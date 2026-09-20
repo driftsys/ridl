@@ -65,18 +65,9 @@ impl Default for Speed {
 pub struct OldFlag(bool);
 #[allow(deprecated)]
 impl OldFlag {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: bool,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: bool) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: bool) -> Self {
         Self(value)
     }
     pub const fn get(self) -> bool {
@@ -84,10 +75,9 @@ impl OldFlag {
     }
 }
 #[allow(deprecated)]
-impl ::core::convert::TryFrom<bool> for OldFlag {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: bool) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<bool> for OldFlag {
+    fn from(value: bool) -> Self {
+        Self(value)
     }
 }
 #[allow(deprecated)]
@@ -98,35 +88,25 @@ impl ::core::convert::From<OldFlag> for bool {
 }
 impl Default for OldFlag {
     fn default() -> Self {
-        OldFlag::new_unchecked(false)
+        OldFlag::new(false)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub(crate) struct RawTicks(i64);
 impl RawTicks {
-    /// Constructs the value, enforcing its typl constraints.
-    pub(crate) fn new(
-        value: i64,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub(crate) const fn new_unchecked(value: i64) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub(crate) const fn new(value: i64) -> Self {
         Self(value)
     }
     pub(crate) const fn get(self) -> i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for RawTicks {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<i64> for RawTicks {
+    fn from(value: i64) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<RawTicks> for i64 {
@@ -136,6 +116,6 @@ impl ::core::convert::From<RawTicks> for i64 {
 }
 impl Default for RawTicks {
     fn default() -> Self {
-        RawTicks::new_unchecked(0)
+        RawTicks::new(0)
     }
 }

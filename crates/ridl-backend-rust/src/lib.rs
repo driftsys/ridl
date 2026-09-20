@@ -358,6 +358,10 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
     let vis = vis_tokens(decl.visibility);
     let type_name = decl.name.as_str();
 
+    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
+        return emit_vacuous_type_def(decl, td, derived);
+    }
+
     let checks = constraint_checks(td, type_name, quote! { value });
     let getter = scalar_getter(td, vis.clone(), inner.clone());
 
@@ -406,6 +410,101 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
                 value.0
             }
         }
+    }
+}
+
+/// A named scalar whose constraint checks nothing: `boolean`, and `integer`
+/// or `float` with no declared range. A `String` or `Vec<u8>` backing reaches
+/// this only from hand-built IR: the checker always materializes the typl §4.4
+/// default `[0..256]` length bound, so both are constrained on the source
+/// route.
+///
+/// Construction is infallible, so `From<Inner>` is correct here — there is no
+/// invariant for it to bypass. Core's blanket `impl<T, U: Into<T>> TryFrom<U>
+/// for T` then supplies `TryFrom<Inner>` with `Error = Infallible`, so generic
+/// consumer code calling `try_from` compiles against both kinds of scalar. A
+/// manual `TryFrom` would collide with that blanket impl (`rustc` reports
+/// `E0119`), which is the second reason it is absent.
+///
+/// `new_unchecked` is deliberately absent: `new` already is the unchecked
+/// path, and on this type it is `const`, so [`scalar_ctor`] routes a constant
+/// and a derived default through `new` instead.
+///
+/// The prelude names are absolute for the reason [`emit_type_def`] records: a
+/// typl package may declare `type From`, and that declaration shadows the
+/// prelude in the module the generated impl shares with it.
+fn emit_vacuous_type_def(
+    decl: &v2::Decl,
+    td: &v2::TypeDef,
+    derived: &TokenStream,
+) -> TokenStream {
+    let name = ident(&decl.name);
+    let inner = newtype_inner(td);
+    let doc = doc_attrs(&decl.doc);
+    // A `step`-only constraint is vacuous (`constraint_is_vacuous` excludes
+    // `step`), and that is exactly the case `unchecked_doc` still speaks for,
+    // so the note and its separator are computed here too.
+    let unchecked = unchecked_doc(td);
+    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
+        quote! {}
+    } else {
+        quote! { #[doc = ""] }
+    };
+    let deprecated = deprecated_attr(decl.deprecated.as_deref());
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
+    let vis = vis_tokens(decl.visibility);
+    let getter = scalar_getter(td, vis.clone(), inner.clone());
+
+    quote! {
+        #doc
+        #separator
+        #unchecked
+        #derived
+        #deprecated
+        #[repr(transparent)]
+        #vis struct #name(#inner);
+
+        #allow_deprecated
+        impl #name {
+            /// Constructs the value. This type declares no constraint, so
+            /// construction cannot fail.
+            #vis const fn new(value: #inner) -> Self {
+                Self(value)
+            }
+
+            #getter
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#inner> for #name {
+            fn from(value: #inner) -> Self {
+                Self(value)
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for #inner {
+            fn from(value: #name) -> Self {
+                value.0
+            }
+        }
+    }
+}
+
+/// The associated function a constant or a derived default constructs a named
+/// scalar through. A constrained type keeps `new_unchecked`, whose value is
+/// checked by `ridlc` rather than at run time; a vacuous type has no
+/// `new_unchecked` ([`emit_vacuous_type_def`]) and its `new` is `const`, so
+/// both positions — a `const` item and the body of `fn default()` — accept it.
+pub(crate) fn scalar_ctor(td: &v2::TypeDef) -> TokenStream {
+    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
+        quote! { new }
+    } else {
+        quote! { new_unchecked }
     }
 }
 
@@ -625,21 +724,24 @@ fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
     // A named-type constant resolves through the type's backing; a
     // primitive-keyword constant reads the keyword directly.
     if let Some(backing) = same_package_scalar_backing(ctx, type_ref) {
+        // A vacuous type has no `new_unchecked`; its `new` is `const` and
+        // infallible, so it stands in here (`scalar_ctor`).
+        let ctor = same_package_scalar_ctor(ctx, type_ref).unwrap_or_else(|| quote! { new });
         match backing {
             ScalarBacking::Float => {
                 let value = numeric_tokens(&cd.value, true);
                 let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::new_unchecked(#value); }
+                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
             }
             ScalarBacking::Integer => {
                 let value = numeric_tokens(&cd.value, false);
                 let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::new_unchecked(#value); }
+                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
             }
             ScalarBacking::Boolean => {
                 let value = bool_tokens(&cd.value);
                 let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::new_unchecked(#value); }
+                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
             }
             ScalarBacking::String => {
                 let value = cd.value.as_str();
@@ -1148,6 +1250,16 @@ pub(crate) fn backing_scalar(td: &v2::TypeDef) -> ScalarBacking {
 pub(crate) fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
     match &ctx.lookup(reference)?.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
+        _ => None,
+    }
+}
+
+/// [`scalar_ctor`] for a same-package named scalar, read through the same
+/// lookup as [`same_package_scalar_backing`]. A reference that resolves to
+/// anything but a named scalar has no constructor to name.
+fn same_package_scalar_ctor(ctx: &Ctx, reference: &str) -> Option<TokenStream> {
+    match &ctx.lookup(reference)?.kind {
+        Some(v2::decl::Kind::TypeDef(td)) => Some(scalar_ctor(td)),
         _ => None,
     }
 }

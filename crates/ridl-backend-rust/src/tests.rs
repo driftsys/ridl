@@ -348,6 +348,34 @@ fn constrained_scalar_is_a_value_object() {
 }
 
 #[test]
+fn vacuous_scalar_constructs_infallibly() {
+    let decls = vec![public_decl(
+        "Enabled",
+        primitive_type(
+            v2::PrimitiveType::Boolean,
+            init_value(true, Some("false")),
+            None,
+        ),
+    )];
+    let source = rust_for(decls);
+    assert!(source.contains("pub const fn new(value: bool) -> Self"));
+    assert!(source.contains("impl ::core::convert::From<bool> for Enabled"));
+    assert!(source.contains("impl ::core::convert::From<Enabled> for bool"));
+    // No escape hatch is emitted: `new` already is one.
+    assert!(
+        !source.contains("Enabled::new_unchecked")
+            && !source.contains("fn new_unchecked(value: bool)"),
+        "new_unchecked would duplicate new on a vacuous type, got:\n{source}"
+    );
+    // And no manual TryFrom, which would collide with core's blanket impl.
+    assert!(
+        !source.contains("impl ::core::convert::TryFrom<bool> for Enabled")
+            && !source.contains("impl TryFrom<bool> for Enabled"),
+        "a manual TryFrom collides with core's blanket impl, got:\n{source}"
+    );
+}
+
+#[test]
 fn constant_of_a_constrained_type_uses_new_unchecked() {
     let decls = vec![
         speed_decl(),
@@ -951,8 +979,11 @@ fn a_deprecated_scalar_allows_deprecated_on_its_impls() {
     );
 }
 
+/// A `boolean` type is vacuous, so it has no `new_unchecked`; its `new` is
+/// `const` and infallible, and a constant constructs through that instead
+/// (`scalar_ctor`).
 #[test]
-fn a_boolean_constant_uses_new_unchecked() {
+fn a_boolean_constant_constructs_through_new() {
     let decls = vec![
         public_decl(
             "Flag",
@@ -973,8 +1004,8 @@ fn a_boolean_constant_uses_new_unchecked() {
     ];
     let source = rust_for(decls);
     assert!(
-        source.contains("pub const ENABLED: Flag = Flag::new_unchecked(true);"),
-        "a boolean constant constructs through new_unchecked, got:\n{source}"
+        source.contains("pub const ENABLED: Flag = Flag::new(true);"),
+        "a boolean constant constructs through new, got:\n{source}"
     );
 }
 
@@ -2882,19 +2913,20 @@ fn cross_package_declared_init_omits_the_default() {
     );
 }
 
-/// I2: the same-package equivalent CAN be wrapped: the backend knows
-/// `GearIndex`'s integer backing, so the declared init 1 wraps to
-/// `GearIndex::new_unchecked(1)`.
-#[test]
-fn same_package_declared_init_gets_the_correct_default() {
-    let gear_index = public_decl(
-        "GearIndex",
-        primitive_type(
-            v2::PrimitiveType::Integer,
-            init_value(true, Some("0")),
-            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
-        ),
+/// A `Selection` struct holding one `GearIndex` field whose declared init is
+/// the value 1. The `range` argument carries the named type's constraint,
+/// which decides whether the wrapping constructor is `new_unchecked` or
+/// `new`.
+fn selection_with_gear_index(range: Option<v2::Constraint>) -> String {
+    let mut gear_kind = primitive_type(
+        v2::PrimitiveType::Integer,
+        init_value(true, Some("0")),
+        Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
     );
+    if let v2::decl::Kind::TypeDef(td) = &mut gear_kind {
+        td.constraint = range;
+    }
+    let gear_index = public_decl("GearIndex", gear_kind);
     let field = v2::Field {
         declared_init: Some("1".to_string()),
         ..named_field(
@@ -2909,10 +2941,18 @@ fn same_package_declared_init_gets_the_correct_default() {
         members: vec![field_member(field)],
         fixed_layout: false,
     };
-    let source = rust_for(vec![
+    rust_for(vec![
         gear_index,
         public_decl("Selection", v2::decl::Kind::StructDef(struct_def)),
-    ]);
+    ])
+}
+
+/// I2: the same-package equivalent CAN be wrapped: the backend knows
+/// `GearIndex`'s integer backing, so the declared init 1 wraps to
+/// `GearIndex::new_unchecked(1)`.
+#[test]
+fn same_package_declared_init_gets_the_correct_default() {
+    let source = selection_with_gear_index(Some(constraint(Some("0"), Some("8"), None)));
     assert!(
         source.contains("impl Default for Selection"),
         "the same-package equivalent gets a Default, got:\n{source}"
@@ -2920,6 +2960,18 @@ fn same_package_declared_init_gets_the_correct_default() {
     assert!(
         source.contains("GearIndex::new_unchecked(1)"),
         "the declared init 1 must wrap to GearIndex::new_unchecked(1), got:\n{source}"
+    );
+}
+
+/// The same wrapping on a vacuous named type. It has no `new_unchecked`
+/// (`emit_vacuous_type_def`), so the declared init wraps through its `const
+/// fn new` instead — the same substitution `emit_const` makes.
+#[test]
+fn same_package_declared_init_of_a_vacuous_type_wraps_through_new() {
+    let source = selection_with_gear_index(None);
+    assert!(
+        source.contains("GearIndex::new(1)") && !source.contains("GearIndex::new_unchecked(1)"),
+        "the declared init 1 must wrap to GearIndex::new(1), got:\n{source}"
     );
 }
 

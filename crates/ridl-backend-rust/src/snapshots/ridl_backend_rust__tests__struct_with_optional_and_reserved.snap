@@ -59,18 +59,9 @@ impl Default for Speed {
 #[repr(transparent)]
 pub struct Label(String);
 impl Label {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: String,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: String) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: String) -> Self {
         Self(value)
     }
     pub fn get(&self) -> &str {
@@ -80,10 +71,9 @@ impl Label {
         self.0
     }
 }
-impl ::core::convert::TryFrom<String> for Label {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: String) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<String> for Label {
+    fn from(value: String) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Label> for String {

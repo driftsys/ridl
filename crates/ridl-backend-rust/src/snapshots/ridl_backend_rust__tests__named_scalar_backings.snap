@@ -59,28 +59,18 @@ impl Default for Speed {
 #[repr(transparent)]
 pub struct Counter(i64);
 impl Counter {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: i64,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: i64) -> Self {
         Self(value)
     }
     pub const fn get(self) -> i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Counter {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<i64> for Counter {
+    fn from(value: i64) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Counter> for i64 {
@@ -90,35 +80,25 @@ impl ::core::convert::From<Counter> for i64 {
 }
 impl Default for Counter {
     fn default() -> Self {
-        Counter::new_unchecked(0)
+        Counter::new(0)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Enabled(bool);
 impl Enabled {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: bool,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: bool) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: bool) -> Self {
         Self(value)
     }
     pub const fn get(self) -> bool {
         self.0
     }
 }
-impl ::core::convert::TryFrom<bool> for Enabled {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: bool) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<bool> for Enabled {
+    fn from(value: bool) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Enabled> for bool {
@@ -128,25 +108,16 @@ impl ::core::convert::From<Enabled> for bool {
 }
 impl Default for Enabled {
     fn default() -> Self {
-        Enabled::new_unchecked(false)
+        Enabled::new(false)
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Label(String);
 impl Label {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: String,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: String) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: String) -> Self {
         Self(value)
     }
     pub fn get(&self) -> &str {
@@ -156,10 +127,9 @@ impl Label {
         self.0
     }
 }
-impl ::core::convert::TryFrom<String> for Label {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: String) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<String> for Label {
+    fn from(value: String) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Label> for String {
@@ -169,25 +139,16 @@ impl ::core::convert::From<Label> for String {
 }
 impl Default for Label {
     fn default() -> Self {
-        Label::new_unchecked(String::new())
+        Label::new(String::new())
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Blob(Vec<u8>);
 impl Blob {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: Vec<u8>,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: Vec<u8>) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: Vec<u8>) -> Self {
         Self(value)
     }
     pub fn get(&self) -> &[u8] {
@@ -197,10 +158,9 @@ impl Blob {
         self.0
     }
 }
-impl ::core::convert::TryFrom<Vec<u8>> for Blob {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: Vec<u8>) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<Vec<u8>> for Blob {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Blob> for Vec<u8> {
@@ -210,6 +170,6 @@ impl ::core::convert::From<Blob> for Vec<u8> {
 }
 impl Default for Blob {
     fn default() -> Self {
-        Blob::new_unchecked(Vec::new())
+        Blob::new(Vec::new())
     }
 }

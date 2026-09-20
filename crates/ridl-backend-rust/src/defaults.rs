@@ -12,7 +12,9 @@
 //! this backend cannot resolve (it generates one package at a time) and which
 //! T15 computed with full resolution.
 
-use crate::{Ctx, ScalarBacking, backing_scalar, bool_tokens, ident, numeric_tokens, type_path};
+use crate::{
+    Ctx, ScalarBacking, backing_scalar, bool_tokens, ident, numeric_tokens, scalar_ctor, type_path,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 use ridl_ir::name::{camel_case, snake_case};
@@ -51,7 +53,10 @@ fn type_def_default(name: &str, td: &v2::TypeDef) -> Option<TokenStream> {
     }
     let inner = scalar_default_value(backing_scalar(td), init.value.as_deref())?;
     let name_id = ident(name);
-    Some(quote! { #name_id::new_unchecked(#inner) })
+    // A vacuous type has no `new_unchecked`; its `new` is `const` and
+    // infallible, so it stands in here (`scalar_ctor`).
+    let ctor = scalar_ctor(td);
+    Some(quote! { #name_id::#ctor(#inner) })
 }
 
 /// The inner value of a newtype default for a scalar backing. A derivable
@@ -183,7 +188,8 @@ fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream>
                 let path = type_path(reference);
                 if let Some(declared) = slot.declared_init {
                     let inner = scalar_default_value(backing_scalar(td), Some(declared))?;
-                    Some(quote! { #path::new_unchecked(#inner) })
+                    let ctor = scalar_ctor(td);
+                    Some(quote! { #path::#ctor(#inner) })
                 } else {
                     Some(quote! { #path::default() })
                 }
