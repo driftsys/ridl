@@ -37,6 +37,21 @@ fixes the crate's version number, its tag, and that creating the tag and running
 `cargo publish` are maintainer acts. This record adds the policy those mechanics
 did not need to state: what counts as a breaking 0.x change.
 
+**Amendment (2026-09-20) — decisions 11 and 12.** An assessment of the generated
+interaction face and the ports, made on 2026-09-20 over `main` at 2bcbab8, found
+two gaps this record had left: nothing except a runtime's own type implements a
+port trait, so a face can be built over a runtime's port and over nothing else;
+and nothing stated whether a port may be sent to another thread or shared
+between threads, so the answer would have been fixed by whichever concrete type
+story E11.9 shipped. Decisions 11 and 12 answer them. Sebastien took both on
+2026-09-20; the working note they come from and his disposition of it are on
+driftsys/ridl#429, as its items D-2 and D-3, and decision 12's aggregate handle
+is a second amendment he took there the same day. Decision 12 changes no API in
+this crate; decision 11's impls land in the `ridl-rt` change that follows this
+record, which also gives the crate-level rustdoc its matching paragraph. Until
+that change merges, this record describes impls `crates/ridl-rt/src/port.rs`
+does not yet contain.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -212,6 +227,78 @@ trusted with no `unsafe` and no second verification pass.
     or generated directly into a consuming crate, compiles as that crate's own
     edition, and a consumer may be edition 2021 or 2024.
 
+11. **Amendment (2026-09-20) — every port trait is implemented for `&mut P`, and
+    every port trait whose methods all take `&self` also for `&P`.** For each
+    port trait `T` in `crates/ridl-rt/src/port.rs`, the crate provides
+    `impl<P: T + ?Sized> T for &mut P`; for the traits whose methods all take
+    `&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
+    `ScannableSignals` and `CoherentSignals` — it also provides
+    `impl<P: T + ?Sized> T for &P`. The crate itself implements no port trait,
+    so until these impls land a face can be built only over a type that
+    implements the traits by hand — a runtime's own, or an application's wrapper
+    — and never over a reference to one. That is the whole of what they buy: a
+    wrapper that adds tracing and a test double are accepted by the face's trait
+    bounds already, with or without them. The impls are additive — every
+    existing signature and every existing implementation is unchanged — so this
+    is not a breaking change under decision 10, and they need no `alloc`. They
+    are what keep `Client::new(&mut h)` compiling once the face of
+    [ADR-0023](ADR-0023-interaction-face-generation.md) decision 5 takes its
+    port by value, with `P` inferred as `&mut H` for whatever handle `H`
+    decision 12 has the runtime present; the by-value face then also accepts
+    that handle owned, a `Clone` handle, or any wrapper that forwards the port
+    traits. A face built over `&mut H` holds that borrow for as long as the face
+    lives, exactly as a face does now — these impls widen what a face accepts,
+    and it is decision 12's one handle per port role that lets two faces run
+    over one runtime without contending for a single value.
+    **`impl<P: T + ?Sized> T for Box<P>` is deferred**, because it needs
+    `alloc`, which this crate brings in under no feature combination (decision
+    8, and [the design record's](../design/ridl-rt.md) "Features, `no_std`,
+    `alloc` and `wasm32`"); it is deferred until a cargo feature brings in
+    `alloc` and something needs a boxed port.
+
+12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
+    may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or
+    `Sync` bound to any port trait.** A **port role** is one port trait. A
+    runtime crate exposes one handle type per port role it implements, rather
+    than one type implementing them all. In a runtime whose handles are used
+    from more than one thread, a handle whose port traits all take `&self` —
+    `Attached`, `Clock`, `SignalReader`, `FixedReader` and the two signal
+    extensions — is `Send + Sync`, because several threads may read one store at
+    once, and a handle carrying a trait with a `&mut self` method —
+    `SignalWriter`, `EventSource`, `EventSink`, `Caller` and `Handler` — is
+    `Send` and need not be `Sync`, because one thread drives each. Deriving the
+    split from the receiver rather than from a list classifies every one of the
+    eleven port traits. A single-threaded runtime is held to neither, for the
+    reason the third paragraph gives.
+
+    A face is built over one value implementing exactly the port traits its
+    interface needs, which [ADR-0023](ADR-0023-interaction-face-generation.md)
+    decision 5 leaves unchanged; the value implements at least those traits, and
+    may implement more. When a face needs exactly one port trait, that value is
+    the role handle itself. When it needs more than one — the common case,
+    because a generated `Client` may be bound over
+    `SignalReader + EventSource + Caller` at once — it is an **aggregate
+    handle**: one the runtime offers for that port set, or one the application
+    writes over role handles, implementing each port trait by delegating to the
+    handle that has it. An aggregate is `Send` or `Sync` exactly when the
+    handles it holds are, which the compiler derives. Either value reaches
+    `Client::new` by value, or as a `&mut` borrow of itself under decision 11's
+    forwarding impls. A handle for one role does not satisfy a multi-trait
+    bound, so a face that needs more than one port trait must be given an
+    aggregate (the second 2026-09-20 amendment; driftsys/ridl#429).
+
+    This record states the expectation; the crate does not enforce it. No port
+    trait gains `Send` or `Sync` as a supertrait, because that would exclude a
+    single-threaded `no_std` runtime whose handles use `Cell` or `RefCell`
+    internally, which is a supported target on the platform ladder. A runtime
+    crate checks its own handles with a compile-time assertion —
+    `fn assert_sync<T: Sync>()` applied to a reader handle. The alternative this
+    rejects is one runtime struct implementing every port and shared behind a
+    mutex: every `SignalReader::read` would then wait behind every
+    `SignalWriter::commit`, removing the property a signal read is specified to
+    have, that a read does not block on a publication. Story E11.9 builds the
+    first runtime to this shape, and its roadmap row states that obligation.
+
 ## Alternatives considered
 
 | Question                   | Alternative                                                | Why it was not chosen                                                                                                                                                                                                                      |
@@ -232,6 +319,10 @@ trusted with no `unsafe` and no second verification pass.
 | Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin      | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
 | Rust version (decision 10) | no `rust-version` at all                                   | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
 | Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only        | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
+| Forwarding (decision 11)   | no forwarding impls; runtimes hand out short-lived ports   | moves the cost into every runtime rather than removing it, and still admits no face over a reference to a port                                                                                                                             |
+| Forwarding (decision 11)   | `impl<P: T + ?Sized> T for Box<P>` in 0.1                  | needs `alloc`, which no feature combination of this crate brings in (decision 8); deferred rather than rejected                                                                                                                            |
+| Threading (decision 12)    | one runtime struct implementing every port, behind a mutex | serialises every signal read behind every publication commit, removing the property a signal read is specified to have                                                                                                                     |
+| Threading (decision 12)    | `Send + Sync` as supertraits on the port traits            | excludes a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell` internally, a supported target on the platform ladder                                                                                                    |
 
 ## Consequences
 
@@ -247,6 +338,12 @@ trusted with no `unsafe` and no second verification pass.
   `Init` envelope convention needs a sentence that confirms it, not a
   correction. A reader of the reference alone, without this record, sees the
   older wording until E14.2 adds these sentences.
+- **Positive — added 2026-09-20.** Once decision 11's impls land, a face can be
+  built over a borrowed port, a wrapped port or a test double rather than only
+  over a runtime's own value; and from now on the threading model a runtime
+  presents is stated where a runtime author reads it, rather than left for story
+  E11.9 to settle by implementation (decision 12). Neither costs a breaking
+  release: decision 11 is additive and decision 12 adds no bound to any trait.
 - **Neutral — the `u16` fallback and the review debt stay open.** Decision 2's
   fallback and the driftsys/ridl#350 items decision 10 leaves open are not
   blocking anything scheduled now, and are recorded here so a future change to
@@ -264,6 +361,15 @@ trusted with no `unsafe` and no second verification pass.
    value) — story E11.8's, not fixed here.
 4. **How a generated binding keeps a signal's last good value with no `alloc`**
    — the Rust codegen's question, once it starts consuming this crate.
+5. **`Box<P>` forwarding** (decision 11), deferred until a cargo feature brings
+   `alloc` into this crate and something needs a boxed port.
+6. **A wake hook** — whether a port gains a way to register interest in the
+   arrival of a reply, an occurrence or a claim, or whether waiting stays a
+   runtime's own loop. Every port method returns immediately, which this record
+   keeps; what an adapter that presents a reply as a future does instead of
+   polling is a frame and transport question, left to stories E11.1 and E11.9.
+   Tracked as driftsys/ridl#350 item 17; items 15 and 16 of that issue are the
+   two the 2026-09-20 amendment settles.
 
 ## Documents amended
 
@@ -273,6 +379,8 @@ trusted with no `unsafe` and no second verification pass.
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5 | its 2026-09-13 amendment (the `strata` → `error` rename) now points at [the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md) rather than at the working `docs/wip/` spec, which this pull request archives                                                                                                           |
 | [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                        | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                                                                                                                                |
 | [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                         | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024                                                                                                         |
+| [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                     | two paragraphs record the forwarding impls of decision 11 and the handle model of decision 12                                                                                                                                                                                                                                    |
+| [the roadmap](../ROADMAP.md), story E11.9                                            | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over                                                                                                                                  |
 
 ## References
 

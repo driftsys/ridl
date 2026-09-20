@@ -144,8 +144,12 @@
   at construction, a failed `require`/`ensure` clause carrying no value, the
   driftsys/ridl#308 and #309 dispositions, the sealed `Encoding` and
   private-field `Ref` proof type, and what counts as a breaking `ridl-rt`
-  change. Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes,
-  and the ridl reference finalization pass (story E14.2).
+  change. Its 2026-09-20 amendment adds decisions 11 and 12: every port trait is
+  implemented for `&mut P`, and the `&self`-only traits also for `&P`; and a
+  runtime presents one handle per port role, with an aggregate handle for a face
+  that needs several, while the crate itself adds no `Send` or `Sync` bound.
+  Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the
+  ridl reference finalization pass (story E14.2).
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
@@ -160,19 +164,23 @@
   `ridl build` contract, and `ridl diff`.
 
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
-  and call signatures.** Four decisions taken while implementing story E11.13,
-  the in-process MVP of the face ADR-0018 decision 15 restores: the Rust
-  backend's contract-clause translator accepts one expression form and refuses
-  every other with a `GenerateError`, never dropping a clause silently; the face
-  is emitted from a companion entry point, `generate_face`, while `generate`
-  stays exactly what it emitted before this story, following the precedent
-  ADR-0017 decision 1 set; a `Provider` method takes its argument by reference,
-  superseding the M1 design's by-value example, which cannot compile; and a
-  consumer-side call returns `Result<Correlation, SendError>`, closing a gap
-  that design left open. Binds every later story that extends the Rust backend's
-  interaction face, until superseded: E5.1, Epic 10, and any later language
-  backend that follows this precedent. The as-built face this record's decisions
-  produced is
+  and call signatures.** Five decisions: four taken while implementing story
+  E11.13, the in-process MVP of the face ADR-0018 decision 15 restores, and one
+  added by the 2026-09-20 amendment. The Rust backend's contract-clause
+  translator accepts one expression form and refuses every other with a
+  `GenerateError`, never dropping a clause silently; the face is emitted from a
+  companion entry point, `generate_face`, while `generate` stays exactly what it
+  emitted before this story, following the precedent ADR-0017 decision 1 set; a
+  `Provider` method takes its argument by reference, superseding the M1 design's
+  by-value example, which cannot compile; and a consumer-side call returns a
+  correlation on success and `SendError` on failure, closing a gap that design
+  left open. The 2026-09-20 amendment makes that success half the call's own
+  `Copy` correlation newtype, one per command and per query, so a query's
+  correlation cannot be passed to an `ack`; and its decision 5 has a face hold
+  its port by value, with no lifetime parameter. Binds every later story that
+  extends the Rust backend's interaction face, until superseded: E5.1, Epic 10,
+  and any later language backend that follows this precedent. The as-built face
+  this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
