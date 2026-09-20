@@ -924,6 +924,13 @@ fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> Toke
 /// reached at (see [`InducedTuple`] and [`vis_tokens`]). The fields stay `pub`,
 /// as they are on a declared `struct`: a field's effective visibility is capped
 /// by the item's, so `pub(crate) struct T { pub f: Private }` exposes nothing.
+///
+/// A tuple field name is projected through the pinned transform, the same one
+/// [`emit_field`] applies to a declared struct's field (ADR-0016 decisions 1
+/// and 2). The `hint` below keeps `camel_case`, because it builds a nested
+/// tuple's type name rather than a field name. Neither namespace is checked:
+/// two tuple field names distinct in typl can spell one Rust field name, which
+/// rustc then rejects with E0124 — driftsys/ridl#449.
 fn emit_tuple_struct(
     ctx: &Ctx,
     induced: &InducedTuple,
@@ -938,7 +945,7 @@ fn emit_tuple_struct(
     let vis = vis_tokens(*visibility);
     let derived = derives::tuple_derive_attr(ctx, tuple);
     let fields = tuple.fields.iter().map(|field| {
-        let fname = ident(&field.name);
+        let fname = ident(&snake_case(&field.name));
         let hint = format!("{}{}", name, camel_case(&field.name));
         let ty = field
             .r#type

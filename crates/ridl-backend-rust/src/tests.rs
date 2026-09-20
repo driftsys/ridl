@@ -1445,6 +1445,44 @@ fn tuple_field_generates_named_struct() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// A tuple field name is camelCase in typl exactly as a struct field name is
+/// (typl §15.1), and the struct a tuple generates carries it as a Rust field
+/// name, so it goes through the same pinned transform (ADR-0016 decisions 1
+/// and 2).
+///
+/// Two sites project it, and the assertions discriminate them: the generated
+/// struct in `emit_tuple_struct`, and the `Default` initializer in
+/// `tuple_default_expr`. Projecting one and not the other is E0560, so the
+/// negative assertion is that the written name reaches no generated site.
+///
+/// Two tuple field names distinct in typl can still project to one Rust field
+/// name. That is unchecked, and rustc rejects the result with E0124 —
+/// driftsys/ridl#449.
+#[test]
+fn a_tuple_field_name_is_projected_to_snake_case() {
+    let bounds = shaped_field("range", 1, tuple_of(&[("minSpeed", "Speed")]));
+    let decls = vec![
+        speed_decl(),
+        public_decl(
+            "SensorBounds",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(bounds)],
+                fixed_layout: false,
+            }),
+        ),
+    ];
+    let source = rust_for(decls);
+    assert!(source.contains("pub min_speed:"), "got:\n{source}");
+    assert!(
+        source.contains("min_speed: Speed::default()"),
+        "the `Default` initializer must name the projected field, got:\n{source}"
+    );
+    assert!(
+        !source.contains("minSpeed"),
+        "the written name must reach no generated site, got:\n{source}"
+    );
+}
+
 /// A struct field whose type is `kind`, at `ordinal`.
 fn shaped_field(name: &str, ordinal: u32, kind: v2::field_type::Kind) -> v2::Field {
     v2::Field {

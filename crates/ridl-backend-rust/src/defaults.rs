@@ -113,7 +113,9 @@ pub(crate) fn tuple_default_expr(
     let mut inits = Vec::new();
     for field in &tuple.fields {
         let ft = field.r#type.as_ref()?;
-        let fname = ident(&field.name);
+        // The same projection `emit_tuple_struct` applies, or the initializer
+        // names a field the tuple struct does not have (ADR-0016 decision 2).
+        let fname = ident(&snake_case(&field.name));
         let hint = format!("{}{}", name, camel_case(&field.name));
         let slot = Slot {
             init_value: None,
