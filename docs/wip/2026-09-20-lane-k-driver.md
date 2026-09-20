@@ -90,6 +90,37 @@ at that boundary and post the handoff; the plan is a fresh session with the same
 prompt and the `THIS SESSION RUNS` line set to K1, continuing from the approved
 note.
 
+### K2 to K8 — the plan's tasks, one stage each
+
+Added by the plan's pull request, as K1 requires. The plan is
+[`2026-09-20-flatbuffers-codec-plan.md`](2026-09-20-flatbuffers-codec-plan.md)
+and each stage is one of its tasks, with the files, the test and the
+must-not-break set stated there.
+
+- **K2 — the shared projection facts and the size bound.** Outside any backend,
+  in `ridl-ir` or a small projection crate; the stage chooses between them and
+  records the ground. Carries the drift test that makes driftsys/ridl#302
+  visible. No FlatBuffers snapshot may move.
+- **K3 — the `ridl-rt` helpers.** The `flatbuffers` feature stops being empty,
+  `Encoded.bytes` becomes a subslice, and **the proof mechanism is settled
+  here**, before any emitter exists, because D-1's amendment rests on it. The
+  helpers must build at `rust-version = "1.83"`, which `just compat-check`
+  enforces with `cargo +1.83 test --all-features`.
+- **K4 — `MAX_SIZE` and D-7's refusal.** Tested over a hand-built IR, because no
+  typl source can reach an unbounded type.
+- **K5 — the view, `encode`, `verify`, `decode`.** Emitted into `generate`'s
+  output. **Waits on Epic 10 Task 4**, which has no session.
+- **K6 — the constraint check beside `new`.** Reads what Epic 10 Task 6 landed
+  (8e5a552) rather than assuming.
+- **K7 — the face on `Wire`, and driftsys/ridl#448.** Regenerates the
+  interaction-face fixture, so it conflicts with any other in-flight change to
+  that file. Either emits the catalog check ADR-0021 decision 3 describes or
+  records that it waits for E16.2; leaving the promise false is ruled out.
+- **K8 — conformance, determinism, and the records.** `planus` stays a test-only
+  dependency.
+
+K5 to K8 wait on Epic 10 Task 4. K2 to K4 do not, and can run now.
+
 ## The twelve decisions K1 must take
 
 **K-1. What reads and writes the buffer.** Emitted Rust that encodes and
