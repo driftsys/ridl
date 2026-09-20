@@ -403,22 +403,24 @@ merges, this paragraph describes impls `crates/ridl-rt/src/port.rs` does not
 contain.
 
 **A runtime presents one handle per port role, and this crate adds no `Send` or
-`Sync` bound.** A runtime crate exposes one handle type per port trait it
-implements rather than one type implementing them all, and may also offer an
-aggregate handle covering the port set one interface's face needs. A handle
-whose port traits all take `&self` is `Send + Sync`, because several threads may
-read one store at once; a handle carrying a trait with a `&mut self` method is
-`Send` and need not be `Sync`, because one thread drives each. An aggregate is
-`Send`, and `Sync` only if every trait it carries is. A face is built over one
-value implementing exactly the port traits its interface needs: the role handle
-itself when the interface has one interaction kind, and an aggregate — the
-runtime's, or one the application composes from role handles — when it has
-several, because a generated `Client` may be bound over
-`SignalReader + EventSource + Caller` at once. No port trait in this crate
-carries `Send` or `Sync` as a supertrait, so a single-threaded `no_std` runtime
-whose handles use `Cell` or `RefCell` internally remains supported; a runtime
-checks its own handles with a compile-time assertion,
-`fn assert_sync<T: Sync>()` applied to a reader handle.
+`Sync` bound.** A port role is one port trait. A runtime crate exposes one
+handle type per port role it implements rather than one type implementing them
+all, and may also offer an aggregate handle covering the port set one
+interface's face needs. A handle whose port traits all take `&self` is
+`Send + Sync`, because several threads may read one store at once; a handle
+carrying a trait with a `&mut self` method is `Send` and need not be `Sync`,
+because one thread drives each. An aggregate is `Send`, and is `Sync` only if
+every port trait it carries takes `&self` in all its methods. A face is built
+over one value implementing exactly the port traits its interface needs: the
+role handle itself when the face needs exactly one, and an aggregate — the
+runtime's, or one the application composes from role handles — when it needs
+more, because a generated `Client` may be bound over
+`SignalReader + EventSource + Caller` at once. Either value reaches
+`Client::new` by value, or as a `&mut` borrow of itself under the forwarding
+impls above. No port trait in this crate carries `Send` or `Sync` as a
+supertrait, so a single-threaded `no_std` runtime whose handles use `Cell` or
+`RefCell` internally remains supported; a runtime checks its own handles with a
+compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12
 records the reasoning and the alternative it rejects, one runtime struct behind
 a mutex. No runtime exists in this workspace yet; story E11.9 builds the first

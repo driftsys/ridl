@@ -37,8 +37,8 @@ yet emit. It also describes shapes that
 [the interaction-face design record](../design/interaction-face.md) and
 [`ridl-rt` by example](../technotes/ridl-rt-by-example.md) still document in
 their pre-amendment form; both are corrected in that same change, and until then
-a reader who follows their pointer to decision 4 finds a success half those
-documents do not yet show.
+a reader who follows their cross-reference to decision 4 finds a success half
+those documents do not yet show.
 
 ## Context
 
@@ -124,18 +124,26 @@ never stated.
    and a command has no failure the application reports, ridl §6.1) is kept
    exactly.
 
-   **Amendment (2026-09-20) — the rule survives the derives, and its reason is
-   restated.** Epic 10 task 6 emits the derive set the value-objects design's
-   decision 7 fixes, which puts `Copy` and `Clone` on generated types whose
-   closure admits them. The reason given above — "the generated payload types
-   implement neither `Copy` nor `Clone`" — is true today and stops being true
-   then, so it is replaced rather than left to expire: a `Provider` method takes
-   its argument by reference because one rule describes the whole trait, and by
+   **Amendment (2026-09-20) — the rule is unchanged by the derives, and its
+   reason is restated.** Epic 10 task 6 emits the derive set the value-objects
+   design's decision 7 fixes, which puts `Copy` and `Clone` on generated types
+   whose closure admits them. The reason given above — "the generated payload
+   types implement neither `Copy` nor `Clone`" — is true today and stops being
+   true then, so it is replaced rather than left in place to become false.
+
+   The replacement is that decision 7 derives `Clone` on every generated type
+   but `Copy` on only some: `Copy` lands when the transitive closure is `f64`,
+   `i64` or `bool` only, so a payload reaching a string or a sequence is `Clone`
+   and not `Copy`. A by-value parameter moves such a payload — `Clone` does not
+   prevent a move — so a by-value query signature would still take the arguments
+   out from under `dispatch`'s `ensure` evaluation for every payload that is not
+   `Copy`, while compiling for those that are. The signature would then depend
+   on a payload's closure. One rule describes the whole trait instead, and by
    reference costs nothing. The rule itself does not change, and neither does
    the argument for it in the command case.
 
 4. **A consumer-side `Client` call returns `Result<Correlation, SendError>`, not
-   `CallError`** (the success half amended 2026-09-20, below)**.** The M1 design
+   `CallError`** — the success half amended 2026-09-20, below. The M1 design
    fixed the `Client` shape — a query returning a `Correlation` a separate
    `*_reply` method polls — but never named the error type a send method
    returns; the `CallError` vocabulary in the design belongs to the settlement
@@ -172,19 +180,19 @@ never stated.
    The bounds are unchanged: a `Client` still carries exactly the port traits
    its interface needs, and the catalog check
    [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3 places once at
-   construction still has a constructor to live in. What changes is what a face
-   can be built over. A borrowed port still works — `Client::new(&mut port)`
-   compiles with `P` inferred as `&mut Runtime`, under the forwarding impls of
-   ADR-0021 decision 11 — and so now does an owned handle, a `Clone` handle, or
-   any wrapper that forwards the port traits. Under the borrowed form a runtime
-   implementing every port on one value can be held by one face at a time and by
-   none while `dispatch` runs over it, which is why the round-trip tests build a
-   face inside a block, drop it, and build another for the next step
-   (`crates/ridl-backend-rust/tests/interaction_face.rs`); a component that
-   reads a signal, sends a command and later polls the reply rebuilds its
-   `Client` at each step. This decision **supersedes** the M1 design's
-   `Client<'a, P>` and `Publisher<'a, W>` shape. A face built over a borrow
-   needs the forwarding impls of
+   construction is still performed once in the constructor. What changes is what
+   a face can be built over. A borrowed port still works —
+   `Client::new(&mut port)` compiles with `P` inferred as `&mut Runtime`, under
+   the forwarding impls of ADR-0021 decision 11 — and so now does an owned
+   handle, a `Clone` handle, or any wrapper that forwards the port traits. Under
+   the borrowed form a runtime implementing every port on one value can be held
+   by one face at a time and by none while `dispatch` runs over it, which is why
+   the round-trip tests build a face inside a block, drop it, and build another
+   for the next step (`crates/ridl-backend-rust/tests/interaction_face.rs`); a
+   component that reads a signal, sends a command and later polls the reply
+   rebuilds its `Client` at each step. This decision **supersedes** the M1
+   design's `Client<'a, P>` and `Publisher<'a, W>` shape. A face built over a
+   borrow needs the forwarding impls of
    [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11 to compile at
    all, because `&mut Runtime` implements no port trait without them, so the two
    changes land in that order even though the ratified note left their order
@@ -229,8 +237,8 @@ never stated.
   over an owned handle, a borrowed port or any wrapper that forwards the port
   traits, rather than only over a mutable borrow of a runtime's own value
   (decision 5); and a correlation cannot be passed to a method of the other
-  kind, which puts the `None` that `Caller::ack` returns for every query
-  correlation out of reach of generated code (decision 4's amendment).
+  kind, so generated code can no longer call `ack` with a query correlation
+  (decision 4's amendment).
 - Negative — added 2026-09-20: both amendments change the emitted face, so every
   consumer written against the E11.13 shape is edited once. The MVP is
   in-process and its only consumers are this backend's own tests and the
@@ -256,7 +264,8 @@ never stated.
 - [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) — the `ridl-rt` API this
   face's generated code calls: `Payload`, the ports, `SendError`, `CallError`;
   decision 3 is the catalog check decision 5 keeps in the constructor, and
-  decision 11 is the forwarding impls decision 5 rests on for the borrowed case
+  decision 11 is the forwarding impls decision 5 depends on for the borrowed
+  case
 - driftsys/ridl#429 — the face-and-port ergonomics note, and the disposition
   that ratifies D-1 and D-4 as the 2026-09-20 amendment
 - [the interaction-face design record](../design/interaction-face.md) — the

@@ -98,7 +98,8 @@ Proposed draft with no implementation. See
   Rust backend's interaction face. Its 2026-09-20 amendment makes that success
   half the call's own correlation newtype and adds decision 5, a face that holds
   its port by value with no lifetime parameter — neither emitted yet, both
-  landing with lane R's face change. The as-built design record is
+  landing with the `ridl-backend-rust` face change that follows that record
+  (driftsys/ridl#429). The as-built design record is
   `docs/design/interaction-face.md`).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust

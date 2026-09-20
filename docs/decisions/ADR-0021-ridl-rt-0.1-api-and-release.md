@@ -239,14 +239,15 @@ trusted with no `unsafe` and no second verification pass.
     a wrapper that adds tracing or a test double. The impls are additive — every
     existing signature and every existing implementation is unchanged — so this
     is not a breaking change under decision 10, and they need no `alloc`. They
-    are what keep `Client::new(&mut port)` compiling once the face of
+    are what keep `Client::new(&mut h)` compiling once the face of
     [ADR-0023](ADR-0023-interaction-face-generation.md) decision 5 takes its
-    port by value, with `P` inferred as `&mut Runtime`; the by-value face then
-    also accepts an owned handle, a `Clone` handle, or any wrapper that forwards
-    the port traits. A face built over `&mut Runtime` holds that borrow for as
-    long as the face lives, exactly as it does now — these impls widen what a
-    face accepts, and it is decision 12's one handle per port role that lets two
-    faces run over one runtime without contending for a single value.
+    port by value, with `P` inferred as `&mut H` for whatever handle `H`
+    decision 12 has the runtime present; the by-value face then also accepts
+    that handle owned, a `Clone` handle, or any wrapper that forwards the port
+    traits. A face built over `&mut H` holds that borrow for as long as the face
+    lives, exactly as a face does now — these impls widen what a face accepts,
+    and it is decision 12's one handle per port role that lets two faces run
+    over one runtime without contending for a single value.
     **`impl<P: T + ?Sized> T for Box<P>` is deferred**, because it needs
     `alloc`, which this crate brings in under no feature combination (decision
     8, and [the design record's](../design/ridl-rt.md) "Features, `no_std`,
@@ -255,28 +256,31 @@ trusted with no `unsafe` and no second verification pass.
 
 12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or
-    `Sync` bound to any port trait.** A runtime crate exposes one handle type
-    per port trait it implements rather than one type implementing them all. A
-    handle whose port traits all take `&self` is `Send + Sync`, because several
-    threads may read one store at once; a handle carrying a trait with a
-    `&mut self` method is `Send` and is not required to be `Sync`, because one
-    thread drives each. Stating the rule by receiver rather than as a list
-    classifies every port trait, including `EventSink`, whose `raise` takes
-    `&mut self`, and `Clock`, whose `now` does not.
+    `Sync` bound to any port trait.** A **port role** is one port trait. A
+    runtime crate exposes one handle type per port role it implements, rather
+    than one type implementing them all. A handle whose port traits all take
+    `&self` is `Send + Sync`, because several threads may read one store at
+    once; a handle carrying a trait with a `&mut self` method is `Send` and is
+    not required to be `Sync`, because one thread drives each. Stating the rule
+    by receiver rather than as a list classifies every port trait, including
+    `EventSink`, whose `raise` takes `&mut self`, and `Clock`, whose `now` does
+    not.
 
     A face is built over one value implementing exactly the port traits its
     interface needs, which [ADR-0023](ADR-0023-interaction-face-generation.md)
-    decision 5 leaves unchanged. For an interface with one interaction kind that
-    value is the role handle itself. For an interface with several — the common
+    decision 5 leaves unchanged. When a face needs exactly one port trait, that
+    value is the role handle itself. When it needs more than one — the common
     case, because a generated `Client` may be bound over
     `SignalReader + EventSource + Caller` at once — it is an **aggregate
     handle**: one the runtime offers for that port set, or one the application
     composes from role handles and forwards the port traits through, which is
-    the wrapper decision 11's impls admit. An aggregate is `Send`, and `Sync`
-    only if every trait it carries is. Without this paragraph the two halves of
-    the 2026-09-20 amendment would not compose, because no per-trait handle
-    satisfies a multi-trait bound; Sebastien amended the ratified D-3 on
-    2026-09-20 to add it (driftsys/ridl#429).
+    the wrapper decision 11's impls admit. An aggregate is `Send`, and is `Sync`
+    only if every port trait it carries takes `&self` in all its methods, which
+    is the same receiver rule applied to the traits it composes. Either value
+    reaches `Client::new` by value, or as a `&mut` borrow of itself under
+    decision 11's forwarding impls. A handle for one role does not satisfy a
+    multi-trait bound, so a face that needs more than one port trait must be
+    given an aggregate (the second 2026-09-20 amendment; driftsys/ridl#429).
 
     This record states the expectation; the crate does not enforce it. No port
     trait gains `Send` or `Sync` as a supertrait, because that would exclude a
@@ -288,7 +292,7 @@ trusted with no `unsafe` and no second verification pass.
     mutex: every `SignalReader::read` would then wait behind every
     `SignalWriter::commit`, removing the property a signal read is specified to
     have, that a read does not block on a publication. Story E11.9 builds the
-    first runtime to this shape, and its roadmap row carries the obligation.
+    first runtime to this shape, and its roadmap row states that obligation.
 
 ## Alternatives considered
 
@@ -334,7 +338,7 @@ trusted with no `unsafe` and no second verification pass.
   over a runtime's own value; and from now on the threading model a runtime
   presents is stated where a runtime author reads it, rather than left for story
   E11.9 to settle by implementation (decision 12). Neither costs a breaking
-  release: decision 11 is additive and decision 12 adds no bound.
+  release: decision 11 is additive and decision 12 adds no bound to any trait.
 - **Neutral — the `u16` fallback and the review debt stay open.** Decision 2's
   fallback and the driftsys/ridl#350 items decision 10 leaves open are not
   blocking anything scheduled now, and are recorded here so a future change to
