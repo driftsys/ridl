@@ -1,8 +1,15 @@
 # The FlatBuffers payload codec — design note
 
-**Status:** proposal. Nothing here is decided until the disposition comment on
-its pull request says so, and no decision record, design record or roadmap row
-moves before that.
+**Status: disposed of, 2026-09-20.** The disposition comment on this note's pull
+request took D-2, D-3, D-5, D-8, D-9 and D-10 as proposed; D-4, D-7, D-11 and
+D-12 with an addition each; and amended **D-1 and D-6** together on where the
+shared projection facts live and on the codec's entry point. Every amended
+decision below is marked, and the amendment is written into the decision itself,
+not left to the comment. Open items 1 and 3 are closed here; open item 2 stays
+Epic 10's. The implementation plan is
+[`2026-09-20-flatbuffers-codec-plan.md`](2026-09-20-flatbuffers-codec-plan.md),
+which carries the amendments. The records of §5 still move with the stage that
+needs each one.
 
 **Story:** roadmap E11.7, the FlatBuffers payload codec. **Done when** a payload
 round-trips through the library.
@@ -48,18 +55,29 @@ Three couplings are live while this is written:
 
 ### D-1 — the codec is Rust output, emitted by the Rust backend
 
-`ridl-backend-rust` emits the `Payload<FlatBuffers>` implementations, from a
-companion entry point beside `generate` and `generate_face` — the shape
-[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 2
-already took for the face — writing a `flatbuffers` module into the generated
-package. `ridl-backend-flatbuffers` keeps emitting the `.fbs` schema and gains
-no Rust emission.
+**Amended by the disposition, 2026-09-20**, on both halves: the entry point and
+where the shared facts live. The text below is the amended decision.
+
+`ridl-backend-rust` emits the `Payload<FlatBuffers>` implementations **into
+`generate`'s own output**, not behind a companion entry point. The codec is
+needed by a package whose consumer never dispatches, and `generate` already
+names `ridl-rt`, so a third entry point beside `generate` and `generate_face`
+would split the output a plain consumer needs across two calls. What made a
+separate entry point look necessary was the proof mechanism — every rustc proof
+compiles `ridl-rt` bare — and D-12 settles that instead.
+`ridl-backend-flatbuffers` keeps emitting the `.fbs` schema and gains no Rust
+emission.
 
 The two emitters share no emission code. What they share is ADR-0019, and one
 place that reads it: the projection facts both need — a type's table layout, its
-field slots, a union arm's discriminant, a type's size bound — are computed once
-in `ridl-backend-flatbuffers` and exported, and the Rust emitter calls that
-rather than re-deriving the projection from the IR. A drift test asserts the two
+field slots, a union arm's discriminant, a type's size bound. **Those facts live
+outside any backend**, in `ridl-ir` or in a small projection crate, where
+`ridl-backend-flatbuffers`, `ridl-backend-rust` and later `ridl-descriptor` all
+reach them without one crate depending on a backend. A dependency of the Rust
+backend on the FlatBuffers backend would make a backend a library other crates
+link, which is the opposite of what
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 9 makes a backend in step 2. A drift test asserts the two emitters
 agree on every fixture.
 
 **Rejected:** the FlatBuffers backend emitting Rust. A backend is named for the
@@ -105,6 +123,11 @@ that is the parsed value would make `verify` allocate.
 **Rejected:** `View<'a> = &'a [u8]`, the minimum that compiles.
 
 ### D-4 — the constraint check runs in `verify`, over a borrowed value
+
+**Taken, 2026-09-20.** The `check` beside `new` is a request on lane C, and Epic
+10 Task 6 is driftsys/ridl#443, which was told while still open rather than
+after it merged. Whether `check` is public stays Epic 10's call — open item 2,
+left open.
 
 `Payload::decode` returns `Self` and cannot fail, and every generated domain
 type is an Epic 10 value object whose constructor rejects an out-of-constraint
@@ -164,10 +187,16 @@ buffer, in place of the verifier limits another implementation would carry.
 
 ### D-6 — the size bound has one implementation, and it is the projection's
 
-`MAX_SIZE` is computed by `ridl-backend-flatbuffers`, beside the projection
-rules that determine it, and exported as a function over the IR returning
-`Option<u64>` — `None` meaning no finite bound. The Rust emitter calls it and
-writes the value into the generated `const MAX_SIZE: usize`.
+**Amended by the disposition, 2026-09-20**, on where the implementation lives,
+for D-1's reason.
+
+`MAX_SIZE` is computed **in the shared home D-1 names** — `ridl-ir` or a small
+projection crate — beside the projection facts that determine it, and exported
+as a function over the IR returning `Option<u64>`, `None` meaning no finite
+bound. The Rust emitter calls it and writes the value into the generated
+`const MAX_SIZE: usize`. It is not `ridl-backend-flatbuffers`'s to own, because
+`ridl-descriptor` needs the same number and must not depend on a backend to get
+it.
 
 Epic 16 needs the same number for `EncodedSizes.flatbuffers`. Its plan
 (`2026-09-13-catalog-descriptor-plan.md`, Task 7) writes an independent
@@ -192,6 +221,15 @@ the padding and vtable slack the projection charges.
 If the bound of D-6 is `None`, the emitter writes no `Payload<FlatBuffers>`
 implementation for that type and returns a `GenerateError` naming the type and
 the member that is unbounded.
+
+**Taken with an addition, 2026-09-20.** typl makes every array and map bound
+mandatory, defaults a `string` and a `bytes` to `[0..256]` when unspecified
+(TYPL-103, a warning), and rejects a recursive composite reference, direct or
+transitive (TYPL-206, an error). So a type with no finite bound **is not
+reachable from typl source**. This diagnostic is totality over the IR, not a
+case a user will meet: it must exist and be tested, and it does not need to be
+loud. That closes open item 3, and the plan's first task needs no fixture work
+to discover the answer.
 
 This keeps the encoding total in the sense ADR-0016 decision 6 and ADR-0017
 decision 4 fix for every projection: a construct the target cannot carry is a
@@ -285,6 +323,16 @@ deleted and the generated codec takes their place, retiring the first row of the
 interaction-face record's "What is provisional" table. That record's other rows
 are untouched.
 
+**Taken with an addition, 2026-09-20: this stage settles driftsys/ridl#448.**
+The `Wire` rebinding is the one place every generated constructor is rewritten,
+so the change that does it either emits the catalog check
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
+describes, or records in the same change that the check waits for E16.2 and
+amends the two sentences #448 quotes. Today ADR-0021 decision 3 and ADR-0023
+decision 5 both promise a check no constructor performs — no `.catalog()` call
+exists under `crates/ridl-backend-rust/`. Touching every constructor and leaving
+that promise false is the one outcome ruled out.
+
 **Rejected:** a type parameter on the face. **Rejected:** leaving the face on
 `ReprC` until E11.12. That would keep a hand-written placeholder in the tree
 through two more stories, and it would mean the first real codec is never
@@ -307,6 +355,19 @@ exercised by the face's round trip.
 - **`wasm32`.** The fixture package joins `just wasm-check`, because ADR-0020
   decision 2 makes the generated Rust compiled to `wasm32` the codec a
   TypeScript consumer loads.
+- **The proof mechanism (added 2026-09-20).** Every rustc proof in the Rust
+  backend compiles `ridl-rt` bare, with no feature, so a proof over
+  `Payload<FlatBuffers>` output needs `--cfg feature="flatbuffers"` or a cargo
+  build; the `--extern` mechanism alone will not compile the emitted code. This
+  is what D-1's amendment relies on, and it lands with the emitter.
+- **The release coupling (added 2026-09-20).** A consumer outside this
+  repository cannot build the emitted crate until a `ridl-rt` release carries
+  the feature's contents, because the emitted manifest names crates.io. The
+  feature gating and the release are one decision, not two.
+- **The minimum toolchain (added 2026-09-20).** `just compat-check` runs
+  `cargo +1.83 test --all-features` against the packaged crate, so the helpers
+  of the first bullet must build at `rust-version = "1.83"`, not only at the
+  toolchain pin.
 - **Out of scope.** E11.7 emits no frame (E11.1), no transport (E11.9), no
   proto3 (E11.8), no `repr(C)` layout (E11.12) and no TypeScript. It does not
   make `ridl build` emit the codec — that is the row K0 adds as E11.14 — and it
@@ -325,19 +386,23 @@ exercised by the face's round trip.
 
 ## 4. Open items
 
-1. **Where the shared projection facts of D-1 live in the crate's API.** A
-   public module of `ridl-backend-flatbuffers`, or a third crate both backends
-   depend on. The first is proposed; the second is what the codegen model of
-   ADR-0020 decision 8 will make natural in step 2, and choosing it now would
-   pre-empt that design.
-2. **Whether `check` of D-4 is public in the generated package.** It has a use
-   beyond the codec — a consumer validating a value it did not build — and
-   making it public is a surface commitment Epic 10 should take, not this note.
-3. **A vector of tables and the `MAX_SIZE` of an unbounded collection.** D-7
-   refuses a type with no finite bound. Whether typl's default bounds leave any
-   such type reachable in practice is a question for the fixture work of the
-   plan's first task, and the answer changes how loud D-7's diagnostic needs to
-   be.
+1. ~~**Where the shared projection facts of D-1 live in the crate's API.**~~
+   **Closed by the disposition, 2026-09-20.** Not a public module of
+   `ridl-backend-flatbuffers`: the facts live outside any backend, in `ridl-ir`
+   or a small projection crate, so that `ridl-backend-rust` and later
+   `ridl-descriptor` reach them without depending on a backend. The ground is
+   ADR-0020 decision 9 — a backend is not a library other crates link — rather
+   than the step-2 convenience this note offered as the second option.
+2. **Open — Epic 10's.** **Whether `check` of D-4 is public in the generated
+   package.** It has a use beyond the codec — a consumer validating a value it
+   did not build — and making it public is a surface commitment Epic 10 should
+   take, not this note.
+3. ~~**A vector of tables and the `MAX_SIZE` of an unbounded collection.**~~
+   **Closed by the disposition, 2026-09-20.** No such type is reachable from
+   typl source: every array and map bound is mandatory, a `string` and a `bytes`
+   default to `[0..256]` (TYPL-103), and recursion is an error (TYPL-206). D-7's
+   diagnostic is totality over the IR, tested but not loud, and the plan's first
+   task needs no fixture work to settle it.
 
 ## 5. Records this changes, if the disposition takes it
 
