@@ -385,11 +385,11 @@ mechanisms some runtimes have, not interaction semantics every runtime must
 present, so a runtime may omit either.
 
 **Every port trait is implemented for `&mut P`, and the `&self`-only traits also
-for `&P` — impls this module does not yet contain.** For each port trait `T`,
-the crate provides `impl<P: T + ?Sized> T for &mut P`; for the traits whose
-methods all take `&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
-`ScannableSignals` and `CoherentSignals` — it also provides
-`impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
+for `&P`.** For each port trait `T`, the crate provides
+`impl<P: T + ?Sized> T for &mut P`; for the traits whose methods all take
+`&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`
+and `CoherentSignals` — it also provides `impl<P: T + ?Sized> T for &P`. A
+generated face holds its port by value
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
 so these impls are what let it be built over a borrow of a handle. An owned
 handle, a `Clone` handle and a wrapper that adds tracing or a test double are
@@ -398,9 +398,7 @@ implements the port traits itself rather than borrowing through them. The impls
 are additive and need no `alloc`; `Box<P>` is not forwarded, because that would
 need `alloc`, which no feature combination of this crate brings in.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
-records them and the reasoning; until the `ridl-rt` change that follows it
-merges, this paragraph describes impls `crates/ridl-rt/src/port.rs` does not
-contain.
+records them and the reasoning.
 
 **A runtime presents one handle per port role, and this crate adds no `Send` or
 `Sync` bound.** A port role is one port trait. A runtime crate exposes one
@@ -423,7 +421,7 @@ supertrait, so a single-threaded `no_std` runtime whose handles use `Cell` or
 compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12
 records the reasoning and the alternative it rejects, one runtime struct behind
-a mutex. No runtime exists in this workspace yet; story E11.9 builds the first
+a mutex. No runtime exists in this workspace yet; story E11.15 builds the first
 one to this shape.
 
 ## The `error` module and the port errors
@@ -457,8 +455,8 @@ calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
 (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
 wire tag values, added with story E11.1); `Access` (the trust constant the Rust
 codegen generates once the rsdl lowering exists); the three payload codecs
-(stories E11.7, E11.8 and E11.12); the runtimes `ridl-loopback` and
-`ridl-transport-ws` (story E11.9); and the engine. `Family` returns as a
+(stories E11.7, E11.8 and E11.12); the runtimes `ridl-loopback` (story E11.15)
+and `ridl-transport-ws` (story E11.9); and the engine. `Family` returns as a
 `Member` field, which is a breaking change (ADR-0021 decision 10); streams have
 no story yet.
 

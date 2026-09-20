@@ -5,6 +5,7 @@ expression: rust_for(decls)
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[deprecated(note = "use Velocity")]
 #[repr(transparent)]
 pub struct Speed(f64);
@@ -58,6 +59,7 @@ impl Default for Speed {
         Speed::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[deprecated]
 #[repr(transparent)]
 pub struct OldFlag(bool);
@@ -99,6 +101,7 @@ impl Default for OldFlag {
         OldFlag::new_unchecked(false)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub(crate) struct RawTicks(i64);
 impl RawTicks {

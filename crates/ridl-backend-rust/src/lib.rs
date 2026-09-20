@@ -17,6 +17,11 @@
 //! derivable. The IR `InitValue.derivable` flag on a composite-typed field is a
 //! one-level flag, so same-package composite references are re-checked by
 //! recursion rather than trusted (see the `defaults` module).
+//!
+//! Derive eligibility uses the same recursion over the transitive closure, in
+//! the `derives` module: `Debug`, `Clone` and `PartialEq` on every generated
+//! type, `Copy`, `Eq`, `Hash` and the ordering pair where the closure permits,
+//! and `Default` never, because it comes from the typl init value instead.
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -26,6 +31,7 @@ use std::collections::{HashMap, HashSet};
 
 mod clauses;
 mod defaults;
+mod derives;
 mod descriptors;
 mod face;
 
@@ -282,13 +288,19 @@ impl<'a> Ctx<'a> {
 // ---------------------------------------------------------------------------
 
 fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> TokenStream {
+    // The derive attribute is computed once and handed to the emitter, which
+    // places it under the declaration's doc comment rather than above it.
+    // Prepending it to the finished item would render it above the doc, which
+    // is backwards from how Rust is written everywhere else — and `Default` is
+    // never among the traits (`derives`, design decision 8).
+    let derived = derives::derive_attr(ctx, decl);
     let item = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td),
+        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td, &derived),
         Some(v2::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
-        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, tuples),
-        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed),
-        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
-        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
+        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, &derived, tuples),
+        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed, &derived),
+        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd, &derived),
+        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud, &derived),
         // Interaction kinds ride `Interface.interactions`, never a package
         // decl, so none of them reaches this match; nothing emits them today.
         Some(_) | None => return quote! {},
@@ -324,7 +336,7 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
 /// Each covered impl block uses the deprecated type, and without the allow
 /// the consumer's build draws the `deprecated` lint on code the consumer did
 /// not write.
-fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
+fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
     let doc = doc_attrs(&decl.doc);
@@ -352,6 +364,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
         #doc
         #separator
         #unchecked
+        #derived
         #deprecated
         #[repr(transparent)]
         #vis struct #name(#inner);
@@ -395,10 +408,11 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     }
 }
 
-/// The range and length checks for one constraint, as statements that return
-/// early with a `Violation`. Only the branches the constraint carries are
-/// emitted, so a string with a length bound and no range gets only the length
-/// check. The pattern check is not emitted here.
+/// The range, length and pattern checks for one constraint, as statements
+/// that return early with a `Violation`. Only the branches the constraint
+/// carries are emitted, so a string with a length bound and no range gets
+/// only the length check. The pattern check is emitted last and is the only
+/// one behind a feature gate.
 ///
 /// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
 /// emitted only for a float or integer backing; on any other backing the two
@@ -484,6 +498,49 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             });
         }
     }
+    if backing_scalar(td) == ScalarBacking::String
+        && let Some(pattern) = c.pattern.as_deref()
+    {
+        // A `match` pattern is checked against text, and `regex::Regex`
+        // matches `&str`. Only a `String` backing has a value that coerces
+        // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
+        // against which `Regex::is_match` does not type-check.
+        //
+        // No typl source reaches this: the reference gives bytes no `match`
+        // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
+        // that backing, so the pattern never enters the IR. The guard is
+        // totality over the IR rather than over the surface, on the same
+        // footing as the `is_float` guard above — `lower_len_scalar` always
+        // leaves `min` and `max` absent, so that one is unreachable from a
+        // typl source too, and is pinned by its own test. A backend reads
+        // the IR, which need not have come from this checker.
+        //
+        // The pattern needs a regex engine, which `core` has none of. The
+        // range and length checks above are not gated; only this one is, so
+        // a `--no-default-features` build still validates the bounds it
+        // emits.
+        //
+        // `::std` and `::regex` are absolute for the reason the prelude
+        // names are: the face module of an interface named `Std` or `Regex`
+        // is a module of that name in this same module, and it would shadow
+        // the extern crate.
+        let source = strip_regex_delimiters(pattern);
+        checks.push(quote! {
+            #[cfg(feature = "validate-pattern")]
+            {
+                static PATTERN: ::std::sync::LazyLock<::regex::Regex> =
+                    ::std::sync::LazyLock::new(|| {
+                        ::regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
+                    });
+                if !PATTERN.is_match(&#value) {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Pattern,
+                    });
+                }
+            }
+        });
+    }
     quote! { #(#checks)* }
 }
 
@@ -509,20 +566,33 @@ fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> Toke
 }
 
 /// The gaps a generated constructor does not close, named on the type itself
-/// rather than left silent: a `step` is not checked by `new`, and neither is
-/// a `match` pattern until the pattern check lands. `pattern_const` is read as
-/// well as `pattern`, because a pattern constant that did not resolve leaves
-/// `pattern` absent while the type still carries a match constraint.
+/// rather than left silent: a `step` is not checked by `new`. A literal
+/// `match` pattern on a `String` backing is checked by `new`, but only under
+/// the `validate-pattern` feature, so the type names that condition rather
+/// than leaving the guarantee silently variable. On any other backing
+/// `constraint_checks` emits no pattern branch at all (a `regex::Regex`
+/// matches `&str`, and only a `String` backing's value coerces to one), so
+/// the plain "not checked" line applies there instead. `pattern_const` is
+/// read as well as `pattern`, because a pattern constant that did not resolve
+/// leaves `pattern` absent while the type still carries a match constraint,
+/// and no check is emitted for that case either, so it keeps the plain "not
+/// checked" line.
 fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
     let Some(c) = td.constraint.as_ref() else {
         return quote! {};
     };
     let mut lines = Vec::new();
     if c.step.is_some() {
-        lines.push(" Quantization (`step`) is not checked by `new`.");
+        lines.push(" Quantization (`step`) is not checked by `new`.".to_string());
     }
-    if c.pattern.is_some() || c.pattern_const.is_some() {
-        lines.push(" The `match` pattern is not checked by `new`.");
+    if c.pattern.is_some() && backing_scalar(td) == ScalarBacking::String {
+        lines.push(
+            " The `match` pattern is checked by `new` only when the crate is built with \
+              the `validate-pattern` feature."
+                .to_string(),
+        );
+    } else if c.pattern.is_some() || c.pattern_const.is_some() {
+        lines.push(" The `match` pattern is not checked by `new`.".to_string());
     }
     quote! { #(#[doc = #lines])* }
 }
@@ -533,7 +603,8 @@ fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
 /// constructed in a `const` context. This asymmetry is documented in the C
 /// header and here.
 fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
-    let attrs = decl_attrs(decl);
+    // A constant is a value, not a type: there is nothing to derive on it.
+    let attrs = decl_attrs(decl, &quote! {});
     let vis = vis_tokens(decl.visibility);
     let name = ident(&decl.name);
 
@@ -602,9 +673,14 @@ fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
     }
 }
 
-fn emit_struct(decl: &v2::Decl, sd: &v2::StructDef, tuples: &mut Vec<InducedTuple>) -> TokenStream {
+fn emit_struct(
+    decl: &v2::Decl,
+    sd: &v2::StructDef,
+    derived: &TokenStream,
+    tuples: &mut Vec<InducedTuple>,
+) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
     let repr = if sd.fixed_layout {
         quote! { #[repr(C)] }
@@ -649,9 +725,9 @@ fn emit_field(
 
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names keep their typl `SCREAMING_SNAKE` spelling.
-fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
+fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
@@ -719,9 +795,9 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
 /// because it shares the block. Without the allow the consumer's build draws
 /// the `deprecated` lint on code the consumer did not write — which is what
 /// driftsys/ridl#420 settled for a named scalar's impl blocks.
-fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
+fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let bits = esd.bits.iter().map(|bit| {
@@ -810,9 +886,9 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef) -> TokenStream {
+fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ud.arms.iter().map(|arm| {
@@ -851,6 +927,7 @@ fn emit_tuple_struct(
     } = induced;
     let name_id = ident(name);
     let vis = vis_tokens(*visibility);
+    let derived = derives::tuple_derive_attr(ctx, tuple);
     let fields = tuple.fields.iter().map(|field| {
         let fname = ident(&field.name);
         let hint = format!("{}{}", name, camel_case(&field.name));
@@ -863,6 +940,7 @@ fn emit_tuple_struct(
     });
 
     let struct_item = quote! {
+        #derived
         #vis struct #name_id {
             #(#fields),*
         }
@@ -1074,10 +1152,15 @@ fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
 
-fn decl_attrs(decl: &v2::Decl) -> TokenStream {
+/// The attributes that precede a generated item: its doc comment first, then
+/// its `#[derive(...)]`, then `#[deprecated]`. The derive sits under the doc
+/// comment because that is where Rust is conventionally written; it sits above
+/// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
+/// looks for the trait list first.
+fn decl_attrs(decl: &v2::Decl, derived: &TokenStream) -> TokenStream {
     let doc = doc_attrs(&decl.doc);
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
-    quote! { #doc #deprecated }
+    quote! { #doc #derived #deprecated }
 }
 
 fn field_attrs(field: &v2::Field) -> TokenStream {

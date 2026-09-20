@@ -178,6 +178,96 @@ fn speed_decl() -> v2::Decl {
     }
 }
 
+/// A `string`-backed type carrying a positive length bound and a literal
+/// pattern, used to pin that the pattern check is gated behind
+/// `validate-pattern` while the length check is not. `len_min` and `len_max`
+/// are both 17 so the minimum branch is emitted (a `len_min` of 0 emits no
+/// branch at all).
+fn vin_decl() -> v2::Decl {
+    public_decl(
+        "Vin",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(17),
+                len_max: Some(17),
+                pattern: Some("/[A-HJ-NPR-Z0-9]{17}/".to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
+/// A `bytes`-backed type carrying a positive length bound and a literal
+/// pattern.
+///
+/// **No typl source produces this.** The reference gives bytes no `match`
+/// (§4.5, §5.4), and `lower_scalar` passes `allow_pattern: false` for that
+/// backing, so a `match` written on a bytes type is dropped and the IR
+/// carries `{len_min, len_max}` and nothing else. The fixture is built by
+/// hand to exercise the backend's totality over an IR it did not lower
+/// itself, which is the same thing `a_range_on_a_non_numeric_backing_emits_no_range_check`
+/// does for `min`/`max` — `lower_len_scalar` always leaves those absent too.
+///
+/// What it pins: `newtype_inner` gives such a type a `Vec<u8>`, against which
+/// `regex::Regex::is_match` (which takes `&str`) does not type-check, so
+/// `constraint_checks` must emit no pattern branch while still emitting its
+/// length checks.
+fn bytes_pattern_decl() -> v2::Decl {
+    public_decl(
+        "Sig",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Bytes as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(1),
+                len_max: Some(8),
+                pattern: Some("/^[A-Z]+$/".to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
+/// A `string`-backed type whose pattern is a literal the stand-in `regex`
+/// can decide, with `len_min` and `len_max` both 3 so a matching and a
+/// non-matching value are the same length and the length checks cannot be
+/// what separates them. Used by the executed proof of the pattern check.
+fn literal_pattern_decl() -> v2::Decl {
+    public_decl(
+        "Code",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(3),
+                len_max: Some(3),
+                pattern: Some("/ABC/".to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
 fn counter_decl() -> v2::Decl {
     public_decl(
         "Counter",
@@ -510,14 +600,13 @@ fn a_range_without_a_step_names_nothing_unchecked() {
     );
 }
 
-/// The pattern check is not emitted until a later task, so a type carrying a
-/// `match` constraint names that on itself (design, "Not validated, and
-/// documented as such"). A pattern given by name is read as well as one given
-/// literally: a pattern constant that did not resolve leaves `pattern` absent
-/// while the type still carries a match constraint.
+/// An unresolved `pattern_const` names the pattern as unchecked, because no
+/// check is emitted for it (design, "Not validated, and documented as such"
+/// still applies to that case). A length bound alone leaves nothing unchecked
+/// to name.
 #[test]
-fn an_unchecked_pattern_is_named_on_the_type() {
-    let with_pattern = |pattern: Option<&str>, pattern_const: Option<&str>| {
+fn an_unresolved_pattern_const_is_named_on_the_type() {
+    let with_pattern = |pattern_const: Option<&str>| {
         rust_for(vec![public_decl(
             "Handle",
             v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -529,7 +618,7 @@ fn an_unchecked_pattern_is_named_on_the_type() {
                 constraint: Some(v2::Constraint {
                     len_min: Some(3),
                     len_max: Some(8),
-                    pattern: pattern.map(str::to_string),
+                    pattern: None,
                     pattern_const: pattern_const.map(str::to_string),
                     ..constraint(None, None, None)
                 }),
@@ -539,32 +628,77 @@ fn an_unchecked_pattern_is_named_on_the_type() {
             }),
         )])
     };
-    for source in [
-        with_pattern(Some("/[a-z]+/"), None),
-        with_pattern(None, Some("HANDLE_PATTERN")),
-    ] {
-        assert!(
-            source.contains("/// The `match` pattern is not checked by `new`."),
-            "an unchecked pattern must be named on the type, got:\n{source}"
-        );
-    }
-    let source = with_pattern(None, None);
+    let source = with_pattern(Some("HANDLE_PATTERN"));
+    assert!(
+        source.contains("/// The `match` pattern is not checked by `new`."),
+        "an unresolved pattern constant must be named as unchecked, got:\n{source}"
+    );
+    let source = with_pattern(None);
     assert!(
         !source.contains("is not checked by `new`"),
         "a length bound alone leaves nothing unchecked to name, got:\n{source}"
     );
-    // A `step` and a pattern together are both named.
+}
+
+/// A literal pattern is checked by `new` under `validate-pattern`, so the
+/// type names that condition instead of claiming the pattern goes unchecked
+/// outright.
+#[test]
+fn a_literal_pattern_is_named_as_feature_gated() {
+    let source = rust_for(vec![public_decl(
+        "Handle",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(3),
+                len_max: Some(8),
+                pattern: Some("/[a-z]+/".to_string()),
+                pattern_const: None,
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )]);
+    assert!(
+        !source.contains("The `match` pattern is not checked by `new`."),
+        "a literal pattern is checked by `new` under the feature, got:\n{source}"
+    );
+    // The assertion names the doc line itself. A bare `contains`
+    // ("validate-pattern") is satisfied by the `#[cfg(feature =
+    // "validate-pattern")]` attribute in the constructor body, so deleting
+    // the doc line entirely would leave it green.
+    assert!(
+        source.contains(
+            "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
+        ),
+        "the type must name the condition its pattern guarantee depends on, got:\n{source}"
+    );
+}
+
+/// A `step` and a literal pattern together are both named: the step is never
+/// checked, and the pattern is checked only under `validate-pattern`. The
+/// `unchecked_doc` check for `step` reads no backing, so it is unconditional;
+/// the backing here is `String` so the pattern's own guard (a check is
+/// emitted only for a `String` backing) also applies.
+#[test]
+fn a_step_and_a_literal_pattern_are_both_named() {
     let source = rust_for(vec![public_decl(
         "Stepped",
         v2::decl::Kind::TypeDef(v2::TypeDef {
             backing: Some(v2::Backing {
                 kind: Some(v2::backing::Kind::Primitive(
-                    v2::PrimitiveType::Float as i32,
+                    v2::PrimitiveType::String as i32,
                 )),
             }),
             constraint: Some(v2::Constraint {
                 pattern: Some("/x/".to_string()),
-                ..constraint(Some("0.0"), Some("1.0"), Some("0.5"))
+                ..constraint(None, None, Some("0.5"))
             }),
             declared_init: None,
             init: Some(init_value(true, Some("0.0"))),
@@ -572,7 +706,226 @@ fn an_unchecked_pattern_is_named_on_the_type() {
         }),
     )]);
     assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
-    assert!(source.contains("/// The `match` pattern is not checked by `new`."));
+    assert!(!source.contains("The `match` pattern is not checked by `new`."));
+    // The doc line itself, not the `cfg` attribute that also carries the
+    // feature name.
+    assert!(source.contains(
+        "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
+    ));
+}
+
+/// The pattern check is emitted only under `validate-pattern`; the range and
+/// length checks above it are not gated, since they need no dependency.
+#[test]
+fn pattern_check_is_feature_gated() {
+    let source = rust_for(vec![vin_decl()]);
+    assert!(source.contains("#[cfg(feature = \"validate-pattern\")]"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Pattern"));
+    // Both crate paths are absolute, so an interface named `Std` or `Regex`
+    // cannot shadow them from the module the constructor lives in.
+    assert!(source.contains("::std::sync::LazyLock"));
+    // The regex source is the pattern with its `/` delimiters stripped. The
+    // IR stores them (`ridl-sem` keeps the literal as written), and emitting
+    // them would compile into a regex that never matches, so every `new`
+    // would reject every value. Asserting only on `Regex::new` leaves that
+    // undetected, so the argument is pinned too.
+    assert!(
+        source.contains(r#"::regex::Regex::new("[A-HJ-NPR-Z0-9]{17}")"#),
+        "the emitted regex source must have its delimiters stripped, got:\n{source}"
+    );
+    // The length check is not gated - it needs no dependency. This is the
+    // text before the first gate, so the name says ungated, not gated.
+    let ungated = source
+        .split("#[cfg(feature = \"validate-pattern\")]")
+        .next()
+        .unwrap();
+    assert!(ungated.contains("::ridl_rt::payload::Rule::Length"));
+}
+
+/// Outside this test and [`the_generated_pattern_check_runs`], no proof in
+/// this repository compiles the `#[cfg(feature = "validate-pattern")]` block:
+/// every other `rustc` compile proof, here and in
+/// `crates/ridlc/tests/rust_crate_emit.rs`, drives bare `rustc` with no
+/// `--cfg` for that feature, so the block is compiled out. `regex` is not a
+/// declared dependency of any workspace crate, so neither proof can link the
+/// real one; both link [`regex_stub_rlib`], a hand-written stand-in built the
+/// same way [`ridl_rt_rlib`] builds `ridl-rt` (see its doc comment for why one
+/// `rustc` call is the whole build).
+///
+/// The two are not redundant. This one uses `vin_decl` and is the only test
+/// asserting that the gate attribute is emitted at all, so it alone catches
+/// the gate being dropped. [`the_generated_pattern_check_runs`] uses a fixture
+/// whose pattern its stand-in can decide, and runs the result, so it catches
+/// what compiling cannot see.
+#[test]
+fn pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in() {
+    let source = rust_for(vec![vin_decl()]);
+    assert!(
+        source.contains("#[cfg(feature = \"validate-pattern\")]"),
+        "the fixture must actually exercise the gated block, got:\n{source}"
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("pattern_gated.rs");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let ridl_rt = ridl_rt_rlib(dir.path());
+    let regex = regex_stub_rlib(dir.path());
+
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("pattern_gated.rmeta"))
+        .arg("--cfg")
+        .arg(r#"feature="validate-pattern""#)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", ridl_rt.display()))
+        .arg("--extern")
+        .arg(format!("regex={}", regex.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the validate-pattern block must compile against the regex stand-in, source:\n{source}"
+    );
+}
+
+/// The pattern check is compiled **and run**, with the feature enabled.
+///
+/// `pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in`
+/// stops at `--emit metadata`, so it type-checks the gated block and never
+/// evaluates it. Two things the emitter can get wrong survive that: the
+/// polarity of the test (`if !PATTERN.is_match(…)` inverted to
+/// `if PATTERN.is_match(…)` still type-checks), and the stripping of the
+/// pattern's `/` delimiters (emitting `"/ABC/"` is a valid regex source that
+/// simply never matches, so every `new` would reject every value). Both leave
+/// every string assertion in this file green, so only an executed assertion
+/// catches them.
+///
+/// The stand-in's `Regex::new` refuses a delimiter-carrying pattern and its
+/// `is_match` compares for equality, so `Code::new("ABC")` must be accepted
+/// and `Code::new("XYZ")` must be refused with `Rule::Pattern`. Both values
+/// are three characters, which is exactly the declared length bound, so the
+/// length checks cannot be what decides either case.
+#[test]
+fn the_generated_pattern_check_runs() {
+    let source = format!(
+        "{}\n{}",
+        rust_for(vec![literal_pattern_decl()]),
+        r#"
+fn main() {
+    // The matching value. If the emitted test were inverted, this would be
+    // refused; if the delimiters were left on the pattern, the stand-in's
+    // `new` would return `Err` and the `expect` in the generated code would
+    // panic before this line.
+    match Code::new(String::from("ABC")) {
+        Ok(c) => assert_eq!(c.get(), "ABC"),
+        Err(v) => panic!("ABC matches the pattern, got {:?}", v.rule),
+    }
+    // The non-matching value, the same length as the matching one, so the
+    // length bounds cannot be what refuses it.
+    match Code::new(String::from("XYZ")) {
+        Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Pattern),
+        Ok(_) => panic!("XYZ does not match the pattern"),
+    }
+    // A value outside the length bound is still refused on length, which
+    // proves the ungated checks survive with the feature enabled.
+    match Code::new(String::from("ABCD")) {
+        Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Length),
+        Ok(_) => panic!("ABCD is outside the declared length bound"),
+    }
+}
+"#
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("pattern_run.rs");
+    let bin_path = dir.path().join("pattern_run");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let ridl_rt = ridl_rt_rlib(dir.path());
+    let regex = regex_stub_rlib(dir.path());
+
+    let status = std::process::Command::new("rustc")
+        .args(["--edition", "2024", "--crate-type", "bin"])
+        .arg("-o")
+        .arg(&bin_path)
+        .arg("--cfg")
+        .arg(r#"feature="validate-pattern""#)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", ridl_rt.display()))
+        .arg("--extern")
+        .arg(format!("regex={}", regex.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the gated pattern check must compile as a program, source:\n{source}"
+    );
+
+    let run = std::process::Command::new(&bin_path)
+        .output()
+        .expect("the compiled program runs");
+    assert!(
+        run.status.success(),
+        "the generated pattern check must behave as declared, stderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
+
+/// A literal pattern on a `bytes` backing emits no pattern check at all: a
+/// `Vec<u8>` value does not type-check against `regex::Regex::is_match`
+/// (`&str`). The length checks are unaffected.
+#[test]
+fn bytes_backed_pattern_emits_no_pattern_check() {
+    let source = rust_for(vec![bytes_pattern_decl()]);
+    assert!(
+        !source.contains("::ridl_rt::payload::Rule::Pattern"),
+        "a bytes backing must emit no pattern check, got:\n{source}"
+    );
+    assert!(
+        !source.contains("#[cfg(feature = \"validate-pattern\")]"),
+        "a bytes backing must emit no feature-gated block, got:\n{source}"
+    );
+    assert!(
+        !source.contains("::regex::"),
+        "a bytes backing must name no regex engine, got:\n{source}"
+    );
+    assert!(
+        source.contains("::ridl_rt::payload::Rule::Length"),
+        "the length bound is still checked, got:\n{source}"
+    );
+}
+
+/// The doc for a bytes-backed pattern must not claim the feature-gated
+/// guarantee it does not implement: since `constraint_checks` emits no
+/// pattern branch for this backing, the type must carry the plain "not
+/// checked" line instead.
+///
+/// This is about an IR the backend did not lower, not about a typl source.
+/// A bytes type written with a `match` reaches the backend with no pattern
+/// at all, so `unchecked_doc` emits no line for it whatsoever; see
+/// [`bytes_pattern_decl`]. The behaviour pinned here is that a pattern
+/// arriving on a backing the check cannot cover is described accurately
+/// rather than advertised as gated.
+#[test]
+fn bytes_backed_pattern_is_named_as_unchecked_not_feature_gated() {
+    let source = rust_for(vec![bytes_pattern_decl()]);
+    assert!(
+        source.contains(" The `match` pattern is not checked by `new`."),
+        "a bytes-backed pattern must be named plainly unchecked, got:\n{source}"
+    );
+    assert!(
+        !source.contains("validate-pattern"),
+        "a bytes-backed pattern must not name the feature it is not gated on, got:\n{source}"
+    );
 }
 
 /// A deprecated declaration's own impl blocks use the deprecated type, which
@@ -1879,6 +2232,92 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
     rlib
 }
 
+/// A hand-written stand-in for the `regex` crate, built as an rlib with plain
+/// `rustc` the same way [`ridl_rt_rlib`] builds `ridl-rt`. `regex` is not a
+/// declared dependency of any workspace crate (`validate-pattern` names it as
+/// an optional dependency only in the crate emitted for a consumer, never
+/// here), so the real crate cannot be linked; this stand-in exposes just
+/// enough surface for the emitted `#[cfg(feature = "validate-pattern")]`
+/// block to type-check: a `Regex` with a fallible `new` and an `is_match`.
+///
+/// `is_match` takes `&str` and nothing more general (not `&[u8]`, not an
+/// `AsRef<str>` bound), so the proof pins the emitted call's argument type
+/// rather than accepting whatever the generator produces. Passing the value
+/// by move instead of by reference, for instance, fails here.
+///
+/// It does **not** guard the backing guard in `constraint_checks`. Doing that
+/// would need a compile proof over a bytes fixture with the feature on, and
+/// no proof here feeds one: both proofs use a `String`-backed fixture, since
+/// a bytes fixture emits no gated block to compile. Removing the backing
+/// guard is caught by `bytes_backed_pattern_emits_no_pattern_check`, which
+/// reads the generated text, not by anything that compiles it.
+const REGEX_STAND_IN_SOURCE: &str = r#"
+pub struct Regex {
+    pattern: String,
+}
+
+#[derive(Debug)]
+pub struct Error;
+
+impl Regex {
+    /// Refuses a pattern that still carries its `/` delimiters. The real
+    /// engine accepts `"/ABC/"` — it is a valid regex whose first and last
+    /// characters are literal slashes, so it simply never matches a value
+    /// that has none — which is why an executed proof needs this refusal to
+    /// notice that the emitter stopped stripping them.
+    ///
+    /// Both ends must be slashes, not either end. `strip_regex_delimiters`
+    /// removes one leading and one trailing `/`, so a typl pattern written
+    /// `/a\//` strips to `a\/`, which ends in a slash and is correct. A
+    /// refusal keyed on either end alone would reject that.
+    pub fn new(pattern: &str) -> Result<Regex, Error> {
+        if pattern.len() >= 2 && pattern.starts_with('/') && pattern.ends_with('/') {
+            return Err(Error);
+        }
+        Ok(Regex { pattern: pattern.to_string() })
+    }
+
+    /// Matches when the text equals the pattern. This is not a regex engine
+    /// and does not pretend to be one: it is the smallest predicate that
+    /// distinguishes a match from a non-match, which is all an executed
+    /// proof of the constructor's polarity needs.
+    pub fn is_match(&self, text: &str) -> bool {
+        text == self.pattern
+    }
+}
+"#;
+
+fn regex_stub_rlib(dir: &std::path::Path) -> std::path::PathBuf {
+    let source_path = dir.join("regex_stand_in.rs");
+    std::fs::write(&source_path, REGEX_STAND_IN_SOURCE)
+        .expect("the regex stand-in source is written");
+    let rlib = dir.join("libregex.rlib");
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "rlib",
+            "--crate-name",
+            "regex",
+        ])
+        .arg(&source_path)
+        .arg("-o")
+        .arg(&rlib)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the regex stand-in must build as an rlib for the compile proof to link"
+    );
+    let head = std::fs::read(&rlib).expect("the rlib is readable");
+    assert!(
+        head.starts_with(b"!<arch>\n"),
+        "the helper must produce an rlib archive, not metadata under an rlib name"
+    );
+    rlib
+}
+
 #[test]
 fn the_compile_proof_harness_links_ridl_rt() {
     // The harness the compile proofs use. Source naming the runtime by its
@@ -1996,12 +2435,24 @@ fn the_harness_rlib_belongs_to_its_caller() {
 fn appendix_b_compiles_with_rustc() {
     let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
 
+    // The stand-in types carry the three derives every generated type carries
+    // (design decision 7), because that is what the real `ridl.std` package
+    // generates. Without them the proof fails on the stand-in rather than on
+    // the code under test: a struct with a cross-package field still derives
+    // `Debug`, `Clone` and `PartialEq`, and those three reach the field's type.
+    // The conditional derives are deliberately absent here — a cross-package
+    // reference disables them on this side, so the proof would not notice if
+    // the stand-in had them.
     const PRELUDE: &str = "\
 pub mod ridl {
     pub mod std {
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Name(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Message(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Label(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Timestamp(pub i64);
         impl Default for Timestamp {
             fn default() -> Self {
@@ -2554,22 +3005,35 @@ fn appendix_a() -> v2::Package {
 fn appendix_a_compiles_with_rustc() {
     let Generated { rust_source, .. } = generate(&appendix_a()).expect("Appendix A generates");
 
+    // Every stand-in carries the three derives a generated type always
+    // carries (design decision 7), because the real packages generate them
+    // and the importing package's own derives reach these types through its
+    // fields. The conditional ones are left off: a cross-package reference
+    // disables them on the importing side, so the proof cannot observe them.
     const PRELUDE: &str = "\
 pub mod ridl {
     pub mod std {
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Message(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Label(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Version(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Duration(pub i64);
-        #[derive(Default)]
+        #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Timestamp(pub i64);
     }
 }
 pub mod veh {
     pub mod common {
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Speed(pub f64);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Temperature(pub f64);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct WarningFlags(pub i64);
+        #[derive(Debug, Clone, PartialEq)]
         pub enum GearPosition {
             PARK = 0,
             DRIVE = 1,
@@ -2686,4 +3150,797 @@ fn module_segment_spells_a_segment_the_way_type_path_does() {
              `{segment}` must agree, or the crate root emits a module the reference cannot name"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Derives (design decision 7, Task 6).
+// ---------------------------------------------------------------------------
+
+/// The trait names inside the `#[derive(...)]` attribute that belongs to the
+/// item whose rendered header is `header` (for example `pub struct Bag {`).
+///
+/// The attribute is found by scanning backwards from the header to the nearest
+/// `#[derive(`, and the text between that attribute and the header is required
+/// to hold nothing but further attributes and doc comments. Without that guard
+/// the helper would silently report the *previous* item's derive for an item
+/// that carries none, which is exactly the failure mode a negative assertion
+/// has to rule out. prettyplease may wrap a long trait list over several
+/// lines, so the list is split on commas and each name trimmed rather than
+/// compared as one string.
+fn derives_of(source: &str, header: &str) -> Vec<String> {
+    let header_at = source
+        .find(header)
+        .unwrap_or_else(|| panic!("`{header}` must be emitted, got:\n{source}"));
+    let open = "#[derive(";
+    let attr_at = source[..header_at]
+        .rfind(open)
+        .unwrap_or_else(|| panic!("`{header}` must carry a derive attribute, got:\n{source}"));
+    let list_at = attr_at + open.len();
+    let close = source[list_at..header_at]
+        .find(")]")
+        .unwrap_or_else(|| panic!("the derive attribute must close, got:\n{source}"));
+    let list = &source[list_at..list_at + close];
+    let gap = &source[list_at + close + ")]".len()..header_at];
+    for line in gap.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        assert!(
+            line.starts_with("#[") || line.starts_with("///") || line.starts_with("//"),
+            "the derive attribute found for `{header}` belongs to another item; \
+             the text between them is:\n{gap}"
+        );
+    }
+    list.split(',')
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+/// Every generated type carries `Debug`, `Clone` and `PartialEq` — the three
+/// that are sound on every backing (design decision 7). Asserted as the
+/// positive companion of each negative assertion below.
+fn assert_always_derived(derived: &[String], header: &str) {
+    for name in ["Debug", "Clone", "PartialEq"] {
+        assert!(
+            derived.iter().any(|d| d == name),
+            "`{header}` must derive {name}, got {derived:?}"
+        );
+    }
+}
+
+#[test]
+fn float_backed_scalar_derives_partial_ord_but_not_ord() {
+    let source = rust_for(vec![speed_decl()]);
+    let derived = derives_of(&source, "pub struct Speed(f64);");
+    assert_always_derived(&derived, "Speed");
+    // Ord requires Eq, and f64 is neither Eq nor Hash.
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "PartialOrd"]
+    );
+}
+
+#[test]
+fn integer_backed_scalar_derives_the_full_ordering_set() {
+    let source = rust_for(vec![counter_decl()]);
+    let derived = derives_of(&source, "pub struct Counter(i64);");
+    assert_always_derived(&derived, "Counter");
+    assert_eq!(
+        derived,
+        [
+            "Debug",
+            "Clone",
+            "Copy",
+            "PartialEq",
+            "Eq",
+            "Hash",
+            "PartialOrd",
+            "Ord"
+        ]
+    );
+}
+
+#[test]
+fn string_backed_scalar_is_not_copy() {
+    let decls = vec![public_decl(
+        "Label",
+        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
+    )];
+    let source = rust_for(decls);
+    let derived = derives_of(&source, "pub struct Label(String);");
+    assert_always_derived(&derived, "Label");
+    // A String is Eq and Hash but not Copy, and a string backing is not
+    // numeric, so it takes no ordering.
+    assert_eq!(derived, ["Debug", "Clone", "PartialEq", "Eq", "Hash"]);
+}
+
+/// A struct whose transitive closure reaches a float is neither `Eq` nor
+/// `Hash`, but is still `Copy` — the two conditions are independent.
+#[test]
+fn struct_with_a_float_field_is_not_eq() {
+    let speed_field = named_field("speed", 1, "Speed", false, init_value(true, None));
+    let telemetry = public_decl(
+        "Telemetry",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(speed_field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), telemetry]);
+    let derived = derives_of(&source, "pub struct Telemetry {");
+    assert_always_derived(&derived, "Telemetry");
+    assert_eq!(derived, ["Debug", "Clone", "Copy", "PartialEq"]);
+}
+
+/// A struct whose closure holds no float is `Eq` and `Hash`. This is the
+/// positive companion of [`struct_with_a_float_field_is_not_eq`]: without it,
+/// a rule that never emits `Eq` would pass that test.
+#[test]
+fn struct_over_integers_only_is_eq_and_hash() {
+    let count_field = named_field("count", 1, "Counter", false, init_value(true, None));
+    let tally = public_decl(
+        "Tally",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(count_field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), tally]);
+    let derived = derives_of(&source, "pub struct Tally {");
+    assert_always_derived(&derived, "Tally");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]
+    );
+}
+
+/// Ordering is a named-scalar property. A struct takes none of it, because
+/// ordering a struct's fields lexicographically is not something typl states
+/// (design decision 7).
+#[test]
+fn a_struct_takes_no_ordering() {
+    let count_field = named_field("count", 1, "Counter", false, init_value(true, None));
+    let tally = public_decl(
+        "Tally",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(count_field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), tally]);
+    let derived = derives_of(&source, "pub struct Tally {");
+    // The positive companion: the numeric named scalar in the same package
+    // does take both, so an emitter that never emits ordering at all cannot
+    // pass this pair.
+    let scalar = derives_of(&source, "pub struct Counter(i64);");
+    assert!(
+        scalar.iter().any(|d| d == "PartialOrd") && scalar.iter().any(|d| d == "Ord"),
+        "the numeric named scalar must take both, got {scalar:?}"
+    );
+    assert!(
+        !derived.iter().any(|d| d == "PartialOrd" || d == "Ord"),
+        "a struct must take no ordering, got {derived:?}"
+    );
+}
+
+/// A union takes no ordering either, for the same reason: arm declaration
+/// order is not a contract typl states.
+#[test]
+fn a_union_takes_no_ordering() {
+    let arm_struct = |name: &str, field: &str| {
+        public_decl(
+            name,
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    field,
+                    1,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        )
+    };
+    let union = public_decl(
+        "Outcome",
+        v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![
+                v2::UnionArm {
+                    name: "ok".to_string(),
+                    ordinal: 1,
+                    type_ref: "Reading".to_string(),
+                    doc: String::new(),
+                },
+                v2::UnionArm {
+                    name: "err".to_string(),
+                    ordinal: 2,
+                    type_ref: "Fault".to_string(),
+                    doc: String::new(),
+                },
+            ],
+            is_result: true,
+            reserved: Vec::new(),
+        }),
+    );
+    let source = rust_for(vec![
+        counter_decl(),
+        arm_struct("Reading", "value"),
+        arm_struct("Fault", "code"),
+        union,
+    ]);
+    let derived = derives_of(&source, "pub enum Outcome {");
+    assert_always_derived(&derived, "Outcome");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]
+    );
+}
+
+/// A union whose arm reaches a float loses `Eq` and `Hash` through the arm,
+/// which is the recursion working through a union rather than a struct.
+#[test]
+fn a_union_arm_reaching_a_float_loses_eq() {
+    let reading = public_decl(
+        "Reading",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                "value",
+                1,
+                "Speed",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let union = public_decl(
+        "Outcome",
+        v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![v2::UnionArm {
+                name: "ok".to_string(),
+                ordinal: 1,
+                type_ref: "Reading".to_string(),
+                doc: String::new(),
+            }],
+            is_result: false,
+            reserved: Vec::new(),
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), reading, union]);
+    let derived = derives_of(&source, "pub enum Outcome {");
+    assert_always_derived(&derived, "Outcome");
+    assert_eq!(derived, ["Debug", "Clone", "Copy", "PartialEq"]);
+}
+
+/// An unresolvable cross-package reference disables every conditional derive.
+/// An unsound `#[derive(Copy)]` is a hard error in the consumer's build, so
+/// the backend cannot be optimistic the way `defaults.rs` is.
+#[test]
+fn struct_with_a_cross_package_field_drops_conditional_derives() {
+    let field = named_field("speed", 1, "veh.other.Speed", false, init_value(true, None));
+    let telemetry = public_decl(
+        "Telemetry",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![telemetry]);
+    let derived = derives_of(&source, "pub struct Telemetry {");
+    assert_always_derived(&derived, "Telemetry");
+    assert_eq!(derived, ["Debug", "Clone", "PartialEq"]);
+}
+
+/// A collection field keeps `Eq` but never `Copy`: the emitted Rust is a
+/// `Vec`, which is not `Copy`.
+#[test]
+fn a_collection_field_keeps_eq_and_loses_copy() {
+    let bag = public_decl(
+        "Bag",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(array_field("counts", "Counter", 2, 8))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), bag]);
+    let derived = derives_of(&source, "pub struct Bag {");
+    assert_always_derived(&derived, "Bag");
+    assert_eq!(derived, ["Debug", "Clone", "PartialEq", "Eq", "Hash"]);
+}
+
+/// A reserved tombstone emits no field (typl §7.4), so it constrains nothing.
+///
+/// The fixture is integer-only on purpose. `struct_with_optional_and_reserved`
+/// also holds a tombstone, but it holds a `String` leaf and an `f64` leaf as
+/// well, so its struct already meets to no conditional derive and a tombstone
+/// that contributed `Eligibility::NONE` would change nothing there. Here the
+/// fields alone permit `Copy`, `Eq` and `Hash`, so the tombstone is the only
+/// thing that could take them away.
+#[test]
+fn a_reserved_tombstone_does_not_constrain_the_derives() {
+    let ledger = public_decl(
+        "Ledger",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![
+                field_member(named_field(
+                    "count",
+                    1,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                )),
+                reserved_member(2, "legacyChecksum"),
+                field_member(named_field(
+                    "total",
+                    3,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                )),
+            ],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), ledger]);
+    let derived = derives_of(&source, "pub struct Ledger {");
+    assert_always_derived(&derived, "Ledger");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"],
+        "a reserved tombstone must not take a conditional derive away"
+    );
+}
+
+/// A map field at the given key and value type, holding up to 32 entries.
+fn map_field(name: &str, key: &str, value: &str) -> v2::Field {
+    let named = |type_ref: &str| {
+        Some(Box::new(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named(type_ref.to_string())),
+        }))
+    };
+    v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: named(key),
+                value: named(value),
+                min: 0,
+                max: 32,
+            }))),
+        }),
+        ..named_field(name, 1, "", false, init_value(true, None))
+    }
+}
+
+/// A map emits `Vec<(K, V)>`, which is not `Copy` however `Copy` its halves
+/// are. The fixture's key and value are both integer-backed, so the leaves
+/// alone would permit `Copy`; the map position is what refuses it.
+#[test]
+fn a_map_field_loses_copy() {
+    let table = public_decl(
+        "Table",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(map_field("meta", "Counter", "Counter"))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), table]);
+    assert!(
+        source.contains("Vec<(Counter, Counter)>"),
+        "the map must emit the Vec form this test reasons about, got:\n{source}"
+    );
+    let derived = derives_of(&source, "pub struct Table {");
+    assert_always_derived(&derived, "Table");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq", "Eq", "Hash"],
+        "a map field must lose Copy and keep the equality pair"
+    );
+}
+
+/// A map whose value reaches a float loses `Eq` and `Hash`: `f64` has neither,
+/// and `Vec<(K, V)>` has them only when both halves do. The key is
+/// integer-backed, so the float reaches the struct through the value half
+/// alone.
+#[test]
+fn a_map_whose_value_reaches_a_float_loses_eq() {
+    let table = public_decl(
+        "Table",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(map_field("meta", "Counter", "Speed"))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), counter_decl(), table]);
+    let derived = derives_of(&source, "pub struct Table {");
+    assert_always_derived(&derived, "Table");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a map whose value reaches a float must lose Eq and Hash"
+    );
+}
+
+/// A map whose **key** reaches a float loses `Eq` and `Hash`, for the same
+/// reason the value half does. This is the mirror of
+/// [`a_map_whose_value_reaches_a_float_loses_eq`], and it is a separate test
+/// because both halves of `eq: key.eq && value.eq` need pinning: with only
+/// the value case covered, dropping `key.eq` passes the whole suite.
+///
+/// The shape is reachable from a typl source. `Checker::lower_map_key`
+/// accepts a bare primitive key under TYPL-209, so a float key lowers with no
+/// diagnostic, and deriving `Eq` on the resulting `Vec<(f64, Counter)>` would
+/// not compile.
+#[test]
+fn a_map_whose_key_reaches_a_float_loses_eq() {
+    let table = public_decl(
+        "KeyTable",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(map_field("meta", "Speed", "Counter"))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), counter_decl(), table]);
+    assert!(
+        source.contains("Vec<(Speed, Counter)>"),
+        "the fixture must emit the map shape it reasons about, got:\n{source}"
+    );
+    let derived = derives_of(&source, "pub struct KeyTable {");
+    assert_always_derived(&derived, "KeyTable");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a map whose key reaches a float must lose Eq and Hash"
+    );
+}
+
+/// A cyclic IR takes no conditional derive.
+///
+/// A cycle is TYPL-206 upstream, but this pass does not trust that gate: on a
+/// repeat visit it returns `Eligibility::NONE` rather than recursing forever.
+/// [`recursive_struct_default_terminates`] pins that the recursion terminates;
+/// this pins what it terminates *with*, which a guard returning
+/// `Eligibility::ALL` would also satisfy.
+#[test]
+fn a_cyclic_struct_takes_no_conditional_derives() {
+    let recursive = v2::StructDef {
+        members: vec![field_member(named_field(
+            "next",
+            1,
+            "S",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let source = rust_for(vec![public_decl("S", v2::decl::Kind::StructDef(recursive))]);
+    let derived = derives_of(&source, "pub struct S {");
+    assert_always_derived(&derived, "S");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a cycle must refuse every conditional derive"
+    );
+}
+
+/// A `Stream` position refuses every conditional derive.
+///
+/// A stream is an interaction-position type (ridl §12.3) and never reaches a
+/// struct field in checked IR. The fixture is built by hand to exercise the
+/// backend's totality over an IR it did not lower itself: the field emits
+/// `()`, and the conservative answer is what the arm returns.
+#[test]
+fn a_stream_field_takes_no_conditional_derives() {
+    let feed = public_decl(
+        "Feed",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(shaped_field(
+                "items",
+                1,
+                v2::field_type::Kind::Stream(v2::StreamType {
+                    element: Some(v2::stream_type::Element::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                }),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![feed]);
+    let derived = derives_of(&source, "pub struct Feed {");
+    assert_always_derived(&derived, "Feed");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a stream position must refuse every conditional derive"
+    );
+}
+
+/// An `Unspecified` field primitive refuses every conditional derive.
+///
+/// This is the field-primitive path only. An `Unspecified` *backing* never
+/// reaches it: `backing_scalar` maps an unspecified primitive backing to
+/// [`ScalarBacking::Bytes`], so such a type emits `Vec<u8>` and is
+/// `Eq` and `Hash` without being `Copy` — which is what
+/// [`string_backed_scalar_is_not_copy`] already covers for the other
+/// allocating backing.
+///
+/// [`ScalarBacking::Bytes`]: super::ScalarBacking::Bytes
+#[test]
+fn an_unspecified_field_primitive_takes_no_conditional_derives() {
+    let hole = public_decl(
+        "Hole",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(shaped_field(
+                "nothing",
+                1,
+                v2::field_type::Kind::Primitive(v2::PrimitiveType::Unspecified as i32),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![hole]);
+    let derived = derives_of(&source, "pub struct Hole {");
+    assert_always_derived(&derived, "Hole");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "an Unspecified field primitive must refuse every conditional derive"
+    );
+}
+
+/// A **fixed** array refuses `Copy` too, and that is a policy rather than a
+/// soundness rule: `[Counter; 4]` is `Copy` in Rust, so deriving it would
+/// compile. The backend refuses it anyway, so that `Copy` never depends on the
+/// array bounds being equal — a rule no reader of the generated crate could
+/// predict from the declaration.
+///
+/// [`a_collection_field_keeps_eq_and_loses_copy`] covers the bounded form,
+/// where `Vec<T>` makes the refusal a soundness rule instead.
+#[test]
+fn a_fixed_array_field_loses_copy_by_policy() {
+    let readings = public_decl(
+        "Readings",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(array_field("counts", "Counter", 4, 4))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), readings]);
+    assert!(
+        source.contains("[Counter; 4]"),
+        "the array must emit the fixed form this test reasons about, got:\n{source}"
+    );
+    let derived = derives_of(&source, "pub struct Readings {");
+    assert_always_derived(&derived, "Readings");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq", "Eq", "Hash"],
+        "a fixed array must lose Copy even though [T; N] would permit it"
+    );
+}
+
+/// `Default` is never derived (design decision 8): it comes from the typl init
+/// value through `defaults.rs`, which may be a declared `= 0.5` that
+/// `#[derive(Default)]` would silently replace with the backing's zero.
+///
+/// The fixture covers every declaration kind that receives a derive attribute
+/// — `type`, `struct`, `enum`, `enum set` and `union` — not just the scalars.
+/// `defaults.rs` emits an `impl Default` for several of them, so a rule that
+/// derived `Default` on the composites while sparing the scalars would be an
+/// easy thing to write and would otherwise go unnoticed here.
+#[test]
+fn default_is_never_derived() {
+    let tally = public_decl(
+        "Tally",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                "count",
+                1,
+                "Counter",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let outcome = public_decl(
+        "Outcome",
+        v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![v2::UnionArm {
+                name: "ok".to_string(),
+                ordinal: 1,
+                type_ref: "Tally".to_string(),
+                doc: String::new(),
+            }],
+            is_result: false,
+            reserved: Vec::new(),
+        }),
+    );
+    let source = rust_for(vec![
+        speed_decl(),
+        counter_decl(),
+        features_decl(),
+        gear_position_decl(),
+        tally,
+        outcome,
+    ]);
+    for header in [
+        "pub struct Speed(f64);",
+        "pub struct Counter(i64);",
+        "pub struct Features(i64);",
+        "pub enum GearPosition {",
+        "pub struct Tally {",
+        "pub enum Outcome {",
+    ] {
+        let derived = derives_of(&source, header);
+        assert!(
+            !derived.iter().any(|d| d == "Default"),
+            "`{header}` must not derive Default, got {derived:?}"
+        );
+    }
+    // The positive companion: the Default the backend does emit is an impl
+    // built from the init value, not a derive.
+    for emitted in [
+        "impl Default for Speed",
+        "impl Default for GearPosition",
+        "impl Default for Tally",
+    ] {
+        assert!(
+            source.contains(emitted),
+            "the init-value Default is still emitted (`{emitted}`), got:\n{source}"
+        );
+    }
+}
+
+/// An induced tuple struct carries its own derive attribute. It has to: the
+/// struct that holds it derives `Debug`, `Clone` and `PartialEq`
+/// unconditionally, and those derives do not compile unless the tuple struct
+/// has them too.
+///
+/// The fixture is deliberately heterogeneous, and the tuple's answer is
+/// deliberately different from its holder's. The tuple is an integer and a
+/// float, so it is `Copy` and not `Eq` — neither `Eligibility::ALL` nor
+/// `Eligibility::NONE`, so a `tuple_derive_attr` that ignored the eligibility
+/// computation and returned a fixed answer could not pass. The holder adds a
+/// `String`-backed field, so it is neither `Copy` nor `Eq`, and the two
+/// attributes cannot be each other's.
+#[test]
+fn an_induced_tuple_struct_carries_its_derives() {
+    let range = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                fields: vec![tuple_field("min", "Counter"), tuple_field("max", "Speed")],
+            })),
+        }),
+        ..named_field("range", 1, "", false, init_value(true, None))
+    };
+    let label = public_decl(
+        "Label",
+        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
+    );
+    let bounds = public_decl(
+        "Bounds",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![
+                field_member(range),
+                field_member(named_field(
+                    "name",
+                    2,
+                    "Label",
+                    false,
+                    init_value(true, None),
+                )),
+            ],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), counter_decl(), label, bounds]);
+    let tuple = derives_of(&source, "pub struct BoundsRange {");
+    assert_always_derived(&tuple, "BoundsRange");
+    assert_eq!(
+        tuple,
+        ["Debug", "Clone", "Copy", "PartialEq"],
+        "the tuple's own closure is an integer and a float: Copy, not Eq"
+    );
+    let outer = derives_of(&source, "pub struct Bounds {");
+    assert_always_derived(&outer, "Bounds");
+    assert_eq!(
+        outer,
+        ["Debug", "Clone", "PartialEq"],
+        "the holder reaches a String as well as a float, so it takes neither"
+    );
+}
+
+/// An enum set is `Copy`, and that is what lets a struct field holding one be
+/// read through a shared reference.
+///
+/// `get` takes `self` by value (driftsys/ridl#433), so `warnings.flags.get()`
+/// behind a `&Warnings` moves out of the borrow and rustc reports E0507
+/// unless the enum set is `Copy`. #433 declined to fix that and recorded it as
+/// this task's to cover, so the proof is a `rustc` run rather than a string
+/// assertion: the string says `Copy` is in the list, the compile says the list
+/// is enough.
+#[test]
+fn an_enum_set_in_a_struct_field_is_readable_through_a_shared_reference() {
+    let warnings = public_decl(
+        "Warnings",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                "flags",
+                1,
+                "Features",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let generated = rust_for(vec![features_decl(), warnings]);
+    let derived = derives_of(&generated, "pub struct Features(i64);");
+    assert_always_derived(&derived, "Features");
+    assert!(
+        derived.iter().any(|d| d == "Copy"),
+        "an enum set must be Copy, got {derived:?}"
+    );
+
+    let source = format!(
+        "{generated}\n{}",
+        r#"
+pub fn read_through_a_shared_reference(warnings: &Warnings) -> i64 {
+    warnings.flags.get()
+}
+"#
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("enum_set_read.rs");
+    let meta_path = dir.path().join("enum_set_read.rmeta");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "an enum set held in a struct field must be readable through a shared \
+         reference, source:\n{source}"
+    );
+}
+
+/// The derive attribute is placed under the declaration's doc comment, not
+/// above it. A naive prepend in `emit_decl` renders it above, which is
+/// backwards from how Rust is written everywhere else.
+#[test]
+fn the_derive_attribute_sits_under_the_doc_comment() {
+    let source = rust_for(vec![speed_decl()]);
+    let doc_at = source
+        .find("/// Vehicle speed over ground")
+        .expect("the doc comment is emitted");
+    let derive_at = source.find("#[derive(").expect("the derive is emitted");
+    assert!(
+        doc_at < derive_at,
+        "the doc comment must come first, got:\n{source}"
+    );
+    let repr_at = source
+        .find("#[repr(transparent)]")
+        .expect("the repr is emitted");
+    assert!(
+        derive_at < repr_at,
+        "the derive must precede the repr, got:\n{source}"
+    );
 }

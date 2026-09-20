@@ -45,6 +45,28 @@
 //! [`port::Correlation`]. And **no port names a payload type** — ports carry
 //! interface numbers, ordinals and bytes, and the generated binding is what
 //! encodes and decodes, through [`payload::Ref`].
+//!
+//! # How a runtime presents its ports
+//!
+//! A runtime crate exposes one handle type per port role it implements — a
+//! port role is one port trait — rather than one type implementing them all,
+//! and it may also offer an aggregate handle covering the port set one
+//! interface's face needs. A generated face is built over one value
+//! implementing at least the port traits its interface needs: the role handle
+//! itself when the face needs exactly one, and an aggregate — the runtime's,
+//! or one the application writes over role handles — when it needs more,
+//! because a generated `Client` may be bound over `SignalReader`,
+//! `EventSource` and `Caller` at once. Either value reaches the face by value
+//! or as a `&mut` borrow of itself, because every port trait is implemented
+//! for `&mut P` and the `&self`-only traits also for `&P`. In a runtime whose
+//! handles are used from more than one thread, a handle whose port traits all
+//! take `&self` is `Send + Sync`, because several threads may read one store
+//! at once, and a handle carrying a trait with a `&mut self` method is `Send`
+//! and need not be `Sync`, because one thread drives each. No port trait here
+//! carries `Send` or `Sync` as a supertrait, so a single-threaded `no_std`
+//! runtime whose handles use `Cell` or `RefCell` internally is held to
+//! neither; a runtime checks its own handles itself, with a compile-time
+//! assertion. ADR-0021 decision 12 records this.
 
 #![no_std]
 #![forbid(unsafe_code)]

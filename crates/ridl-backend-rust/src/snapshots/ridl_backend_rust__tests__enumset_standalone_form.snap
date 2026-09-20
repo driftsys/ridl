@@ -2,6 +2,7 @@
 source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct WarningFlags(i64);
 impl WarningFlags {

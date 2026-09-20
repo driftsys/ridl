@@ -38,7 +38,7 @@ examples below run against, which holds every value in a map on one thread and
 whose clock is a counter the test advances by hand; `MinimalSignalOnlyPort` in
 `crates/ridl-backend-rust/tests/interaction_face.rs`; and `Stub` and `Memory`
 inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`. Story
-E11.9 builds the first real runtime.
+E11.15 builds the first real runtime.
 
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.
@@ -421,8 +421,8 @@ Commands and queries are the first interactions with two ends and an outcome.
 The generated client methods are:
 
 ```rust
-pub fn set_level(&mut self, level: Level)   -> Result<Correlation, SendError>;
-pub fn average(&mut self, window: Window)   -> Result<Correlation, SendError>;
+pub fn set_level(&mut self, level: Level)   -> Result<SetLevelCorrelation, SendError>;
+pub fn average(&mut self, window: Window)   -> Result<AverageCorrelation, SendError>;
 ```
 
 Neither returns a reply. **Nothing in generated code waits.** There is no
@@ -431,13 +431,13 @@ blocks: every one of them returns immediately. Waiting — blocking, `async`, or
 loop driving a runtime — belongs to a layer above the port, and `ridl-rt`
 defines no such layer.
 
-So a call returns a `Correlation`, which is a `u64` identifying that one sent
-call to its caller, and you ask about the outcome separately:
+So a call returns a correlation, which identifies that one sent call to its
+caller, and you ask about the outcome separately:
 
 ```rust
 let correlation = client.set_level(Level(42))?;
 // ... later ...
-match client.ack(correlation) {
+match client.set_level_ack(correlation) {
     Some(Ok(()))   => { /* accepted */ }
     Some(Err(e))   => { /* rejected, or a transport failure */ }
     None           => { /* not known yet */ }
@@ -454,11 +454,22 @@ match client.average_reply(correlation)? {
 }
 ```
 
+Each call has its own correlation type. `set_level` returns a
+`SetLevelCorrelation` and `average` an `AverageCorrelation`, each a `Copy`
+newtype around `ridl_rt::port::Correlation`, which is itself a `u64`. Only that
+call's own outcome method accepts it: `set_level_ack` takes a
+`SetLevelCorrelation` and `average_reply` an `AverageCorrelation`. The newtypes
+are the generated face's. `Correlation` in `ridl-rt` stays untyped, because a
+port carries identity and bytes and never a payload type, while which
+interaction a correlation belongs to is a payload-shaped fact. Reach the `u64`
+through the newtype's field — `correlation.0` — when you call a port method such
+as `Caller::forget` yourself.
+
 ### Why a command and a query have separate methods
 
 `Caller` has `command` and `query` as separate port methods, and correspondingly
-`ack` and a generated `*_reply`, because their outcomes are different things
-(ridl §6, §7).
+a generated `*_ack` and a generated `*_reply`, because their outcomes are
+different things (ridl §6, §7).
 
 A command's acknowledgment is a **delivery** acknowledgment, not a completion
 one (ridl §6.1). `Ok(())` means the provider accepted the command, not that it
@@ -466,12 +477,15 @@ finished doing anything. A command has no failure the application reports —
 which is why, in step 6, the generated `Provider` method for a command returns
 nothing at all.
 
-A query's outcome is its reply. `ack` is always `None` for a query's
-correlation, and that is a trap worth naming: `ack` returns `Option<...>` with
-no error case, so a caller that polls `ack` for a query's correlation waits
-forever. Keep the correlations `command` returned and ask only about those.
-Likewise, after `Caller::forget` releases a correlation its outcome is no longer
-retrievable, so do not ask about it.
+A query's outcome is its reply. `Caller::ack` is always `None` for a query's
+correlation, and that is a trap worth naming at the port: `ack` returns
+`Option<...>` with no error case, so a caller that polls it for a query's
+correlation waits forever. Through the generated face the trap is closed — a
+`*_ack` takes its own command's newtype, so a query's correlation does not
+compile there — but a caller that drives the `Caller` port itself must keep the
+correlations `command` returned and ask only about those. Likewise, after
+`Caller::forget` releases a correlation its outcome is no longer retrievable, so
+do not ask about it.
 
 ### Why the error type is `SendError` and not `CallError`
 
@@ -648,13 +662,13 @@ step 1 falls back to. `Command` adds `require`. `Query` adds `require` and
 Both interfaces in the fixture produce a `Client`, and the bounds differ:
 
 ```rust
-pub struct cabin::Client<'a, P: SignalReader + EventSource + Caller>;
-pub struct horn::Client<'a, P: SignalReader>;
+pub struct cabin::Client<P: SignalReader + EventSource + Caller>;
+pub struct horn::Client<P: SignalReader>;
 ```
 
 ```rust
-pub struct cabin::Publisher<'a, W: SignalWriter + EventSink>;
-pub struct horn::Publisher<'a, W: SignalWriter>;
+pub struct cabin::Publisher<W: SignalWriter + EventSink>;
+pub struct horn::Publisher<W: SignalWriter>;
 ```
 
 The bounds are computed from the interaction kinds the interface actually
@@ -666,6 +680,15 @@ its `Attached` supertrait constructs it. `Horn` generates no `Provider` and no
 This is why the face is generic over a port rather than taking a single runtime
 type: an application links exactly the port capabilities its interfaces use, and
 a runtime that offers only some of them still serves the interfaces that fit.
+
+A face holds its port by value and carries no lifetime parameter, so `P` is
+whatever you hand `new`. `Client::new(&mut port)` infers `P` as `&mut Port`,
+because `ridl-rt` implements every port trait for `&mut P`; an owned handle, a
+`Clone` handle and a wrapper that forwards the port traits are accepted just as
+well. A face built over a borrow holds that borrow for as long as the face
+lives, so a runtime that implements every port on one value can be held by one
+face at a time, and by none while `dispatch` runs over it. That is why the
+examples above build a client, use it, and let it go before the next step.
 
 ## The ports that did not appear
 

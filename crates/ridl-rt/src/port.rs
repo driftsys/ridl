@@ -490,3 +490,208 @@ pub enum SettleError {
     /// The runtime behind the port is gone.
     Detached,
 }
+
+// Forwarding impls (ADR-0021 decision 11).
+//
+// Every port trait above is implemented for `&mut P`, and the six whose
+// methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
+// `FixedReader`, `ScannableSignals` and `CoherentSignals` — also for `&P`.
+// What they buy is one thing: a value generic over a port trait, such as a
+// generated face, can be built over a reference to a port rather than over the
+// port itself. A wrapper that adds tracing and a test double are accepted by
+// such a bound with or without them, because each implements the port traits
+// itself.
+//
+// `impl<P: T + ?Sized> T for Box<P>` is deferred: it needs `alloc`, which no
+// feature combination of this crate brings in.
+
+impl<P: Attached + ?Sized> Attached for &P {
+    fn catalog(&self) -> &CatalogRef {
+        (**self).catalog()
+    }
+}
+
+impl<P: Attached + ?Sized> Attached for &mut P {
+    fn catalog(&self) -> &CatalogRef {
+        (**self).catalog()
+    }
+}
+
+impl<P: Clock + ?Sized> Clock for &P {
+    fn now(&self) -> Timestamp {
+        (**self).now()
+    }
+}
+
+impl<P: Clock + ?Sized> Clock for &mut P {
+    fn now(&self) -> Timestamp {
+        (**self).now()
+    }
+}
+
+impl<P: SignalReader + ?Sized> SignalReader for &P {
+    fn read(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<RawSample, ReadError> {
+        (**self).read(iface, ord, out)
+    }
+}
+
+impl<P: SignalReader + ?Sized> SignalReader for &mut P {
+    fn read(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<RawSample, ReadError> {
+        (**self).read(iface, ord, out)
+    }
+}
+
+impl<P: SignalWriter + ?Sized> SignalWriter for &mut P {
+    fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError> {
+        (**self).set(iface, ord, bytes)
+    }
+    fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError> {
+        (**self).invalidate(iface, ord)
+    }
+    fn touch(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError> {
+        (**self).touch(iface, ord)
+    }
+    fn commit(&mut self) {
+        (**self).commit();
+    }
+}
+
+impl<P: EventSource + ?Sized> EventSource for &mut P {
+    fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError> {
+        (**self).subscribe(iface, ords)
+    }
+    fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) {
+        (**self).unsubscribe(iface, ords);
+    }
+    fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
+        (**self).next(out)
+    }
+}
+
+impl<P: EventSink + ?Sized> EventSink for &mut P {
+    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError> {
+        (**self).raise(iface, ord, bytes)
+    }
+}
+
+impl<P: Caller + ?Sized> Caller for &mut P {
+    fn command(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        args: &[u8],
+    ) -> Result<Correlation, SendError> {
+        (**self).command(iface, ord, args)
+    }
+    fn query(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        args: &[u8],
+    ) -> Result<Correlation, SendError> {
+        (**self).query(iface, ord, args)
+    }
+    fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
+        (**self).ack(c)
+    }
+    fn reply(
+        &mut self,
+        c: Correlation,
+        out: &mut [u8],
+    ) -> Result<Option<Result<usize, CallError>>, ReadError> {
+        (**self).reply(c, out)
+    }
+    fn forget(&mut self, c: Correlation) {
+        (**self).forget(c);
+    }
+}
+
+impl<P: Handler + ?Sized> Handler for &mut P {
+    fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError> {
+        (**self).serve(iface, ords)
+    }
+    fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
+        (**self).next_claim(out)
+    }
+    fn settle(
+        &mut self,
+        claim: ClaimId,
+        outcome: Result<&[u8], CallError>,
+    ) -> Result<(), SettleError> {
+        (**self).settle(claim, outcome)
+    }
+}
+
+impl<P: FixedReader + ?Sized> FixedReader for &P {
+    fn read_fixed(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError> {
+        (**self).read_fixed(iface, ord, out)
+    }
+}
+
+impl<P: FixedReader + ?Sized> FixedReader for &mut P {
+    fn read_fixed(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError> {
+        (**self).read_fixed(iface, ord, out)
+    }
+}
+
+impl<P: ScannableSignals + ?Sized> ScannableSignals for &P {
+    fn generation(&self, iface: InterfaceNo) -> u64 {
+        (**self).generation(iface)
+    }
+    fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize {
+        (**self).scan(marks, out)
+    }
+}
+
+impl<P: ScannableSignals + ?Sized> ScannableSignals for &mut P {
+    fn generation(&self, iface: InterfaceNo) -> u64 {
+        (**self).generation(iface)
+    }
+    fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize {
+        (**self).scan(marks, out)
+    }
+}
+
+impl<P: CoherentSignals + ?Sized> CoherentSignals for &P {
+    fn read_coherent(
+        &self,
+        iface: InterfaceNo,
+        ords: &[Ordinal],
+        out: &mut [u8],
+        samples: &mut [RawSample],
+    ) -> Result<usize, ReadError> {
+        (**self).read_coherent(iface, ords, out, samples)
+    }
+}
+
+impl<P: CoherentSignals + ?Sized> CoherentSignals for &mut P {
+    fn read_coherent(
+        &self,
+        iface: InterfaceNo,
+        ords: &[Ordinal],
+        out: &mut [u8],
+        samples: &mut [RawSample],
+    ) -> Result<usize, ReadError> {
+        (**self).read_coherent(iface, ords, out, samples)
+    }
+}

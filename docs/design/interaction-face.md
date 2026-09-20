@@ -3,7 +3,8 @@
 The Rust backend's generated `Client`/`Publisher`/`Provider`/`dispatch` face
 over `ridl-rt`, as built by roadmap story E11.13. ADR-0018 decision 15 restores
 this face as the runtime layer's "phase 2", sequenced after the frame
-specification (E11.1) and the transport and loopback runtime (E11.9). E11.13 is
+specification (E11.1) and the transport and loopback runtime (E11.9, whose
+loopback half became E11.15 when that story was split on 2026-09-20). E11.13 is
 a deliberate exception to that sequence: an in-process-only MVP, built ahead of
 both so the team has a face to write against. It generates, for one example
 package, the consumer and provider faces of one interface, proves them with an
@@ -38,9 +39,10 @@ translator, and the only entry point whose output names `::ridl_rt::…`.
 (`crates/ridlc/src/lib.rs`) still calls `generate`, not `generate_face` — which
 is correct for this story rather than a shortfall: ADR-0018 decision 15 makes
 the face phase 2, and nothing in E11.13 ships a runtime for a pipeline consumer
-to link against. Why a companion entry point rather than folding the face into
-`generate` is [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
-decision 2.
+to link against. Closing that gap is story E11.14 (driftsys/ridl#444), which
+also gives the emitted `Cargo.toml` the encoding feature the codec needs. Why a
+companion entry point rather than folding the face into `generate` is
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 2.
 
 ## The descriptors
 
@@ -122,14 +124,14 @@ Why the translator refuses rather than widens, and why it lives behind
 `src/face.rs` emits, per named interface with at least one member the face
 covers, one `pub mod` holding:
 
-- **`Client<'a, P: ...>`** — one read method per signal, a `subscribe_*` and a
+- **`Client<P: ...>`** — one read method per signal, a `subscribe_*` and a
   shared `next_event` per interface's events, one send method per command and
-  query, a `*_reply` poll per query, and `ack` if the interface declares a
-  command. The trait bounds on `P` are computed from the interface's actual
-  interaction kinds and no others: `SignalReader` only if it declares a signal,
-  `EventSource` only if it declares an event, `Caller` only if it declares a
-  command or a query. This is RA-19: a `Client` never carries a bound its own
-  interface does not need. It is proven, not merely asserted, by
+  query, a `*_reply` poll per query, and a `*_ack` poll per command. The trait
+  bounds on `P` are computed from the interface's actual interaction kinds and
+  no others: `SignalReader` only if it declares a signal, `EventSource` only if
+  it declares an event, `Caller` only if it declares a command or a query. This
+  is RA-19: a `Client` never carries a bound its own interface does not need. It
+  is proven, not merely asserted, by
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` in
   `tests/interaction_face.rs`, which constructs the fixture's signal-only `Horn`
   interface's `Client` with a port implementing only `SignalReader` and
@@ -137,7 +139,7 @@ covers, one `pub mod` holding:
   compile. (The converse — that a bound the interface does need is never missing
   — is not separately proven: under-bounding cannot compile at all, because a
   method body that needs a port trait the bound omits fails to build.)
-- **`Publisher<'a, W: ...>`** — over `SignalWriter` and `EventSink` on the same
+- **`Publisher<W: ...>`** — over `SignalWriter` and `EventSink` on the same
   rule, with `invalidate_*` per signal and `commit`.
 - **`trait Provider`** — one method per command and query, generated only when
   the interface declares one. **A method takes its argument by reference**
@@ -150,17 +152,47 @@ covers, one `pub mod` holding:
   -> usize`**
   — see the next section.
 
-**A `Client` method's send call returns `Result<Correlation, SendError>`.**
-`SendError` is the `Caller` port's own return type and already carries
-`Contract`, so a `require` clause that fails client-side is reported as
+**A face holds its port by value and has no lifetime parameter.** `Client<P>`
+and `Publisher<W>` hold `P` and `W`, and `new` takes the port by value. A
+borrowed port still works — `Client::new(&mut port)` infers `P` as `&mut Port`,
+under the forwarding impls of
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11 —
+and so does an owned handle, a `Clone` handle, or any wrapper that forwards the
+port traits. A face built over a borrow holds that borrow for as long as the
+face lives, so a runtime that implements every port on one value can be held by
+one face at a time and by none while `dispatch` runs over it; that is why the
+round-trip tests in `tests/interaction_face.rs` build a face inside a block,
+drop it, and build another for the next step. The bounds are unchanged, and the
+catalog check of
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
+stays once, in the constructor. This supersedes the M1 design's `Client<'a, P>`
+and `Publisher<'a, W>`;
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
+records it.
+
+**A `Client` method's send call returns
+`Result<<Name>Correlation, SendError>`.** The error half is the `Caller` port's
+own `SendError`, which already carries `Contract`, so a `require` clause that
+fails client-side is reported as
 `SendError::Contract(Contract::PreconditionFailed)` with no lossy mapping into
-the settlement side's `CallError`. Why the parameter is by reference and why the
-return type is `SendError` rather than `CallError` — a gap the M1 design left
-open — is [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
-decisions 3 and 4.
+the settlement side's `CallError`. The success half is a `Copy` newtype the face
+emits per call — `SetLevelCorrelation` for command `setLevel`,
+`AverageCorrelation` for query `average` — and only that call's own outcome
+method accepts it: `average_reply` takes an `AverageCorrelation`, and
+`set_level_ack` takes a `SetLevelCorrelation`. So a query's correlation cannot
+be handed to an acknowledgment, and a command's cannot be handed to a reply.
+Both compiled before, and `Caller::ack` returns `None` for a query's correlation
+always, with no part of the type saying it will. The newtype is the face's, not
+the port's: `Correlation` and `ClaimId` in `ridl-rt` stay untyped, because a
+port carries identity and bytes and never a payload type, while which
+interaction a correlation belongs to is a payload-shaped fact. Why the parameter
+is by reference, why the error half is `SendError` rather than `CallError` — a
+gap the M1 design left open — and why the success half is the call's own newtype
+is [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decisions 3
+and 4.
 
 **Nothing here waits (RA-20).** No generated method spawns a thread, holds a
-future, opens a socket, or reads a timer. A query send returns a `Correlation`
+future, opens a socket, or reads a timer. A query send returns its correlation
 immediately; a separate `*_reply` method polls it without blocking. `dispatch`
 makes one pass over the claims a handler already has and returns; the loop that
 calls it repeatedly belongs to the application or the runtime.
@@ -197,7 +229,7 @@ its settlement carries the reply. **This ordering is pinned only by an
 exact-text assertion** in `tests/dispatch_generation.rs`; no behavioural test
 exercises it, because neither `Handler::settle` nor a provider call in the
 test-only loopback of the next section has an observable side effect a
-reordering would change. E11.9's real runtime is what would make the ordering
+reordering would change. E11.15's real runtime is what would make the ordering
 observable — this is a limitation of the test double, not a defect in the
 generated code.
 
@@ -241,13 +273,13 @@ implementation is explicitly marked throwaway in its own module documentation
 and deleted when E11.12 lands.
 
 **The ports are a disposable, test-only loopback**, not a runtime. `ridl-rt`
-ships no runtime; the first real one is E11.9's in-process loopback (ADR-0020
+ships no runtime; the first real one is E11.15's in-process loopback (ADR-0020
 decision 6). `tests/support/loopback.rs` implements exactly `Attached`, `Clock`,
 `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`
 and `FixedReader` over in-memory queues and a hand-advanced counter clock — no
 I/O, no thread, no real time — and deliberately implements neither
 `ScannableSignals` nor `CoherentSignals` (both are optional extensions a runtime
-may omit). Its own module documentation names E11.9 as its replacement.
+may omit). Its own module documentation names E11.15 as its replacement.
 
 ## The fixture and the round trip
 
@@ -308,19 +340,20 @@ rework rather than a blocker.
 
 ## What is provisional
 
-| Placeholder                                                                                    | Replaced by                               |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                    |
-| The test-only loopback ports (`tests/support/loopback.rs`)                                     | E11.9                                     |
-| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                 |
-| The all-`None` `EncodedSizes` columns                                                          | E16.2                                     |
-| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                      |
-| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | E11.9 (makes it behaviourally observable) |
+| Placeholder                                                                                    | Replaced by                                |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                     |
+| The test-only loopback ports (`tests/support/loopback.rs`)                                     | E11.15                                     |
+| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                  |
+| The all-`None` `EncodedSizes` columns                                                          | E16.2                                      |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                       |
+| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                 |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | E11.15 (makes it behaviourally observable) |
 
 `ridl --emit rust` emitting the face itself is not on this list as a defect:
 ADR-0018 decision 15 places that behind the frame specification and the
-transport, and nothing in E11.13 changes that gate.
+transport, and nothing in E11.13 changes that gate. It is story E11.14
+(driftsys/ridl#444), which takes the same gate with it.
 
 ## Trace
 
@@ -335,7 +368,7 @@ transport, and nothing in E11.13 changes that gate.
   generation decisions specific to this face
 - Depends on: `crates/ridl-rt` 0.1.0 (E11.0, landed); the IR's provisional
   interface numbering (the lock design's L4, driftsys/ridl#391)
-- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E11.9 (the
+- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E11.15 (the
   test-only ports), E16.2 (the catalog hash and the encoded sizes), E5.1 (the
   clause translator)
 - Reasoning trail (archived):

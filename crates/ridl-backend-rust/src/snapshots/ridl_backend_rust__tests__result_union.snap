@@ -5,6 +5,7 @@ expression: rust_for(decls)
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -54,6 +55,7 @@ impl Default for Speed {
         Speed::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Counter(i64);
 impl Counter {
@@ -91,6 +93,7 @@ impl Default for Counter {
         Counter::new_unchecked(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct SensorReading {
     pub value: Speed,
@@ -102,6 +105,7 @@ impl Default for SensorReading {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct SensorFault {
     pub code: Counter,
@@ -113,6 +117,7 @@ impl Default for SensorFault {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SensorResult {
     /// Successful reading
     Ok(SensorReading),

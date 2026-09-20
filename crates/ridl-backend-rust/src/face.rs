@@ -5,11 +5,14 @@
 //! For each named interface this module emits one `pub mod`, named after the
 //! interface, holding what the design note's §8 calls the face:
 //!
-//! - `Client<'a, P>`, the consumer face, generic over exactly the ports the
+//! - one `Copy` correlation newtype per command and per query,
+//!   `<Name>Correlation`, which the call's send method returns and its
+//!   `<name>_reply` or `<name>_ack` takes;
+//! - `Client<P>`, the consumer face, generic over exactly the ports the
 //!   interface's own interactions need and no others (RA-19): `SignalReader`
 //!   when it declares a signal, `EventSource` when it declares an event,
 //!   `Caller` when it declares a command or a query;
-//! - `Publisher<'a, W>`, the provider face for signals and events, over
+//! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
 //! - `Provider`, the trait the application implements, with one method per
 //!   command and query;
@@ -134,6 +137,7 @@ fn one_interface(
     }
 
     let mut body: Vec<TokenStream> = Vec::new();
+    body.extend(correlations(&commands, &queries));
     if !signals.is_empty() || !events.is_empty() || !commands.is_empty() || !queries.is_empty() {
         body.push(client(
             &iface, iface_name, &signals, &events, &commands, &queries,
@@ -166,6 +170,42 @@ fn one_interface(
 // ---------------------------------------------------------------------------
 // The consumer face.
 // ---------------------------------------------------------------------------
+
+/// The name of one call's correlation newtype, `<Name>Correlation`.
+fn correlation_type(call: &Call) -> Ident {
+    ident(&format!("{}Correlation", camel_case(call.member.declared)))
+}
+
+/// One `Copy` correlation newtype per command and per query.
+///
+/// The newtype is the face's, not the port's: `ridl_rt::port::Correlation`
+/// stays untyped, because which interaction a correlation belongs to is a
+/// payload-shaped fact and a port never carries one (ADR-0023 decision 4's
+/// 2026-09-20 amendment). What the newtype buys is that a query's correlation
+/// cannot be passed to an `ack` and a command's cannot be passed to a
+/// `*_reply`.
+fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
+    let mut items = Vec::new();
+    for (call, kind) in commands
+        .iter()
+        .map(|c| (c, "command"))
+        .chain(queries.iter().map(|q| (q, "query")))
+    {
+        let name = correlation_type(call);
+        let doc = format!(
+            "Identifies one sent {kind} `{}` to its caller. It is returned by \
+             the send method and accepted by that call's own outcome method, \
+             and by no other.",
+            call.member.declared
+        );
+        items.push(quote! {
+            #[doc = #doc]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+            pub struct #name(pub ::ridl_rt::port::Correlation);
+        });
+    }
+    items
+}
 
 fn client(
     iface: &Ident,
@@ -340,6 +380,7 @@ fn client(
 
         let member = &call.member;
         let reply = call.reply_type.unwrap_or(call.arg_type);
+        let correlation = correlation_type(call);
         let method = ident(&format!("{}_reply", member.method));
         let path = ty(reply);
         let buffer = payload_buffer(reply);
@@ -352,7 +393,7 @@ fn client(
             #[doc = #doc]
             pub fn #method(
                 &mut self,
-                correlation: ::ridl_rt::port::Correlation,
+                correlation: #correlation,
             ) -> ::core::result::Result<
                 ::core::option::Option<
                     ::core::result::Result<#path, ::ridl_rt::error::CallError>,
@@ -360,7 +401,7 @@ fn client(
                 ::ridl_rt::port::ReadError,
             > {
                 let mut buf = #buffer;
-                match self.port.reply(correlation, &mut buf)? {
+                match self.port.reply(correlation.0, &mut buf)? {
                     None => Ok(None),
                     Some(Err(error)) => Ok(Some(Err(error))),
                     Some(Ok(len)) => Ok(Some(
@@ -384,17 +425,24 @@ fn client(
         });
     }
 
-    if !commands.is_empty() {
+    for call in commands {
+        let member = &call.member;
+        let correlation = correlation_type(call);
+        let method = ident(&format!("{}_ack", member.method));
+        let doc = format!(
+            "Takes command `{}`'s delivery acknowledgment once it is known, \
+             or `None` while it is not. It does not wait.",
+            member.declared
+        );
         methods.push(quote! {
-            /// Takes a command's delivery acknowledgment once it is known, or
-            /// `None` while it is not. It does not wait.
-            pub fn ack(
+            #[doc = #doc]
+            pub fn #method(
                 &mut self,
-                correlation: ::ridl_rt::port::Correlation,
+                correlation: #correlation,
             ) -> ::core::option::Option<
                 ::core::result::Result<(), ::ridl_rt::error::CallError>,
             > {
-                self.port.ack(correlation)
+                self.port.ack(correlation.0)
             }
         });
     }
@@ -405,13 +453,14 @@ fn client(
     );
     quote! {
         #[doc = #doc]
-        pub struct Client<'a, P: #(#bounds)+*> {
-            port: &'a mut P,
+        pub struct Client<P: #(#bounds)+*> {
+            port: P,
         }
 
-        impl<'a, P: #(#bounds)+*> Client<'a, P> {
-            /// Binds the face to a port.
-            pub fn new(port: &'a mut P) -> Self {
+        impl<P: #(#bounds)+*> Client<P> {
+            /// Binds the face to a port. The port is held by value: pass a
+            /// handle, or a `&mut` borrow of one.
+            pub fn new(port: P) -> Self {
                 Client { port }
             }
 
@@ -433,6 +482,7 @@ fn send(
     let method = &member.method;
     let ordinal = &member.ordinal;
     let descriptor = &member.descriptor;
+    let correlation = correlation_type(call);
     let arg = &call.arg;
     let path = ty(call.arg_type);
     let buffer = payload_buffer(call.arg_type);
@@ -454,10 +504,7 @@ fn send(
         pub fn #method(
             &mut self,
             #arg: #path,
-        ) -> ::core::result::Result<
-            ::ridl_rt::port::Correlation,
-            ::ridl_rt::port::SendError,
-        > {
+        ) -> ::core::result::Result<#correlation, ::ridl_rt::port::SendError> {
             <#descriptor as #contract_trait>::require(&#arg).map_err(|()| {
                 ::ridl_rt::port::SendError::Contract(
                     ::ridl_rt::error::Contract::PreconditionFailed,
@@ -465,7 +512,7 @@ fn send(
             })?;
             let mut buf = #buffer;
             let len = #encode;
-            self.port.#port_method(#number, #ordinal, &buf[..len])
+            self.port.#port_method(#number, #ordinal, &buf[..len]).map(#correlation)
         }
     }
 }
@@ -589,13 +636,14 @@ fn publisher(
     let doc = format!("The provider face of interface `{iface_name}`'s signals and events.");
     quote! {
         #[doc = #doc]
-        pub struct Publisher<'a, W: #(#bounds)+*> {
-            port: &'a mut W,
+        pub struct Publisher<W: #(#bounds)+*> {
+            port: W,
         }
 
-        impl<'a, W: #(#bounds)+*> Publisher<'a, W> {
-            /// Binds the face to a port.
-            pub fn new(port: &'a mut W) -> Self {
+        impl<W: #(#bounds)+*> Publisher<W> {
+            /// Binds the face to a port. The port is held by value: pass a
+            /// handle, or a `&mut` borrow of one.
+            pub fn new(port: W) -> Self {
                 Publisher { port }
             }
 

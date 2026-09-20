@@ -1,4 +1,5 @@
 /// Cabin temperature, in degrees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Temperature(i64);
 impl Temperature {
@@ -49,6 +50,7 @@ impl Default for Temperature {
     }
 }
 /// A control level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Level(i64);
 impl Level {
@@ -99,6 +101,7 @@ impl Default for Level {
     }
 }
 /// A window length, in samples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Window(i64);
 impl Window {
@@ -149,6 +152,7 @@ impl Default for Window {
     }
 }
 /// An averaged reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Average(i64);
 impl Average {
@@ -198,6 +202,7 @@ impl Default for Average {
         Average::new_unchecked(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Health {
     OK = 0,
@@ -230,6 +235,7 @@ impl Default for Health {
         Health::OK
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Warning {
     pub code: Level,
@@ -507,21 +513,26 @@ impl ::ridl_rt::contract::Signal for HornActive {
 }
 ///The generated interaction face of interface `Cabin`.
 pub mod cabin {
+    ///Identifies one sent command `setLevel` to its caller. It is returned by the send method and accepted by that call's own outcome method, and by no other.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub struct SetLevelCorrelation(pub ::ridl_rt::port::Correlation);
+    ///Identifies one sent query `average` to its caller. It is returned by the send method and accepted by that call's own outcome method, and by no other.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
     ///The consumer face of interface `Cabin`, generic over exactly the ports the interface's interactions need.
     pub struct Client<
-        'a,
         P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
             + ::ridl_rt::port::Caller,
     > {
-        port: &'a mut P,
+        port: P,
     }
     impl<
-        'a,
         P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
             + ::ridl_rt::port::Caller,
-    > Client<'a, P> {
-        /// Binds the face to a port.
-        pub fn new(port: &'a mut P) -> Self {
+    > Client<P> {
+        /// Binds the face to a port. The port is held by value: pass a
+        /// handle, or a `&mut` borrow of one.
+        pub fn new(port: P) -> Self {
             Client { port }
         }
         ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
@@ -639,10 +650,7 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
         pub fn set_level(
             &mut self,
             level: super::Level,
-        ) -> ::core::result::Result<
-            ::ridl_rt::port::Correlation,
-            ::ridl_rt::port::SendError,
-        > {
+        ) -> ::core::result::Result<SetLevelCorrelation, ::ridl_rt::port::SendError> {
             <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(&level)
                 .map_err(|()| {
                     ::ridl_rt::port::SendError::Contract(
@@ -671,15 +679,13 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                     ::ridl_rt::contract::Ordinal(3u32),
                     &buf[..len],
                 )
+                .map(SetLevelCorrelation)
         }
         ///Sends query `average` and returns the correlation of its outcome. A `require` clause that fails is reported as `SendError::Contract(Contract::PreconditionFailed)` and nothing is sent.
         pub fn average(
             &mut self,
             window: super::Window,
-        ) -> ::core::result::Result<
-            ::ridl_rt::port::Correlation,
-            ::ridl_rt::port::SendError,
-        > {
+        ) -> ::core::result::Result<AverageCorrelation, ::ridl_rt::port::SendError> {
             <super::CabinAverage as ::ridl_rt::contract::Query>::require(&window)
                 .map_err(|()| {
                     ::ridl_rt::port::SendError::Contract(
@@ -708,11 +714,12 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                     ::ridl_rt::contract::Ordinal(4u32),
                     &buf[..len],
                 )
+                .map(AverageCorrelation)
         }
         ///Takes query `average`'s reply once it is known, or `Ok(None)` while it is not. It does not wait.
         pub fn average_reply(
             &mut self,
-            correlation: ::ridl_rt::port::Correlation,
+            correlation: AverageCorrelation,
         ) -> ::core::result::Result<
             ::core::option::Option<
                 ::core::result::Result<super::Average, ::ridl_rt::error::CallError>,
@@ -722,7 +729,7 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
             let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::ReprC,
             >>::MAX_SIZE];
-            match self.port.reply(correlation, &mut buf)? {
+            match self.port.reply(correlation.0, &mut buf)? {
                 None => Ok(None),
                 Some(Err(error)) => Ok(Some(Err(error))),
                 Some(Ok(len)) => {
@@ -755,15 +762,14 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                 }
             }
         }
-        /// Takes a command's delivery acknowledgment once it is known, or
-        /// `None` while it is not. It does not wait.
-        pub fn ack(
+        ///Takes command `setLevel`'s delivery acknowledgment once it is known, or `None` while it is not. It does not wait.
+        pub fn set_level_ack(
             &mut self,
-            correlation: ::ridl_rt::port::Correlation,
+            correlation: SetLevelCorrelation,
         ) -> ::core::option::Option<
             ::core::result::Result<(), ::ridl_rt::error::CallError>,
         > {
-            self.port.ack(correlation)
+            self.port.ack(correlation.0)
         }
     }
     ///One occurrence of an event of interface `Cabin`.
@@ -772,18 +778,13 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
         Warning(::ridl_rt::sample::Occurrence<super::Warning>),
     }
     ///The provider face of interface `Cabin`'s signals and events.
-    pub struct Publisher<
-        'a,
-        W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink,
-    > {
-        port: &'a mut W,
+    pub struct Publisher<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> {
+        port: W,
     }
-    impl<
-        'a,
-        W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink,
-    > Publisher<'a, W> {
-        /// Binds the face to a port.
-        pub fn new(port: &'a mut W) -> Self {
+    impl<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> Publisher<W> {
+        /// Binds the face to a port. The port is held by value: pass a
+        /// handle, or a `&mut` borrow of one.
+        pub fn new(port: W) -> Self {
             Publisher { port }
         }
         ///Stages a new value for signal `temperature`. It is published by `commit`.
@@ -1062,12 +1063,13 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
     ///The consumer face of interface `Horn`, generic over exactly the ports the interface's interactions need.
-    pub struct Client<'a, P: ::ridl_rt::port::SignalReader> {
-        port: &'a mut P,
+    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+        port: P,
     }
-    impl<'a, P: ::ridl_rt::port::SignalReader> Client<'a, P> {
-        /// Binds the face to a port.
-        pub fn new(port: &'a mut P) -> Self {
+    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        /// Binds the face to a port. The port is held by value: pass a
+        /// handle, or a `&mut` borrow of one.
+        pub fn new(port: P) -> Self {
             Client { port }
         }
         ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
@@ -1120,12 +1122,13 @@ pub mod horn {
         }
     }
     ///The provider face of interface `Horn`'s signals and events.
-    pub struct Publisher<'a, W: ::ridl_rt::port::SignalWriter> {
-        port: &'a mut W,
+    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+        port: W,
     }
-    impl<'a, W: ::ridl_rt::port::SignalWriter> Publisher<'a, W> {
-        /// Binds the face to a port.
-        pub fn new(port: &'a mut W) -> Self {
+    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        /// Binds the face to a port. The port is held by value: pass a
+        /// handle, or a `&mut` borrow of one.
+        pub fn new(port: W) -> Self {
             Publisher { port }
         }
         ///Stages a new value for signal `active`. It is published by `commit`.

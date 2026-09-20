@@ -153,9 +153,16 @@ design note, from the archive.
   `Payload<FlatBuffers>` implementations are emitted, how `encode` builds a
   back-to-front format into a caller's slice, where the typl constraint check
   runs so `decode` stays infallible, who owns the `MAX_SIZE` computation Epic 16
-  also needs, and how the generated face stops being bound to `ReprC`. **A
-  proposal.** It decides nothing until the disposition comment on its pull
-  request, and the plan follows that comment. Roadmap: E11.7.
+  also needs, and how the generated face stops being bound to `ReprC`. Disposed
+  of on 2026-09-20 in the comment on its pull request: six decisions as
+  proposed, four with an addition, and D-1 and D-6 amended to put the shared
+  projection facts outside any backend. Roadmap: E11.7.
+- **2026-09-20-lane-k-driver.md** — the driver prompt for lane K, the
+  FlatBuffers payload codec (story E11.7). Its stage K0 filed the two rows the
+  codec work surfaced, E11.14 (the face and the codec reach `ridl build`) and
+  E11.15 (`ridl-loopback`, split out of E11.9 so it does not wait on the frame
+  specification). Stage K1 writes the codec's design note, which takes twelve
+  named decisions, and then its plan. The stages after K1 come from that plan.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

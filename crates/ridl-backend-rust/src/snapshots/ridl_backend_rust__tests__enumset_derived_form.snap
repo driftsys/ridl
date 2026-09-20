@@ -2,6 +2,7 @@
 source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Warning {
     LOW_FUEL = 0,
@@ -36,6 +37,7 @@ impl Default for Warning {
         Warning::LOW_FUEL
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct WarningFlags(i64);
 impl WarningFlags {

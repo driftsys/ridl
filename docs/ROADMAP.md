@@ -213,8 +213,10 @@ E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers · E11.8 proto3 · E11.12 repr(C)
 
 E6 rsdl finalized and lowered to the IR — beside the lock; only E6.17 waits
-E11.0 ridl-rt, landed ─→ E11.1 frame spec ─→ E11.9 transport and loopback
+E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ E11.9 ridl-transport-ws
+                       └─→ E11.15 ridl-loopback — no frame, no socket
 E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
+      ─→ E11.14 the face and a codec reach ridl build — after E11.15 and one codec
 E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 ```
 
@@ -393,18 +395,30 @@ The crates.io release of 0.1.0 is a maintainer act and is not a story here. The
 first half of the exit criteria above is therefore met; the transport half is
 E11.9.
 
-| ID    | Story                                                                                                                     | Done when                                                                                                                                                                                                                                                                                                                         | Size |
-| ----- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.1 | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                                                                                                                                                                                                                                        | M    |
-| E11.9 | `ridl-transport-ws` — the WebSocket transport crate, plus the in-process loopback runtime for tests                       | a contract reaches a second process over the transport, the loopback runs the same tests with no socket, and the loopback exposes one handle per port role with a `Sync` reader handle, plus the aggregate handle the generated face is built over, which ADR-0021 decision 12 permits a runtime to offer and this story requires | M    |
+**E11.9 was split on 2026-09-20.** It held two deliverables, and only one of
+them needs the frame specification: `ridl-transport-ws` binds E11.1's frame onto
+a socket, while the in-process loopback runtime speaks no frame and opens no
+socket. The loopback is what E11.13's face needs to stop running against a
+test-only double, and what a package emitted by E11.14 is exercised over, so
+holding it behind E11.1 would hold both. It is now **E11.15**
+(driftsys/ridl#445), with the handle clause of E11.9's `Done when` moved to it
+unchanged; E11.9 keeps the transport. The two stories stay independent of each
+other: the loopback is not a degenerate transport, and the transport does not
+link it.
+
+| ID     | Story                                                                                                                     | Done when                                                                                                                                                                                                                                                                                                                                      | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.1  | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                                                                                                                                                                                                                                                     | M    |
+| E11.9  | `ridl-transport-ws` — the WebSocket transport crate                                                                       | a contract reaches a second process over the transport, and E11.15's loopback runs the same tests with no socket                                                                                                                                                                                                                               | M    |
+| E11.15 | `ridl-loopback` — the in-process reference runtime: every port over a queue and a map, no IO                              | the loopback exposes one handle per port role with a `Sync` reader handle, plus the aggregate handle the generated face is built over, which ADR-0021 decision 12 permits a runtime to offer and this story requires; the interaction-face round trips run over the crate, and `crates/ridl-backend-rust/tests/support/loopback.rs` is deleted | M    |
 
 **E11.13 landed in driftsys/ridl#418.** It is the MVP of the generated
 interaction face, taken deliberately out of sequence: ADR-0018 decision 15
 places the face after E11.1 and E11.9, and this story ran before both so the
 team has a face to write against. It is in-process only, and it carries four
 explicit placeholders that later stories retire — a hand-written payload
-implementation (E11.7, E11.8 or E11.12), test-only ports (E11.9), a zero catalog
-hash and all-absent encoded sizes (E16.2), and a narrow contract-clause
+implementation (E11.7, E11.8 or E11.12), test-only ports (E11.15), a zero
+catalog hash and all-absent encoded sizes (E16.2), and a narrow contract-clause
 translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
@@ -414,6 +428,23 @@ trail is archived at
 | ID     | Story                                                                                                                                                                                                                                   | Done when                                                                                                        | Size |
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---- |
 | E11.13 | The generated interaction face, MVP — interface and interaction descriptors, a `Client` generic over exactly the ports it needs, a `Publisher`, a `Provider` trait and a generated `dispatch`, for one example package, in process only | an example package's generated face compiles, and a signal, an event, a command and a query round-trip in a test | M    |
+
+**What E11.13 did not do is reach the command line.** `ridl build --emit rust`
+calls `ridl_backend_rust::generate`, and the face is emitted by the companion
+`generate_face` ([ADR-0023](decisions/ADR-0023-interaction-face-generation.md)
+decision 2), so a package built through the CLI today carries its domain types
+and nothing else — no descriptors, no face, no codec, and a `Cargo.toml` that
+names `ridl-rt` with no encoding feature. The interaction-face record states
+that as correct for E11.13 rather than a shortfall, because there was no codec
+to emit and no runtime to link. Both of those change in this step, and closing
+the gap is its own story, **E11.14** (driftsys/ridl#444). It is the story that
+makes the generated surface reachable by a consumer who runs the compiler rather
+than a test in this workspace, and the first of the three codecs to land is what
+unblocks it.
+
+| ID     | Story                                                                                                                                                                                                    | Done when                                                                                                                                                                               | Size |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.14 | The face and the codec reach `ridl build` — `--emit rust` writes the descriptors, the face and a codec's `Payload` implementations, and the emitted `Cargo.toml` names that encoding's `ridl-rt` feature | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
 
 ## Epic 14 — typl and ridl finalization
 
