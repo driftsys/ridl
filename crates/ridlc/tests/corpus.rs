@@ -1266,7 +1266,8 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "lib",
             "--emit",
             "metadata",
-            // The one lint denied by name (issue #161). A generated `pub` item
+            // The first of the three lints denied by name (issue #161). A
+            // generated `pub` item
             // over a `pub(crate)` type is warn-by-default on current rustc, so
             // a plain exit-status check accepts it — which is why the corpus's
             // own compile proof did not notice a public interface carrying an

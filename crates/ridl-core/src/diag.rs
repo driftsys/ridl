@@ -407,7 +407,7 @@ diag_codes! {
 
         /// A field name declared twice in one struct (typl §7, §16.3). Distinct
         /// from RIDL-149: that code fires when two distinct source names
-        /// collide only after the pinned name transform, and this one fires
+        /// collide only after a pinned name transform, and this one fires
         /// when the two source names are already the same, before any
         /// transform runs. Both fields still lower — this check reports and
         /// does not drop.
@@ -820,7 +820,7 @@ diag_codes! {
         /// A parameter name declared twice in one `command` or `query`
         /// parameter list (ridl §6.1, §7.1, §16.4). Distinct from RIDL-149:
         /// that code fires when two distinct source names collide only after
-        /// the pinned name transform, and this one fires when the two source
+        /// a pinned name transform, and this one fires when the two source
         /// names are already the same, before any transform runs. Both
         /// parameters still lower — this check reports and does not drop.
         RIDL_413 = "RIDL-413", Error,
