@@ -475,13 +475,12 @@ link-check:
 # rather than inside a URL, is reported as broken. Write it as a URL and this
 # recipe leaves it alone, because a URL puts a `/` in front of it.
 #
-# Both halves are exercised before the scan, because a gate that cannot be shown
-# to fail is not a gate. `extract_paths` runs over a built-in sample and must
-# give exactly the expected paths. `scan_paths` runs over a temporary root
-# holding one `.rs` and one `.ridl` that between them cite three paths which do
-# not exist and one which does, and must report exactly the three and return
-# non-zero.
-doc-path-check:
+# Given no argument, the gate runs over the repository this justfile is in, and
+# runs its own fixtures first, because a gate that cannot be shown to fail is
+# not a gate. Given a directory, it runs over the repository there and runs no
+# fixture: that is the form the fixtures invoke as a child process, and it is
+# what stops the recursion.
+doc-path-check root="":
     #!/usr/bin/env bash
     set -euo pipefail
     # C collation, so the order `sort -u` gives is the same on every machine the
@@ -502,11 +501,14 @@ doc-path-check:
     # written with a leading `../` is excluded by that same rule and is
     # therefore never checked. The sample below pins both.
     path_re="(^|[^A-Za-z0-9._/-])$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
-    # `-I` states that a binary file is skipped rather than leaving that to
-    # whichever grep is installed; no tracked file is binary today, so it pins
-    # the behaviour rather than changing it. The extension is unbounded:
-    # capping its length would truncate a long one rather than skip it, and
-    # report a string that is in no file.
+    # `-I` states that a file holding a NUL byte is skipped rather than leaving
+    # that to whichever grep is installed; no tracked file is binary today, so
+    # it pins the behaviour rather than changing it. The two greps this was run
+    # against announce a match in a binary file differently — one prints a line
+    # on stdout that the extractor would take for a path, the other a notice on
+    # stderr — so the fixture below asserts the whole report and not only the
+    # status. The extension is unbounded: capping its length would truncate a
+    # long one rather than skip it, and report a string that is in no file.
     extract_paths() {
         local matches status=0
         matches="$(grep -IoE "$path_re" "$1")" || status=$?
@@ -522,8 +524,12 @@ doc-path-check:
     # Report every extracted path that does not resolve under $1, over the file
     # list on stdin. Returns 1 when any did not resolve, or when a file could
     # not be read, and 0 only when every path resolved.
+    #
+    # A file that is not text is named instead of being passed over in silence:
+    # it is not read for paths, so whatever it cites goes unchecked, and a gate
+    # that loses coverage has to say where.
     scan_paths() {
-        local root="$1" broken=0 file target targets
+        local root="$1" broken=0 not_text="" file target targets
         while IFS= read -r file; do
             if ! targets="$(extract_paths "$root/$file")"; then
                 echo "doc-path-check: cannot read '$file'." >&2
@@ -536,8 +542,16 @@ doc-path-check:
                         broken=$((broken + 1))
                     fi
                 done <<<"$targets"
+            elif [ -s "$root/$file" ] && ! grep -Iq -e '' "$root/$file"; then
+                # Nothing came back from a file that is not empty. `-e ''`
+                # matches every line of a text file, so only `-I` can hold the
+                # match back: grep skipped the file rather than reading it.
+                not_text="$not_text $file"
             fi
         done
+        if [ -n "$not_text" ]; then
+            echo "doc-path-check: not text, so not scanned:$not_text" >&2
+        fi
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ file path(s) above do not resolve." >&2
             echo "doc-path-check: $skip_archive and $skip_wip are not scanned; a path" >&2
@@ -569,126 +583,218 @@ doc-path-check:
     list_files() {
         git_at "$1" -c core.quotePath=false ls-files "${@:2}"
     }
-    work="$(mktemp -d)"
-    trap 'rm -rf "$work"' EXIT
-    # The extraction half. Each line pins one rule: a path in prose, in an
-    # inline code span, in a source comment, followed by line references,
-    # inside a URL, inside a Markdown link, mid-word, nested, an uppercase
-    # segment, a segment carrying digits and an underscore, a filename with
-    # more than one dot and an extension that is neither two letters nor short,
-    # a relative citation, and a repeat of an earlier path for `sort -u`.
-    sample="$work/sample"
-    printf '%s\n' \
-        "$d/plain.md named in prose" \
-        "an inline code span \`$d/span.md\` link-check would strip" \
-        "//! $d/comment.md §6)." \
-        "with line references $d/lines.md:77,285" \
-        "a foreign URL https://example.com/$d/url.md is not ours" \
-        "a Markdown link [a]($d/link.md)" \
-        "not a word boundary: x$d/notaword.md" \
-        "nested $d/sub/dir/nested.md" \
-        "$d/ROADMAP.md, an uppercase segment" \
-        "a digit and an underscore in $d/decisions/ADR-0012-boundary_model.md" \
-        "two dots and a five-letter extension in $d/ir/cruise.system.txtpb" \
-        "an eight-letter extension in $d/typl-language-reference.markdown" \
-        "a relative citation ../$d/design/relative.md" \
-        "$d/plain.md a second time" > "$sample"
-    expected="$d/ROADMAP.md $d/comment.md $d/decisions/ADR-0012-boundary_model.md"
-    expected="$expected $d/ir/cruise.system.txtpb $d/lines.md $d/link.md $d/plain.md"
-    expected="$expected $d/span.md $d/sub/dir/nested.md $d/typl-language-reference.markdown "
-    if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
-        echo "doc-path-check: the extractor no longer gives the expected paths on the built-in sample:" >&2
-        extract_paths "$sample" >&2
-        exit 1
-    fi
-    # The enforcement half. A scan that prints its findings and still returns 0
-    # is the shape this fixture exists to catch, so the status, every report
-    # line and the count in the summary are all asserted. One of the two files
-    # cites two paths that do not exist, behind one that does, so a scan that
-    # stops at the first breakage in a file fails here as well.
-    root="$work/fixture"
-    mkdir -p "$root/$d/design" "$root/src"
-    : > "$root/$d/design/aa-present.md"
-    printf '%s\n' "//! $d/design/aa-present.md" "//! $d/design/bb-gone.md" \
-        "//! $d/design/cc-gone.md" > "$root/src/a.rs"
-    printf '%s\n' "// $d/design/dd-gone.md" > "$root/src/b.ridl"
-    report="$work/report"
-    if printf '%s\n' src/a.rs src/b.ridl | scan_paths "$root" 2>"$report"; then
-        echo "doc-path-check: the scan returned 0 over a fixture citing three paths that do not exist:" >&2
-        cat "$report" >&2
-        exit 1
-    fi
-    if [ "$(grep -c -- '->' "$report" || true)" -ne 3 ] \
-        || ! grep -q -- "src/a.rs -> $d/design/bb-gone.md" "$report" \
-        || ! grep -q -- "src/a.rs -> $d/design/cc-gone.md" "$report" \
-        || ! grep -q -- "src/b.ridl -> $d/design/dd-gone.md" "$report" \
-        || ! grep -q -- '^doc-path-check: 3 docs/ file path' "$report"; then
-        echo "doc-path-check: the scan no longer reports exactly the three broken paths in its fixture:" >&2
-        cat "$report" >&2
-        exit 1
-    fi
-    # A file the list names but grep cannot open fails the scan rather than
-    # being skipped: grep's exit 2 is an error, not an empty result.
-    if printf '%s\n' src/not-there.rs | scan_paths "$root" 2>"$report" \
-        || ! grep -q -- "cannot read 'src/not-there.rs'" "$report"; then
-        echo "doc-path-check: the scan no longer fails on a file it cannot read:" >&2
-        cat "$report" >&2
-        exit 1
-    fi
-    # A tracked path holding a byte outside ASCII must come back in a spelling
-    # that opens. The name is built from its two bytes so that this file stays
-    # ASCII, and the repository needs no commit, because git lists the index.
-    quoting="$work/quoting"
-    mkdir -p "$quoting"
-    git_at "$quoting" -c init.defaultBranch=main -c init.templateDir= init -q
-    name="na$(printf '\303\257')ve.md"
-    printf 'no path is cited here\n' > "$quoting/$name"
-    # An ignore rule reaching this repository from the machine's own git config
-    # would drop the file from the listing, and a scan over an empty listing
-    # returns 0 — the assertion would pass having tested nothing. The rule is
-    # neutralised, and the listing is compared against the name rather than
-    # only being fed to the scan, so the check cannot succeed vacuously.
-    git_at "$quoting" -c core.excludesFile=/dev/null add -A
-    listed="$(list_files "$quoting")"
-    if [ "$listed" != "$name" ]; then
-        echo "doc-path-check: the listing did not give the fixture's name as it is spelled on disk:" >&2
-        printf '%s\n' "$listed" >&2
-        exit 1
-    fi
-    if ! printf '%s\n' "$listed" | scan_paths "$quoting" 2>"$report"; then
-        echo "doc-path-check: the scan could not read a tracked path holding a byte outside ASCII:" >&2
-        cat "$report" >&2
-        exit 1
-    fi
-    # Each skipped pathspec is asserted to match tracked files, so a typo that
-    # makes one of them inert fails here rather than widening the scan without
-    # reporting it.
-    for skipped in "$skip_archive" "$skip_wip"; do
-        if [ -z "$(git_at . ls-files "$skipped")" ]; then
-            echo "doc-path-check: the skipped tree '$skipped' matches no tracked file; correct the pathspec, or drop the exclusion if that tree is gone." >&2
+    # The gate itself, over the repository at $1: every docs/ file path named
+    # in a tracked file outside the two skipped trees has to resolve.
+    run_gate() (
+        cd "$1"
+        # Each skipped pathspec has to match tracked files, so a typo that
+        # makes one of them inert fails here rather than widening the scan
+        # without reporting it.
+        for skipped in "$skip_archive" "$skip_wip"; do
+            if [ -z "$(git_at . ls-files "$skipped")" ]; then
+                echo "doc-path-check: the skipped tree '$skipped' matches no tracked file; correct the pathspec, or drop the exclusion if that tree is gone." >&2
+                exit 1
+            fi
+        done
+        if ! files="$(list_files . ":!$skip_archive" ":!$skip_wip")" \
+            || ! all_files="$(list_files .)"; then
+            echo "doc-path-check: git ls-files failed; the file list cannot be trusted." >&2
             exit 1
         fi
-    done
-    if ! files="$(list_files . ":!$skip_archive" ":!$skip_wip")"; then
-        echo "doc-path-check: git ls-files failed; the file list cannot be trusted." >&2
-        exit 1
-    fi
-    tracked="$(printf '%s\n' "$files" | grep -c . || true)"
-    if [ "$tracked" -lt 200 ]; then
-        echo "doc-path-check: git ls-files gave $tracked files, which is too few to be the tree." >&2
-        exit 1
-    fi
-    # And the list that invocation produced holds neither tree. Asserting the
-    # two pathspecs one at a time above does not cover naming one of them twice
-    # in the call itself, which leaves the other tree in the scan.
-    for skipped in "$skip_archive" "$skip_wip"; do
-        if printf '%s\n' "$files" | grep -q "^$skipped"; then
-            echo "doc-path-check: the file list still holds files under '$skipped'." >&2
+        # The scanned list has to be exactly the tracked files outside the two
+        # skipped trees. The expectation is rebuilt from the whole listing with
+        # the two tree names spelled out, rather than taken from the pathspecs
+        # the call above used, so a pathspec that drops more than its own tree
+        # parts the two lists and fails here. A size check did not: the scan
+        # passed with `$d/` skipped in place of `$d/wip/`, and passed again
+        # with every .rs file dropped, which is the file type this gate exists
+        # for.
+        expected="$(printf '%s\n' "$all_files" | grep -Ev "^$d/(archive|wip)/" || true)"
+        if [ -z "$expected" ]; then
+            echo "doc-path-check: every tracked file is inside $skip_archive or $skip_wip; there is nothing left to scan." >&2
             exit 1
         fi
-    done
-    printf '%s\n' "$files" | scan_paths .
-    echo "doc-path-check: every docs/ file path named outside $skip_archive and $skip_wip resolves, over $tracked tracked files."
+        if [ "$files" != "$expected" ]; then
+            echo "doc-path-check: the file list is not the tracked tree minus $skip_archive and $skip_wip." >&2
+            echo "doc-path-check: '<' would be scanned and should not be; '>' should be and would not:" >&2
+            diff <(printf '%s\n' "$files") <(printf '%s\n' "$expected") >&2 || true
+            exit 1
+        fi
+        tracked="$(printf '%s\n' "$files" | grep -c . || true)"
+        printf '%s\n' "$files" | scan_paths .
+        echo "doc-path-check: every docs/ file path named outside $skip_archive and $skip_wip resolves, over $tracked tracked files."
+    )
+    # The fixtures. Each one builds a case the gate has to pass or fail and
+    # fails this recipe when the gate does not. They run in a subshell, so the
+    # temporary tree and the git environment set below go no further.
+    fixtures() (
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        # The extraction half. Each line pins one rule: a path in prose, in an
+        # inline code span, in a source comment, followed by line references,
+        # inside a URL, inside a Markdown link, mid-word, nested, an uppercase
+        # segment, a segment carrying digits and an underscore, a filename with
+        # more than one dot and an extension that is neither two letters nor short,
+        # a relative citation, and a repeat of an earlier path for `sort -u`.
+        sample="$work/sample"
+        printf '%s\n' \
+            "$d/plain.md named in prose" \
+            "an inline code span \`$d/span.md\` link-check would strip" \
+            "//! $d/comment.md §6)." \
+            "with line references $d/lines.md:77,285" \
+            "a foreign URL https://example.com/$d/url.md is not ours" \
+            "a Markdown link [a]($d/link.md)" \
+            "not a word boundary: x$d/notaword.md" \
+            "nested $d/sub/dir/nested.md" \
+            "$d/ROADMAP.md, an uppercase segment" \
+            "a digit and an underscore in $d/decisions/ADR-0012-boundary_model.md" \
+            "two dots and a five-letter extension in $d/ir/cruise.system.txtpb" \
+            "an eight-letter extension in $d/typl-language-reference.markdown" \
+            "a relative citation ../$d/design/relative.md" \
+            "$d/plain.md a second time" > "$sample"
+        expected="$d/ROADMAP.md $d/comment.md $d/decisions/ADR-0012-boundary_model.md"
+        expected="$expected $d/ir/cruise.system.txtpb $d/lines.md $d/link.md $d/plain.md"
+        expected="$expected $d/span.md $d/sub/dir/nested.md $d/typl-language-reference.markdown "
+        if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
+            echo "doc-path-check: the extractor no longer gives the expected paths on the built-in sample:" >&2
+            extract_paths "$sample" >&2
+            exit 1
+        fi
+        # The enforcement half. A scan that prints its findings and still returns 0
+        # is the shape this fixture exists to catch, so the status, every report
+        # line and the count in the summary are all asserted. One of the two files
+        # cites two paths that do not exist, behind one that does, so a scan that
+        # stops at the first breakage in a file fails here as well.
+        root="$work/fixture"
+        mkdir -p "$root/$d/design" "$root/src"
+        : > "$root/$d/design/aa-present.md"
+        printf '%s\n' "//! $d/design/aa-present.md" "//! $d/design/bb-gone.md" \
+            "//! $d/design/cc-gone.md" > "$root/src/a.rs"
+        printf '%s\n' "// $d/design/dd-gone.md" > "$root/src/b.ridl"
+        report="$work/report"
+        if printf '%s\n' src/a.rs src/b.ridl | scan_paths "$root" 2>"$report"; then
+            echo "doc-path-check: the scan returned 0 over a fixture citing three paths that do not exist:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        if [ "$(grep -c -- '->' "$report" || true)" -ne 3 ] \
+            || ! grep -q -- "src/a.rs -> $d/design/bb-gone.md" "$report" \
+            || ! grep -q -- "src/a.rs -> $d/design/cc-gone.md" "$report" \
+            || ! grep -q -- "src/b.ridl -> $d/design/dd-gone.md" "$report" \
+            || ! grep -q -- '^doc-path-check: 3 docs/ file path' "$report"; then
+            echo "doc-path-check: the scan no longer reports exactly the three broken paths in its fixture:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A file the list names but grep cannot open fails the scan rather than
+        # being skipped: grep's exit 2 is an error, not an empty result.
+        if printf '%s\n' src/not-there.rs | scan_paths "$root" 2>"$report" \
+            || ! grep -q -- "cannot read 'src/not-there.rs'" "$report"; then
+            echo "doc-path-check: the scan no longer fails on a file it cannot read:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A file holding a NUL byte is skipped and named, and nothing else is
+        # said about it. The path it cites does not exist, so a grep that reads
+        # the file anyway reports a breakage and returns 1; the report is
+        # compared whole, so a grep that writes a notice about the binary file
+        # instead of a match fails here too.
+        printf '//! %s\000\n' "$d/design/ee-gone.md" > "$root/src/blob.bin"
+        if ! printf '%s\n' src/blob.bin | scan_paths "$root" 2>"$report" \
+            || [ "$(cat "$report")" != "doc-path-check: not text, so not scanned: src/blob.bin" ]; then
+            echo "doc-path-check: the scan no longer skips a file that is not text and names it:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # From here on the fixtures use git, and they run under a git
+        # environment that names a repository of their own. That is what the
+        # clearing in git_at is for, and it is pinned here: without it every
+        # call below acts on the decoy rather than on the directory it is
+        # given, the listings come back empty and the assertions fail. It also
+        # keeps a call that escapes the clearing away from this repository,
+        # which is the accident that has to be made impossible — `just verify`
+        # runs from the pre-push hook, so an inherited GIT_DIR here is this
+        # repository's own.
+        decoy="$work/decoy"
+        mkdir -p "$decoy"
+        # The environment is set before the decoy repository is created, not
+        # after, so that the call creating it is covered as well: without the
+        # clearing that call reads GIT_DIR, and GIT_DIR has to name the decoy
+        # by then rather than this repository.
+        export GIT_DIR="$decoy/.git" GIT_WORK_TREE="$decoy"
+        git_at "$decoy" -c init.defaultBranch=main -c init.templateDir= init -q
+        # A tracked path holding a byte outside ASCII must come back in a spelling
+        # that opens. The name is built from its two bytes so that this file stays
+        # ASCII, and the repository needs no commit, because git lists the index.
+        quoting="$work/quoting"
+        mkdir -p "$quoting"
+        git_at "$quoting" -c init.defaultBranch=main -c init.templateDir= init -q
+        name="na$(printf '\303\257')ve.md"
+        printf 'no path is cited here\n' > "$quoting/$name"
+        # An ignore rule reaching this repository from the machine's own git config
+        # would drop the file from the listing, and a scan over an empty listing
+        # returns 0 — the assertion would pass having tested nothing. The rule is
+        # neutralised, and the listing is compared against the name rather than
+        # only being fed to the scan, so the check cannot succeed vacuously.
+        git_at "$quoting" -c core.excludesFile=/dev/null add -A
+        listed="$(list_files "$quoting")"
+        if [ "$listed" != "$name" ]; then
+            echo "doc-path-check: the listing did not give the fixture's name as it is spelled on disk:" >&2
+            printf '%s\n' "$listed" >&2
+            exit 1
+        fi
+        if ! printf '%s\n' "$listed" | scan_paths "$quoting" 2>"$report"; then
+            echo "doc-path-check: the scan could not read a tracked path holding a byte outside ASCII:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # The status this recipe exits with, pinned from outside it. From in
+        # here it cannot be observed: a `|| true` on the one call to run_gate
+        # would print every breakage line and still exit 0, and no assertion
+        # above would notice. So the gate is run as a child process — this
+        # recipe, given a root, which is the form that runs the gate and
+        # nothing else — over a repository built for it: first with every
+        # scanned citation resolving, then with one that does not.
+        #
+        # That repository also cites a path that does not exist from inside
+        # each of the two skipped trees, so a run that stops skipping them
+        # fails the first of the two invocations.
+        gate="$work/gate"
+        mkdir -p "$gate/$d/design" "$gate/$d/archive" "$gate/$d/wip" "$gate/src"
+        : > "$gate/$d/design/present.md"
+        printf '%s\n' "moved to $d/archive/ff-gone.md" > "$gate/$d/archive/old.md"
+        printf '%s\n' "will write $d/design/gg-gone.md" > "$gate/$d/wip/plan.md"
+        printf '%s\n' "//! $d/design/present.md" > "$gate/src/a.rs"
+        git_at "$gate" -c init.defaultBranch=main -c init.templateDir= init -q
+        git_at "$gate" -c core.excludesFile=/dev/null add -A
+        run="$work/run"
+        if ! "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
+            echo "doc-path-check: the gate did not pass over a fixture whose scanned citations all resolve:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        printf '%s\n' "//! $d/design/hh-gone.md" > "$gate/src/broken.rs"
+        git_at "$gate" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
+            echo "doc-path-check: the gate returned 0 over a fixture citing a path that does not exist:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q -- "src/broken.rs -> $d/design/hh-gone.md" "$run"; then
+            echo "doc-path-check: the gate did not report the broken path in its fixture:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+    )
+    # One call site, so the fixture above and the real run take the same line:
+    # a clause appended here disarms both, and the child process notices.
+    root=.
+    if [ -n "{{root}}" ]; then
+        root="{{root}}"
+    else
+        fixtures
+    fi
+    run_gate "$root"
 
 # Check that CI still invokes every recipe the local gate is made of.
 #
