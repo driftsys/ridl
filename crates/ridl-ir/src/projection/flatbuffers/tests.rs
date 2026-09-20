@@ -70,6 +70,22 @@ fn string_type(characters: u64) -> v2::decl::Kind {
     })
 }
 
+/// A named bytes scalar bounded to `length` bytes.
+fn bytes_type(length: u64) -> v2::decl::Kind {
+    v2::decl::Kind::TypeDef(v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        }),
+        constraint: Some(v2::Constraint {
+            len_max: Some(length),
+            ..Default::default()
+        }),
+        ..Default::default()
+    })
+}
+
 fn int_type(width: v2::IntWidth) -> v2::decl::Kind {
     v2::decl::Kind::TypeDef(v2::TypeDef {
         backing: Some(v2::Backing {
@@ -293,9 +309,13 @@ fn a_scalar_struct_is_bounded_by_its_own_table() {
         )],
     );
 
-    // root (4 + 7) + table: soffset 4 + one inline byte + slack 7 + vtable
-    // (4 header + 2 for the one slot + slack 7).
-    assert_eq!(bound(&[&pkg], "Flags"), Some(11 + 4 + 1 + 7 + 13));
+    // root (4 + 7) + table: soffset 4, one inline byte, slack for the one
+    // slot and for the soffset, and a vtable of 4 header bytes, 2 for the one
+    // slot, and its own slack.
+    assert_eq!(
+        bound(&[&pkg], "Flags"),
+        Some(ROOT + OFFSET + 1 + ALIGN_SLACK * 2 + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK))
+    );
 }
 
 #[test]
@@ -434,16 +454,17 @@ fn an_arm_that_is_not_a_table_pays_for_its_box() {
     );
 
     // The wrapper alone: root, its soffset, the discriminant byte and the
-    // union offset inline, slack, and a two-slot vtable.
+    // union offset inline, slack for its two slots and its soffset, and a
+    // two-slot vtable.
     let wrapper_only = ROOT
         + OFFSET
         + (1 + OFFSET)
-        + ALIGN_SLACK
+        + ALIGN_SLACK * 3
         + (VTABLE_HEADER + 2 * VTABLE_SLOT + ALIGN_SLACK);
     // What the box adds: a whole table of its own, holding one inline byte.
     assert_eq!(
         bound(&[&pkg], "Command").expect("bounded") - wrapper_only,
-        OFFSET + 1 + ALIGN_SLACK + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK)
+        OFFSET + 1 + ALIGN_SLACK * 2 + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK)
     );
 }
 
@@ -548,6 +569,131 @@ fn an_overflowing_count_has_no_bound() {
     );
 
     assert_eq!(bound(&[&pkg], "Holder"), None);
+}
+
+#[test]
+fn a_table_charges_alignment_slack_for_every_slot() {
+    // The reason it is per slot: a builder that writes a table's fields in
+    // declaration order pre-aligns again at every widening, and nothing here
+    // obliges it to write them in non-increasing alignment order. `u8, u64,
+    // u8, u64` is the shape that breaks a bound charging slack once per
+    // table.
+    let alternating = package(
+        "veh.cruise",
+        vec![
+            decl("Narrow", int_type(v2::IntWidth::U8)),
+            decl("Wide", int_type(v2::IntWidth::U64)),
+            decl(
+                "Holder",
+                v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![
+                        field("a", 1, named("Narrow")),
+                        field("b", 2, named("Wide")),
+                        field("c", 3, named("Narrow")),
+                        field("d", 4, named("Wide")),
+                    ],
+                    ..Default::default()
+                }),
+            ),
+        ],
+    );
+
+    let charged = bound(&[&alternating], "Holder").expect("bounded");
+    // What a declaration-order builder spends at worst: the root offset and
+    // the buffer's own alignment, the soffset and its alignment, the 18
+    // inline bytes, one pre-align of up to seven before each of the four
+    // fields, and the vtable with the one byte a 2-aligned object can waste.
+    let worst_case = OFFSET
+        + ALIGN_SLACK
+        + OFFSET
+        + ALIGN_SLACK
+        + 18
+        + 4 * ALIGN_SLACK
+        + (VTABLE_HEADER + 4 * VTABLE_SLOT + 1);
+    assert!(
+        charged >= worst_case,
+        "the bound {charged} must cover the worst write order, which costs {worst_case}"
+    );
+}
+
+#[test]
+fn a_shared_type_is_walked_once() {
+    // A diamond: every level names the one below it twice. TYPL-206 rejects a
+    // cycle, not sharing, so this is legal typl — and with no memoization it
+    // costs time exponential in the depth. Thirty levels is 2^30 walks, which
+    // is the difference between this test finishing and `ridlc` hanging.
+    let mut decls = vec![decl(
+        "S30",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field("x", 1, primitive(v2::PrimitiveType::Boolean))],
+            ..Default::default()
+        }),
+    )];
+    for level in (0..30).rev() {
+        decls.push(decl(
+            &format!("S{level}"),
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![
+                    field("a", 1, named(&format!("S{}", level + 1))),
+                    field("b", 2, named(&format!("S{}", level + 1))),
+                ],
+                ..Default::default()
+            }),
+        ));
+    }
+    let pkg = package("veh.cruise", decls);
+
+    // The bound passes what an offset can address long before the top, so the
+    // answer is `None`. What this test is about is that an answer arrives.
+    assert_eq!(bound(&[&pkg], "S0"), None);
+    // And the shallow end of the same graph is finite, so the walk is not
+    // simply refusing everything.
+    assert!(bound(&[&pkg], "S28").is_some());
+}
+
+#[test]
+fn a_bound_larger_than_an_offset_can_address_is_refused() {
+    // Every offset in the format is 32 bits. A bound above that describes a
+    // buffer FlatBuffers cannot address, and the codec would emit it as a
+    // `usize` that does not fit on the wasm32 target this encoding is for.
+    let pkg = package(
+        "veh.cruise",
+        vec![
+            decl("Blob", bytes_type(256)),
+            holder_of(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(named("Blob"))),
+                    min: 0,
+                    max: 20_000_000,
+                }))),
+            }),
+        ],
+    );
+
+    assert_eq!(bound(&[&pkg], "Holder"), None);
+}
+
+#[test]
+fn a_bound_just_inside_the_offset_range_is_kept() {
+    let pkg = package(
+        "veh.cruise",
+        vec![
+            decl("Blob", bytes_type(256)),
+            holder_of(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(named("Blob"))),
+                    min: 0,
+                    max: 1_000,
+                }))),
+            }),
+        ],
+    );
+
+    let charged = bound(&[&pkg], "Holder").expect("bounded");
+
+    assert!(charged <= MAX_ENCODABLE, "{charged}");
 }
 
 #[test]

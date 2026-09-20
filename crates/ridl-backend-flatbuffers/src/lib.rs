@@ -473,15 +473,26 @@ fn emit_struct(
 ) -> Result<(), GenerateError> {
     let mut fields = Namespace::fields(name);
     let layout = projection::struct_table(name, def)?;
-    out.push_str(&format!("\ntable {name} {{\n"));
+    let members: Vec<&v2::struct_member::Member> = def
+        .members
+        .iter()
+        .filter_map(|member| member.member.as_ref())
+        .collect();
     // One slot per member, in the same order: `struct_table` walks the same
-    // list and skips the same empty members, so the two iterators stay
-    // aligned.
-    for (slot, member) in layout.slots.iter().zip(
-        def.members
-            .iter()
-            .filter_map(|member| member.member.as_ref()),
-    ) {
+    // list and skips the same empty members. Checked rather than assumed,
+    // because `zip` truncates silently and would emit a short table if the
+    // two ever stopped agreeing.
+    if layout.slots.len() != members.len() {
+        return Err(GenerateError {
+            message: format!(
+                "`{name}` carries {} struct members but the projection gives {} slots.",
+                members.len(),
+                layout.slots.len()
+            ),
+        });
+    }
+    out.push_str(&format!("\ntable {name} {{\n"));
+    for (slot, member) in layout.slots.iter().zip(members) {
         let id = slot.id;
         match member {
             v2::struct_member::Member::Field(field) => {
@@ -1007,10 +1018,14 @@ fn emit_tuple_table(
     let layout = projection::tuple_table(name, tuple)?;
     out.push_str(&format!("\ntable {name} {{\n"));
     for (slot, field) in layout.slots.iter().zip(tuple.fields.iter()) {
-        // The ids run from 0 in declaration order, so the 1-based position the
-        // generated field name carries is the id plus one.
         let id = slot.id;
-        let position = id + 1;
+        // The 1-based position the generated field name carries is the slot's
+        // own, taken from the layout rather than recomputed from the id.
+        let projection::SlotSource::TupleField { position } = slot.source else {
+            return Err(GenerateError {
+                message: format!("{name} was given a slot that is not a tuple field."),
+            });
+        };
         let field_name = format!("field_{position}");
         let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
             message: format!("{name}.{field_name} carries no type in the IR."),

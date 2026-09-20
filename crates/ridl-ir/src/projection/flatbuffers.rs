@@ -20,6 +20,8 @@
 //! The spelling of a type stays with the emitter that spells it; what is
 //! shared is the layout both emitters must produce.
 
+use std::collections::HashMap;
+
 use crate::v2;
 
 /// A fact this module cannot derive from the IR it was handed.
@@ -77,8 +79,10 @@ pub struct FieldSlot {
 pub enum SlotSource {
     /// A live struct field, by its typl name and 1-based ordinal.
     Field { name: String, ordinal: u32 },
-    /// A retired struct ordinal. ADR-0019 keeps the slot occupied with a
-    /// `deprecated` placeholder so a later id never moves onto it.
+    /// A retired struct ordinal. typl §7.4 is what makes a tombstone hold
+    /// its ordinal; holding it with a `deprecated` placeholder field, so a
+    /// later id never moves onto it, is this projection's way of doing that
+    /// and not a rule ADR-0019 states.
     Retired { ordinal: u32 },
     /// A tuple field, by its 1-based position (typl §11).
     TupleField { position: u32 },
@@ -126,12 +130,14 @@ pub fn struct_table(owner: &str, def: &v2::StructDef) -> Result<TableLayout, Pro
 pub fn tuple_table(name: &str, tuple: &v2::TupleType) -> Result<TableLayout, ProjectionError> {
     let mut slots = Vec::with_capacity(tuple.fields.len());
     for index in 0..tuple.fields.len() {
-        let id = u32::try_from(index).map_err(|_| ProjectionError {
+        // The position is taken before the id, so the last id a FlatBuffers
+        // field can carry is refused rather than wrapped to `field_0`.
+        let position = u32::try_from(index + 1).map_err(|_| ProjectionError {
             message: format!("{name} has more tuple fields than a FlatBuffers id can carry."),
         })?;
         slots.push(FieldSlot {
-            id,
-            source: SlotSource::TupleField { position: id + 1 },
+            id: position - 1,
+            source: SlotSource::TupleField { position },
         });
     }
     Ok(TableLayout { slots })
@@ -154,7 +160,7 @@ pub const UNION_ARM_BOX_VALUE_ID: u32 = 0;
 /// The layout of the entry table a map induces: `key` at
 /// [`MAP_ENTRY_KEY_ID`], `value` at [`MAP_ENTRY_VALUE_ID`]. FlatBuffers has
 /// no map type, so a map is a vector of these (typl §12.2), and ADR-0019
-/// decision 5 emits no `(key)` attribute on it — which is why the entry table
+/// decision 4 emits no `(key)` attribute on it — which is why the entry table
 /// is an ordinary two-field table here and carries no sort obligation.
 #[must_use]
 pub fn map_entry_table() -> TableLayout {
@@ -286,10 +292,15 @@ pub fn mints_root_table(decl: &v2::Decl) -> bool {
 ///
 /// - the root: one `uoffset` plus [`ALIGN_SLACK`];
 /// - each table: one `soffset` back to its vtable, its inline fields, one
-///   [`ALIGN_SLACK`], and its own vtable — four header bytes plus two per slot
-///   up to the highest id used ([`TableLayout::vtable_slots`]) plus
-///   [`ALIGN_SLACK`]. Vtable sharing is never charged, because sharing only
-///   ever makes a buffer smaller;
+///   [`ALIGN_SLACK`] **per slot and one more for the `soffset`**, and its own
+///   vtable — four header bytes plus two per slot up to the highest id used
+///   ([`TableLayout::vtable_slots`]) plus [`ALIGN_SLACK`]. Vtable sharing is
+///   never charged, because sharing only ever makes a buffer smaller. The
+///   slack is charged per slot rather than once per table so that the bound
+///   holds whatever order the encoder writes a table's fields in: a builder
+///   writing them in non-increasing alignment order pre-aligns once, but one
+///   writing them in declaration order pre-aligns again at every widening,
+///   and nothing here obliges the encoder to either;
 /// - a string: its length prefix, four bytes per declared character
 ///   (typl §5.3 bounds a string in characters, and UTF-8 spends up to four
 ///   bytes on one), the null terminator, and [`ALIGN_SLACK`];
@@ -313,7 +324,16 @@ pub fn mints_root_table(decl: &v2::Decl) -> bool {
 ///   this projection does not carry;
 /// - a composite that reaches itself, directly or transitively — TYPL-206
 ///   rejects one, so this is totality over IR handed in directly;
-/// - an arithmetic overflow of `u64`, which is no representable finite bound.
+/// - an arithmetic overflow of `u64`, which is no representable finite
+///   bound;
+/// - a bound above [`MAX_ENCODABLE`]. Every offset in the format is 32 bits,
+///   so a larger buffer is not addressable by FlatBuffers at all, and the
+///   constant the codec emits is a `usize` — which on the `wasm32` target
+///   ADR-0020 decision 2 makes this encoding's home is itself 32 bits.
+///
+/// An array or a map whose `max` is zero is charged as no elements rather
+/// than refused. TYPL-202 makes both bounds mandatory, so a zero maximum is a
+/// container that carries nothing, not a missing bound.
 ///
 /// Ask only about a declaration [`mints_root_table`] accepts; any other kind
 /// answers `None` because it has no buffer of its own, not because it is
@@ -323,6 +343,7 @@ pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
     let mut sizer = Sizer {
         packages,
         visiting: Vec::new(),
+        computed: HashMap::new(),
     };
     let body = match &decl.kind {
         Some(v2::decl::Kind::StructDef(def)) => {
@@ -333,11 +354,24 @@ pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
         }
         _ => return None,
     };
-    ROOT.checked_add(body)
+    match ROOT.checked_add(body) {
+        Some(bound) if bound <= MAX_ENCODABLE => Some(bound),
+        _ => None,
+    }
 }
 
-/// The worst-case padding one placed object can cost: FlatBuffers aligns a
-/// scalar to its own width, and eight is the widest this projection emits.
+/// The largest buffer a FlatBuffers offset can address. Every offset in the
+/// format is 32 bits, so nothing above this is encodable, whatever the
+/// arithmetic says.
+pub const MAX_ENCODABLE: u64 = u32::MAX as u64;
+
+/// The worst-case padding **one alignment event** can cost: FlatBuffers
+/// aligns a scalar to its own width, and eight is the widest this projection
+/// emits.
+///
+/// A table incurs several — one per inline field in the worst write order,
+/// plus one for its `soffset` — so a table is charged this per slot and once
+/// more for itself, never once for the whole table.
 pub const ALIGN_SLACK: u64 = 7;
 
 /// A `uoffset_t` or an `soffset_t`: four bytes.
@@ -377,6 +411,15 @@ impl Charge {
 struct Sizer<'a> {
     packages: Packages<'a>,
     visiting: Vec<String>,
+    /// The bound of each named composite already derived, so a type reached
+    /// twice is walked once. Without it a diamond — `A { b: B, c: B }`,
+    /// `B { d: C, e: C }`, and so on — costs time exponential in its depth,
+    /// and typl admits one: TYPL-206 rejects a cycle, not sharing.
+    ///
+    /// Only a finite bound is cached. A `None` may be the cycle guard
+    /// answering for the path that reached it rather than a property of the
+    /// type, and that answer does not generalize to another path.
+    computed: HashMap<String, u64>,
 }
 
 impl<'a> Sizer<'a> {
@@ -408,27 +451,38 @@ impl<'a> Sizer<'a> {
         }
     }
 
-    /// Runs `body` with `key` on the visiting stack, answering `None` when
-    /// `key` is already on it — a composite that reaches itself.
-    fn guarded<T>(&mut self, key: String, body: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
+    /// The bound of the named composite `key`: the one already derived if
+    /// there is one, `None` when `key` is already on the visiting stack — a
+    /// composite that reaches itself — and otherwise whatever `body` derives,
+    /// remembered when it is finite.
+    fn guarded(&mut self, key: String, body: impl FnOnce(&mut Self) -> Option<u64>) -> Option<u64> {
+        if let Some(bound) = self.computed.get(&key) {
+            return Some(*bound);
+        }
         if self.visiting.contains(&key) {
             return None;
         }
-        self.visiting.push(key);
+        self.visiting.push(key.clone());
         let out = body(self);
         self.visiting.pop();
+        if let Some(bound) = out {
+            self.computed.insert(key, bound);
+        }
         out
     }
 
-    /// One table: its soffset, its inline fields, its alignment slack, its own
-    /// vtable, and everything its fields place out of line.
+    /// One table: its soffset, its inline fields, one [`ALIGN_SLACK`] per slot
+    /// plus one for the soffset, its own vtable, and everything its fields
+    /// place out of line.
     fn table_bound(&self, layout: &TableLayout, inline: u64, out_of_line: u64) -> Option<u64> {
+        let slots = layout.vtable_slots();
         let vtable = VTABLE_HEADER
-            .checked_add(VTABLE_SLOT.checked_mul(layout.vtable_slots())?)?
+            .checked_add(VTABLE_SLOT.checked_mul(slots)?)?
             .checked_add(ALIGN_SLACK)?;
+        let padding = ALIGN_SLACK.checked_mul(slots.checked_add(1)?)?;
         OFFSET
             .checked_add(inline)?
-            .checked_add(ALIGN_SLACK)?
+            .checked_add(padding)?
             .checked_add(vtable)?
             .checked_add(out_of_line)
     }
