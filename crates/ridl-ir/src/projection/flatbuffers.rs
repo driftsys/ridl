@@ -137,21 +137,35 @@ pub fn tuple_table(name: &str, tuple: &v2::TupleType) -> Result<TableLayout, Pro
     Ok(TableLayout { slots })
 }
 
-/// The layout of the entry table a map induces: `key` at id 0, `value` at
-/// id 1. FlatBuffers has no map type, so a map is a vector of these
-/// (typl §12.2), and ADR-0019 decision 5 emits no `(key)` attribute on it —
-/// which is why the entry table is an ordinary two-field table here and
-/// carries no sort obligation.
+/// The id a map entry's `key` takes.
+pub const MAP_ENTRY_KEY_ID: u32 = 0;
+
+/// The id a map entry's `value` takes.
+pub const MAP_ENTRY_VALUE_ID: u32 = 1;
+
+/// The id the value field of a union's wrapper table takes — **1**, because
+/// the implicit `_type` discriminant takes 0 (ADR-0019 decision 1).
+pub const UNION_WRAPPER_VALUE_ID: u32 = 1;
+
+/// The id the value field of a union arm's box table takes
+/// (ADR-0019 decision 2).
+pub const UNION_ARM_BOX_VALUE_ID: u32 = 0;
+
+/// The layout of the entry table a map induces: `key` at
+/// [`MAP_ENTRY_KEY_ID`], `value` at [`MAP_ENTRY_VALUE_ID`]. FlatBuffers has
+/// no map type, so a map is a vector of these (typl §12.2), and ADR-0019
+/// decision 5 emits no `(key)` attribute on it — which is why the entry table
+/// is an ordinary two-field table here and carries no sort obligation.
 #[must_use]
 pub fn map_entry_table() -> TableLayout {
     TableLayout {
         slots: vec![
             FieldSlot {
-                id: 0,
+                id: MAP_ENTRY_KEY_ID,
                 source: SlotSource::Key,
             },
             FieldSlot {
-                id: 1,
+                id: MAP_ENTRY_VALUE_ID,
                 source: SlotSource::Value,
             },
         ],
@@ -171,21 +185,21 @@ pub fn map_entry_table() -> TableLayout {
 pub fn union_wrapper_table() -> TableLayout {
     TableLayout {
         slots: vec![FieldSlot {
-            id: 1,
+            id: UNION_WRAPPER_VALUE_ID,
             source: SlotSource::Wrapped,
         }],
     }
 }
 
 /// The layout of the box table a non-table union arm is isolated in
-/// (ADR-0019 decision 2): one `value` field at id 0. A FlatBuffers union
+/// (ADR-0019 decision 2): one `value` field at [`UNION_ARM_BOX_VALUE_ID`]. A FlatBuffers union
 /// member must be a table, and a named scalar, an enum and an enum set each
 /// inline to a bare scalar, so each is wrapped rather than refused.
 #[must_use]
 pub fn union_arm_box_table() -> TableLayout {
     TableLayout {
         slots: vec![FieldSlot {
-            id: 0,
+            id: UNION_ARM_BOX_VALUE_ID,
             source: SlotSource::Wrapped,
         }],
     }
@@ -397,7 +411,7 @@ impl<'a> Sizer<'a> {
     /// Runs `body` with `key` on the visiting stack, answering `None` when
     /// `key` is already on it — a composite that reaches itself.
     fn guarded<T>(&mut self, key: String, body: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
-        if self.visiting.iter().any(|seen| *seen == key) {
+        if self.visiting.contains(&key) {
             return None;
         }
         self.visiting.push(key);

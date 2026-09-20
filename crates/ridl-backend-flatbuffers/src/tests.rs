@@ -1,5 +1,9 @@
-use crate::{generate, generate_with};
+use std::collections::HashMap;
+
+use ridl_ir::projection::flatbuffers as projection;
 use ridl_ir::v2;
+
+use crate::{generate, generate_with};
 
 // `compile_with_planus` and `compile_with_planus_and_siblings` live in
 // `tests/support/mod.rs`, loaded here by path so the unit tests and
@@ -1374,4 +1378,379 @@ fn a_local_struct_reference_names_the_bare_declared_table() {
         generated.fbs_source
     );
     compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+// ---------------------------------------------------------------------
+// The drift test (E11.7, design note D-1 and D-10)
+// ---------------------------------------------------------------------
+//
+// The `.fbs` schema this backend emits and the codec `ridl-backend-rust`
+// emits have to agree byte for byte on ADR-0019's projection. They share no
+// emission code, so what they share is `ridl_ir::projection::flatbuffers`,
+// and this is the test that fails when one of them walks away from it: the
+// facts that module exports are compared against the schema text this
+// backend actually wrote, on every fixture.
+//
+// It is also what makes driftsys/ridl#302 visible. The union declaration is
+// emitted with no explicit member values, so the target numbers the arms by
+// position while the IR numbers them by `UnionArm.ordinal`, which a
+// tombstone keeps occupied. The two agree until an arm is retired ahead of a
+// live one, and [`a_retired_arm_drifts_the_union_discriminant`] pins that
+// disagreement with the arm named in it. E11.7 does not close #302 — the fix
+// is explicit member values in the schema, and #302 records that `planus`
+// 1.3.0 rejects that form — so the test asserts the drift is *detected*
+// rather than asserting it is gone.
+
+/// The emitted schema, read back as the two things the facts can be compared
+/// against: each table's field names and ids in the order they were written,
+/// and each union's member names in the order they were written.
+#[derive(Debug, Default)]
+struct Schema {
+    tables: HashMap<String, Vec<(String, u32)>>,
+    unions: HashMap<String, Vec<String>>,
+}
+
+/// Reads back what [`generate_with`] wrote. This is deliberately a reader
+/// over the emitted text rather than a second call into the emitter's own
+/// helpers: a drift test that asked the emitter what it meant to write could
+/// not see the emitter writing something else.
+fn read_back(fbs_source: &str) -> Schema {
+    let mut schema = Schema::default();
+    let mut open_table: Option<(String, Vec<(String, u32)>)> = None;
+    for line in fbs_source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("union ") {
+            let (name, body) = rest.split_once('{').expect("a union line carries a body");
+            let members = body
+                .trim_end_matches('}')
+                .split(',')
+                .filter_map(|member| member.split_once(':'))
+                .map(|(member, _)| member.trim().to_string())
+                .collect();
+            schema.unions.insert(name.trim().to_string(), members);
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("table ") {
+            let name = rest.trim_end_matches('{').trim().to_string();
+            open_table = Some((name, Vec::new()));
+            continue;
+        }
+        if trimmed == "}" {
+            if let Some((name, fields)) = open_table.take() {
+                schema.tables.insert(name, fields);
+            }
+            continue;
+        }
+        if let Some((_, fields)) = open_table.as_mut()
+            && let Some((name, rest)) = trimmed.split_once(':')
+            && let Some(id_clause) = rest.split_once("(id: ")
+        {
+            let id: u32 = id_clause
+                .1
+                .split([',', ')'])
+                .next()
+                .expect("an id clause carries a number")
+                .trim()
+                .parse()
+                .expect("an id is a number");
+            fields.push((name.trim().to_string(), id));
+        }
+    }
+    schema
+}
+
+/// Every way the emitted schema and the shared facts disagree, one line each.
+/// An empty result is agreement.
+fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
+    let generated = generate_with(package, others).expect("generate");
+    let schema = read_back(&generated.fbs_source);
+    let mut findings = Vec::new();
+
+    for decl in &package.decls {
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(def)) => {
+                let layout = projection::struct_table(&decl.name, def).expect("layout");
+                let Some(emitted) = schema.tables.get(&decl.name) else {
+                    findings.push(format!("struct `{}` emitted no table", decl.name));
+                    continue;
+                };
+                let expected: Vec<(String, u32)> = layout
+                    .slots
+                    .iter()
+                    .map(|slot| {
+                        let name = match &slot.source {
+                            projection::SlotSource::Field { name, .. } => {
+                                ridl_ir::name::snake_case(name)
+                            }
+                            projection::SlotSource::Retired { ordinal } => {
+                                format!("reserved_{ordinal}")
+                            }
+                            other => panic!("a struct slot is a field or a tombstone: {other:?}"),
+                        };
+                        (name, slot.id)
+                    })
+                    .collect();
+                if *emitted != expected {
+                    findings.push(format!(
+                        "table `{}`: the schema has {emitted:?}, the facts say {expected:?}",
+                        decl.name
+                    ));
+                }
+            }
+            Some(v2::decl::Kind::UnionDef(def)) => {
+                // The wrapper table: one value field, at the id ADR-0019
+                // decision 1 leaves free after the implicit discriminant.
+                match schema.tables.get(&decl.name) {
+                    Some(emitted)
+                        if emitted
+                            == &vec![("value".to_string(), projection::UNION_WRAPPER_VALUE_ID)] => {
+                    }
+                    other => findings.push(format!(
+                        "the wrapper table of union `{}` is {other:?}, not one value field at \
+                         id {}",
+                        decl.name,
+                        projection::UNION_WRAPPER_VALUE_ID
+                    )),
+                }
+
+                let union_name = format!("{}Union", decl.name);
+                let Some(members) = schema.unions.get(&union_name) else {
+                    findings.push(format!("union `{}` emitted no declaration", decl.name));
+                    continue;
+                };
+                for arm in &def.arms {
+                    let member = ridl_ir::name::snake_case(&arm.name);
+                    match members.iter().position(|emitted| *emitted == member) {
+                        // The target numbers a union's members from 1 in the
+                        // order they are declared, NONE taking 0.
+                        Some(position) => {
+                            let implicit = u32::try_from(position + 1).expect("a small position");
+                            let discriminant = projection::union_arm_discriminant(arm);
+                            if implicit != discriminant {
+                                findings.push(format!(
+                                    "arm `{}` of union `{}`: the schema numbers it {implicit}, \
+                                     the facts say {discriminant}",
+                                    arm.name, decl.name
+                                ));
+                            }
+                        }
+                        None => findings.push(format!(
+                            "arm `{}` of union `{}` is not in the emitted declaration",
+                            arm.name, decl.name
+                        )),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    findings
+}
+
+/// The cruise-control fixture, compiled through the real source-to-IR path —
+/// the same fixture `tests/corpus.rs` snapshots, read here for its IR rather
+/// than its text.
+fn cruise_package() -> v2::Package {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-proto/tests/fixtures/cruise.ridl");
+    let text = std::fs::read_to_string(&path).expect("read the fixture");
+    let output = ridlc::compile(&path.display().to_string(), &text);
+    assert!(
+        output.diagnostics.is_empty(),
+        "the fixture compiles clean, got: {:?}",
+        output.diagnostics
+    );
+    output.package
+}
+
+#[test]
+fn the_corpus_schema_and_the_shared_facts_agree() {
+    let package = cruise_package();
+
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
+}
+
+#[test]
+fn a_perturbed_fact_is_caught() {
+    // The test has to fail when either side moves, or it proves nothing. The
+    // IR is perturbed here rather than the emitter, because the emitter reads
+    // the facts now: moving an ordinal moves the fact, and the schema text
+    // has to move with it or this test reports the gap.
+    let mut package = cruise_package();
+    let mut emitted_before = generate(&package).expect("generate").fbs_source;
+
+    for decl in &mut package.decls {
+        if let Some(v2::decl::Kind::StructDef(def)) = &mut decl.kind {
+            for member in &mut def.members {
+                if let Some(v2::struct_member::Member::Field(field)) = &mut member.member {
+                    field.ordinal += 10;
+                }
+            }
+        }
+    }
+
+    let emitted_after = generate(&package).expect("generate");
+    assert_ne!(
+        std::mem::take(&mut emitted_before),
+        emitted_after.fbs_source,
+        "moving every ordinal must move the schema"
+    );
+    // Both sides moved together, so there is still no drift — which is the
+    // property this module is for. What the reader below proves is that the
+    // comparison is real: a schema read back against the *unperturbed* facts
+    // does disagree.
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
+
+    let schema = read_back(&emitted_after.fbs_source);
+    let unperturbed = cruise_package();
+    for decl in &unperturbed.decls {
+        if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind
+            && !def.members.is_empty()
+        {
+            let layout = projection::struct_table(&decl.name, def).expect("layout");
+            let emitted = schema.tables.get(&decl.name).expect("a table");
+            let ids: Vec<u32> = emitted.iter().map(|(_, id)| *id).collect();
+            let facts: Vec<u32> = layout.slots.iter().map(|slot| slot.id).collect();
+            assert_ne!(
+                ids, facts,
+                "the perturbation must be visible in `{}`",
+                decl.name
+            );
+        }
+    }
+}
+
+#[test]
+fn a_retired_arm_drifts_the_union_discriminant() {
+    // driftsys/ridl#302, made visible rather than fixed. `reserved override`
+    // in the cruise fixture retires an arm *after* the live ones, so its
+    // ordinals and the schema's implicit numbering still agree. Retire one
+    // ahead of a live arm and they do not.
+    let package = v2::Package {
+        name: "veh.cruise".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Setpoint".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("desired", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Command".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "engage".to_string(),
+                        // The first arm was retired, so this one is second.
+                        ordinal: 2,
+                        type_ref: "Setpoint".to_string(),
+                        ..Default::default()
+                    }],
+                    reserved: vec![v2::Reserved {
+                        ordinal: 1,
+                        name: Some("legacyEngage".to_string()),
+                        ..Default::default()
+                    }],
+                    is_result: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let findings = drift(&package, &[]);
+
+    assert_eq!(
+        findings,
+        vec![
+            "arm `engage` of union `Command`: the schema numbers it 1, the facts say 2".to_string()
+        ],
+        "#302 is open, and this is the test that names it"
+    );
+}
+
+/// The cross-package fixture `tests/corpus.rs` also emits, read here for its
+/// IR: the one corpus entry where a reference crosses a package, and so the
+/// one where the facts have to be derived against `others` too.
+fn cross_package_fixture() -> (v2::Package, v2::Package) {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-proto/tests/fixtures/cross-package");
+    let output = ridlc::compile_workspace(&mut db, &entry).expect("load the fixture");
+    assert!(
+        output.diagnostics.is_empty(),
+        "the fixture compiles clean, got: {:?}",
+        output.diagnostics
+    );
+    let find = |name: &str| {
+        output
+            .checked
+            .iter()
+            .find(|checked| checked.ir.name == name)
+            .unwrap_or_else(|| panic!("the fixture declares {name}"))
+            .ir
+            .clone()
+    };
+    (find("proto.parts"), find("proto.vehicle"))
+}
+
+#[test]
+fn the_cross_package_schema_and_the_shared_facts_agree() {
+    let (parts, vehicle) = cross_package_fixture();
+
+    assert_eq!(drift(&parts, &[]), Vec::<String>::new());
+    assert_eq!(drift(&vehicle, &[&parts]), Vec::<String>::new());
+}
+
+#[test]
+fn the_corpus_fixture_carries_an_unbounded_map_key() {
+    // `byId : [string : Speed; 0..8]` — TYPL-208 keeps a bare `string` out of
+    // a field position, but TYPL-209 admits one as a map key with no
+    // constraint, so `max_size` has nothing to charge. Recorded on
+    // driftsys/ridl#457, and the refusal K4 adds would meet it on this
+    // fixture.
+    let package = cruise_package();
+    let telemetry = package
+        .decls
+        .iter()
+        .find(|decl| decl.name == "Telemetry")
+        .expect("the fixture declares it");
+
+    assert!(projection::mints_root_table(telemetry));
+    assert_eq!(
+        projection::max_size(
+            projection::Packages {
+                package: &package,
+                others: &[]
+            },
+            telemetry
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_corpus_type_with_no_unbounded_member_is_bounded() {
+    let package = cruise_package();
+    let setpoint = package
+        .decls
+        .iter()
+        .find(|decl| decl.name == "Setpoint")
+        .expect("the fixture declares it");
+
+    assert!(
+        projection::max_size(
+            projection::Packages {
+                package: &package,
+                others: &[]
+            },
+            setpoint
+        )
+        .is_some()
+    );
 }
