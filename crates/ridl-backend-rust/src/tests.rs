@@ -4310,6 +4310,14 @@ fn flatbuffers_bound_names_the_unbounded_union_arm() {
 /// from checking the rest of the struct's own fields (there are none of
 /// concern here, so this pins that the walk does not error over the cycle
 /// alone).
+///
+/// **This does not pin the cycle exemption beside an *unbounded* member** —
+/// a struct carrying both a cyclic field and a bare unbounded `string` field
+/// is not covered by any test in this module. A probe confirms
+/// `unbounded_member` refuses over the unbounded field correctly (the cycle
+/// still answers `false` from `member_resolves_locally` and is skipped, the
+/// unbounded field is still probed on its own), but that path is untested;
+/// see design note §4a.
 #[test]
 fn flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member() {
     let recursive = v2::StructDef {

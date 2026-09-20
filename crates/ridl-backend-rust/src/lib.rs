@@ -226,9 +226,19 @@ enum Attribution {
     /// [`fb_projection::max_size`] itself would.
     Member(String),
     /// No single member probes `None`, and none was skipped for being
-    /// something this backend cannot judge — the cause is aggregate: the
-    /// summed size overflows `u64`, or the total exceeds
-    /// `fb_projection::MAX_ENCODABLE`.
+    /// something this backend cannot judge. **Not only the aggregate case**
+    /// (the summed size overflows `u64`, or the total exceeds
+    /// `fb_projection::MAX_ENCODABLE` while every member is individually
+    /// bounded) reaches this variant — two other causes do too, and neither
+    /// is named by a probe: a member with no `r#type` at all
+    /// (`unbounded_member` skips it rather than attributing it, the same as a
+    /// reserved tombstone), and a `fb_projection::struct_table` layout error
+    /// over the *whole* declaration (for example two fields sharing one
+    /// ordinal) that only shows up across members and that no single-field
+    /// probe can reproduce. See design note §4a, "`Attribution::Declaration`
+    /// is reached for more than aggregate overflow", for the gap this
+    /// leaves: none of the three causes is disambiguated in the message
+    /// `check_flatbuffers_bounds` writes for this variant.
     Declaration,
     /// Every member that could be judged is individually bounded, and at
     /// least one could not be judged — a cross-package reference this

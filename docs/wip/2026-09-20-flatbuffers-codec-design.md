@@ -493,6 +493,47 @@ the whole package ahead of every other emit. It inherits the per-member
 cross-package and cycle exemptions as built here, and repairs the five test
 fixtures named above when it wires the check into the live pipeline.
 
+**Two gaps carried forward from the 2026-09-20 review's second pass, for K5 to
+close.**
+
+1. **The exemption is per-member but still whole-member: an anonymous composite
+   can still hide an unbounded leaf beside an unjudgeable one.** A struct field
+   typed `map<veh.other.Speed, string>` — a cross-package (unjudgeable) key and
+   a bare unbounded `string` value in the same map — returns `Ok(())`.
+   `member_resolves_locally` answers `false` for the whole field the moment it
+   reaches the unresolved key, so the member is exempted in full and the
+   unbounded value inside the same map rides along unexamined;
+   `unbounded_member` never gets to probe the value on its own, because probing
+   happens per struct field or per union arm, not per leaf inside an array, a
+   map, or a tuple. A _named_ local declaration does not have this hole: a local
+   struct with one cross-package field and one unbounded field is still refused,
+   because each is a separate member of the enclosing struct and each is probed
+   independently — the gap is specific to an anonymous composite carrying both
+   kinds of leaf inline. Verified directly (`check_flatbuffers_bounds` over the
+   fixture above answers `Ok(())`). K5 closes this when it wires the check per
+   type; until then, a struct or a union with an anonymous composite member is
+   not fully covered by this refusal.
+2. **`Attribution::Declaration` is reached for more than aggregate overflow.**
+   Its own doc comment said the cause is aggregate — the summed size overflows
+   `u64`, or the total exceeds `MAX_ENCODABLE` — but two other causes land on
+   the same variant and the same declaration-only message, and neither is
+   disambiguated: a member with no `r#type` at all (skipped by
+   `unbounded_member` rather than attributed, the same as a reserved tombstone),
+   and a `fb_projection::struct_table` layout error over the _whole_ declaration
+   — two fields sharing one ordinal, for example — that only shows up across
+   members and that no single-field probe can reproduce. The doc comment on
+   `Attribution::Declaration` is corrected to say so; the message
+   `check_flatbuffers_bounds` writes for this variant still does not distinguish
+   the three causes, which is K5's to do if a reader needs to.
+
+**A third gap, noted rather than tested.** A same-package cycle beside a
+genuinely unbounded member (a cyclic field and a bare unbounded `string` field
+in one struct) is not covered by any test in this module —
+`flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member` pins a cycle
+beside a _bounded_ member only. A probe confirms the untested path refuses
+correctly, naming the unbounded field, but the coverage gap is real and is left
+for K5 to close alongside the two above.
+
 ## 5. Records this changes, if the disposition takes it
 
 None of these moves in the note's own pull request.
