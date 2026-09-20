@@ -57,15 +57,23 @@ that collided, and names both for a pair that collides under both: the message
 previously asserted `snake_case` of every input, which a `camel_case`-only
 collision makes false, and the two have different consequences — a `camel_case`
 collision gives one Rust enum two variants of one name, a `snake_case` one is
-refused by both wire backends. The member and parameter namespaces are
-unchanged: each is projected through `snake_case` alone and is checked under
-that transform alone. A struct field is checked under `snake_case` alone too,
-but it is not projected through `snake_case` alone: the Rust backend also
-projects a field name through `camel_case`, into the type name of the induced
-tuple struct a tuple-typed field generates —
+refused by both wire backends.
+
+The amendment leaves the member, parameter and struct-field **checks**
+unchanged: each is still keyed on `snake_case` alone. It does not follow that
+each of those names is _projected_ through `snake_case` alone, and for two of
+them it is not. A struct field name also reaches `camel_case`, as the type name
+of the induced tuple struct a tuple-typed field generates —
 `format!("{}{}", camel_case(parent), camel_case(&field.name))` in `emit_field`.
-That namespace is unchecked, and the amendment does not extend to it. The
-residual is recorded below and on driftsys/ridl#453.
+An interaction member name also reaches `camel_case`, in the generated face —
+`format!("{iface}{}", camel_case(&decl.name))` in `descriptors.rs` and
+`face.rs`, and `camel_case(member.declared)` for a correlation type and an enum
+variant. Only the parameter namespace is projected through `snake_case` alone.
+
+Neither `camel_case` namespace is checked, and the amendment does not extend to
+either. The struct-field residual is recorded below and on driftsys/ridl#453;
+the member residual on driftsys/ridl#455, which is reached only through
+`generate_face` and so is not on any path `ridl build` takes today.
 
 The cost is stated where it falls. A package whose arms collide under
 `camel_case` only was already broken — the Rust backend emitted E0428 — so the
@@ -348,9 +356,20 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   RIDL-149 to a tuple's fields is recorded on driftsys/ridl#449.
 - **Negative — a third transform, `crates/ridl-backend-rust/src/face.rs`'s
   private `snake_case`, is still not the pinned one.** It names the generated
-  face's modules and methods, is outside this record's scope as the arm
-  transform was, and is unchecked in the same way. Stated here rather than
-  discovered later.
+  face's modules and methods, and a declared parameter through
+  `single_param_name`; that last one its own docstring does not admit. It is
+  outside this record's scope as the arm transform was, and is unchecked in the
+  same way. Stated here rather than discovered later. Recorded on
+  driftsys/ridl#450.
+- **Negative — an interaction member name also reaches `camel_case`, and that
+  namespace is unchecked.** Decision 4 puts interface members in RIDL-149 under
+  `snake_case`, which is the wire symbol. The generated face additionally spells
+  a unit struct, a correlation type and an enum variant from the member name
+  through `camel_case`, so the members `XY` and `x_y` — distinct under
+  `snake_case`, identical under `camel_case` — give one generated name twice and
+  rustc rejects it with E0428. Only `generate_face` reaches those sites, and
+  `ridl build` calls `generate`, so no CLI path reaches this today; it becomes
+  reachable when the face joins the pipeline. Recorded on driftsys/ridl#455.
 - **Negative — a struct field name also reaches `camel_case`, and that namespace
   is unchecked.** Decision 4 puts struct fields in RIDL-149 under `snake_case`,
   which is the Rust field name and the wire symbol. The Rust backend also spells
@@ -365,11 +384,12 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 
 ## Documents amended
 
-| Document          | Change                                                                                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| rsdl §13          | gains the service-number open question (decision 8) — answered in rsdl v0.2.0 §17 item 9 (2026-09-13): a tag-based transport's service number is its backend key |
-| ridl §16.4        | RIDL-149's row gains a union's arms as a fourth checked namespace and the second pinned transform (2026-09-20 amendment)                                         |
-| `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                            |
+| Document          | Change                                                                                                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rsdl §13          | gains the service-number open question (decision 8) — answered in rsdl v0.2.0 §17 item 9 (2026-09-13): a tag-based transport's service number is its backend key                                                             |
+| ridl §16.4        | RIDL-149's row gains a union's arms as a fourth checked namespace and the second pinned transform (2026-09-20 amendment)                                                                                                     |
+| ADR-0017          | decision 5's union-arm half is done and its enum-value half is not; open question 2 ("whether `ridl-backend-rust` should transform struct field names") is answered yes; the alternatives row follows (2026-09-20 amendment) |
+| `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                                                                                        |
 
 ## Open
 

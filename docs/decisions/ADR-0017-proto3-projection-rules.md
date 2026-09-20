@@ -123,15 +123,23 @@ distinct reachable cases.
    4's backend check instead. Extending RIDL-149 to them would carry its own
    churn measurement and belongs to its own story.
 
+   **Amended 2026-09-20 by driftsys/ridl#451.** The union-arm half is done.
+   RIDL-149 now covers a union's arms, keyed on both pinned transforms, because
+   the two are incomparable: `XY` and `x_y` collide under `camel_case` only, and
+   `HTTPServer` and `httpServer` under `snake_case` only, so keying on either
+   alone lets the other class through. The churn was one word added to
+   RIDL-149's existing message on four lines of one corpus snapshot. Enum value
+   names still rest on decision 4's backend check; that half is unchanged.
+
 ## Alternatives considered
 
-| Candidate                                                       | Verdict  | Reason                                                                                                                                                                                                                           |
-| --------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A wrapper message per named scalar, making every ref importable | rejected | +22 % on a `double` and +100 % on a small varint, and proto3 gives every message-typed field explicit presence, realising absence for fields that never declared `?` — the thing ADR-0013 decision 7 reserves for a declared `?` |
-| Mapping `ridl.std` onto the protobuf well-known types           | rejected | `Duration` and `Timestamp` are seconds-and-nanos messages while the typl declarations are an `ms` float and an integer, so the mapping changes the wire encoding                                                                 |
-| Refusing every cross-package reference in v0.1                  | rejected | the repository's own corpus is multi-package, so the backend would refuse real source                                                                                                                                            |
-| An options extension carrying constraints structurally          | deferred | serves a consumer that does not exist; reopened by a consumer that must validate without the IR (decision 3)                                                                                                                     |
-| Extending RIDL-149 to enum values and union arms                | deferred | the collision is a property of one target's namespace, and the extension carries a churn measurement of its own (decisions 4 and 5)                                                                                              |
+| Candidate                                                       | Verdict                                                                     | Reason                                                                                                                                                                                                                           |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A wrapper message per named scalar, making every ref importable | rejected                                                                    | +22 % on a `double` and +100 % on a small varint, and proto3 gives every message-typed field explicit presence, realising absence for fields that never declared `?` — the thing ADR-0013 decision 7 reserves for a declared `?` |
+| Mapping `ridl.std` onto the protobuf well-known types           | rejected                                                                    | `Duration` and `Timestamp` are seconds-and-nanos messages while the typl declarations are an `ms` float and an integer, so the mapping changes the wire encoding                                                                 |
+| Refusing every cross-package reference in v0.1                  | rejected                                                                    | the repository's own corpus is multi-package, so the backend would refuse real source                                                                                                                                            |
+| An options extension carrying constraints structurally          | deferred                                                                    | serves a consumer that does not exist; reopened by a consumer that must validate without the IR (decision 3)                                                                                                                     |
+| Extending RIDL-149 to enum values and union arms                | union arms taken 2026-09-20 (driftsys/ridl#451); enum values still deferred | the collision is a property of one target's namespace, and the extension carries a churn measurement of its own (decisions 4 and 5) — for union arms that churn turned out to be one word on four snapshot lines                 |
 
 ## Consequences
 
@@ -158,11 +166,15 @@ distinct reachable cases.
    only home for constraint information, and an inline scalar has no named type
    to hang one on. Resolving it means either naming the anonymous type or
    admitting a second home.
-2. **Whether `ridl-backend-rust` should transform struct field names.** It emits
-   them verbatim, so a typl `currentSpeed` reaches generated Rust as
-   `currentSpeed` and draws `non_snake_case` at every consumer. Adopting the
+2. ~~**Whether `ridl-backend-rust` should transform struct field names.**~~
+   **Answered 2026-09-20 by driftsys/ridl#451: yes.** The question read: it
+   emitted them verbatim, so a typl `currentSpeed` reached generated Rust as
+   `currentSpeed` and drew `non_snake_case` at every consumer; adopting the
    pinned transform would rename a field on every generated struct — a breaking
-   change to a shipped API, which is why E9.8 did not take it.
+   change to a shipped API, which is why E9.8 did not take it. The rename was
+   taken (driftsys/ridl#243), and it is breaking, which is why both commits
+   carry `!`. Tuple field names went with them, for the same reason: typl §15.1
+   gives a tuple field the same camelCase spelling as a struct field.
 
 ## References
 
