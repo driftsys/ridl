@@ -711,7 +711,10 @@ fn emit_struct(
 /// (ADR-0016 decisions 1 and 2): a typl field name is camelCase (typl §15.1)
 /// and reaching generated Rust verbatim draws `non_snake_case` at every
 /// consumer. The `hint` below keeps `camel_case`, because it builds the type
-/// name of an induced tuple struct rather than a field name.
+/// name of an induced tuple struct rather than a field name. That second
+/// projection reaches a namespace RIDL-149 does not check — two field names
+/// distinct under `snake_case` can induce one tuple type name — which is
+/// driftsys/ridl#453, recorded in ADR-0016's consequences.
 fn emit_field(
     parent: &str,
     visibility: i32,

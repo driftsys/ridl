@@ -1140,6 +1140,14 @@ fn struct_with_field(name: &str, field_name: &str, type_ref: &str) -> v2::Decl {
 /// typl §15.1 makes field names camelCase, so an untransformed name draws
 /// `non_snake_case` at every consumer of the generated module. The field name
 /// goes through the pinned transform (ADR-0016 decisions 1 and 2).
+///
+/// Two sites project the name, and the assertions discriminate them: the
+/// struct declaration in `emit_field`, and the `Default` initializer in
+/// `struct_default`. Projecting one and not the other is worse than
+/// projecting neither — the initializer would name a field the struct does
+/// not have, which is E0560 — so the negative assertion is that the written
+/// name appears nowhere at all, rather than that one particular line is
+/// absent.
 #[test]
 fn a_struct_field_name_is_projected_to_snake_case() {
     let source = rust_for(vec![
@@ -1147,7 +1155,14 @@ fn a_struct_field_name_is_projected_to_snake_case() {
         struct_with_field("Reading", "sensorId", "Speed"),
     ]);
     assert!(source.contains("pub sensor_id:"), "got:\n{source}");
-    assert!(!source.contains("pub sensorId:"), "got:\n{source}");
+    assert!(
+        source.contains("sensor_id: Speed::default()"),
+        "the `Default` initializer must name the projected field, got:\n{source}"
+    );
+    assert!(
+        !source.contains("sensorId"),
+        "the written name must reach no generated site, got:\n{source}"
+    );
 }
 
 #[test]
@@ -1612,12 +1627,14 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     // `crates/ridlc/tests/corpus.rs`: the generated code carries by-design
     // naming and dead-code lints that say nothing about visibility.
     //
-    // `non_snake_case` is denied beside them, as the regression guard for
-    // issue #243: a field name that reaches generated Rust verbatim draws it
-    // at every consumer, and no compile proof failed on it because a warning
-    // does not fail one. An enum variant keeps its typl `SCREAMING_SNAKE`
-    // spelling and draws `non_camel_case_types`, a different lint, which
-    // stays undenied.
+    // `non_snake_case` is denied beside them so that a field name reaching
+    // generated Rust verbatim fails this run rather than warning in it. It is
+    // inert on this fixture, whose every field name is a single word: the
+    // proof that guards issue #243 is `appendix_a_compiles_with_rustc`, whose
+    // IR carries `sensorId` and `isOpen`. The deny here is what makes this
+    // proof stay a proof if a multi-word field name is ever added to the
+    // fixture. An enum variant keeps its typl `SCREAMING_SNAKE` spelling and
+    // draws `non_camel_case_types`, a different lint, which stays undenied.
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
@@ -2509,12 +2526,15 @@ pub mod ridl {
     std::fs::write(&source_path, &source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
 
-    // `non_snake_case` is denied as the regression guard for issue #243: a
-    // field name that reached generated Rust verbatim drew it at every
-    // consumer, and this proof asserted only on the exit status, which a
-    // warning does not change. An enum variant keeps its typl
-    // `SCREAMING_SNAKE` spelling and draws `non_camel_case_types`, a
-    // different lint, which stays undenied.
+    // `non_snake_case` is denied so that a field name reaching generated Rust
+    // verbatim fails this run rather than warning in it — the assertion below
+    // is on the exit status, which a warning does not change. It is inert on
+    // Appendix B, whose every field name is a single word; the proof that
+    // guards issue #243 is `appendix_a_compiles_with_rustc`. The deny here is
+    // what makes this proof stay a proof if a multi-word field name is ever
+    // added to the fixture. An enum variant keeps its typl `SCREAMING_SNAKE`
+    // spelling and draws `non_camel_case_types`, a different lint, which
+    // stays undenied.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2675,8 +2695,11 @@ fn constructible_collections_compile() {
     let meta_path = dir.path().join("bag.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
-    // `-D non_snake_case` is the regression guard for issue #243 — see
-    // `appendix_b_compiles_with_rustc`.
+    // `-D non_snake_case` is inert on this fixture, whose every field name is
+    // a single word. It is denied for the same reason as in
+    // `appendix_b_compiles_with_rustc`: to keep this proof a proof if a
+    // multi-word field name is ever added. Issue #243 is guarded by
+    // `appendix_a_compiles_with_rustc`.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3102,6 +3125,12 @@ pub mod veh {
     std::fs::write(&source_path, &source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
 
+    // `non_snake_case` is denied by name, and this is the proof that guards
+    // issue #243: the Appendix A IR carries the field names `sensorId` and
+    // `isOpen`, so a field name reaching generated Rust verbatim fails this
+    // run. The assertion is otherwise on the exit status, which a warning
+    // does not change. `non_camel_case_types`, which a screaming-case enum
+    // variant draws by design, stays undenied.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3110,6 +3139,8 @@ pub mod veh {
             "lib",
             "--emit",
             "metadata",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -3121,7 +3152,8 @@ pub mod veh {
 
     assert!(
         status.success(),
-        "generated Rust for Appendix A must compile, source:\n{source}"
+        "generated Rust for Appendix A must compile under `-D non_snake_case`, \
+         source:\n{source}"
     );
 }
 
