@@ -530,7 +530,7 @@ fn round_trip_command_is_acknowledged() {
     assert_eq!(provider.set_level_calls, vec![42]);
 
     let mut client = generated::cabin::Client::new(&mut port);
-    assert_eq!(client.ack(correlation), Some(Ok(())));
+    assert_eq!(client.set_level_ack(correlation), Some(Ok(())));
 }
 
 #[test]
@@ -728,7 +728,7 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
         "the first claim's settlement fails and dispatch does not count it"
     );
     assert_eq!(
-        port.ack(first),
+        port.ack(first.0),
         None,
         "a failed settle records no outcome for the first claim's correlation"
     );
@@ -745,7 +745,7 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
         "the second claim's settlement succeeds and dispatch counts it"
     );
     assert_eq!(
-        port.ack(second),
+        port.ack(second.0),
         Some(Ok(())),
         "the successful settlement is observable as accepted through ack"
     );

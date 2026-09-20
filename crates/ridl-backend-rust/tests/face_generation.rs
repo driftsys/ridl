@@ -80,12 +80,20 @@ fn the_client_is_bound_by_every_port_its_interface_needs() {
     // a query need Caller.
     assert!(
         d.contains(
-            "pubstructClient<'a,P:::ridl_rt::port::SignalReader+::ridl_rt::port::EventSource\
+            "pubstructClient<P:::ridl_rt::port::SignalReader+::ridl_rt::port::EventSource\
              +::ridl_rt::port::Caller"
         ),
         "Cabin client port bounds",
     );
-    assert!(d.contains("port:&'amutP,"), "the client borrows its port");
+    // ADR-0023 decision 5: the face holds its port by value and has no
+    // lifetime parameter, so `Client::new(&mut port)` infers `P` as
+    // `&mut Port` under the forwarding impls of ADR-0021 decision 11, and an
+    // owned handle or a wrapper is accepted too.
+    assert!(d.contains("port:P,"), "the client holds its port by value");
+    assert!(
+        !d.contains("Client<'a,"),
+        "the client carries no lifetime parameter"
+    );
 }
 
 #[test]
@@ -98,7 +106,7 @@ fn a_signal_only_interface_gets_a_client_bound_only_by_signal_reader() {
     let d = dense(&horn);
 
     assert!(
-        d.contains("pubstructClient<'a,P:::ridl_rt::port::SignalReader"),
+        d.contains("pubstructClient<P:::ridl_rt::port::SignalReader"),
         "Horn client is bound by SignalReader",
     );
     assert!(
@@ -114,7 +122,7 @@ fn a_signal_only_interface_gets_a_client_bound_only_by_signal_reader() {
         "no EventSink bound on a signal-only publisher",
     );
     assert!(
-        d.contains("pubstructPublisher<'a,W:::ridl_rt::port::SignalWriter>"),
+        d.contains("pubstructPublisher<W:::ridl_rt::port::SignalWriter>"),
         "a signal-only interface still gets a publisher, bound by SignalWriter alone",
     );
     assert!(
@@ -203,8 +211,11 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     let d = dense(&module(&face(), "cabin"));
 
     assert!(
-        d.contains("pubfnset_level(&mutself,level:super::Level,)->::core::result::Result<::ridl_rt::port::Correlation,"),
-        "the command method returns a correlation",
+        d.contains(
+            "pubfnset_level(&mutself,level:super::Level,)\
+             ->::core::result::Result<SetLevelCorrelation,::ridl_rt::port::SendError>"
+        ),
+        "the command method returns its own correlation newtype",
     );
     assert!(
         d.contains("self.port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),&buf[..len],)"),
@@ -220,16 +231,19 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the consumer evaluates the command's require, through the Command trait",
     );
     assert!(
-        d.contains("pubfnaverage(&mutself,window:super::Window,)->::core::result::Result<::ridl_rt::port::Correlation,"),
-        "the query method returns a correlation",
+        d.contains(
+            "pubfnaverage(&mutself,window:super::Window,)\
+             ->::core::result::Result<AverageCorrelation,::ridl_rt::port::SendError>"
+        ),
+        "the query method returns its own correlation newtype",
     );
     assert!(
         d.contains("self.port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),&buf[..len],)"),
         "the query calls Caller::query"
     );
     assert!(
-        d.contains("pubfnaverage_reply(&mutself,correlation:::ridl_rt::port::Correlation,)"),
-        "a separate reply method polls the correlation",
+        d.contains("pubfnaverage_reply(&mutself,correlation:AverageCorrelation,)"),
+        "a separate reply method polls the correlation, typed by its query",
     );
     assert!(
         d.contains("self.port.reply("),
@@ -243,7 +257,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
 
     // The reply's own check failures map to the two call errors, in the same
     // split the dispatch side uses.
-    let reply = between(&d, "pubfnaverage_reply", "pubfnack");
+    let reply = between(&d, "pubfnaverage_reply", "pubfnset_level_ack");
     assert!(
         reply.contains("::ridl_rt::error::Contract::InvalidValue(violation)"),
         "a reply that breaks a typl constraint is an InvalidValue contract error",
@@ -253,8 +267,12 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "malformed reply bytes are a transport corruption",
     );
     assert!(
-        d.contains("self.port.ack("),
-        "the acknowledgment method calls Caller::ack"
+        d.contains("pubfnset_level_ack(&mutself,correlation:SetLevelCorrelation,)"),
+        "the acknowledgment method is per command and takes that command's newtype",
+    );
+    assert!(
+        d.contains("self.port.ack(correlation.0)"),
+        "the acknowledgment method calls Caller::ack through the newtype"
     );
 }
 
@@ -263,10 +281,12 @@ fn the_publisher_writes_signals_and_raises_events() {
     let d = dense(&module(&face(), "cabin"));
 
     assert!(
-        d.contains(
-            "pubstructPublisher<'a,W:::ridl_rt::port::SignalWriter+::ridl_rt::port::EventSink"
-        ),
+        d.contains("pubstructPublisher<W:::ridl_rt::port::SignalWriter+::ridl_rt::port::EventSink"),
         "Cabin publisher port bounds",
+    );
+    assert!(
+        d.contains("port:W,"),
+        "the publisher holds its port by value"
     );
     assert!(
         d.contains("pubfntemperature(&mutself,value:super::Temperature,)"),
