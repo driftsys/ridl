@@ -76,9 +76,24 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    instead of one.
 
 4. **Pattern validation is a Cargo feature that codegen owns.** `min`/`max` and
-   `len_min`/`len_max` are checked unconditionally. `pattern` is checked under
-   `validate-pattern`, on by default, which enables an optional `regex`
-   dependency. A constrained target builds `--no-default-features`.
+   `len_min`/`len_max` are checked whenever the check can fail. `pattern` is
+   checked under `validate-pattern`, on by default, which enables an optional
+   `regex` dependency. A constrained target builds `--no-default-features`.
+
+   **"Checked unconditionally" was the original wording and is no longer true.**
+   driftsys/ridl#420 added two guards, both because rustc's `unused_comparisons`
+   lint fires in the consumer's build on a comparison it can fold to a constant.
+   A `len_min` of 0 — the §4.4 and §4.5 default lower bound of string and bytes
+   — emits no branch, because a `u64` length is never below 0. A `max` on an
+   integer backing emits no branch when it equals `i64::MAX`, because the
+   generated newtype always backs an integer with `i64`, so no value can exceed
+   it. Neither of those two drops a comparison that could ever be false.
+
+   A third skip predates them and is not a fold-to-constant guard: `min` and
+   `max` are numeric bounds (§5.5), so the Rust emitter emits a range check only
+   for a float or an integer backing. On a `boolean`, `string` or `bytes`
+   backing it ignores both rather than rendering a literal of the wrong type. A
+   length bound on the same type is still checked.
 
    This is why codegen must emit a manifest: `regex` cannot be an optional
    dependency of a bare `.rs` file, and a `#[cfg(feature = "std")]` gate would
