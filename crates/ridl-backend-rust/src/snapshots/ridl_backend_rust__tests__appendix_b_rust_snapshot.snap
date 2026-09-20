@@ -5,6 +5,7 @@ expression: rust_source
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -57,6 +58,7 @@ impl Default for Speed {
 /// Coolant / ambient temperature
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Temperature(f64);
 impl Temperature {
@@ -109,6 +111,7 @@ impl Default for Temperature {
 /// Engine crankshaft speed
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct RPM(f64);
 impl RPM {
@@ -161,6 +164,7 @@ impl Default for RPM {
 /// Normalised ratio
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(f64);
 impl Ratio {
@@ -210,6 +214,7 @@ impl Default for Ratio {
         Ratio::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Counter(i64);
 impl Counter {
@@ -248,6 +253,7 @@ impl Default for Counter {
     }
 }
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Gain(f64);
 impl Gain {
@@ -301,6 +307,7 @@ pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);
 pub const SPEED_LIMIT_EU: Speed = Speed::new_unchecked(130.0);
 pub const IDLE_RPM: RPM = RPM::new_unchecked(800.0);
 pub const MAX_GEAR: i64 = 6;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum GearPosition {
     PARK = 0,
@@ -335,6 +342,7 @@ impl Default for GearPosition {
         GearPosition::PARK
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Warning {
     LOW_FUEL = 0,
@@ -369,6 +377,7 @@ impl Default for Warning {
         Warning::LOW_FUEL
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct WarningFlags(i64);
 impl WarningFlags {
@@ -405,6 +414,7 @@ impl Default for WarningFlags {
         WarningFlags(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct SpeedLimitPayload {
     pub limit: Speed,
@@ -418,18 +428,21 @@ impl Default for SpeedLimitPayload {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct DriverProfile {
     pub name: crate::ridl::std::Name,
     pub speed: Speed,
     pub r#override: Option<Speed>,
     pub gears: i64,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
     pub readings: [Speed; 8],
     pub labels: Vec<crate::ridl::std::Label>,
     pub meta: Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
@@ -439,6 +452,7 @@ impl Default for SensorResult {
         SensorResult::Ok(SensorReading::default())
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct SensorReading {
     pub value: Speed,
@@ -452,14 +466,17 @@ impl Default for SensorReading {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct SensorFault {
     pub code: Counter,
     pub message: crate::ridl::std::Message,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RawWheelFrame {
     pub ticks: Counter,
     pub frame: Vec<u8>,
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,

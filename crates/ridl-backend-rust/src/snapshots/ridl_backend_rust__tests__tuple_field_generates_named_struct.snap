@@ -5,6 +5,7 @@ expression: rust_for(decls)
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -54,6 +55,7 @@ impl Default for Speed {
         Speed::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
 }
@@ -64,6 +66,7 @@ impl Default for SensorBounds {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,

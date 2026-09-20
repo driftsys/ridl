@@ -1,4 +1,5 @@
 /// Cabin temperature, in degrees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Temperature(i64);
 impl Temperature {
@@ -49,6 +50,7 @@ impl Default for Temperature {
     }
 }
 /// A control level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Level(i64);
 impl Level {
@@ -99,6 +101,7 @@ impl Default for Level {
     }
 }
 /// A window length, in samples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Window(i64);
 impl Window {
@@ -149,6 +152,7 @@ impl Default for Window {
     }
 }
 /// An averaged reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Average(i64);
 impl Average {
@@ -198,6 +202,7 @@ impl Default for Average {
         Average::new_unchecked(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Health {
     OK = 0,
@@ -230,6 +235,7 @@ impl Default for Health {
         Health::OK
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Warning {
     pub code: Level,

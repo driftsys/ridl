@@ -8,6 +8,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 
 // ===== package veh.common =====
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -57,6 +58,7 @@ impl Default for Speed {
         Speed::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Engaged(bool);
 impl Engaged {
@@ -94,6 +96,7 @@ impl Default for Engaged {
         Engaged::new_unchecked(false)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum LeverCmd {
     SET = 1,
@@ -126,6 +129,7 @@ impl Default for LeverCmd {
         LeverCmd::SET
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FaultReport {
     pub count: i64,

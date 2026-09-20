@@ -7,6 +7,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -59,6 +60,7 @@ impl Default for Speed {
 /// Coolant / ambient temperature
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Temperature(f64);
 impl Temperature {
@@ -111,6 +113,7 @@ impl Default for Temperature {
 /// Engine crankshaft speed
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct RPM(f64);
 impl RPM {
@@ -163,6 +166,7 @@ impl Default for RPM {
 /// Normalised ratio
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(f64);
 impl Ratio {
@@ -212,6 +216,7 @@ impl Default for Ratio {
         Ratio::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Counter(i64);
 impl Counter {
@@ -262,6 +267,7 @@ impl Default for Counter {
     }
 }
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Gain(f64);
 impl Gain {
@@ -315,6 +321,7 @@ pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);
 pub const SPEED_LIMIT_EU: Speed = Speed::new_unchecked(130.0);
 pub const MAX_GEAR: i64 = 6;
 pub const IDLE_RPM: RPM = RPM::new_unchecked(800.0);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum GearPosition {
     PARK = 0,
@@ -349,6 +356,7 @@ impl Default for GearPosition {
         GearPosition::PARK
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Warning {
     LOW_FUEL = 0,
@@ -383,6 +391,7 @@ impl Default for Warning {
         Warning::LOW_FUEL
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct WarningFlags(i64);
 impl WarningFlags {
@@ -419,6 +428,7 @@ impl Default for WarningFlags {
         WarningFlags(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct SpeedLimitPayload {
     pub limit: Speed,
@@ -432,18 +442,21 @@ impl Default for SpeedLimitPayload {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct DriverProfile {
     pub name: crate::ridl::std::Name,
     pub speed: Speed,
     pub r#override: Option<Speed>,
     pub gears: i64,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
     pub readings: [Speed; 8],
     pub labels: Vec<crate::ridl::std::Label>,
     pub meta: Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
@@ -453,6 +466,7 @@ impl Default for SensorResult {
         SensorResult::Ok(SensorReading::default())
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct SensorReading {
     pub value: Speed,
@@ -466,14 +480,17 @@ impl Default for SensorReading {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct SensorFault {
     pub code: Counter,
     pub message: crate::ridl::std::Message,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RawWheelFrame {
     pub ticks: Counter,
     pub frame: Vec<u8>,
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
@@ -489,6 +506,7 @@ impl Default for SensorBoundsRange {
 
 
 // ===== package veh.cluster =====
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorPayload {
     pub sensorId: i64,
@@ -502,6 +520,7 @@ impl Default for DoorPayload {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct DiagFilter {
     pub severity: i64,
     pub category: Option<crate::ridl::std::Label>,
@@ -514,11 +533,13 @@ impl Default for DiagFilter {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct FaultEvent {
     pub code: i64,
     pub message: crate::ridl::std::Message,
     pub timestamp: crate::ridl::std::Timestamp,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum DiagError {
     FILTER_INVALID = 0,
@@ -551,6 +572,7 @@ impl Default for DiagError {
         DiagError::FILTER_INVALID
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct FaultPage {
     pub faults: Vec<FaultEvent>,
 }
@@ -563,6 +585,7 @@ impl Default for FaultPage {
 /// `internal`-over-`internal` case is exercised inside one package. The
 /// cross-package counterpart is impossible by construction: a foreign
 /// `internal` name never resolves (typl §3.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub(crate) struct RawTickCount(i64);
 impl RawTickCount {
@@ -613,6 +636,7 @@ impl Default for RawTickCount {
     }
 }
 /// The window of raw tick counts a wheel diagnostic covers.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
@@ -626,6 +650,7 @@ impl Default for RawWheelSpan {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct FanLevel(i64);
 impl FanLevel {
@@ -675,6 +700,7 @@ impl Default for FanLevel {
         FanLevel::new_unchecked(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FilterState {
     pub hoursRun: i64,
@@ -688,6 +714,7 @@ impl Default for FilterState {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct ClimateReport {
     pub cabin: crate::veh::common::Temperature,
@@ -703,6 +730,7 @@ impl Default for ClimateReport {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum HvacError {
     COMPRESSOR_OFF = 0,
@@ -742,6 +770,7 @@ pub const FAN_CEILING: FanLevel = FanLevel::new_unchecked(7);
 /// The same ceiling, one hop further along the chain.
 pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);
 /// The label a cabin fan reports itself under.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct FanTag(String);
 impl FanTag {
@@ -798,6 +827,7 @@ impl Default for FanTag {
 pub const FAN_TAG: &str = "cabin-fan";
 /// The same label, reached through the constant above.
 pub const FAN_LABEL: &str = "cabin-fan";
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct RawWheelSpanSpan {
     pub first: RawTickCount,
     pub latest: RawTickCount,
@@ -810,6 +840,7 @@ impl Default for RawWheelSpanSpan {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct RawWheelSpanBurstsElement {
     pub first: RawTickCount,
     pub latest: RawTickCount,

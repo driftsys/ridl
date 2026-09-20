@@ -5,6 +5,7 @@ expression: rust_for(decls)
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -56,6 +57,7 @@ impl Default for Speed {
 }
 pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);
 pub const MAX_GEAR: i64 = 6;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Greeting(String);
 impl Greeting {
