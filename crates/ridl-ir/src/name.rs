@@ -56,8 +56,10 @@ pub fn snake_case(name: &str) -> String {
 /// the rest left as written, so an acronym already spelled in capitals keeps
 /// them (`httpServer` gives `HttpServer`, `HTTPServer` gives `HTTPServer`).
 ///
-/// **The transform is not injective:** the underscores it removes are what
-/// distinguished `foo_bar` from `fooBar`, so the two share an output. A
+/// **The transform is not injective**, for two reasons. The underscores it
+/// removes are what distinguished `foo_bar` from `fooBar`, so those two share
+/// an output; and upper-casing a segment's first character destroys the case
+/// that distinguished `fooBar` from `FooBar`, so those two do as well. A
 /// package whose names collide under it is rejected by RIDL-149 (ADR-0016
 /// decision 3 as amended), which is where the projection contract's
 /// injectivity obligation is discharged.
@@ -77,6 +79,25 @@ pub fn camel_case(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{camel_case, snake_case};
+
+    /// The outputs the docstring names, pinned as values. The relational
+    /// tests below constrain which names share an output, not what that
+    /// output is, so without these a transform composed with any injective
+    /// suffix would satisfy them.
+    #[test]
+    fn camel_case_pins_the_outputs_its_docstring_names() {
+        assert_eq!(camel_case("httpServer"), "HttpServer");
+        assert_eq!(camel_case("HTTPServer"), "HTTPServer");
+        assert_eq!(camel_case("foo_bar"), "FooBar");
+    }
+
+    /// The two sources of non-injectivity the docstring names: the removed
+    /// underscore, and the upper-cased first character.
+    #[test]
+    fn camel_case_is_not_injective_in_two_ways() {
+        assert_eq!(camel_case("foo_bar"), camel_case("fooBar"));
+        assert_eq!(camel_case("fooBar"), camel_case("FooBar"));
+    }
 
     /// Neither collision set contains the other, which is why a union's arms
     /// are checked under both (ADR-0016 amendment, Task 11 decision D).
