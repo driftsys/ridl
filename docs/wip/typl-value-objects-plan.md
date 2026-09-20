@@ -2041,7 +2041,17 @@ Expected: FAIL — no `cfg` attribute is emitted.
 Append to `constraint_checks`, after the length checks:
 
 ```rust
-if let Some(pattern) = c.pattern.as_deref() {
+if backing_scalar(td) == ScalarBacking::String
+    && let Some(pattern) = c.pattern.as_deref()
+{
+    // A `match` pattern is checked against text, and `regex::Regex`
+    // matches `&str`. Only a `String` backing has a value that coerces
+    // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
+    // against which `Regex::is_match` does not type-check. typl allows a
+    // literal `pattern` on a bytes-backed type (it draws only the
+    // TYPL-115 note, not an error), so that case must fall through with
+    // no pattern branch rather than emit code that does not compile.
+    //
     // The pattern needs a regex engine, which `core` has none of. The
     // range and length checks above are not gated; only this one is, so a
     // `--no-default-features` build still validates the bounds it emits.
@@ -2069,21 +2079,44 @@ if let Some(pattern) = c.pattern.as_deref() {
 }
 ```
 
+The pattern branch carries a backing guard, mirroring the `is_float` guard
+already in the same function for `min`/`max`: it fires only for
+`ScalarBacking::String`. Without it, a bytes-backed type carrying a literal
+`pattern` (legal in typl — it draws only the TYPL-115 note, not an error) gets
+`PATTERN.is_match(&value)` where `value` is a `Vec<u8>`, which does not
+type-check against `regex::Regex::is_match` (`&str`). No `rustc` compile proof
+in this repository drives `--cfg feature="validate-pattern"`, so no test
+compiled the block that missing guard produced, and it was found and corrected
+by review, in a later commit than the one that first landed this task. Step 4
+below covers both the guard and a proof that actually compiles the gated block.
+
 Emit a doc line on the type naming that the pattern is enforced only under the
 feature, so the guarantee is not silently variable. That line replaces one
 rather than joining it: `unchecked_doc` (Task 3) emits " The `match` pattern is
 not checked by `new`." whenever the constraint carries a `pattern` or a
-`pattern_const`, and the `pattern` half of that becomes untrue here. An
-unresolved `pattern_const` keeps the existing line, because no check is emitted
-for it.
+`pattern_const`, and the `pattern` half of that becomes untrue here — but only
+for a `String` backing, which is the only backing the emitted check covers;
+`unchecked_doc` applies the same `backing_scalar` guard so the feature-gated
+line appears exactly when the feature-gated check is emitted, and any other
+backing carrying a literal `pattern` keeps the plain "not checked" line. An
+unresolved `pattern_const` keeps the existing line too, because no check is
+emitted for it.
 
 - [ ] **Step 4: Run the tests**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. The `rustc`
-compile proofs run without the feature, so they exercise the gated-out path; the
-enabled path is covered by Task 7's emitted crate building under default
-features.
+compile proofs that use `vin_decl` and its siblings run without the feature, so
+they exercise the gated-out path only. The gated-in path is covered by a named
+proof, `pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in`,
+which compiles the generated source for a `string`-backed named scalar with a
+literal pattern and a length bound, with `--cfg 'feature="validate-pattern"'`,
+against a hand-written stand-in `regex` rlib built with `rustc` (`regex` is not
+a declared dependency of any workspace crate, so the real crate cannot be linked
+here) and the existing `ridl_rt_rlib` helper's `ridl-rt` rlib. No test builds
+the emitted crate itself with cargo or under a cargo feature flag; the proof
+above is what exercises the feature-gated code, not a build of Task 7's emitted
+crate.
 
 - [ ] **Step 5: Commit**
 
