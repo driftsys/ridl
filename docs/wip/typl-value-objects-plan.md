@@ -2007,7 +2007,7 @@ entry point, not as a repair of a defect a `ridl build` can produce today.
 - Consumes: `constraint_checks` (Task 3), the manifest feature (Task 7).
 - Produces: nothing new; extends the generated `new`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -2031,12 +2031,12 @@ to stay positive for the last assertion to mean anything: a `len_min` of 0 emits
 no branch at all (Task 3, correction 2), so a fixture defaulting to 0 would
 leave that assertion resting on the `len_max` branch alone.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cargo test -p ridl-backend-rust --locked pattern_check_is_feature_gated`
 Expected: FAIL — no `cfg` attribute is emitted.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `constraint_checks`, after the length checks:
 
@@ -2102,7 +2102,7 @@ backing carrying a literal `pattern` keeps the plain "not checked" line. An
 unresolved `pattern_const` keeps the existing line too, because no check is
 emitted for it.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. The `rustc`
@@ -2118,7 +2118,7 @@ the emitted crate itself with cargo or under a cargo feature flag; the proof
 above is what exercises the feature-gated code, not a build of Task 7's emitted
 crate.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-backend-rust/
