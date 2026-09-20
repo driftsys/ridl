@@ -47,8 +47,9 @@ pub struct GenerateError {
 
 /// Generates the Rust source for `package`: the domain types only. The only
 /// runtime paths in its output are the `::ridl_rt::payload::Violation` and
-/// `::ridl_rt::payload::Rule` a named scalar's constructor names (typl value
-/// objects, Task 3); it emits no interaction face.
+/// `::ridl_rt::payload::Rule` that a named scalar's constructor (typl value
+/// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
+/// it emits no interaction face.
 ///
 /// This is the pipeline entry point — `ridl --emit rust` and the compiler
 /// corpus run it. The face is emitted by the companion [`generate_face`], not
@@ -56,7 +57,9 @@ pub struct GenerateError {
 /// emitted from"): the corpus interfaces carry contract clauses the M3 clause
 /// translator must refuse. The plan's second reason, that the corpus proofs
 /// passed no `--extern ridl_rt`, no longer holds: every compile proof links
-/// the runtime, because every generated named scalar names it.
+/// the runtime, because a generated named scalar, enum and enum set all name
+/// it. A package of pure `enum` and `enumset` declarations, with no named
+/// scalar at all, still depends on `ridl-rt`.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
 /// emitted identifier is produced through `ident`, which escapes Rust
@@ -79,7 +82,8 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// point, not the pipeline" decision. The descriptors it appends name
 /// `::ridl_rt` and carry the translated `require`/`ensure` clause bodies, so it
 /// is the only caller of the clause translator, and the only entry point whose
-/// output names the runtime outside a named scalar's constructor. The domain
+/// output names the runtime outside the domain types' own constructors and
+/// conversions. The domain
 /// types come from the same call because the checked-in fixture is brought in
 /// with a single `include!`: the face names those types, and the orphan rule
 /// needs them local to the test crate for the hand-written `Payload<ReprC>`
@@ -710,9 +714,11 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
 ///
 /// The bit constants, `DECLARED_MASK` and `get` share one inherent impl block
 /// so that a deprecated declaration carries `#[allow(deprecated)]` over all
-/// three. Each names the deprecated type, and without the allow the consumer's
-/// build draws the `deprecated` lint on code the consumer did not write —
-/// which is what driftsys/ridl#420 settled for a named scalar's impl blocks.
+/// three. The `impl` header itself names the deprecated type, as do the bit
+/// constants and `get`; `DECLARED_MASK` names only `i64`, and is covered
+/// because it shares the block. Without the allow the consumer's build draws
+/// the `deprecated` lint on code the consumer did not write — which is what
+/// driftsys/ridl#420 settled for a named scalar's impl blocks.
 fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
@@ -724,6 +730,19 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
         quote! { #vis const #bname: #name = #name(1 << #shift); }
     });
 
+    // Refusing a value that carries an undeclared bit is this backend's
+    // reading, not a rule the reference states. typl §9 fixes a bit's
+    // identity as its declared position and infers the width from the highest
+    // one; it says nothing about what an undeclared bit means. The reading is
+    // in tension with `ridl-diff`, which classifies an enum value appended
+    // above every live and retired number as compatible
+    // (`crates/ridl-diff/src/classify.rs`): a producer that appends a bit on
+    // that advice sends a value an older consumer's `TryFrom` then refuses
+    // whole, rather than ignoring the bit it does not know. Whether an enum
+    // set is closed or open on the wire is recorded as an open question
+    // rather than settled here, because settling it changes `ridl-diff` as
+    // well as this backend.
+    //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside
     // 0..=63 and still carries the bit into the IR — its range guard covers
@@ -753,8 +772,8 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
         impl #name {
             #(#bits)*
 
-            /// The union of every declared bit. A value carrying any other
-            /// bit is not a member of this set (typl §9).
+            /// The union of every declared bit. `TryFrom` refuses a value
+            /// that carries any other bit.
             #vis const DECLARED_MASK: i64 = #mask_lit;
 
             #vis const fn get(self) -> i64 { self.0 }
