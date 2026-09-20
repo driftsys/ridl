@@ -688,6 +688,56 @@ fn pattern_check_is_feature_gated() {
     assert!(gated.contains("::ridl_rt::payload::Rule::Length"));
 }
 
+/// No test elsewhere in this repository compiles the `#[cfg(feature =
+/// "validate-pattern")]` block: every other `rustc` compile proof, here and in
+/// `crates/ridlc/tests/rust_crate_emit.rs`, drives bare `rustc` with no
+/// `--cfg` for that feature, so the block is compiled out. `regex` is not a
+/// declared dependency of any workspace crate, so this proof cannot link the
+/// real one; it links [`regex_stub_rlib`] instead, a hand-written stand-in
+/// built the same way [`ridl_rt_rlib`] builds `ridl-rt` (see its doc comment
+/// for why one `rustc` call is the whole build). This is the only proof that
+/// would catch a syntax error, a type error or a bad path inside the gated
+/// block.
+#[test]
+fn pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in() {
+    let source = rust_for(vec![vin_decl()]);
+    assert!(
+        source.contains("#[cfg(feature = \"validate-pattern\")]"),
+        "the fixture must actually exercise the gated block, got:\n{source}"
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("pattern_gated.rs");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let ridl_rt = ridl_rt_rlib(dir.path());
+    let regex = regex_stub_rlib(dir.path());
+
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("pattern_gated.rmeta"))
+        .arg("--cfg")
+        .arg(r#"feature="validate-pattern""#)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", ridl_rt.display()))
+        .arg("--extern")
+        .arg(format!("regex={}", regex.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the validate-pattern block must compile against the regex stand-in, source:\n{source}"
+    );
+}
+
 /// A literal pattern on a `bytes` backing emits no pattern check at all: a
 /// `Vec<u8>` value does not type-check against `regex::Regex::is_match`
 /// (`&str`). The length checks are unaffected.
@@ -2025,6 +2075,70 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
     // An rlib is an `ar` archive. Asserting the magic distinguishes a real
     // rlib from a metadata-only file under the same name, which a proof using
     // `--emit metadata` would accept while nothing that links could.
+    let head = std::fs::read(&rlib).expect("the rlib is readable");
+    assert!(
+        head.starts_with(b"!<arch>\n"),
+        "the helper must produce an rlib archive, not metadata under an rlib name"
+    );
+    rlib
+}
+
+/// A hand-written stand-in for the `regex` crate, built as an rlib with plain
+/// `rustc` the same way [`ridl_rt_rlib`] builds `ridl-rt`. `regex` is not a
+/// declared dependency of any workspace crate (`validate-pattern` names it as
+/// an optional dependency only in the crate emitted for a consumer, never
+/// here), so the real crate cannot be linked; this stand-in exposes just
+/// enough surface for the emitted `#[cfg(feature = "validate-pattern")]`
+/// block to type-check: a `Regex` with a fallible `new` and an `is_match`.
+///
+/// `is_match` takes `&str` and nothing more general (not `&[u8]`, not an
+/// `AsRef<str>` bound), on purpose: the emitted code calls it as
+/// `PATTERN.is_match(&value)`, and if the backing guard `constraint_checks`
+/// applies before choosing to emit this branch (a `String` backing only) were
+/// ever removed, `value` for a bytes-backed type would be a `Vec<u8>`, which
+/// does not coerce to `&str`. An `is_match` that accepted anything broader
+/// would let that regression compile here while still failing to link against
+/// the real `regex`, silently losing the proof this test exists to be.
+const REGEX_STAND_IN_SOURCE: &str = r#"
+pub struct Regex;
+
+#[derive(Debug)]
+pub struct Error;
+
+impl Regex {
+    pub fn new(_pattern: &str) -> Result<Regex, Error> {
+        Ok(Regex)
+    }
+
+    pub fn is_match(&self, _text: &str) -> bool {
+        true
+    }
+}
+"#;
+
+fn regex_stub_rlib(dir: &std::path::Path) -> std::path::PathBuf {
+    let source_path = dir.join("regex_stand_in.rs");
+    std::fs::write(&source_path, REGEX_STAND_IN_SOURCE)
+        .expect("the regex stand-in source is written");
+    let rlib = dir.join("libregex.rlib");
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "rlib",
+            "--crate-name",
+            "regex",
+        ])
+        .arg(&source_path)
+        .arg("-o")
+        .arg(&rlib)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the regex stand-in must build as an rlib for the compile proof to link"
+    );
     let head = std::fs::read(&rlib).expect("the rlib is readable");
     assert!(
         head.starts_with(b"!<arch>\n"),
