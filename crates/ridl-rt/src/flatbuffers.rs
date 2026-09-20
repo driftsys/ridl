@@ -116,7 +116,17 @@ pub fn root(buf: &[u8]) -> Result<usize, Malformed> {
 /// value equals its declared default, and a vtable shorter than `slot` omits
 /// every field from there on. Whether an absent field is legal for the type is
 /// the generated `verify`'s question, not this one's.
-pub fn field(buf: &[u8], table: usize, slot: u16) -> Result<Option<usize>, Malformed> {
+///
+/// `width` is the field's size in bytes — four for an offset. The field must
+/// lie wholly inside the table the vtable describes, so a vtable that points a
+/// field across the table's end is rejected here rather than read from bytes
+/// belonging to another object.
+pub fn field(
+    buf: &[u8],
+    table: usize,
+    slot: u16,
+    width: usize,
+) -> Result<Option<usize>, Malformed> {
     // The table's first field is a signed offset backwards to its vtable.
     // The arithmetic is done in i64 so that it cannot wrap on any target.
     let soffset = read_i32(buf, table)?;
@@ -143,8 +153,10 @@ pub fn field(buf: &[u8], table: usize, slot: u16) -> Result<Option<usize>, Malfo
     if offset == 0 {
         return Ok(None);
     }
-    // The field must lie inside the table the vtable describes.
-    if offset >= table_bytes {
+    // The field must lie wholly inside the table the vtable describes: one
+    // that starts inside it and ends past it would otherwise be read from
+    // whatever follows the table in the buffer.
+    if offset < OFFSET_SIZE || offset + width > table_bytes {
         return Err(Malformed::OutOfBounds);
     }
     let position = table as u64 + offset as u64;
@@ -159,6 +171,12 @@ pub fn string(buf: &[u8], from: usize) -> Result<&str, Malformed> {
     let start = follow(buf, from)?;
     let len = read_u32(buf, start)? as usize;
     let bytes = at(buf, start + OFFSET_SIZE, len)?;
+    // A FlatBuffers string carries a terminating zero after its bytes, so a
+    // reader can hand it to C. Accepting a buffer without one would let
+    // `verify` pass bytes a C consumer runs off the end of.
+    if at(buf, start + OFFSET_SIZE + len, 1)?[0] != 0 {
+        return Err(Malformed::OutOfBounds);
+    }
     str::from_utf8(bytes).map_err(|_| Malformed::Utf8)
 }
 
@@ -290,6 +308,23 @@ impl<'a> Builder<'a> {
     /// handed over dirty does not leak its old contents into the encoding and
     /// two encodes of one value produce the same bytes.
     pub fn reserve(&mut self, size: usize, align: usize) -> Result<(Pos, &mut [u8]), EncodeError> {
+        self.reserve_skewed(size, align, 0)
+    }
+
+    /// As [`Builder::reserve`], but puts the byte `skew` bytes into the object
+    /// on the `align` boundary, rather than its first byte.
+    ///
+    /// A vector needs this: its elements carry the alignment and they sit
+    /// behind a four-byte length prefix. Aligning the prefix instead would
+    /// leave a vector of eight-byte elements on a four-byte boundary, which
+    /// this builder's own reads survive — they copy before they read — and a
+    /// reader that loads in place does not.
+    fn reserve_skewed(
+        &mut self,
+        size: usize,
+        align: usize,
+        skew: usize,
+    ) -> Result<(Pos, &mut [u8]), EncodeError> {
         debug_assert!(align.is_power_of_two(), "an alignment is a power of two");
         let capacity = self.out.len();
         let unpadded = match self.used.checked_add(size) {
@@ -303,9 +338,10 @@ impl<'a> Builder<'a> {
         };
         // An object at position `p` starts at offset `total - p` of the
         // finished buffer, and `finish` makes `total` a multiple of the
-        // buffer's alignment. Padding so that `p` is a multiple of `align`
-        // therefore aligns the object in the finished buffer.
-        let padding = (align - (unpadded % align)) % align;
+        // buffer's alignment. Padding so that `p` is congruent to `skew`
+        // modulo `align` therefore puts the object's byte `skew` on an
+        // `align` boundary in the finished buffer.
+        let padding = (align + (skew % align) - (unpadded % align)) % align;
         let needed = match unpadded.checked_add(padding) {
             Some(n) => n,
             None => {
@@ -381,6 +417,10 @@ impl<'a> Builder<'a> {
 
     /// Writes a vector of scalars that the caller has already encoded, each
     /// `stride` bytes, in element order.
+    ///
+    /// When `stride` is eight the buffer's own alignment must be at least
+    /// eight, so [`Builder::finish`] is passed eight or more; otherwise the
+    /// elements are aligned within the buffer and the buffer is not.
     pub fn push_vector(&mut self, elements: &[u8], stride: usize) -> Result<Pos, EncodeError> {
         debug_assert!(stride > 0, "an element occupies at least one byte");
         debug_assert!(
@@ -389,12 +429,15 @@ impl<'a> Builder<'a> {
         );
         let count = elements.len() / stride;
         let size = OFFSET_SIZE + elements.len();
-        let align = if stride > OFFSET_SIZE {
-            stride
+        // The elements carry the alignment, and they start `OFFSET_SIZE`
+        // bytes into the object, behind the length prefix. For a stride of
+        // four or less the prefix's own alignment already covers them.
+        let (align, skew) = if stride > OFFSET_SIZE {
+            (stride, OFFSET_SIZE)
         } else {
-            OFFSET_SIZE
+            (OFFSET_SIZE, 0)
         };
-        let (position, bytes) = self.reserve(size, align)?;
+        let (position, bytes) = self.reserve_skewed(size, align, skew)?;
         bytes[..OFFSET_SIZE].copy_from_slice(&(count as u32).to_le_bytes());
         bytes[OFFSET_SIZE..].copy_from_slice(elements);
         Ok(position)
@@ -419,6 +462,16 @@ impl<'a> Builder<'a> {
         debug_assert!(
             size >= OFFSET_SIZE,
             "a table begins with the offset to its vtable"
+        );
+        // A vtable states its own size and its table's size as `u16`, so a
+        // table larger than `u16::MAX` is not representable. The projection
+        // guarantees it does not happen: a type whose table does not fit has
+        // no finite size bound, and stage K4 refuses it at generation time
+        // with a diagnostic. This assertion catches a projection that stops
+        // upholding that.
+        debug_assert!(
+            size <= usize::from(u16::MAX),
+            "a table's size is stated in its vtable as a u16"
         );
         let table = {
             let (table, bytes) = self.reserve(size, align)?;
@@ -456,6 +509,10 @@ impl<'a> Builder<'a> {
         };
 
         let vtable_bytes = VTABLE_HEADER + usize::from(slots) * VOFFSET_SIZE;
+        debug_assert!(
+            vtable_bytes <= usize::from(u16::MAX),
+            "a vtable's size is stated in its first field as a u16"
+        );
         let vtable = {
             let (vtable, bytes) = self.reserve(vtable_bytes, VOFFSET_SIZE)?;
             bytes[..VOFFSET_SIZE].copy_from_slice(&(vtable_bytes as u16).to_le_bytes());

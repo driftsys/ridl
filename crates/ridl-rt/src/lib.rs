@@ -14,7 +14,8 @@
 //! `Payload<FlatBuffers>` implementation shares; `proto3` and `repr-c` enable
 //! nothing in this version.
 //!
-//! Every public item lives in one of six modules. Generated code names each
+//! Every public item lives in one of six modules, or in the seventh that the
+//! `flatbuffers` feature adds. Generated code names each
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
 //! none, because several names here — `Duration`, `Handler`, `Kind` — are also
 //! names in `core` or in application code.

@@ -138,7 +138,17 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
 pub enum EncodeError {
     /// The output buffer is shorter than the encoding.
     Capacity {
-        /// The bytes the encoding needs.
+        /// The bytes the encoding needs: a lower bound, not always the whole
+        /// requirement.
+        ///
+        /// An encoder that knows its size before it writes reports the whole
+        /// encoding. One that builds incrementally — the FlatBuffers encoder
+        /// does, because a child's size is known only once it is written —
+        /// reports what it needed at the point it gave up, which is at least
+        /// `available + 1` and at most the whole encoding. Either way a
+        /// caller that grows the buffer to `needed` has made progress, and
+        /// one that wants a buffer that always suffices uses
+        /// [`Payload::MAX_SIZE`].
         needed: usize,
         /// The bytes the output buffer has.
         available: usize,

@@ -5,8 +5,8 @@
 #![cfg(feature = "flatbuffers")]
 
 use ridl_rt::flatbuffers::{
-    field, follow, read_bool, read_f64, read_i32, read_u16, root, string, vector, Builder, Field,
-    Pos, TableField, Vector,
+    field, follow, read_bool, read_f64, read_i32, read_i64, read_u16, root, string, vector,
+    Builder, Field, Pos, TableField, Vector,
 };
 use ridl_rt::payload::{EncodeError, Malformed};
 
@@ -129,17 +129,17 @@ fn a_buffer_reads_back_through_the_walk() {
     let table = root(bytes).expect("the root resolves");
     assert_eq!(table, 16);
 
-    let x = field(bytes, table, 0)
+    let x = field(bytes, table, 0, 4)
         .expect("the slot is readable")
         .expect("x is present");
     assert_eq!(read_i32(bytes, x).expect("x reads"), 7);
 
-    let y = field(bytes, table, 1)
+    let y = field(bytes, table, 1, 4)
         .expect("the slot is readable")
         .expect("y is present");
     assert_eq!(read_i32(bytes, y).expect("y reads"), -2);
 
-    let label = field(bytes, table, 2)
+    let label = field(bytes, table, 2, 4)
         .expect("the slot is readable")
         .expect("label is present");
     assert_eq!(string(bytes, label).expect("the label reads"), "hi");
@@ -154,10 +154,13 @@ fn an_omitted_field_is_absent_rather_than_an_error() {
     let bytes = encode_point(&mut out, 1, 2, None);
     let table = root(bytes).expect("the root resolves");
 
-    assert!(field(bytes, table, 0)
+    assert!(field(bytes, table, 0, 4)
         .expect("the slot is readable")
         .is_some());
-    assert_eq!(field(bytes, table, 2).expect("the slot is readable"), None);
+    assert_eq!(
+        field(bytes, table, 2, 4).expect("the slot is readable"),
+        None
+    );
 }
 
 /// A slot past the end of the vtable is absent, not out of bounds: a writer
@@ -167,7 +170,10 @@ fn a_slot_past_the_vtable_is_absent() {
     let mut out = [0u8; 64];
     let bytes = encode_point(&mut out, 1, 2, Some("hi"));
     let table = root(bytes).expect("the root resolves");
-    assert_eq!(field(bytes, table, 9).expect("the slot is readable"), None);
+    assert_eq!(
+        field(bytes, table, 9, 4).expect("the slot is readable"),
+        None
+    );
 }
 
 #[test]
@@ -182,7 +188,7 @@ fn every_read_is_bounded_by_the_buffer() {
         // Whatever the truncation, no read panics and none reports a value
         // from outside the bytes it was given.
         let _ = root(short);
-        let _ = field(short, table.min(cut), 0);
+        let _ = field(short, table.min(cut), 0, 4);
         let _ = read_i32(short, cut.saturating_sub(2));
         let _ = string(short, 28.min(cut));
         let _ = vector(short, 28.min(cut), 4);
@@ -217,7 +223,7 @@ fn a_string_that_is_not_utf8_is_rejected() {
     out[start + 36] = 0xff;
     let bytes = &out[start..];
     let table = root(bytes).expect("the root resolves");
-    let label = field(bytes, table, 2)
+    let label = field(bytes, table, 2, 4)
         .expect("the slot is readable")
         .expect("label is present");
     assert_eq!(string(bytes, label), Err(Malformed::Utf8));
@@ -236,7 +242,9 @@ fn a_buffer_reads_the_same_at_any_alignment() {
         moved.extend_from_slice(&aligned);
         let bytes = &moved[shift..];
         let table = root(bytes).expect("the root resolves");
-        let x = field(bytes, table, 0).expect("readable").expect("present");
+        let x = field(bytes, table, 0, 4)
+            .expect("readable")
+            .expect("present");
         assert_eq!(read_i32(bytes, x).expect("x reads"), 7);
     }
 }
@@ -272,7 +280,9 @@ fn a_vector_of_scalars_round_trips() {
     };
 
     let table = root(bytes).expect("the root resolves");
-    let at = field(bytes, table, 0).expect("readable").expect("present");
+    let at = field(bytes, table, 0, 4)
+        .expect("readable")
+        .expect("present");
     let v: Vector = vector(bytes, at, 4).expect("the vector resolves");
     assert_eq!(v.len, 3);
     let read: Vec<i32> = (0..v.len)
@@ -380,8 +390,86 @@ fn a_boolean_reads_as_zero_or_not() {
     let bytes = b.finish(table, ALIGN).expect("the root fits");
 
     let t = root(bytes).expect("the root resolves");
-    let yes = field(bytes, t, 0).expect("readable").expect("present");
-    let no = field(bytes, t, 1).expect("readable").expect("present");
+    let yes = field(bytes, t, 0, 1).expect("readable").expect("present");
+    let no = field(bytes, t, 1, 1).expect("readable").expect("present");
     assert!(read_bool(bytes, yes).expect("reads"));
     assert!(!read_bool(bytes, no).expect("reads"));
+}
+
+/// A vector's elements carry the alignment, not its length prefix. With the
+/// prefix aligned instead, a vector of eight-byte elements lands its elements
+/// on a four-byte boundary — which these reads survive, because they copy
+/// before they read, and a reader that loads in place does not.
+#[test]
+fn a_vector_of_eight_byte_elements_aligns_its_elements() {
+    let mut out = [0u8; 96];
+    let elements: [u8; 16] = {
+        let mut e = [0u8; 16];
+        e[..8].copy_from_slice(&1i64.to_le_bytes());
+        e[8..].copy_from_slice(&(-2i64).to_le_bytes());
+        e
+    };
+    let bytes = {
+        let mut b = Builder::new(&mut out);
+        let v = b
+            .push_vector(&elements, 8)
+            .expect("the buffer fits the vector");
+        let table = b
+            .push_table(
+                8,
+                ALIGN,
+                1,
+                &[TableField {
+                    slot: 0,
+                    offset: 4,
+                    value: Field::Offset(v),
+                }],
+            )
+            .expect("the buffer fits the table");
+        // The buffer's alignment is that of its widest object.
+        b.finish(table, 8).expect("the buffer fits the root")
+    };
+
+    let table = root(bytes).expect("the root resolves");
+    let at = field(bytes, table, 0, 4)
+        .expect("readable")
+        .expect("present");
+    let v = vector(bytes, at, 8).expect("the vector resolves");
+    assert_eq!(v.len, 2);
+    assert_eq!(v.first % 8, 0, "the elements sit on an eight-byte boundary");
+    assert_eq!(bytes.len() % 8, 0, "and the buffer itself is eight-aligned");
+    assert_eq!(read_i64(bytes, v.element(0, 8)).expect("reads"), 1);
+    assert_eq!(read_i64(bytes, v.element(1, 8)).expect("reads"), -2);
+}
+
+/// A FlatBuffers string is terminated by a zero. A buffer without one is
+/// malformed, and accepting it would let `verify` pass bytes a C consumer runs
+/// off the end of.
+#[test]
+fn a_string_without_its_terminator_is_rejected() {
+    let mut out = [0u8; 64];
+    let len = encode_point(&mut out, 1, 2, Some("hi")).len();
+    let start = out.len() - len;
+    out[start + 38] = b'!'; // where the terminator sits
+    let bytes = &out[start..];
+    let table = root(bytes).expect("the root resolves");
+    let label = field(bytes, table, 2, 4)
+        .expect("readable")
+        .expect("present");
+    assert_eq!(string(bytes, label), Err(Malformed::OutOfBounds));
+}
+
+/// A vtable that points a field across the end of its own table is rejected,
+/// rather than read from whatever follows the table in the buffer.
+#[test]
+fn a_field_that_straddles_the_end_of_its_table_is_rejected() {
+    let mut out = [0u8; 64];
+    let len = encode_point(&mut out, 7, -2, Some("hi")).len();
+    let start = out.len() - len;
+    // The vtable sits at offset 6 and states its table as 16 bytes. Slot 0's
+    // entry is at offset 10; an offset of 14 runs two bytes past the end.
+    out[start + 10..start + 12].copy_from_slice(&14u16.to_le_bytes());
+    let bytes = &out[start..];
+    let table = root(bytes).expect("the root resolves");
+    assert_eq!(field(bytes, table, 0, 4), Err(Malformed::OutOfBounds));
 }
