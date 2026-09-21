@@ -1,24 +1,31 @@
 # Lane K driver — the FlatBuffers payload codec
 
-> **State, 2026-09-21: K1 to K8 have run, and the lane is not closed.** Every
-> decision of the design note is built except **D-11**, the interaction face
-> moving off its `ReprC` placeholder onto the codec. Stage K7 could not execute
-> it: a FlatBuffers root is a table and the projection mints one only for a
-> `struct` or a `union`, so a named-scalar or enum payload — which is what most
-> of the corpus writes — has no `Payload<FlatBuffers>` to name. That is a
-> projection decision nobody has taken, **driftsys/ridl#470**, and it awaits
-> Sebastien.
+> **Archived, 2026-09-21: lane K is closed.** Every stage has run and every
+> decision of the design note is on `main`. The last was **D-11**, the
+> interaction face moving off its `ReprC` placeholder onto the codec, which ran
+> as stage K9 in two parts: K9a took the projection decision that blocked it,
+> driftsys/ridl#470, as
+> [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 8
+> (driftsys/ridl#474), and K9b landed D-11 itself (driftsys/ridl#475). The story
+> issue driftsys/ridl#263 is closed and the lane's closing comment is on
+> driftsys/ridl#328.
 >
-> The design note and the plan are archived:
-> [`../archive/2026-09-20-flatbuffers-codec-design.md`](../archive/2026-09-20-flatbuffers-codec-design.md)
+> **The current design is elsewhere.** The codec as built is
+> [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md) and the
+> face over it is
+> [`../design/interaction-face.md`](../design/interaction-face.md). The note and
+> the plan this document drove are
+> [`2026-09-20-flatbuffers-codec-design.md`](2026-09-20-flatbuffers-codec-design.md)
 > and
-> [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
-> The codec as built is
-> [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md), and its
-> "What is not built" section is the live statement of D-11. This document stays
-> here, rather than archiving with the other two, because the lane has a stage
-> left to run: whoever takes #470 runs D-11 as **K9**, with the Mechanics and
-> the review rule below unchanged.
+> [`2026-09-20-flatbuffers-codec-plan.md`](2026-09-20-flatbuffers-codec-plan.md).
+> Read what follows as the prompt the lane ran under, not as a description of
+> the result: its `THIS SESSION RUNS` line and its stage list record what was
+> still to do when it was written.
+>
+> Four findings stay open past the lane, none blocking the story:
+> driftsys/ridl#467, driftsys/ridl#469, driftsys/ridl#472 and driftsys/ridl#476,
+> with driftsys/ridl#302 pre-existing. The closing comment on driftsys/ridl#328
+> carries each one's owner.
 
 Status: driver prompt, 2026-09-20. One lane. Each stage is a fresh session. Set
 the `THIS SESSION RUNS` line below before starting a session, and do only that

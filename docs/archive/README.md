@@ -291,7 +291,20 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 7
   and 8 for what `ridl-rt` owes it. Read the note for the reasoning behind a
   decision and for §4a to §4e, each stage's record of what it measured and what
-  it corrected in the stage before — not as a description of the result. **One
-  of its decisions is not built**: D-11, the face on the codec, blocked on
-  driftsys/ridl#470, so [the lane driver](../wip/2026-09-20-lane-k-driver.md) is
-  still live.
+  it corrected in the stage before — not as a description of the result. **Every
+  decision is built**: the last, D-11, the face on the codec, was blocked on
+  driftsys/ridl#470 until stage K9a took that as ADR-0019 decision 8, and landed
+  in stage K9b on 2026-09-21. The face over the codec is
+  [the interaction-face design record](../design/interaction-face.md).
+- **2026-09-20-lane-k-driver.md** — the driver prompt lane K ran under, archived
+  with the pair above when the lane closed on 2026-09-21. Its stage K0 filed the
+  two rows the codec work surfaced, E11.14 (the face and the codec reach
+  `ridl build`, driftsys/ridl#444) and E11.15 (`ridl-loopback`, split out of
+  E11.9 so it does not wait on the frame specification, driftsys/ridl#445); K1
+  wrote the note and the plan, and K2 to K9 are that plan's tasks. Read it for
+  how the lane was run — the mechanics, the review rule, and the four facts
+  about the tree it warns are easy to get wrong — not for the state of the code:
+  its `THIS SESSION RUNS` line and its stage list record what was still to do
+  when it was written. Four findings outlive it — driftsys/ridl#467,
+  driftsys/ridl#469, driftsys/ridl#472 and driftsys/ridl#476 — and the closing
+  comment on driftsys/ridl#328 carries each one's owner.
