@@ -132,6 +132,21 @@ test:
 # `xtask/tests/oracle_boundary.rs`, which reads the resolved dependency
 # graph's edge kind directly (`cargo test -p xtask`, part of `just test`)
 # and is what actually enforces that boundary.
+#
+# GENERATED CODE IS NOT ON THE `-p` LIST, AND CANNOT BE. ADR-0020 decision 2
+# makes the generated Rust compiled to wasm32 the codec a TypeScript consumer
+# loads, so the obligation reaches what the backend emits and not only the
+# crates that emit it — but a generated package is text with no manifest, and
+# `cargo check -p` takes packages. E11.7 stage K8 took the other shape:
+# `the_generated_codec_checks_for_wasm32` in
+# `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` runs the same
+# check (`rustc --target wasm32-unknown-unknown --emit=metadata`, which is
+# the unit of work `cargo check` performs) over the emitted source, through
+# stage K3's bare-`rustc` proof mechanism. It runs under `just test`. The
+# alternative, an example crate under `crates/` holding a checked-in
+# generated fixture so it could join the `-p` list, was rejected: it would
+# add a workspace member and a second copy of the fixture to keep in step,
+# for a check the test already performs over the emitter's live output.
 wasm-check:
     #!/usr/bin/env bash
     set -euo pipefail

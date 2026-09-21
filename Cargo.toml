@@ -35,6 +35,17 @@ num-rational = "0.4.2"
 # code calls into. Both target prost ^0.14, matching the pin below.
 pbjson = "0.9.0"
 pbjson-build = "0.9.0"
+# The independent FlatBuffers implementation E11.7's conformance test round
+# trips against (design note D-8), and the code generator that turns an
+# emitted `.fbs` into the Rust reader that test drives. Both are
+# dev-dependencies of `ridl-backend-rust` only; nothing this workspace ships
+# and nothing a generated package links depends on either, which is what
+# ADR-0020 decision 5 and the design note's RA-01 require. Pinned at the same
+# 1.3 release line as `planus-translation` below, because the three crates
+# are released together and `planus-codegen` emits code against the runtime
+# of its own version.
+planus = "1.3.0"
+planus-codegen = "1.3.0"
 # The FlatBuffers schema validity oracle for `ridl-backend-flatbuffers`'s
 # tests (`crates/ridl-backend-flatbuffers/Cargo.toml`'s doc comment): a
 # dev-dependency only, matching how `protox` backs the proto3 backend.

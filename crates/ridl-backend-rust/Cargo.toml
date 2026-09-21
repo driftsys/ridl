@@ -40,3 +40,20 @@ ridl-loopback = { path = "../ridl-loopback" }
 # generated face need it, for the vocabulary the face names and for the port
 # traits the round trip calls.
 ridl-rt = { path = "../ridl-rt" }
+# The independent FlatBuffers implementation the conformance test round trips
+# against (E11.7 design note D-8), and the code generator that turns the
+# emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
+# in one test, which regenerates the checked-in reader and asserts it is byte
+# for byte what is in the tree; `planus` is the runtime that reader links, in
+# this test binary only. Neither is a dependency of anything this workspace
+# ships or anything a generated package links.
+# The `.fbs` the conformance test compiles with planus is emitted from the
+# same IR as the codec under test, by the schema backend, so the two agree by
+# construction rather than through a checked-in schema that could drift. A
+# dev-dependency only: nothing in this crate's library links it, and ADR-0020
+# decision 9's rule that a backend is not a library other crates link is
+# about the shipped graph, not about a test binary.
+ridl-backend-flatbuffers = { path = "../ridl-backend-flatbuffers" }
+planus.workspace = true
+planus-codegen.workspace = true
+planus-translation.workspace = true

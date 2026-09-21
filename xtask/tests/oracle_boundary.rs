@@ -1,4 +1,4 @@
-//! The schema-compiler dependency-boundary guard.
+//! The test-time dependency-boundary guard.
 //!
 //! `ridl-backend-proto` and `ridl-backend-flatbuffers` each carry a schema
 //! compiler — `protox`, `planus-translation` — as a test-time validity
@@ -21,6 +21,14 @@
 //! repeated here as an automated check, because reproducing it would mean
 //! shipping the very promotion this guard exists to prevent).
 //!
+//! E11.7 stage K8 widened this guard past the two schema compilers.
+//! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
+//! runtime and code generator, and emits the `.fbs` it feeds them with
+//! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
+//! same reason and one more: ADR-0020 decision 5 keeps a third-party
+//! FlatBuffers implementation out of the shipped path, and decision 9 makes
+//! a backend an executable rather than a library other crates link.
+//!
 //! This guard reads the resolved dependency graph instead, via
 //! `cargo metadata --format-version 1`, because that is the one place the
 //! *kind* of a dependency edge — normal, dev, or build — is recorded
@@ -38,8 +46,7 @@ use std::process::Command;
 struct Boundary {
     /// The backend crate under the constraint.
     package: &'static str,
-    /// The schema-compiler crate `package` may reach only through
-    /// `[dev-dependencies]`.
+    /// The crate `package` may reach only through `[dev-dependencies]`.
     oracle: &'static str,
 }
 
@@ -51,6 +58,33 @@ const BOUNDARIES: &[Boundary] = &[
     Boundary {
         package: "ridl-backend-proto",
         oracle: "protox",
+    },
+    // E11.7 stage K8 added planus's runtime and code generator to
+    // `ridl-backend-rust` for the FlatBuffers codec's conformance test. They
+    // are the same kind of oracle under a stronger rule: ADR-0020 decision 5
+    // keeps a third-party FlatBuffers implementation out of the shipped
+    // path, and this crate emits the codec rather than linking one. A
+    // promotion here would put planus behind `ridlc`, and so behind the
+    // `ridl` CLI.
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "planus",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "planus-codegen",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "planus-translation",
+    },
+    // Not an oracle, the same rule: the conformance test emits the `.fbs`
+    // with the schema backend so that the schema and the codec come from one
+    // IR. ADR-0020 decision 9 makes a backend an executable rather than a
+    // library other crates link, so that edge stays inside the test binary.
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "ridl-backend-flatbuffers",
     },
 ];
 
@@ -139,12 +173,11 @@ fn schema_compilers_stay_dev_dependencies() {
              `{package}` depends on `{oracle}` as a NORMAL dependency in the \
              resolved graph (resolved kinds: {kinds:?}).\n\
              \n\
-             `{oracle}` is a test-time validity oracle for `{package}`, not \
-             part of emission — see `{package}`'s own `Cargo.toml` doc \
-             comment. Promoting it out of `[dev-dependencies]` drags a \
-             schema compiler and its whole dependency tree into every \
-             downstream build. Move `{oracle}` back to \
-             `[dev-dependencies]`.\n",
+             `{oracle}` is test-time only for `{package}` and plays no part \
+             in emission — see `{package}`'s own `Cargo.toml` doc comment. \
+             Promoting it out of `[dev-dependencies]` drags it and its whole \
+             dependency tree into every downstream build. Move `{oracle}` \
+             back to `[dev-dependencies]`.\n",
             package = boundary.package,
             oracle = boundary.oracle,
             kinds = kinds,

@@ -394,6 +394,77 @@ fn main() {
     rustc::run_program("fb_deterministic", &program(&main));
 }
 
+/// The bytes one value encodes to are pinned, which is the half of D-8's
+/// determinism claim that [`the_encoding_is_deterministic`] cannot reach.
+///
+/// That case encodes twice inside one process, so it holds under anything
+/// that is stable within a process and unstable across processes — a
+/// `HashMap` iteration order, which Rust randomizes per process, is the
+/// standing example, and field write order, vtable layout and vtable sharing
+/// are all decided by the emitter over collections. D-8 claims the same
+/// value encodes to the same bytes "on every run and every target"; this is
+/// what measures it. Every write in the codec and in
+/// `crates/ridl-rt/src/flatbuffers.rs` is little-endian by construction —
+/// `to_le_bytes` and `from_le_bytes` with no native-endian write anywhere —
+/// so the pin is a fact about the encoding rather than about this host.
+///
+/// A deliberate change to the write order, to the vtable layout or to what
+/// the encoder writes changes this literal in the same commit, the way
+/// [`max_size_is_pinned_and_holds_the_largest_legal_value`] pins the bound.
+#[test]
+fn the_encoding_of_one_value_is_pinned_across_runs() {
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_pinned",
+        &program(&format!(
+            "{VALUE}{}",
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = sample().encode(&mut out).expect("encode").bytes;
+    let mut text = String::new();
+    for byte in bytes {
+        text.push_str(&format!("{byte:02x}"));
+    }
+    println!("{text}");
+}
+"#
+        )),
+    );
+    assert_eq!(
+        transcript.trim(),
+        SAMPLE_ENCODING,
+        "the bytes one value encodes to are pinned; a deliberate change to the \
+         encoder updates this literal in the same commit"
+    );
+}
+
+/// The encoding of `sample()`, read by
+/// [`the_encoding_of_one_value_is_pinned_across_runs`].
+const SAMPLE_ENCODING: &str = concat!(
+    "380000000000000000002e005600040008000c001000140018002000240028002c003000",
+    "340038003c0040004400480000004c00500000002e000000070000005c02000050020000",
+    "0000803e0100000001000000000000000200000020020000ec010000d8010000c0010000",
+    "a80100006001000038010000f00000007c0000004c000000200000000800000000000000",
+    "040000006e6f74650000000008000c000400080008000000050000000c00000008000c00",
+    "04000800080000000600000004000000030000007369780002000000200000000c000000",
+    "0800080004000600080000001e0028000800080004000600080000000a00140002000000",
+    "400000000c00000008000c000400080008000000020000000c0000000000060010000800",
+    "060000000000000001000000000000000000000008000c00040008000800000001000000",
+    "0c00000008000c0004000800080000000300000004000000050000007468726565000000",
+    "020000002c0000000c00000008000c000400080008000000020000000400000003000000",
+    "74776f0008000c0004000800080000000100000004000000030000006f6e650002000000",
+    "1400000004000000060000007365636f6e64000005000000666972737400000002000000",
+    "2c0000000c00000008000900040008000800000008000000020000000200000062620000",
+    "080009000400080008000000080000000100000001000000610000000200000000000000",
+    "000000000200000000000000030000000100020003000000080008000400060008000000",
+    "00002c0108000c000400080008000000020000000c000000000006001000080006000000",
+    "0000000002000000000000000000000008000c0004000800080000007800000004000000",
+    "05000000696e6e6572000000030000000102030005000000636162696e000000",
+);
+
 /// A buffer too small for the value is a `Capacity` error rather than a
 /// panic or a truncated encoding, and a buffer of `MAX_SIZE` always suffices.
 #[test]
@@ -473,10 +544,10 @@ fn main() {
 /// A union discriminant naming no arm is `Malformed::Union`, checked by
 /// corrupting **only** that byte.
 ///
-/// [`verify_refuses_an_undeclared_discriminant`] flips every byte in turn and
-/// asserts that the contract half is reached at least once, which other
-/// fields satisfy on their own: accepting any discriminant in the union's
-/// wildcard arm leaves that case passing. This one writes one byte, at the
+/// [`a_byte_flip_reaches_the_contract_half_of_verify`] flips every byte in
+/// turn and asserts that the contract half is reached at least once, which
+/// other fields satisfy on their own: accepting any discriminant in the
+/// union's wildcard arm leaves that case passing. This one writes one byte, at the
 /// position the union's own wrapper table puts its discriminant, and asserts
 /// the specific refusal.
 #[test]
@@ -687,25 +758,29 @@ fn main() {
     rustc::run_program("fb_representative_positions", &program(&main));
 }
 
-/// A union arm this type does not declare is `Malformed::Union`, and an enum
-/// discriminant no variant carries is a contract violation — the two checks
-/// that keep `decode` from having to answer for a value it cannot build.
+/// Flipping any one byte of a valid buffer reaches the contract half of
+/// `verify` at least once: `Rule::Variant` from an enum discriminant no
+/// variant carries, `Rule::Length` from a collection count, or, since stage
+/// K6, `Rule::Range` from a named scalar's own inline bytes.
 ///
-/// Since stage K6, a byte flip can also land inside a named scalar's own
-/// inline bytes and read as a value outside its typl bound — a `Speed` past
-/// 300 — which `check` (called from `verify`, beside `new`) now catches too,
-/// as `Rule::Range` beside the `Rule::Variant`/`Rule::Length` an enum or a
-/// collection count produces. `Rule::Pattern` is deliberately not in the
-/// accepted set: this fixture declares no `match` pattern (`Label` is
-/// length-only), so `Rule::Pattern` is unreachable here, and widening the
-/// accepted set to include it (or to a wildcard) would let this test pass
-/// under a broken `verify` that stops checking union discriminants at all —
-/// only the isolated
-/// [`verify_refuses_a_union_discriminant_that_names_no_arm`] above would
-/// still catch that, which is exactly what that test's own doc comment
-/// warns readers not to rely on this one for.
+/// **That is all this case establishes, and its name says so.** It was
+/// called `verify_refuses_an_undeclared_discriminant`, which claimed
+/// something it cannot show: the fixture carries an enum, so a flip
+/// somewhere else in the buffer satisfies `hits > 0` on its own, and the
+/// case still passes with the union `verify`'s wildcard arm changed from
+/// `_ => return #union_malformed` to `_ => {}` — measured by applying that
+/// mutation, in the review of 2026-09-21 and again at stage K8. Counting
+/// per rule would not repair it either, for the same reason: a `Variant`
+/// hit can come from the enum. The isolated
+/// [`verify_refuses_a_union_discriminant_that_names_no_arm`] above is the
+/// detector for that defence, and this case is the breadth guard beside it.
+///
+/// `Rule::Pattern` is deliberately not in the accepted set: this fixture
+/// declares no `match` pattern (`Label` is length-only), so `Rule::Pattern`
+/// is unreachable here and accepting it would widen the set for no
+/// corruption this fixture can produce.
 #[test]
-fn verify_refuses_an_undeclared_discriminant() {
+fn a_byte_flip_reaches_the_contract_half_of_verify() {
     let main = format!(
         "{VALUE}{}",
         r#"
