@@ -270,16 +270,28 @@ refused.
    take it, and this item no longer names a story.** The codec landed and writes
    a map as a vector of entry tables with no `(key)`, with entries in the order
    of the generated `Vec<(K, V)>` and nothing sorting — decision 4 as written.
-   Three of the four things the item wanted are still missing and none of them
-   moved: typl states no ordering on a map (§12.2), `planus` still parses no
-   `(key)`, and this repository's conformance obligation now **rests** on planus
-   parsing what the schema emitter writes
+   **The ground is the language, and it has not moved: typl states no ordering
+   on a map (§12.2).** Emitting `(key)` would assert an ordering the contract
+   does not make, and oblige every producer to sort for a guarantee no typl
+   declaration asks for. That is independent of any tool and is sufficient on
+   its own.
+
+   A practical note, subordinate to it and deliberately **not** the reason: this
+   repository's validity oracle and its conformance round trip both run on
+   `planus`, which parses no `(key)`
    ([`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)), so
-   emitting the attribute today would cost the oracle that proves the schema
-   valid and the round trip that proves the bytes are FlatBuffers. The item is
-   parked rather than closed: it reopens on the observation that a consumer
-   needs keyed lookup into a map without decoding it, which nothing in the
-   roadmap asks for. Whoever reopens it files the story then.
+   emitting the attribute today would cost both. This must not become the ground
+   — it is the reasoning the alternatives table above rejects for the
+   reserved-word question, where a refusal would let a test dependency constrain
+   the language, and it evaporates the moment planus gains support or a second
+   oracle arrives.
+
+   The item is parked rather than closed, and reopens on either of two
+   observations: a consumer needs keyed lookup into a map without decoding it,
+   which nothing in the roadmap asks for; or the oracle changes — planus gaining
+   `(key)`, or a second implementation joining it — which removes the practical
+   note and leaves the language ground to be answered on its own. Whoever
+   reopens it files the story then.
 2. **The `fixed_layout` flag has no consumer.** Decision 3 leaves it in the IR
    for a target where a fixed layout is safe — one whose schema evolution is
    closed, or a deployment that pins both schema versions. The first backend

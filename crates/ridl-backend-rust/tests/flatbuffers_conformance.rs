@@ -17,22 +17,33 @@
 //! and that reader is **checked in** beside this file. There is no
 //! `build.rs` and no `flatc`: nothing outside this test binary depends on
 //! planus, and nothing a generated package links does
-//! (ADR-0020 decision 5).
+//! (design note D-12, which leaves unused the one FlatBuffers runtime
+//! ADR-0020 decision 5 permits, so ADR-0020's RA-01 dependency ceiling
+//! stays unspent).
 //!
 //! [`the_checked_in_planus_reader_is_what_planus_codegen_writes`] is what
 //! keeps the checked-in reader honest: it regenerates it from the fixture's
 //! own emitted schema and asserts byte equality.
 //!
-//! **The two implementations do not agree on an absent scalar, by design.**
-//! planus omits a table field whose value equals its FlatBuffers default,
-//! which is what a FlatBuffers writer does by default; design note D-9 makes
-//! a non-optional field's absence `Malformed::MissingRequired` for this
-//! codec, and makes this codec always write such a field. So a buffer planus
-//! writes from a value carrying a default-valued non-optional scalar is a
-//! buffer this codec refuses. That is a decided divergence rather than a
-//! defect, it is measured here by
-//! [`a_buffer_planus_wrote_omitting_a_default_is_refused`] rather than
-//! described, and it is recorded as driftsys/ridl#472.
+//! **The two implementations do not agree about a default-valued field, by
+//! design, and the disagreement has two sides.** planus omits a table field
+//! whose value equals its FlatBuffers default, which is what a FlatBuffers
+//! writer does. Design note D-9 makes this codec always write such a field
+//! and read an absent non-optional one as `Malformed::MissingRequired`. So:
+//!
+//! - a buffer planus writes from a value carrying a default-valued
+//!   **non-optional** scalar is a buffer this codec refuses
+//!   ([`a_buffer_planus_wrote_omitting_a_default_is_refused`]);
+//! - an **optional** scalar present at its default survives no foreign round
+//!   trip, because it projects to a plain scalar with no `= null` and the
+//!   schema gives another reader nothing to read presence from
+//!   ([`an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip`]).
+//!
+//! Both are decided divergences rather than defects, both are measured here
+//! rather than described, and driftsys/ridl#472 carries the pair. The
+//! optional half also bounds what D-9 claims: a present default is
+//! distinguishable from an absent optional for this codec reading its own
+//! bytes, and for no reader following the emitted schema.
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -495,6 +506,115 @@ fn main() {{
 "#
     );
     rustc::run_program("fb_conformance_omitted_default", &program(&main));
+}
+
+/// **The same disagreement from the other side: an optional scalar present at
+/// its FlatBuffers default is lost by a foreign round trip.**
+///
+/// `spare: Speed?` projects to a plain `ushort` with no `= null`, so
+/// presence for it is exactly "the slot is in the buffer". This codec writes
+/// `Some(Speed(0))` as a present slot, which is what design note D-9 asks
+/// for; planus reads `0`, which is all the schema lets it read; and a planus
+/// re-encode of what it read omits the slot, because 0 is the field's
+/// default. Round-tripped through another implementation,
+/// `Some(Speed(0))` comes back `None`.
+///
+/// **This bounds D-9's claim.** "A present value is written even when it
+/// equals the field's FlatBuffers default, so that the reader can tell the
+/// two apart" holds for this codec reading its own bytes, and for no reader
+/// following the emitted schema. It is the optional half of
+/// driftsys/ridl#472, which the case above measures the non-optional half
+/// of; a `= null` default on an optional scalar field is the projection
+/// change that would close it, and that is a projection decision rather than
+/// a codec one.
+///
+/// All three legs are asserted, so a pass cannot come from the wrong place:
+/// this codec's own buffer carries the slot, planus's re-encode does not,
+/// and the decode that follows reads `None` while every other field is
+/// unchanged.
+#[test]
+fn an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip() {
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_spare_zero",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let mut value = conformance();
+    value.spare = Some(Speed::new_unchecked(0));
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    let mut text = String::new();
+    for byte in bytes {
+        text.push_str(&format!("{byte:02x}"));
+    }
+    println!("{text}");
+}
+"#,
+        ),
+    );
+
+    // Leg one: this codec wrote the slot. `Report` has 21 slots and this
+    // encoder writes one per field, so a full-length vtable is what a
+    // present optional looks like here.
+    let ours = from_hex(&transcript);
+    assert_eq!(
+        vtable_entries(&ours),
+        21,
+        "this codec writes a slot for a present optional at its default"
+    );
+    let read = <fb::ReportRef<'_> as planus::ReadAsRoot>::read_as_root(&ours)
+        .expect("planus reads the buffer this codec wrote");
+    let owned = fb::Report::try_from(read).expect("planus reads every field");
+    assert_eq!(
+        owned.spare, 0,
+        "planus reads the slot as 0, which is all the schema lets it read"
+    );
+
+    // Leg two: planus re-encodes what it read, and omits the slot.
+    let mut builder = planus::Builder::new();
+    let theirs = builder.finish(owned, None).to_vec();
+    assert!(
+        vtable_entries(&theirs) < 21,
+        "planus must omit the default-valued trailing slot, or this case \
+         proves nothing: its vtable carries {}",
+        vtable_entries(&theirs)
+    );
+
+    // Leg three: this codec decodes planus's buffer, and the optional is
+    // gone.
+    let hex = to_hex(&theirs);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    let proof: Ref<'_, Report, FlatBuffers> =
+        Ref::verify(&bytes).expect("the re-encoded buffer still verifies");
+    let back = proof.decode();
+    assert_eq!(
+        back.spare, None,
+        "the round trip through another implementation turns Some(0) into None",
+    );
+    let mut expected = conformance();
+    expected.spare = None;
+    assert_eq!(
+        back, expected,
+        "and nothing else about the value changed, so the loss is the optional's",
+    );
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_spare_lost", &program(&main));
 }
 
 /// The generated codec checks for `wasm32-unknown-unknown`.

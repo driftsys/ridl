@@ -18,6 +18,11 @@
 > Three narrower items are tracked as driftsys/ridl#467, driftsys/ridl#469 and
 > driftsys/ridl#472.
 >
+> **§4e is stage K8's own section** and is where two texts this note carries are
+> corrected: D-12's `wasm32` bullet and the plan's Task 7 `Done when` both say
+> the fixture package joins `just wasm-check`, which it cannot; and D-9's
+> presence claim holds only for this codec reading its own bytes.
+>
 > §5's records have moved, each with the stage that needed it. What remained at
 > the end — `2026-09-13-catalog-descriptor-plan.md` Task 7, amended to call the
 > bound of D-6 rather than derive a second one — moved with stage K8, and so did
@@ -1114,6 +1119,76 @@ correction, and `docs/design/interaction-face.md` a section of its own; the
 issue is closed by comment. The disposition does not depend on D-11: it was tied
 to this stage because this stage rewrites every constructor, and the decision is
 that no constructor changes.
+
+## 4e. Stage K8, 2026-09-21: conformance, and two texts above it contradicts
+
+Stage K8 (plan Task 7) made D-8's conformance real, pinned determinism across
+runs, took the `wasm32` obligation over generated code, and did the gardening
+that archived this note. What follows is what it decided or found that the note
+above does not already carry.
+
+**D-8 named no implementation; this stage named two crates.** `planus` 1.3.0 and
+`planus-codegen` 1.3.0 join `planus-translation` 1.3.0 as dev-dependencies of
+`ridl-backend-rust` only — the release line already in the tree, the three
+crates being released together and the generator emitting a
+`check_version_compatibility("planus-1.3.0")` against its own runtime. The Rust
+reader the generator produces from the emitted `.fbs` is checked in, with a test
+that regenerates it and asserts byte equality, so there is no `build.rs` and no
+`flatc`. `xtask/tests/oracle_boundary.rs` now walks the normal-edge closure
+rather than the direct edges, so a promotion one hop away — planus in
+`ridl-ir`'s `[dependencies]`, which reaches `ridlc` and the CLI while producing
+no direct edge — fails the guard too.
+
+**D-12's `wasm32` bullet and plan Task 7's `Done when` are both literally false
+as written, and this section is where that is recorded.** Both say the fixture
+package joins `just wasm-check`. It does not and cannot: the recipe runs
+`cargo check` over a `-p` list of packages, and the generated codec is text with
+no manifest — the fixture is `include!`d or compiled as a program, never built
+as a package. Plan Task 7 offered the two shapes and asked the stage to name the
+one taken, so this is a choice the plan authorized rather than a deviation from
+it, but the two texts were left saying the other thing. What was taken:
+`the_generated_codec_checks_for_wasm32` in
+`crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` runs
+`rustc --target wasm32-unknown-unknown --emit=metadata` — the unit of work
+`cargo check` performs — over the emitted source, through K3's bare-`rustc`
+proof mechanism, against a `ridl-rt` built for the same target. It runs under
+`just test`, so no recipe was added and `just gate-parity` is untouched. The
+rejected shape is an example crate under `crates/` holding a checked-in
+generated fixture so it could join the `-p` list: a workspace member and a
+second copy of the fixture to keep in step, for a check the test already
+performs over the emitter's live output.
+
+**D-9's presence claim is bounded, and the bound is measured.** D-9 says a
+present value is written even at its FlatBuffers default "so that the reader can
+tell the two apart". That holds for this codec reading its own bytes and for no
+reader following the emitted schema: an optional scalar projects to a plain
+scalar with no `= null`, so presence for it is exactly "the slot is in the
+buffer", and a conforming writer omits a default-valued slot. A codec → planus →
+codec round trip turns `Some(Speed(0))` into `None`
+(`an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip`). The
+mirror image is the non-optional case: a buffer planus wrote for a value whose
+non-optional scalar sat at its default is refused as `MissingRequired`. Both
+halves are **driftsys/ridl#472**, which wants deciding with or before E11.8 —
+proto3 gives a non-optional scalar no presence at all, so the answer there is
+close to forced. Closing the optional half means `= null` on an optional scalar
+field, a projection change rather than a codec one.
+
+**What conformance proves, and what it does not.** Both emitters read the same
+shared projection, so a wrong slot id **in the projection** moves the schema and
+the codec together and planus faithfully follows the wrong `.fbs`. The suite
+proves the codec's bytes are FlatBuffers and agree with the emitted schema;
+agreement between that schema and ADR-0019 rests on the schema backend's own
+snapshots. Four shapes the cases do not reach: an empty vector, a multi-byte
+UTF-8 string, a default-valued scalar inside a **nested** table, and any
+assertion about alignment. The third is the sharpest and belongs with #472.
+
+**K-10 was never taken.** The driver's decision K-10 asked K1 to dispose of
+`(key)` and sorted-vector lookup — ADR-0019's open item 1 defers it to E11.7 by
+name — or to defer it again to a named story. This note does neither, in §2 or
+in §3. Stage K8 parked the item in ADR-0019 in place, on the ground that typl
+states no ordering on a map, with the oracle's inability to parse `(key)`
+recorded as a subordinate practical note rather than as the reason, and with a
+reopening trigger that includes the oracle changing.
 
 ## 5. Records this changes, if the disposition takes it
 

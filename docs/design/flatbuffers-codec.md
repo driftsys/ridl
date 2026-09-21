@@ -5,12 +5,12 @@ E11.7, as built. The binding choices are
 [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) (the
 projection this codec must agree with byte for byte),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decisions 2, 5, 6 and 7 (the encoding matrix, no third-party implementation in
-the shipped path, one cargo feature per encoding, the codec as generated Rust)
-and [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 7
-and 8 (`Encoded.bytes`, the `flatbuffers` feature). The reasoning behind each
-decision, and the stage-by-stage record of what each round of work found, is the
-archived design note
+decisions 2, 5, 6 and 7 (the encoding matrix, the one FlatBuffers runtime crate
+a codec is permitted, one cargo feature per encoding, the codec as generated
+Rust) and [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
+decisions 7 and 8 (`Encoded.bytes`, the `flatbuffers` feature). The reasoning
+behind each decision, and the stage-by-stage record of what each round of work
+found, is the archived design note
 [`../archive/2026-09-20-flatbuffers-codec-design.md`](../archive/2026-09-20-flatbuffers-codec-design.md)
 and its plan
 [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
@@ -147,9 +147,19 @@ prove a position unbounded and never prove one bounded.
 ## Presence, defaults, and what an absent field means
 
 - An optional field is written when present and omitted when absent. A present
-  value is written **even when it equals the field's FlatBuffers default**, so
-  that a reader can tell a present default from an absent optional, which typl
-  distinguishes.
+  value is written **even when it equals the field's FlatBuffers default**.
+
+  **That distinction holds only for this codec reading its own bytes.** An
+  optional scalar projects to a plain scalar field with no `= null`, so the
+  schema states nothing that would let another reader tell a present default
+  from an absent optional: presence for such a field is exactly "the slot is in
+  the buffer", and a conforming writer omits a default-valued slot. Round trip a
+  `Some(0)` through planus and it comes back `None` — measured, not reasoned, by
+  `an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip`. An
+  optional string or an optional table is unaffected, because an absent offset
+  and a present one are already distinct in the format. Closing it means putting
+  `= null` on an optional scalar field, which is a projection change and not a
+  codec one; it is the optional half of driftsys/ridl#472.
 - A non-optional field is always written, and its absence in a buffer is
   `Malformed::MissingRequired`. FlatBuffers cannot mark a scalar or an enum
   field required, which ADR-0019 records, so the requirement is the verifier's
@@ -195,40 +205,66 @@ in** under `crates/ridl-backend-rust/tests/generated/`, with a test that
 regenerates it and asserts byte equality. There is no `build.rs` and no `flatc`:
 `planus`, `planus-codegen` and `planus-translation` are dev-dependencies of
 `ridl-backend-rust` only, and `xtask/tests/oracle_boundary.rs` fails if any of
-them, or `ridl-backend-flatbuffers`, is promoted to a normal dependency. The
-`.fbs` is emitted from the same IR as the codec, so the schema and the codec
-cannot drift apart.
+them, or `ridl-backend-flatbuffers`, is promoted to a normal dependency at any
+distance — the guard walks the normal-edge closure, not just the direct edges.
+The `.fbs` is emitted from the same IR as the codec.
 
-Four cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
+**What "from the same IR" does and does not buy.** It rules out the schema and
+the codec being generated from two different inputs. It does not make the suite
+a check against ADR-0019: both emitters read the same shared projection, so a
+wrong slot id **in the projection** moves both together and planus faithfully
+follows the wrong `.fbs`. What this suite proves is that the codec's bytes are
+FlatBuffers and agree with the emitted schema; agreement between the emitted
+schema and ADR-0019 rests on the schema backend's own snapshots.
+
+Five cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 
 1. bytes this codec writes are read by planus and compare equal field by field;
 2. bytes planus writes are accepted by `verify` and decode to the same value;
 3. a planus buffer whose vtable is **truncated** — a shape this codec's own
    writer never produces, since it writes a slot for every field — decodes with
    the missing slots read as absent;
-4. a planus buffer that omits a default-valued non-optional field is refused,
-   which is the divergence below.
+4. a planus buffer that omits a default-valued non-optional field is refused;
+5. an optional scalar present at its default is lost by a codec → planus → codec
+   round trip.
+
+The last two are the two halves of the one disagreement below.
 
 Two mutations were applied and run, and each is what says the suite is not
 decorative. Shifting the union discriminant by one in `codec.rs` leaves every
-case of the self-consistent round-trip suite passing and fails both conformance
-directions — a codec that disagrees with its own schema is exactly what a round
-trip through itself cannot see. Turning a short vtable into an error in
-`ridl-rt` leaves the round-trip suite and the three other conformance cases
-passing, and fails only case 3.
+case of the self-consistent round-trip suite passing and fails three conformance
+cases — 1, 2 and 3, the last because that sample carries a union field too. A
+codec that disagrees with its own schema is exactly what a round trip through
+itself cannot see. Turning a short vtable into an error in `ridl-rt` leaves the
+round-trip suite and every other conformance case passing, and fails only
+case 3.
 
-### The one disagreement: an omitted default (driftsys/ridl#472)
+**What the cases do not reach.** An empty vector, a multi-byte UTF-8 string, a
+default-valued scalar inside a **nested** table, and any assertion about
+alignment. The nested-table one is the sharpest of the four: it is the same
+omitted-default disagreement one level down, where this codec's `verify` walks
+into a nested table planus may have written with a short vtable, and it is
+untested rather than known to work.
+
+### The one disagreement: a default and presence (driftsys/ridl#472)
 
 A conforming FlatBuffers writer omits a table field whose value equals its
-declared default. This codec reads an omitted non-optional field as
-`MissingRequired`, so **a buffer another conforming writer produced, for a value
-whose non-optional scalar happens to equal its default, is a buffer this codec
-refuses.** It is a decided divergence rather than a defect — the decision is
-above, under presence and defaults, and it was taken so that a present default
-stays distinguishable from an absent optional — but it means interoperation with
-a foreign writer is not unconditional. The reader half of that decision is what
-driftsys/ridl#472 reopens, and the same question binds E11.8, where a
-default-valued field's absence is the format's own normal state.
+declared default. That meets this codec's presence rules from both sides:
+
+- **Non-optional.** This codec reads an omitted non-optional field as
+  `MissingRequired`, so a buffer another conforming writer produced, for a value
+  whose non-optional scalar happened to equal its default, is a buffer this
+  codec refuses.
+- **Optional.** This codec writes a present default-valued optional scalar as a
+  slot, and the schema gives no other reader a way to see that as presence, so a
+  foreign re-encode drops it and `Some(0)` becomes `None`.
+
+Both are decided rather than accidental — the presence rules above state them —
+but together they mean interoperation with a foreign writer is not unconditional
+in either direction. driftsys/ridl#472 carries both halves. The same question
+binds E11.8 and is closer to forced there: proto3 gives a non-optional scalar no
+presence at all, so #472 wants deciding with or before that story rather than
+left open-ended.
 
 ## `wasm32`
 
@@ -289,13 +325,13 @@ of that note is the measurement above.
 
 ## Known gaps
 
-| Gap                                                                                             | Issue             |
-| ----------------------------------------------------------------------------------------------- | ----------------- |
-| A type reaching a cross-package reference carries no codec; the emitted source says so per type | driftsys/ridl#467 |
-| An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify`    | driftsys/ridl#469 |
-| No `Payload` for a named-scalar or enum payload, which blocks D-11                              | driftsys/ridl#470 |
-| A conforming writer's omitted default is refused                                                | driftsys/ridl#472 |
-| A union-arm retirement would shift wire discriminants silently                                  | driftsys/ridl#302 |
+| Gap                                                                                                                                                                 | Issue             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| A type reaching a cross-package reference carries no codec; the emitted source says so per type                                                                     | driftsys/ridl#467 |
+| An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify`                                                                        | driftsys/ridl#469 |
+| No `Payload` for a named-scalar or enum payload, which blocks D-11                                                                                                  | driftsys/ridl#470 |
+| A default and presence: a conforming writer's omitted non-optional default is refused, and a present default-valued optional scalar is lost by a foreign round trip | driftsys/ridl#472 |
+| A union-arm retirement would shift wire discriminants silently                                                                                                      | driftsys/ridl#302 |
 
 driftsys/ridl#467 is the widest of these: ten of the corpus's fifteen payload
 types are withheld a codec, every type touching the prelude or an import. Each

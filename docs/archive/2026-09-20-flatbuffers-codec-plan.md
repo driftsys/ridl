@@ -11,8 +11,12 @@
 > archived beside this file.
 >
 > Read this as the work breakdown that was followed, not as work to do. Where a
-> task's text and what landed differ, the design note's §4a to §4d record the
-> difference and say why.
+> task's text and what landed differ, the design note's §4a to §4e record the
+> difference and say why. **Task 7's `Done when` is one of those**: it says
+> `just wasm-check` covers the fixture, which it cannot — the recipe takes
+> packages and the generated codec is text with no manifest. Task 7's own body
+> offered the two shapes and asked the stage to name the one taken; §4e names
+> it, a test that runs the same check over the emitted source.
 
 **Status:** plan, 2026-09-20. It implements
 [`2026-09-20-flatbuffers-codec-design.md`](2026-09-20-flatbuffers-codec-design.md)
