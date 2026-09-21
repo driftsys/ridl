@@ -11,6 +11,16 @@ default an enum-typed field carries when its enum declares no zero member, and
 what happens to a name that reaches a word the validity oracle reserves. All
 seven are FlatBuffers-scoped; none binds another backend.
 
+**Amended 2026-09-21 — decision 8, the root rule.** An eighth decision was added
+at the end of E11.7's implementation, from the disposition on driftsys/ridl#470:
+every declaration has a root table, and a named scalar, an enum and an enum set
+are rooted in a box table. It answers a question this record did not ask —
+nothing here stated what a payload's root is — and it changes what the schema
+emitter writes for those three kinds, so every emitted schema gained tables.
+Decisions 1 to 7 are unchanged; decision 5's list of generated names gained
+decision 8's box, and Open item 3 records the one thing decision 8 deliberately
+did not settle. Decision 8 is FlatBuffers-scoped like the other seven.
+
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
 [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
@@ -167,7 +177,7 @@ refused.
    prefixes every value. Reusing `SymbolScope` would over-refuse, because its
    package scope registers enum values. What the guard must still catch is a
    **generated** name colliding with a declared one — the wrapper, box and entry
-   tables of decisions 1, 2 and 4 and the identity-table enums all mint names
+   tables of decisions 1, 2, 4 and 8 and the identity-table enums all mint names
    into the namespace scope, and `flatc` rejects a duplicate with "datatype
    already exists" (ADR-0017 decision 4's obligation, discharged over this
    target's scopes).
@@ -208,6 +218,46 @@ refused.
    planus-based cannot compile the schema. Ruled by the repository owner at the
    branch's final review.
 
+8. **Every declaration has a root table, and a named scalar, an enum and an enum
+   set are rooted in a box** — added 2026-09-21, from the disposition on
+   driftsys/ridl#470, at the end of E11.7's implementation. A struct's root is
+   its own table (decision 3); a union's is its wrapper table (decision 1); a
+   named scalar, an enum and an enum set are rooted in
+   `table <Name>Box { value: <resolved type> (id: 0); }`, the box idiom decision
+   2 already uses for a non-table union arm, with the wrapped field resolved
+   exactly as an ordinary field would be — its scalar or qualified name, its
+   `= null` default when decision 6 calls for one, its constraint comment. The
+   `.fbs` emitter writes the box for every such declaration, whether or not an
+   interaction carries it. The bound of such a root is the box table's, charged
+   as decision 2's arm box is. **No `root_type` is written**, as none was
+   before. `<Name>Box` joins the generated names decision 5 and decision 7 check
+   against declared ones.
+
+   The question this answers is the one the codec could not get past: a
+   FlatBuffers root is a table, and a named scalar or an enum as an interaction
+   payload is idiomatic ridl — `signal target: Speed`,
+   `command setLever(cmd: LeverCmd)` — so a payload with no root table has no
+   `Payload<FlatBuffers>` to name. This record stated no root rule at all
+   before, and a wrapper only the Rust codec knew about would break the
+   agreement between the schema and the codec that the whole design rests on.
+
+   Three alternatives were rejected. **A box only for the declarations an
+   interaction carries** makes the projection context-sensitive: adding a signal
+   would add a table to the schema and an implementation to a type that had
+   none, where ADR-0016 decision 6 asks every projection to be total over the IR
+   — and an unused box table costs nothing. **An induced per-interaction
+   argument struct as the root** changes the face's payload types, which is an
+   ADR-0023 change, and boxes one scalar once per use; the induced argument
+   struct for a multi-parameter call is a separate parked follow-up, and an
+   induced struct is a struct, so it composes with this rule when it comes. **A
+   raw scalar root** does not exist: FlatBuffers has no root that is not a
+   table, the `planus` oracle could not read one, and the conformance suite
+   would have nothing to compare.
+
+   The same question binds E11.8 (proto3) and E11.12 (`repr(C)`); each answers
+   it in its own projection record in its own terms, and nothing here decides
+   for them.
+
 ## Alternatives considered
 
 | Candidate                                                         | Verdict    | Reason                                                                                                                                                                                                           |
@@ -220,6 +270,9 @@ refused.
 | Lifting `ridl-backend-proto`'s `SymbolScope`                      | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
 | Defaulting a zero-less enum field to its lowest declared value    | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
 | Refusing or escaping a name that reaches a `planus` reserved word | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                   |
+| A box table only for the declarations an interaction carries      | rejected   | a projection that depends on which interactions exist is context-sensitive: adding a signal would add a table and an implementation to a type that had none, against ADR-0016 decision 6's totality (decision 8) |
+| An induced per-interaction argument struct as the payload's root  | rejected   | it changes the face's payload types, which is an ADR-0023 change, and boxes one scalar once per use; an induced struct is a struct, so it composes with decision 8 if it ever comes                              |
+| A raw scalar root, with no table at all                           | rejected   | FlatBuffers has no root that is not a table; `planus` could not read one and the conformance suite would have nothing to compare (decision 8)                                                                    |
 
 ## Consequences
 
@@ -249,6 +302,13 @@ refused.
   Decision 6's `= null` renders absence where the contract states requiredness —
   a faithfulness loss, though not a new one: the target cannot express a
   required scalar or enum field at all.
+- **Negative — every FlatBuffers snapshot moved when decision 8 landed, and a
+  box table is emitted that nothing may reference.** Decision 8 adds one table
+  per named scalar, per enum and per enum set to every emitted schema. The
+  earlier stage constraint that no FlatBuffers snapshot may move was a
+  constraint on one stage, not a standing rule; the `planus` oracle checks each
+  new schema. An unreferenced box table costs nothing on the wire, because
+  nothing writes it unless it is a root.
 - **Negative — a map lookup is linear.** With no `(key)` there is no generated
   `LookupByKey` and no binary search. The Open item names the story that may
   restore it.
@@ -297,6 +357,15 @@ refused.
    closed, or a deployment that pins both schema versions. The first backend
    that takes the `struct` form owes its own record of when the form's
    fabrication hazard does not apply.
+3. **Whether a non-table union arm should reference `<Name>Box`.** Decision 8
+   gives a named scalar, an enum and an enum set a box named `<Name>Box`, and
+   decision 2 gives a non-table union arm a box named `<Union><Arm>Box`. The two
+   boxes have the same shape, so one type now has two of them wherever a union
+   carries it as an arm. Decision 8 deliberately did not change decision 2: the
+   arm box's name and shape are what every merged FlatBuffers snapshot and every
+   emitted discriminant already carry, and collapsing the two is a wire change
+   rather than a tidying. Whoever reopens it decides whether one type has one
+   box, and files the story then.
 
 ## References
 
