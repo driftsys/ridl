@@ -29,7 +29,7 @@
 //! Since E11.14 the face is reached from [`crate::generate_pipeline`], which
 //! is what `ridl build --emit rust` calls, as well as from
 //! [`crate::generate_face`]. It is not reached from [`crate::generate`],
-//! whose output is unchanged.
+//! which still emits no face.
 
 use crate::descriptors::{query_reply_type, single_param_type};
 use crate::{GenerateError, ident, type_path};

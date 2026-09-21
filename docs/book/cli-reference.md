@@ -463,12 +463,15 @@ a package in one file: the domain types (a struct, an enum, an enum set, a
 union and a named scalar, each with its typl constraints enforced at
 construction), the FlatBuffers codec — `encode`, `verify`,
 `decode` and a `MAX_SIZE` bound — the interaction descriptors, and the
-interaction face: per interface a `Client` for the consumer side, a
-`Publisher` for the producer side, and, for an interface that carries a
-command or a query, a `Provider` trait the application implements and a
-`dispatch` function that settles the claims waiting on a port. A signal-only
-interface gets the first two and neither of the last two, because it has
-nothing to settle. Beside the per-package files it writes a `lib.rs` crate
+interaction face. Each interface gets the parts its own interactions need: a
+`Client` for the consumer side when it carries any interaction at all; a
+`Publisher` for the producer side when it carries a signal or an event; and a
+`Provider` trait the application implements plus a `dispatch` function that
+settles the claims waiting on a port, when it carries a command or a query. So
+a signal-only interface gets a `Client` and a `Publisher` and nothing to settle
+with, a command-only interface gets a `Client`, a `Provider` and a `dispatch`
+and no `Publisher`, and an interface carrying only `fixed` declarations gets no
+face module at all. Beside the per-package files it writes a `lib.rs` crate
 root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
 
 **Two things it may leave out, each with a note in the source it writes.** A

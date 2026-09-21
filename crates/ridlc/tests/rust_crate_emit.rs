@@ -1129,7 +1129,11 @@ fn write_two_package_workspace(dir: &Path, source_a: &str, source_b: &str) -> Pa
 ///
 /// The mutation that proves this test: make either field of the emitted
 /// `#view` struct in `codec.rs` private again, and `rustc` reports E0451
-/// twice for the struct and once for the union arm.
+/// twice — once per field accessor of `Line`. The union is here for a
+/// different path: its arm reaches the foreign `__ridl_fb_*` free functions
+/// rather than a view literal, so it is what covers their `pub(crate)`.
+/// Emptying `owner_prefix` instead fails the path assertion below, not the
+/// compile, so the two assertions are independently load-bearing.
 #[test]
 fn a_cross_package_struct_or_union_reference_compiles() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -1159,6 +1163,49 @@ fn a_cross_package_struct_or_union_reference_compiles() {
         "the foreign view is named by a path, got:\n{source}"
     );
 
+    compile_crate_root(out.path());
+}
+
+/// A **service** whose inline shape sits at package scope is not refused by
+/// the `Wire` guard, because no identity struct is emitted for one.
+///
+/// `refuse_wire_collision` walks `shapes()`, which yields a service's inline
+/// shape as well as a named interface, and then skips the former for the same
+/// reason `descriptors::interface_items` does. Without that skip the guard
+/// would refuse on a shape that emits nothing.
+///
+/// What this pins is that the widened walk does not over-refuse: a mutation
+/// that refuses on any name rather than on `Wire` fails it. It does **not**
+/// pin the `.filter(|shape| shape.service.is_none())`, which is unreachable —
+/// a service's name is dotted and lowercase, so an inline shape's name can
+/// never be `Wire`. That filter is kept because it mirrors
+/// `descriptors::interface_items`, not because a case reaches it; dropping it
+/// changes nothing observable today.
+#[test]
+fn a_service_with_an_inline_shape_is_not_refused() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = dir.path().join("pkg");
+    std::fs::create_dir_all(&entry).expect("the package directory is created");
+    std::fs::write(
+        entry.join("ridl.toml"),
+        "[package]\nname = \"px.s\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        entry.join("source.ridl"),
+        "package px.s\n\ntype Level : integer [0..100]\n\n\
+         service px.s.wire {\n  signal level : Level @10ms\n}\n",
+    )
+    .expect("the source is written");
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "a service's inline shape emits no identity struct, so it collides \
+         with nothing and must not be refused, got: {:?}",
+        run.diagnostics
+    );
     compile_crate_root(out.path());
 }
 
@@ -1212,6 +1259,13 @@ fn an_interface_named_wire_is_refused() {
     assert!(
         message.contains("rename the interface"),
         "the refusal must name the interface as the thing to rename, got: {message}"
+    );
+    // The message is one string literal across several source lines, so a
+    // dropped continuation reaches the user as a run of spaces.
+    assert!(
+        !message.contains("     "),
+        "the refusal may not carry a run of literal spaces from a broken \
+         string continuation, got: {message}"
     );
 }
 
@@ -1282,18 +1336,34 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "the owner line must name the clause story, not the multi-parameter \
          one, got:\n{note}"
     );
-    // A run of literal spaces inside the note is a broken line continuation
-    // in the emitter's string, which reaches the reader's source.
+    // A run of literal spaces inside a note is a broken line continuation in
+    // the emitter's string, which reaches the reader's source. Both notes are
+    // checked: `VehicleStatus` is the clause owner and `WheelDiagnostics` the
+    // call-shape one, and they are separate string literals, so checking one
+    // leaves the other free to break.
+    let call_shape_note = source
+        .split("const __RIDL_NO_FACE_WHEEL_DIAGNOSTICS")
+        .next()
+        .expect("the note precedes its constant");
+    let call_shape_note = &call_shape_note[call_shape_note
+        .rfind("Interface `WheelDiagnostics`")
+        .expect("the call-shape note's headline")..];
     assert!(
-        !note.contains("     "),
-        "no note may carry a run of literal spaces from a broken \
-         string continuation, got:\n{note}"
+        call_shape_note.contains("lane M's"),
+        "the call-shape note names its own story, got:\n{call_shape_note}"
     );
+    for (which, text) in [("clause", note), ("call-shape", call_shape_note)] {
+        assert!(
+            !text.contains("     "),
+            "the {which} note may not carry a run of literal spaces from a \
+             broken string continuation, got:\n{text}"
+        );
+    }
 
     // The skip is per interface: the package's other interfaces keep their
     // face, and its payload types are unaffected.
     assert!(
-        source.contains("pub mod cabin_climate") || source.contains("pub struct Client"),
+        source.contains("pub struct Client"),
         "an interface the face can carry still gets one, got:\n{source}"
     );
 

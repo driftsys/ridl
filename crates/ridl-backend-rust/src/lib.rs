@@ -60,9 +60,10 @@ pub struct GenerateError {
 /// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
 /// it emits no interaction face.
 ///
-/// This is the pipeline entry point — `ridl --emit rust` and the compiler
-/// corpus run it. The face is emitted by the companion [`generate_face`], not
-/// from here, for the reason the Lane M plan records ("Where the face is
+/// The compiler corpus runs this. The pipeline ran it too until E11.14, which
+/// gave the pipeline [`generate_pipeline`] — `ridl build --emit rust` calls
+/// that, and this output is a subset of it. The face is emitted by
+/// [`generate_face`] and [`generate_pipeline`], not from here, for the reason the Lane M plan records ("Where the face is
 /// emitted from"): the corpus interfaces carry contract clauses the M3 clause
 /// translator must refuse. The plan's second reason, that the corpus proofs
 /// passed no `--extern ridl_rt`, no longer holds: every compile proof links
@@ -159,9 +160,13 @@ pub fn generate_with(
 /// consumer of `ridl build --emit rust` needs the face as much as the domain
 /// types, and the face compiles over the codec in the same unit, so the
 /// emitted unit is the superset rather than two calls.
-/// [`generate`] stays the entry point for every other caller and its output is
-/// unchanged. ADR-0023 decision 2 carries a dated consequence note saying the
-/// CLI calls the companion; the decision itself is not amended.
+/// [`generate`] stays the entry point for every other caller, and it still
+/// emits no face and no descriptors. Its output is not byte-for-byte what it
+/// was — this story widened the visibility of `check` and the `__ridl_fb_*`
+/// functions, which moved every corpus snapshot — but what it emits is
+/// unchanged in kind. ADR-0023 decision 2 carries a dated consequence note
+/// (2026-09-21) saying the CLI calls this entry point rather than
+/// [`generate`]; the decision itself is not amended.
 ///
 /// **Why an interface is skipped and not refused** (decision 2): the clause
 /// translator accepts one narrow form, and a multi-parameter call and a stream
@@ -244,6 +249,7 @@ fn skipped_interface_note(
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
              Story E5.1 replaces the translator and removes this."
         }
+        FaceGap::Other => " No story below owns this one: the reason above is the whole of it.",
     };
     quote! {
         #[doc = #headline]
@@ -280,6 +286,11 @@ enum FaceGap {
     CallShape,
     /// What was refused is a clause.
     Clause,
+    /// Neither: the refusal is one no owner below claims, so the note names
+    /// the reason and no story. A `fixed` whose payload is not a named type
+    /// is the case this exists for — naming either owner there would blame a
+    /// story that does not remove it.
+    Other,
 }
 
 fn face_gap(interface: &v2::Interface, err: &GenerateError) -> FaceGap {
@@ -301,7 +312,9 @@ fn face_gap(interface: &v2::Interface, err: &GenerateError) -> FaceGap {
             return FaceGap::CallShape;
         }
     }
-    FaceGap::Clause
+    // Not a clause by the message, and every call has a face shape: the
+    // refusal came from somewhere neither owner claims.
+    FaceGap::Other
 }
 
 /// The name [`wire_alias`] emits at package scope.
@@ -338,9 +351,13 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
     // The interface half walks `shapes()` rather than `interfaces`, which is
     // the complete set of interface bodies (`xtask`'s `shape_walk` guard
     // holds every reader to it), and then skips a service's inline shape for
-    // the same reason `descriptors::interface_items` does: no identity
-    // struct is emitted for one, so it collides with nothing. Refusing on a
-    // shape that emits nothing would reject a package that compiles.
+    // the same reason `descriptors::interface_items` does: no identity struct
+    // is emitted for one, so it collides with nothing.
+    //
+    // No case reaches that skip today — an inline shape's name is the
+    // service's own, which rsdl requires to be dotted and lowercase, so it
+    // can never be `Wire`. It is here so this walk and the emitter's stay the
+    // same shape, not because it changes an outcome.
     let declared = package
         .decls
         .iter()

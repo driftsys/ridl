@@ -87,9 +87,12 @@ never stated.
    what it produced before, unchanged and still bound by the two `crates/ridlc`
    tests named below; what changed is which entry point the pipeline calls, not
    what this one emits. The as-built record is the E11.14 section of
-   [`interaction-face.md`](../design/interaction-face.md). `generate(package)`
-   is the pipeline's entry point (`ridl --emit rust`), and two of
-   `crates/ridlc`'s own tests bind what it may emit:
+   [`interaction-face.md`](../design/interaction-face.md).
+
+   The decision as taken, unamended, follows.
+
+   `generate(package)` was the pipeline's entry point (`ridl --emit rust`), and
+   two of `crates/ridlc`'s own tests bind what it may emit:
    `corpus_entries_compile_to_reviewed_snapshots` calls it over every clean
    corpus entry, several of which carry contract clauses the translator of
    decision 1 must refuse (`window > 0ms`, `result >= 0.0`,

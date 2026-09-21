@@ -1173,11 +1173,11 @@ fn materialize_and_lock(
 
 /// Writes the selected `emits` for one package's IR into `out_dir`.
 ///
-/// The Rust and C-header emits share one
+/// The Rust emit is one
 /// [`generate_pipeline`](ridl_backend_rust::generate_pipeline) call, which
 /// emits the interaction face and the descriptors beside the domain types and
-/// the codec (E11.14); a codegen failure is recorded as a diagnostic and those
-/// two emits are skipped. The `ir-json` and `ir-text` emits (direct IR dumps) follow the
+/// the codec (E11.14); a codegen failure is recorded as a diagnostic and the
+/// emit is skipped. The `ir-json` and `ir-text` emits (direct IR dumps) follow the
 /// same rule: when the package cannot be rendered in that encoding (ADR-0014
 /// decisions 12 and 14), the failure is recorded as a diagnostic and no
 /// artifact is written. The `ir-binary` dump has no failure path — binary
@@ -1203,7 +1203,7 @@ fn write_emits(
 ) -> std::io::Result<()> {
     let need_codegen = emits.iter().any(|emit| matches!(emit, Emit::Rust));
     let generated = if need_codegen {
-        // E11.14 decision 1: the CLI calls the companion, not `generate`, so a
+        // E11.14: the CLI calls `generate_pipeline`, not `generate`, so a
         // built crate carries the descriptors and the interaction face beside
         // its domain types and codec. `others` is every other package of the
         // build, which is what lets the codec size and encode a cross-package

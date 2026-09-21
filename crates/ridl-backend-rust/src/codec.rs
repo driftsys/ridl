@@ -673,12 +673,26 @@ impl<'a> Codec<'a> {
             snake_case(&decl.name).to_uppercase()
         );
         let members = unjudgeable_members(self.ctx, decl);
+        // Which causes are possible depends on what this call was handed. A
+        // caller that passed the other packages of the build resolves a
+        // cross-package reference, so only a cycle and a stream are left; a
+        // caller that passed none — `generate`, which is
+        // `generate_with(package, &[])` — cannot resolve one, and a
+        // cross-package reference is a cause again. Naming the causes the
+        // other case has would make this note false for the reference that
+        // produced it, which is how it read before driftsys/ridl#467 was
+        // closed for the pipeline but not for `generate`.
+        let causes = if self.ctx.others.is_empty() {
+            "a reference into another package, which this call was handed no \
+             package to resolve, a same-package cycle, or a stream"
+        } else {
+            "a same-package cycle, or a stream"
+        };
         let cause = if members.is_empty() {
             " No member of it could be judged.".to_string()
         } else {
             format!(
-                " The member{} {} reach{} a reference this backend does not resolve — a \
-                 same-package cycle, or a stream.",
+                " The member{} {} reach{} a reference this backend does not resolve — {causes}.",
                 if members.len() == 1 { "" } else { "s" },
                 members
                     .iter()
@@ -696,11 +710,13 @@ impl<'a> Codec<'a> {
             #[doc = #headline]
             ///
             #[doc = #cause]
-            /// A reference into another package of the same build is not
-            /// this: the codec resolves one, and names it by a path through
-            /// the emitted module tree. What is left is a reference that no
-            /// package of the build can settle — a type that reaches itself,
-            /// and a stream, which has no single value to size.
+            /// A reference into another package of the same build resolves
+            /// when the caller hands the codec that build, which
+            /// `ridl build --emit rust` does and a bare `generate` does not;
+            /// a resolved one is named by a path through the emitted module
+            /// tree. The causes above are the ones this call could meet.
+            /// A type that reaches itself, and a stream, which has no single
+            /// value to size, are never resolvable by any caller.
             ///
             /// This is a silent omission in the sense ADR-0016 decision 6 and
             /// ADR-0017 decision 4 rule out, and it is deliberate for now.

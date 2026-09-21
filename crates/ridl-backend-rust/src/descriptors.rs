@@ -17,7 +17,8 @@
 //! what `ridl build --emit rust` calls, as well as from
 //! [`crate::generate_face`]. It is not reached from [`crate::generate`],
 //! whose output is unchanged and carries neither the descriptors nor the
-//! face (see the entry points' own documentation).
+//! face — which is what is unchanged about it, rather than its bytes (see
+//! the entry points' own documentation).
 
 use crate::clauses::{self, ClauseKind};
 use crate::{Ctx, GenerateError, ident, type_path};

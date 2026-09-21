@@ -566,12 +566,14 @@ impl Default for SensorBoundsRange {
 }
 /// `DriverProfile` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `name` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
-/// A reference into another package of the same build is not
-/// this: the codec resolves one, and names it by a path through
-/// the emitted module tree. What is left is a reference that no
-/// package of the build can settle — a type that reaches itself,
-/// and a stream, which has no single value to size.
+/// The member `name` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
+/// A reference into another package of the same build resolves
+/// when the caller hands the codec that build, which
+/// `ridl build --emit rust` does and a bare `generate` does not;
+/// a resolved one is named by a path through the emitted module
+/// tree. The causes above are the ones this call could meet.
+/// A type that reaches itself, and a stream, which has no single
+/// value to size, are never resolvable by any caller.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
@@ -579,12 +581,14 @@ impl Default for SensorBoundsRange {
 const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
 /// `SensorBounds` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The members `labels`, `meta` reach a reference this backend does not resolve — a same-package cycle, or a stream.
-/// A reference into another package of the same build is not
-/// this: the codec resolves one, and names it by a path through
-/// the emitted module tree. What is left is a reference that no
-/// package of the build can settle — a type that reaches itself,
-/// and a stream, which has no single value to size.
+/// The members `labels`, `meta` reach a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
+/// A reference into another package of the same build resolves
+/// when the caller hands the codec that build, which
+/// `ridl build --emit rust` does and a bare `generate` does not;
+/// a resolved one is named by a path through the emitted module
+/// tree. The causes above are the ones this call could meet.
+/// A type that reaches itself, and a stream, which has no single
+/// value to size, are never resolvable by any caller.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
@@ -592,12 +596,14 @@ const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
 const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
 /// `SensorResult` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The members `ok`, `err` reach a reference this backend does not resolve — a same-package cycle, or a stream.
-/// A reference into another package of the same build is not
-/// this: the codec resolves one, and names it by a path through
-/// the emitted module tree. What is left is a reference that no
-/// package of the build can settle — a type that reaches itself,
-/// and a stream, which has no single value to size.
+/// The members `ok`, `err` reach a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
+/// A reference into another package of the same build resolves
+/// when the caller hands the codec that build, which
+/// `ridl build --emit rust` does and a bare `generate` does not;
+/// a resolved one is named by a path through the emitted module
+/// tree. The causes above are the ones this call could meet.
+/// A type that reaches itself, and a stream, which has no single
+/// value to size, are never resolvable by any caller.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
@@ -605,12 +611,14 @@ const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
 const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
 /// `SensorReading` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `timestamp` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
-/// A reference into another package of the same build is not
-/// this: the codec resolves one, and names it by a path through
-/// the emitted module tree. What is left is a reference that no
-/// package of the build can settle — a type that reaches itself,
-/// and a stream, which has no single value to size.
+/// The member `timestamp` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
+/// A reference into another package of the same build resolves
+/// when the caller hands the codec that build, which
+/// `ridl build --emit rust` does and a bare `generate` does not;
+/// a resolved one is named by a path through the emitted module
+/// tree. The causes above are the ones this call could meet.
+/// A type that reaches itself, and a stream, which has no single
+/// value to size, are never resolvable by any caller.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
@@ -618,12 +626,14 @@ const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
 const __RIDL_FB_NO_CODEC_SENSOR_READING: () = ();
 /// `SensorFault` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `message` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
-/// A reference into another package of the same build is not
-/// this: the codec resolves one, and names it by a path through
-/// the emitted module tree. What is left is a reference that no
-/// package of the build can settle — a type that reaches itself,
-/// and a stream, which has no single value to size.
+/// The member `message` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
+/// A reference into another package of the same build resolves
+/// when the caller hands the codec that build, which
+/// `ridl build --emit rust` does and a bare `generate` does not;
+/// a resolved one is named by a path through the emitted module
+/// tree. The causes above are the ones this call could meet.
+/// A type that reaches itself, and a stream, which has no single
+/// value to size, are never resolvable by any caller.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
