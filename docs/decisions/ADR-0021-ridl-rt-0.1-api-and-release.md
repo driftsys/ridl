@@ -105,6 +105,25 @@ trusted with no `unsafe` and no second verification pass.
    that spans two catalogs holds one port set per catalog; nothing atomic is
    lost, because generation is already per interface.
 
+   **Amendment (2026-09-21) — the check is not emitted yet, and waits on E16.2
+   (driftsys/ridl#378).** No generated constructor compares `port.catalog()`
+   against its interface's `CATALOG`, and none has since the face first landed:
+   `.catalog()` is called nowhere under `crates/ridl-backend-rust/`. The
+   sentence above described a check the codegen never wrote, which
+   driftsys/ridl#448 recorded. It is deferred rather than written now because
+   the descriptor emitter still writes `CatalogHash([0u8; 32])` as a
+   placeholder, so the comparison would hold two zero hashes against each other
+   and pass for every port, of every catalog — a check with no power, in a place
+   where its presence would read as a guarantee. E16.2 is what gives a catalog a
+   computed hash; the check lands with it or after it, and **the story that
+   emits it also takes the decision this record leaves open: what `new` does on
+   a mismatch.** Decision 3's substance is unchanged — the binding is one
+   catalog per port, checked once at construction and not per call — and what
+   the amendment changes is only the tense: this is what a generated client will
+   do, not what it does. Until then a face built over a port bound to another
+   catalog reads and writes the wrong interface's slots with no error, which is
+   sound only because `ridl-loopback` is in-process and single-catalog.
+
 4. **A failed `require` or `ensure` clause carries no value.** Both methods
    return `Result<(), ()>` (`#[allow(clippy::result_unit_err)]`, because the
    omission is deliberate): the method that fails already decides the contract
@@ -175,6 +194,19 @@ trusted with no `unsafe` and no second verification pass.
    different contract and are unchanged: a FlatBuffers buffer is
    position-independent, so a runtime may place one anywhere in the caller's
    slice.
+
+   **Addendum 2026-09-21 (stage K7, driftsys/ridl#471): the one consumer named
+   above no longer assumes a prefix, and it was not the face that changed it.**
+   `encode_into` now evaluates to `encoded.bytes()` and the emitted code passes
+   that subslice on unchanged, at all four sites — a command's and a query's
+   `send`, a signal's `set`, an event's `raise`, and a query reply's `settle`.
+   The paragraph above expected this to land with D-11, in the stage that moves
+   the face onto `Wire`; D-11 did not land, because a payload type that mints no
+   root table has no FlatBuffers root at all (driftsys/ridl#470), and the fix
+   was taken on its own instead. The emitted code still names `ReprC`, so
+   nothing observable changed — what changed is that it is now
+   encoding-independent, which is the property this amendment asked for, and it
+   no longer waits on D-11 to become true.
 
    The same amendment settles what `EncodeError::Capacity`'s `needed` means,
    which the FlatBuffers encoder is the first to make a question. An encoder

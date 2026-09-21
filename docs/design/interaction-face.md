@@ -163,10 +163,11 @@ face lives, so a runtime that implements every port on one value can be held by
 one face at a time and by none while `dispatch` runs over it; that is why the
 round-trip tests in `tests/interaction_face.rs` build a face inside a block,
 drop it, and build another for the next step. The bounds are unchanged, and the
-catalog check of
+constructor is still where the catalog check of
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
-stays once, in the constructor. This supersedes the M1 design's `Client<'a, P>`
-and `Publisher<'a, W>`;
+belongs — **but no constructor performs one, and none ever has** (see "The
+catalog check is not emitted" below). This supersedes the M1 design's
+`Client<'a, P>` and `Publisher<'a, W>`;
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
 records it.
 
@@ -341,12 +342,35 @@ E11.13; when that does not hold, the cost is a touch-up pass to the checked-in
 fixture and the hand-written `Payload<ReprC>` implementations, accepted as
 rework rather than a blocker.
 
+## The catalog check is not emitted (2026-09-21)
+
+`Client::new` and `Publisher::new` are `Client { port }` and nothing else. No
+`.catalog()` call exists under `crates/ridl-backend-rust/`, so a face built over
+a port bound to another catalog reads and writes the wrong interface's slots
+with no error. ADR-0021 decision 3 and ADR-0023 decision 5 both read as though
+the check were there; driftsys/ridl#448 recorded that it is not, and both
+records carry a 2026-09-21 amendment saying so in their own words.
+
+**The disposition is to wait, not to emit.** Until E16.2 (driftsys/ridl#378)
+computes a catalog hash, the descriptor emitter writes `CatalogHash([0u8; 32])`,
+and the comparison would hold two zero hashes against each other: it would pass
+for every port of every catalog, while reading as a guarantee. The story that
+emits the check also takes the one decision ADR-0021 decision 3 leaves open —
+what `new` does on a mismatch, which is an ADR-0023 amendment and a change to
+every generated constructor. Stage K7 of lane K took this disposition, on
+Sebastien's decision, rather than emitting a check in the same change that
+rewrites the constructors for the payload encoding.
+
+Nothing in the tree depends on the check's absence: `ridl-loopback` is
+in-process and single-catalog, and the round trip's `CATALOG` constant names the
+same all-zero hash the face declares.
+
 ## What is provisional
 
 | Placeholder                                                                                    | Replaced by                                  |
 | ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                       |
-| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                    |
+| The zero `CatalogHash`, and with it the unemitted catalog check                                | E16.2 (driftsys/ridl#378)                    |
 | The all-`None` `EncodedSizes` columns                                                          | E16.2                                        |
 | The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
 | One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |

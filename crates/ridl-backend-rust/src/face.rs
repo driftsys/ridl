@@ -512,8 +512,8 @@ fn send(
                 )
             })?;
             let mut buf = #buffer;
-            let len = #encode;
-            self.port.#port_method(#number, #ordinal, &buf[..len]).map(#correlation)
+            let bytes = #encode;
+            self.port.#port_method(#number, #ordinal, bytes).map(#correlation)
         }
     }
 }
@@ -587,8 +587,8 @@ fn publisher(
                 value: #path,
             ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
                 let mut buf = #buffer;
-                let len = #encode;
-                self.port.set(#number, #ordinal, &buf[..len])
+                let bytes = #encode;
+                self.port.set(#number, #ordinal, bytes)
             }
 
             #[doc = #invalidate_doc]
@@ -619,8 +619,8 @@ fn publisher(
                 value: #path,
             ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
                 let mut buf = #buffer;
-                let len = #encode;
-                self.port.raise(#number, #ordinal, &buf[..len])
+                let bytes = #encode;
+                self.port.raise(#number, #ordinal, bytes)
             }
         });
     }
@@ -784,8 +784,8 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
                                         )),
                                     ),
                                     Ok(()) => {
-                                        let len = #encode;
-                                        h.settle(claim.id, Ok(&buf[..len]))
+                                        let bytes = #encode;
+                                        h.settle(claim.id, Ok(bytes))
                                     }
                                 }
                             }
@@ -891,7 +891,15 @@ fn payload_buffer(type_name: &str) -> TokenStream {
     }
 }
 
-/// Encodes `value` into `target` and evaluates to the encoded length.
+/// Encodes `value` into `target` and evaluates to the encoded bytes.
+///
+/// The expression evaluates to `Encoded::bytes`, the subslice of `target` the
+/// encoder actually wrote, and a call site passes that slice on unchanged. It
+/// is **not** a length, and the bytes are **not** necessarily a prefix of
+/// `target`: a FlatBuffers builder fills a buffer from its end, which is why
+/// [`Encoded::bytes`](ridl_rt::payload::Encoded::bytes) is documented as a
+/// subslice. A call site that reconstructed `&target[..len]` would send the
+/// wrong bytes for any such encoding.
 ///
 /// `target` is at least `<T as Payload<ReprC>>::MAX_SIZE` bytes at every call
 /// site, and `MAX_SIZE` is the largest encoded size of any legal value, so
@@ -920,7 +928,7 @@ fn encode_into(
             #value,
             #target,
         ) {
-            Ok(encoded) => encoded.bytes().len(),
+            Ok(encoded) => encoded.bytes(),
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(#capacity, needed, available)
             }

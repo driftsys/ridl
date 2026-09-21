@@ -100,6 +100,18 @@ mod generated {
 /// it with a generated codec. The wire layout is 8 little-endian bytes per
 /// `i64`-backed scalar or enum, and a struct's fields back to back in
 /// declaration order.
+///
+/// **Every `encode` here writes after [`PAD`] leading bytes, so what it
+/// returns is a subslice of the output buffer and never a prefix of it.**
+/// That is deliberate, and it is the standing guard on the property K3 gave
+/// `Encoded.bytes` (`crates/ridl-rt/src/payload.rs`: "a subslice of `out`,
+/// not necessarily a prefix"): a FlatBuffers builder fills a buffer from its
+/// end, so a face that reconstructed `&buf[..encoded.bytes().len()]` would
+/// send the wrong bytes once the face moves onto the generated codec. With
+/// the pad, any such reconstruction sends `PAD` zero bytes followed by a
+/// truncated value, and the round trips below fail. A `repr(C)` codec would
+/// have no reason to pad; this one pads because the face, not the encoding,
+/// is what is under test here.
 mod payloads {
     use ridl_rt::encoding::ReprC;
     use ridl_rt::payload::{
@@ -108,26 +120,32 @@ mod payloads {
 
     use super::generated::{Average, Health, Inner, Level, Temperature, Warning, Window};
 
+    /// The leading bytes every `encode` below skips, so that the bytes it
+    /// returns are a subslice of the output buffer and not a prefix of it.
+    /// Four is enough to make a prefix read observably wrong and small
+    /// enough to keep every buffer constant small.
+    pub const PAD: usize = 4;
+
     /// A named scalar backed by `i64`, with its declared closed range
     /// (typl §5.5: both bounds inclusive) checked by `verify`.
     macro_rules! scalar_payload {
         ($ty:ty, $name:literal, $min:expr, $max:expr) => {
             impl Payload<ReprC> for $ty {
-                const MAX_SIZE: usize = 8;
+                const MAX_SIZE: usize = PAD + 8;
                 type View<'a> = &'a [u8];
 
                 fn encode<'o>(
                     &self,
                     out: &'o mut [u8],
                 ) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
-                    if out.len() < 8 {
+                    if out.len() < PAD + 8 {
                         return Err(EncodeError::Capacity {
-                            needed: 8,
+                            needed: PAD + 8,
                             available: out.len(),
                         });
                     }
-                    out[..8].copy_from_slice(&self.inner().to_le_bytes());
-                    let bytes = &out[..8];
+                    out[PAD..PAD + 8].copy_from_slice(&self.inner().to_le_bytes());
+                    let bytes = &out[PAD..PAD + 8];
                     Ok(Encoded { bytes, view: bytes })
                 }
 
@@ -177,18 +195,18 @@ mod payloads {
     }
 
     impl Payload<ReprC> for Health {
-        const MAX_SIZE: usize = 8;
+        const MAX_SIZE: usize = PAD + 8;
         type View<'a> = &'a [u8];
 
         fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
-            if out.len() < 8 {
+            if out.len() < PAD + 8 {
                 return Err(EncodeError::Capacity {
-                    needed: 8,
+                    needed: PAD + 8,
                     available: out.len(),
                 });
             }
-            out[..8].copy_from_slice(&health_discriminant(self).to_le_bytes());
-            let bytes = &out[..8];
+            out[PAD..PAD + 8].copy_from_slice(&health_discriminant(self).to_le_bytes());
+            let bytes = &out[PAD..PAD + 8];
             Ok(Encoded { bytes, view: bytes })
         }
 
@@ -215,19 +233,20 @@ mod payloads {
     }
 
     impl Payload<ReprC> for Warning {
-        const MAX_SIZE: usize = 16;
+        const MAX_SIZE: usize = PAD + 16;
         type View<'a> = &'a [u8];
 
         fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
-            if out.len() < 16 {
+            if out.len() < PAD + 16 {
                 return Err(EncodeError::Capacity {
-                    needed: 16,
+                    needed: PAD + 16,
                     available: out.len(),
                 });
             }
-            out[..8].copy_from_slice(&self.code.inner().to_le_bytes());
-            out[8..16].copy_from_slice(&health_discriminant(&self.health).to_le_bytes());
-            let bytes = &out[..16];
+            out[PAD..PAD + 8].copy_from_slice(&self.code.inner().to_le_bytes());
+            out[PAD + 8..PAD + 16]
+                .copy_from_slice(&health_discriminant(&self.health).to_le_bytes());
+            let bytes = &out[PAD..PAD + 16];
             Ok(Encoded { bytes, view: bytes })
         }
 
@@ -448,16 +467,19 @@ fn round_trip_failing_require_settles_precondition_failed() {
     // own check instead.
     let level = generated::Level::new_unchecked(100);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+    // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
+    // (`crates/ridl-rt/src/payload.rs`), and the `payloads` module's `encode`
+    // writes after `payloads::PAD` leading bytes, so the bytes to send are
+    // the ones the encoder returned.
+    let bytes = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
         .expect("encode")
-        .bytes()
-        .len();
+        .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
-            &encode_buf[..len],
+            bytes,
         )
         .expect("send");
 
@@ -722,16 +744,19 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     let mut port = loopback();
     let level = generated::Level::new_unchecked(50);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+    // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
+    // (`crates/ridl-rt/src/payload.rs`), and the `payloads` module's `encode`
+    // writes after `payloads::PAD` leading bytes, so the bytes to send are
+    // the ones the encoder returned.
+    let bytes = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
         .expect("encode")
-        .bytes()
-        .len();
+        .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
             <generated::Horn as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
-            &encode_buf[..len],
+            bytes,
         )
         .expect("send");
 
@@ -802,16 +827,19 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
     let mut port = loopback();
     let level = generated::Level::new_unchecked(200);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+    // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
+    // (`crates/ridl-rt/src/payload.rs`), and the `payloads` module's `encode`
+    // writes after `payloads::PAD` leading bytes, so the bytes to send are
+    // the ones the encoder returned.
+    let bytes = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
         .expect("encode")
-        .bytes()
-        .len();
+        .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
-            &encode_buf[..len],
+            bytes,
         )
         .expect("send");
 
