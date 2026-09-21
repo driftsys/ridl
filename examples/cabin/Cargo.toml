@@ -1,0 +1,22 @@
+# The demo workspace: the program a person runs, and the crate `ridlc` wrote
+# for `cabin.ridl`.
+#
+# It is its own workspace, outside the repository's, because `generated/` is a
+# build output and a member that is not in git has no place in the workspace
+# the gate builds. The root `Cargo.toml` also carries `exclude = ["examples"]`.
+# That exclusion is belt and braces rather than load-bearing: the root's
+# `members = ["crates/*", "xtask"]` never globbed this directory, and this
+# file's own `[workspace]` would keep it separate regardless. It is there so
+# the separation is stated where a reader of the root manifest looks.
+[workspace]
+resolver = "2"
+members = ["consumer", "generated"]
+
+# The generated manifest requires `ridl-rt = "0.1"`, which is what a consumer
+# outside this repository would resolve from crates.io. The demo must exercise
+# the `ridl-rt` in this tree — the one the codec is developed against and the
+# one the gate's other proofs build — rather than whatever a registry would
+# hand it, so the requirement is patched to the local path. Remove this patch
+# when a published release is what the demo should be proving against.
+[patch.crates-io]
+ridl-rt = { path = "../../crates/ridl-rt" }

@@ -473,15 +473,15 @@ written as prose.
 
 6. **The proof runs what the CLI wrote.** `crates/ridlc/tests/cabin_example.rs`
    builds `examples/cabin/`, compiles the emitted crate and
-   `examples/cabin/consumer.rs` against it with plain `rustc`, runs the program,
-   and requires one round trip of each of a signal, an event, a command and a
-   query through the generated `Client`, `Publisher`, `Provider` and `dispatch`
-   over `ridl-loopback`. What is new is the path rather than the running: other
-   proofs run generated code, and the round trips above already run these four,
-   but each runs the backend's own output inside this workspace. This one runs
-   what the CLI wrote, linked as a separate crate into a separate process. It
-   does not establish identity — the round trip is symmetric, so a wrong
-   `InterfaceNo`, ordinal or catalog hash would be written and read back
+   `examples/cabin/consumer/src/main.rs` against it with plain `rustc`, runs the
+   program, and requires one round trip of each of a signal, an event, a command
+   and a query through the generated `Client`, `Publisher`, `Provider` and
+   `dispatch` over `ridl-loopback`. What is new is the path rather than the
+   running: other proofs run generated code, and the round trips above already
+   run these four, but each runs the backend's own output inside this workspace.
+   This one runs what the CLI wrote, linked as a separate crate into a separate
+   process. It does not establish identity — the round trip is symmetric, so a
+   wrong `InterfaceNo`, ordinal or catalog hash would be written and read back
    consistently; `descriptor_generation.rs` pins those.
 
 ## What is provisional

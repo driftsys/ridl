@@ -8,8 +8,20 @@
 //! that proof: the program exits non-zero if a round trip does not hold, and
 //! the test fails with its output.
 //!
-//! It is not a cargo target. The workspace is virtual and its members are
-//! `crates/*` and `xtask`, so nothing here is built except by that test.
+//! Each line it prints carries the value that round trip carried, rather than
+//! the bare word `ok`. That is what `just demo` matches, so the gate checks
+//! the value that travelled and not merely that a line was printed: a codec
+//! or a face returning a wrong value fails the match even if the `assert`
+//! above it were weakened. Keep the value in the line when editing one of
+//! these — a line rewritten to a bare literal would still match, and would
+//! be checking nothing.
+//!
+//! It is also `just demo`'s program. `examples/cabin/Cargo.toml` is a
+//! two-member cargo workspace — this crate and the generated one — outside
+//! the repository's own workspace, which excludes `examples`. So this file is
+//! built two ways from one source: by `cargo` for the demo, and by a bare
+//! `rustc` for the test. The crate name is `veh_cabin` in both, because that
+//! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
 //! One `Loopback` per round trip, rather than one for all four: the loopback
 //! holds every value in one map, and a fresh port is what keeps each round
@@ -17,10 +29,10 @@
 //! they run in.
 
 use api::cabin;
-use cabin_api::veh::cabin as api;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef};
 use ridl_rt::sample::Provenance;
+use veh_cabin::veh::cabin as api;
 
 const CATALOG: CatalogRef = CatalogRef {
     name: "veh.cabin",
@@ -56,7 +68,7 @@ fn main() {
         .expect("read temperature");
     assert_eq!(sample.value.get(), 21);
     assert_eq!(sample.provenance, Provenance::Live);
-    println!("signal ok");
+    println!("signal ok {}", sample.value.get());
 
     // 2 — event
     let mut port = Loopback::new(CATALOG);
@@ -73,14 +85,15 @@ fn main() {
         .next_event()
         .expect("next_event")
         .expect("an occurrence is waiting");
-    match event {
+    let code = match event {
         cabin::Event::Warning(occurrence) => {
             let warning = occurrence.payload.expect("payload verifies");
             assert_eq!(warning.code.get(), 5);
             assert!(matches!(warning.health, api::Health::WARN));
+            warning.code.get()
         }
-    }
-    println!("event ok");
+    };
+    println!("event ok {}", code);
 
     // 3 — command
     let mut port = Loopback::new(CATALOG);
@@ -98,7 +111,7 @@ fn main() {
         cabin::Client::new(&mut port).set_level_ack(correlation),
         Some(Ok(()))
     );
-    println!("command ok");
+    println!("command ok {}", provider.levels[0]);
 
     // 4 — query
     let mut port = Loopback::new(CATALOG);
@@ -117,5 +130,5 @@ fn main() {
         .expect("reply is known")
         .expect("no call error");
     assert_eq!(reply.get(), 7);
-    println!("query ok");
+    println!("query ok {}", reply.get());
 }

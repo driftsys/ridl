@@ -125,6 +125,17 @@ docs/
 - Building the toolchain? [`docs/ROADMAP.md`](docs/ROADMAP.md) and the ADRs
   under [`docs/decisions/`](docs/decisions/).
 
+**Want to watch the generated code run?** `just demo` compiles
+[`examples/cabin/cabin.ridl`](examples/cabin/cabin.ridl) with
+`ridl build --emit rust`, then builds and runs
+[`examples/cabin/consumer`](examples/cabin/consumer), a small program that links
+the crate that came out. It prints one line per round trip — a signal, an event,
+a command and a query — each travelling through the generated `Client`,
+`Publisher`, `Provider` and `dispatch` over the in-process `ridl-loopback`
+runtime. The consumer names the generated face and the runtime and nothing of
+the compiler that produced them, so it shows what a RIDL interface becomes for
+the application that uses one.
+
 ## Development
 
 This repository follows the driftsys house style. After cloning, run
@@ -137,26 +148,27 @@ other tool the gate needs — `just`, `rustup`, mdBook — that it cannot find.
 
 The task runner is [`just`](https://github.com/casey/just):
 
-| recipe                 | what it does                                                                                                                                                                                                                       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `just`                 | list the recipes                                                                                                                                                                                                                   |
-| `just fmt`             | reformat the connective tissue with prim                                                                                                                                                                                           |
-| `just check`           | lint gate — `prim fmt --check` + `prim lint`, no writes                                                                                                                                                                            |
-| `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                                                                                        |
-| `just gate-parity`     | CI invokes every member of `just build`                                                                                                                                                                                            |
-| `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                                                                                              |
-| `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                                                                                                                |
-| `just compile`         | compile the Rust workspace (`--locked`)                                                                                                                                                                                            |
-| `just test`            | run the Rust workspace test suite (`--locked`)                                                                                                                                                                                     |
-| `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                                                                                                            |
-| `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`                                                                                                                                                                                  |
-| `just compat-check`    | build and test `ridl-rt` as edition 2021 with its minimum supported Rust version and as edition 2024 with the `rust-toolchain.toml` pin (ADR-0021 decision 10)                                                                     |
-| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `check` — the local gate, which is what CI runs |
-| `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                                                                                            |
-| `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                                                                                         |
-| `just book`            | serve the mdBook docs locally                                                                                                                                                                                                      |
-| `just book-build`      | render the book to `./book` — what CI publishes to Pages                                                                                                                                                                           |
-| `just release`         | `git std bump` — version, changelog, tag                                                                                                                                                                                           |
+| recipe                 | what it does                                                                                                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just`                 | list the recipes                                                                                                                                                                                                                            |
+| `just fmt`             | reformat the connective tissue with prim                                                                                                                                                                                                    |
+| `just check`           | lint gate — `prim fmt --check` + `prim lint`, no writes                                                                                                                                                                                     |
+| `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                                                                                                 |
+| `just gate-parity`     | CI invokes every member of `just build`                                                                                                                                                                                                     |
+| `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                                                                                                       |
+| `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                                                                                                                         |
+| `just compile`         | compile the Rust workspace (`--locked`)                                                                                                                                                                                                     |
+| `just test`            | run the Rust workspace test suite (`--locked`)                                                                                                                                                                                              |
+| `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                                                                                                                     |
+| `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`                                                                                                                                                                                           |
+| `just compat-check`    | build and test `ridl-rt` as edition 2021 with its minimum supported Rust version and as edition 2024 with the `rust-toolchain.toml` pin (ADR-0021 decision 10)                                                                              |
+| `just demo`            | generate the cabin example's crate and run the program that links it — each round trip's value is matched, and a missing one or a non-zero exit fails                                                                                       |
+| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `demo` + `check` — the local gate, which is what CI runs |
+| `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                                                                                                     |
+| `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                                                                                                  |
+| `just book`            | serve the mdBook docs locally                                                                                                                                                                                                               |
+| `just book-build`      | render the book to `./book` — what CI publishes to Pages                                                                                                                                                                                    |
+| `just release`         | `git std bump` — version, changelog, tag                                                                                                                                                                                                    |
 
 CI (`.github/workflows/ci.yml`) invokes these recipes rather than restating
 their commands, so there is one definition of each (ADR-0009).

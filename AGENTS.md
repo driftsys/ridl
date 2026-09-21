@@ -158,13 +158,20 @@ member; rsdl is the apex.
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
                          and check its LICENSE (ADR-0021 decision 10)
+    just demo            generate examples/cabin's crate with ridl build and run
+                         the program that links it — each round trip's value
+                         is matched, and a missing one or a non-zero exit
+                         fails. examples/cabin is its own
+                         cargo workspace, outside this one, and carries the fmt
+                         and clippy checks for its consumer, which --all over
+                         this workspace cannot reach
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
                          compile + test + lint + wasm-check + compat-check +
-                         check — the full local gate: every member ADR-0008
+                         demo + check — the full local gate: every member ADR-0008
                          decision 11 names, the four CI checks ADR-0009 brought
-                         back to this side, and doc-path-check, which postdates
-                         both
+                         back to this side, and doc-path-check and demo, which
+                         postdate both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just verify          lint-commits, then build — run before a PR

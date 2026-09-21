@@ -21,10 +21,13 @@ happened to the E0 open items.
 
 ## The workspace map
 
-One Cargo workspace (`Cargo.toml`, `members = ["crates/*", "xtask"]`): every
-crate under `crates/` with its directory named after it, and the `xtask`
-automation member at the root (issue #180). The VS Code extension
-(`editors/vscode`) is TypeScript and is not a workspace member.
+One Cargo workspace for the toolchain (`Cargo.toml`,
+`members = ["crates/*", "xtask"]`, `exclude = ["examples"]` — `examples/cabin`
+is a second, separate workspace, because one of its members is written by
+`ridl build` and is not in git): every crate under `crates/` with its directory
+named after it, and the `xtask` automation member at the root (issue #180). The
+VS Code extension (`editors/vscode`) is TypeScript and is not a workspace
+member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
