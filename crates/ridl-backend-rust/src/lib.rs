@@ -863,7 +863,9 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
         return emit_vacuous_type_def(decl, td, derived);
     }
 
-    let checks = constraint_checks(td, type_name, quote! { value });
+    let check_param_ty = check_param_type(td);
+    let check_shadow = check_deref_shadow(td);
+    let check_body = constraint_checks(td, type_name, quote! { value });
     let getter = scalar_getter(td, vis.clone(), inner.clone());
 
     quote! {
@@ -881,8 +883,21 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
             #vis fn new(
                 value: #inner,
             ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-                #checks
-                ::core::result::Result::Ok(Self(value))
+                Self::check(&value)?;
+                ::core::result::Result::Ok(Self::new_unchecked(value))
+            }
+
+            /// Checks `value` against this type's typl constraints, without
+            /// constructing it. Not `pub`: every caller outside `new` is a
+            /// function generated into this same module, which can see a
+            /// private item here the way any other item of the module can.
+            /// `new` is the composition of this and `new_unchecked`.
+            fn check(
+                value: #check_param_ty,
+            ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+                #check_shadow
+                #check_body
+                ::core::result::Result::Ok(())
             }
 
             /// Constructs the value without checking its constraints.
@@ -920,12 +935,21 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
 /// default `[0..256]` length bound, so both are constrained on the source
 /// route.
 ///
-/// Construction is infallible, so `From<Inner>` is correct here — there is no
-/// invariant for it to bypass. Core's blanket `impl<T, U: Into<T>> TryFrom<U>
-/// for T` then supplies `TryFrom<Inner>` with `Error = Infallible`, so generic
-/// consumer code calling `try_from` compiles against both kinds of scalar. A
-/// manual `TryFrom` would collide with that blanket impl (`rustc` reports
-/// `E0119`), which is the second reason it is absent.
+/// Construction is infallible, so `From<Inner>` is correct here. That is not
+/// because the type carries no invariant at all — a `step`-only constraint
+/// reaches this function too (`constraint_is_vacuous` excludes `step`), and
+/// its quantization is a real invariant, which `unchecked_doc` names on the
+/// type a few lines below. It is because `new` checks nothing `From` would
+/// then bypass: `constraint_checks` emits a range branch only for a min or a
+/// max, a length branch only for `len_min`/`len_max`, and a pattern branch
+/// only for `pattern`/`pattern_const` — none of which a vacuous constraint
+/// carries — and `step` is never checked by `new` on any type, constrained or
+/// not. `From<Inner>` therefore introduces no failure the checked path would
+/// have caught. Core's blanket `impl<T, U: Into<T>> TryFrom<U> for T` then
+/// supplies `TryFrom<Inner>` with `Error = Infallible`, so generic consumer
+/// code calling `try_from` compiles against both kinds of scalar. A manual
+/// `TryFrom` would collide with that blanket impl (`rustc` reports `E0119`),
+/// which is the second reason it is absent.
 ///
 /// `new_unchecked` is deliberately absent: `new` already is the unchecked
 /// path, and on this type it is `const`, so [`scalar_ctor`] routes a constant
@@ -1141,6 +1165,44 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
     quote! { #(#checks)* }
 }
 
+/// The parameter type `check` (`emit_type_def`) borrows its value as. A
+/// `String`/`Vec<u8>` backing borrows the slice form directly — `&str` and
+/// `&[u8]` — which is what a zero-copy caller (the FlatBuffers codec's
+/// `verify`) already holds and needs no allocation to produce; a `Copy`
+/// backing borrows the newtype's own inner type, which [`check_deref_shadow`]
+/// then reads back to a plain value so [`constraint_checks`]'s emitted
+/// expressions need no change between `new`'s former inline form and `check`.
+///
+/// This matches on `backing_scalar` the same way [`newtype_inner`] does, by
+/// the same backing's borrowed form rather than its owned one; the two
+/// matches must stay in lockstep for every backing this function names, and
+/// each names the other for that reason.
+fn check_param_type(td: &v2::TypeDef) -> TokenStream {
+    match backing_scalar(td) {
+        ScalarBacking::Float => quote! { &f64 },
+        ScalarBacking::Integer => quote! { &i64 },
+        ScalarBacking::Boolean => quote! { &bool },
+        ScalarBacking::String => quote! { &str },
+        ScalarBacking::Bytes => quote! { &[u8] },
+    }
+}
+
+/// A `Copy` backing's `check` parameter is a reference (`check_param_type`),
+/// while [`constraint_checks`]'s emitted comparisons are written against a
+/// plain value (`value < 0.0`, not `*value < 0.0`). This reborrows the
+/// parameter into a local of the same name and the owned type, so those
+/// expressions type-check unchanged. `String` and `&[u8]` need no shadow:
+/// their methods (`.chars()`, `.len()`) and the `&value` the pattern check
+/// takes both work directly on the borrowed slice form.
+fn check_deref_shadow(td: &v2::TypeDef) -> TokenStream {
+    match backing_scalar(td) {
+        ScalarBacking::Float | ScalarBacking::Integer | ScalarBacking::Boolean => {
+            quote! { let value = *value; }
+        }
+        ScalarBacking::String | ScalarBacking::Bytes => quote! {},
+    }
+}
+
 /// The accessor. A `Copy` backing returns by value from a `const fn`; `String`
 /// and `Vec<u8>` borrow, and gain `into_inner` for the owned form.
 ///
@@ -1221,9 +1283,15 @@ fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
     // A named-type constant resolves through the type's backing; a
     // primitive-keyword constant reads the keyword directly.
     if let Some(backing) = same_package_scalar_backing(ctx, type_ref) {
-        // A vacuous type has no `new_unchecked`; its `new` is `const` and
-        // infallible, so it stands in here (`scalar_ctor`).
-        let ctor = same_package_scalar_ctor(ctx, type_ref).unwrap_or_else(|| quote! { new });
+        // `same_package_scalar_ctor` resolves the same declaration through
+        // the same lookup as the `backing` above, so a `Some` here is
+        // guaranteed once `backing` is: there is no reachable case with a
+        // backing and no ctor. A fallback here would be dead code, and a
+        // wrong one besides — `new` is fallible on a constrained type and
+        // does not type-check in this `const` position (`scalar_ctor` names
+        // `new_unchecked` for exactly that type).
+        let ctor = same_package_scalar_ctor(ctx, type_ref)
+            .expect("a same-package scalar backing implies a same-package scalar ctor");
         match backing {
             ScalarBacking::Float => {
                 let value = numeric_tokens(&cd.value, true);
@@ -1640,6 +1708,10 @@ pub(crate) fn field_type_tokens(
 
 /// The Rust newtype inner type for a named scalar backing (Appendix D language
 /// layer): unit and float back to `f64`, integer to `i64`.
+///
+/// [`check_param_type`] matches on `backing_scalar` the same way, one entry
+/// per backing this function names, in its borrowed form; the two matches
+/// must stay in lockstep, and each names the other for that reason.
 fn newtype_inner(td: &v2::TypeDef) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::Float => quote! { f64 },

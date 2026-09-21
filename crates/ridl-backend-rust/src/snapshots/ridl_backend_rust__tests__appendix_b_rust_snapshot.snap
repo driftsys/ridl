@@ -13,6 +13,16 @@ impl Speed {
     pub fn new(
         value: f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
@@ -25,7 +35,7 @@ impl Speed {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -66,6 +76,16 @@ impl Temperature {
     pub fn new(
         value: f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < -40.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
@@ -78,7 +98,7 @@ impl Temperature {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -119,6 +139,16 @@ impl RPM {
     pub fn new(
         value: f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "RPM",
@@ -131,7 +161,7 @@ impl RPM {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -172,6 +202,16 @@ impl Ratio {
     pub fn new(
         value: f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",
@@ -184,7 +224,7 @@ impl Ratio {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -251,6 +291,16 @@ impl Gain {
     pub fn new(
         value: f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Gain",
@@ -263,7 +313,7 @@ impl Gain {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -623,14 +673,24 @@ fn __ridl_fb_encode_speed_limit_payload(
 }
 /// Checks the FlatBuffers table at `table` against `SpeedLimitPayload`'s shape.
 ///
-/// **The typl constraints of a named scalar are not checked
-/// here yet.** The structure is checked in full, and so are an
-/// enum and an enum-set discriminant and a collection's declared
-/// element count. A named scalar's range, length and pattern are
-/// not: checking them over a borrow needs the `check` beside
-/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
-/// this function accepts can hold a named scalar outside its
-/// declared bound.
+/// A total walk of the type's own shape: the structure in full,
+/// an enum and an enum-set discriminant, a collection's declared
+/// element count, and every **named** scalar's own declared
+/// range, length and pattern, checked over a borrow (`check`,
+/// beside `new` on the type itself) against its declared range,
+/// length and pattern.
+///
+/// This does not make every value `decode` builds satisfy every
+/// typl constraint. Three gaps:
+///
+/// - a `step` constraint is checked nowhere — not by `new`, by
+///   `check`, or here (driftsys/ridl#469);
+/// - the pattern check is behind the `validate-pattern` feature,
+///   so a value violating a `match` pattern passes when that
+///   feature is off;
+/// - an anonymous inline constraint (a field's own `[..]` or
+///   `match` written at the field, not through a named scalar)
+///   is not checked here at all (driftsys/ridl#469).
 #[allow(deprecated)]
 fn __ridl_fb_verify_speed_limit_payload(
     buf: &[u8],
@@ -640,8 +700,10 @@ fn __ridl_fb_verify_speed_limit_payload(
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
         ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Speed::check(&(f64::from(__raw)))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
         }
         ::core::option::Option::None => {
             return ::core::result::Result::Err(
@@ -655,8 +717,10 @@ fn __ridl_fb_verify_speed_limit_payload(
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
         ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Speed::check(&(f64::from(__raw)))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
         }
         ::core::option::Option::None => {
             return ::core::result::Result::Err(
@@ -673,13 +737,10 @@ fn __ridl_fb_verify_speed_limit_payload(
 /// It cannot fail. A read that could is discharged with the
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
-/// what makes those branches unreachable.
-///
-/// **A named scalar is built with its unchecked constructor over
-/// a value `verify` has not range-checked**, because `verify`
-/// does not check one yet — story E11.7 stage K6 adds that. Until
-/// it lands, a hostile buffer yields a value outside its declared
-/// typl bound through a safe call.
+/// what makes those branches unreachable. A named scalar is
+/// built with its unchecked constructor (`new_unchecked`) over a
+/// value `verify` has already range-checked (`check`), so this
+/// never re-checks and never fails.
 #[allow(deprecated)]
 fn __ridl_fb_decode_speed_limit_payload(buf: &[u8], table: usize) -> SpeedLimitPayload {
     SpeedLimitPayload {
@@ -843,14 +904,24 @@ fn __ridl_fb_encode_raw_wheel_frame(
 }
 /// Checks the FlatBuffers table at `table` against `RawWheelFrame`'s shape.
 ///
-/// **The typl constraints of a named scalar are not checked
-/// here yet.** The structure is checked in full, and so are an
-/// enum and an enum-set discriminant and a collection's declared
-/// element count. A named scalar's range, length and pattern are
-/// not: checking them over a borrow needs the `check` beside
-/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
-/// this function accepts can hold a named scalar outside its
-/// declared bound.
+/// A total walk of the type's own shape: the structure in full,
+/// an enum and an enum-set discriminant, a collection's declared
+/// element count, and every **named** scalar's own declared
+/// range, length and pattern, checked over a borrow (`check`,
+/// beside `new` on the type itself) against its declared range,
+/// length and pattern.
+///
+/// This does not make every value `decode` builds satisfy every
+/// typl constraint. Three gaps:
+///
+/// - a `step` constraint is checked nowhere — not by `new`, by
+///   `check`, or here (driftsys/ridl#469);
+/// - the pattern check is behind the `validate-pattern` feature,
+///   so a value violating a `match` pattern passes when that
+///   feature is off;
+/// - an anonymous inline constraint (a field's own `[..]` or
+///   `match` written at the field, not through a named scalar)
+///   is not checked here at all (driftsys/ridl#469).
 #[allow(deprecated)]
 fn __ridl_fb_verify_raw_wheel_frame(
     buf: &[u8],
@@ -893,13 +964,10 @@ fn __ridl_fb_verify_raw_wheel_frame(
 /// It cannot fail. A read that could is discharged with the
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
-/// what makes those branches unreachable.
-///
-/// **A named scalar is built with its unchecked constructor over
-/// a value `verify` has not range-checked**, because `verify`
-/// does not check one yet — story E11.7 stage K6 adds that. Until
-/// it lands, a hostile buffer yields a value outside its declared
-/// typl bound through a safe call.
+/// what makes those branches unreachable. A named scalar is
+/// built with its unchecked constructor (`new_unchecked`) over a
+/// value `verify` has already range-checked (`check`), so this
+/// never re-checks and never fails.
 #[allow(deprecated)]
 fn __ridl_fb_decode_raw_wheel_frame(buf: &[u8], table: usize) -> RawWheelFrame {
     RawWheelFrame {

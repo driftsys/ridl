@@ -7,6 +7,16 @@ impl Temperature {
     pub fn new(
         value: i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < -40 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
@@ -19,7 +29,7 @@ impl Temperature {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -58,6 +68,16 @@ impl Level {
     pub fn new(
         value: i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Level",
@@ -70,7 +90,7 @@ impl Level {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -109,6 +129,16 @@ impl Window {
     pub fn new(
         value: i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Window",
@@ -121,7 +151,7 @@ impl Window {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -160,6 +190,16 @@ impl Average {
     pub fn new(
         value: i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
+    fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Average",
@@ -172,7 +212,7 @@ impl Average {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///

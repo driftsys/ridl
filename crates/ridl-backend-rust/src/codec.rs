@@ -468,6 +468,28 @@ fn decode_ident(owner: &str) -> Ident {
     format_ident!("__ridl_fb_decode_{}", snake_case(owner))
 }
 
+/// The typl constraint check for a named scalar's value, over a borrow
+/// (design note D-4, plan Task 5, stage K6). `value` is an expression
+/// already of `check`'s own parameter type — `&f64`/`&i64`/`&bool` for a
+/// numeric or boolean backing, `&str` for a string backing, `&[u8]` for a
+/// bytes backing (`crate::check_param_type`).
+///
+/// `None` when the type is vacuous (`crate::emit_vacuous_type_def`): such a
+/// type emits no `check`, because it has no constraint to check, so this is
+/// exactly [`NamedScalar::ctor`]'s two cases — `"new_unchecked"` (a
+/// constrained type, which does emit `check`) and `"new"` (a vacuous one,
+/// which does not).
+fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenStream> {
+    if named.ctor != "new_unchecked" {
+        return None;
+    }
+    let ty = ident(&named.name);
+    Some(quote! {
+        #ty::check(#value)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Emission
 // ---------------------------------------------------------------------------
@@ -1351,14 +1373,24 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[doc = #doc]
             ///
-            /// **The typl constraints of a named scalar are not checked
-            /// here yet.** The structure is checked in full, and so are an
-            /// enum and an enum-set discriminant and a collection's declared
-            /// element count. A named scalar's range, length and pattern are
-            /// not: checking them over a borrow needs the `check` beside
-            /// `new` that story E11.7 stage K6 adds. Until it lands, bytes
-            /// this function accepts can hold a named scalar outside its
-            /// declared bound.
+            /// A total walk of the type's own shape: the structure in full,
+            /// an enum and an enum-set discriminant, a collection's declared
+            /// element count, and every **named** scalar's own declared
+            /// range, length and pattern, checked over a borrow (`check`,
+            /// beside `new` on the type itself) against its declared range,
+            /// length and pattern.
+            ///
+            /// This does not make every value `decode` builds satisfy every
+            /// typl constraint. Three gaps:
+            ///
+            /// - a `step` constraint is checked nowhere — not by `new`, by
+            ///   `check`, or here (driftsys/ridl#469);
+            /// - the pattern check is behind the `validate-pattern` feature,
+            ///   so a value violating a `match` pattern passes when that
+            ///   feature is off;
+            /// - an anonymous inline constraint (a field's own `[..]` or
+            ///   `match` written at the field, not through a named scalar)
+            ///   is not checked here at all (driftsys/ridl#469).
             #[allow(deprecated)]
             fn #name(
                 buf: &[u8],
@@ -1401,10 +1433,11 @@ impl<'a> Codec<'a> {
         Ok(quote! { #(#checks)* })
     }
 
-    /// The structural walk of one value, plus the two constraints this stage
-    /// checks: an enum and an enum-set discriminant, and a collection's
-    /// declared element count. A named scalar's own range, length and pattern
-    /// are stage K6's, which adds `check` beside `new` and calls it here.
+    /// The structural walk of one value, plus every typl constraint this
+    /// codec checks: an enum and an enum-set discriminant, a collection's
+    /// declared element count, and — over a borrow, through the `check`
+    /// associated function beside `new` on the type itself — a named
+    /// scalar's own range, length and pattern.
     fn verify_at(
         &self,
         owner: &str,
@@ -1426,19 +1459,56 @@ impl<'a> Codec<'a> {
                                 .map_err(::ridl_rt::payload::VerifyError::Contract)?;
                         }
                     }
+                    Repr::Named(named) => {
+                        let widened = scalar.widen(quote! { __raw });
+                        match named_scalar_check(named, quote! { &(#widened) }) {
+                            Some(check) => quote! {
+                                let __raw = #read
+                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                #check
+                            },
+                            None => quote! {
+                                #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                            },
+                        }
+                    }
                     _ => quote! {
                         #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
                     },
                 }
             }
-            Wire::Text(_) => quote! {
-                ::ridl_rt::flatbuffers::string(buf, #at)
-                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            },
-            Wire::Bytes(_) => quote! {
-                ::ridl_rt::flatbuffers::vector(buf, #at, 1usize)
-                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            },
+            Wire::Text(named) => {
+                let check = named
+                    .as_ref()
+                    .and_then(|named| named_scalar_check(named, quote! { __s }));
+                match check {
+                    Some(check) => quote! {
+                        let __s = ::ridl_rt::flatbuffers::string(buf, #at)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        #check
+                    },
+                    None => quote! {
+                        ::ridl_rt::flatbuffers::string(buf, #at)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    },
+                }
+            }
+            Wire::Bytes(named) => {
+                let check = named.as_ref().and_then(|named| {
+                    named_scalar_check(named, quote! { &buf[__v.first..__v.first + __v.len] })
+                });
+                match check {
+                    Some(check) => quote! {
+                        let __v = ::ridl_rt::flatbuffers::vector(buf, #at, 1usize)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        #check
+                    },
+                    None => quote! {
+                        ::ridl_rt::flatbuffers::vector(buf, #at, 1usize)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    },
+                }
+            }
             Wire::Table(name) | Wire::Union(name) => {
                 let call = verify_ident(name);
                 quote! {
@@ -1502,13 +1572,10 @@ impl<'a> Codec<'a> {
             /// It cannot fail. A read that could is discharged with the
             /// neutral value of its own type — zero, the empty string or
             /// collection, the first declared enum variant — and `verify` is
-            /// what makes those branches unreachable.
-            ///
-            /// **A named scalar is built with its unchecked constructor over
-            /// a value `verify` has not range-checked**, because `verify`
-            /// does not check one yet — story E11.7 stage K6 adds that. Until
-            /// it lands, a hostile buffer yields a value outside its declared
-            /// typl bound through a safe call.
+            /// what makes those branches unreachable. A named scalar is
+            /// built with its unchecked constructor (`new_unchecked`) over a
+            /// value `verify` has already range-checked (`check`), so this
+            /// never re-checks and never fails.
             #[allow(deprecated)]
             fn #name(buf: &[u8], table: usize) -> #ty {
                 #ty { #(#fields),* }

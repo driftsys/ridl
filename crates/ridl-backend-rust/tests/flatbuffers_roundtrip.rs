@@ -525,9 +525,185 @@ fn main() {
     rustc::run_program("fb_union_discriminant", &program(&main));
 }
 
+/// The hazard stage K5 left and stage K6 closes (design note §4b): before
+/// K6, `verify` checked the structural walk, an enum and an enum-set
+/// discriminant and a collection's declared element count, but not a named
+/// scalar's own range, length or pattern — a `Speed` of 9000 or a `Label` of
+/// sixty-four characters passed `verify`, and `Ref::decode()`, a safe call,
+/// returned a value outside its declared typl bound.
+///
+/// `Speed::new_unchecked` and `Label::new_unchecked` bypass `new`'s own
+/// checks by design — they are how `decode` itself builds a value over bytes
+/// `verify` has already accepted — so a value built with them here, and
+/// handed to `encode` (which never rechecks a constraint either), is exactly
+/// the hostile buffer the design note describes. If `verify`'s call to
+/// `check` were removed, this test is the one that catches it: every other
+/// case in this file uses a value within every typl bound.
+#[test]
+fn verify_refuses_a_named_scalar_outside_its_declared_bound() {
+    let main = format!(
+        "{VALUE}{}",
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref, Rule, VerifyError};
+
+fn main() {
+    // A `Speed` past its declared [0..300] range.
+    let mut over_range = sample();
+    over_range.range.min = Speed::new_unchecked(9000);
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = over_range
+        .encode(&mut out)
+        .expect("encode does not check constraints")
+        .bytes
+        .to_vec();
+    match Ref::<'_, Report, FlatBuffers>::verify(&bytes).err() {
+        Some(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, Rule::Range);
+            assert_eq!(violation.type_name, "Speed");
+        }
+        other => panic!("a Speed of 9000 is outside [0..300], got {other:?}"),
+    }
+
+    // A `Label` past its declared [0..16] length.
+    let mut over_length = sample();
+    over_length.name = Label::new_unchecked("x".repeat(20));
+    let mut out2 = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes2 = over_length
+        .encode(&mut out2)
+        .expect("encode does not check constraints")
+        .bytes
+        .to_vec();
+    match Ref::<'_, Report, FlatBuffers>::verify(&bytes2).err() {
+        Some(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, Rule::Length);
+            assert_eq!(violation.type_name, "Label");
+        }
+        other => panic!("a Label of 20 characters is outside [0..16], got {other:?}"),
+    }
+
+    // And a value within every bound still verifies, so the checks above
+    // are not vacuously refusing everything.
+    let ok = sample();
+    let mut out3 = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes3 = ok.encode(&mut out3).expect("encode").bytes.to_vec();
+    Ref::<'_, Report, FlatBuffers>::verify(&bytes3)
+        .expect("a value within every declared bound verifies");
+}
+"#
+    );
+    rustc::run_program("fb_named_scalar_bound", &program(&main));
+}
+
+/// A representative subset of the positions `check` (called from `verify`)
+/// reaches: a map key, a map value, an array element, a union table arm's
+/// own field, a nested struct's field, an optional field, and a `bytes`
+/// backing, the one arm nothing else in this file exercised. Named-scalar
+/// coverage is total across every position the projection admits (design
+/// note §4c); this pins a representative slice as a permanent regression
+/// guard rather than the throwaway nineteen-position probe the review that
+/// found this coverage ran once.
+///
+/// `Count` is `[0..200]`, width-projected to `u8` because 200 fits in one
+/// byte. A probe value of 9000 would truncate to 40 on encode — an in-bound
+/// byte that looks like a false pass — so the map-value case below uses 250,
+/// which does not truncate into range.
+#[test]
+fn verify_refuses_out_of_bound_values_at_representative_positions() {
+    let main = format!(
+        "{VALUE}{}",
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref, Rule, VerifyError};
+
+fn refutes(value: &Report, rule: Rule, type_name: &str, case: &str) {
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value
+        .encode(&mut out)
+        .expect("encode does not check constraints")
+        .bytes
+        .to_vec();
+    match Ref::<'_, Report, FlatBuffers>::verify(&bytes).err() {
+        Some(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, rule, "{case}: wrong rule");
+            assert_eq!(violation.type_name, type_name, "{case}: wrong type");
+        }
+        other => panic!("{case}: expected a Contract violation, got {other:?}"),
+    }
+}
+
+fn main() {
+    // A map key past its declared [0..16] length.
+    let mut map_key = sample();
+    map_key.meta = vec![(Label::new_unchecked("x".repeat(20)), Count::new_unchecked(1))];
+    refutes(&map_key, Rule::Length, "Label", "map key");
+
+    // A map value past its declared [0..200] range (250, not 9000 — see the
+    // doc comment above).
+    let mut map_value = sample();
+    map_value.meta = vec![(Label::new_unchecked(String::from("a")), Count::new_unchecked(250))];
+    refutes(&map_value, Rule::Range, "Count", "map value");
+
+    // An array element past its declared [0..300] range.
+    let mut array_element = sample();
+    array_element.readings = [
+        Speed::new_unchecked(1),
+        Speed::new_unchecked(9000),
+        Speed::new_unchecked(3),
+    ];
+    refutes(&array_element, Rule::Range, "Speed", "array element");
+
+    // A union table arm's own field past its declared bound.
+    let mut union_arm = sample();
+    union_arm.outcome = Outcome::Ok(inner(9000, "ok"));
+    refutes(&union_arm, Rule::Range, "Speed", "union table arm");
+
+    // A nested struct's field past its declared bound.
+    let mut nested_struct = sample();
+    nested_struct.inner = inner(9000, "inner");
+    refutes(&nested_struct, Rule::Range, "Speed", "nested struct");
+
+    // An optional field past its declared bound, present rather than absent.
+    let mut optional = sample();
+    optional.spare = Some(Speed::new_unchecked(9000));
+    refutes(&optional, Rule::Range, "Speed", "optional scalar");
+
+    // A `bytes` backing past its declared [0..8] length — the arm nothing
+    // else in this file exercised.
+    let mut bytes_backed = sample();
+    bytes_backed.blob = Blob::new_unchecked(vec![0u8; 20]);
+    refutes(&bytes_backed, Rule::Length, "Blob", "bytes-backed");
+
+    // A value within every bound still verifies, so the checks above are
+    // not vacuously refusing everything.
+    let ok = sample();
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = ok.encode(&mut out).expect("encode").bytes.to_vec();
+    Ref::<'_, Report, FlatBuffers>::verify(&bytes)
+        .expect("a value within every declared bound verifies");
+}
+"#
+    );
+    rustc::run_program("fb_representative_positions", &program(&main));
+}
+
 /// A union arm this type does not declare is `Malformed::Union`, and an enum
 /// discriminant no variant carries is a contract violation — the two checks
 /// that keep `decode` from having to answer for a value it cannot build.
+///
+/// Since stage K6, a byte flip can also land inside a named scalar's own
+/// inline bytes and read as a value outside its typl bound — a `Speed` past
+/// 300 — which `check` (called from `verify`, beside `new`) now catches too,
+/// as `Rule::Range` beside the `Rule::Variant`/`Rule::Length` an enum or a
+/// collection count produces. `Rule::Pattern` is deliberately not in the
+/// accepted set: this fixture declares no `match` pattern (`Label` is
+/// length-only), so `Rule::Pattern` is unreachable here, and widening the
+/// accepted set to include it (or to a wildcard) would let this test pass
+/// under a broken `verify` that stops checking union discriminants at all —
+/// only the isolated
+/// [`verify_refuses_a_union_discriminant_that_names_no_arm`] above would
+/// still catch that, which is exactly what that test's own doc comment
+/// warns readers not to rely on this one for.
 #[test]
 fn verify_refuses_an_undeclared_discriminant() {
     let main = format!(
@@ -559,9 +735,9 @@ fn main() {
             Ref::<'_, Report, FlatBuffers>::verify(&broken)
         {
             assert!(
-                matches!(violation.rule, Rule::Variant | Rule::Length),
-                "a wire-level corruption shows up as a variant or a length \
-                 violation, got {:?}",
+                matches!(violation.rule, Rule::Variant | Rule::Length | Rule::Range),
+                "a wire-level corruption shows up as a variant, a length, or \
+                 a range violation, got {:?}",
                 violation.rule
             );
             hits += 1;

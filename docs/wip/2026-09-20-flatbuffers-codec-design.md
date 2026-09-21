@@ -182,13 +182,14 @@ table's vtable and each field the type declares, recursing.
 | a union discriminant with no arm, or a present tag with no value | `Malformed::Union`                 |
 | a leaf outside its typl constraint                               | `VerifyError::Contract(Violation)` |
 
-**Amended 2026-09-21 (stage K5), on the last row of that table.** A leaf outside
-its typl constraint is `VerifyError::Contract` for an enum and an enum-set
-discriminant and for a collection's declared element count, all three as
-written. **A named scalar's own range, length and pattern are not checked yet**:
-checking them over a borrow needs the `check` beside `new` that D-4 asks Epic 10
-for, which stage K6 adds and calls from here. §4b states what a hostile buffer
-produces in the meantime. Every other row of the table is as disposed.
+**Amended 2026-09-21 (stage K5), on the last row of that table, closed
+2026-09-21 (stage K6).** A leaf outside its typl constraint is
+`VerifyError::Contract` for an enum and an enum-set discriminant and for a
+collection's declared element count, all three as written. Stage K5 left a named
+scalar's own range, length and pattern unchecked; stage K6 adds `check` beside
+`new` (D-4) and calls it from here, over a borrow, so the row now reads as
+written for every leaf the table names. §4c records what closed it. Every other
+row of the table is as disposed.
 
 **Every scalar is read with `from_le_bytes` over a copied byte array**, so the
 walk never dereferences an unaligned pointer and a generated `verify` never
@@ -758,25 +759,26 @@ than a value no run can reach. A generated enum with no value and a union with
 no arm have no neutral value at all, so the emitter refuses both with a
 `GenerateError` rather than emitting a `decode` it cannot complete.
 
-**What `verify` checks at this stage, and the hazard the rest leaves.** The
-structural walk of D-5 in full, plus two constraints: an enum and an enum-set
-discriminant, through the `TryFrom` Epic 10 already emits, reported as
-`VerifyError::Contract`; and a collection's declared element count, reported as
-`Rule::Length`. Both are what keeps `decode`'s neutral discharge unreachable. A
-named scalar's own range, length and pattern are **not** checked: that is stage
-K6, which adds `check` beside `new` (D-4) and calls it from `verify`.
+**What `verify` checked at this stage, and the hazard the rest left — closed
+2026-09-21, stage K6; §4c records how.** The structural walk of D-5 in full,
+plus two constraints: an enum and an enum-set discriminant, through the
+`TryFrom` Epic 10 already emits, reported as `VerifyError::Contract`; and a
+collection's declared element count, reported as `Rule::Length`. Both are what
+keeps `decode`'s neutral discharge unreachable. A named scalar's own range,
+length and pattern were **not** checked at K5: that was stage K6, which adds
+`check` beside `new` (D-4) and calls it from `verify`.
 
-Stated as what a hostile buffer produces today: a buffer carrying a `Label` of
-four hundred characters, or a `Speed` of 9000, passes `verify`, and
+Stated as what a hostile buffer produced at K5: a buffer carrying a `Label` of
+four hundred characters, or a `Speed` of 9000, passed `verify`, and
 `Ref::decode()` — a safe call, over a proof type whose whole purpose is to make
-this unreachable — returns a value outside its declared typl bound. It is
-memory-safe and contract-broken, and it is exactly the hazard D-4 names when it
-rules out a `verify` that checks structure only. The window is narrow and closed
-by design rather than left open: K6 is the next stage, and nothing in the tree
-consumes the codec until K7 moves the face onto `Wire`. It is not implicit
-either — the generated `verify` and `decode` each carry a doc comment saying the
-typl constraints are not checked yet, and K6 removes both comments with the same
-change that removes the hazard.
+this unreachable — returned a value outside its declared typl bound. It was
+memory-safe and contract-broken, and it was exactly the hazard D-4 names when it
+rules out a `verify` that checks structure only. The window was narrow and
+closed by design rather than left open: nothing in the tree consumed the codec
+between K5 and K6, and K7 is what moves the face onto `Wire`. It was not
+implicit either — the generated `verify` and `decode` each carried a doc comment
+saying the typl constraints were not checked yet, and K6 removed both comments
+with the same change that removed the hazard.
 
 **One inconsistency in the attribution, noted rather than fixed.** A `FieldType`
 whose `kind` is `None` probes to `Unbounded` and is attributed as an unbounded
@@ -847,6 +849,172 @@ a `const __RIDL_FB_NO_CODEC_<NAME>: () = ()` carrying a doc comment that names
 the type, the member that could not be judged, the reason, and the issue, so a
 consumer meets a reason rather than an unsatisfied trait bound in their own
 crate far from the cause.
+
+## 4c. Stage K6, 2026-09-21: `check` beside `new`, and what it closes
+
+Stage K6 (plan Task 5) added the constraint check D-4 asks Epic 10 for, called
+it from `verify`, and removed the hazard §4b and D-5's amendment recorded. What
+follows is what this stage decided that the note above did not already carry.
+
+**`check` is not public — Sebastien's decision, not this stage's.** Every named
+scalar's `impl` block gains `fn check(value: T) -> Result<(), Violation>` beside
+`new`, `new_unchecked` and the getter, with no `pub` and no `#vis`: it carries
+no visibility modifier regardless of the type's own declared visibility. The
+real reason a private `check` is enough for every caller that needs it, stated
+in full rather than by the weaker "shares a module" framing an earlier draft of
+this section gave: the codec (`crates/ridl-backend-rust/src/codec.rs`) resolves
+no reference it cannot see in-package — a cross-package field is withheld a
+codec entirely (§4b, "What a cross-package reference gets") rather than
+generating a call across a visibility boundary — so every `check` call the codec
+emits is already known, at generation time, to name a type in the same generated
+module `check` is private to; and the interaction face (`generate_face`, K7) is
+a child `pub mod` of that module, which can see a parent module's private items
+the way any nested module can. Neither caller ever needs `check` to be more
+visible than the module it is defined in. Open item 2 of §4, whether `check` is
+public in the generated package, stays open — this closes only whether either
+caller needs it public, and neither does.
+
+**`new` becomes the composition of `check` and `new_unchecked`, exactly as D-4
+states,** rather than keeping its own inline checks beside a duplicate copy in
+`check`. `new`'s signature and its externally observable behaviour (which values
+it accepts, which `Violation` it returns, in the same order) are unchanged; only
+its body is now `Self::check(&value)?; Ok(Self::new_unchecked(value))`. This is
+why the constrained-scalar snapshot and unit tests written before this stage
+needed no assertions changed beyond the snapshot regeneration itself — `new`'s
+contract held, and the range/length/pattern check text simply moved into the new
+function.
+
+**`check`'s parameter type is the natural borrow, not always `&Inner`.** A
+`float`/`integer`/`boolean` backing takes `&f64`/`&i64`/`&bool`; a `string`
+backing takes `&str` and a `bytes` backing takes `&[u8]`, not `&String` or
+`&Vec<u8>`. This is what lets the codec's `verify` call `check` directly on the
+bytes it already has — a FlatBuffers-backed `&str` or `&[u8]` slice, read in
+place — with no allocation, which is what Task 2 (K3) promised of `verify`. A
+`let value = *value;` reborrow at the top of `check` is emitted only for the
+three `Copy` backings, so the existing range/length/pattern check bodies
+(`constraint_checks`) are reused unchanged for every backing rather than
+duplicated for a reference form.
+
+**What `verify` now checks, closing the gap §4b and D-5's amendment named.** The
+generated `verify` walks a named scalar's own range, length and pattern over a
+borrow, through `check`, beside the structural walk, the enum and enum-set
+discriminant, and the collection element count K5 already checked. `verify_at`
+is a single recursive funnel, and the named-scalar branch that calls `check`
+hangs off the one `Codec::wire` site every position reaches — so this is not
+three field forms, it is **every position the projection admits a named scalar
+at all**: an inline scalar field, a `string`-backed field's bytes, a
+`bytes`-backed field's bytes, a fixed or bounded array element, a map key, a map
+value, a tuple field, a nested struct reached through a table, a union's table
+arm and its boxed non-table arm, an array of structs, of unions, or of tuples,
+and a named scalar behind an optional, in every one of those shapes. The pull
+request that closed this gap proved the claim by execution rather than by
+reading the recursion: nineteen positions, each built out of bound with
+`new_unchecked`, encoded, and checked with `verify` — every one refused. The one
+position this coverage does **not** reach is an _anonymous_ inline constraint,
+which carries no `NamedScalar` and so has no `check` to call at all
+(driftsys/ridl#469). A **vacuous** named scalar (`ctor ==
+"new"`,
+`crate::NamedScalar::ctor`) emits no `check` at all (`emit_vacuous_type_def`),
+so `verify` calls nothing for one and the structural read is unchanged for that
+position, which is correct: a vacuous type has no constraint for `check` to
+hold. `decode` is unchanged by this stage — it already built a named scalar with
+its unchecked constructor over bytes `verify` accepted; what changed is that
+`verify` now accepts fewer buffers, so that constructor is now always called
+over a value inside the type's typl bound. The generated `verify` and `decode`
+doc comments that announced the hazard are removed with this change, as the
+driver instructed, and the new `verify` doc states what it does and does not
+check rather than claiming totality over every typl constraint (`step` and the
+anonymous inline constraint are named exclusions; see driftsys/ridl#469).
+
+**`crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs` gained
+`verify_refuses_a_named_scalar_outside_its_declared_bound`**, which builds a
+`Report` with `Speed::new_unchecked(9000)` (outside `[0..300]`) and a
+`Label::new_unchecked("x".repeat(20))` (outside `[0..16]`), encodes each with
+`encode` (which still never rechecks a constraint), and asserts `verify` refuses
+both with `VerifyError::Contract` naming the right type and rule; a value within
+every bound still verifies, so the assertion is not vacuous. Removing the
+`check` call from `verify` fails only this test among the crate's full suite —
+checked by disabling it and re-running. The same edit also widened
+`verify_refuses_an_undeclared_discriminant`'s byte-flip fuzz test to accept
+`Rule::Range` and `Rule::Pattern` beside `Rule::Variant` and `Rule::Length`, on
+the reasoning that a random byte flip can now land inside a named scalar's own
+inline bytes and read as a value outside its typl bound.
+
+**Fix round (pass 1 review, R-10/S2-4): the widened assertion was proved by
+mutation to stop catching what it guards, and is narrowed back.** With the union
+`verify`'s wildcard arm changed from `_ => return #union_malformed` to
+`_ => {}`, the widened `verify_refuses_an_undeclared_discriminant` still passed:
+its accepted rule set was wide enough that a byte flip landing on some other
+named scalar in the buffer produced an accepted `Contract` outcome, so
+`hits > 0` held even though the mutation had silently made an undeclared union
+discriminant pass `verify`. Only the isolated
+`verify_refuses_a_union_discriminant_that_names_no_arm` caught it, which is
+exactly what that test's own doc comment warns readers not to rely on the fuzz
+test for. `Rule::Pattern` was also unreachable in this fixture — no type in it
+carries a `match` pattern; `Label` is length-only — so it was added on
+speculation rather than to catch a real corruption. The assertion is narrowed to
+`Rule::Variant | Rule::Length | Rule::Range`. **Re-running the same mutation
+against the narrowed assertion gives a mixed result, reported rather than
+smoothed over**: `verify_refuses_a_union_discriminant_that_names_no_arm` still
+fails, as it did before, because it targets the exact byte the mutation changes;
+`verify_refuses_an_undeclared_discriminant` still _passes_ under the mutation,
+because its `hits > 0` check is satisfied by unrelated Range/Length violations
+the same byte-flip loop produces elsewhere in the buffer, regardless of the
+accepted rule set's width. Narrowing the rule set closes the part of the finding
+about over-accepting a rule no real corruption in this fixture produces; it does
+not make the byte-flip fuzz test a reliable detector of this specific
+union-discriminant defect. The isolated test is, and stays, the one that catches
+it.
+
+**`crates/ridl-backend-rust/src/tests.rs` gained
+`step_only_scalar_is_vacuous_and_still_names_the_gap`**, pinning
+driftsys/ridl#463 finding (a): `constraint_is_vacuous` excludes `step`
+(`crates/ridl-ir/src/lib.rs`), so a `step`-only constraint takes the infallible
+`emit_vacuous_type_def` path while `unchecked_doc` still emits its quantization
+note on the type. Adding `step` to the vacuity check — the mutation the issue
+named — fails this test alone.
+
+**Fix round (S1-2): the generated `check` doc comment named a compiler
+internal.** It read "the codec (`crate::codec`) is the one caller outside `new`,
+and it shares this module (E11.7 stage K6)" — but a generated crate has no
+`crate::codec`, that path names a module of this backend, not of the consumer's
+package, and "E11.7 stage K6" is a work item no consumer can resolve. Rewritten
+in the consumer's vocabulary: every caller outside `new` is a function generated
+into the same module, which can see a private item the way any item of a module
+can — the same register the `step` note beside it already uses.
+
+**Fix round (S1-3b/R-6): a representative subset of the nineteen-position probe
+is now permanent.** Seat 2's probe was throwaway, run once during review and not
+committed. `verify_refuses_out_of_bound_values_at_representative_positions`
+(`crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`) pins seven of the
+nineteen positions as a standing regression guard: a map key, a map value, an
+array element, a union table arm, a nested struct, an optional scalar, and a
+`bytes` backing — the last is the one arm nothing else in this file exercised,
+named scalar or otherwise. The map-value case uses `250`, not `9000`, for
+`Count` (`[0..200]`, width-projected to `u8`): `9000` truncates to `40` on
+encode, an in-bound byte that reads as a false pass, the exact artifact the
+review's own caveat records.
+
+**Fix round (S1-7a): `step_only_scalar_is_vacuous_and_still_names_the_gap` also
+asserts that no `fn check` is emitted.** The property `named_scalar_check`'s
+`ctor != "new_unchecked"` short-circuit depends on — `crate::NamedScalar::ctor`
+reads `"new"` on the vacuous path, never `"new_unchecked"`, so no `check` call
+site is ever generated for it — was until now unasserted; the test now checks
+`!source.contains("fn check(")` alongside its existing assertions.
+
+**#463 findings (b) and (c) are fixed in the same file this stage already edits,
+not filed onward.** (b): `emit_vacuous_type_def`'s doc claimed `From<Inner>` was
+correct "because there is no invariant to bypass", which is false of a
+`step`-only constraint reaching that same function; the doc now states the true
+reason — `new` checks nothing on this path, for every input that reaches it,
+`step` included. (c):
+`same_package_scalar_ctor(ctx, type_ref).unwrap_or_else(|| quote! { new })` in
+`emit_const` was unreachable, since `same_package_scalar_backing` and
+`same_package_scalar_ctor` resolve the same declaration through the same lookup;
+the fallback also named the wrong constructor for a constrained type (`new`
+returns `Result`, which does not type-check in a `const` item). It is replaced
+with `.expect(...)`, which documents the invariant instead of papering over it
+with a wrong default.
 
 ## 5. Records this changes, if the disposition takes it
 
