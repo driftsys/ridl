@@ -227,7 +227,7 @@ case the `Provenance` already models, so the generated code reports it as
 proceed with. The `ReadError` in the signature covers the read itself — the
 buffer was too short, or the runtime behind the port is gone.
 
-The `Payload`, `Ref` and `ReprC` names are the encoding machinery. Step 3 covers
+The `Payload`, `Ref` and `Wire` names are the encoding machinery. Step 3 covers
 them; for now, `verify` checks bytes and `decode` turns checked bytes into a
 value.
 
