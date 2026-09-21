@@ -6,6 +6,11 @@
 **/target
 **/*.rs.bk
 
+# The demo's generated crate — written by `just demo` from
+# `examples/cabin/cabin.ridl`, never edited and never committed. What is in
+# git is the schema it is generated from and the program that links it.
+/examples/cabin/generated/
+
 # Node (the VS Code extension's own dependencies)
 node_modules/
 

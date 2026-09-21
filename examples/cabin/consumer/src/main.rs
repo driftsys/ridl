@@ -8,8 +8,12 @@
 //! that proof: the program exits non-zero if a round trip does not hold, and
 //! the test fails with its output.
 //!
-//! It is not a cargo target. The workspace is virtual and its members are
-//! `crates/*` and `xtask`, so nothing here is built except by that test.
+//! It is also `just demo`'s program. `examples/cabin/Cargo.toml` is a
+//! two-member cargo workspace — this crate and the generated one — outside
+//! the repository's own workspace, which excludes `examples`. So this file is
+//! built two ways from one source: by `cargo` for the demo, and by a bare
+//! `rustc` for the test. The crate name is `veh_cabin` in both, because that
+//! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
 //! One `Loopback` per round trip, rather than one for all four: the loopback
 //! holds every value in one map, and a fresh port is what keeps each round
@@ -17,10 +21,10 @@
 //! they run in.
 
 use api::cabin;
-use cabin_api::veh::cabin as api;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef};
 use ridl_rt::sample::Provenance;
+use veh_cabin::veh::cabin as api;
 
 const CATALOG: CatalogRef = CatalogRef {
     name: "veh.cabin",

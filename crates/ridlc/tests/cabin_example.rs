@@ -31,10 +31,17 @@
 //! proof and still does not build what a consumer outside this repository
 //! builds.
 //!
-//! The consumer names `cabin_api`, which is this test's `--crate-name` for
-//! the emitted crate and not a name the emitter chose; the emitted
-//! `Cargo.toml` is what names the crate for a cargo consumer, and it is
-//! written but not read here. For the same reason the `ridl-rt` this links is
+//! One source serves both proofs. `examples/cabin/consumer/src/main.rs` is
+//! also `just demo`'s program, built there by cargo against the same schema,
+//! so the crate name here is `veh_cabin` — the package name `ridlc` writes
+//! into the emitted `Cargo.toml` — rather than one this test invents. That
+//! manifest is read by the demo and written but not read here.
+//!
+//! The two proofs differ in what they hold fixed. The demo builds the way a
+//! person does, through cargo and the committed `examples/cabin/Cargo.lock`,
+//! with `ridl-rt` patched to this repository's copy. This test builds with
+//! bare `rustc` against an `ridl-rt` rlib it builds itself, so it needs no
+//! manifest, no lock and no registry, and it is what runs under `just test`. For the same reason the `ridl-rt` this links is
 //! built with the three encoding features and not with the `std` and
 //! `validate-pattern` defaults that `Cargo.toml` declares, so a generated
 //! item gated behind either of those two is outside this proof.
@@ -100,7 +107,7 @@ fn the_emitted_cabin_crate_runs_four_round_trips_against_a_consumer() {
 
     // 3 — the emitted crate itself, as a linkable rlib rather than the
     // metadata the other proofs stop at: a consumer that runs must link it.
-    let cabin_api = libs.join("libcabin_api.rlib");
+    let veh_cabin = libs.join("libveh_cabin.rlib");
     let dependency = format!("dependency={}", libs.display());
     rustc(
         "the emitted crate",
@@ -110,14 +117,14 @@ fn the_emitted_cabin_crate_runs_four_round_trips_against_a_consumer() {
             "--crate-type".as_ref(),
             "rlib".as_ref(),
             "--crate-name".as_ref(),
-            "cabin_api".as_ref(),
+            "veh_cabin".as_ref(),
             "--extern".as_ref(),
             format!("ridl_rt={}", ridl_rt.display()).as_ref(),
             "-L".as_ref(),
             dependency.as_ref(),
             out.join("lib.rs").as_ref(),
             "-o".as_ref(),
-            cabin_api.as_ref(),
+            veh_cabin.as_ref(),
         ],
     );
 
@@ -132,14 +139,18 @@ fn the_emitted_cabin_crate_runs_four_round_trips_against_a_consumer() {
             "--crate-name".as_ref(),
             "consumer".as_ref(),
             "--extern".as_ref(),
-            format!("cabin_api={}", cabin_api.display()).as_ref(),
+            format!("veh_cabin={}", veh_cabin.display()).as_ref(),
             "--extern".as_ref(),
             format!("ridl_rt={}", ridl_rt.display()).as_ref(),
             "--extern".as_ref(),
             format!("ridl_loopback={}", ridl_loopback.display()).as_ref(),
             "-L".as_ref(),
             dependency.as_ref(),
-            example_dir().join("consumer.rs").as_ref(),
+            example_dir()
+                .join("consumer")
+                .join("src")
+                .join("main.rs")
+                .as_ref(),
             "-o".as_ref(),
             program.as_ref(),
         ],

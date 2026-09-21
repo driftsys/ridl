@@ -136,6 +136,10 @@ jobs:
       - run: just compile
       - run: just test
       - run: just lint
+      # The demo: `ridl build` writes a crate from examples/cabin, and cargo
+      # builds a program against it and runs it. Sits in this job because it
+      # needs the same pinned toolchain and warm cargo cache the others do.
+      - run: just demo
 
   wasm:
     name: wasm

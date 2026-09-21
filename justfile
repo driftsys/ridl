@@ -197,6 +197,42 @@ wasm-check:
 # runs let cargo's fingerprints for that path outlive the source they once
 # described, so a passing tree could read as failing or the reverse (issue
 # #442). ridl-rt is no_std with no dependency of its own in any feature
+# Generate the cabin example's crate and run the program that links it.
+#
+# This is the one place the whole chain runs as a person runs it: `ridl build`
+# writes a crate from `examples/cabin/cabin.ridl`, and `cargo` builds a program
+# against it and executes it. The program prints one line per round trip — a
+# signal, an event, a command and a query — and exits non-zero if any of them
+# does not hold, so a green run is the demo working rather than merely
+# compiling.
+#
+# `examples/cabin` is its own cargo workspace, outside this repository's, which
+# excludes `examples`. Its `generated/` member is written here and is not in
+# git, so nothing in the repository's own workspace depends on a build output.
+# `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
+# change that the lock does not carry fails rather than silently resolving.
+#
+# The format and lint checks are here rather than in `fmt-check` and `lint`,
+# which run `--all` over this repository's workspace and so cannot see a crate
+# outside it. They run over the consumer only — `--no-deps` for clippy, whose
+# default is to lint a path dependency built from source. `generated/` is
+# emitter output, held to the emitter's own proofs, and is not something a
+# contributor edits; it draws `clippy::module_inception` for the module a
+# package named `veh.cabin` and an interface named `Cabin` give
+# (`veh::cabin::cabin`), which is the emitter's naming and not a defect here.
+#
+# Fails on: the build drawing an error; the emitted crate or the consumer
+# failing to compile; the program exiting non-zero; the lock being out of
+# date; the consumer being unformatted or drawing a clippy warning.
+demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --locked -p ridl
+    ./target/debug/ridl build examples/cabin --emit rust --out-dir examples/cabin/generated
+    cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
+    cargo run --manifest-path examples/cabin/Cargo.toml -p consumer --locked
+
 # combination (ADR-0021 decision 8), so the rebuild this costs is small.
 #
 # `toolchain-check` is a dependency, and has already proven the running
@@ -1093,7 +1129,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check compile test lint wasm-check compat-check check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check compile test lint wasm-check compat-check demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

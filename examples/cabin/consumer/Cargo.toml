@@ -1,0 +1,23 @@
+# The demo's program. It depends on the generated crate by path, the way an
+# application outside this repository would depend on one it generated, and on
+# `ridl-loopback` for the ports the face runs over.
+#
+# `generated/` is written by `ridl build --emit rust` and is not in git, so
+# this manifest resolves only after `just demo` has run the build once.
+[package]
+name = "consumer"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+# The crate `ridlc` wrote. Its own manifest names `ridl-rt` with the
+# `flatbuffers` feature, which is what the codec needs.
+veh_cabin = { path = "../generated" }
+# The in-process runtime (ADR-0020 decision 6). Reached by path rather than by
+# version because it is unpublished.
+ridl-loopback = { path = "../../../crates/ridl-loopback" }
+# Named directly for `CatalogRef`, `CatalogHash` and `Provenance`. The
+# workspace patch below resolves this to `crates/ridl-rt`.
+ridl-rt = "0.1"

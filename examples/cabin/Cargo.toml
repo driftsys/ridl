@@ -1,0 +1,16 @@
+# The demo workspace: the program a person runs, and the crate `ridlc` wrote
+# for `cabin.ridl`.
+#
+# It is its own workspace, outside the repository's — the root `Cargo.toml`
+# excludes `examples` — because `generated/` is a build output. A member that
+# is not in git cannot be a member of the workspace the gate builds.
+[workspace]
+resolver = "2"
+members = ["consumer", "generated"]
+
+# The generated manifest requires `ridl-rt = "0.1"` from crates.io, which is
+# correct for a consumer outside this repository. No published 0.1 carries the
+# contents of the `flatbuffers` feature yet, so the demo builds against this
+# repository's own copy. Remove this patch once a release carries them.
+[patch.crates-io]
+ridl-rt = { path = "../../crates/ridl-rt" }

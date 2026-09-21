@@ -489,7 +489,8 @@ The face names the `ridl-rt` port traits and nothing else: the crate carries no
 runtime and opens no socket, so an application supplies the ports. The one
 runtime in this workspace is `ridl-loopback`, which runs in process.
 `examples/cabin/` is a worked example — a schema, and a consumer program
-against the crate built from it.
+against the crate built from it — and `just demo` generates that crate and runs
+the program, which prints one round trip per interaction kind.
 
 There is **no flag for the payload encoding**. A package emits the FlatBuffers
 codec, which is the only one built; the emitted `pub type Wire` names it in one

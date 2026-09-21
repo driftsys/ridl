@@ -13,6 +13,11 @@
 # decision 10; decided by Sebastien on 2026-09-14 in driftsys/ridl#352).
 resolver = "2"
 members = ["crates/*", "xtask"]
+# `examples/cabin` is its own workspace (`just demo`). One of its two members,
+# `generated/`, is written by `ridl build --emit rust` and is not in git, so a
+# member of this workspace it cannot be: every gate command would fail on a
+# fresh clone until the demo had been run once.
+exclude = ["examples"]
 
 [workspace.package]
 version = "0.0.0"
