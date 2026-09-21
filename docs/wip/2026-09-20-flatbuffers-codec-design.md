@@ -534,6 +534,162 @@ beside a _bounded_ member only. A probe confirms the untested path refuses
 correctly, naming the unbounded field, but the coverage gap is real and is left
 for K5 to close alongside the two above.
 
+## 4b. Stage K5, 2026-09-21: the codec is emitted, and what this stage decided
+
+Stage K5 (plan Task 4) emitted the view, `encode`, `verify`, `decode` and
+`MAX_SIZE` into `generate`'s output, from a new module
+`crates/ridl-backend-rust/src/codec.rs`, and wired D-7's refusal in per type. A
+payload round-trips: `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`
+compiles the generated codec as a program and runs it, over a fixture carrying
+one declaration per shape the codec reaches. What follows is what this stage
+decided that the note above did not already carry.
+
+**The two gaps §4a carried forward are closed, and the third is covered.**
+
+1. **An anonymous composite is descended into, leaf by leaf.** The exemption was
+   per member but whole-member, so `map<veh.other.Speed, string>` answered
+   `Ok(())`: the unresolved key made the whole field unjudgeable and the
+   unbounded value rode along. `judge` in `crates/ridl-backend-rust/src/lib.rs`
+   now probes a position it can resolve in full and **descends into one it
+   cannot**: an array hands the question to its element, a map to its two
+   halves, a tuple to its fields, and one unbounded leaf refuses the member
+   whatever sits beside it. Only a named reference and a stream are unjudgeable
+   in themselves. `probe_struct_field` and `probe_union_arm` are one function
+   again, `probe_field_type`, which writes ordinal 1 rather than copying the
+   member's, so a malformed ordinal is attributed as a layout error instead of
+   being mistaken for an unbounded member.
+2. **`Attribution::Declaration` is split into three.** `Layout(String)` carries
+   `fb_projection::struct_table`'s own message for a declaration-wide layout
+   error — two members on one ordinal, or an ordinal of 0 — and is checked
+   first, because with two members on one ordinal every member probes as bounded
+   and only the aggregate answers `None`. `Untyped(String)` names a member with
+   no `r#type` at all. `Aggregate` is what is left: every member bounded on its
+   own, the total not. Each writes its own message.
+3. **The untested path §4a noted is now tested.** A same-package cycle beside a
+   genuinely unbounded member refuses over the unbounded one and names it
+   (`flatbuffers_bound_names_the_unbounded_member_beside_a_cycle`).
+
+**An `Unspecified` field primitive is exempted, not refused.** It emits `()` and
+is charged nothing, exactly as a `Stream` is, and `derives` already lists the
+two side by side among its refusing positions. It is malformed IR rather than an
+unbounded shape, so `member_resolves_locally` answers `false` for it and the
+type carries no codec.
+
+**`check_flatbuffers_bounds` became `check_flatbuffers_bound`, per type.** D-7's
+own wording is per type, and §4a's "Consequence for K5" says K5 calls it once
+per type as it is about to emit that type's implementation. It is now called
+exactly there, and `Ok(())` means one of two things the caller already knows
+apart: the type has a bound, or its missing bound has a cause this backend
+cannot judge and that one type carries no codec. The five hand-built fixtures
+§4a named are repaired: four gave their `string`-backed named scalar typl §4.4's
+default `[0..256]` bound, which the checker always materializes, and the fifth
+is the `Unspecified` primitive above.
+
+**`MAX_SIZE` is a literal with a doc comment naming the rule.** Task 4 rules out
+a const-evaluable expression over the field types. The constant is the number
+`ridl_ir::projection::flatbuffers::max_size` returned, and the doc comment on it
+names the rule that produced it — each table charged its `soffset`, its inline
+fields, its vtable and one alignment event per slot; a string four bytes per
+declared character plus a terminator; a collection its declared maximum — and
+says why it is a literal: the slack the projection charges is not expressible in
+Rust's type system.
+
+**The inline layout is the codec's, not the projection's.** The projection owns
+the slot ids, the union discriminant and the size bound, because two emitters
+must agree on them. Which byte of a table a field starts at, and how large the
+table is, are observable only by the codec: a `.fbs` schema states no offsets,
+and no other emitter reads one. They are therefore computed in `codec.rs`, in
+declaration order with each field aligned to its own width, which makes the
+encoding deterministic (D-8). The bound stays sound whatever order is chosen,
+because it charges `ALIGN_SLACK` once per vtable slot and once more for the
+table's own `soffset`, which is the worst case any order can reach.
+`crates/ridl-rt/src/flatbuffers.rs`'s module documentation said the offsets were
+the projection's; it is corrected in place, as is the `ridl-rt` design record's
+paragraph on the feature.
+
+**The codec is emitted at the generated package's module scope, not in a
+submodule.** Three free functions per table —
+`__ridl_fb_{encode,verify,decode}_<snake>` — plus one view struct
+`<T>FbView<'a>` per table. At module scope a same-package reference is spelled
+exactly as `type_path` spells it everywhere else, and the functions can read a
+generated type's private inner value the way any other item of that module can,
+which is what lets `decode` build an enum set that publishes no constructor. The
+`__ridl_fb_` prefix collides with no typl name: typl §15.1 gives a declaration a
+CamelCase name and a constant a SCREAMING_SNAKE one.
+
+**What the view offers, and what it decodes.** D-3 asks for one accessor per
+field returning the field's own view. A scalar, a string, a byte sequence and a
+nested table are read in place, which is the zero-copy property ADR-0020
+decision 2 rests on. **A union and a collection decode on access**: a union's
+arms have no one view type, and an indexable vector view would need one view
+type per element shape and one per nesting level. That is this stage's scope
+decision, not a rejection of the fuller form; a later stage can add an
+element-wise view without changing the trait.
+
+**`decode` is total and never panics.** Every read that could fail is discharged
+with the neutral value of its own type — zero for a number, `false`, the empty
+string, the empty collection, the first declared enum variant, the enum set with
+no bit set, the first declared union arm — and `verify` is what makes those
+branches unreachable. The alternative, `unreachable!`, was rejected: D-4 says
+`decode` neither fails nor panics, and a panic in a consumer's build is worse
+than a value no run can reach. A generated enum with no value and a union with
+no arm have no neutral value at all, so the emitter refuses both with a
+`GenerateError` rather than emitting a `decode` it cannot complete.
+
+**What `verify` checks at this stage.** The structural walk of D-5 in full, plus
+two constraints: an enum and an enum-set discriminant, through the `TryFrom`
+Epic 10 already emits, reported as `VerifyError::Contract`; and a collection's
+declared element count, reported as `Rule::Length`. Both are what keeps
+`decode`'s neutral discharge from being reachable. A named scalar's own range,
+length and pattern are **not** checked yet: that is stage K6, which adds `check`
+beside `new` (D-4) and calls it from `verify`. Until it lands, `decode` builds a
+named scalar with the unchecked constructor over a value `verify` has not
+range-checked, and the type's own invariant is not enforced on the receive path.
+
+**An optional marker outside a table field is refused.** A FlatBuffers vector
+has no absent element and a map entry no absent half, so `T?` in one of those
+positions is a `GenerateError` rather than a value silently written as present.
+No typl source reaches it.
+
+**`encode` allocates only where the domain type already does.** A vector of
+strings or of tables needs each element's position before the vector can be
+written, and there are as many positions as elements. Those are exactly the
+shapes whose domain type is a `Vec` or a `String`, so a generated package over
+types that own neither still encodes with no allocator, which is what D-12
+claims. `Builder::push_offset_vector` is the one helper this needed, and K3's
+module documentation had already said such a helper would arrive with the
+emitter.
+
+**The codec is `generate`'s output and not `generate_face`'s.** D-1 as amended
+says the codec is `generate`'s output; it says nothing about the companion.
+Adding it to `generate_face` as well would regenerate
+`crates/ridl-backend-rust/tests/generated/interaction_face.rs`, which the plan
+assigns to Task 6 (stage K7) and which is ordered against another lane's work.
+So `generate_face` is unchanged here, and K7 adds the codec to it with the
+`Wire` rebinding, in the stage that owns that file.
+`the_pipeline_generate_stays_clean_of_the_face` is rewritten rather than
+deleted: it used to assert that `generate` names no runtime path outside a
+constructor, which the D-1 amendment made false, and it now asserts that every
+runtime path `generate` names belongs to the constructors or the codec and that
+none belongs to the face.
+
+**The emitted manifest names the feature.** `crates/ridlc/src/lib.rs` now
+renders `ridl-rt = { version = "0.1", features = ["flatbuffers"] }`, because
+`generate`'s output calls the helpers that feature gates. This makes the
+generated manifest unbuildable outside this repository until a `ridl-rt` release
+carries the feature's contents — the release coupling D-12 records — and nothing
+here can test it, because every proof links `ridl-rt`'s source rather than a
+release. E11.14 owns the manifest.
+
+**What a cross-package reference gets: no codec, and no diagnostic.**
+`ridl-backend-rust` resolves no cross-package reference, so it can neither size
+nor encode a type that reaches one — it cannot even learn a foreign named
+scalar's width. Such a type is exempt, not refused, so the corpus's
+`ClimateReport` generates its domain type and no `Payload<FlatBuffers>`
+implementation. Closing that needs the emitter to be handed the other packages,
+which is a change to `generate`'s signature and belongs with E11.14 or the
+plugin system's `CodegenRequest`, not here.
+
 ## 5. Records this changes, if the disposition takes it
 
 None of these moves in the note's own pull request.
