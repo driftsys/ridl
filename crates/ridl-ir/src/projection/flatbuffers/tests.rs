@@ -281,19 +281,133 @@ fn an_enum_with_no_zero_member_needs_the_null_default() {
 // --- the bound --------------------------------------------------------
 
 #[test]
-fn only_a_struct_or_a_union_mints_a_root_table() {
-    assert!(mints_root_table(&decl(
-        "Setpoint",
-        v2::decl::Kind::StructDef(v2::StructDef::default())
-    )));
-    assert!(mints_root_table(&decl(
-        "Command",
-        v2::decl::Kind::UnionDef(v2::UnionDef::default())
-    )));
-    assert!(!mints_root_table(&decl(
-        "Percent",
-        int_type(v2::IntWidth::U8)
-    )));
+fn every_declaration_that_projects_a_type_is_rooted_somewhere() {
+    // ADR-0019 decision 8: the three kinds that had no root before each get a
+    // box, and the two that had one keep it.
+    assert_eq!(
+        root_table(&decl(
+            "Setpoint",
+            v2::decl::Kind::StructDef(v2::StructDef::default())
+        )),
+        Some(RootTable::Own)
+    );
+    assert_eq!(
+        root_table(&decl(
+            "Command",
+            v2::decl::Kind::UnionDef(v2::UnionDef::default())
+        )),
+        Some(RootTable::UnionWrapper)
+    );
+    assert_eq!(
+        root_table(&decl("Percent", int_type(v2::IntWidth::U8))),
+        Some(RootTable::Box)
+    );
+    assert_eq!(
+        root_table(&decl(
+            "EngageState",
+            v2::decl::Kind::EnumDef(v2::EnumDef::default())
+        )),
+        Some(RootTable::Box)
+    );
+    assert_eq!(
+        root_table(&decl(
+            "Faults",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                width: v2::IntWidth::U8 as i32,
+                ..Default::default()
+            })
+        )),
+        Some(RootTable::Box)
+    );
+}
+
+#[test]
+fn a_constant_is_rooted_nowhere() {
+    // A constant is never emitted (ADR-0013 decision 5), so decision 8's
+    // "every declaration" does not reach it: there is no type to root.
+    assert_eq!(
+        root_table(&decl(
+            "MAX_SPEED",
+            v2::decl::Kind::ConstDef(v2::ConstDef::default())
+        )),
+        None
+    );
+}
+
+#[test]
+fn the_root_box_is_decision_2s_arm_box() {
+    // Decision 8 adopts decision 2's idiom rather than minting a second
+    // shape, and this is what says so: one slot, at one id.
+    assert_eq!(root_box_table(), union_arm_box_table());
+}
+
+#[test]
+fn a_named_scalar_root_is_bounded_by_its_box() {
+    let pkg = package(
+        "veh.cruise",
+        vec![decl("Percent", int_type(v2::IntWidth::U8))],
+    );
+
+    // The box is a table holding one inline byte: root, its soffset, the byte,
+    // slack for its one slot and its soffset, and a one-slot vtable — the same
+    // charge `an_arm_that_is_not_a_table_pays_for_its_box` measures for
+    // decision 2's box, less the wrapper that surrounds it there.
+    assert_eq!(
+        bound(&[&pkg], "Percent"),
+        Some(ROOT + OFFSET + 1 + ALIGN_SLACK * 2 + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK))
+    );
+}
+
+#[test]
+fn an_enum_root_is_charged_its_long_and_an_enum_set_root_its_width() {
+    // An enum is emitted at one underlying width, `long`, so its box holds
+    // eight bytes; an enum set holds its declared width.
+    let pkg = package(
+        "veh.cruise",
+        vec![
+            decl(
+                "EngageState",
+                v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![v2::EnumValue {
+                        name: "OFF".to_string(),
+                        value: 0,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ),
+            decl(
+                "Faults",
+                v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    width: v2::IntWidth::U16 as i32,
+                    ..Default::default()
+                }),
+            ),
+        ],
+    );
+
+    let box_overhead =
+        ROOT + OFFSET + ALIGN_SLACK * 2 + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK);
+    assert_eq!(bound(&[&pkg], "EngageState"), Some(box_overhead + 8));
+    assert_eq!(bound(&[&pkg], "Faults"), Some(box_overhead + 2));
+}
+
+#[test]
+fn a_string_root_pays_its_box_and_its_bytes() {
+    let pkg = package("veh.cruise", vec![decl("Label", string_type(8))]);
+
+    // A string is an offset inline and its bytes out of line, which is what
+    // the same named scalar costs at an ordinary field position.
+    assert_eq!(
+        bound(&[&pkg], "Label"),
+        Some(
+            ROOT + OFFSET
+                + OFFSET
+                + ALIGN_SLACK * 2
+                + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK)
+                + (OFFSET + 8 * 4 + 1 + ALIGN_SLACK)
+        )
+    );
 }
 
 #[test]
@@ -699,11 +813,18 @@ fn a_bound_just_inside_the_offset_range_is_kept() {
 }
 
 #[test]
-fn a_declaration_with_no_table_of_its_own_has_no_bound() {
+fn a_declaration_that_projects_no_type_has_no_bound() {
+    // ADR-0019 decision 8 gave a named scalar a root of its own, so the kinds
+    // left with no bound are the ones that project no type at all. This test
+    // held for `Percent` until then, and the bound it now has is measured by
+    // `a_named_scalar_root_is_bounded_by_its_box`.
     let pkg = package(
         "veh.cruise",
-        vec![decl("Percent", int_type(v2::IntWidth::U8))],
+        vec![decl(
+            "MAX_SPEED",
+            v2::decl::Kind::ConstDef(v2::ConstDef::default()),
+        )],
     );
 
-    assert_eq!(bound(&[&pkg], "Percent"), None);
+    assert_eq!(bound(&[&pkg], "MAX_SPEED"), None);
 }

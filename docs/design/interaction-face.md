@@ -376,15 +376,19 @@ same all-zero hash the face declares.
 | One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                    |
 | The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written  |
 
-**The first row's replacement is blocked, 2026-09-21.** E11.7's FlatBuffers
-codec landed and `generate` emits it, but the face cannot move onto it yet: a
-`Payload<FlatBuffers>` implementation is written only for a declaration the
-projection mints a root table for, which is a `struct` or a `union`, and this
-face's payloads are four named scalars and one enum beside one struct. Measured
-by adding the codec to `generate_face` and regenerating the fixture, exactly one
-implementation appears. What is missing is a projection rule for a root that is
-not a struct or a union — **driftsys/ridl#470** — and until it is decided the
-`ReprC` placeholder is still what this face names.
+**The first row's replacement is unblocked and not yet done, 2026-09-21.**
+E11.7's FlatBuffers codec landed and `generate` emits it, but for a while the
+face could not move onto it: a `Payload<FlatBuffers>` implementation was written
+only for a declaration the projection minted a root table for, which was a
+`struct` or a `union`, and this face's payloads are four named scalars and one
+enum beside one struct. Measured by adding the codec to `generate_face` and
+regenerating the fixture, exactly one implementation appeared. The missing piece
+was a projection rule for a root that is not a struct or a union —
+**driftsys/ridl#470** — and **ADR-0019 decision 8 supplies it**: every
+declaration has a root table, and a named scalar, an enum and an enum set are
+rooted in a box, so every one of this face's payloads now has a codec. What
+remains is the face-side change itself, which is E11.7's D-11 and is not done:
+until it lands, the `ReprC` placeholder is still what this face names.
 [`flatbuffers-codec.md`](flatbuffers-codec.md)'s "What is not built" carries the
 detail.
 

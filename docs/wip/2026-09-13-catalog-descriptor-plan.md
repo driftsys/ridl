@@ -2189,7 +2189,9 @@ git commit -m "feat(ridl-descriptor): derive the proto3 upper bound of every pay
 >    one.** Its signature is
 >    `max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64>`, and
 >    it answers `None` for any declaration
->    `ridl_ir::projection::flatbuffers::mints_root_table` rejects. A
+>    `ridl_ir::projection::flatbuffers::root_table` names no root for — which,
+>    since ADR-0019 decision 8, is a constant and the kinds that are not types
+>    at all, where it used to be a named scalar, an enum and an enum set too. A
 >    `PayloadShape::Field`, `::Params`, `::Return` or `::Element` is a
 >    payload with no declaration of its own. The bridge is the one stage K4
 >    already uses to charge a single member: build a synthetic `v2::Decl` in

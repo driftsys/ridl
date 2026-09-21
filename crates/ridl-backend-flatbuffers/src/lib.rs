@@ -104,9 +104,11 @@ struct Packages<'a> {
 
 /// Registers every declared name that becomes a FlatBuffers declaration: a
 /// struct's table, an enum, and a union — whose wrapper table takes the
-/// declared name ([`emit_union`]). A named scalar, enum set or constant
-/// mints no FlatBuffers declaration ([`emit_structs`]), so their names stay
-/// free for a generated name to take.
+/// declared name ([`emit_union`]). A named scalar, an enum set or a constant
+/// mints no declaration under its own name ([`emit_structs`]), so those names
+/// stay free for a generated name to take. ADR-0019 decision 8 does not change
+/// that: a named scalar's box is `<Name>Box`, a generated name claimed with the
+/// other generated ones ([`emit_induced_tables`]), never `<Name>` itself.
 fn claim_declared_names(names: &mut Namespace, package: &v2::Package) -> Result<(), GenerateError> {
     for decl in &package.decls {
         match &decl.kind {
@@ -234,10 +236,17 @@ fn screaming_snake_case(name: &str) -> String {
 /// union ([`emit_union`]). A named scalar and an enum set inline at each use
 /// site instead of becoming a declaration of their own, the same as in
 /// `ridl-backend-proto`'s tier 1, and a constant is never emitted (ADR-0013
-/// decision 5) — so a `TypeDef`, `EnumSetDef` or `ConstDef` declaration
-/// simply contributes nothing here. The walk collects the tables a container
-/// field induces — a map's entry table and a tuple's positional table —
-/// which are emitted after the declarations that reached them
+/// decision 5).
+///
+/// **Every declaration that projects a type is rooted somewhere**, though
+/// (ADR-0019 decision 8): a named scalar, an enum and an enum set each gain a
+/// box table `<Name>Box` ([`push_root_box`]), so a payload of one of those
+/// kinds has a root a buffer can carry. They still inline at a field position;
+/// the box is the root form, not the field form.
+///
+/// The walk collects the tables a container field induces — a map's entry
+/// table and a tuple's positional table — and the boxes, all of which are
+/// emitted after the declarations that reached them
 /// ([`emit_induced_tables`]).
 fn emit_structs(
     out: &mut String,
@@ -265,8 +274,53 @@ fn emit_structs(
             }
             _ => {}
         }
+        if matches!(
+            projection::root_table(decl),
+            Some(projection::RootTable::Box)
+        ) {
+            push_root_box(packages, decl, &mut induced, includes)?;
+        }
     }
     emit_induced_tables(out, packages, &mut induced, names, includes)?;
+    Ok(())
+}
+
+/// The box table a named scalar, an enum or an enum set is rooted in
+/// (ADR-0019 decision 8): `table <Name>Box { value: <resolved type> (id: 0); }`.
+///
+/// A FlatBuffers root is a table, and these three kinds each inline to a bare
+/// scalar or an enum reference at a field position, so none of them had a root
+/// at all before decision 8 — which is what left a named scalar or an enum
+/// payload with no codec to name (driftsys/ridl#470). The box is written for
+/// **every** such declaration, whether or not an interaction carries it: a
+/// projection that depended on which interactions exist would not be total
+/// over the IR (ADR-0016 decision 6), and an unreferenced box table costs
+/// nothing.
+///
+/// The wrapped field is resolved by [`named_field_type`] exactly as an
+/// ordinary field would be — its scalar or qualified name, its `= null`
+/// default when decision 6 calls for one, its constraint comment — which is
+/// the same call decision 2's arm box goes through, and the same box table
+/// [`emit_box_table`] then writes. The name is claimed in the namespace scope
+/// along with every other generated name, so `<Name>Box` colliding with a
+/// declared `NameBox` is refused ([`Namespace`], decision 5).
+fn push_root_box(
+    packages: Packages,
+    decl: &v2::Decl,
+    induced: &mut Vec<Induced>,
+    includes: &mut BTreeSet<String>,
+) -> Result<(), GenerateError> {
+    let (type_text, needs_null_default, comment) =
+        named_field_type(packages, &decl.name, "value", &decl.name, includes)?;
+    induced.push(Induced {
+        name: format!("{}Box", decl.name),
+        kind: InducedKind::Box {
+            type_text,
+            needs_null_default,
+            comment,
+        },
+        claim: "a box table generated as the root of a named scalar, an enum or an enum set",
+    });
     Ok(())
 }
 
@@ -422,6 +476,8 @@ fn union_arm_type(
                     needs_null_default,
                     comment,
                 },
+                claim: "a wrapper table generated for a union arm whose target is not itself a \
+                        table",
             });
             Ok(box_name)
         }
@@ -670,6 +726,8 @@ fn resolve_field_type(
             induced.push(Induced {
                 name: entry_name.clone(),
                 kind: InducedKind::Entry(map.as_ref().clone()),
+                claim: "an entry table generated for a map, named for the field path that \
+                        reaches it",
             });
             Ok((format!("[{entry_name}]"), false, None))
         }
@@ -677,6 +735,7 @@ fn resolve_field_type(
             induced.push(Induced {
                 name: hint.to_string(),
                 kind: InducedKind::Tuple(tuple.clone()),
+                claim: "a table generated for a tuple, named for the field path that reaches it",
             });
             Ok((hint.to_string(), false, None))
         }
@@ -871,10 +930,16 @@ fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
 #[derive(Debug, Clone)]
 struct Induced {
     /// The generated table name: the [`resolve_field_type`] `hint` for a
-    /// tuple, that hint plus `Entry` for a map, or `<Union><Arm>Box` for a
-    /// union arm ([`union_arm_type`]).
+    /// tuple, that hint plus `Entry` for a map, `<Union><Arm>Box` for a union
+    /// arm ([`union_arm_type`]), or `<Name>Box` for a declaration rooted in a
+    /// box ([`emit_structs`], ADR-0019 decision 8).
     name: String,
     kind: InducedKind,
+    /// What the namespace claim names this table as, in the refusal a
+    /// collision writes ([`Namespace`]). It is not part of [`InducedKind`],
+    /// because two paths that reach one name with one shape still collapse to
+    /// one emission whatever each of them was generated for.
+    claim: &'static str,
 }
 
 /// The container that induced a generated table, carrying what is needed to
@@ -884,10 +949,12 @@ struct Induced {
 enum InducedKind {
     Tuple(v2::TupleType),
     Entry(v2::MapType),
-    /// A union arm's wrapper, holding the already-resolved `value` field —
-    /// the same triple [`resolve_field_type`] and [`named_field_type`]
-    /// return: the FlatBuffers type, whether it needs `= null`, and the
-    /// constraint comment, if any ([`union_arm_type`]).
+    /// A box table, holding the already-resolved `value` field — the same
+    /// triple [`resolve_field_type`] and [`named_field_type`] return: the
+    /// FlatBuffers type, whether it needs `= null`, and the constraint
+    /// comment, if any. Two rules generate one: a union arm that is not
+    /// itself a table (ADR-0019 decision 2, [`union_arm_type`]), and a
+    /// declaration rooted in a box (decision 8, [`emit_structs`]).
     Box {
         type_text: String,
         needs_null_default: bool,
@@ -924,12 +991,28 @@ fn emit_induced_tables(
         index += 1;
         if let Some(previous) = seen.get(&item.name) {
             if *previous != item.kind {
+                // A box is not a container and no field path reaches one, so
+                // the container wording — and its "rename a field" remedy —
+                // would misdirect an author whose declaration's `<Name>Box`
+                // (ADR-0019 decision 8) met a union arm's `<Union><Arm>Box`
+                // (decision 2). Two boxes of the *same* shape collapse above
+                // rather than reaching here, which is why only a real
+                // disagreement is refused.
+                let remedy = if matches!(item.kind, InducedKind::Box { .. })
+                    || matches!(previous, InducedKind::Box { .. })
+                {
+                    "a box table is named for the declaration or the union arm it wraps, and \
+                     two of them spelled one name here — rename the declaration or the arm so \
+                     they differ."
+                } else {
+                    "a container generates a table named for the field path that reaches it, \
+                     and two different paths spelled one name here — rename a field so they \
+                     differ."
+                };
                 return Err(GenerateError {
                     message: format!(
-                        "the generated table name `{}` is claimed by two different container \
-                         types; a container generates a table named for the field path that \
-                         reaches it, and two different paths spelled one name here — rename \
-                         a field so they differ.",
+                        "the generated table name `{}` is claimed by two different generated \
+                         tables; {remedy}",
                         item.name
                     ),
                 });
@@ -937,20 +1020,12 @@ fn emit_induced_tables(
             continue;
         }
         seen.insert(item.name.clone(), item.kind.clone());
+        names.claim(&item.name, item.claim)?;
         match &item.kind {
             InducedKind::Tuple(tuple) => {
-                names.claim(
-                    &item.name,
-                    "a table generated for a tuple, named for the field path that reaches it",
-                )?;
                 emit_tuple_table(out, packages, &item.name, tuple, induced, includes)?;
             }
             InducedKind::Entry(map) => {
-                names.claim(
-                    &item.name,
-                    "an entry table generated for a map, named for the field path that \
-                     reaches it",
-                )?;
                 emit_entry_table(out, packages, &item.name, map, induced, includes)?;
             }
             InducedKind::Box {
@@ -958,38 +1033,53 @@ fn emit_induced_tables(
                 needs_null_default,
                 comment,
             } => {
-                names.claim(
-                    &item.name,
-                    "a wrapper table generated for a union arm whose target is not itself a \
-                     table",
-                )?;
                 emit_box_table(
                     out,
                     &item.name,
                     type_text,
                     *needs_null_default,
                     comment.clone(),
-                );
+                )?;
             }
         }
     }
     Ok(())
 }
 
-/// One induced union-arm wrapper table: a single `value` field at id 0,
-/// holding what [`union_arm_type`] already resolved — the FlatBuffers type,
-/// the `= null` default and the constraint comment an ordinary field
-/// carries at this same position ([`push_field`]). Nothing here can itself
-/// induce a further table: the three kinds this wraps — a named scalar, an
-/// enum, an enum set — each resolve to a scalar or an enum reference, never
-/// a container, so `induced` is not threaded through.
+/// One box table: a single `value` field, holding what [`union_arm_type`] or
+/// [`push_root_box`] already resolved — the FlatBuffers type, the `= null`
+/// default and the constraint comment an ordinary field carries at this same
+/// position ([`push_field`]). Two rules generate one: a union arm that is not
+/// itself a table (ADR-0019 decision 2) and a declaration rooted in a box
+/// (decision 8).
+///
+/// The slot is read from the projection's own layout rather than written as a
+/// number here, so the table this emits and the table
+/// [`projection::max_size`] charges cannot be two different tables. One layout
+/// serves both rules because decision 8 adopted decision 2's idiom:
+/// `projection::root_box_table` delegates to `union_arm_box_table`, and a unit
+/// test in `ridl-ir` pins the two equal, so reading the arm's layout here is
+/// reading the root's as well. Nothing
+/// here can itself induce a further table: the three kinds a box wraps — a
+/// named scalar, an enum, an enum set — each resolve to a scalar or an enum
+/// reference, never a container, so `induced` is not threaded through.
 fn emit_box_table(
     out: &mut String,
     name: &str,
     type_text: &str,
     needs_null_default: bool,
     comment: Option<String>,
-) {
+) -> Result<(), GenerateError> {
+    let layout = projection::union_arm_box_table();
+    let [slot] = layout.slots.as_slice() else {
+        return Err(GenerateError {
+            message: format!(
+                "the FlatBuffers projection describes a box table with {} slots, and a box \
+                 holds exactly one value (ADR-0019 decisions 2 and 8).",
+                layout.slots.len()
+            ),
+        });
+    };
     out.push_str(&format!("\ntable {name} {{\n"));
     push_field(
         out,
@@ -997,9 +1087,10 @@ fn emit_box_table(
         type_text,
         needs_null_default,
         comment,
-        projection::UNION_ARM_BOX_VALUE_ID,
+        slot.id,
     );
     out.push_str("}\n");
+    Ok(())
 }
 
 /// One induced tuple table: positional fields `field_1`, `field_2`, … with

@@ -7,9 +7,11 @@
 //! `docs/archive/2026-09-20-flatbuffers-codec-design.md`; read it for the
 //! reasoning behind a decision, not for what the code does.
 //!
-//! For every declaration that mints a root table — a struct or a union
-//! ([`fb_projection::mints_root_table`]) — this module emits, beside the
-//! domain type:
+//! For every declaration the projection names a root table for
+//! ([`fb_projection::root_table`]) — which, since ADR-0019 decision 8, is
+//! every declaration that projects a type at all: a struct over its own
+//! table, a union over its wrapper, and a named scalar, an enum and an enum
+//! set over a box table — this module emits, beside the domain type:
 //!
 //! - a view struct `<T>FbView<'a>`, the accessor D-3 asks for: it holds the
 //!   verified bytes and a table offset and reads a field in place;
@@ -290,10 +292,16 @@ impl Scalar {
     }
 
     /// The language-layer value (`i64`, `f64` or `bool`) of a primitive read.
+    ///
+    /// The `u64` cast carries no parentheses of its own: every caller either
+    /// uses the result as a whole expression or passes it as a sole call
+    /// argument, where `as` binds tightly enough, and a redundant pair draws
+    /// `unused_parens` in a consumer's build. The one caller that needs
+    /// grouping — the borrow `verify` hands `check` — writes its own.
     fn widen(&self, raw: TokenStream) -> TokenStream {
         match self.prim {
             Prim::Bool | Prim::I64 | Prim::F64 => raw,
-            Prim::U64 => quote! { (#raw as i64) },
+            Prim::U64 => quote! { #raw as i64 },
             Prim::F32 => quote! { f64::from(#raw) },
             _ => quote! { i64::from(#raw) },
         }
@@ -512,7 +520,7 @@ impl<'a> Codec<'a> {
         let mut roots: Vec<&v2::Decl> = Vec::new();
         let mut withheld: Vec<&v2::Decl> = Vec::new();
         for decl in &self.package.decls {
-            if !fb_projection::mints_root_table(decl) {
+            if fb_projection::root_table(decl).is_none() {
                 continue;
             }
             match fb_projection::max_size(self.packages(), decl) {
@@ -667,7 +675,18 @@ impl<'a> Codec<'a> {
                 items.push(self.payload_impl(decl)?);
                 Ok(items)
             }
-            // `mints_root_table` admits nothing else.
+            // A named scalar, an enum and an enum set are rooted in a box
+            // table (ADR-0019 decision 8).
+            Some(
+                v2::decl::Kind::TypeDef(_)
+                | v2::decl::Kind::EnumDef(_)
+                | v2::decl::Kind::EnumSetDef(_),
+            ) => {
+                let mut items = self.root_box_items(decl)?;
+                items.push(self.payload_impl(decl)?);
+                Ok(items)
+            }
+            // `root_table` admits nothing else.
             _ => Ok(Vec::new()),
         }
     }
@@ -1890,6 +1909,104 @@ impl<'a> Codec<'a> {
         ])
     }
 
+    /// The three bodies of one box table — the encode, the verify and the
+    /// decode — for a value of `wire` held in `table`'s one slot.
+    ///
+    /// **One box, one implementation.** ADR-0019 decision 8 adopts decision 2's
+    /// box idiom rather than minting a second shape, and this is where that is
+    /// true of the code rather than only of the records: `union_arm`'s
+    /// non-table branch and `root_box_items` both call it, and the slot, the
+    /// vtable width, the inline placement and the `MissingRequired` rule are
+    /// written once. `table` is the layout the projection hands over —
+    /// `union_arm_box_table` for an arm, `root_box_table` for a root — so the
+    /// table this writes and the table `max_size` charges cannot be two
+    /// different tables.
+    ///
+    /// `at` is the expression naming the box's own table offset. The two call
+    /// sites differ in one thing and nothing else: a root table is already
+    /// followed by the time `Payload::verify` reaches it, while an arm's sits
+    /// behind the union's value offset and is followed first — which is what
+    /// the caller passes in.
+    fn box_bodies(
+        &self,
+        owner: &str,
+        wire: &Wire,
+        table: &fb_projection::TableLayout,
+        value: &Operand,
+        at: &TokenStream,
+    ) -> Result<BoxBodies, GenerateError> {
+        let [slot] = table.slots.as_slice() else {
+            return Err(GenerateError {
+                message: format!(
+                    "the FlatBuffers projection describes a box table with {} slots, and a box \
+                     holds exactly one value (ADR-0019 decisions 2 and 8)",
+                    table.slots.len()
+                ),
+            });
+        };
+        let id = u16::try_from(slot.id).map_err(|_| GenerateError {
+            message: format!(
+                "the FlatBuffers projection puts a box table's value at id {}, which a vtable \
+                 cannot carry",
+                slot.id
+            ),
+        })?;
+        let id_lit = Literal::u16_suffixed(id);
+        let slots = Literal::u16_suffixed(u16::try_from(table.vtable_slots()).map_err(|_| {
+            GenerateError {
+                message: "a box table's vtable does not fit a u16".to_string(),
+            }
+        })?);
+
+        let width = wire.inline_width();
+        let (offsets, size, align) = place(&[width]);
+        let offset = Literal::u16_suffixed(offsets[0]);
+        let size = Literal::usize_suffixed(size);
+        let align = Literal::usize_suffixed(align);
+        let width_lit = Literal::usize_suffixed(width);
+
+        let field = self.encode_field(wire, value)?;
+        let inner_verify = self.verify_at(owner, wire, &quote! { __p })?;
+        let inner_decode = self.decode_expr(wire, &quote! { buf }, &quote! { __p })?;
+
+        Ok(BoxBodies {
+            encode: quote! {
+                {
+                    let __box = [::ridl_rt::flatbuffers::TableField {
+                        slot: #id_lit,
+                        offset: #offset,
+                        value: #field,
+                    }];
+                    builder.push_table(#size, #align, #slots, &__box)?
+                }
+            },
+            // The box's one field is not optional, so a buffer with no slot
+            // for it carries no value at all.
+            verify: quote! {
+                match ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                {
+                    ::core::option::Option::Some(__p) => { #inner_verify }
+                    ::core::option::Option::None => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::MissingRequired,
+                            ),
+                        );
+                    }
+                }
+            },
+            decode: quote! {
+                {
+                    let __p = ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
+                        .unwrap_or(::core::option::Option::None)
+                        .unwrap_or(0usize);
+                    #inner_decode
+                }
+            },
+        })
+    }
+
     /// One arm's three bodies. A struct or a union arm is the referenced
     /// table itself; anything else is isolated in a box table with one value
     /// field (ADR-0019 decision 2).
@@ -1916,57 +2033,171 @@ impl<'a> Codec<'a> {
                 decode: self.decode_expr(&wire, &quote! { buf }, &quote! { __value })?,
             }),
             _ => {
-                let width = wire.inline_width();
-                let (offsets, size, align) = place(&[width]);
-                let offset = Literal::u16_suffixed(offsets[0]);
-                let size = Literal::usize_suffixed(size);
-                let align = Literal::usize_suffixed(align);
-                let width_lit = Literal::usize_suffixed(width);
-                let field = self.encode_field(&wire, &Operand::borrowed(quote! { __a }))?;
-                let inner_verify = self.verify_at(owner, &wire, &quote! { __p })?;
-                let inner_decode = self.decode_expr(&wire, &quote! { buf }, &quote! { __p })?;
+                // The arm's box sits behind the union's value offset, so it is
+                // followed before its one slot is read; a root's is already
+                // followed (`root_box_items`). That is the only difference
+                // between the two, and `box_bodies` writes everything else.
+                let bodies = self.box_bodies(
+                    owner,
+                    &wire,
+                    &fb_projection::union_arm_box_table(),
+                    &Operand::borrowed(quote! { __a }),
+                    &quote! { __t },
+                )?;
+                let verify = &bodies.verify;
+                let decode = &bodies.decode;
                 Ok(UnionArm {
                     name: arm.name.clone(),
                     tag,
-                    encode: quote! {
-                        {
-                            let __box = [::ridl_rt::flatbuffers::TableField {
-                                slot: 0u16,
-                                offset: #offset,
-                                value: #field,
-                            }];
-                            builder.push_table(#size, #align, 1u16, &__box)?
-                        }
-                    },
+                    encode: bodies.encode.clone(),
                     verify: quote! {
                         let __t = ::ridl_rt::flatbuffers::follow(buf, __value)
                             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                        match ::ridl_rt::flatbuffers::field(buf, __t, 0u16, #width_lit)
-                            .map_err(::ridl_rt::payload::VerifyError::Structure)?
-                        {
-                            ::core::option::Option::Some(__p) => { #inner_verify }
-                            ::core::option::Option::None => {
-                                return ::core::result::Result::Err(
-                                    ::ridl_rt::payload::VerifyError::Structure(
-                                        ::ridl_rt::payload::Malformed::MissingRequired,
-                                    ),
-                                );
-                            }
-                        }
+                        #verify
                     },
                     decode: quote! {
                         {
                             let __t = ::ridl_rt::flatbuffers::follow(buf, __value)
                                 .unwrap_or(0usize);
-                            let __p = ::ridl_rt::flatbuffers::field(buf, __t, 0u16, #width_lit)
-                                .unwrap_or(::core::option::Option::None)
-                                .unwrap_or(0usize);
-                            #inner_decode
+                            #decode
                         }
                     },
                 })
             }
         }
+    }
+
+    // -----------------------------------------------------------------
+    // The box root (ADR-0019 decision 8)
+    // -----------------------------------------------------------------
+
+    /// The view struct and the three functions for a declaration rooted in a
+    /// box table: a named scalar, an enum or an enum set.
+    ///
+    /// A FlatBuffers root is a table, and each of these three kinds inlines to
+    /// a bare scalar at a field position, so before ADR-0019 decision 8 none of
+    /// them had a root and none of them carried a codec — which is what left
+    /// the generated face on its `ReprC` placeholder (driftsys/ridl#470). The
+    /// box is `table <Name>Box { value: <resolved type> (id: 0); }`, the same
+    /// table decision 2 gives a non-table union arm, so the three bodies are
+    /// the same three [`Codec::union_arm`] writes for that arm — read at the
+    /// root rather than behind a union's value offset, which is the one
+    /// difference: the root table is already followed, so nothing here
+    /// dereferences an offset first.
+    ///
+    /// The view hands back the value rather than a borrow: a box holds exactly
+    /// one value and decoding it costs a read, so there is nothing a nested
+    /// view would save.
+    fn root_box_items(&self, decl: &v2::Decl) -> Result<Vec<TokenStream>, GenerateError> {
+        let owner = decl.name.as_str();
+        let wire = self.wire(
+            &v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named(owner.to_string())),
+            },
+            "",
+        )?;
+        let vis = vis_tokens(decl.visibility);
+        let ty = ident(owner);
+        let view = view_ident(owner);
+        let encode_name = encode_ident(owner);
+        let verify_name = verify_ident(owner);
+        let decode_name = decode_ident(owner);
+
+        // The root table is already followed by the time `Payload::verify`
+        // and `Payload::decode` reach it, so the box's one slot is read from
+        // `table` directly. Everything else is `box_bodies`, shared with
+        // decision 2's arm box.
+        let bodies = self.box_bodies(
+            owner,
+            &wire,
+            &fb_projection::root_box_table(),
+            &Operand::borrowed(quote! { value }),
+            &quote! { table },
+        )?;
+        let encode_body = &bodies.encode;
+        let verify_body = &bodies.verify;
+        let decode_body = &bodies.decode;
+
+        let doc = format!(" An accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+        // A box holds one value, and `value()` hands it over rather than
+        // borrowing it: for a scalar and an enum that is a read, and nothing
+        // a nested view would save; for a string or a bytes backing it is an
+        // allocation, where a struct field of the same type is borrowed in
+        // place. The doc says which, since a caller in a hot path needs to
+        // know.
+        let value_doc = if matches!(wire, Wire::Text(_) | Wire::Bytes(_)) {
+            format!(
+                " The value the box carries. `{owner}` owns its bytes, so this allocates — \
+                 unlike a struct field of the same type, which a view borrows in place."
+            )
+        } else {
+            format!(
+                " The value the box carries. `{owner}` is one value, so this decodes it rather \
+                 than borrowing it, which costs one read."
+            )
+        };
+        let encode_doc = format!(
+            " Writes `{owner}` as its box table and returns its position (ADR-0019 decision 8)."
+        );
+
+        Ok(vec![
+            quote! {
+                #[doc = #doc]
+                ///
+                /// The buffer's root is the box table ADR-0019 decision 8
+                /// gives this declaration: one required `value` field. A
+                /// buffer carrying no slot for it is `MissingRequired`.
+                #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+                #[allow(deprecated)]
+                #vis struct #view<'a> {
+                    buf: &'a [u8],
+                    table: usize,
+                }
+
+                #[allow(deprecated)]
+                impl<'a> #view<'a> {
+                    /// The verified bytes this view reads.
+                    #vis fn bytes(&self) -> &'a [u8] {
+                        self.buf
+                    }
+
+                    #[doc = #value_doc]
+                    #vis fn value(&self) -> #ty {
+                        #decode_name(self.buf, self.table)
+                    }
+                }
+            },
+            quote! {
+                #[doc = #encode_doc]
+                #[allow(deprecated)]
+                fn #encode_name(
+                    value: &#ty,
+                    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+                ) -> ::core::result::Result<
+                    ::ridl_rt::flatbuffers::Pos,
+                    ::ridl_rt::payload::EncodeError,
+                > {
+                    ::core::result::Result::Ok(#encode_body)
+                }
+            },
+            quote! {
+                #[allow(deprecated)]
+                fn #verify_name(
+                    buf: &[u8],
+                    table: usize,
+                ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+                    #verify_body
+                    ::core::result::Result::Ok(())
+                }
+            },
+            quote! {
+                #[allow(deprecated)]
+                fn #decode_name(buf: &[u8], table: usize) -> #ty {
+                    #decode_body
+                }
+            },
+        ])
     }
 
     // -----------------------------------------------------------------
@@ -2055,6 +2286,15 @@ impl<'a> Codec<'a> {
             }
         })
     }
+}
+
+/// One box table's three generated bodies ([`Codec::box_bodies`]): the
+/// expression that writes it, the statements that verify it, and the
+/// expression that decodes it.
+struct BoxBodies {
+    encode: TokenStream,
+    verify: TokenStream,
+    decode: TokenStream,
 }
 
 /// One union arm's three generated bodies.

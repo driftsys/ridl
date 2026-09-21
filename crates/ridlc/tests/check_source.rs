@@ -41,13 +41,17 @@ fn check_source_and_compile_agree_on_diagnostics() {
     // `compile` always attempts Rust code generation, even when the front end
     // already reported an error, and a codegen failure appends a diagnostic
     // that `check_source` never produces — so this equality holds only for a
-    // fixture whose checked IR the backend can still generate from. This
-    // source's one parse error leaves the backend nothing it fails on, so
-    // `compile`'s diagnostics stop at the same front-end diagnostics
-    // `check_source` reports. This is not a general equality between the two
-    // functions; a fixture that also breaks the backend would need a
-    // different assertion.
-    let source = "package p\ntype X:\n";
+    // fixture whose checked IR the backend can still generate from. This is not
+    // a general equality between the two functions; a fixture that also breaks
+    // the backend would need a different assertion.
+    //
+    // The fixture is an interface in a `.typl` file: the profile refuses it,
+    // and the IR that reaches the backend carries no declaration the backend
+    // fails on. It used to be `type X:`, a declaration with no backing, which
+    // the backend now refuses in its own right — ADR-0019 decision 8 roots a
+    // named scalar in a box table, so a declaration with no backing has no
+    // FlatBuffers bound and the codec says so.
+    let source = "package p\ninterface I {}\n";
     let checked = ridlc::check_source("same.typl", source);
     let compiled = ridlc::compile("same.typl", source);
     assert_eq!(

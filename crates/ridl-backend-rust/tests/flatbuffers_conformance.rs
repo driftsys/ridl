@@ -39,6 +39,12 @@
 //!   schema gives another reader nothing to read presence from
 //!   ([`an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip`]).
 //!
+//! **A scalar root is a root like any other** (ADR-0019 decision 8). A named
+//! scalar, an enum and an enum set are rooted in a box table, and
+//! [`a_scalar_root_round_trips_through_planus_both_ways`] measures both
+//! directions over one — the same obligation the composite cases carry, on the
+//! shape that had no root at all until decision 8.
+//!
 //! Both are decided divergences rather than defects, both are measured here
 //! rather than described, and driftsys/ridl#472 carries the pair. The
 //! optional half also bounds what D-9 claims: a present default is
@@ -654,6 +660,202 @@ fn main() {{
 "#
     );
     rustc::run_program("fb_conformance_spare_lost", &program(&main));
+}
+
+/// **A scalar root, both directions** (ADR-0019 decision 8).
+///
+/// `Speed` is a named scalar, so before decision 8 it had no root table and
+/// no `Payload<FlatBuffers>` at all. Its root is now
+/// `table SpeedBox { value: ushort (id: 0); }`, and what this case measures is
+/// that the box is a FlatBuffers root like any other: planus reads the buffer
+/// this codec writes for one, and this codec accepts the buffer planus writes
+/// for one.
+///
+/// The value is 150, which is not `ushort`'s default, so the disagreement
+/// [`a_buffer_planus_wrote_omitting_a_default_is_refused`] measures is not in
+/// the way — it applies to a box's `value` field exactly as it does to any
+/// other non-optional field, since decision 8 resolves that field as an
+/// ordinary one.
+#[test]
+fn a_scalar_root_round_trips_through_planus_both_ways() {
+    // Direction one: this codec writes the box, planus reads it.
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_scalar_root_encode",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let value = Speed::new_unchecked(150);
+    let mut out = vec![0u8; <Speed as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    let mut text = String::new();
+    for byte in bytes {
+        text.push_str(&format!("{byte:02x}"));
+    }
+    println!("{text}");
+}
+"#,
+        ),
+    );
+
+    let ours = from_hex(&transcript);
+    let read = <fb::SpeedBoxRef<'_> as planus::ReadAsRoot>::read_as_root(&ours)
+        .expect("planus reads the box table this codec rooted a named scalar in");
+    assert_eq!(
+        fb::SpeedBox::try_from(read).expect("planus reads the box's one field"),
+        fb::SpeedBox { value: 150 },
+        "an independent reader must see the value this codec boxed"
+    );
+
+    // Direction two: planus writes the box, this codec verifies and decodes
+    // it. planus lays the one-field table out its own way, so a `verify` that
+    // depended on this encoder's own placement fails here.
+    let mut builder = planus::Builder::new();
+    let theirs = builder.finish(fb::SpeedBox { value: 150 }, None).to_vec();
+    let hex = to_hex(&theirs);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    let proof: Ref<'_, Speed, FlatBuffers> =
+        Ref::verify(&bytes).expect("a box another implementation wrote verifies");
+    assert_eq!(
+        proof.decode(),
+        Speed::new_unchecked(150),
+        "a box another implementation wrote decodes to the same scalar"
+    );
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_scalar_root_decode", &program(&main));
+}
+
+/// **A box root with no value slot is refused** (ADR-0019 decision 8).
+///
+/// The box's `value` field is not optional, so a buffer carrying no slot for
+/// it carries no value at all, and `verify` answers `MissingRequired`. Until
+/// this case existed the rule was pinned only as generated **text**: deleting
+/// the branch that enforces it turned fourteen snapshots red and left every
+/// round trip and every conformance case passing, because nothing constructed
+/// such a buffer. The review of 2026-09-21 found that, and this is the case
+/// that fails on the behaviour rather than on the spelling.
+///
+/// The buffer comes from planus rather than from a hand-written byte string:
+/// planus omits a field equal to its FlatBuffers default, so writing a
+/// `SpeedBox` of 0 produces exactly the empty box this codec must refuse, laid
+/// out by a conforming writer.
+///
+/// **This is the root-level reach of the default-elision divergence**
+/// driftsys/ridl#472 carries. At a field position an omitted default costs one
+/// field; at a root it costs the whole payload, since the payload *is* that
+/// one field. The rule is decision 8's and D-9's together, and it is measured
+/// here rather than described.
+#[test]
+fn a_box_root_with_no_value_slot_is_refused() {
+    let mut builder = planus::Builder::new();
+    let bytes = builder.finish(fb::SpeedBox { value: 0 }, None).to_vec();
+
+    // The omission is real: planus wrote a box with an empty vtable slot,
+    // which is what makes this a case about an absent field rather than
+    // about a zero.
+    assert_eq!(
+        voffset(&bytes, 0),
+        0,
+        "planus must omit the default-valued slot, or this case proves nothing \
+         about an absent one"
+    );
+
+    let hex = to_hex(&bytes);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    match Ref::<'_, Speed, FlatBuffers>::verify(&bytes) {{
+        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{}}
+        Err(other) => panic!("expected MissingRequired, got {{other:?}}"),
+        Ok(_) => panic!("a box with no value slot must not verify"),
+    }}
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_empty_box", &program(&main));
+}
+
+/// **An empty string box survives a foreign round trip**, which bounds how far
+/// the case above reaches.
+///
+/// A FlatBuffers default applies to a scalar and an enum, not to a string or a
+/// bytes field: an offset is present or absent, and a conforming writer writes
+/// an empty string as a present zero-length one. So the root-level refusal
+/// above does not swallow an empty `Label`, and this is the case that says so —
+/// the review of 2026-09-21 found the records claiming otherwise.
+///
+/// What a non-optional string box does refuse is an **absent** offset, which is
+/// a null string; typl gives a non-optional field no way to state one.
+#[test]
+fn an_empty_string_box_round_trips_through_planus() {
+    let mut builder = planus::Builder::new();
+    let bytes = builder
+        .finish(
+            fb::LabelBox {
+                value: Some(String::new()),
+            },
+            None,
+        )
+        .to_vec();
+
+    // The slot is present, which is what distinguishes this case from
+    // `a_box_root_with_no_value_slot_is_refused`: planus elides a default, and
+    // a string field has none to elide.
+    assert_ne!(
+        voffset(&bytes, 0),
+        0,
+        "a conforming writer writes an empty string as a present slot, or this \
+         case is testing the absent one instead"
+    );
+
+    let hex = to_hex(&bytes);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    let proof: Ref<'_, Label, FlatBuffers> =
+        Ref::verify(&bytes).expect("an empty string box verifies");
+    assert_eq!(
+        proof.decode(),
+        Label::new_unchecked(String::new()),
+        "an empty string is a value, not an absent field"
+    );
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_empty_string_box", &program(&main));
 }
 
 /// The generated codec checks for `wasm32-unknown-unknown`.

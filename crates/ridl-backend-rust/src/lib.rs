@@ -168,7 +168,7 @@ fn domain_items(
 // The FlatBuffers size bound's refusal (design note D-7, stages K4 and K5).
 // ---------------------------------------------------------------------------
 
-/// Refuses one struct or union with no finite FlatBuffers bound (design note
+/// Refuses one declaration with no finite FlatBuffers bound (design note
 /// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that note
 /// records what stage K4 built and what stage K5 closed).
 ///
@@ -192,7 +192,7 @@ pub(crate) fn check_flatbuffers_bound(
     package: &v2::Package,
     decl: &v2::Decl,
 ) -> Result<(), GenerateError> {
-    if !fb_projection::mints_root_table(decl) {
+    if fb_projection::root_table(decl).is_none() {
         return Ok(());
     }
     let packages = fb_projection::Packages {
@@ -234,11 +234,14 @@ pub(crate) fn check_flatbuffers_bound(
 /// second gap §4a of the design note carried forward: the three causes that
 /// one variant covered are now told apart, and each writes its own message.
 enum Attribution {
-    /// One member — a struct field's name, or a union arm's name — is
-    /// individually unbounded.
+    /// One member — a struct field's name, a union arm's name, or the
+    /// `value` field of a box root (ADR-0019 decision 8) — is individually
+    /// unbounded.
     Member(String),
-    /// One member carries no type at all, which is malformed IR rather than
-    /// an unbounded shape, and which no probe can charge.
+    /// One member carries no type at all — a struct field with no type, or
+    /// the `value` of a box root whose declaration names no backing — which
+    /// is malformed IR rather than an unbounded shape, and which no probe can
+    /// charge.
     Untyped(String),
     /// `fb_projection::struct_table` refused the declaration's layout — two
     /// members sharing one ordinal, or an ordinal of 0. It is a property of
@@ -316,6 +319,34 @@ fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attrib
                     Verdict::Unjudgeable => any_exempt = true,
                     Verdict::Bounded => {}
                 }
+            }
+        }
+        // A declaration rooted in a box (ADR-0019 decision 8) has one member:
+        // the box's `value` field, holding the declaration itself. It is
+        // resolved in the package that declares it, so it is never
+        // unjudgeable — only bounded, or unbounded because the IR carries no
+        // width or no length bound for it.
+        Some(
+            v2::decl::Kind::TypeDef(_) | v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_),
+        ) => {
+            // A named scalar with no backing at all is malformed IR rather
+            // than an unbounded shape, which is what `Untyped` is for. The
+            // front end leaves one behind after a parse error such as
+            // `type X:`, so this is the shape such a declaration reaches the
+            // backend in — not one a length or a width would fix.
+            if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind
+                && td.backing.is_none()
+            {
+                return Attribution::Untyped("value".to_string());
+            }
+            let ty = v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named(decl.name.clone())),
+            };
+            match judge(ctx, package, &ty) {
+                Verdict::Unbounded => return Attribution::Member("value".to_string()),
+                Verdict::Unjudgeable => any_exempt = true,
+                Verdict::Bounded => {}
             }
         }
         _ => {}

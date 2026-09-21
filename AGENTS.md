@@ -66,11 +66,15 @@ roadmap, and `rmdl` stays a Proposed draft with no implementation. See
   isolated in a wrapper table, a non-table union arm boxed, every struct a
   `table`, a map with no `(key)`, the target's own name scopes, and `= null` on
   a field whose enum declares no zero member; binds the FlatBuffers backend
-  only), ADR-0020 (the third payload encoding, the runtime layering and the
-  codegen plugin system — _proposed_; `repr(C)` joins proto3 and FlatBuffers and
-  the encoding matrix settles the codec-in-wasm boundary as FlatBuffers,
-  `ridl-rt` is one crate with one cargo feature per encoding and the runtimes
-  live outside it, and a backend becomes an executable over
+  only, and carries a 2026-09-21 amendment adding decision 8, the root rule:
+  every declaration has a root table, and a named scalar, an enum and an enum
+  set are rooted in `table <Name>Box { value: … (id: 0); }` — read it before
+  changing what the FlatBuffers backend emits for a declaration that is not a
+  struct or a union), ADR-0020 (the third payload encoding, the runtime layering
+  and the codegen plugin system — _proposed_; `repr(C)` joins proto3 and
+  FlatBuffers and the encoding matrix settles the codec-in-wasm boundary as
+  FlatBuffers, `ridl-rt` is one crate with one cargo feature per encoding and
+  the runtimes live outside it, and a backend becomes an executable over
   `generate(CodegenRequest) -> CodegenResponse` fed by a lowering step in the
   compiler — read it before writing a backend or a runtime library, and read its
   **Documents amended** table: ADR-0018's decisions 3, 6 and 15 rest on this

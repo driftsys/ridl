@@ -305,8 +305,15 @@ fn a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment() {
 
     let generated = generate(&package).expect("generate");
     assert!(
-        !generated.fbs_source.contains("table Speed"),
-        "a named scalar must inline:\n{}",
+        !generated.fbs_source.contains("table Speed {"),
+        "a named scalar must inline at a field position:\n{}",
+        generated.fbs_source
+    );
+    // ADR-0019 decision 8: it is rooted in a box all the same, under a
+    // generated name, which is not the declaration taking a table of its own.
+    assert!(
+        generated.fbs_source.contains("table SpeedBox {"),
+        "got:\n{}",
         generated.fbs_source
     );
     assert!(
@@ -1684,8 +1691,9 @@ fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
 }
 
 /// The layout of every table the projection generates for `package` — one per
-/// map, one per tuple, one per union arm that is not itself a table — derived
-/// from the IR, never from what was emitted.
+/// map, one per tuple, one per union arm that is not itself a table, and one
+/// per declaration rooted in a box (ADR-0019 decision 8) — derived from the IR,
+/// never from what was emitted.
 ///
 /// The walk follows the same paths `emit_structs` does: a struct's fields, a
 /// tuple's fields, a map's key and value, an array's element, and a union's
@@ -1718,6 +1726,16 @@ fn induced_layouts(package: &v2::Package, others: &[&v2::Package]) -> Vec<projec
                 }
             }
             _ => {}
+        }
+        // ADR-0019 decision 8: a named scalar, an enum and an enum set are
+        // each rooted in a box of their own, emitted whether or not anything
+        // references them. They are generated tables like the three above, so
+        // the multiset the schema owes gains one layout per such declaration.
+        if matches!(
+            projection::root_table(decl),
+            Some(projection::RootTable::Box)
+        ) {
+            layouts.push(projection::root_box_table());
         }
     }
     layouts
@@ -2061,6 +2079,188 @@ fn a_retired_arm_drifts_the_union_discriminant() {
 }
 
 #[test]
+fn a_root_box_colliding_with_a_declared_name_is_refused() {
+    // ADR-0019 decision 5 over decision 8's generated name: `SpeedBox` is
+    // minted for the named scalar `Speed`, and a package may already declare
+    // a struct by that name. The target rejects the redefinition
+    // ("datatype already exists"), so this backend does first.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "SpeedBox".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("value", 1, named_type("Speed"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("a generated name may not take a declared one");
+    assert!(
+        error.message.contains("SpeedBox"),
+        "the refusal must name the collision; got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_root_box_colliding_with_an_arm_box_of_another_shape_is_refused_in_its_own_words() {
+    // `<Name>Box` (ADR-0019 decision 8) and `<Union><Arm>Box` (decision 2)
+    // mint into one namespace, and two declarations can spell one box name:
+    // the named scalar `GearRatio` gives `GearRatioBox`, and the union `Gear`
+    // with an arm named `ratio` gives `GearRatioBox` too. Here the two wrap
+    // different types, so they are two different tables and the emitter
+    // refuses rather than picking one.
+    //
+    // What this pins is the *wording*. A box is not a container, no field
+    // path reaches one, and renaming a field fixes nothing — so the induced
+    // container message would send an author looking in the wrong place.
+    // ADR-0019 Open item 3 is the question of collapsing the two names; until
+    // it is taken, this is the diagnostic an author meets.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "GearRatio".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Narrow".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+                    ..speed_type_def()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "ratio".to_string(),
+                        ordinal: 1,
+                        type_ref: "Narrow".to_string(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("two boxes of different shapes may not share a name");
+    assert!(
+        error.message.contains("rename the declaration or the arm"),
+        "a box's refusal must not send the author renaming a field; got: {}",
+        error.message
+    );
+    assert!(
+        !error.message.contains("field path"),
+        "the container wording does not apply to a box; got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn two_boxes_of_one_shape_collapse_to_one_table() {
+    // The benign half of the case above, and the reason only a real
+    // disagreement is refused: when the two boxes wrap the same type they are
+    // the same table, so one emission serves both. That is incidentally the
+    // "one type, one box" outcome ADR-0019 Open item 3 contemplates, reached
+    // here by accident of naming rather than by decision.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "GearRatio".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "ratio".to_string(),
+                        ordinal: 1,
+                        type_ref: "GearRatio".to_string(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("two boxes of one shape are one table");
+    assert_eq!(
+        generated.fbs_source.matches("table GearRatioBox {").count(),
+        1,
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn every_boxed_declaration_of_the_corpus_gets_its_root_table() {
+    // ADR-0019 decision 8. The drift walk compares the multiset of generated
+    // layouts, which counts the boxes but does not say which declaration each
+    // one belongs to, so the names are checked here: one `<Name>Box` per named
+    // scalar, per enum and per enum set, holding one `value` field at id 0.
+    let package = cruise_package();
+    let generated = generate(&package).expect("generate");
+    let schema = read_back(&generated.fbs_source);
+
+    let mut boxed: Vec<String> = Vec::new();
+    for decl in &package.decls {
+        if !matches!(
+            projection::root_table(decl),
+            Some(projection::RootTable::Box)
+        ) {
+            continue;
+        }
+        let name = format!("{}Box", decl.name);
+        assert_eq!(
+            schema.tables.get(&name),
+            Some(&expected_fields(&projection::root_box_table(), &[])),
+            "`{name}` must be the box ADR-0019 decision 8 asks for; got:\n{}",
+            generated.fbs_source
+        );
+        boxed.push(decl.name.clone());
+    }
+
+    assert_eq!(
+        boxed,
+        vec![
+            "Speed".to_string(),
+            "Percent".to_string(),
+            "Delta".to_string(),
+            "EngageState".to_string(),
+            "Warnings".to_string(),
+        ],
+        "the fixture exists to carry one of each kind, and the list pins that it still does"
+    );
+    // A box is written whether or not anything references it: `Warnings` is a
+    // field type of `Telemetry`, `Speed` of three members, and `Delta` of one,
+    // while nothing in this package references `Percent` or `EngageState`
+    // through a struct field at all.
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
+}
+
+#[test]
 fn the_corpus_fixtures_map_key_is_bounded() {
     // `Telemetry.byId` is the one corpus member whose key is a `string`, and
     // a string with no length bound is the one shape `max_size` cannot
@@ -2077,7 +2277,10 @@ fn the_corpus_fixtures_map_key_is_bounded() {
         .find(|decl| decl.name == "Telemetry")
         .expect("the fixture declares it");
 
-    assert!(projection::mints_root_table(telemetry));
+    assert_eq!(
+        projection::root_table(telemetry),
+        Some(projection::RootTable::Own)
+    );
     assert!(
         projection::max_size(
             projection::Packages {

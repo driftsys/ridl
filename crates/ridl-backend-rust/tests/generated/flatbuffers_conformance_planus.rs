@@ -2909,10 +2909,2143 @@ mod root {
                 }
             }
 
+            /// The table `SpeedBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `SpeedBox` in the file `fb_demo.fbs:57`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct SpeedBox {
+                /// The field `value` in the table `SpeedBox`
+                pub value: u16,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for SpeedBox {
+                fn default() -> Self {
+                    Self { value: 0 }
+                }
+            }
+
+            impl SpeedBox {
+                /// Creates a [SpeedBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> SpeedBoxBuilder<()> {
+                    SpeedBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsDefault<u16, u16>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder, &0);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<u16>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 2>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<SpeedBox>> for SpeedBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<SpeedBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<SpeedBox>> for SpeedBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<SpeedBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<SpeedBox> for SpeedBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<SpeedBox> {
+                    SpeedBox::create(builder, self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [SpeedBox] type.
+            ///
+            /// Can be created using the [SpeedBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct SpeedBoxBuilder<State>(State);
+
+            impl SpeedBoxBuilder<()> {
+                /// Setter for the [`value` field](SpeedBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> SpeedBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<u16, u16>,
+                {
+                    SpeedBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](SpeedBox#structfield.value) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_default(self) -> SpeedBoxBuilder<(::planus::DefaultValue,)> {
+                    self.value(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> SpeedBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [SpeedBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<SpeedBox>
+                where
+                    Self: ::planus::WriteAsOffset<SpeedBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u16, u16>>
+                ::planus::WriteAs<::planus::Offset<SpeedBox>> for SpeedBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<SpeedBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<SpeedBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u16, u16>>
+                ::planus::WriteAsOptional<::planus::Offset<SpeedBox>> for SpeedBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<SpeedBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<SpeedBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u16, u16>> ::planus::WriteAsOffset<SpeedBox>
+                for SpeedBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<SpeedBox> {
+                    let (v0,) = &self.0;
+                    SpeedBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [SpeedBox].
+            #[derive(Copy, Clone)]
+            pub struct SpeedBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> SpeedBoxRef<'a> {
+                /// Getter for the [`value` field](SpeedBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<u16> {
+                    ::core::result::Result::Ok(self.0.access(0, "SpeedBox", "value")?.unwrap_or(0))
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for SpeedBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("SpeedBoxRef");
+                    f.field("value", &self.value());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<SpeedBoxRef<'a>> for SpeedBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: SpeedBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: ::core::convert::TryInto::try_into(value.value()?)?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for SpeedBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for SpeedBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[SpeedBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<SpeedBox>> for SpeedBox {
+                type Value = ::planus::Offset<SpeedBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<SpeedBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for SpeedBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[SpeedBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `CountBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `CountBox` in the file `fb_demo.fbs:62`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct CountBox {
+                /// The field `value` in the table `CountBox`
+                pub value: u8,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for CountBox {
+                fn default() -> Self {
+                    Self { value: 0 }
+                }
+            }
+
+            impl CountBox {
+                /// Creates a [CountBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> CountBoxBuilder<()> {
+                    CountBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsDefault<u8, u8>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder, &0);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<u8>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 1>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<CountBox>> for CountBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<CountBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<CountBox>> for CountBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<CountBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<CountBox> for CountBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<CountBox> {
+                    CountBox::create(builder, self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [CountBox] type.
+            ///
+            /// Can be created using the [CountBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct CountBoxBuilder<State>(State);
+
+            impl CountBoxBuilder<()> {
+                /// Setter for the [`value` field](CountBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> CountBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<u8, u8>,
+                {
+                    CountBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](CountBox#structfield.value) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_default(self) -> CountBoxBuilder<(::planus::DefaultValue,)> {
+                    self.value(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> CountBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [CountBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<CountBox>
+                where
+                    Self: ::planus::WriteAsOffset<CountBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u8, u8>> ::planus::WriteAs<::planus::Offset<CountBox>>
+                for CountBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<CountBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<CountBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u8, u8>>
+                ::planus::WriteAsOptional<::planus::Offset<CountBox>> for CountBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<CountBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<CountBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u8, u8>> ::planus::WriteAsOffset<CountBox>
+                for CountBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<CountBox> {
+                    let (v0,) = &self.0;
+                    CountBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [CountBox].
+            #[derive(Copy, Clone)]
+            pub struct CountBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> CountBoxRef<'a> {
+                /// Getter for the [`value` field](CountBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<u8> {
+                    ::core::result::Result::Ok(self.0.access(0, "CountBox", "value")?.unwrap_or(0))
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for CountBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("CountBoxRef");
+                    f.field("value", &self.value());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<CountBoxRef<'a>> for CountBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: CountBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: ::core::convert::TryInto::try_into(value.value()?)?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for CountBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for CountBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[CountBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<CountBox>> for CountBox {
+                type Value = ::planus::Offset<CountBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<CountBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for CountBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[CountBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `RatioBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `RatioBox` in the file `fb_demo.fbs:67`
+            #[derive(
+                Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize,
+            )]
+            pub struct RatioBox {
+                /// The field `value` in the table `RatioBox`
+                pub value: f32,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for RatioBox {
+                fn default() -> Self {
+                    Self { value: 0.0 }
+                }
+            }
+
+            impl RatioBox {
+                /// Creates a [RatioBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> RatioBoxBuilder<()> {
+                    RatioBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsDefault<f32, f32>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder, &0.0);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<f32>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 4>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<RatioBox>> for RatioBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RatioBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<RatioBox>> for RatioBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<RatioBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<RatioBox> for RatioBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RatioBox> {
+                    RatioBox::create(builder, self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [RatioBox] type.
+            ///
+            /// Can be created using the [RatioBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct RatioBoxBuilder<State>(State);
+
+            impl RatioBoxBuilder<()> {
+                /// Setter for the [`value` field](RatioBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> RatioBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<f32, f32>,
+                {
+                    RatioBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](RatioBox#structfield.value) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_default(self) -> RatioBoxBuilder<(::planus::DefaultValue,)> {
+                    self.value(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> RatioBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [RatioBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<RatioBox>
+                where
+                    Self: ::planus::WriteAsOffset<RatioBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<f32, f32>>
+                ::planus::WriteAs<::planus::Offset<RatioBox>> for RatioBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<RatioBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RatioBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<f32, f32>>
+                ::planus::WriteAsOptional<::planus::Offset<RatioBox>> for RatioBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<RatioBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<RatioBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<f32, f32>> ::planus::WriteAsOffset<RatioBox>
+                for RatioBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<RatioBox> {
+                    let (v0,) = &self.0;
+                    RatioBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [RatioBox].
+            #[derive(Copy, Clone)]
+            pub struct RatioBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> RatioBoxRef<'a> {
+                /// Getter for the [`value` field](RatioBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<f32> {
+                    ::core::result::Result::Ok(
+                        self.0.access(0, "RatioBox", "value")?.unwrap_or(0.0),
+                    )
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for RatioBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("RatioBoxRef");
+                    f.field("value", &self.value());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<RatioBoxRef<'a>> for RatioBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: RatioBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: ::core::convert::TryInto::try_into(value.value()?)?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for RatioBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for RatioBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[RatioBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<RatioBox>> for RatioBox {
+                type Value = ::planus::Offset<RatioBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<RatioBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for RatioBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[RatioBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `LabelBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `LabelBox` in the file `fb_demo.fbs:72`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct LabelBox {
+                /// The field `value` in the table `LabelBox`
+                pub value: ::core::option::Option<::planus::alloc::string::String>,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for LabelBox {
+                fn default() -> Self {
+                    Self {
+                        value: ::core::default::Default::default(),
+                    }
+                }
+            }
+
+            impl LabelBox {
+                /// Creates a [LabelBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> LabelBoxBuilder<()> {
+                    LabelBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsOptional<
+                        ::planus::Offset<::core::primitive::str>,
+                    >,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<::planus::Offset<str>>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 4>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<LabelBox>> for LabelBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<LabelBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<LabelBox>> for LabelBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<LabelBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<LabelBox> for LabelBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<LabelBox> {
+                    LabelBox::create(builder, &self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [LabelBox] type.
+            ///
+            /// Can be created using the [LabelBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct LabelBoxBuilder<State>(State);
+
+            impl LabelBoxBuilder<()> {
+                /// Setter for the [`value` field](LabelBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> LabelBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                {
+                    LabelBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](LabelBox#structfield.value) to null.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_null(self) -> LabelBoxBuilder<((),)> {
+                    self.value(())
+                }
+            }
+
+            impl<T0> LabelBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [LabelBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<LabelBox>
+                where
+                    Self: ::planus::WriteAsOffset<LabelBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>>
+                ::planus::WriteAs<::planus::Offset<LabelBox>> for LabelBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<LabelBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<LabelBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>>
+                ::planus::WriteAsOptional<::planus::Offset<LabelBox>> for LabelBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<LabelBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<LabelBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>>
+                ::planus::WriteAsOffset<LabelBox> for LabelBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<LabelBox> {
+                    let (v0,) = &self.0;
+                    LabelBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [LabelBox].
+            #[derive(Copy, Clone)]
+            pub struct LabelBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> LabelBoxRef<'a> {
+                /// Getter for the [`value` field](LabelBox#structfield.value).
+                #[inline]
+                pub fn value(
+                    &self,
+                ) -> ::planus::Result<::core::option::Option<&'a ::core::primitive::str>>
+                {
+                    self.0.access(0, "LabelBox", "value")
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for LabelBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("LabelBoxRef");
+                    if let ::core::option::Option::Some(field_value) = self.value().transpose() {
+                        f.field("value", &field_value);
+                    }
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<LabelBoxRef<'a>> for LabelBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: LabelBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: value.value()?.map(::core::convert::Into::into),
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for LabelBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for LabelBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[LabelBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<LabelBox>> for LabelBox {
+                type Value = ::planus::Offset<LabelBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<LabelBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for LabelBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[LabelBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `BlobBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `BlobBox` in the file `fb_demo.fbs:77`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct BlobBox {
+                /// The field `value` in the table `BlobBox`
+                pub value: ::core::option::Option<::planus::alloc::vec::Vec<u8>>,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for BlobBox {
+                fn default() -> Self {
+                    Self {
+                        value: ::core::default::Default::default(),
+                    }
+                }
+            }
+
+            impl BlobBox {
+                /// Creates a [BlobBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> BlobBoxBuilder<()> {
+                    BlobBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsOptional<::planus::Offset<[u8]>>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<::planus::Offset<[u8]>>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 4>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<BlobBox>> for BlobBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BlobBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<BlobBox>> for BlobBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<BlobBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<BlobBox> for BlobBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BlobBox> {
+                    BlobBox::create(builder, &self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [BlobBox] type.
+            ///
+            /// Can be created using the [BlobBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct BlobBoxBuilder<State>(State);
+
+            impl BlobBoxBuilder<()> {
+                /// Setter for the [`value` field](BlobBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> BlobBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsOptional<::planus::Offset<[u8]>>,
+                {
+                    BlobBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](BlobBox#structfield.value) to null.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_null(self) -> BlobBoxBuilder<((),)> {
+                    self.value(())
+                }
+            }
+
+            impl<T0> BlobBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [BlobBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<BlobBox>
+                where
+                    Self: ::planus::WriteAsOffset<BlobBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsOptional<::planus::Offset<[u8]>>>
+                ::planus::WriteAs<::planus::Offset<BlobBox>> for BlobBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<BlobBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BlobBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsOptional<::planus::Offset<[u8]>>>
+                ::planus::WriteAsOptional<::planus::Offset<BlobBox>> for BlobBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<BlobBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<BlobBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsOptional<::planus::Offset<[u8]>>>
+                ::planus::WriteAsOffset<BlobBox> for BlobBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<BlobBox> {
+                    let (v0,) = &self.0;
+                    BlobBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [BlobBox].
+            #[derive(Copy, Clone)]
+            pub struct BlobBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> BlobBoxRef<'a> {
+                /// Getter for the [`value` field](BlobBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<::core::option::Option<&'a [u8]>> {
+                    self.0.access(0, "BlobBox", "value")
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for BlobBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("BlobBoxRef");
+                    if let ::core::option::Option::Some(field_value) = self.value().transpose() {
+                        f.field("value", &field_value);
+                    }
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<BlobBoxRef<'a>> for BlobBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: BlobBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: value.value()?.map(|v| v.to_vec()),
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for BlobBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for BlobBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[BlobBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<BlobBox>> for BlobBox {
+                type Value = ::planus::Offset<BlobBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<BlobBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for BlobBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[BlobBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `EngagedBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `EngagedBox` in the file `fb_demo.fbs:82`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct EngagedBox {
+                /// The field `value` in the table `EngagedBox`
+                pub value: bool,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for EngagedBox {
+                fn default() -> Self {
+                    Self { value: false }
+                }
+            }
+
+            impl EngagedBox {
+                /// Creates a [EngagedBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> EngagedBoxBuilder<()> {
+                    EngagedBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsDefault<bool, bool>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder, &false);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<bool>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 1>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<EngagedBox>> for EngagedBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EngagedBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<EngagedBox>> for EngagedBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<EngagedBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<EngagedBox> for EngagedBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EngagedBox> {
+                    EngagedBox::create(builder, self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [EngagedBox] type.
+            ///
+            /// Can be created using the [EngagedBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct EngagedBoxBuilder<State>(State);
+
+            impl EngagedBoxBuilder<()> {
+                /// Setter for the [`value` field](EngagedBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> EngagedBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<bool, bool>,
+                {
+                    EngagedBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](EngagedBox#structfield.value) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_default(self) -> EngagedBoxBuilder<(::planus::DefaultValue,)> {
+                    self.value(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> EngagedBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [EngagedBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<EngagedBox>
+                where
+                    Self: ::planus::WriteAsOffset<EngagedBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<bool, bool>>
+                ::planus::WriteAs<::planus::Offset<EngagedBox>> for EngagedBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<EngagedBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EngagedBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<bool, bool>>
+                ::planus::WriteAsOptional<::planus::Offset<EngagedBox>>
+                for EngagedBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<EngagedBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<EngagedBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<bool, bool>> ::planus::WriteAsOffset<EngagedBox>
+                for EngagedBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<EngagedBox> {
+                    let (v0,) = &self.0;
+                    EngagedBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [EngagedBox].
+            #[derive(Copy, Clone)]
+            pub struct EngagedBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> EngagedBoxRef<'a> {
+                /// Getter for the [`value` field](EngagedBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<bool> {
+                    ::core::result::Result::Ok(
+                        self.0.access(0, "EngagedBox", "value")?.unwrap_or(false),
+                    )
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for EngagedBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("EngagedBoxRef");
+                    f.field("value", &self.value());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<EngagedBoxRef<'a>> for EngagedBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: EngagedBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: ::core::convert::TryInto::try_into(value.value()?)?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for EngagedBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for EngagedBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[EngagedBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<EngagedBox>> for EngagedBox {
+                type Value = ::planus::Offset<EngagedBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<EngagedBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for EngagedBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[EngagedBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `HealthBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `HealthBox` in the file `fb_demo.fbs:87`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct HealthBox {
+                /// The field `value` in the table `HealthBox`
+                pub value: self::Health,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for HealthBox {
+                fn default() -> Self {
+                    Self {
+                        value: self::Health::Ok,
+                    }
+                }
+            }
+
+            impl HealthBox {
+                /// Creates a [HealthBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> HealthBoxBuilder<()> {
+                    HealthBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsDefault<self::Health, self::Health>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder, &self::Health::Ok);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<self::Health>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 8>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<HealthBox>> for HealthBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<HealthBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<HealthBox>> for HealthBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<HealthBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<HealthBox> for HealthBox {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<HealthBox> {
+                    HealthBox::create(builder, self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [HealthBox] type.
+            ///
+            /// Can be created using the [HealthBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct HealthBoxBuilder<State>(State);
+
+            impl HealthBoxBuilder<()> {
+                /// Setter for the [`value` field](HealthBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> HealthBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<self::Health, self::Health>,
+                {
+                    HealthBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](HealthBox#structfield.value) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_default(self) -> HealthBoxBuilder<(::planus::DefaultValue,)> {
+                    self.value(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> HealthBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [HealthBox].
+                #[inline]
+                pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<HealthBox>
+                where
+                    Self: ::planus::WriteAsOffset<HealthBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<self::Health, self::Health>>
+                ::planus::WriteAs<::planus::Offset<HealthBox>> for HealthBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<HealthBox>;
+
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<HealthBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<self::Health, self::Health>>
+                ::planus::WriteAsOptional<::planus::Offset<HealthBox>> for HealthBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<HealthBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<HealthBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<self::Health, self::Health>>
+                ::planus::WriteAsOffset<HealthBox> for HealthBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<HealthBox> {
+                    let (v0,) = &self.0;
+                    HealthBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [HealthBox].
+            #[derive(Copy, Clone)]
+            pub struct HealthBoxRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> HealthBoxRef<'a> {
+                /// Getter for the [`value` field](HealthBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<self::Health> {
+                    ::core::result::Result::Ok(
+                        self.0
+                            .access(0, "HealthBox", "value")?
+                            .unwrap_or(self::Health::Ok),
+                    )
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for HealthBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("HealthBoxRef");
+                    f.field("value", &self.value());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<HealthBoxRef<'a>> for HealthBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: HealthBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: ::core::convert::TryInto::try_into(value.value()?)?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for HealthBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for HealthBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[HealthBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<HealthBox>> for HealthBox {
+                type Value = ::planus::Offset<HealthBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<HealthBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for HealthBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[HealthBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
+            /// The table `WarningFlagsBox` in the namespace `fb.demo`
+            ///
+            /// Generated from these locations:
+            /// * Table `WarningFlagsBox` in the file `fb_demo.fbs:91`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct WarningFlagsBox {
+                /// The field `value` in the table `WarningFlagsBox`
+                pub value: u8,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for WarningFlagsBox {
+                fn default() -> Self {
+                    Self { value: 0 }
+                }
+            }
+
+            impl WarningFlagsBox {
+                /// Creates a [WarningFlagsBoxBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> WarningFlagsBoxBuilder<()> {
+                    WarningFlagsBoxBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_value: impl ::planus::WriteAsDefault<u8, u8>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_value = field_value.prepare(builder, &0);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    if prepared_value.is_some() {
+                        table_writer.write_entry::<u8>(0);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_value) = prepared_value {
+                                object_writer.write::<_, _, 1>(&prepared_value);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<WarningFlagsBox>> for WarningFlagsBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<WarningFlagsBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<WarningFlagsBox>> for WarningFlagsBox {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<WarningFlagsBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<WarningFlagsBox> for WarningFlagsBox {
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<WarningFlagsBox> {
+                    WarningFlagsBox::create(builder, self.value)
+                }
+            }
+
+            /// Builder for serializing an instance of the [WarningFlagsBox] type.
+            ///
+            /// Can be created using the [WarningFlagsBox::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct WarningFlagsBoxBuilder<State>(State);
+
+            impl WarningFlagsBoxBuilder<()> {
+                /// Setter for the [`value` field](WarningFlagsBox#structfield.value).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value<T0>(self, value: T0) -> WarningFlagsBoxBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<u8, u8>,
+                {
+                    WarningFlagsBoxBuilder((value,))
+                }
+
+                /// Sets the [`value` field](WarningFlagsBox#structfield.value) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn value_as_default(self) -> WarningFlagsBoxBuilder<(::planus::DefaultValue,)> {
+                    self.value(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> WarningFlagsBoxBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [WarningFlagsBox].
+                #[inline]
+                pub fn finish(
+                    self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<WarningFlagsBox>
+                where
+                    Self: ::planus::WriteAsOffset<WarningFlagsBox>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u8, u8>>
+                ::planus::WriteAs<::planus::Offset<WarningFlagsBox>>
+                for WarningFlagsBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<WarningFlagsBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<WarningFlagsBox> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u8, u8>>
+                ::planus::WriteAsOptional<::planus::Offset<WarningFlagsBox>>
+                for WarningFlagsBoxBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<WarningFlagsBox>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<WarningFlagsBox>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAsDefault<u8, u8>> ::planus::WriteAsOffset<WarningFlagsBox>
+                for WarningFlagsBoxBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<WarningFlagsBox> {
+                    let (v0,) = &self.0;
+                    WarningFlagsBox::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [WarningFlagsBox].
+            #[derive(Copy, Clone)]
+            pub struct WarningFlagsBoxRef<'a>(
+                #[allow(dead_code)] ::planus::table_reader::Table<'a>,
+            );
+
+            impl<'a> WarningFlagsBoxRef<'a> {
+                /// Getter for the [`value` field](WarningFlagsBox#structfield.value).
+                #[inline]
+                pub fn value(&self) -> ::planus::Result<u8> {
+                    ::core::result::Result::Ok(
+                        self.0.access(0, "WarningFlagsBox", "value")?.unwrap_or(0),
+                    )
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for WarningFlagsBoxRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("WarningFlagsBoxRef");
+                    f.field("value", &self.value());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<WarningFlagsBoxRef<'a>> for WarningFlagsBox {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: WarningFlagsBoxRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        value: ::core::convert::TryInto::try_into(value.value()?)?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for WarningFlagsBoxRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for WarningFlagsBoxRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[WarningFlagsBoxRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<WarningFlagsBox>> for WarningFlagsBox {
+                type Value = ::planus::Offset<WarningFlagsBox>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<WarningFlagsBox>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for WarningFlagsBoxRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[WarningFlagsBoxRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
             /// The table `OutcomeBadBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `OutcomeBadBox` in the file `fb_demo.fbs:57`
+            /// * Table `OutcomeBadBox` in the file `fb_demo.fbs:97`
             #[derive(
                 Clone,
                 Debug,
@@ -3196,7 +5329,7 @@ mod root {
             /// The table `ReportRange` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportRange` in the file `fb_demo.fbs:61`
+            /// * Table `ReportRange` in the file `fb_demo.fbs:101`
             #[derive(
                 Clone,
                 Debug,
@@ -3530,7 +5663,7 @@ mod root {
             /// The table `ReportMetaEntry` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportMetaEntry` in the file `fb_demo.fbs:68`
+            /// * Table `ReportMetaEntry` in the file `fb_demo.fbs:108`
             #[derive(
                 Clone,
                 Debug,
@@ -3867,7 +6000,7 @@ mod root {
             /// The table `ReportPointsElement` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportPointsElement` in the file `fb_demo.fbs:75`
+            /// * Table `ReportPointsElement` in the file `fb_demo.fbs:115`
             #[derive(
                 Clone,
                 Debug,
@@ -4214,7 +6347,7 @@ mod root {
             /// The table `ReportPair` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportPair` in the file `fb_demo.fbs:82`
+            /// * Table `ReportPair` in the file `fb_demo.fbs:122`
             #[derive(
                 Clone,
                 Debug,

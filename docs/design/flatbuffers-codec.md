@@ -16,22 +16,24 @@ and its plan
 [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
 
 **One decision of that note is not built.** D-11, the generated interaction face
-moving off its `ReprC` placeholder and onto the codec, is blocked on a
-projection decision nobody has taken: **driftsys/ridl#470**. The section
-["What is not built"](#what-is-not-built) below is the live statement of it, and
-is what whoever takes that issue should read first.
+moving off its `ReprC` placeholder and onto the codec, is stage K9b's. The
+projection decision that blocked it, **driftsys/ridl#470**, is taken and is
+[ADR-0019 decision 8](../decisions/ADR-0019-flatbuffers-projection-rules.md):
+every declaration has a root table, and a named scalar, an enum and an enum set
+are rooted in a box. The section ["What is not built"](#what-is-not-built) below
+is the live statement of what is left.
 
 ## Where the code is
 
-| What                                               | Where                                                       |
-| -------------------------------------------------- | ----------------------------------------------------------- |
-| The projection facts both emitters read            | `crates/ridl-ir/src/projection/flatbuffers.rs`              |
-| The `.fbs` schema emitter                          | `crates/ridl-backend-flatbuffers/src/lib.rs`                |
-| The codec emitter                                  | `crates/ridl-backend-rust/src/codec.rs`                     |
-| The per-type refusal (`check_flatbuffers_bound`)   | `crates/ridl-backend-rust/src/lib.rs`                       |
-| The reader and builder the emitted code calls      | `crates/ridl-rt/src/flatbuffers.rs`                         |
-| The round trip, run rather than compiled           | `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`   |
-| Conformance against planus, and the `wasm32` check | `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` |
+| What                                                                 | Where                                                       |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| The projection facts both emitters read, and each declaration's root | `crates/ridl-ir/src/projection/flatbuffers.rs`              |
+| The `.fbs` schema emitter                                            | `crates/ridl-backend-flatbuffers/src/lib.rs`                |
+| The codec emitter                                                    | `crates/ridl-backend-rust/src/codec.rs`                     |
+| The per-type refusal (`check_flatbuffers_bound`)                     | `crates/ridl-backend-rust/src/lib.rs`                       |
+| The reader and builder the emitted code calls                        | `crates/ridl-rt/src/flatbuffers.rs`                         |
+| The round trip, run rather than compiled                             | `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`   |
+| Conformance against planus, and the `wasm32` check                   | `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` |
 
 ## The shared facts live outside both backends
 
@@ -73,9 +75,60 @@ what lets `decode` build an enum set that publishes no constructor. The
 `__ridl_fb_` prefix collides with no typl name: typl §15.1 gives a declaration a
 CamelCase name and a constant a SCREAMING_SNAKE one.
 
-A `Payload<FlatBuffers>` implementation is written for a declaration
-`ridl_ir::projection::flatbuffers::mints_root_table` accepts, which is a
-`struct` or a `union` and nothing else.
+A `Payload<FlatBuffers>` implementation is written for every declaration
+`ridl_ir::projection::flatbuffers::root_table` names a root for, which is every
+declaration that projects a type at all: a struct over its own table, a union
+over its wrapper, and a named scalar, an enum and an enum set over the box table
+ADR-0019 decision 8 gives them. A constant projects no type and gets none.
+
+**The box root is decision 2's box read at the root.**
+`table <Name>Box { value:
+<resolved type> (id: 0); }` is the same table a
+non-table union arm is isolated in, and the two share one implementation rather
+than two that agree: `Codec::box_bodies` writes the encode, the verify and the
+decode once, and decision 2's arm and decision 8's root both call it. The slot
+comes from the layout the projection hands over, so the table the codec writes
+and the table `max_size` charges cannot be two different tables, and the `.fbs`
+emitter reads the same layout for the same reason. The one difference between
+the two call sites is that a root table is already followed by the time
+`Payload::verify` reaches it, where an arm's sits behind the union's value
+offset and is followed first. The box's `value` field is not optional, so a
+buffer with no slot for it is `Malformed::MissingRequired`. The view a box hands
+back is the value rather than a borrow, and what that costs depends on the
+backing: a scalar or an enum is one read, and nothing a nested view would save,
+while a string or a bytes backing **allocates**, where a struct field of the
+same type is borrowed in place as `&'a str` or `&'a [u8]`. The generated doc
+comment on `value()` says which of the two a given box is, since a caller in a
+hot path needs to know. Handing back a borrow instead would mean a second view
+type for those two backings alone, which is not worth the surface; a caller that
+wants the bytes without the allocation reads them off `bytes()`.
+
+Decision 8 narrowed what `generate` accepts, in one direction worth naming. A
+declaration whose box cannot be charged is now refused in its own right, over
+the box's own field: a named scalar with no width, a `string` or `bytes` one
+with no length bound, and an enum set with an unspecified width all answer
+`` `pkg.Name.value` has no finite FlatBuffers bound ``. A named scalar with **no
+backing at all** — what the front end leaves after a parse error such as
+`type X:` — is told apart from those and answers
+`` `pkg.Name.value` carries no type ``, because it is malformed IR rather than
+an unbounded shape. (The `.fbs` emitter is more tolerant of that one: it
+defaults a backing-less named scalar to `string` and emits the box without
+complaint. That predates decision 8 and is left alone.) The compiler produces no
+such IR (typl §4.4–§4.5 default a length to `[0..256]` with TYPL-103, and the
+checker derives a width for every numeric named scalar), so this is the same
+totality-over-IR-handed-in-directly standing every other case of that refusal
+has. It did change the hand-built fixtures in
+`crates/ridl-backend-rust/src/tests.rs`, which now carry what the compiler
+emits.
+
+One consequence of that is worth stating rather than leaving a reader to infer
+it from a missing fixture. The **vacuous** constructor path — `new` rather than
+`new_unchecked` — is still live and still tested for a `boolean`, `integer` or
+`float` backing, but for a `string` or a `bytes` one it is now unreachable: such
+a type is vacuous only if it carries no length bound, and a type with no length
+bound has no box bound, so no IR that `generate` accepts can reach it. It is
+dead code rather than an undertested path, and there is no fixture for it
+because there can be none.
 
 ## `encode`, `verify`, `decode`, `MAX_SIZE`
 
@@ -217,7 +270,7 @@ follows the wrong `.fbs`. What this suite proves is that the codec's bytes are
 FlatBuffers and agree with the emitted schema; agreement between the emitted
 schema and ADR-0019 rests on the schema backend's own snapshots.
 
-Five cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
+Eight cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 
 1. bytes this codec writes are read by planus and compare equal field by field;
 2. bytes planus writes are accepted by `verify` and decode to the same value;
@@ -226,9 +279,21 @@ Five cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
    the missing slots read as absent;
 4. a planus buffer that omits a default-valued non-optional field is refused;
 5. an optional scalar present at its default is lost by a codec → planus → codec
-   round trip.
+   round trip;
+6. a **scalar root** — a named scalar in its box table (ADR-0019 decision 8) —
+   is read by planus in the one direction and written by planus in the other;
+7. a box root **with no value slot** — which is what planus writes for a box at
+   its default — is refused with `MissingRequired`;
+8. an **empty string box**, which a conforming writer writes as a present
+   zero-length slot rather than eliding, round-trips.
 
-The last two are the two halves of the one disagreement below.
+Cases 4 and 5 are the two halves of the one disagreement below, case 7 is that
+same disagreement met at a root, and case 8 is the bound on how far it reaches.
+Case 7 exists because the rule was otherwise pinned only as generated text:
+deleting the branch that enforces it turned every snapshot carrying a box root
+red — fourteen under `--lib` and six more across `ridlc` — and left every round
+trip and every other conformance case passing, since nothing built such a
+buffer.
 
 Two mutations were applied and run, and each is what says the suite is not
 decorative. Shifting the union discriminant by one in `codec.rs` leaves every
@@ -259,6 +324,26 @@ declared default. That meets this codec's presence rules from both sides:
   slot, and the schema gives no other reader a way to see that as presence, so a
   foreign re-encode drops it and `Some(0)` becomes `None`.
 
+**Decision 8 gives this a root-level reach.** A box's `value` is a field like
+any other, so the non-optional half applies to it: a box carrying a scalar zero,
+or an enum at a zero member its enum declares, written by a conforming
+implementation, is a buffer this codec refuses — and at a root that is not one
+field of a payload, it is the whole payload. Measured by
+`a_box_root_with_no_value_slot_is_refused`.
+
+**It reaches only the kinds a FlatBuffers default applies to.** A string and a
+bytes field have no default: an offset is present or absent, and a conforming
+writer writes an empty string as a present zero-length one, so an empty `Label`
+survives a foreign round trip. Measured rather than reasoned, by
+`an_empty_string_box_round_trips_through_planus`: planus writing
+`LabelBox { value: Some("") }` produces a present slot, and this codec verifies
+it and decodes `Label("")`. What a non-optional string box refuses is an
+**absent** offset, which is a null string, and typl gives a non-optional field
+no way to state one. Relaxing it is #472's question, not decision 8's; note that
+accepting an absent slot without also changing `decode` would fabricate a value
+out of the buffer header rather than return the FlatBuffers default, so the two
+move together or not at all.
+
 Both are decided rather than accidental — the presence rules above state them —
 but together they mean interoperation with a foreign writer is not unconditional
 in either direction. driftsys/ridl#472 carries both halves. The same question
@@ -284,7 +369,7 @@ the test already performs over the emitter's live output.
 
 ## What is not built
 
-### D-11 — the generated face still names `ReprC` (driftsys/ridl#470)
+### D-11 — the generated face still names `ReprC`
 
 The generated interaction face names `::ridl_rt::encoding::ReprC` in
 `crates/ridl-backend-rust/src/face.rs`, and
@@ -293,35 +378,16 @@ The generated interaction face names `::ridl_rt::encoding::ReprC` in
 implementations in `crates/ridl-backend-rust/tests/interaction_face.rs` are
 still there, and they are a throwaway rather than a reference implementation.
 
-**Why it did not land.** Moving the face onto the codec needs an
-`impl Payload<FlatBuffers>` for every type an interaction carries. The emitter
-writes one only where `mints_root_table` holds, which is a `struct` or a
-`union`. The interaction-face fixture's payloads are four named scalars and one
-enum, plus one struct; measured by adding the codec to `generate_face` and
-regenerating the fixture, exactly one implementation appears. The face does not
-compile on the codec.
-
-That is not the fixture's doing. A named scalar or an enum as an interaction
-payload is idiomatic ridl and is what most of the corpus writes —
-`signal target: Speed`, `command setLever(cmd: LeverCmd)`,
-`query getLevel(limit: Level): Level`.
-
-**Why it is a decision and not a patch.** A FlatBuffers root is a table, so a
-scalar payload needs a generated wrapper table — the shape ADR-0019 decision 1
-already gives a union — and that is a projection rule. ADR-0019 states no root
-rule at all: the `.fbs` emitter writes no `root_type` and emits nothing for a
-named scalar. A wrapper only the Rust codec knew about would break the
-codec/schema agreement this whole design rests on, and putting it in the schema
-moves every FlatBuffers snapshot. The same question binds E11.8 and E11.12, and
-whatever is chosen fixes `MAX_SIZE` for such a root and therefore the bound
-E16.4 advertises.
-
-**What a taker needs.** A projection decision, in ADR-0019 or a record beside
-it, answering: what a root table is for a payload that is not a struct or a
-union; whether the `.fbs` emitter writes it; and what the bound of such a root
-is. D-11's own text in the archived design note states the face-side shape that
-follows — one encoding alias, emitted once per package — and stage K7's section
-of that note is the measurement above.
+**What blocked it is gone.** Moving the face onto the codec needs an
+`impl Payload<FlatBuffers>` for every type an interaction carries, and until
+ADR-0019 decision 8 the emitter wrote one only for a struct or a union, while
+the interaction-face fixture's payloads are four named scalars and one enum plus
+one struct — measured by adding the codec to `generate_face` and regenerating
+the fixture, exactly one implementation appeared. Decision 8 gives every
+declaration a root, so every one of those payloads now has a
+`Payload<FlatBuffers>`. What is left is the face-side change D-11 states: one
+encoding alias, emitted once per package, and every site in `face.rs` and
+`descriptors.rs` that names `ReprC` naming it instead.
 
 ## Known gaps
 
@@ -329,7 +395,7 @@ of that note is the measurement above.
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | A type reaching a cross-package reference carries no codec; the emitted source says so per type                                                                     | driftsys/ridl#467 |
 | An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify`                                                                        | driftsys/ridl#469 |
-| No `Payload` for a named-scalar or enum payload, which blocks D-11                                                                                                  | driftsys/ridl#470 |
+| No `Payload` for a named-scalar or enum payload, which blocked D-11 — closed by ADR-0019 decision 8; the row goes when K9b lands D-11                               | driftsys/ridl#470 |
 | A default and presence: a conforming writer's omitted non-optional default is refused, and a present default-valued optional scalar is lost by a foreign round trip | driftsys/ridl#472 |
 | A union-arm retirement would shift wire discriminants silently                                                                                                      | driftsys/ridl#302 |
 
