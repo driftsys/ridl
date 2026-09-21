@@ -859,14 +859,20 @@ follows is what this stage decided that the note above did not already carry.
 **`check` is not public — Sebastien's decision, not this stage's.** Every named
 scalar's `impl` block gains `fn check(value: T) -> Result<(), Violation>` beside
 `new`, `new_unchecked` and the getter, with no `pub` and no `#vis`: it carries
-no visibility modifier regardless of the type's own declared visibility.
-`verify` (`crates/ridl-backend-rust/src/codec.rs`) is the one caller outside
-`new`, and it is emitted into the same generated module as the domain types
-(design note, "The codec is emitted at the generated package's module scope, not
-in a submodule"), so a private function is visible to it the way any other item
-of that module is. Open item 2 of §4, whether `check` is public in the generated
-package, stays open — this closes only whether the codec needs it public, and it
-does not.
+no visibility modifier regardless of the type's own declared visibility. The
+real reason a private `check` is enough for every caller that needs it, stated
+in full rather than by the weaker "shares a module" framing an earlier draft of
+this section gave: the codec (`crates/ridl-backend-rust/src/codec.rs`) resolves
+no reference it cannot see in-package — a cross-package field is withheld a
+codec entirely (§4b, "What a cross-package reference gets") rather than
+generating a call across a visibility boundary — so every `check` call the codec
+emits is already known, at generation time, to name a type in the same generated
+module `check` is private to; and the interaction face (`generate_face`, K7) is
+a child `pub mod` of that module, which can see a parent module's private items
+the way any nested module can. Neither caller ever needs `check` to be more
+visible than the module it is defined in. Open item 2 of §4, whether `check` is
+public in the generated package, stays open — this closes only whether either
+caller needs it public, and neither does.
 
 **`new` becomes the composition of `check` and `new_unchecked`, exactly as D-4
 states,** rather than keeping its own inline checks beside a duplicate copy in
@@ -892,20 +898,33 @@ duplicated for a reference form.
 **What `verify` now checks, closing the gap §4b and D-5's amendment named.** The
 generated `verify` walks a named scalar's own range, length and pattern over a
 borrow, through `check`, beside the structural walk, the enum and enum-set
-discriminant, and the collection element count K5 already checked. This applies
-at every position a named scalar can occupy on the wire: an inline scalar field,
-a `string`-backed field's bytes, and a `bytes`-backed field's bytes — the last
-two read the buffer's verified slice directly and pass it to `check` with no
-copy. A **vacuous** named scalar (`ctor ==
-"new"`, `crate::NamedScalar::ctor`)
-emits no `check` at all (`emit_vacuous_type_def`), so `verify` calls nothing for
-one and the structural read is unchanged for that position, which is correct: a
-vacuous type has no constraint for `check` to hold. `decode` is unchanged by
-this stage — it already built a named scalar with its unchecked constructor over
-bytes `verify` accepted; what changed is that `verify` now accepts fewer
-buffers, so that constructor is now always called over a value inside the type's
-typl bound. The generated `verify` and `decode` doc comments that announced the
-hazard are removed with this change, as the driver instructed.
+discriminant, and the collection element count K5 already checked. `verify_at`
+is a single recursive funnel, and the named-scalar branch that calls `check`
+hangs off the one `Codec::wire` site every position reaches — so this is not
+three field forms, it is **every position the projection admits a named scalar
+at all**: an inline scalar field, a `string`-backed field's bytes, a
+`bytes`-backed field's bytes, a fixed or bounded array element, a map key, a map
+value, a tuple field, a nested struct reached through a table, a union's table
+arm and its boxed non-table arm, an array of structs, of unions, or of tuples,
+and a named scalar behind an optional, in every one of those shapes. The pull
+request that closed this gap proved the claim by execution rather than by
+reading the recursion: nineteen positions, each built out of bound with
+`new_unchecked`, encoded, and checked with `verify` — every one refused. The one
+position this coverage does **not** reach is an _anonymous_ inline constraint,
+which carries no `NamedScalar` and so has no `check` to call at all
+(driftsys/ridl#469). A **vacuous** named scalar (`ctor ==
+"new"`,
+`crate::NamedScalar::ctor`) emits no `check` at all (`emit_vacuous_type_def`),
+so `verify` calls nothing for one and the structural read is unchanged for that
+position, which is correct: a vacuous type has no constraint for `check` to
+hold. `decode` is unchanged by this stage — it already built a named scalar with
+its unchecked constructor over bytes `verify` accepted; what changed is that
+`verify` now accepts fewer buffers, so that constructor is now always called
+over a value inside the type's typl bound. The generated `verify` and `decode`
+doc comments that announced the hazard are removed with this change, as the
+driver instructed, and the new `verify` doc states what it does and does not
+check rather than claiming totality over every typl constraint (`step` and the
+anonymous inline constraint are named exclusions; see driftsys/ridl#469).
 
 **`crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs` gained
 `verify_refuses_a_named_scalar_outside_its_declared_bound`**, which builds a
@@ -917,10 +936,35 @@ every bound still verifies, so the assertion is not vacuous. Removing the
 `check` call from `verify` fails only this test among the crate's full suite —
 checked by disabling it and re-running. The same edit also widened
 `verify_refuses_an_undeclared_discriminant`'s byte-flip fuzz test to accept
-`Rule::Range` and `Rule::Pattern` beside `Rule::Variant` and `Rule::Length`: a
-random byte flip can now land inside a named scalar's own inline bytes and read
-as a value outside its typl bound, which is a real `Contract` outcome the fuzz
-loop must not treat as a failure.
+`Rule::Range` and `Rule::Pattern` beside `Rule::Variant` and `Rule::Length`, on
+the reasoning that a random byte flip can now land inside a named scalar's own
+inline bytes and read as a value outside its typl bound.
+
+**Fix round (pass 1 review, R-10/S2-4): the widened assertion was proved by
+mutation to stop catching what it guards, and is narrowed back.** With the union
+`verify`'s wildcard arm changed from `_ => return #union_malformed` to
+`_ => {}`, the widened `verify_refuses_an_undeclared_discriminant` still passed:
+its accepted rule set was wide enough that a byte flip landing on some other
+named scalar in the buffer produced an accepted `Contract` outcome, so
+`hits > 0` held even though the mutation had silently made an undeclared union
+discriminant pass `verify`. Only the isolated
+`verify_refuses_a_union_discriminant_that_names_no_arm` caught it, which is
+exactly what that test's own doc comment warns readers not to rely on the fuzz
+test for. `Rule::Pattern` was also unreachable in this fixture — no type in it
+carries a `match` pattern; `Label` is length-only — so it was added on
+speculation rather than to catch a real corruption. The assertion is narrowed to
+`Rule::Variant | Rule::Length | Rule::Range`. **Re-running the same mutation
+against the narrowed assertion gives a mixed result, reported rather than
+smoothed over**: `verify_refuses_a_union_discriminant_that_names_no_arm` still
+fails, as it did before, because it targets the exact byte the mutation changes;
+`verify_refuses_an_undeclared_discriminant` still _passes_ under the mutation,
+because its `hits > 0` check is satisfied by unrelated Range/Length violations
+the same byte-flip loop produces elsewhere in the buffer, regardless of the
+accepted rule set's width. Narrowing the rule set closes the part of the finding
+about over-accepting a rule no real corruption in this fixture produces; it does
+not make the byte-flip fuzz test a reliable detector of this specific
+union-discriminant defect. The isolated test is, and stays, the one that catches
+it.
 
 **`crates/ridl-backend-rust/src/tests.rs` gained
 `step_only_scalar_is_vacuous_and_still_names_the_gap`**, pinning
@@ -929,6 +973,34 @@ driftsys/ridl#463 finding (a): `constraint_is_vacuous` excludes `step`
 `emit_vacuous_type_def` path while `unchecked_doc` still emits its quantization
 note on the type. Adding `step` to the vacuity check — the mutation the issue
 named — fails this test alone.
+
+**Fix round (S1-2): the generated `check` doc comment named a compiler
+internal.** It read "the codec (`crate::codec`) is the one caller outside `new`,
+and it shares this module (E11.7 stage K6)" — but a generated crate has no
+`crate::codec`, that path names a module of this backend, not of the consumer's
+package, and "E11.7 stage K6" is a work item no consumer can resolve. Rewritten
+in the consumer's vocabulary: every caller outside `new` is a function generated
+into the same module, which can see a private item the way any item of a module
+can — the same register the `step` note beside it already uses.
+
+**Fix round (S1-3b/R-6): a representative subset of the nineteen-position probe
+is now permanent.** Seat 2's probe was throwaway, run once during review and not
+committed. `verify_refuses_out_of_bound_values_at_representative_positions`
+(`crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`) pins seven of the
+nineteen positions as a standing regression guard: a map key, a map value, an
+array element, a union table arm, a nested struct, an optional scalar, and a
+`bytes` backing — the last is the one arm nothing else in this file exercised,
+named scalar or otherwise. The map-value case uses `250`, not `9000`, for
+`Count` (`[0..200]`, width-projected to `u8`): `9000` truncates to `40` on
+encode, an in-bound byte that reads as a false pass, the exact artifact the
+review's own caveat records.
+
+**Fix round (S1-7a): `step_only_scalar_is_vacuous_and_still_names_the_gap` also
+asserts that no `fn check` is emitted.** The property `named_scalar_check`'s
+`ctor != "new_unchecked"` short-circuit depends on — `crate::NamedScalar::ctor`
+reads `"new"` on the vacuous path, never `"new_unchecked"`, so no `check` call
+site is ever generated for it — was until now unasserted; the test now checks
+`!source.contains("fn check(")` alongside its existing assertions.
 
 **#463 findings (b) and (c) are fixed in the same file this stage already edits,
 not filed onward.** (b): `emit_vacuous_type_def`'s doc claimed `From<Inner>` was

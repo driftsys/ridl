@@ -1375,11 +1375,22 @@ impl<'a> Codec<'a> {
             ///
             /// A total walk of the type's own shape: the structure in full,
             /// an enum and an enum-set discriminant, a collection's declared
-            /// element count, and a named scalar's own range, length and
-            /// pattern, each over a borrow (`check`, beside `new` on the
-            /// type itself). By the time this returns `Ok`, every value
-            /// `decode` builds from these bytes satisfies its typl
-            /// constraints.
+            /// element count, and every **named** scalar's own declared
+            /// range, length and pattern, checked over a borrow (`check`,
+            /// beside `new` on the type itself) against its declared range,
+            /// length and pattern.
+            ///
+            /// This does not make every value `decode` builds satisfy every
+            /// typl constraint. Three gaps:
+            ///
+            /// - a `step` constraint is checked nowhere — not by `new`, by
+            ///   `check`, or here (driftsys/ridl#469);
+            /// - the pattern check is behind the `validate-pattern` feature,
+            ///   so a value violating a `match` pattern passes when that
+            ///   feature is off;
+            /// - an anonymous inline constraint (a field's own `[..]` or
+            ///   `match` written at the field, not through a named scalar)
+            ///   is not checked here at all (driftsys/ridl#469).
             #[allow(deprecated)]
             fn #name(
                 buf: &[u8],

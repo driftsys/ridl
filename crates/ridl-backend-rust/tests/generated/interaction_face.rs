@@ -11,10 +11,10 @@ impl Temperature {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
-    /// one caller outside `new`, and it shares this module (E11.7
-    /// stage K6). `new` is the composition of this and
-    /// `new_unchecked`.
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
     fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < -40 {
@@ -72,10 +72,10 @@ impl Level {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
-    /// one caller outside `new`, and it shares this module (E11.7
-    /// stage K6). `new` is the composition of this and
-    /// `new_unchecked`.
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
     fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -133,10 +133,10 @@ impl Window {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
-    /// one caller outside `new`, and it shares this module (E11.7
-    /// stage K6). `new` is the composition of this and
-    /// `new_unchecked`.
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
     fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -194,10 +194,10 @@ impl Average {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
-    /// one caller outside `new`, and it shares this module (E11.7
-    /// stage K6). `new` is the composition of this and
-    /// `new_unchecked`.
+    /// constructing it. Not `pub`: every caller outside `new` is a
+    /// function generated into this same module, which can see a
+    /// private item here the way any other item of the module can.
+    /// `new` is the composition of this and `new_unchecked`.
     fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {

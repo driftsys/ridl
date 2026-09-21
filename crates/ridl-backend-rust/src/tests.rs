@@ -440,6 +440,13 @@ fn step_only_scalar_is_vacuous_and_still_names_the_gap() {
     // And the quantization gap is still named on the type, although `new`
     // cannot fail.
     assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
+    // No `fn check` on the vacuous path either: `named_scalar_check`'s
+    // `ctor != "new_unchecked"` short-circuit depends on this, since a
+    // vacuous type's `ctor` is `"new"`, not `"new_unchecked"`.
+    assert!(
+        !source.contains("fn check("),
+        "a vacuous type has no invariant for check to hold, got:\n{source}"
+    );
 }
 
 #[test]

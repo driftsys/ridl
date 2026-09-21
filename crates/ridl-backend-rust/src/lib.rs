@@ -888,10 +888,10 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
             }
 
             /// Checks `value` against this type's typl constraints, without
-            /// constructing it. Not `pub`: the codec (`crate::codec`) is the
-            /// one caller outside `new`, and it shares this module (E11.7
-            /// stage K6). `new` is the composition of this and
-            /// `new_unchecked`.
+            /// constructing it. Not `pub`: every caller outside `new` is a
+            /// function generated into this same module, which can see a
+            /// private item here the way any other item of the module can.
+            /// `new` is the composition of this and `new_unchecked`.
             fn check(
                 value: #check_param_ty,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1172,6 +1172,11 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
 /// backing borrows the newtype's own inner type, which [`check_deref_shadow`]
 /// then reads back to a plain value so [`constraint_checks`]'s emitted
 /// expressions need no change between `new`'s former inline form and `check`.
+///
+/// This matches on `backing_scalar` the same way [`newtype_inner`] does, by
+/// the same backing's borrowed form rather than its owned one; the two
+/// matches must stay in lockstep for every backing this function names, and
+/// each names the other for that reason.
 fn check_param_type(td: &v2::TypeDef) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::Float => quote! { &f64 },
@@ -1703,6 +1708,10 @@ pub(crate) fn field_type_tokens(
 
 /// The Rust newtype inner type for a named scalar backing (Appendix D language
 /// layer): unit and float back to `f64`, integer to `i64`.
+///
+/// [`check_param_type`] matches on `backing_scalar` the same way, one entry
+/// per backing this function names, in its borrowed form; the two matches
+/// must stay in lockstep, and each names the other for that reason.
 fn newtype_inner(td: &v2::TypeDef) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::Float => quote! { f64 },
