@@ -479,3 +479,510 @@ impl Default for SensorBoundsRange {
         }
     }
 }
+/// `DriverProfile` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `name` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
+/// `SensorBounds` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The members `labels`, `meta` reach a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
+/// `SensorResult` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The members `ok`, `err` reach a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
+/// `SensorReading` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `timestamp` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_READING: () = ();
+/// `SensorFault` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `message` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_FAULT: () = ();
+/// A zero-copy accessor over FlatBuffers bytes `SpeedLimitPayload`'s `verify` accepted.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct SpeedLimitPayloadFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> SpeedLimitPayloadFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// Reads `SpeedLimitPayload`'s `limit` field in place.
+    pub fn limit(&self) -> Speed {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Speed::new_unchecked(
+            f64::from(::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32)),
+        )
+    }
+    /// Reads `SpeedLimitPayload`'s `actual` field in place.
+    pub fn actual(&self) -> Speed {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Speed::new_unchecked(
+            f64::from(::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32)),
+        )
+    }
+}
+/// Writes `SpeedLimitPayload` as a FlatBuffers table and returns its position.
+#[allow(deprecated)]
+fn __ridl_fb_encode_speed_limit_payload(
+    value: &SpeedLimitPayload,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.limit;
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: {
+            let __s = value.actual;
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+        },
+    };
+    __n += 1;
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+}
+/// Checks the FlatBuffers table at `table` against `SpeedLimitPayload`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
+#[allow(deprecated)]
+fn __ridl_fb_verify_speed_limit_payload(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            ::ridl_rt::flatbuffers::read_f32(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            ::ridl_rt::flatbuffers::read_f32(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+/// Builds `SpeedLimitPayload` from the FlatBuffers table at `table`.
+///
+/// It cannot fail. A read that could is discharged with the
+/// neutral value of its own type — zero, the empty string or
+/// collection, the first declared enum variant — and `verify` is
+/// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
+#[allow(deprecated)]
+fn __ridl_fb_decode_speed_limit_payload(buf: &[u8], table: usize) -> SpeedLimitPayload {
+    SpeedLimitPayload {
+        limit: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            Speed::new_unchecked(
+                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+            )
+        },
+        actual: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            Speed::new_unchecked(
+                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+            )
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for SpeedLimitPayload {
+    /// The largest FlatBuffers buffer any legal `SpeedLimitPayload` encodes to: 59 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 59usize;
+    type View<'a> = SpeedLimitPayloadFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_speed_limit_payload(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SpeedLimitPayloadFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_speed_limit_payload(buf, table)?;
+        ::core::result::Result::Ok(SpeedLimitPayloadFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_speed_limit_payload(__view.buf, __view.table)
+    }
+}
+/// A zero-copy accessor over FlatBuffers bytes `RawWheelFrame`'s `verify` accepted.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub(crate) struct RawWheelFrameFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> RawWheelFrameFbView<'a> {
+    /// The verified bytes this view reads.
+    pub(crate) fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// Reads `RawWheelFrame`'s `ticks` field in place.
+    pub(crate) fn ticks(&self) -> Counter {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Counter::new(
+            i64::from(::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16)),
+        )
+    }
+    /// Reads `RawWheelFrame`'s `frame` field in place.
+    pub(crate) fn frame(&self) -> &'a [u8] {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        {
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 1usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            self.buf.get(__v.first..__v.first + __v.len).unwrap_or(&[])
+        }
+    }
+}
+/// Writes `RawWheelFrame` as a FlatBuffers table and returns its position.
+#[allow(deprecated)]
+fn __ridl_fb_encode_raw_wheel_frame(
+    value: &RawWheelFrame,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.ticks;
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset(
+            builder.push_vector(&value.frame.as_slice(), 1usize)?,
+        ),
+    };
+    __n += 1;
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+}
+/// Checks the FlatBuffers table at `table` against `RawWheelFrame`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
+#[allow(deprecated)]
+fn __ridl_fb_verify_raw_wheel_frame(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            ::ridl_rt::flatbuffers::read_u16(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+/// Builds `RawWheelFrame` from the FlatBuffers table at `table`.
+///
+/// It cannot fail. A read that could is discharged with the
+/// neutral value of its own type — zero, the empty string or
+/// collection, the first declared enum variant — and `verify` is
+/// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
+#[allow(deprecated)]
+fn __ridl_fb_decode_raw_wheel_frame(buf: &[u8], table: usize) -> RawWheelFrame {
+    RawWheelFrame {
+        ticks: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            Counter::new(
+                i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+            )
+        },
+        frame: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            {
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                    .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                        len: 0,
+                        first: 0,
+                    });
+                buf.get(__v.first..__v.first + __v.len).unwrap_or(&[]).to_vec()
+            }
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelFrame {
+    /// The largest FlatBuffers buffer any legal `RawWheelFrame` encodes to: 76 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 76usize;
+    type View<'a> = RawWheelFrameFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_raw_wheel_frame(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: RawWheelFrameFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_raw_wheel_frame(buf, table)?;
+        ::core::result::Result::Ok(RawWheelFrameFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_raw_wheel_frame(__view.buf, __view.table)
+    }
+}

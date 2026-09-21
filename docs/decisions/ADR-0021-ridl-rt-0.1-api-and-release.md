@@ -205,6 +205,31 @@ trusted with no `unsafe` and no second verification pass.
    feature stays permitted and unused; a later story that takes it would restore
    this paragraph's obligation with it.
 
+   **Amended 2026-09-21 (story E11.7, stage K5): the `flatbuffers` feature gains
+   one public item, `Builder::push_offset_vector`.** It writes a vector of
+   `uoffset_t`s naming objects already written, which is what a vector of
+   strings and a vector of tables encode to; every offset in it is relative to
+   its own position inside the vector, and a `Pos` carries no arithmetic outside
+   the module, so a caller cannot compute them. Stage K3's own module
+   documentation said a helper of this kind would arrive with the emitter that
+   needs it, and stage K5 is that emitter.
+
+   It is recorded here rather than only in the design record because a new
+   public item in `ridl-rt` is a decision of this ADR, not an implementation
+   detail — the lane K driver's K-2 says so, and stage K3's amendment above is
+   the precedent. The item is additive: no signature changes, nothing is
+   removed, and it is reachable only under a feature that is off by default, so
+   under decision 10 it is a 0.x minor rather than a break. It takes no
+   dependency, allocates nothing, and is `no_std`, so the three constraints that
+   bind this crate — `no_std`, the `wasm32` build with `--no-default-features`,
+   and the edition 2021 build at rust-version 1.83 — are unaffected;
+   `just wasm-check` and `just compat-check` both cover it through the
+   `-p ridl-rt --all-features` invocations stage K3 added.
+
+   No helper for a union arrived with it, and none is needed: a union's wrapper
+   table and a non-table arm's box are both ordinary tables (ADR-0019 decisions
+   1 and 2), which `Builder::push_table` already writes.
+
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
    categories and `CallError` composes `Contract` with `Transport`, so a new
@@ -423,14 +448,15 @@ trusted with no `unsafe` and no second verification pass.
 
 ## Documents amended
 
-| Document                                                                             | Change                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ADR-0007](ADR-0007-e1-execution.md)                                                 | decision 14's 2026-09-14 amendment now points at this record and [the `ridl-rt` design record](../design/ridl-rt.md) rather than at the working `docs/wip/` spec, which this pull request archives, and now also points at R-12 of that archived spec, noting that this record's decision 10 replaces R-12's `rust-version` item |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5 | its 2026-09-13 amendment (the `strata` → `error` rename) now points at [the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md) rather than at the working `docs/wip/` spec, which this pull request archives                                                                                                           |
-| [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                        | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                                                                                                                                |
-| [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                         | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024                                                                                                         |
-| [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                     | two paragraphs record the forwarding impls of decision 11 and the handle model of decision 12                                                                                                                                                                                                                                    |
-| [the roadmap](../ROADMAP.md), story E11.9, then E11.15                               | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over. E11.9 was split on 2026-09-20 (driftsys/ridl#445) and that clause moved to story E11.15's row unchanged                         |
+| Document                                                                                     | Change                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0007](ADR-0007-e1-execution.md)                                                         | decision 14's 2026-09-14 amendment now points at this record and [the `ridl-rt` design record](../design/ridl-rt.md) rather than at the working `docs/wip/` spec, which this pull request archives, and now also points at R-12 of that archived spec, noting that this record's decision 10 replaces R-12's `rust-version` item |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5         | its 2026-09-13 amendment (the `strata` → `error` rename) now points at [the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md) rather than at the working `docs/wip/` spec, which this pull request archives                                                                                                           |
+| [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                                | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                                                                                                                                |
+| [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                                 | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024                                                                                                         |
+| [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                             | two paragraphs record the forwarding impls of decision 11 and the handle model of decision 12                                                                                                                                                                                                                                    |
+| [the `ridl-rt` design record](../design/ridl-rt.md), the API table and the feature paragraph | `Builder::push_offset_vector` joins the `flatbuffers` row, and the paragraph's claim that a field's inline offset and a table's size are the projection's facts is corrected: they are the codec emitter's, because no other emitter can observe them (2026-09-21, story E11.7, stage K5)                                        |
+| [the roadmap](../ROADMAP.md), story E11.9, then E11.15                                       | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over. E11.9 was split on 2026-09-20 (driftsys/ridl#445) and that clause moved to story E11.15's row unchanged                         |
 
 ## References
 
