@@ -1016,6 +1016,79 @@ returns `Result`, which does not type-check in a `const` item). It is replaced
 with `.expect(...)`, which documents the invariant instead of papering over it
 with a wrong default.
 
+## 4d. Stage K7, 2026-09-21: D-11 is blocked, and what the stage landed instead
+
+Stage K7 (plan Task 6) could not execute D-11. What follows is why, what it
+landed of Task 6 that does not depend on D-11, and what it deliberately did not
+touch.
+
+**D-11 is blocked on a projection decision nobody has taken
+(driftsys/ridl#470).** Moving the face onto `Wire` requires
+`impl Payload<FlatBuffers>` for every type an interaction carries. The K5
+emitter writes one only where `fb_projection::mints_root_table` holds, and that
+is a `struct` or a `union` and nothing else. The interaction-face fixture's
+payloads are four named scalars and one enum, plus one struct; measured by
+adding `codec::package_items` to `generate_face` and regenerating the fixture,
+exactly one implementation appears, `Payload<FlatBuffers> for Warning`. The face
+does not compile on `Wire`.
+
+This is not the fixture's doing. A named scalar or an enum as an interaction
+payload is idiomatic ridl and is what most of the corpus writes —
+`signal target: Speed`, `command setLever(cmd: LeverCmd)`,
+`query getLevel(limit: Level): Level`. Plan Task 4 asked for
+"`Payload<FlatBuffers>` per payload type" and K5 delivered one per root table;
+the gap surfaced here because K7 is the first stage that compiles the face over
+the codec.
+
+It is not a patch either. A FlatBuffers root is a table, so a scalar payload
+needs a generated wrapper table — the shape ADR-0019 decision 1 already gives a
+union — and that is a projection rule. ADR-0019 states no root rule; the `.fbs`
+emitter writes no `root_type` and emits nothing for a named scalar. A wrapper
+only the Rust codec knew about would break the codec/schema agreement K-9 and
+D-9 rest on, and putting it in the schema moves every FlatBuffers snapshot,
+which K2 was told not to do. The same question binds E11.8 and E11.12, and
+whatever is chosen fixes `MAX_SIZE` for such a root and therefore E16.4's
+advertised bound. It is the "a decision and a merged record disagree in a way
+the note did not foresee" case the driver's **When to stop** names.
+
+**What is therefore untouched.** The face still names `ReprC` in
+`crates/ridl-backend-rust/src/face.rs` and
+`crates/ridl-backend-rust/src/descriptors.rs`; no `Wire` alias and no backend
+option exists; `generate_face` still emits no codec; the hand-written
+`Payload<ReprC>` implementations and the `Inner`/`inner_i64!` bridge in
+`crates/ridl-backend-rust/tests/interaction_face.rs` are still there; and the
+first row of the interaction-face record's "What is provisional" table is not
+retired, because it is still true.
+
+**What the stage landed: the prefix assumption D-2 left in the face.** K3 made
+`Encoded.bytes` a subslice of the output buffer and not necessarily a prefix
+(ADR-0021 decision 7's 2026-09-20 amendment), and `encode_into` in
+`crates/ridl-backend-rust/src/face.rs` still kept only `encoded.bytes().len()`
+and had the emitted code send `&buf[..len]`. That is wrong for any encoder that
+does not start at `out[0]`, which is every FlatBuffers encoder. The emitted code
+now binds the returned subslice and passes it on unchanged, at all four sites —
+a command's and a query's `send`, a signal's `set`, an event's `raise`, and a
+query reply's `settle`. The fix does not wait on D-11 and would otherwise have
+been a silent correctness hole the day the face did move.
+
+The guard is standing rather than one-off: every `encode` in the fixture's own
+throwaway `Payload<ReprC>` module now writes after four leading bytes, so what
+it returns is a subslice and never a prefix, and the three raw-port tests that
+re-sliced `&encode_buf[..len]` themselves were carrying the same bug and now
+pass the encoder's own slice. Restoring `&buf[..len]` in the emitter and
+regenerating the fixture fails seven of the round-trip tests in
+`tests/interaction_face.rs` — applied and run, not inferred.
+
+**What the stage landed: driftsys/ridl#448, taken the second way it names.**
+Sebastien's decision: the catalog check waits for E16.2 (driftsys/ridl#378),
+because that is what gives a port a real hash and until then the check would
+compare two zeros. Nothing is emitted and `new` still returns `Self`. ADR-0021
+decision 3 carries a 2026-09-21 amendment, ADR-0023 decision 5 a 2026-09-21
+correction, and `docs/design/interaction-face.md` a section of its own; the
+issue is closed by comment. The disposition does not depend on D-11: it was tied
+to this stage because this stage rewrites every constructor, and the decision is
+that no constructor changes.
+
 ## 5. Records this changes, if the disposition takes it
 
 None of these moves in the note's own pull request.

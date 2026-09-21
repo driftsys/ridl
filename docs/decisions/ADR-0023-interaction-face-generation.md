@@ -197,6 +197,22 @@ argument for it in the command case.
    changes land in that order even though the ratified note left their order
    open.
 
+   **Correction (2026-09-21) — "still performed once in the constructor"
+   describes a check that was never emitted.** The generated `new` is
+   `Client { port }` and nothing else; the amendment above was right that the
+   move to a by-value port neither added nor removed a catalog check, and wrong
+   to say one was there to keep. Read the clause as: the constructor is still
+   where the catalog check of
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3 belongs, and
+   holding the port by value is what leaves it somewhere to go. The check itself
+   waits on E16.2 (driftsys/ridl#378), for the reason that record's own
+   2026-09-21 amendment gives — until a catalog hash is computed rather than an
+   all-zero placeholder, the comparison is two zeros — and the story that emits
+   it takes the decision left open, which is what `new` does on a mismatch. That
+   decision is an amendment to this record, and nothing here anticipates it:
+   `new` returning `Self` today is the absence of a decision, not a decision
+   that it is infallible. Recorded on driftsys/ridl#448.
+
 ## Alternatives considered
 
 | Alternative                                                                             | Why not                                                                                                                                                                                                                                                                                                 |

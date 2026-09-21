@@ -105,6 +105,25 @@ trusted with no `unsafe` and no second verification pass.
    that spans two catalogs holds one port set per catalog; nothing atomic is
    lost, because generation is already per interface.
 
+   **Amendment (2026-09-21) — the check is not emitted yet, and waits on E16.2
+   (driftsys/ridl#378).** No generated constructor compares `port.catalog()`
+   against its interface's `CATALOG`, and none has since the face first landed:
+   `.catalog()` is called nowhere under `crates/ridl-backend-rust/`. The
+   sentence above described a check the codegen never wrote, which
+   driftsys/ridl#448 recorded. It is deferred rather than written now because
+   the descriptor emitter still writes `CatalogHash([0u8; 32])` as a
+   placeholder, so the comparison would hold two zero hashes against each other
+   and pass for every port, of every catalog — a check with no power, in a place
+   where its presence would read as a guarantee. E16.2 is what gives a catalog a
+   computed hash; the check lands with it or after it, and **the story that
+   emits it also takes the decision this record leaves open: what `new` does on
+   a mismatch.** Decision 3's substance is unchanged — the binding is one
+   catalog per port, checked once at construction and not per call — and what
+   the amendment changes is only the tense: this is what a generated client will
+   do, not what it does. Until then a face built over a port bound to another
+   catalog reads and writes the wrong interface's slots with no error, which is
+   sound only because `ridl-loopback` is in-process and single-catalog.
+
 4. **A failed `require` or `ensure` clause carries no value.** Both methods
    return `Result<(), ()>` (`#[allow(clippy::result_unit_err)]`, because the
    omission is deliberate): the method that fails already decides the contract
