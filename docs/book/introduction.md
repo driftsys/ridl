@@ -50,11 +50,15 @@ this book describes them as usable. rmdl is parked, with no implementation
 scheduled; rxdl keeps only its unrestricted profile, narrowed to types,
 interfaces and wiring, scheduled in step 2.
 
-**There is no runtime.** The transport bindings, the delivery semantics, and the
-provider-side contract enforcement are all specified and none of them are
-implemented. `ridl-rt` (above) is the library a runtime will implement, not a
-runtime itself — it performs no I/O and links no codec. This repository holds
-a compiler, its tooling, and that library.
+**There is no runtime you can run a contract over.** The transport bindings, the
+delivery semantics, and the provider-side contract enforcement are all specified
+and none of them are implemented. `ridl-rt` (above) is the library a runtime
+implements, not a runtime itself — it performs no I/O and links no codec. The
+repository does hold one runtime, `ridl-loopback`: an in-process reference that
+carries values between a provider and a consumer in one program, with no
+transport, no wire format and a clock a test advances by hand. Nothing the
+compiler emits links it yet, so it is reached only from a program written
+against it by hand.
 
 [Getting started](getting-started.md) walks through what you can run today.
 

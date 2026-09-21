@@ -412,14 +412,23 @@ link it.
 | E11.9  | `ridl-transport-ws` — the WebSocket transport crate                                                                       | a contract reaches a second process over the transport, and E11.15's loopback runs the same tests with no socket                                                                                                                                                                                                                               | M    |
 | E11.15 | `ridl-loopback` — the in-process reference runtime: every port over a queue and a map, no IO                              | the loopback exposes one handle per port role with a `Sync` reader handle, plus the aggregate handle the generated face is built over, which ADR-0021 decision 12 permits a runtime to offer and this story requires; the interaction-face round trips run over the crate, and `crates/ridl-backend-rust/tests/support/loopback.rs` is deleted | M    |
 
+**E11.15 landed** (driftsys/ridl#445). `crates/ridl-loopback` is the first
+runtime in this workspace: six handles, one per port role, with a `Send + Sync`
+reader handle carrying the two signal extensions, and an aggregate handle
+implementing all eleven port traits by delegation. Every interaction-face round
+trip builds its face over it, and the test-only double it replaced is deleted.
+Its as-built record is
+[the `ridl-loopback` design record](design/ridl-loopback.md). It is not a
+transport: E11.9 still owns that, and it does not link this crate.
+
 **E11.13 landed in driftsys/ridl#418.** It is the MVP of the generated
 interaction face, taken deliberately out of sequence: ADR-0018 decision 15
 places the face after E11.1 and E11.9, and this story ran before both so the
 team has a face to write against. It is in-process only, and it carries four
 explicit placeholders that later stories retire — a hand-written payload
-implementation (E11.7, E11.8 or E11.12), test-only ports (E11.15), a zero
-catalog hash and all-absent encoded sizes (E16.2), and a narrow contract-clause
-translator (E5.1). The as-built record is
+implementation (E11.7, E11.8 or E11.12), test-only ports (retired by E11.15), a
+zero catalog hash and all-absent encoded sizes (E16.2), and a narrow
+contract-clause translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
 trail is archived at

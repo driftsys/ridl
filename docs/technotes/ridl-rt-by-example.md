@@ -27,18 +27,20 @@ and nothing about the runtime.
 
 ## One thing to know before the examples
 
-**There is no runtime in this workspace.** `ridl-rt` is a library: it defines
-the vocabulary and the port traits, and it contains no implementation of them
-(ADR-0020 decision 6). Everything in this note that describes delivery, timing,
-ordering or staleness is describing what the specification requires of a
-runtime, not behaviour you can observe by running this repository's tests. Every
-implementation of the ports in the tree is a test double: the in-process
-`Loopback` at `crates/ridl-backend-rust/tests/support/loopback.rs` that the
-examples below run against, which holds every value in a map on one thread and
-whose clock is a counter the test advances by hand; `MinimalSignalOnlyPort` in
-`crates/ridl-backend-rust/tests/interaction_face.rs`; and `Stub` and `Memory`
-inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`. Story
-E11.15 builds the first real runtime.
+**`ridl-rt` is a library, not a runtime.** It defines the vocabulary and the
+port traits and contains no implementation of them (ADR-0020 decision 6). The
+one runtime in this workspace is `ridl-loopback` (story E11.15,
+[its design record](../design/ridl-loopback.md)), which the examples below run
+against: it holds every value in a map behind one lock, in one process, and its
+clock is a counter a test advances by hand. It carries no frame and opens no
+socket, so everything in this note that describes delivery over a transport,
+timing or staleness is still describing what the specification requires of a
+runtime rather than behaviour `ridl-loopback` produces — it measures nothing
+against a staleness bound and discards nothing for age, because it holds no
+member table to read a bound from. The other implementations of the ports in the
+tree are test doubles, not runtimes: `MinimalSignalOnlyPort` in
+`crates/ridl-backend-rust/tests/interaction_face.rs`, and `Stub` and `Memory`
+inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`.
 
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.
@@ -751,20 +753,20 @@ variant compiles without a `_` arm. That split is pinned by doctests in
 Everything in this note is real code that compiles and runs. Several pieces of
 what it stands on are placeholders with a named replacement.
 
-| Placeholder                                         | Replaced by                   |
-| --------------------------------------------------- | ----------------------------- |
-| The in-process test double the examples run against | E11.9, the first real runtime |
-| The hand-written `Payload<ReprC>` implementations   | E11.7, E11.8 or E11.12        |
-| `CATALOG.hash`, an all-zero `CatalogHash`           | E16.2 (driftsys/ridl#378)     |
-| Every `PayloadInfo.max_size` field, which is `None` | E16.2 (driftsys/ridl#378)     |
-| The contract-clause translator                      | E5.1                          |
+| Placeholder                                                         | Replaced by               |
+| ------------------------------------------------------------------- | ------------------------- |
+| The transport under the in-process runtime the examples run against | E11.9                     |
+| The hand-written `Payload<ReprC>` implementations                   | E11.7, E11.8 or E11.12    |
+| `CATALOG.hash`, an all-zero `CatalogHash`                           | E16.2 (driftsys/ridl#378) |
+| Every `PayloadInfo.max_size` field, which is `None`                 | E16.2 (driftsys/ridl#378) |
+| The contract-clause translator                                      | E5.1                      |
 
 Two further limits are not placeholders but scope:
 
 **`ridl --emit rust` does not emit the face.** The pipeline calls the backend's
 `generate`, which is unchanged; the face comes from a separate `generate_face`
-entry point. ADR-0018 decision 15 makes the face phase 2, and nothing ships a
-runtime for a pipeline consumer to link against yet.
+entry point. ADR-0018 decision 15 makes the face phase 2, and reaching the
+command line is story E11.14's.
 
 **Every command and query takes exactly one parameter.** Multi-parameter calls
 need induced argument structs, which the Rust backend does not emit from an
@@ -789,6 +791,7 @@ driven by the structured expression tree.
 | The generated face as built              | [`../design/interaction-face.md`](../design/interaction-face.md)                                                                                                |
 | The concrete generated code quoted here  | `crates/ridl-backend-rust/tests/generated/interaction_face.rs`                                                                                                  |
 | A worked round trip                      | `crates/ridl-backend-rust/tests/interaction_face.rs`                                                                                                            |
+| The runtime the round trip runs over     | [`../design/ridl-loopback.md`](../design/ridl-loopback.md)                                                                                                      |
 | What the language requires               | [`../specification/ridl-language-reference.md`](../specification/ridl-language-reference.md)                                                                    |
 | Why the runtime is layered this way      | [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md), [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) |
 | Why the `ridl-rt` API is shaped this way | [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)                                                                                                |
