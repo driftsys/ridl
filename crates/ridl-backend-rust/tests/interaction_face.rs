@@ -2,14 +2,23 @@
 //! `docs/design/interaction-face.md`; the approved design is
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §7).
 //!
-//! It brings in the checked-in generated face of `tests/generated/`, adds the
-//! hand-written `Payload<ReprC>` implementations the fixture's types need to
-//! compile (design §2 — a throwaway stand-in; E11.7/E11.8/E11.12 replace it),
-//! and runs the round trip over `ridl-loopback`, the in-process reference
-//! runtime: a signal publish and read, an event raise and receive, a command's
+//! It brings in the checked-in generated face of `tests/generated/` and runs
+//! the round trip over `ridl-loopback`, the in-process reference runtime: a
+//! signal publish and read, an event raise and receive, a command's
 //! acknowledgment, a query's reply, a failing `require`, a failing `ensure`,
 //! the settlement count when one claim's settlement fails and a later one
 //! succeeds, and dispatch's short-buffer behavior.
+//!
+//! **Every payload here is encoded by the generated FlatBuffers codec**
+//! (stage K9b, design note D-11). The hand-written `Payload<ReprC>` module
+//! this file carried until then is gone, and with it the `PAD` constant that
+//! made its `encode` return a subslice rather than a prefix. That guard is
+//! not lost: a FlatBuffers builder fills a buffer from its end, so what the
+//! generated `encode` returns is a suffix of the output buffer and a caller
+//! that re-sliced `&buf[..len]` would send leading bytes the encoder never
+//! wrote. `the_encoded_bytes_are_not_a_prefix_of_the_buffer` states that
+//! property directly, and every round trip below goes red if the emitter
+//! re-slices, because each one sends through the generated `Client`.
 //!
 //! The ports the round trip runs over are the aggregate handle of
 //! `ridl-loopback` (story E11.15, driftsys/ridl#445). Until that story landed
@@ -24,8 +33,6 @@ use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::port::Caller;
 use ridl_rt::sample::Provenance;
-
-use generated::Inner;
 
 /// The catalog the fixture's package declares, with the all-zero placeholder
 /// hash the descriptor emitter writes until story E16.2 (driftsys/ridl#378)
@@ -67,242 +74,6 @@ fn loopback() -> Loopback {
 )]
 mod generated {
     include!("generated/interaction_face.rs");
-
-    /// Reads an `i64`-backed scalar through a shared reference.
-    ///
-    /// The generated `get(self)` takes the value by move, and the generated
-    /// type carries no `Copy` derive until Task 6 of the typl value objects
-    /// plan lands, so a `Payload::encode(&self)` or a `Provider` method that
-    /// receives `&Level` cannot call it. This module is the type's defining
-    /// module, where the private field is visible, which is why the bridge
-    /// lives here. Task 6 replaces every `inner()` call with `get()` and
-    /// removes this trait.
-    pub trait Inner {
-        fn inner(&self) -> i64;
-    }
-
-    macro_rules! inner_i64 {
-        ($($ty:ident),* $(,)?) => {
-            $(impl Inner for $ty {
-                fn inner(&self) -> i64 {
-                    self.0
-                }
-            })*
-        };
-    }
-
-    inner_i64!(Temperature, Level, Window, Average);
-}
-
-/// Hand-written `Payload<ReprC>` implementations for the fixture's restricted
-/// fixed-size scalar, enum, and struct types (design §2). This is a throwaway
-/// stand-in with no schema and no dependency: E11.7, E11.8, or E11.12 replaces
-/// it with a generated codec. The wire layout is 8 little-endian bytes per
-/// `i64`-backed scalar or enum, and a struct's fields back to back in
-/// declaration order.
-///
-/// **Every `encode` here writes after [`PAD`] leading bytes, so what it
-/// returns is a subslice of the output buffer and never a prefix of it.**
-/// That is deliberate, and it is the standing guard on the property K3 gave
-/// `Encoded.bytes` (`crates/ridl-rt/src/payload.rs`: "a subslice of `out`,
-/// not necessarily a prefix"): a FlatBuffers builder fills a buffer from its
-/// end, so a face that reconstructed `&buf[..encoded.bytes().len()]` would
-/// send the wrong bytes once the face moves onto the generated codec. With
-/// the pad, any such reconstruction sends `PAD` zero bytes followed by a
-/// truncated value, and the round trips below fail. A `repr(C)` codec would
-/// have no reason to pad; this one pads because the face, not the encoding,
-/// is what is under test here.
-mod payloads {
-    use ridl_rt::encoding::ReprC;
-    use ridl_rt::payload::{
-        EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
-    };
-
-    use super::generated::{Average, Health, Inner, Level, Temperature, Warning, Window};
-
-    /// The leading bytes every `encode` below skips, so that the bytes it
-    /// returns are a subslice of the output buffer and not a prefix of it.
-    /// Four is enough to make a prefix read observably wrong and small
-    /// enough to keep every buffer constant small.
-    pub const PAD: usize = 4;
-
-    /// A named scalar backed by `i64`, with its declared closed range
-    /// (typl §5.5: both bounds inclusive) checked by `verify`.
-    macro_rules! scalar_payload {
-        ($ty:ty, $name:literal, $min:expr, $max:expr) => {
-            impl Payload<ReprC> for $ty {
-                const MAX_SIZE: usize = PAD + 8;
-                type View<'a> = &'a [u8];
-
-                fn encode<'o>(
-                    &self,
-                    out: &'o mut [u8],
-                ) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
-                    if out.len() < PAD + 8 {
-                        return Err(EncodeError::Capacity {
-                            needed: PAD + 8,
-                            available: out.len(),
-                        });
-                    }
-                    out[PAD..PAD + 8].copy_from_slice(&self.inner().to_le_bytes());
-                    let bytes = &out[PAD..PAD + 8];
-                    Ok(Encoded { bytes, view: bytes })
-                }
-
-                fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
-                    if buf.len() != 8 {
-                        return Err(VerifyError::Structure(Malformed::OutOfBounds));
-                    }
-                    let value = i64::from_le_bytes(buf.try_into().expect("checked length"));
-                    if !($min..=$max).contains(&value) {
-                        return Err(VerifyError::Contract(Violation {
-                            type_name: $name,
-                            rule: Rule::Range,
-                        }));
-                    }
-                    Ok(buf)
-                }
-
-                fn decode(r: Ref<'_, Self, ReprC>) -> Self {
-                    let bytes = r.bytes();
-                    Self::new_unchecked(i64::from_le_bytes(
-                        bytes.try_into().expect("verified length"),
-                    ))
-                }
-            }
-        };
-    }
-
-    scalar_payload!(Temperature, "Temperature", -40, 85);
-    scalar_payload!(Level, "Level", 0, 100);
-    scalar_payload!(Window, "Window", 0, 100_000);
-    scalar_payload!(Average, "Average", 0, 1000);
-
-    fn health_discriminant(value: &Health) -> i64 {
-        match value {
-            Health::OK => 0,
-            Health::WARN => 1,
-            Health::FAIL => 2,
-        }
-    }
-
-    fn health_from_discriminant(value: i64) -> Health {
-        match value {
-            0 => Health::OK,
-            1 => Health::WARN,
-            _ => Health::FAIL,
-        }
-    }
-
-    impl Payload<ReprC> for Health {
-        const MAX_SIZE: usize = PAD + 8;
-        type View<'a> = &'a [u8];
-
-        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
-            if out.len() < PAD + 8 {
-                return Err(EncodeError::Capacity {
-                    needed: PAD + 8,
-                    available: out.len(),
-                });
-            }
-            out[PAD..PAD + 8].copy_from_slice(&health_discriminant(self).to_le_bytes());
-            let bytes = &out[PAD..PAD + 8];
-            Ok(Encoded { bytes, view: bytes })
-        }
-
-        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
-            if buf.len() != 8 {
-                return Err(VerifyError::Structure(Malformed::OutOfBounds));
-            }
-            let value = i64::from_le_bytes(buf.try_into().expect("checked length"));
-            if !(0..=2).contains(&value) {
-                return Err(VerifyError::Contract(Violation {
-                    type_name: "Health",
-                    rule: Rule::Variant,
-                }));
-            }
-            Ok(buf)
-        }
-
-        fn decode(r: Ref<'_, Self, ReprC>) -> Self {
-            let bytes = r.bytes();
-            health_from_discriminant(i64::from_le_bytes(
-                bytes.try_into().expect("verified length"),
-            ))
-        }
-    }
-
-    impl Payload<ReprC> for Warning {
-        const MAX_SIZE: usize = PAD + 16;
-        type View<'a> = &'a [u8];
-
-        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
-            if out.len() < PAD + 16 {
-                return Err(EncodeError::Capacity {
-                    needed: PAD + 16,
-                    available: out.len(),
-                });
-            }
-            out[PAD..PAD + 8].copy_from_slice(&self.code.inner().to_le_bytes());
-            out[PAD + 8..PAD + 16]
-                .copy_from_slice(&health_discriminant(&self.health).to_le_bytes());
-            let bytes = &out[PAD..PAD + 16];
-            Ok(Encoded { bytes, view: bytes })
-        }
-
-        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
-            if buf.len() != 16 {
-                return Err(VerifyError::Structure(Malformed::OutOfBounds));
-            }
-            // Each field's own check, so a violation names the field's own
-            // type — `Level` or `Health` — not `Warning` (`Violation` names
-            // "the typl type whose constraint failed").
-            Level::verify(&buf[..8])?;
-            Health::verify(&buf[8..16])?;
-            Ok(buf)
-        }
-
-        fn decode(r: Ref<'_, Self, ReprC>) -> Self {
-            let bytes = r.bytes();
-            let code = Level::new_unchecked(i64::from_le_bytes(
-                bytes[..8].try_into().expect("verified length"),
-            ));
-            let health = health_from_discriminant(i64::from_le_bytes(
-                bytes[8..16].try_into().expect("verified length"),
-            ));
-            Warning { code, health }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn an_out_of_range_level_verifies_as_a_contract_violation() {
-            let mut buf = [0u8; 8];
-            buf.copy_from_slice(&150i64.to_le_bytes());
-            let error = <Level as Payload<ReprC>>::verify(&buf).expect_err("150 is out of range");
-            assert!(matches!(
-                error,
-                VerifyError::Contract(Violation {
-                    type_name: "Level",
-                    rule: Rule::Range,
-                })
-            ));
-        }
-
-        #[test]
-        fn malformed_bytes_verify_as_a_structure_error() {
-            let short = [0u8; 3];
-            let error =
-                <Level as Payload<ReprC>>::verify(&short).expect_err("too short to be a Level");
-            assert!(matches!(
-                error,
-                VerifyError::Structure(Malformed::OutOfBounds)
-            ));
-        }
-    }
 }
 
 /// A `Provider` whose `average` reply is test-controlled, so a test can make
@@ -323,7 +94,7 @@ impl TestProvider {
 
 impl generated::cabin::Provider for TestProvider {
     fn set_level(&mut self, level: &generated::Level) {
-        self.set_level_calls.push(level.inner());
+        self.set_level_calls.push(level.get());
     }
 
     fn average(&mut self, _window: &generated::Window) -> generated::Average {
@@ -455,7 +226,6 @@ fn round_trip_query_reply_is_delivered() {
 #[test]
 fn round_trip_failing_require_settles_precondition_failed() {
     use ridl_rt::contract::Interaction;
-    use ridl_rt::encoding::ReprC;
     use ridl_rt::payload::Ref;
 
     let mut port = loopback();
@@ -468,10 +238,10 @@ fn round_trip_failing_require_settles_precondition_failed() {
     let level = generated::Level::new_unchecked(100);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
-    // (`crates/ridl-rt/src/payload.rs`), and the `payloads` module's `encode`
-    // writes after `payloads::PAD` leading bytes, so the bytes to send are
-    // the ones the encoder returned.
-    let bytes = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+    // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
+    // encoder builds at the tail, so the bytes to send are the ones the
+    // encoder returned and never `&encode_buf[..len]`.
+    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut encode_buf)
         .expect("encode")
         .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
@@ -684,6 +454,51 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
 }
 
 // ---------------------------------------------------------------------------
+// The property the deleted `payloads` module's `PAD` constant used to guard.
+// ---------------------------------------------------------------------------
+
+/// `Encoded.bytes` is a subslice of the output buffer and not necessarily a
+/// prefix of it (`crates/ridl-rt/src/payload.rs`, ADR-0021 decision 7's
+/// 2026-09-20 amendment). Until stage K9b this file's own throwaway
+/// `Payload<ReprC>` implementations wrote after four leading bytes so that
+/// the property held of them too; the generated FlatBuffers codec needs no
+/// such arrangement, because a FlatBuffers builder fills a buffer from its
+/// end.
+///
+/// This states the property over the real codec: the bytes `encode` returns
+/// start past the front of the buffer, and the equally long prefix of that
+/// same buffer is not a payload. A face that reconstructed `&buf[..len]`
+/// would send exactly that prefix.
+#[test]
+fn the_encoded_bytes_are_not_a_prefix_of_the_buffer() {
+    use ridl_rt::payload::{Payload, Ref};
+
+    let level = generated::Level::new_unchecked(42);
+    let mut buf = [0u8; <generated::Level as Payload<generated::Wire>>::MAX_SIZE];
+    let encoded = Ref::<generated::Level, generated::Wire>::encode(&level, &mut buf)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+
+    assert!(
+        encoded.len() < buf.len(),
+        "the bound leaves room ahead of the value, which is what makes the \
+         prefix and the subslice different slices"
+    );
+    assert_ne!(
+        encoded.as_slice(),
+        &buf[..encoded.len()],
+        "the encoder built at the tail, so the equally long prefix is not \
+         the value"
+    );
+    <generated::Level as Payload<generated::Wire>>::verify(&buf[..encoded.len()])
+        .expect_err("the prefix of the buffer is not a payload");
+    let checked =
+        Ref::<generated::Level, generated::Wire>::verify(&encoded).expect("the subslice is");
+    assert_eq!(checked.decode().get(), 42);
+}
+
+// ---------------------------------------------------------------------------
 // Design §6's settlement table: the three rows with no prior runtime proof.
 // Each test sends raw bytes through the loopback port, bypassing the
 // generated `Client`, so the claim `dispatch` receives has exactly the shape
@@ -725,7 +540,6 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
 #[test]
 fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     use ridl_rt::contract::Interaction;
-    use ridl_rt::encoding::ReprC;
     use ridl_rt::payload::Ref;
 
     // `dispatch`'s first branch checks `claim.iface != Cabin::NUMBER` before
@@ -745,10 +559,10 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     let level = generated::Level::new_unchecked(50);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
-    // (`crates/ridl-rt/src/payload.rs`), and the `payloads` module's `encode`
-    // writes after `payloads::PAD` leading bytes, so the bytes to send are
-    // the ones the encoder returned.
-    let bytes = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+    // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
+    // encoder builds at the tail, so the bytes to send are the ones the
+    // encoder returned and never `&encode_buf[..len]`.
+    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut encode_buf)
         .expect("encode")
         .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
@@ -782,10 +596,11 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
 fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
     use ridl_rt::contract::Interaction;
 
-    // `Level`'s `ReprC` encoding is exactly 8 bytes (`Payload::verify` in
-    // `tests/interaction_face.rs`'s own `payloads` module); 3 bytes fail
-    // that length check before the value is ever read, so this exercises
-    // `VerifyError::Structure`, not `VerifyError::Contract`.
+    // `Level`'s FlatBuffers encoding is a box table behind a root offset
+    // (ADR-0019 decision 8); 3 bytes are too short even for that offset, so
+    // the generated `verify` refuses the buffer's structure before any value
+    // is read. This exercises `VerifyError::Structure`, not
+    // `VerifyError::Contract`.
     let mut port = loopback();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
@@ -817,21 +632,21 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
 #[test]
 fn round_trip_out_of_range_argument_settles_invalid_value() {
     use ridl_rt::contract::Interaction;
-    use ridl_rt::encoding::ReprC;
     use ridl_rt::payload::Ref;
 
     // 200 is out of `Level`'s declared range [0, 100]. `new` would refuse
-    // it; `new_unchecked` does not, so this value encodes to a well-formed
-    // 8-byte `ReprC` payload and fails `verify`'s range check rather than
-    // its length check.
+    // it; `new_unchecked` does not, so this value encodes to a structurally
+    // well-formed box table and fails `verify`'s own range check — the
+    // `check` the codec calls beside the structure walk — rather than its
+    // structure check.
     let mut port = loopback();
     let level = generated::Level::new_unchecked(200);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
-    // (`crates/ridl-rt/src/payload.rs`), and the `payloads` module's `encode`
-    // writes after `payloads::PAD` leading bytes, so the bytes to send are
-    // the ones the encoder returned.
-    let bytes = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+    // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
+    // encoder builds at the tail, so the bytes to send are the ones the
+    // encoder returned and never `&encode_buf[..len]`.
+    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut encode_buf)
         .expect("encode")
         .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
@@ -930,7 +745,8 @@ impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
 /// is exact.
 ///
 /// The zero-length `RawSample` `MinimalSignalOnlyPort::read` returns is too
-/// short for `Health`'s 8-byte encoding, so `active()`'s own structure check
+/// short for any FlatBuffers buffer — a root offset alone is four bytes — so
+/// `active()`'s own structure check
 /// reports it as corrupt — the same client-side path
 /// `the_client_reads_a_signal_through_the_signal_reader_port` in
 /// `face_generation.rs` pins as `Detection::Corrupt`. The assertion below
@@ -946,7 +762,7 @@ fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
         Provenance::Invalid(ridl_rt::sample::Cause::Detected(
             ridl_rt::sample::Detection::Corrupt
         )),
-        "a zero-length sample is too short for Health's 8-byte encoding",
+        "a zero-length sample is too short for any FlatBuffers buffer",
     );
 }
 

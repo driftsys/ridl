@@ -198,9 +198,9 @@ This is `Client::temperature`, with the error handling summarised:
 
 ```rust
 pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError> {
-    let mut buf = [0u8; <Temperature as Payload<ReprC>>::MAX_SIZE];
+    let mut buf = [0u8; <Temperature as Payload<Wire>>::MAX_SIZE];
     let raw = self.port.read(Cabin::NUMBER, Ordinal(1u32), &mut buf)?;
-    match Ref::<Temperature, ReprC>::verify(&buf[..raw.len]) {
+    match Ref::<Temperature, Wire>::verify(&buf[..raw.len]) {
         Ok(checked) => Ok(Sample { value: checked.decode(), /* raw's three fields */ }),
         Err(error)  => Ok(Sample {
             value: CabinTemperature::init(),
@@ -338,8 +338,10 @@ valid when constructed, and the receiver's `verify` reports one that is not. The
 generated encode sites treat a capacity failure as `unreachable!` with a message
 naming the type, because a legal value cannot exceed its own `MAX_SIZE`.
 
-> The `Payload<ReprC>` implementations the round-trip test uses are written by
-> hand. See [What is provisional](#what-is-provisional).
+> `Wire` is the alias the generated package carries for its payload encoding,
+> `::ridl_rt::encoding::FlatBuffers` (E11.7's D-11). The `Payload`
+> implementations behind it are generated, not hand-written: the round-trip test
+> runs over the emitted codec.
 
 ## Step 4 — an event
 
@@ -756,7 +758,6 @@ what it stands on are placeholders with a named replacement.
 | Placeholder                                                         | Replaced by               |
 | ------------------------------------------------------------------- | ------------------------- |
 | The transport under the in-process runtime the examples run against | E11.9                     |
-| The hand-written `Payload<ReprC>` implementations                   | E11.7, E11.8 or E11.12    |
 | `CATALOG.hash`, an all-zero `CatalogHash`                           | E16.2 (driftsys/ridl#378) |
 | Every `PayloadInfo.max_size` field, which is `None`                 | E16.2 (driftsys/ridl#378) |
 | The contract-clause translator                                      | E5.1                      |

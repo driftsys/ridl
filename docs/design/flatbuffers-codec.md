@@ -15,13 +15,17 @@ found, is the archived design note
 and its plan
 [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
 
-**One decision of that note is not built.** D-11, the generated interaction face
-moving off its `ReprC` placeholder and onto the codec, is stage K9b's. The
-projection decision that blocked it, **driftsys/ridl#470**, is taken and is
+**Every decision of that note is built.** The last was D-11, the generated
+interaction face moving off its `ReprC` placeholder and onto this codec, landed
+by stage K9b: the face names one per-package alias,
+`pub type Wire = ::ridl_rt::encoding::FlatBuffers;`, at every buffer it sizes
+and every `Ref` it builds, and the hand-written `Payload<ReprC>` implementations
+its fixture carried are deleted. The projection decision that had blocked it,
+**driftsys/ridl#470**, is
 [ADR-0019 decision 8](../decisions/ADR-0019-flatbuffers-projection-rules.md):
 every declaration has a root table, and a named scalar, an enum and an enum set
-are rooted in a box. The section ["What is not built"](#what-is-not-built) below
-is the live statement of what is left.
+are rooted in a box. What the face does with this codec is
+[the interaction-face design record](interaction-face.md).
 
 ## Where the code is
 
@@ -34,6 +38,8 @@ is the live statement of what is left.
 | The reader and builder the emitted code calls                        | `crates/ridl-rt/src/flatbuffers.rs`                         |
 | The round trip, run rather than compiled                             | `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`   |
 | Conformance against planus, and the `wasm32` check                   | `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` |
+| The `Wire` alias and the option that writes it                       | `crates/ridl-backend-rust/src/lib.rs`                       |
+| The face over this codec, run rather than compiled                   | `crates/ridl-backend-rust/tests/interaction_face.rs`        |
 
 ## The shared facts live outside both backends
 
@@ -196,6 +202,38 @@ own. A leaf this backend cannot judge is replaced by a one-byte stand-in and the
 whole position probed once, so a count or a product of counts is still charged
 even where a foreign reference sits inside the same position; the stand-in can
 prove a position unbounded and never prove one bounded.
+
+## The face names this codec through one alias
+
+`generate` emits the codec, and `generate_face` appends the interaction face to
+exactly the items `generate` emits. There is one codec emitter and one call to
+it, so a face compiles over the same implementations a consumer of `generate`
+gets rather than over a second set written for it.
+
+The face names the encoding once, through an alias the generated package
+carries:
+
+```rust
+pub type Wire = ::ridl_rt::encoding::FlatBuffers;
+```
+
+`MAX_BUFFER_SIZE`, `EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and
+`Ref::verify` the face builds and every `unreachable!` message it writes name
+`Wire`. The alias is written from `ridl_backend_rust::WireEncoding`, which
+defaults to `FlatBuffers` and reaches the output through
+`generate_face_with(package, wire)`; `generate_face(package)` is its defaulted
+form. It is emitted by that entry point alone, so `generate`'s output is
+unchanged by it and a package generated with no face names no encoding. The
+reasoning, and why the face takes no `E: Encoding` type parameter, is design
+note D-11 and [the interaction-face design record](interaction-face.md).
+
+**One consequence of the codec building at the tail reaches every consumer.**
+`Encoded.bytes` is a subslice of the output buffer, so a caller that
+reconstructs `&buf[..len]` sends leading bytes the encoder never wrote. The face
+passes the returned slice on unchanged at all four send sites (stage K7), and
+`the_encoded_bytes_are_not_a_prefix_of_the_buffer` in
+`crates/ridl-backend-rust/tests/interaction_face.rs` states the property
+directly: the equally long prefix of the same buffer fails `verify`.
 
 ## Presence, defaults, and what an absent field means
 
@@ -367,35 +405,12 @@ checked-in generated fixture so it could join the `-p` list, was rejected: a
 workspace member and a second copy of the fixture to keep in step, for a check
 the test already performs over the emitter's live output.
 
-## What is not built
-
-### D-11 — the generated face still names `ReprC`
-
-The generated interaction face names `::ridl_rt::encoding::ReprC` in
-`crates/ridl-backend-rust/src/face.rs`, and
-`crates/ridl-backend-rust/src/descriptors.rs` computes its buffer constants over
-`<T as Payload<ReprC>>::MAX_SIZE`. The hand-written `Payload<ReprC>`
-implementations in `crates/ridl-backend-rust/tests/interaction_face.rs` are
-still there, and they are a throwaway rather than a reference implementation.
-
-**What blocked it is gone.** Moving the face onto the codec needs an
-`impl Payload<FlatBuffers>` for every type an interaction carries, and until
-ADR-0019 decision 8 the emitter wrote one only for a struct or a union, while
-the interaction-face fixture's payloads are four named scalars and one enum plus
-one struct — measured by adding the codec to `generate_face` and regenerating
-the fixture, exactly one implementation appeared. Decision 8 gives every
-declaration a root, so every one of those payloads now has a
-`Payload<FlatBuffers>`. What is left is the face-side change D-11 states: one
-encoding alias, emitted once per package, and every site in `face.rs` and
-`descriptors.rs` that names `ReprC` naming it instead.
-
 ## Known gaps
 
 | Gap                                                                                                                                                                 | Issue             |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | A type reaching a cross-package reference carries no codec; the emitted source says so per type                                                                     | driftsys/ridl#467 |
 | An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify`                                                                        | driftsys/ridl#469 |
-| No `Payload` for a named-scalar or enum payload, which blocked D-11 — closed by ADR-0019 decision 8; the row goes when K9b lands D-11                               | driftsys/ridl#470 |
 | A default and presence: a conforming writer's omitted non-optional default is refused, and a present default-valued optional scalar is lost by a foreign round trip | driftsys/ridl#472 |
 | A union-arm retirement would shift wire discriminants silently                                                                                                      | driftsys/ridl#302 |
 

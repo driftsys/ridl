@@ -63,7 +63,7 @@ carries no `interfaces.lock`, so `Interface::NUMBER` and
 (`Interface.number`, `Interface.provisional`, added by the lock design's L4).
 
 **The two buffer constants are computed, not counted.** `MAX_BUFFER_SIZE` is the
-maximum over every argument and reply `<T as Payload<ReprC>>::MAX_SIZE` the
+maximum over every argument and reply `<T as Payload<Wire>>::MAX_SIZE` the
 interface's calls use — arguments alone would under-size a dispatch buffer
 whenever a query's reply is larger than its argument, because a reply is encoded
 into the same buffer. `EVENT_SOURCE_BUFFER_SIZE` is the maximum over event
@@ -92,7 +92,7 @@ the emitter.
   note is stale: the `ridl-rt` doc-comment change it refers to has landed.
   Dropping it is a change to the emitter and to the checked-in fixture the
   byte-equality guard compares against, so it is not made here. `dispatch` never
-  reads these fields — it sizes buffers from `<T as Payload<ReprC>>::MAX_SIZE`
+  reads these fields — it sizes buffers from `<T as Payload<Wire>>::MAX_SIZE`
   directly — so the absent sizes cost the face nothing and cost a future catalog
   consumer everything, which is the right way round for a placeholder.
 
@@ -237,18 +237,18 @@ the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
 manufactured contract error.** Every buffer `dispatch` and the face encode into
-is sized from `<T as Payload<ReprC>>::MAX_SIZE`, the largest encoded size of any
+is sized from `<T as Payload<Wire>>::MAX_SIZE`, the largest encoded size of any
 legal value, so a legal value cannot exceed it. If `Ref::encode` still returns
 `Capacity`, the provider returned a value outside its own type's range, or a
-hand-written `Payload` implementation does not honor `MAX_SIZE` — a defect the
-generated code has no vocabulary to describe as one of the five settlement
-outcomes, because `EncodeError::Capacity` carries no received bytes and no
-violated rule. The generated branch is an explicit `unreachable!` naming the
-type, the needed size and the available size. No runtime test drives this
-branch: doing so needs a `Payload` implementation that lies about `MAX_SIZE`
-without corrupting the buffers the round trip's other assertions share, and
-nothing in the fixture isolates one type enough to do that safely under the test
-binary's parallel execution.
+`Payload` implementation does not honor `MAX_SIZE` — a defect the generated code
+has no vocabulary to describe as one of the five settlement outcomes, because
+`EncodeError::Capacity` carries no received bytes and no violated rule. The
+generated branch is an explicit `unreachable!` naming the type, the needed size
+and the available size. No runtime test drives this branch: doing so needs a
+`Payload` implementation that lies about `MAX_SIZE` without corrupting the
+buffers the round trip's other assertions share, and nothing in the fixture
+isolates one type enough to do that safely under the test binary's parallel
+execution.
 
 **`dispatch`'s returned count is the number of claims `Handler::settle`
 accepted, not the number of claims taken.** A `SettleError` is left to the
@@ -260,19 +260,51 @@ failure followed by one successful claim and asserts the counts are `0` then
 `1`. It is a runtime test through `dispatch`, not a source-text assertion;
 `tests/dispatch_generation.rs` holds only the latter.
 
-## The payload stand-in and the ports
+## The encoding and the ports
 
-**No codec is generated.** ADR-0020 sanctions three payload encodings — proto3,
-FlatBuffers, `repr(C)` — and none is built (E11.7, E11.8, E11.12 are all out of
-scope). The face is generic over `T: Payload<E>` and calls only `Ref::encode`,
-`Ref::verify` and `Ref::decode`, so it does not matter to the generated code
-whether a `Payload` implementation is generated or hand-written. `ReprC` was
-chosen as the marker because its stand-in needs no dependency and no schema, and
-because E11.12's real codec is expected to disturb it least.
-`tests/interaction_face.rs` hand-writes `Payload<ReprC>` for the fixture's
-fixed-width scalars, its one enum, and its one all-fixed-size struct; the
-implementation is explicitly marked throwaway in its own module documentation
-and deleted when E11.12 lands.
+**The face runs over the generated FlatBuffers codec** (story E11.7, stage K9b;
+[its design record](flatbuffers-codec.md)). It names that encoding through one
+alias the generated package carries:
+
+```rust
+pub type Wire = ::ridl_rt::encoding::FlatBuffers;
+```
+
+Every buffer the face sizes and every `Ref` it builds names `Wire`, so the
+package's encoding is one line to read and one line to change. The face gains no
+type parameter: a `Client<E: Encoding, ...>` would put `E` on every descriptor,
+every provider trait and every caller, and a `where` bound per payload type on
+every impl, for a choice made once per generated package.
+
+The alias is written from a backend option. `ridl_backend_rust::WireEncoding`
+defaults to `FlatBuffers` and reaches the output through
+`generate_face_with(package, wire)`, of which `generate_face(package)` is the
+defaulted form. It has one variant, because this backend emits a `Payload`
+implementation for one encoding; `repr(C)` and proto3 join it when E11.12 and
+E11.8 emit theirs. The option is on the face entry point alone — a package
+generated with no face names no encoding — so `generate`'s output is unchanged
+by it.
+
+`generate_face` appends the face to the items `generate` emits, the codec
+included. There is one codec emitter and one call to it, so the face compiles
+over the same implementations a consumer of `generate` gets rather than over a
+second set written for it, and the checked-in fixture stays a single `include!`.
+
+**The alias is an unprefixed item at package scope, and one name can collide.**
+A declaration named `Wire` emits `pub struct Wire(..)` beside the alias and the
+generated crate does not compile. Measured over a package that declares
+`type Wire : integer [0..10]`: the compiler draws no diagnostic and
+`generate_face` returns source carrying both items. It reaches `generate_face`
+only — `generate` emits no alias — so `ridl build --emit rust` is unaffected
+until E11.14 makes the CLI emit the face. Fixing it means either refusing a
+legal typl package or changing the name D-11 fixes, neither of which D-11 takes,
+so it is **driftsys/ridl#476** rather than a patch here. The codec has no such
+exposure: its free functions carry a `__ridl_fb_` prefix, which typl §15.1 makes
+uncollidable.
+
+Through stage K7 this was a placeholder instead: `ReprC`, with
+`tests/interaction_face.rs` hand-writing `Payload<ReprC>` for the fixture's
+types, marked throwaway in its own module documentation. Both are gone.
 
 **The ports are `ridl-loopback`'s**, the in-process reference runtime (ADR-0020
 decision 6, story E11.15, [its design record](ridl-loopback.md)). Every
@@ -289,8 +321,12 @@ hand and no I/O — the runtime is in-process by design, not as a placeholder.
 
 `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl` is a
 single-file, single-catalog package (`face.demo`) cut to what the `ReprC`
-stand-in can carry — fixed-width named scalars, one enum, one all-fixed-size
-struct, no optional field, sequence, map, union, string or bytes — declaring two
+stand-in could carry when it was written — fixed-width named scalars, one enum,
+one all-fixed-size struct, no optional field, sequence, map, union, string or
+bytes. The stand-in is gone and the generated codec carries every typl shape, so
+the cut is now a limit on what this fixture exercises rather than on what the
+face can carry; the codec's own suites (`tests/flatbuffers_roundtrip.rs`,
+`tests/flatbuffers_conformance.rs`) run the wider corpus. It declares two
 interfaces:
 
 - **`Cabin`** — one signal, one event, one command (`setLevel`, with a `require`
@@ -339,8 +375,7 @@ and the byte-equality guard).
 reshapes the domain-type emission this face's generated code names as argument
 and return types. The expected order was Epic 10's Task 3 and Task 6 before
 E11.13; when that does not hold, the cost is a touch-up pass to the checked-in
-fixture and the hand-written `Payload<ReprC>` implementations, accepted as
-rework rather than a blocker.
+fixture, accepted as rework rather than a blocker.
 
 ## The catalog check is not emitted (2026-09-21)
 
@@ -367,30 +402,22 @@ same all-zero hash the face declares.
 
 ## What is provisional
 
-| Placeholder                                                                                    | Replaced by                                   |
-| ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| The hand-written `Payload<ReprC>` implementations                                              | blocked: driftsys/ridl#470, then E11.7's D-11 |
-| The zero `CatalogHash`, and with it the unemitted catalog check                                | E16.2 (driftsys/ridl#378)                     |
-| The all-`None` `EncodedSizes` columns                                                          | E16.2                                         |
-| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                          |
-| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                    |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written  |
+| Placeholder                                                                                    | Replaced by                                  |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The zero `CatalogHash`, and with it the unemitted catalog check                                | E16.2 (driftsys/ridl#378)                    |
+| The all-`None` `EncodedSizes` columns                                                          | E16.2                                        |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
+| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
 
-**The first row's replacement is unblocked and not yet done, 2026-09-21.**
-E11.7's FlatBuffers codec landed and `generate` emits it, but for a while the
-face could not move onto it: a `Payload<FlatBuffers>` implementation was written
-only for a declaration the projection minted a root table for, which was a
-`struct` or a `union`, and this face's payloads are four named scalars and one
-enum beside one struct. Measured by adding the codec to `generate_face` and
-regenerating the fixture, exactly one implementation appeared. The missing piece
-was a projection rule for a root that is not a struct or a union —
-**driftsys/ridl#470** — and **ADR-0019 decision 8 supplies it**: every
-declaration has a root table, and a named scalar, an enum and an enum set are
-rooted in a box, so every one of this face's payloads now has a codec. What
-remains is the face-side change itself, which is E11.7's D-11 and is not done:
-until it lands, the `ReprC` placeholder is still what this face names.
-[`flatbuffers-codec.md`](flatbuffers-codec.md)'s "What is not built" carries the
-detail.
+**The hand-written payload row was retired on 2026-09-21**, by E11.7's D-11 in
+stage K9b. It read "the hand-written `Payload<ReprC>` implementations", and it
+was blocked twice over: the codec wrote a `Payload<FlatBuffers>` only for a
+declaration the projection minted a root table for, which was a `struct` or a
+`union`, while this face's payloads are four named scalars and one enum beside
+one struct. ADR-0019 decision 8 gave every declaration a root, and D-11 made the
+face name `Wire`. The hand-written module is deleted, and the round trips run
+over the generated codec and `ridl-loopback`.
 
 `ridl --emit rust` emitting the face itself is not on this list as a defect:
 ADR-0018 decision 15 places that behind the frame specification and the

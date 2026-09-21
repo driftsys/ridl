@@ -253,7 +253,7 @@ fn client(
             > {
                 let mut buf = #buffer;
                 let raw = self.port.read(#number, #ordinal, &mut buf)?;
-                match ::ridl_rt::payload::Ref::<#path, ::ridl_rt::encoding::ReprC>::verify(
+                match ::ridl_rt::payload::Ref::<#path, super::Wire>::verify(
                     &buf[..raw.len],
                 ) {
                     Ok(checked) => Ok(::ridl_rt::sample::Sample {
@@ -304,7 +304,7 @@ fn client(
                 #ordinal => Ok(Some(Event::#variant(::ridl_rt::sample::Occurrence {
                     payload: match ::ridl_rt::payload::Ref::<
                         #path,
-                        ::ridl_rt::encoding::ReprC,
+                        super::Wire,
                     >::verify(&buf[..occurrence.len]) {
                         Ok(checked) => Ok(checked.decode()),
                         Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -408,7 +408,7 @@ fn client(
                     Some(Ok(len)) => Ok(Some(
                         match ::ridl_rt::payload::Ref::<
                             #path,
-                            ::ridl_rt::encoding::ReprC,
+                            super::Wire,
                         >::verify(&buf[..len]) {
                             Ok(checked) => Ok(checked.decode()),
                             Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -887,7 +887,7 @@ fn ty(reference: &str) -> TokenStream {
 fn payload_buffer(type_name: &str) -> TokenStream {
     let path = ty(type_name);
     quote! {
-        [0u8; <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::ReprC>>::MAX_SIZE]
+        [0u8; <#path as ::ridl_rt::payload::Payload<super::Wire>>::MAX_SIZE]
     }
 }
 
@@ -901,7 +901,7 @@ fn payload_buffer(type_name: &str) -> TokenStream {
 /// subslice. A call site that reconstructed `&target[..len]` would send the
 /// wrong bytes for any such encoding.
 ///
-/// `target` is at least `<T as Payload<ReprC>>::MAX_SIZE` bytes at every call
+/// `target` is at least `<T as Payload<Wire>>::MAX_SIZE` bytes at every call
 /// site, and `MAX_SIZE` is the largest encoded size of any legal value, so
 /// `EncodeError::Capacity` cannot arise from a legal value. Reaching it means
 /// the value is outside its own type's range or its `Payload` implementation
@@ -919,12 +919,12 @@ fn encode_into(
     let path = ty(type_name);
     let capacity = format!(
         "encoding `{type_name}` needs {{}} bytes and {target_name} has {{}}; a legal value \
-         cannot exceed `<{type_name} as Payload<ReprC>>::MAX_SIZE`, so the value is outside \
+         cannot exceed `<{type_name} as Payload<Wire>>::MAX_SIZE`, so the value is outside \
          its own type's range or its `Payload` implementation does not honor `MAX_SIZE`"
     );
     let other = format!("encoding `{type_name}` failed");
     quote! {
-        match ::ridl_rt::payload::Ref::<#path, ::ridl_rt::encoding::ReprC>::encode(
+        match ::ridl_rt::payload::Ref::<#path, super::Wire>::encode(
             #value,
             #target,
         ) {
@@ -944,7 +944,7 @@ fn encode_into(
 fn decode_args(type_name: &str) -> TokenStream {
     let path = ty(type_name);
     quote! {
-        match ::ridl_rt::payload::Ref::<#path, ::ridl_rt::encoding::ReprC>::verify(
+        match ::ridl_rt::payload::Ref::<#path, super::Wire>::verify(
             &buf[..claim.len],
         ) {
             Ok(checked) => Ok(checked.decode()),

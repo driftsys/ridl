@@ -426,9 +426,10 @@ interaction face, taken deliberately out of sequence: ADR-0018 decision 15
 places the face after E11.1 and E11.9, and this story ran before both so the
 team has a face to write against. It is in-process only, and it carries four
 explicit placeholders that later stories retire — a hand-written payload
-implementation (E11.7, E11.8 or E11.12), test-only ports (retired by E11.15), a
-zero catalog hash and all-absent encoded sizes (E16.2), and a narrow
-contract-clause translator (E5.1). The as-built record is
+implementation (retired by E11.7's D-11, which moved the face onto the generated
+FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash and
+all-absent encoded sizes (E16.2), and a narrow contract-clause translator
+(E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
 trail is archived at
@@ -475,10 +476,10 @@ fifteen payload types, tracked as **driftsys/ridl#467**, whose fix is to hand
 an enum used to carry no `Payload` implementation either, because a FlatBuffers
 root is a table and the projection minted one only for a `struct` or a `union`;
 that was **driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated
-face moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21: every
+face moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
 declaration has a root table, and a named scalar, an enum and an enum set are
-rooted in a box. E11.14's `Done when` is written over a payload that has a
-codec.
+rooted in a box — and D-11 landed over it in stage K9b. E11.14's `Done when` is
+written over a payload that has a codec.
 
 ## Epic 14 — typl and ridl finalization
 
@@ -573,24 +574,24 @@ ADR-0018 amendments.
 | E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
 | E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
-**E11.7's `Done when` is met, and one of its decisions is not.** A payload
-round-trips through the library, and the conformance obligation the story's
-design note took beyond that row — a round trip through an independent
+**E11.7's `Done when` is met, and every decision of its design note is built.**
+A payload round-trips through the library, and the conformance obligation the
+story's design note took beyond that row — a round trip through an independent
 FlatBuffers implementation rather than byte equality against one, since
 FlatBuffers fixes no canonical encoding — is discharged against `planus` in
-`crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`. The one decision of
-the note that did not land with the rest is **D-11**, the generated interaction
-face moving off the `ReprC` placeholder and onto the codec: it needs a
-`Payload<FlatBuffers>` implementation for a named scalar and an enum payload,
-which the projection minted no root table for. That projection decision is taken
-— **driftsys/ridl#470**, ADR-0019 decision 8, 2026-09-21 — and every such
-declaration now carries a codec, so what is left of D-11 is the face-side change
-itself. The story is not closed until it lands. Two narrower gaps are tracked
-beside it: **driftsys/ridl#467**, a type reaching a cross-package reference
-carries no codec, and **driftsys/ridl#469**, an anonymous inline constraint, a
-`step` and a map key's uniqueness are not checked by the generated `verify`. A
-fourth, **driftsys/ridl#472**, is a decided divergence rather than a gap: this
-codec refuses a buffer in which a conforming FlatBuffers writer omitted a
+`crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`. The last decision
+to land was **D-11**, the generated interaction face moving off the `ReprC`
+placeholder and onto the codec, which needed a `Payload<FlatBuffers>`
+implementation for a named scalar and an enum payload that the projection minted
+no root table for. That projection decision is **driftsys/ridl#470**, ADR-0019
+decision 8, 2026-09-21; D-11 followed it in stage K9b, and the face now names
+one per-package `Wire` alias and runs its round trips over the generated codec
+and `ridl-loopback`. Two narrower gaps are tracked beside it:
+**driftsys/ridl#467**, a type reaching a cross-package reference carries no
+codec, and **driftsys/ridl#469**, an anonymous inline constraint, a `step` and a
+map key's uniqueness are not checked by the generated `verify`. A fourth,
+**driftsys/ridl#472**, is a decided divergence rather than a gap: this codec
+refuses a buffer in which a conforming FlatBuffers writer omitted a
 default-valued non-optional field, which design note D-9 chose and the
 conformance suite measures.
 
