@@ -563,30 +563,54 @@ decided that the note above did not already carry.
 
 **The two gaps §4a carried forward are closed, and the third is covered.**
 
-1. **An anonymous composite is descended into, leaf by leaf.** The exemption was
-   per member but whole-member, so `map<veh.other.Speed, string>` answered
-   `Ok(())`: the unresolved key made the whole field unjudgeable and the
-   unbounded value rode along. `judge` in `crates/ridl-backend-rust/src/lib.rs`
-   now probes a position it can resolve in full and **descends into one it
-   cannot**: an array hands the question to its element, a map to its two
-   halves, a tuple to its fields, and one unbounded leaf refuses the member
-   whatever sits beside it. Only a named reference and a stream are unjudgeable
-   in themselves. `probe_struct_field` and `probe_union_arm` are one function
-   again, `probe_field_type`, which writes ordinal 1 rather than copying the
-   member's, so a malformed ordinal is attributed as a layout error instead of
-   being mistaken for an unbounded member.
+1. **An unjudgeable leaf is replaced by a one-byte stand-in, and the whole
+   position is probed once.** The exemption was per member but whole-member, so
+   `map<veh.other.Speed, string>` answered `Ok(())`: the unresolved key made the
+   whole field unjudgeable and the unbounded value rode along. `judge` in
+   `crates/ridl-backend-rust/src/lib.rs` now probes a position it can resolve in
+   full as it is, and a position it cannot over `lower_bound_stand_in`'s copy of
+   it: every leaf this backend cannot judge — a named reference that does not
+   resolve in the package or reaches a cycle, a stream, an unspecified primitive
+   — is replaced by a `boolean`, the smallest thing the projection charges
+   anything for, at one inline byte and nothing out of line, and the copy is
+   handed to the same `max_size` as one member. A `boolean` charges no more than
+   any leaf it stands in for, and a vector's charge and a table's bound are both
+   monotone in what they hold, so a copy that is unbounded proves the real
+   position is, and a copy that fits proves nothing, which is what `Unjudgeable`
+   means. `probe_struct_field` and `probe_union_arm` are one function again,
+   `probe_field_type`, which writes ordinal 1 rather than copying the member's,
+   so a malformed ordinal is attributed as a layout error instead of being
+   mistaken for an unbounded member.
 
-   **A collection's own count is judged too**, which the first pass of this
-   stage missed and the review of 2026-09-21 found. A collection charges
-   `count × element`, and `max_size` answers `None` when that overflows `u64` or
-   exceeds `MAX_ENCODABLE`; a count can be over the ceiling on its own.
-   `[veh.other.Speed; 0..2^40]` was exempted — the element is unjudgeable, so
-   the whole position was — while the same field over a local element was
-   refused. `count_verdict` now probes the count with the smallest element the
-   projection charges anything for, a `boolean` at one inline byte: a count
-   unbounded at one byte an element is unbounded whatever the element is, and a
-   count that fits leaves the verdict to the element. Each level of nesting
-   probes its own count, so a nested collection is covered by the recursion.
+   **What the substitution charges, and what it does not.** It charges every
+   count in the position, every product of nested counts, and every locally
+   known leaf, together: `[[veh.other.Speed; 0..2^20]; 0..2^20]` is refused over
+   the product of its two counts,
+   `map<veh.other.Key, [boolean; 0..2^20];
+   0..2^20>` over its entry count
+   times its value's count, and `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]`
+   over four of a local inner array that fits alone. It does not charge the
+   width of a leaf it cannot see, so `[veh.other.Speed; 0..2^31]` stays exempt:
+   at one byte an element the count fits, and the stand-in can prove a position
+   unbounded and never prove one bounded. The first two fix rounds of this stage
+   got this wrong twice — the first by dropping a collection's count altogether,
+   the second by probing each nesting level's count alone with the immediate
+   element replaced, which charged neither a product of counts nor a count over
+   a locally known element — and the review of 2026-09-21's second pass found
+   all four shapes still exempt. Each is now a test in `src/tests.rs`, beside
+   two controls: a nested collection whose counts multiply to something that
+   fits, and the `[veh.other.Speed; 0..2^31]` limit above.
+
+   **A member this backend cannot judge no longer shields the aggregate.** Two
+   local `[boolean; 0..2^31]` members are each under the ceiling and refused
+   together as `Aggregate`; with one foreign field beside them the struct
+   answered `Ok(())`, because `unbounded_member` took any exempt member as the
+   explanation for the declaration's `None`. It now charges the whole struct
+   once more over the stand-in of each member before answering `Exempt`, and a
+   `None` there is `Aggregate`, since the stand-ins are lower bounds. A union is
+   its largest arm rather than a sum, so it has no aggregate to charge. This was
+   pre-existing rather than introduced by a fix round, and it is fixed rather
+   than recorded as a hole.
 2. **`Attribution::Declaration` is split into three.** `Layout(String)` carries
    `fb_projection::struct_table`'s own message for a declaration-wide layout
    error — two members on one ordinal, or an ordinal of 0 — and is checked
@@ -601,7 +625,7 @@ decided that the note above did not already carry.
 Each of the three has a control beside it, so none of them would pass for an
 attribution that simply stopped exempting: the same anonymous composite with
 nothing unbounded beside the unjudgeable leaf is still exempt, and so is a
-collection whose count fits.
+collection whose count fits at one byte an element.
 
 **An `Unspecified` field primitive is exempted, not refused.** It emits `()` and
 is charged nothing, exactly as a `Stream` is, and `derives` already lists the
@@ -659,9 +683,15 @@ bound charges seven bytes of slack per vtable slot, so a bound short by one
 still holds every value a fixture can build. The constant is wire-visible — a
 consumer sizes a buffer from it — so the literal is what it deserves, and a
 deliberate change to the projection's charges changes it in the same commit. The
-same case encodes the largest legal value a fixture admits, a sixteen- character
-label at four UTF-8 bytes a character, which is what keeps the pinned numbers
-honest as upper bounds rather than merely current.
+literal is **pinned, not proven tight**: the test fails on a bound one lower and
+on one higher, so the number cannot drift unnoticed, but nothing demonstrates
+that a legal value reaches it. The same case encodes the largest `Inner` a
+fixture admits, a sixteen-character label at four UTF-8 bytes a character, and
+that value takes 96 bytes against a bound of 133; the largest `Report` is
+encoded by no test, and a probe puts it at 1688 bytes against a bound of 2388.
+The gap is the slack the bound charges for alignment and for the vtable, and it
+is what keeps the bound sound under any write order; a tighter bound would be a
+change to the projection's charges, not to this test.
 
 **`MAX_SIZE` is a literal with a doc comment naming the rule.** Task 4 rules out
 a const-evaluable expression over the field types. The constant is the number
@@ -783,16 +813,18 @@ so it can neither size nor encode a type that reaches one — it cannot even lea
 a foreign named scalar's width. Such a type is exempt, not refused.
 
 **This is a silent omission in the sense ADR-0016 decision 6 and ADR-0017
-decision 4 rule out, and it is the majority of the corpus.** Nine types are
-withheld — `DriverProfile`, `SensorBounds`, `SensorResult`, `SensorReading`,
-`SensorFault`, `DiagFilter`, `FaultEvent`, `FaultPage` and `ClimateReport`,
-every type touching the prelude or an import — and five get a codec. The
-deferral is deliberate, but a doctrine deviation this wide cannot be tracked
-only in a note that archives at the end of the lane, so it has its own issue,
-**driftsys/ridl#467**, linked from driftsys/ridl#263. The fix it states:
-`generate` handed the other packages, which `fb_projection::Packages` already
-takes as `others`, in E11.14 or in the plugin system's `CodegenRequest`. It
-binds E11.8 and E11.12 the moment either emits a codec.
+decision 4 rule out, and it is the majority of the corpus.** Ten types are
+withheld across the corpora, nine of them in veh-cluster — `DriverProfile`,
+`SensorBounds`, `SensorResult`, `SensorReading`, `SensorFault`, `DiagFilter`,
+`FaultEvent`, `FaultPage` and `ClimateReport`, every type touching the prelude
+or an import — and the tenth is workspace-two-members' `ClusterReading`; five
+types in veh-cluster get a codec. The deferral is deliberate, but a doctrine
+deviation this wide cannot be tracked only in a note that archives at the end of
+the lane, so it has its own issue, **driftsys/ridl#467**, linked from
+driftsys/ridl#263. The fix it states: `generate` handed the other packages,
+which `fb_projection::Packages` already takes as `others`, in E11.14 or in the
+plugin system's `CodegenRequest`. It binds E11.8 and E11.12 the moment either
+emits a codec.
 
 Until then the emitted source says so where it happens. Each withheld type gets
 a `const __RIDL_FB_NO_CODEC_<NAME>: () = ()` carrying a doc comment that names
