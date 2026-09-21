@@ -195,6 +195,44 @@ at epic close) and cites these decisions by number.
     the crate's full architecture is
     [the `ridl-rt` design record](../design/ridl-rt.md).
 
+    _Amended (2026-09-21)._ The `0.0.0`-forever policy above and this
+    amendment's `ridl-rt`-only versioning are both retired. The workspace now
+    carries one shared version in `[workspace.package]`, bumped together by
+    `just release` (`git std bump`, which already has a Cargo
+    `workspace.package` version engine). A `v<version>` tag builds no binaries —
+    it triggers `.github/workflows/crates-io-release.yml`, which publishes every
+    workspace crate whose manifest does not set `publish = false` to crates.io.
+    `ridl`, `ridl-lsp` and `ridl-mcp` keep `publish = false`: the CLI reaches a
+    user through the separate `editor-v*` train this decision already describes,
+    not crates.io, and `ridl-mcp`/`ridl-lsp` are internal to it. `xtask` is
+    workspace tooling, never published either.
+
+    `ridl-rt` joins the shared version and the `v*` tag; its standalone
+    `ridl-rt@<version>` tag and its by-hand `cargo publish -p ridl-rt` are
+    retired with it — [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)
+    decision 10 carries the matching amendment. Every internal crate-to-crate
+    dependency gained a `version` requirement alongside its `path`
+    (`[workspace.dependencies]`, one entry per crate, each consumer using
+    `{ workspace = true }`): a bare `path` dependency has no registry version
+    for `cargo publish` to substitute once a crate leaves the workspace, so
+    publishing was not possible before this change at any version number.
+
+    The publish step is modeled on
+    [driftsys/git-std](https://github.com/driftsys/git-std)'s and
+    [driftsys/prim](https://github.com/driftsys/prim)'s `publish` job: a shell
+    function compares each crate's package version against crates.io's
+    `newest_version` and skips it on a match, otherwise runs
+    `cargo publish -p <crate>` and sleeps 30 seconds so the index updates before
+    a dependent crate publishes. Crates publish in dependency order —
+    `ridl-syntax`, `ridl-ir` and `ridl-rt` first, since nothing in the workspace
+    depends on them; `ridlc` last, since it depends on every other published
+    crate. A `verify` job checks the tag's commit is an ancestor of `main`
+    before either job runs, the one check this record's simpler model keeps from
+    git-std's and prim's own release trains, which additionally build, sign and
+    attest binaries — machinery this workspace's crates.io train has no use for,
+    because it ships no binary of its own; the `ridl` binary keeps shipping
+    through the `editor-v*` train instead. Decided by Sebastien on 2026-09-21.
+
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`
     as a built-in, implicitly imported package — no filesystem or network

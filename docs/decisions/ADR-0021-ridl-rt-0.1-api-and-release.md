@@ -298,6 +298,18 @@ trusted with no `unsafe` and no second verification pass.
     `Watermark::seq` — are tracked on that issue; the review debt of
     driftsys/ridl#348 is driftsys/ridl#349.
 
+    **Amended (2026-09-21).** The independent-version sentence above no longer
+    holds: ADR-0007 decision 14's 2026-09-21 amendment retires it. `ridl-rt` now
+    shares the workspace's single version and travels on the same `v<version>`
+    tag as every other published crate, publishing through
+    `.github/workflows/crates-io-release.yml` rather than its own
+    `ridl-rt@<version>` tag and a maintainer's by-hand `cargo publish`. What
+    this decision still owns, unchanged: what counts as a breaking `ridl-rt`
+    change (a 0.x minor release), the fifteen named-field structs and seven
+    tuple structs a public field cannot be added to, and the edition/MSRV matrix
+    below. The version _number_ moves with the rest of the workspace; the _rule_
+    for when it must move stays this decision's.
+
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
     because its 1.83 minimum predates edition 2024 — Rust cannot build that

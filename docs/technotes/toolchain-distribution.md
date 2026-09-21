@@ -10,14 +10,19 @@ train and the maintainer acts) and ADR-0005's resolved host-coverage question
 
 The repository has two independent release trains:
 
-- **`v<version>`**, cut by `just release` (git-std bump). This is the workspace
-  train. Every workspace crate except `ridl-rt` still sits at `0.0.0`, so it has
-  not been used to publish anything. `ridl-rt` has a version of its own, and a
-  maintainer creates its tag, `ridl-rt@<version>`, by hand and runs
-  `cargo publish -p ridl-rt` by hand: `just release` and git-std are not used
-  for either
-  ([R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md)),
-  and both are maintainer acts (ADR-0007 decision 14's 2026-09-14 amendment).
+- **`v<version>`**, cut by `just release` (git-std bump, which bumps the
+  `[workspace.package]` version every crate in the workspace shares — ADR-0007
+  decision 14's 2026-09-21 amendment). The tag triggers
+  `.github/workflows/crates-io-release.yml`, which publishes every crate whose
+  manifest does not set `publish = false` to crates.io: a `verify` job checks
+  the tag's commit is an ancestor of `main` and runs `just build`, then a
+  `publish` job runs the crates in dependency order, skipping one already at
+  that version on crates.io. `ridl`, `ridl-lsp`, `ridl-mcp` and `xtask` stay
+  `publish = false` and are not touched by this train. `ridl-rt` used to have a
+  version and a tag of its own (`ridl-rt@<version>`,
+  [R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md)); it
+  now shares the workspace version and this tag like every other published
+  crate. The tag push is still the maintainer act (ADR-0007 decision 14).
 - **`editor-v<version>`**, cut by a maintainer pushing the tag. This builds the
   `ridl` binary for five targets and packages one VSIX per target, creates the
   GitHub Release, and holds the Marketplace and Open VSX publishes behind the
@@ -39,8 +44,9 @@ the tarball names, so `install.sh` and the VSIX layout are unaffected.
 
 ## How the binary learns its version
 
-The `ridl` crate stays at the workspace version `0.0.0`, so the version a user
-sees does not come from `Cargo.toml`. `crates/ridl/build.rs` reads
+The `ridl` crate shares the workspace version like every other crate, but that
+version is not what a user sees: it moves on the crates.io train's `v*` tags,
+which say nothing about the CLI binary. `crates/ridl/build.rs` reads
 `RIDL_BUILD_VERSION` at build time and falls back to the crate version when that
 variable is absent or empty, which is what a local build gets. The release
 workflow sets it to the `editor-v*` tag. One stamped string is then reported by
