@@ -1697,6 +1697,7 @@ dependencies = [
  "quote",
  "ridl-core",
  "ridl-ir",
+ "ridl-loopback",
  "ridl-rt",
  "ridlc",
  "serde",
@@ -1759,6 +1760,13 @@ dependencies = [
  "protox",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ridl-loopback"
+version = "0.0.0"
+dependencies = [
+ "ridl-rt",
 ]
 
 [[package]]

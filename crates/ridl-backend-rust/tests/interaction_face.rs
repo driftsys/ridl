@@ -1,168 +1,44 @@
-//! The interaction-face round trip (Lane M stage M3, Tasks 4 and 5,
+//! The interaction-face round trip (Lane M stage M3, Task 5,
 //! `docs/design/interaction-face.md`; the approved design is
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §7).
 //!
-//! Task 4 exercises the disposable loopback ports of `tests/support/loopback.rs`
-//! directly, against `ridl-rt`'s trait contracts, ahead of the checked-in
-//! generated face that Task 5 adds. A test name containing `support` isolates
-//! this task's tests: `cargo test -p ridl-backend-rust --test interaction_face
-//! support`.
+//! It brings in the checked-in generated face of `tests/generated/`, adds the
+//! hand-written `Payload<ReprC>` implementations the fixture's types need to
+//! compile (design §2 — a throwaway stand-in; E11.7/E11.8/E11.12 replace it),
+//! and runs the round trip over `ridl-loopback`, the in-process reference
+//! runtime: a signal publish and read, an event raise and receive, a command's
+//! acknowledgment, a query's reply, a failing `require`, a failing `ensure`,
+//! the settlement count when one claim's settlement fails and a later one
+//! succeeds, and dispatch's short-buffer behavior.
 //!
-//! Task 5 brings in the checked-in generated face of `tests/generated/`, adds
-//! the hand-written `Payload<ReprC>` implementations the fixture's types need
-//! to compile (design §2 — a throwaway stand-in; E11.7/E11.8/E11.12 replace
-//! it), and runs the round trip: a signal publish and read, an event raise and
-//! receive, a command's acknowledgment, a query's reply, a failing `require`,
-//! a failing `ensure`, the settlement count when one claim's settlement fails
-//! and a later one succeeds, and dispatch's short-buffer behavior.
+//! The ports the round trip runs over are the aggregate handle of
+//! `ridl-loopback` (story E11.15, driftsys/ridl#445). Until that story landed
+//! they were a disposable double at `tests/support/loopback.rs`, exercised
+//! ahead of the face by a set of `support_*` tests; both the double and those
+//! tests are gone, the tests having moved to `crates/ridl-loopback/tests/`
+//! as tests of the runtime itself.
 
 mod support;
 
-use ridl_rt::contract::{InterfaceNo, Ordinal};
-use ridl_rt::port::{Caller, Clock, EventSink, EventSource, Handler, SignalReader, SignalWriter};
-use ridl_rt::sample::{Duration, Provenance};
+use ridl_loopback::Loopback;
+use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
+use ridl_rt::port::Caller;
+use ridl_rt::sample::Provenance;
 
 use generated::Inner;
-use support::loopback::Loopback;
 
-const IFACE: InterfaceNo = InterfaceNo(1);
-const ORD: Ordinal = Ordinal(1);
+/// The catalog the fixture's package declares, with the all-zero placeholder
+/// hash the descriptor emitter writes until story E16.2 (driftsys/ridl#378)
+/// computes a real one. The generated constructor performs no catalog check
+/// (driftsys/ridl#448), and the loopback checks nothing against it either.
+const CATALOG: CatalogRef = CatalogRef {
+    name: "face.demo",
+    hash: CatalogHash([0u8; 32]),
+};
 
-#[test]
-fn support_command_is_delivered_and_acknowledged() {
-    let mut lb = Loopback::new("face.demo");
-    let correlation = lb.command(IFACE, ORD, &[1, 2, 3]).expect("command sent");
-
-    assert_eq!(lb.ack(correlation), None, "not yet settled");
-
-    let mut buf = [0u8; 8];
-    let claim = lb
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("a claim is waiting");
-    assert_eq!(claim.iface, IFACE);
-    assert_eq!(claim.ord, ORD);
-    assert_eq!(&buf[..claim.len], &[1, 2, 3]);
-
-    lb.settle(claim.id, Ok(&[])).expect("settle succeeds");
-    assert_eq!(
-        lb.ack(correlation),
-        Some(Ok(())),
-        "settlement is observable through ack"
-    );
+fn loopback() -> Loopback {
+    Loopback::new(CATALOG)
 }
-
-#[test]
-fn support_query_is_delivered_and_replied() {
-    let mut lb = Loopback::new("face.demo");
-    let correlation = lb.query(IFACE, ORD, &[9]).expect("query sent");
-
-    let mut buf = [0u8; 8];
-    let claim = lb
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("a claim is waiting");
-    assert_eq!(&buf[..claim.len], &[9]);
-
-    lb.settle(claim.id, Ok(&[7, 7])).expect("settle succeeds");
-
-    let mut out = [0u8; 8];
-    let reply = lb.reply(correlation, &mut out).expect("reply read");
-    let Some(Ok(len)) = reply else {
-        panic!("expected a successful reply, got {reply:?}");
-    };
-    assert_eq!(&out[..len], &[7, 7]);
-    // A query's correlation always answers `None` from `ack` (`Caller::ack`'s
-    // own documentation).
-    assert_eq!(lb.ack(correlation), None);
-}
-
-#[test]
-fn support_settle_can_be_made_to_fail_once_then_succeed() {
-    // Task 5 asserts that `dispatch`'s returned count only advances past a
-    // settlement the handler accepted; this proves the loopback can inject
-    // that one failure ahead of a later, successful claim.
-    let mut lb = Loopback::new("face.demo");
-    let correlation = lb.command(IFACE, ORD, &[1]).expect("command sent");
-    let mut buf = [0u8; 8];
-    let claim = lb
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("a claim is waiting");
-
-    lb.fail_next_settle();
-    assert!(
-        lb.settle(claim.id, Ok(&[])).is_err(),
-        "the injected failure surfaces from settle"
-    );
-    assert_eq!(
-        lb.ack(correlation),
-        None,
-        "a failed settle records no outcome"
-    );
-
-    lb.settle(claim.id, Ok(&[]))
-        .expect("the next settle succeeds");
-    assert_eq!(lb.ack(correlation), Some(Ok(())));
-}
-
-#[test]
-fn support_signal_publish_and_read_round_trips() {
-    let mut lb = Loopback::new("face.demo");
-    lb.set(IFACE, ORD, &[42]).expect("set staged");
-    lb.commit();
-
-    let mut out = [0u8; 8];
-    let raw = lb.read(IFACE, ORD, &mut out).expect("read");
-    assert_eq!(raw.provenance, Provenance::Live);
-    assert_eq!(&out[..raw.len], &[42]);
-}
-
-#[test]
-fn support_event_raise_and_receive_round_trips() {
-    let mut lb = Loopback::new("face.demo");
-    lb.subscribe(IFACE, &[ORD]).expect("subscribe");
-    lb.raise(IFACE, ORD, &[5, 6]).expect("raise");
-
-    let mut out = [0u8; 8];
-    let occurrence = lb
-        .next(&mut out)
-        .expect("next")
-        .expect("an occurrence is waiting");
-    assert_eq!(occurrence.iface, IFACE);
-    assert_eq!(occurrence.ord, ORD);
-    assert_eq!(&out[..occurrence.len], &[5, 6]);
-}
-
-#[test]
-fn support_clock_is_hand_driven_not_wall_clock() {
-    // Two independently constructed ports must start at the same logical time
-    // regardless of when, in real time, each was constructed — a clock that
-    // reads wall-clock time could not guarantee that.
-    let first = Loopback::new("face.demo");
-    std::thread::sleep(std::time::Duration::from_millis(5));
-    let second = Loopback::new("face.demo");
-    assert_eq!(
-        first.now(),
-        second.now(),
-        "the clock must not read wall-clock time"
-    );
-
-    let mut lb = second;
-    let before = lb.now();
-    lb.advance(Duration(1_000));
-    let after = lb.now();
-    assert_eq!(
-        after.0,
-        before.0 + 1_000,
-        "advance moves the hand-driven clock by exactly the given amount"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Task 5: the checked-in generated face, the hand-written payloads, and the
-// round trip.
-// ---------------------------------------------------------------------------
 
 /// The checked-in output of `generate_face` over `tests/fixtures/interaction_face.ridl`.
 /// It is `include!`d, never hand-edited; the regeneration guard below compares
@@ -467,7 +343,7 @@ fn generated_interaction_face_matches_the_emitter() {
 
 #[test]
 fn round_trip_signal_publish_and_read() {
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     {
         let mut publisher = generated::cabin::Publisher::new(&mut port);
         publisher
@@ -484,7 +360,7 @@ fn round_trip_signal_publish_and_read() {
 
 #[test]
 fn round_trip_event_raise_and_receive() {
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     {
         let mut client = generated::cabin::Client::new(&mut port);
         client.subscribe_warning().expect("subscribe");
@@ -515,7 +391,7 @@ fn round_trip_event_raise_and_receive() {
 
 #[test]
 fn round_trip_command_is_acknowledged() {
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let correlation = {
         let mut client = generated::cabin::Client::new(&mut port);
         client
@@ -535,7 +411,7 @@ fn round_trip_command_is_acknowledged() {
 
 #[test]
 fn round_trip_query_reply_is_delivered() {
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let correlation = {
         let mut client = generated::cabin::Client::new(&mut port);
         client
@@ -563,7 +439,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
     use ridl_rt::encoding::ReprC;
     use ridl_rt::payload::Ref;
 
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
 
     // 100 is a legal `Level` value ([0, 100] inclusive) but fails the
     // command's own `require level < 100` clause. The generated `Client`
@@ -611,7 +487,7 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     // sends through the generated `Client::set_level` itself, which is
     // `send()`'s own short circuit (face.rs), not `dispatch`'s: nothing must
     // reach the port.
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let result = {
         let mut client = generated::cabin::Client::new(&mut port);
         client.set_level(generated::Level::new_unchecked(100))
@@ -642,7 +518,7 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
     // query's own `require window > 0` clause. Sent through the generated
     // `Client::average` itself, so this pins `send()`'s own short circuit
     // (face.rs), not `dispatch`'s.
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let result = {
         let mut client = generated::cabin::Client::new(&mut port);
         client.average(generated::Window::new_unchecked(0))
@@ -668,7 +544,7 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
 
 #[test]
 fn round_trip_failing_ensure_settles_contract_broken() {
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let correlation = {
         let mut client = generated::cabin::Client::new(&mut port);
         client
@@ -711,7 +587,7 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     // settlement fails) and the second call's count is pinned to 1 (its only
     // claim's settlement succeeds), which a polarity flip in `dispatch`'s
     // counting condition cannot pass unnoticed.
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let first = {
         let mut client = generated::cabin::Client::new(&mut port);
         client
@@ -761,7 +637,7 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
 
 #[test]
 fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     {
         let mut client = generated::cabin::Client::new(&mut port);
         client
@@ -797,7 +673,7 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
     // Ordinal 99 names no member of `Cabin`, so `dispatch`'s match on
     // `claim.ord` falls to its fallback arm regardless of the argument
     // bytes, which is why an empty argument slice is enough here.
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let correlation = port
         .command(
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
@@ -843,7 +719,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     // so that claim would settle `UnknownInteraction` either way — see
     // `round_trip_unrecognized_ordinal_settles_unknown_interaction` above,
     // which pins that fallback arm instead.)
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let level = generated::Level::new_unchecked(50);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
@@ -885,7 +761,7 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
     // `tests/interaction_face.rs`'s own `payloads` module); 3 bytes fail
     // that length check before the value is ever read, so this exercises
     // `VerifyError::Structure`, not `VerifyError::Contract`.
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
@@ -923,7 +799,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
     // it; `new_unchecked` does not, so this value encodes to a well-formed
     // 8-byte `ReprC` payload and fails `verify`'s range check rather than
     // its length check.
-    let mut port = Loopback::new("face.demo");
+    let mut port = loopback();
     let level = generated::Level::new_unchecked(200);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)

@@ -12,6 +12,17 @@ choices, see [`../decisions/`](../decisions/).
   the identity types, the interaction descriptors, the payload proof type, the
   ports, and the error module. The decisions behind its choices are
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
+- **ridl-loopback.md** — the in-process reference runtime as built: the crate
+  and its one dependency, the one store behind one lock, the six role handles
+  and the aggregate, the two signal extensions, the hand-driven clock, the per
+  handle sequence counters, and what it cannot report until it has a catalog
+  descriptor. The decisions behind its choices are
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 6 and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 5,
+  11 and 12, with
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
+  for the face its handles are passed to.
 - **interaction-face.md** — the generated `Client`/`Publisher`/`Provider`/
   `dispatch` face over `ridl-rt`, story E11.13's in-process MVP: the two emitter
   entry points, the descriptors, the clause translator, the settlement table,

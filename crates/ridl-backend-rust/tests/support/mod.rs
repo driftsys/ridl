@@ -7,4 +7,3 @@
 //! `tests/interaction_face.rs`.
 
 pub mod ir;
-pub mod loopback;

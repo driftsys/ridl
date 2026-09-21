@@ -227,11 +227,12 @@ command's acknowledgment is a delivery acknowledgment, not a completion one
 A query settles after the provider returns and `ensure` is evaluated, because
 its settlement carries the reply. **This ordering is pinned only by an
 exact-text assertion** in `tests/dispatch_generation.rs`; no behavioural test
-exercises it, because neither `Handler::settle` nor a provider call in the
-test-only loopback of the next section has an observable side effect a
-reordering would change. E11.15's real runtime is what would make the ordering
-observable — this is a limitation of the test double, not a defect in the
-generated code.
+exercises it, because neither `Handler::settle` nor a provider call had an
+observable side effect a reordering would change when the round trip ran over a
+test double. `ridl-loopback` makes it observable: a provider can hold a caller
+handle on the same store and read the acknowledgment from inside its own method.
+That test is not written, which is a gap in the tests rather than a defect in
+the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
 manufactured contract error.** Every buffer `dispatch` and the face encode into
@@ -258,7 +259,7 @@ failure followed by one successful claim and asserts the counts are `0` then
 `1`. It is a runtime test through `dispatch`, not a source-text assertion;
 `tests/dispatch_generation.rs` holds only the latter.
 
-## The payload stand-in and the test-only ports
+## The payload stand-in and the ports
 
 **No codec is generated.** ADR-0020 sanctions three payload encodings — proto3,
 FlatBuffers, `repr(C)` — and none is built (E11.7, E11.8, E11.12 are all out of
@@ -272,14 +273,16 @@ fixed-width scalars, its one enum, and its one all-fixed-size struct; the
 implementation is explicitly marked throwaway in its own module documentation
 and deleted when E11.12 lands.
 
-**The ports are a disposable, test-only loopback**, not a runtime. `ridl-rt`
-ships no runtime; the first real one is E11.15's in-process loopback (ADR-0020
-decision 6). `tests/support/loopback.rs` implements exactly `Attached`, `Clock`,
-`SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`
-and `FixedReader` over in-memory queues and a hand-advanced counter clock — no
-I/O, no thread, no real time — and deliberately implements neither
-`ScannableSignals` nor `CoherentSignals` (both are optional extensions a runtime
-may omit). Its own module documentation names E11.15 as its replacement.
+**The ports are `ridl-loopback`'s**, the in-process reference runtime (ADR-0020
+decision 6, story E11.15, [its design record](ridl-loopback.md)). Every
+`round_trip_*` test builds its face over that crate's aggregate handle, which
+implements all eleven port traits by delegating to one handle per port role.
+Through E11.13 the ports were instead a disposable double at
+`tests/support/loopback.rs`, which implemented nine of the eleven traits and
+neither signal extension; E11.15 deleted it and moved its own tests into
+`crates/ridl-loopback/tests/ports.rs`. What did not change with it: the round
+trip is still in one process, on one thread, with a clock the test advances by
+hand and no I/O — the runtime is in-process by design, not as a placeholder.
 
 ## The fixture and the round trip
 
@@ -326,8 +329,8 @@ Alternatives-considered table records against the retracted interaction layer
 Four test files exercise the layers separately before the round trip:
 `tests/descriptor_generation.rs`, `tests/face_generation.rs`,
 `tests/dispatch_generation.rs` (source-text assertions on the generated code),
-and `tests/interaction_face.rs` (the compiled round trip, the loopback support
-module, and the byte-equality guard).
+and `tests/interaction_face.rs` (the compiled round trip over `ridl-loopback`,
+and the byte-equality guard).
 
 ## Coupling with Lane C's Epic 10
 
@@ -340,15 +343,14 @@ rework rather than a blocker.
 
 ## What is provisional
 
-| Placeholder                                                                                    | Replaced by                                |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                     |
-| The test-only loopback ports (`tests/support/loopback.rs`)                                     | E11.15                                     |
-| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                  |
-| The all-`None` `EncodedSizes` columns                                                          | E16.2                                      |
-| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                       |
-| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                 |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | E11.15 (makes it behaviourally observable) |
+| Placeholder                                                                                    | Replaced by                                  |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                       |
+| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                    |
+| The all-`None` `EncodedSizes` columns                                                          | E16.2                                        |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
+| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
 
 `ridl --emit rust` emitting the face itself is not on this list as a defect:
 ADR-0018 decision 15 places that behind the frame specification and the
@@ -368,9 +370,9 @@ transport, and nothing in E11.13 changes that gate. It is story E11.14
   generation decisions specific to this face
 - Depends on: `crates/ridl-rt` 0.1.0 (E11.0, landed); the IR's provisional
   interface numbering (the lock design's L4, driftsys/ridl#391)
-- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E11.15 (the
-  test-only ports), E16.2 (the catalog hash and the encoded sizes), E5.1 (the
-  clause translator)
+- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E16.2 (the
+  catalog hash and the encoded sizes), E5.1 (the clause translator). E11.15
+  replaced the test-only ports and has landed
 - Reasoning trail (archived):
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),
@@ -378,6 +380,6 @@ transport, and nothing in E11.13 changes that gate. It is story E11.14
 - `crates/ridl-backend-rust/src/descriptors.rs`, `src/face.rs`,
   `src/clauses.rs`, `src/lib.rs` (`generate_face`) — the emitter as built
 - `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`,
-  `tests/generated/interaction_face.rs`, `tests/support/loopback.rs`,
-  `tests/interaction_face.rs` — the fixture, the checked-in output, the
-  test-only ports, and the round trip
+  `tests/generated/interaction_face.rs`, `tests/interaction_face.rs` — the
+  fixture, the checked-in output, and the round trip; the ports it runs over are
+  `crates/ridl-loopback/`

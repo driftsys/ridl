@@ -1,0 +1,12 @@
+[package]
+name = "ridl-loopback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# The in-process reference runtime (ADR-0020 decision 6). `ridl-rt` is its only
+# dependency, and it declares no feature: the crate implements the port traits
+# and nothing else, so there is nothing for a consumer to turn off.
+[dependencies]
+ridl-rt = { path = "../ridl-rt" }

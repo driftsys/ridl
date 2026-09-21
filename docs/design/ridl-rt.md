@@ -1,15 +1,15 @@
 # `ridl-rt` — the runtime library
 
 `ridl-rt` 0.1.0 is the `no_std` library that defines what a package generated
-from ridl will link and a runtime will implement: identity, time and the
-envelope, samples, the payload traits, the interaction descriptors, the ports,
-and the contract and transport errors (ADR-0020 decision 5). No backend emits
-code against it yet and no runtime exists. It contains no runtime — nothing in
-the crate performs I/O — and no engine: the store, the sans-IO session, the
-scheduler and the platform traits are `ridl-engine`'s, parked outside this
-repository and reopened by rmdl (ADR-0018's 2026-09-12 amendment). A runtime is
-a separate crate that implements the traits of the `port` module; generated code
-calls those traits without naming the runtime.
+from ridl links and a runtime implements: identity, time and the envelope,
+samples, the payload traits, the interaction descriptors, the ports, and the
+contract and transport errors (ADR-0020 decision 5). It contains no runtime of
+its own — nothing in the crate performs I/O — and no engine: the store, the
+sans-IO session, the scheduler and the platform traits are `ridl-engine`'s,
+parked outside this repository and reopened by rmdl (ADR-0018's 2026-09-12
+amendment). A runtime is a separate crate that implements the traits of the
+`port` module — [`ridl-loopback`](ridl-loopback.md) is the one in this
+workspace; generated code calls those traits without naming the runtime.
 
 The crate carries `#![no_std]` and `#![forbid(unsafe_code)]`, has no dependency
 in any feature combination, and allocates nothing. This is the architecture as
@@ -449,8 +449,9 @@ supertrait, so a single-threaded `no_std` runtime whose handles use `Cell` or
 compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12
 records the reasoning and the alternative it rejects, one runtime struct behind
-a mutex. No runtime exists in this workspace yet; story E11.15 builds the first
-one to this shape.
+a mutex. Story E11.15 built the first runtime to this shape,
+[`ridl-loopback`](ridl-loopback.md): six handles, a `Send + Sync` reader handle,
+and an aggregate implementing all eleven traits by delegation.
 
 ## The `error` module and the port errors
 
@@ -483,8 +484,9 @@ calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
 (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
 wire tag values, added with story E11.1); `Access` (the trust constant the Rust
 codegen generates once the rsdl lowering exists); the three payload codecs
-(stories E11.7, E11.8 and E11.12); the runtimes `ridl-loopback` (story E11.15)
-and `ridl-transport-ws` (story E11.9); and the engine. `Family` returns as a
+(stories E11.7, E11.8 and E11.12); the runtimes — `ridl-loopback` is its own
+crate (story E11.15, [its design record](ridl-loopback.md)) and
+`ridl-transport-ws` is story E11.9; and the engine. `Family` returns as a
 `Member` field, which is a breaking change (ADR-0021 decision 10); streams have
 no story yet.
 
