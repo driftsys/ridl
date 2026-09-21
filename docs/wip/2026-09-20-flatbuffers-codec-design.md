@@ -589,9 +589,23 @@ decided that the note above did not already carry.
    `map<veh.other.Key, [boolean; 0..2^20];
    0..2^20>` over its entry count
    times its value's count, and `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]`
-   over four of a local inner array that fits alone. It does not charge the
-   width of a leaf it cannot see, so `[veh.other.Speed; 0..2^31]` stays exempt:
-   at one byte an element the count fits, and the stand-in can prove a position
+   over four of a local inner array that fits alone. What it does not charge is
+   anything at or below an unjudgeable leaf, and the leaf is the **whole named
+   reference**, not only the foreign part of it: a local composite that reaches
+   a foreign reference anywhere inside it is one leaf to
+   `member_resolves_locally`, and the stand-in collapses all of it — its offset,
+   its table, its vtable, its other members — to one byte.
+   `[veh.other.Speed;
+   0..2^31]` stays exempt because at one byte an element
+   the count fits; and `[Mid; 0..2_000_000_000]` with a local
+   `Mid { s: veh.other.Speed }` stays exempt too, although its real charge is
+   roughly ten times the ceiling, because a local table worth about 26 bytes
+   becomes one. That is not unsound — an exempt type carries no codec, so no
+   wrong `MAX_SIZE` is published — but it is a wider blind spot than a foreign
+   scalar's width, and K6, K7 and K8 should read it as such. The collapse stops
+   at the reference: a local composite sitting beside one, rather than
+   containing one, is charged in full, so `map<veh.other.Key, Big>` with a local
+   `Big` over the ceiling is still refused. The stand-in can prove a position
    unbounded and never prove one bounded. The first two fix rounds of this stage
    got this wrong twice — the first by dropping a collection's count altogether,
    the second by probing each nesting level's count alone with the immediate
@@ -817,8 +831,10 @@ decision 4 rule out, and it is the majority of the corpus.** Ten types are
 withheld across the corpora, nine of them in veh-cluster — `DriverProfile`,
 `SensorBounds`, `SensorResult`, `SensorReading`, `SensorFault`, `DiagFilter`,
 `FaultEvent`, `FaultPage` and `ClimateReport`, every type touching the prelude
-or an import — and the tenth is workspace-two-members' `ClusterReading`; five
-types in veh-cluster get a codec. The deferral is deliberate, but a doctrine
+or an import — and the tenth is workspace-two-members' `ClusterReading`. Five
+types in the veh-cluster corpus get a codec: `SpeedLimitPayload` and
+`RawWheelFrame` in `veh.common`, and `DoorPayload`, `RawWheelSpan` and
+`FilterState` in `veh.cluster`. The deferral is deliberate, but a doctrine
 deviation this wide cannot be tracked only in a note that archives at the end of
 the lane, so it has its own issue, **driftsys/ridl#467**, linked from
 driftsys/ridl#263. The fix it states: `generate` handed the other packages,
