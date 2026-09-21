@@ -848,9 +848,18 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 
 /// The generated `Cargo.toml` body: a plain `format!`, not a template — see
 /// Task 7's rationale for why no templating engine is warranted for two short
-/// strings. `ridl-rt` is not optional and carries no feature: it is `no_std`,
-/// has no dependency of its own in any feature combination, and every generated
-/// named scalar's constructor names `::ridl_rt::payload::Violation` from it.
+/// strings. `ridl-rt` is not optional: it is `no_std`, has no dependency of
+/// its own in any feature combination, and every generated named scalar's
+/// constructor names `::ridl_rt::payload::Violation` from it.
+///
+/// It carries the `flatbuffers` feature, because `generate`'s output now
+/// includes the FlatBuffers payload codec (E11.7 stage K5, design note D-1 as
+/// amended), and that codec names the reading and writing helpers the feature
+/// gates. **This makes the generated manifest unbuildable outside this
+/// repository until a `ridl-rt` release carries the feature's contents**,
+/// which is the release coupling design note D-12 records and E11.14's
+/// manifest work settles; nothing here can test it, because a `rustc` proof
+/// links `ridl-rt`'s source rather than a release.
 /// The `ridl-rt = "0.1"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
@@ -872,7 +881,7 @@ validate-pattern = ["dep:regex"]
 std = []
 
 [dependencies]
-ridl-rt = "0.1"
+ridl-rt = {{ version = "0.1", features = ["flatbuffers"] }}
 regex = {{ version = "1", optional = true }}
 
 [lib]
