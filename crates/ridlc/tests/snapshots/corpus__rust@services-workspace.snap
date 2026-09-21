@@ -231,6 +231,207 @@ impl Default for DoorFault {
         DoorFault::JAMMED
     }
 }
+/// A zero-copy accessor over FlatBuffers bytes `DoorReport`'s `verify` accepted.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct DoorReportFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> DoorReportFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// Reads `DoorReport`'s `door` field in place.
+    pub fn door(&self) -> DoorId {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 1usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        DoorId::new_unchecked(
+            i64::from(::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8)),
+        )
+    }
+    /// Reads `DoorReport`'s `locked` field in place.
+    pub fn locked(&self) -> LockState {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 8usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        <LockState as ::core::convert::TryFrom<
+            i64,
+        >>::try_from(::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64))
+            .unwrap_or(LockState::UNLOCKED)
+    }
+}
+/// Writes `DoorReport` as a FlatBuffers table and returns its position.
+#[allow(deprecated)]
+fn __ridl_fb_encode_door_report(
+    value: &DoorReport,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.door;
+            ::ridl_rt::flatbuffers::Field::U8(__s.get() as u8)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: {
+            let __s = value.locked;
+            ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+        },
+    };
+    __n += 1;
+    builder.push_table(16usize, 8usize, 2u16, &__fields[..__n])
+}
+/// Checks the FlatBuffers table at `table` against `DoorReport`'s shape.
+#[allow(deprecated)]
+fn __ridl_fb_verify_door_report(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            ::ridl_rt::flatbuffers::read_u8(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 8usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            <LockState as ::core::convert::TryFrom<i64>>::try_from(__raw)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+/// Builds `DoorReport` from the FlatBuffers table at `table`.
+///
+/// It cannot fail. A read that could is discharged with the
+/// neutral value of its own type — zero, the empty string or
+/// collection, the first declared enum variant — and `verify` is
+/// what makes those branches unreachable.
+#[allow(deprecated)]
+fn __ridl_fb_decode_door_report(buf: &[u8], table: usize) -> DoorReport {
+    DoorReport {
+        door: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            DoorId::new_unchecked(
+                i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
+            )
+        },
+        locked: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 8usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            <LockState as ::core::convert::TryFrom<
+                i64,
+            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                .unwrap_or(LockState::UNLOCKED)
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorReport {
+    /// The largest FlatBuffers buffer any legal `DoorReport` encodes to: 60 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 60usize;
+    type View<'a> = DoorReportFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_door_report(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: DoorReportFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_door_report(buf, table)?;
+        ::core::result::Result::Ok(DoorReportFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_door_report(__view.buf, __view.table)
+    }
+}
 
 
 // ===== package fleet.legacy =====

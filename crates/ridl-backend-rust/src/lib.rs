@@ -32,6 +32,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 mod clauses;
+mod codec;
 mod defaults;
 mod derives;
 mod descriptors;
@@ -78,7 +79,8 @@ pub struct GenerateError {
 /// as a `GenerateError` instead of unformatted output.
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
-    let items = domain_items(&ctx, package)?;
+    let (mut items, tuples) = domain_items(&ctx, package)?;
+    items.extend(codec::package_items(&ctx, package, &tuples)?);
     render(items)
 }
 
@@ -102,24 +104,32 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// the accepted form and a call the M3 restriction cannot represent.
 pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
-    let mut items = domain_items(&ctx, package)?;
+    let (mut items, _tuples) = domain_items(&ctx, package)?;
     items.extend(descriptors::interface_items(&ctx, package)?);
     items.extend(face::interface_items(package)?);
     render(items)
 }
 
-/// The domain-type items of `package` — the shared work of both entry points.
+/// The domain-type items of `package` — the shared work of both entry points
+/// — and the induced tuple structs the walk discovered.
 ///
-/// This does not call [`check_flatbuffers_bounds`] (see its own doc for why):
-/// wiring the FlatBuffers refusal into every `generate` call ahead of a codec
-/// that does not exist yet would refuse a package this backend already
-/// generates today whenever it carries a same-package cycle or a reference
-/// this backend cannot resolve — neither of which needs a FlatBuffers bound
-/// unless K5's codec is actually emitted for it. K5 calls the check itself,
-/// once it has a `Payload<FlatBuffers>` implementation to withhold.
-fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
+/// The tuples travel back out because the FlatBuffers codec needs them:
+/// a tuple's generated struct is a FlatBuffers table like any other
+/// (ADR-0019 decision 3), and only this walk knows which tuples exist and
+/// what each one is named.
+///
+/// This does not emit the codec. [`generate`] appends it, and
+/// [`generate_face`] does not: the codec is `generate`'s output (design note
+/// D-1 as amended), and the face fixture moves onto it in stage K7, which is
+/// the stage that regenerates that file.
+#[allow(clippy::type_complexity)]
+fn domain_items(
+    ctx: &Ctx,
+    package: &v2::Package,
+) -> Result<(Vec<TokenStream>, Vec<InducedTuple>), GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     let mut tuples: Vec<InducedTuple> = Vec::new();
+    let mut discovered: Vec<InducedTuple> = Vec::new();
 
     for decl in &package.decls {
         items.push(emit_decl(ctx, decl, &mut tuples));
@@ -148,121 +158,134 @@ fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, Ge
         }
         seen.insert(induced.name.clone(), induced.clone());
         items.push(emit_tuple_struct(ctx, &induced, &mut tuples));
+        discovered.push(induced);
     }
 
-    Ok(items)
+    Ok((items, discovered))
 }
 
 // ---------------------------------------------------------------------------
-// The FlatBuffers size bound's refusal (design note D-7, stage K4).
+// The FlatBuffers size bound's refusal (design note D-7, stages K4 and K5).
 // ---------------------------------------------------------------------------
 
-/// Refuses a struct or a union with no finite FlatBuffers bound (design note
-/// D-7 of `docs/wip/2026-09-20-flatbuffers-codec-design.md`; see that note's
-/// §4a for the ground this function rests on).
+/// Refuses one struct or union with no finite FlatBuffers bound (design note
+/// D-7 of `docs/wip/2026-09-20-flatbuffers-codec-design.md`; §4a of that note
+/// records what stage K4 built and what stage K5 closed).
 ///
-/// **Not called from `generate` or `generate_face`.** D-7's refusal is
-/// per-type — the emitter withholds a `Payload<FlatBuffers>` implementation
-/// *for that type*, not for the package — and before K5 there is no per-type
-/// implementation to withhold, so there is no correct call site for this yet.
-/// K5 calls it once, per type, as it is about to emit that type's codec.
-/// `#[allow(dead_code)]` marks that honestly rather than reaching for `pub`
-/// to silence it: `pub` would hide the same fact by putting the function on
-/// this crate's public API, which K5 (a sibling module, `codec.rs`) does not
-/// need.
+/// **Called per type, by the codec emitter**, at the point where it is about
+/// to emit that type's `Payload<FlatBuffers>` implementation — which is what
+/// D-7's own wording asks for: the emitter writes no implementation *for that
+/// type*. It is never a package-wide gate; a package-wide refusal would
+/// withhold every type's domain code over one type's unbounded codec, which
+/// D-7 does not authorise.
 ///
-/// Attributes the refusal to one member where [`unbounded_member`] can name
-/// one, and to the declaration alone when the cause is aggregate (the summed
-/// size overflows `u64`, or exceeds `fb_projection::MAX_ENCODABLE`).
-#[allow(dead_code)]
-pub(crate) fn check_flatbuffers_bounds(package: &v2::Package) -> Result<(), GenerateError> {
-    let ctx = Ctx::new(package);
+/// `Ok(())` therefore means one of two different things, and the caller
+/// already knows which: the type has a bound and its codec is emitted, or the
+/// cause of its missing bound is one this backend cannot judge — a
+/// cross-package reference it does not resolve, or a same-package cycle — and
+/// that one type simply carries no codec.
+///
+/// The refusal names the member wherever [`unbounded_member`] can name one,
+/// and says which of the other three causes it found otherwise.
+pub(crate) fn check_flatbuffers_bound(
+    ctx: &Ctx,
+    package: &v2::Package,
+    decl: &v2::Decl,
+) -> Result<(), GenerateError> {
+    if !fb_projection::mints_root_table(decl) {
+        return Ok(());
+    }
     let packages = fb_projection::Packages {
         package,
         others: &[],
     };
-    for decl in &package.decls {
-        if !fb_projection::mints_root_table(decl) {
-            continue;
-        }
-        if fb_projection::max_size(packages, decl).is_some() {
-            continue;
-        }
-        match unbounded_member(&ctx, package, decl) {
-            Attribution::Member(member) => {
-                return Err(GenerateError {
-                    message: format!(
-                        "`{pkg}.{decl}.{member}` has no finite FlatBuffers bound",
-                        pkg = package.name,
-                        decl = decl.name
-                    ),
-                });
-            }
-            Attribution::Declaration => {
-                return Err(GenerateError {
-                    message: format!(
-                        "`{pkg}.{decl}` has no finite FlatBuffers bound",
-                        pkg = package.name,
-                        decl = decl.name
-                    ),
-                });
-            }
-            // A member this backend cannot judge — an unresolved
-            // cross-package reference or a same-package cycle — accounts for
-            // the `None`, and every member this function could check is
-            // individually bounded. Leave `decl` alone.
-            Attribution::Exempt => {}
-        }
+    if fb_projection::max_size(packages, decl).is_some() {
+        return Ok(());
     }
-    Ok(())
+    let pkg = &package.name;
+    let name = &decl.name;
+    match unbounded_member(ctx, package, decl) {
+        Attribution::Member(member) => Err(GenerateError {
+            message: format!("`{pkg}.{name}.{member}` has no finite FlatBuffers bound"),
+        }),
+        Attribution::Untyped(member) => Err(GenerateError {
+            message: format!(
+                "`{pkg}.{name}.{member}` carries no type, so `{pkg}.{name}` has no FlatBuffers \
+                 bound"
+            ),
+        }),
+        Attribution::Layout(message) => Err(GenerateError {
+            message: format!("`{pkg}.{name}` has no FlatBuffers table layout: {message}"),
+        }),
+        Attribution::Aggregate => Err(GenerateError {
+            message: format!(
+                "`{pkg}.{name}` has no finite FlatBuffers bound: every member is bounded on its \
+                 own and the total is not"
+            ),
+        }),
+        Attribution::Exempt => Ok(()),
+    }
 }
 
-/// What [`check_flatbuffers_bounds`] found when `decl`'s own
+/// What [`check_flatbuffers_bound`] found when `decl`'s own
 /// [`fb_projection::max_size`] answered `None`.
+///
+/// Stage K5 split what stage K4 called `Declaration` into three, closing the
+/// second gap §4a of the design note carried forward: the three causes that
+/// one variant covered are now told apart, and each writes its own message.
 enum Attribution {
-    /// One member (a struct field's name, or a union arm's name) is
-    /// individually unbounded — probed by [`probe_struct_field`] or
-    /// [`probe_union_arm`], each of which charges exactly that member the way
-    /// [`fb_projection::max_size`] itself would.
+    /// One member — a struct field's name, or a union arm's name — is
+    /// individually unbounded.
     Member(String),
-    /// No single member probes `None`, and none was skipped for being
-    /// something this backend cannot judge. **Not only the aggregate case**
-    /// (the summed size overflows `u64`, or the total exceeds
-    /// `fb_projection::MAX_ENCODABLE` while every member is individually
-    /// bounded) reaches this variant — two other causes do too, and neither
-    /// is named by a probe: a member with no `r#type` at all
-    /// (`unbounded_member` skips it rather than attributing it, the same as a
-    /// reserved tombstone), and a `fb_projection::struct_table` layout error
-    /// over the *whole* declaration (for example two fields sharing one
-    /// ordinal) that only shows up across members and that no single-field
-    /// probe can reproduce. See design note §4a, "`Attribution::Declaration`
-    /// is reached for more than aggregate overflow", for the gap this
-    /// leaves: none of the three causes is disambiguated in the message
-    /// `check_flatbuffers_bounds` writes for this variant.
-    Declaration,
+    /// One member carries no type at all, which is malformed IR rather than
+    /// an unbounded shape, and which no probe can charge.
+    Untyped(String),
+    /// `fb_projection::struct_table` refused the declaration's layout — two
+    /// members sharing one ordinal, or an ordinal of 0. It is a property of
+    /// the whole declaration and no single-member probe reproduces it, so the
+    /// projection's own message is carried through.
+    Layout(String),
+    /// Every member is bounded on its own and the total is not: the summed
+    /// size overflows `u64`, or it exceeds
+    /// [`fb_projection::MAX_ENCODABLE`].
+    Aggregate,
     /// Every member that could be judged is individually bounded, and at
-    /// least one could not be judged — a cross-package reference this
-    /// backend does not resolve, or a same-package cycle. `decl`'s own
-    /// `None` is explained by that member, not by an unbounded shape.
+    /// least one could not be judged — a cross-package reference this backend
+    /// does not resolve, or a same-package cycle. `decl`'s own `None` is
+    /// explained by that member, not by an unbounded shape.
     Exempt,
 }
 
-/// Attributes `decl`'s unbounded [`fb_projection::max_size`] to one member,
-/// to the declaration as a whole, or exempts it — see [`Attribution`].
+/// What one type position contributes to the attribution.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    /// It has a finite bound of its own.
+    Bounded,
+    /// It has none, and this backend can say so.
+    Unbounded,
+    /// This backend cannot say: the position reaches a cross-package
+    /// reference or a cycle.
+    Unjudgeable,
+}
+
+/// Attributes `decl`'s unbounded [`fb_projection::max_size`] — see
+/// [`Attribution`].
 ///
-/// Each member is judged on its own: [`member_resolves_locally`] decides
-/// whether this backend can resolve everything the member's type reaches
-/// (see its own doc for the two things it treats as unjudgeable rather than
-/// unbounded), and a member it can judge is probed independently by
-/// [`probe_struct_field`] or [`probe_union_arm`] — never by trusting one
+/// Each member is judged on its own by [`judge`], never by trusting one
 /// member's unboundedness to explain another's. A struct with both a bare
-/// unbounded `string` map key and an unrelated cross-package field is
-/// refused over the first and exempted from nothing on account of the
-/// second.
+/// unbounded `string` map key and an unrelated cross-package field is refused
+/// over the first and exempted from nothing on account of the second.
 fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attribution {
     let mut any_exempt = false;
     match &decl.kind {
         Some(v2::decl::Kind::StructDef(def)) => {
+            // The layout is refused for the declaration as a whole, and it is
+            // checked first: with two members on one ordinal, every member
+            // probes as bounded and only the aggregate answers `None`, which
+            // is exactly the confusion §4a asked K5 to end.
+            if let Err(err) = fb_projection::struct_table(&decl.name, def) {
+                return Attribution::Layout(err.message);
+            }
             for member in &def.members {
                 let Some(v2::struct_member::Member::Field(field)) = &member.member else {
                     // A reserved tombstone emits no field and charges one
@@ -270,25 +293,25 @@ fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attrib
                     continue;
                 };
                 let Some(ty) = field.r#type.as_ref() else {
-                    continue;
+                    return Attribution::Untyped(field.name.clone());
                 };
-                if !member_resolves_locally(ctx, ty) {
-                    any_exempt = true;
-                    continue;
-                }
-                if probe_struct_field(package, field).is_none() {
-                    return Attribution::Member(field.name.clone());
+                match judge(ctx, package, ty) {
+                    Verdict::Unbounded => return Attribution::Member(field.name.clone()),
+                    Verdict::Unjudgeable => any_exempt = true,
+                    Verdict::Bounded => {}
                 }
             }
         }
         Some(v2::decl::Kind::UnionDef(def)) => {
             for arm in &def.arms {
-                if !decl_resolves_locally(ctx, &arm.type_ref, &mut HashSet::new()) {
-                    any_exempt = true;
-                    continue;
-                }
-                if probe_union_arm(package, arm).is_none() {
-                    return Attribution::Member(arm.name.clone());
+                let ty = v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named(arm.type_ref.clone())),
+                };
+                match judge(ctx, package, &ty) {
+                    Verdict::Unbounded => return Attribution::Member(arm.name.clone()),
+                    Verdict::Unjudgeable => any_exempt = true,
+                    Verdict::Bounded => {}
                 }
             }
         }
@@ -297,44 +320,87 @@ fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attrib
     if any_exempt {
         Attribution::Exempt
     } else {
-        Attribution::Declaration
+        Attribution::Aggregate
     }
 }
 
-/// The bound of `field` alone, charged the way
-/// [`fb_projection::max_size`] would charge it as one member of a struct:
-/// `fb_projection::struct_table_bound` sums each member's own
-/// `field_charge` independently and propagates the first `None`, so wrapping
-/// `field` in a struct of its own reproduces exactly the charge it
-/// contributes to `decl`'s real bound, with nothing else able to make the
-/// probe answer `None` in its place.
-fn probe_struct_field(package: &v2::Package, field: &v2::Field) -> Option<u64> {
+/// One type position's verdict.
+///
+/// A position this backend can resolve in full is probed as a whole, which is
+/// the cheapest and the most faithful answer: [`probe_field_type`] charges it
+/// exactly what [`fb_projection::max_size`] charges it as one member.
+///
+/// A position it cannot resolve in full is **descended into**, which is the
+/// first gap §4a carried forward to this stage. An anonymous composite can
+/// mix an unjudgeable leaf with an unbounded one — `map<veh.other.Speed,
+/// string>` is the recorded example — and answering for the whole member
+/// would exempt the unbounded value along with the unresolved key. Only a
+/// named reference and a stream are unjudgeable in themselves; an array, a
+/// map and a tuple hand the question to their own leaves, and one unbounded
+/// leaf refuses the member whatever else is beside it.
+fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
+    if member_resolves_locally(ctx, ty) {
+        return if probe_field_type(package, ty).is_some() {
+            Verdict::Bounded
+        } else {
+            Verdict::Unbounded
+        };
+    }
+    fn worst(verdicts: Vec<Verdict>) -> Verdict {
+        if verdicts.contains(&Verdict::Unbounded) {
+            Verdict::Unbounded
+        } else {
+            Verdict::Unjudgeable
+        }
+    }
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Array(array)) => array
+            .element
+            .as_deref()
+            .map_or(Verdict::Unjudgeable, |element| judge(ctx, package, element)),
+        Some(v2::field_type::Kind::Map(map)) => worst(
+            [map.key.as_deref(), map.value.as_deref()]
+                .into_iter()
+                .flatten()
+                .map(|half| judge(ctx, package, half))
+                .collect(),
+        ),
+        Some(v2::field_type::Kind::Tuple(tuple)) => worst(
+            tuple
+                .fields
+                .iter()
+                .filter_map(|field| field.r#type.as_ref())
+                .map(|field| judge(ctx, package, field))
+                .collect(),
+        ),
+        // A named reference this backend does not resolve, a cycle, or a
+        // stream: the position itself is what cannot be judged.
+        _ => Verdict::Unjudgeable,
+    }
+}
+
+/// The bound of one type position alone, charged the way
+/// [`fb_projection::max_size`] charges it as one member of a struct:
+/// `struct_table_bound` sums each member's own `field_charge` independently
+/// and propagates the first `None`, so a struct of exactly this one field
+/// reproduces the charge the position contributes, with nothing else able to
+/// answer `None` in its place.
+fn probe_field_type(package: &v2::Package, ty: &v2::FieldType) -> Option<u64> {
     let probe = v2::Decl {
         kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
             members: vec![v2::StructMember {
-                member: Some(v2::struct_member::Member::Field(field.clone())),
+                member: Some(v2::struct_member::Member::Field(v2::Field {
+                    // Ordinal 1 is the first FlatBuffers id. It is written
+                    // here rather than copied from the real member so that a
+                    // declaration whose ordinals are themselves malformed is
+                    // attributed by `Attribution::Layout` and not mistaken
+                    // for an unbounded member.
+                    ordinal: 1,
+                    r#type: Some(ty.clone()),
+                    ..Default::default()
+                })),
             }],
             fixed_layout: false,
-        })),
-        ..Default::default()
-    };
-    let packages = fb_projection::Packages {
-        package,
-        others: &[],
-    };
-    fb_projection::max_size(packages, &probe)
-}
-
-/// The bound of `arm` alone, on the same footing as [`probe_struct_field`]:
-/// `fb_projection::union_wrapper_bound` takes the largest of its arms'
-/// `union_arm_bound`, so a union of exactly this one arm charges precisely
-/// what it contributes to `decl`'s real bound.
-fn probe_union_arm(package: &v2::Package, arm: &v2::UnionArm) -> Option<u64> {
-    let probe = v2::Decl {
-        kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
-            arms: vec![arm.clone()],
-            is_result: false,
-            reserved: Vec::new(),
         })),
         ..Default::default()
     };
@@ -433,9 +499,13 @@ fn field_type_resolves_locally(
         Some(v2::field_type::Kind::Named(reference)) => {
             decl_resolves_locally(ctx, reference, visiting)
         }
-        Some(v2::field_type::Kind::Primitive(_)) | Some(v2::field_type::Kind::InlineScalar(_)) => {
-            true
-        }
+        // An `Unspecified` field primitive emits `()` and is charged
+        // nothing, exactly as a `Stream` is, and `derives` lists the two side
+        // by side among its refusing positions. It is malformed IR rather
+        // than an unbounded shape, so it is exempted rather than refused.
+        Some(v2::field_type::Kind::Primitive(primitive)) => v2::PrimitiveType::try_from(*primitive)
+            .is_ok_and(|primitive| primitive != v2::PrimitiveType::Unspecified),
+        Some(v2::field_type::Kind::InlineScalar(_)) => true,
         Some(v2::field_type::Kind::Tuple(tuple)) => tuple.fields.iter().all(|field| {
             field
                 .r#type
