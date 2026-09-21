@@ -78,10 +78,11 @@ impl Default for Samples {
         }
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -94,7 +95,7 @@ impl<'a> SpeedFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
         __ridl_fb_decode_speed(self.buf, self.table)
     }
@@ -108,17 +109,19 @@ fn __ridl_fb_encode_speed(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                },
             },
-        },
-    ];
-    builder.push_table(8usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_speed(
@@ -146,12 +149,14 @@ fn __ridl_fb_verify_speed(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Speed::new_unchecked(
-        f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
-    )
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Speed::new_unchecked(
+            f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+        )
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {

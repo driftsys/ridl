@@ -129,10 +129,11 @@ impl Default for RawTicks {
         RawTicks::new(0)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -145,7 +146,7 @@ impl<'a> SpeedFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
         __ridl_fb_decode_speed(self.buf, self.table)
     }
@@ -159,17 +160,19 @@ fn __ridl_fb_encode_speed(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                },
             },
-        },
-    ];
-    builder.push_table(8usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_speed(
@@ -197,12 +200,14 @@ fn __ridl_fb_verify_speed(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Speed::new_unchecked(
-        f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
-    )
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Speed::new_unchecked(
+            f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+        )
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
@@ -261,10 +266,11 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_speed(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `OldFlag`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `OldFlag`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct OldFlagFbView<'a> {
@@ -277,7 +283,7 @@ impl<'a> OldFlagFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `OldFlag` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `OldFlag` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> OldFlag {
         __ridl_fb_decode_old_flag(self.buf, self.table)
     }
@@ -291,17 +297,19 @@ fn __ridl_fb_encode_old_flag(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+                },
             },
-        },
-    ];
-    builder.push_table(5usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_old_flag(
@@ -327,10 +335,12 @@ fn __ridl_fb_verify_old_flag(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_old_flag(buf: &[u8], table: usize) -> OldFlag {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    OldFlag::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        OldFlag::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for OldFlag {
@@ -389,10 +399,11 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for OldFlag {
         __ridl_fb_decode_old_flag(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawTicks`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `RawTicks`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawTicksFbView<'a> {
@@ -405,7 +416,7 @@ impl<'a> RawTicksFbView<'a> {
     pub(crate) fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `RawTicks` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `RawTicks` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub(crate) fn value(&self) -> RawTicks {
         __ridl_fb_decode_raw_ticks(self.buf, self.table)
     }
@@ -419,17 +430,19 @@ fn __ridl_fb_encode_raw_ticks(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::U32(__s.get() as u32)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::U32(__s.get() as u32)
+                },
             },
-        },
-    ];
-    builder.push_table(8usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_raw_ticks(
@@ -455,10 +468,14 @@ fn __ridl_fb_verify_raw_ticks(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_raw_ticks(buf: &[u8], table: usize) -> RawTicks {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    RawTicks::new(i64::from(::ridl_rt::flatbuffers::read_u32(buf, __p).unwrap_or(0u32)))
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        RawTicks::new(
+            i64::from(::ridl_rt::flatbuffers::read_u32(buf, __p).unwrap_or(0u32)),
+        )
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTicks {

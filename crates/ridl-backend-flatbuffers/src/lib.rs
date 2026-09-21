@@ -991,12 +991,28 @@ fn emit_induced_tables(
         index += 1;
         if let Some(previous) = seen.get(&item.name) {
             if *previous != item.kind {
+                // A box is not a container and no field path reaches one, so
+                // the container wording — and its "rename a field" remedy —
+                // would misdirect an author whose declaration's `<Name>Box`
+                // (ADR-0019 decision 8) met a union arm's `<Union><Arm>Box`
+                // (decision 2). Two boxes of the *same* shape collapse above
+                // rather than reaching here, which is why only a real
+                // disagreement is refused.
+                let remedy = if matches!(item.kind, InducedKind::Box { .. })
+                    || matches!(previous, InducedKind::Box { .. })
+                {
+                    "a box table is named for the declaration or the union arm it wraps, and \
+                     two of them spelled one name here — rename the declaration or the arm so \
+                     they differ."
+                } else {
+                    "a container generates a table named for the field path that reaches it, \
+                     and two different paths spelled one name here — rename a field so they \
+                     differ."
+                };
                 return Err(GenerateError {
                     message: format!(
-                        "the generated table name `{}` is claimed by two different container \
-                         types; a container generates a table named for the field path that \
-                         reaches it, and two different paths spelled one name here — rename \
-                         a field so they differ.",
+                        "the generated table name `{}` is claimed by two different generated \
+                         tables; {remedy}",
                         item.name
                     ),
                 });
@@ -1023,27 +1039,43 @@ fn emit_induced_tables(
                     type_text,
                     *needs_null_default,
                     comment.clone(),
-                );
+                )?;
             }
         }
     }
     Ok(())
 }
 
-/// One induced union-arm wrapper table: a single `value` field at id 0,
-/// holding what [`union_arm_type`] already resolved — the FlatBuffers type,
-/// the `= null` default and the constraint comment an ordinary field
-/// carries at this same position ([`push_field`]). Nothing here can itself
-/// induce a further table: the three kinds this wraps — a named scalar, an
-/// enum, an enum set — each resolve to a scalar or an enum reference, never
-/// a container, so `induced` is not threaded through.
+/// One box table: a single `value` field, holding what [`union_arm_type`] or
+/// [`push_root_box`] already resolved — the FlatBuffers type, the `= null`
+/// default and the constraint comment an ordinary field carries at this same
+/// position ([`push_field`]). Two rules generate one: a union arm that is not
+/// itself a table (ADR-0019 decision 2) and a declaration rooted in a box
+/// (decision 8).
+///
+/// The slot is read from the projection's own layout rather than written as a
+/// number here, so the table this emits and the table
+/// [`projection::max_size`] charges cannot be two different tables. Nothing
+/// here can itself induce a further table: the three kinds a box wraps — a
+/// named scalar, an enum, an enum set — each resolve to a scalar or an enum
+/// reference, never a container, so `induced` is not threaded through.
 fn emit_box_table(
     out: &mut String,
     name: &str,
     type_text: &str,
     needs_null_default: bool,
     comment: Option<String>,
-) {
+) -> Result<(), GenerateError> {
+    let layout = projection::union_arm_box_table();
+    let [slot] = layout.slots.as_slice() else {
+        return Err(GenerateError {
+            message: format!(
+                "the FlatBuffers projection describes a box table with {} slots, and a box \
+                 holds exactly one value (ADR-0019 decisions 2 and 8).",
+                layout.slots.len()
+            ),
+        });
+    };
     out.push_str(&format!("\ntable {name} {{\n"));
     push_field(
         out,
@@ -1051,9 +1083,10 @@ fn emit_box_table(
         type_text,
         needs_null_default,
         comment,
-        projection::UNION_ARM_BOX_VALUE_ID,
+        slot.id,
     );
     out.push_str("}\n");
+    Ok(())
 }
 
 /// One induced tuple table: positional fields `field_1`, `field_2`, … with

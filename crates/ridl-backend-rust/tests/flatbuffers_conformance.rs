@@ -740,6 +740,65 @@ fn main() {{
     rustc::run_program("fb_conformance_scalar_root_decode", &program(&main));
 }
 
+/// **A box root with no value slot is refused** (ADR-0019 decision 8).
+///
+/// The box's `value` field is not optional, so a buffer carrying no slot for
+/// it carries no value at all, and `verify` answers `MissingRequired`. Until
+/// this case existed the rule was pinned only as generated **text**: deleting
+/// the branch that enforces it turned fourteen snapshots red and left every
+/// round trip and every conformance case passing, because nothing constructed
+/// such a buffer. The review of 2026-09-21 found that, and this is the case
+/// that fails on the behaviour rather than on the spelling.
+///
+/// The buffer comes from planus rather than from a hand-written byte string:
+/// planus omits a field equal to its FlatBuffers default, so writing a
+/// `SpeedBox` of 0 produces exactly the empty box this codec must refuse, laid
+/// out by a conforming writer.
+///
+/// **This is the root-level reach of the default-elision divergence**
+/// driftsys/ridl#472 carries. At a field position an omitted default costs one
+/// field; at a root it costs the whole payload, since the payload *is* that
+/// one field. The rule is decision 8's and D-9's together, and it is measured
+/// here rather than described.
+#[test]
+fn a_box_root_with_no_value_slot_is_refused() {
+    let mut builder = planus::Builder::new();
+    let bytes = builder.finish(fb::SpeedBox { value: 0 }, None).to_vec();
+
+    // The omission is real: planus wrote a box with an empty vtable slot,
+    // which is what makes this a case about an absent field rather than
+    // about a zero.
+    assert_eq!(
+        voffset(&bytes, 0),
+        0,
+        "planus must omit the default-valued slot, or this case proves nothing \
+         about an absent one"
+    );
+
+    let hex = to_hex(&bytes);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    match Ref::<'_, Speed, FlatBuffers>::verify(&bytes) {{
+        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{}}
+        Err(other) => panic!("expected MissingRequired, got {{other:?}}"),
+        Ok(_) => panic!("a box with no value slot must not verify"),
+    }}
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_empty_box", &program(&main));
+}
+
 /// The generated codec checks for `wasm32-unknown-unknown`.
 ///
 /// ADR-0020 decision 2 makes the generated Rust compiled to `wasm32` the

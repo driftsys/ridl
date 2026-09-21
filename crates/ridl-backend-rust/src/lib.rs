@@ -238,8 +238,10 @@ enum Attribution {
     /// `value` field of a box root (ADR-0019 decision 8) — is individually
     /// unbounded.
     Member(String),
-    /// One member carries no type at all, which is malformed IR rather than
-    /// an unbounded shape, and which no probe can charge.
+    /// One member carries no type at all — a struct field with no type, or
+    /// the `value` of a box root whose declaration names no backing — which
+    /// is malformed IR rather than an unbounded shape, and which no probe can
+    /// charge.
     Untyped(String),
     /// `fb_projection::struct_table` refused the declaration's layout — two
     /// members sharing one ordinal, or an ordinal of 0. It is a property of
@@ -327,6 +329,16 @@ fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attrib
         Some(
             v2::decl::Kind::TypeDef(_) | v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_),
         ) => {
+            // A named scalar with no backing at all is malformed IR rather
+            // than an unbounded shape, which is what `Untyped` is for. The
+            // front end leaves one behind after a parse error such as
+            // `type X:`, so this is the shape such a declaration reaches the
+            // backend in — not one a length or a width would fix.
+            if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind
+                && td.backing.is_none()
+            {
+                return Attribution::Untyped("value".to_string());
+            }
             let ty = v2::FieldType {
                 optional: false,
                 kind: Some(v2::field_type::Kind::Named(decl.name.clone())),

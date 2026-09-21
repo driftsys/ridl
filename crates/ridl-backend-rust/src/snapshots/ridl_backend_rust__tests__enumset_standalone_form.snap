@@ -39,10 +39,11 @@ impl Default for WarningFlags {
         WarningFlags(0)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
@@ -55,7 +56,7 @@ impl<'a> WarningFlagsFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `WarningFlags` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `WarningFlags` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> WarningFlags {
         __ridl_fb_decode_warning_flags(self.buf, self.table)
     }
@@ -69,17 +70,19 @@ fn __ridl_fb_encode_warning_flags(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::U8(i64::from(__s) as u8)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::U8(i64::from(__s) as u8)
+                },
             },
-        },
-    ];
-    builder.push_table(5usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_warning_flags(
@@ -107,13 +110,15 @@ fn __ridl_fb_verify_warning_flags(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    <WarningFlags as ::core::convert::TryFrom<
-        i64,
-    >>::try_from(i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)))
-        .unwrap_or(WarningFlags(0i64))
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        <WarningFlags as ::core::convert::TryFrom<
+            i64,
+        >>::try_from(i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)))
+            .unwrap_or(WarningFlags(0i64))
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFlags {

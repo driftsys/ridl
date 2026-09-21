@@ -37,10 +37,11 @@ impl Default for GearPosition {
         GearPosition::PARK
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
@@ -53,7 +54,7 @@ impl<'a> GearPositionFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `GearPosition` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `GearPosition` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> GearPosition {
         __ridl_fb_decode_gear_position(self.buf, self.table)
     }
@@ -67,17 +68,19 @@ fn __ridl_fb_encode_gear_position(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 8u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 8u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                },
             },
-        },
-    ];
-    builder.push_table(16usize, 8usize, 1u16, &__box)
+        ];
+        builder.push_table(16usize, 8usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_gear_position(
@@ -105,13 +108,15 @@ fn __ridl_fb_verify_gear_position(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPosition {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    <GearPosition as ::core::convert::TryFrom<
-        i64,
-    >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-        .unwrap_or(GearPosition::PARK)
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        <GearPosition as ::core::convert::TryFrom<
+            i64,
+        >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            .unwrap_or(GearPosition::PARK)
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosition {

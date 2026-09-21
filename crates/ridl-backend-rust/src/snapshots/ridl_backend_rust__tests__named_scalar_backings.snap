@@ -233,10 +233,11 @@ impl Default for Blob {
         Blob::new_unchecked(Vec::new())
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -249,7 +250,7 @@ impl<'a> SpeedFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
         __ridl_fb_decode_speed(self.buf, self.table)
     }
@@ -263,17 +264,19 @@ fn __ridl_fb_encode_speed(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                },
             },
-        },
-    ];
-    builder.push_table(8usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_speed(
@@ -301,12 +304,14 @@ fn __ridl_fb_verify_speed(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Speed::new_unchecked(
-        f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
-    )
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Speed::new_unchecked(
+            f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+        )
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
@@ -365,10 +370,11 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_speed(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -381,7 +387,7 @@ impl<'a> CounterFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Counter` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Counter` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Counter {
         __ridl_fb_decode_counter(self.buf, self.table)
     }
@@ -395,17 +401,19 @@ fn __ridl_fb_encode_counter(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+                },
             },
-        },
-    ];
-    builder.push_table(6usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(6usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_counter(
@@ -431,10 +439,14 @@ fn __ridl_fb_verify_counter(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_counter(buf: &[u8], table: usize) -> Counter {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Counter::new(i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)))
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Counter::new(
+            i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+        )
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
@@ -493,10 +505,11 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         __ridl_fb_decode_counter(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Enabled`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Enabled`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EnabledFbView<'a> {
@@ -509,7 +522,7 @@ impl<'a> EnabledFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Enabled` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Enabled` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Enabled {
         __ridl_fb_decode_enabled(self.buf, self.table)
     }
@@ -523,17 +536,19 @@ fn __ridl_fb_encode_enabled(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: {
-                let __s = *value;
-                ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+                },
             },
-        },
-    ];
-    builder.push_table(5usize, 4usize, 1u16, &__box)
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_enabled(
@@ -559,10 +574,12 @@ fn __ridl_fb_verify_enabled(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_enabled(buf: &[u8], table: usize) -> Enabled {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Enabled::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Enabled::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Enabled {
@@ -621,10 +638,11 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Enabled {
         __ridl_fb_decode_enabled(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Label`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Label`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LabelFbView<'a> {
@@ -637,7 +655,7 @@ impl<'a> LabelFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Label` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Label` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Label {
         __ridl_fb_decode_label(self.buf, self.table)
     }
@@ -651,16 +669,18 @@ fn __ridl_fb_encode_label(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: ::ridl_rt::flatbuffers::Field::Offset(
-                builder.push_string(value.get())?,
-            ),
-        },
-    ];
-    builder.push_table(8usize, 4usize, 1u16, &__box)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: ::ridl_rt::flatbuffers::Field::Offset(
+                    builder.push_string(value.get())?,
+                ),
+            },
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_label(
@@ -687,12 +707,14 @@ fn __ridl_fb_verify_label(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_label(buf: &[u8], table: usize) -> Label {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Label::new_unchecked(
-        String::from(::ridl_rt::flatbuffers::string(buf, __p).unwrap_or("")),
-    )
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Label::new_unchecked(
+            String::from(::ridl_rt::flatbuffers::string(buf, __p).unwrap_or("")),
+        )
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
@@ -751,10 +773,11 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
         __ridl_fb_decode_label(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Blob`'s `verify` accepted.
+/// An accessor over FlatBuffers bytes `Blob`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one `value` field, at id 0.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct BlobFbView<'a> {
@@ -767,7 +790,7 @@ impl<'a> BlobFbView<'a> {
     pub fn bytes(&self) -> &'a [u8] {
         self.buf
     }
-    /// The value the box carries. `Blob` is one value, so this decodes it rather than borrowing it.
+    /// The value the box carries. `Blob` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Blob {
         __ridl_fb_decode_blob(self.buf, self.table)
     }
@@ -781,16 +804,18 @@ fn __ridl_fb_encode_blob(
     ::ridl_rt::flatbuffers::Pos,
     ::ridl_rt::payload::EncodeError,
 > {
-    let __box = [
-        ::ridl_rt::flatbuffers::TableField {
-            slot: 0u16,
-            offset: 4u16,
-            value: ::ridl_rt::flatbuffers::Field::Offset(
-                builder.push_vector(value.get(), 1usize)?,
-            ),
-        },
-    ];
-    builder.push_table(8usize, 4usize, 1u16, &__box)
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: ::ridl_rt::flatbuffers::Field::Offset(
+                    builder.push_vector(value.get(), 1usize)?,
+                ),
+            },
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
 }
 #[allow(deprecated)]
 fn __ridl_fb_verify_blob(
@@ -818,17 +843,19 @@ fn __ridl_fb_verify_blob(
 }
 #[allow(deprecated)]
 fn __ridl_fb_decode_blob(buf: &[u8], table: usize) -> Blob {
-    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-        .unwrap_or(::core::option::Option::None)
-        .unwrap_or(0usize);
-    Blob::new_unchecked({
-        let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
-            .unwrap_or(::ridl_rt::flatbuffers::Vector {
-                len: 0,
-                first: 0,
-            });
-        buf.get(__v.first..__v.first + __v.len).unwrap_or(&[]).to_vec()
-    })
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Blob::new_unchecked({
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            buf.get(__v.first..__v.first + __v.len).unwrap_or(&[]).to_vec()
+        })
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Blob {

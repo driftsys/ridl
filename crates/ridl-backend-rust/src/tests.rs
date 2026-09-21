@@ -4482,6 +4482,32 @@ fn flatbuffers_bound_names_the_unbounded_union_arm() {
     );
 }
 
+/// A named scalar with **no backing at all** is malformed IR, not an
+/// unbounded shape, and the refusal says so.
+///
+/// This is what the front end leaves behind after a parse error such as
+/// `type X:`, and `ridlc::compile` runs the backend even when the front end
+/// already reported one — so the message a reader meets beside their parse
+/// error should not tell them a length bound is missing. The review of
+/// 2026-09-21 found the box branch attributing it as unbounded.
+#[test]
+fn flatbuffers_bound_names_a_box_root_with_no_backing_as_untyped() {
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl(
+            "X",
+            v2::decl::Kind::TypeDef(v2::TypeDef::default()),
+        )],
+    );
+
+    let err = check_flatbuffers_bounds(&pkg).expect_err("a backing-less named scalar has no bound");
+    assert_eq!(
+        err.message,
+        "`veh.cruise.X.value` carries no type, so `veh.cruise.X` has no FlatBuffers bound",
+        "the refusal must say the declaration carries no type, not that it is unbounded"
+    );
+}
+
 /// A named scalar with no finite bound is refused in its own right, over the
 /// `value` field of the box ADR-0019 decision 8 roots it in.
 #[test]
