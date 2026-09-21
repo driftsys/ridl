@@ -451,6 +451,34 @@ fn vtable_entries(bytes: &[u8]) -> usize {
     (vtable_bytes - 4) / 2
 }
 
+/// The `voffset` the root table's vtable carries for `slot`, or zero when
+/// the field is absent.
+///
+/// **This, not [`vtable_entries`], is what says a field was written.** A
+/// vtable's declared width is a property of the writer, not of the value:
+/// `ridl-rt`'s `push_table` always emits
+/// `VTABLE_HEADER + slots * VOFFSET_SIZE` bytes whatever it put in them, so
+/// a codec that skipped a field still produces a 21-entry vtable — with a
+/// zero in that entry. FlatBuffers spells absence as a zero `voffset`, and
+/// a slot past the vtable's end is absent too, which is the other half of
+/// this function.
+fn voffset(bytes: &[u8], slot: usize) -> u16 {
+    let root = u32::from_le_bytes(bytes[0..4].try_into().expect("a root offset")) as usize;
+    let soffset = i32::from_le_bytes(bytes[root..root + 4].try_into().expect("a vtable offset"));
+    let vtable = (root as i64 - i64::from(soffset)) as usize;
+    let vtable_bytes =
+        u16::from_le_bytes(bytes[vtable..vtable + 2].try_into().expect("a vtable size")) as usize;
+    let entry = vtable + 4 + slot * 2;
+    if entry + 2 > vtable + vtable_bytes {
+        return 0;
+    }
+    u16::from_le_bytes(bytes[entry..entry + 2].try_into().expect("a voffset"))
+}
+
+/// `Report.spare`'s vtable slot. The `.fbs` gives it `(id: 20)`, and a
+/// FlatBuffers slot is its id.
+const SPARE_SLOT: usize = 20;
+
 /// **The one disagreement, measured.** planus omits a non-optional scalar
 /// whose value equals its FlatBuffers default; this codec reads an omitted
 /// non-optional field as `Malformed::MissingRequired` (D-9), so it refuses
@@ -529,9 +557,18 @@ fn main() {{
 /// a codec one.
 ///
 /// All three legs are asserted, so a pass cannot come from the wrong place:
-/// this codec's own buffer carries the slot, planus's re-encode does not,
-/// and the decode that follows reads `None` while every other field is
-/// unchanged.
+/// this codec's own buffer carries a **non-zero `voffset`** for `spare`,
+/// planus's re-encode carries none, and the decode that follows reads
+/// `None` while every other field is unchanged.
+///
+/// Leg one reads the `voffset`, not the vtable's declared width. The width
+/// says nothing about what was written: `ridl-rt`'s `push_table` emits one
+/// entry per slot whatever it filled them with, so a codec that stopped
+/// writing a present default-valued optional — the regression D-9 exists to
+/// forbid — still produces a 21-entry vtable, with a zero in that entry. An
+/// earlier version of this case asserted the width and passed under exactly
+/// that mutation; the review of 2026-09-21 found it. The current assertion
+/// fails under it.
 #[test]
 fn an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip() {
     let transcript = rustc::run_program_capturing_stdout(
@@ -556,14 +593,16 @@ fn main() {
         ),
     );
 
-    // Leg one: this codec wrote the slot. `Report` has 21 slots and this
-    // encoder writes one per field, so a full-length vtable is what a
-    // present optional looks like here.
+    // Leg one: this codec wrote the field. A non-zero `voffset` in the
+    // slot is what "written" means in the format; the vtable's declared
+    // width is the writer's habit and says nothing about this value.
     let ours = from_hex(&transcript);
-    assert_eq!(
-        vtable_entries(&ours),
-        21,
-        "this codec writes a slot for a present optional at its default"
+    assert_ne!(
+        voffset(&ours, SPARE_SLOT),
+        0,
+        "this codec must write a present optional at its FlatBuffers default \
+         (D-9); the buffer carries a zero voffset for `spare`, which is how \
+         the format spells an absent field"
     );
     let read = <fb::ReportRef<'_> as planus::ReadAsRoot>::read_as_root(&ours)
         .expect("planus reads the buffer this codec wrote");
@@ -576,11 +615,11 @@ fn main() {
     // Leg two: planus re-encodes what it read, and omits the slot.
     let mut builder = planus::Builder::new();
     let theirs = builder.finish(owned, None).to_vec();
-    assert!(
-        vtable_entries(&theirs) < 21,
-        "planus must omit the default-valued trailing slot, or this case \
-         proves nothing: its vtable carries {}",
-        vtable_entries(&theirs)
+    assert_eq!(
+        voffset(&theirs, SPARE_SLOT),
+        0,
+        "planus must omit the default-valued slot, or this case proves \
+         nothing about what a conforming writer does"
     );
 
     // Leg three: this codec decodes planus's buffer, and the optional is

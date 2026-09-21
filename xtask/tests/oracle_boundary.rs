@@ -156,6 +156,21 @@ fn package_names(metadata: &serde_json::Value) -> HashMap<&str, &str> {
 /// actually ship — and does **not** catch one that nothing activates. That
 /// second case cannot reach a downstream build either, so the gap is not a
 /// hole in the property this guard states.
+///
+/// **A build-dependency is a real gap, named here rather than closed.**
+/// `[build-dependencies] planus` in `ridl-ir` would compile planus in every
+/// downstream build — which is what the failure text below warns of — while
+/// producing no normal edge, so this walk passes it. It does not reach the
+/// linked artefact, which is the narrower property the guard actually
+/// enforces. Following build edges too was considered and rejected on a
+/// measurement rather than on taste: `ridl-ir` already carries `protox` as
+/// a build-dependency, for compiling the IR's own `.proto` files, and
+/// `ridl-backend-proto` depends on `ridl-ir` normally — so a walk over
+/// normal-and-build edges fails the `ridl-backend-proto` / `protox`
+/// boundary today, on a legitimate edge that has nothing to do with that
+/// backend's test oracle. Separating the two would need the guard to know
+/// which use of a crate it is looking at, which is a distinction the
+/// resolved graph does not carry.
 fn normal_closure<'a>(
     metadata: &'a serde_json::Value,
     package: &'a str,
