@@ -195,6 +195,19 @@ trusted with no `unsafe` and no second verification pass.
    position-independent, so a runtime may place one anywhere in the caller's
    slice.
 
+   **Addendum 2026-09-21 (stage K7, driftsys/ridl#471): the one consumer named
+   above no longer assumes a prefix, and it was not the face that changed it.**
+   `encode_into` now evaluates to `encoded.bytes()` and the emitted code passes
+   that subslice on unchanged, at all four sites — a command's and a query's
+   `send`, a signal's `set`, an event's `raise`, and a query reply's `settle`.
+   The paragraph above expected this to land with D-11, in the stage that moves
+   the face onto `Wire`; D-11 did not land, because a payload type that mints no
+   root table has no FlatBuffers root at all (driftsys/ridl#470), and the fix
+   was taken on its own instead. The emitted code still names `ReprC`, so
+   nothing observable changed — what changed is that it is now
+   encoding-independent, which is the property this amendment asked for, and it
+   no longer waits on D-11 to become true.
+
    The same amendment settles what `EncodeError::Capacity`'s `needed` means,
    which the FlatBuffers encoder is the first to make a question. An encoder
    that sizes its output before writing reports the whole encoding; one that
