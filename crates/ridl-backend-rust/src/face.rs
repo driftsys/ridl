@@ -26,8 +26,10 @@
 //! Every method returns without waiting (RA-20). There is no thread, future,
 //! socket or timer here, and no method is bounded on `CoherentSignals`.
 //!
-//! The face is reached only from [`crate::generate_face`], never from the
-//! pipeline [`crate::generate`].
+//! Since E11.14 the face is reached from [`crate::generate_pipeline`], which
+//! is what `ridl build --emit rust` calls, as well as from
+//! [`crate::generate_face`]. It is not reached from [`crate::generate`],
+//! which still emits no face.
 
 use crate::descriptors::{query_reply_type, single_param_type};
 use crate::{GenerateError, ident, type_path};
@@ -80,7 +82,10 @@ struct Call<'a> {
     reply_type: Option<&'a str>,
 }
 
-fn one_interface(
+/// The face module of one interface, or `None` when the interface declares
+/// nothing the face carries. Reachable from the crate for the pipeline's
+/// per-interface walk (E11.14 decision 2).
+pub(crate) fn one_interface(
     iface_name: &str,
     interface: &v2::Interface,
 ) -> Result<Option<TokenStream>, GenerateError> {

@@ -442,15 +442,16 @@ trail is archived at
 **What E11.13 did not do is reach the command line.** `ridl build --emit rust`
 calls `ridl_backend_rust::generate`, and the face is emitted by the companion
 `generate_face` ([ADR-0023](decisions/ADR-0023-interaction-face-generation.md)
-decision 2), so a package built through the CLI today carries its domain types
-and nothing else — no descriptors, no face, no codec, and a `Cargo.toml` that
-names `ridl-rt` with no encoding feature. The interaction-face record states
-that as correct for E11.13 rather than a shortfall, because there was no codec
-to emit and no runtime to link. Both of those change in this step, and closing
-the gap is its own story, **E11.14** (driftsys/ridl#444). It is the story that
-makes the generated surface reachable by a consumer who runs the compiler rather
-than a test in this workspace, and the first of the three codecs to land is what
-unblocks it.
+decision 2), so a package built through the CLI carried its domain types and
+nothing else — no descriptors, no face, no codec, and a `Cargo.toml` that named
+`ridl-rt` with no encoding feature. (That was the state at E11.13; the codec
+arrived with E11.7 and the descriptors and the face with E11.14, both below.)
+The interaction-face record states that as correct for E11.13 rather than a
+shortfall, because there was no codec to emit and no runtime to link. Both of
+those change in this step, and closing the gap is its own story, **E11.14**
+(driftsys/ridl#444). It is the story that makes the generated surface reachable
+by a consumer who runs the compiler rather than a test in this workspace, and
+the first of the three codecs to land is what unblocks it.
 
 | ID     | Story                                                                                                                                            | Done when                                                                                                                                                                               | Size |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
@@ -465,18 +466,33 @@ rather than behind a third entry point, and `ridlc::run_build` calls `generate`
 — so `ridl build --emit rust` has carried the codec since stage K5
 (driftsys/ridl#465), and `crates/ridlc/src/lib.rs` has rendered
 `ridl-rt = { version = "0.1", features = ["flatbuffers"] }` since the same
-stage. What remains to E11.14 is the descriptors and the face, which
-`generate_face` emits and which `run_build` does not call.
+stage. What remained to E11.14 was the descriptors and the face, which
+`generate_face` emitted and which `run_build` did not call — and which it now
+calls `generate_pipeline` for.
 
-**Two limits on what that emitted codec covers**, neither of them E11.14's to
-close. A type that reaches a cross-package reference carries no codec at all,
-because `ridl-backend-rust` resolves no such reference — ten of the corpus's
-fifteen payload types, tracked as **driftsys/ridl#467**, whose fix is to hand
-`generate` the other packages. An interaction whose payload is a named scalar or
-an enum used to carry no `Payload` implementation either, because a FlatBuffers
-root is a table and the projection minted one only for a `struct` or a `union`;
-that was **driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated
-face moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
+**E11.14 landed** (driftsys/ridl#479). `ridlc::run_build` calls
+`generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the
+interaction face beside the domain types and the codec. The proof is
+`crates/ridlc/tests/cabin_example.rs`, which builds `examples/cabin/`, compiles
+the emitted crate and `examples/cabin/consumer.rs` against it with plain
+`rustc`, runs the program, and requires one round trip of every interaction kind
+that carries a payload — a signal, an event, a command and a query — through the
+generated `Client`, `Publisher`, `Provider` and `dispatch` over `ridl-loopback`.
+What is new in it is the path rather than the running: other proofs run
+generated code, and the interaction-face round trips already run these same four
+over `ridl-loopback`, but each runs the backend's own output or a checked-in
+fixture. This one runs what the CLI wrote, linked as a separate crate into a
+separate process. The limit that stood beside the one below closed with it: the
+story resolves a cross-package reference, so no type is withheld a codec for
+that reason any more. Its as-built record is the E11.14 section of
+[`interaction-face.md`](design/interaction-face.md).
+
+**One limit on what that emitted codec covers**, not E11.14's to close. An
+interaction whose payload is a named scalar or an enum used to carry no
+`Payload` implementation, because a FlatBuffers root is a table and the
+projection minted one only for a `struct` or a `union`; that was
+**driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated face
+moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
 declaration has a root table, and a named scalar, an enum and an enum set are
 rooted in a box — and D-11 landed over it in stage K9b. E11.14's `Done when` is
 written over a payload that has a codec.
@@ -587,13 +603,13 @@ no root table for. That projection decision is **driftsys/ridl#470**, ADR-0019
 decision 8, 2026-09-21; D-11 followed it in stage K9b, and the face now names
 one per-package `Wire` alias and runs its round trips over the generated codec
 and `ridl-loopback`. Two narrower gaps are tracked beside it:
-**driftsys/ridl#467**, a type reaching a cross-package reference carries no
-codec, and **driftsys/ridl#469**, an anonymous inline constraint, a `step` and a
-map key's uniqueness are not checked by the generated `verify`. A fourth,
-**driftsys/ridl#472**, is a decided divergence rather than a gap: this codec
-refuses a buffer in which a conforming FlatBuffers writer omitted a
-default-valued non-optional field, which design note D-9 chose and the
-conformance suite measures.
+**driftsys/ridl#467**, a type reaching a cross-package reference carried no
+codec — closed by E11.14 on 2026-09-21 — and **driftsys/ridl#469**, an anonymous
+inline constraint, a `step` and a map key's uniqueness are not checked by the
+generated `verify`. A fourth, **driftsys/ridl#472**, is a decided divergence
+rather than a gap: this codec refuses a buffer in which a conforming FlatBuffers
+writer omitted a default-valued non-optional field, which design note D-9 chose
+and the conformance suite measures.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

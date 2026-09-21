@@ -24,7 +24,7 @@
 //! and `Default` never, because it comes from the typl init value instead.
 
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
 use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::projection::flatbuffers as fb_projection;
 use ridl_ir::v2;
@@ -60,9 +60,10 @@ pub struct GenerateError {
 /// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
 /// it emits no interaction face.
 ///
-/// This is the pipeline entry point — `ridl --emit rust` and the compiler
-/// corpus run it. The face is emitted by the companion [`generate_face`], not
-/// from here, for the reason the Lane M plan records ("Where the face is
+/// The compiler corpus runs this. The pipeline ran it too until E11.14, which
+/// gave the pipeline [`generate_pipeline`] — `ridl build --emit rust` calls
+/// that, and this output is a subset of it. The face is emitted by
+/// [`generate_face`] and [`generate_pipeline`], not from here, for the reason the Lane M plan records ("Where the face is
 /// emitted from"): the corpus interfaces carry contract clauses the M3 clause
 /// translator must refuse. The plan's second reason, that the corpus proofs
 /// passed no `--extern ridl_rt`, no longer holds: every compile proof links
@@ -124,12 +125,259 @@ pub fn generate_face_with(
     package: &v2::Package,
     wire: WireEncoding,
 ) -> Result<Generated, GenerateError> {
+    refuse_wire_collision(package)?;
     let ctx = Ctx::new(package);
     let mut items = vec![wire_alias(wire)];
     items.extend(package_items(&ctx, package)?);
     items.extend(descriptors::interface_items(&ctx, package)?);
     items.extend(face::interface_items(package)?);
     render(items)
+}
+
+/// [`generate`] with the other packages of the same build.
+///
+/// The relation is the one `ridl-backend-proto` and `ridl-backend-flatbuffers`
+/// already give their own `generate_with` (ADR-0017 decision 1):
+/// `generate(package)` is `generate_with(package, &[])`.
+///
+/// `others` is what lets the codec size and encode a cross-package reference.
+/// Without it a type reaching another package carries no
+/// `Payload<FlatBuffers>` implementation and a note saying so
+/// (driftsys/ridl#467); with it, such a type is emitted like any other.
+pub fn generate_with(
+    package: &v2::Package,
+    others: &[&v2::Package],
+) -> Result<Generated, GenerateError> {
+    let ctx = Ctx::with_others(package, others);
+    render(package_items(&ctx, package)?)
+}
+
+/// The pipeline's entry point: everything [`generate_face_with`] emits, over
+/// the whole build, with an interface the face cannot carry skipped rather
+/// than refused (E11.14 decisions 1, 2 and 4).
+///
+/// **Why the pipeline calls this and not [`generate`]** (decision 1): a
+/// consumer of `ridl build --emit rust` needs the face as much as the domain
+/// types, and the face compiles over the codec in the same unit, so the
+/// emitted unit is the superset rather than two calls.
+/// [`generate`] stays the entry point for every other caller, and it still
+/// emits no face and no descriptors. Its output is not byte-for-byte what it
+/// was — this story widened the visibility of `check` and the `__ridl_fb_*`
+/// functions, which moved every corpus snapshot — but what it emits is
+/// unchanged in kind. ADR-0023 decision 2 carries a dated consequence note
+/// (2026-09-21) saying the CLI calls this entry point rather than
+/// [`generate`]; the decision itself is not amended.
+///
+/// **Why an interface is skipped and not refused** (decision 2): the clause
+/// translator accepts one narrow form, and a multi-parameter call and a stream
+/// have no face at all. Refusing would make `--emit rust` reject legal ridl
+/// over a gap two named stories own — E5.1 replaces the translator, and the
+/// multi-parameter argument struct is lane M's parked follow-up — and would
+/// put a codegen error where a source diagnostic belongs. So the package keeps
+/// its domain types and its codec, the interface loses its `Client`,
+/// `Publisher`, `Provider` and `dispatch`, and a note at that site names the
+/// interface, the reason and the story that removes it.
+/// [`generate_face_with`] itself still refuses, for a direct caller.
+///
+/// **What a skipped interface also loses.** Its descriptors. Every cause
+/// decision 2 names is detected in the descriptor emitter, not the face
+/// emitter — `single_param_type`, `query_reply_type` and the clause translator
+/// all live there and serve both — so an interface whose face cannot be built
+/// cannot have its descriptors built either. The rest of the package's
+/// descriptors are unaffected; only the skipped interface's are absent, and
+/// the note says so.
+pub fn generate_pipeline(
+    package: &v2::Package,
+    wire: WireEncoding,
+    others: &[&v2::Package],
+) -> Result<Generated, GenerateError> {
+    refuse_wire_collision(package)?;
+    let ctx = Ctx::with_others(package, others);
+    let mut items = vec![wire_alias(wire)];
+    items.extend(package_items(&ctx, package)?);
+    for shape in package.shapes() {
+        if shape.service.is_some() {
+            continue;
+        }
+        match faced_interface(&ctx, package, shape.name, shape.interface) {
+            Ok(produced) => items.extend(produced),
+            Err(err) => items.push(skipped_interface_note(shape.name, shape.interface, &err)),
+        }
+    }
+    render(items)
+}
+
+/// The descriptors and the face of one interface, which stand or fall
+/// together for the reason [`generate_pipeline`] records.
+fn faced_interface(
+    ctx: &Ctx,
+    package: &v2::Package,
+    iface_name: &str,
+    interface: &v2::Interface,
+) -> Result<Vec<TokenStream>, GenerateError> {
+    let mut items = descriptors::one_interface_items(ctx, &package.name, iface_name, interface)?;
+    if let Some(module) = face::one_interface(iface_name, interface)? {
+        items.push(module);
+    }
+    Ok(items)
+}
+
+/// The note left where an interface's face was skipped (decision 2).
+///
+/// It is a `const` carrying doc attributes rather than a bare comment, for the
+/// reason the codec's withheld note gives: `quote!` emits tokens, and a doc
+/// attribute is the only comment that survives `prettyplease`. The name cannot
+/// collide with a typl constant — typl §15.1 gives one a SCREAMING_SNAKE name,
+/// and no typl name begins with an underscore.
+fn skipped_interface_note(
+    iface_name: &str,
+    interface: &v2::Interface,
+    err: &GenerateError,
+) -> TokenStream {
+    let name = format_ident!("__RIDL_NO_FACE_{}", snake_case(iface_name).to_uppercase());
+    let headline = format!(" Interface `{iface_name}` carries no generated interaction face.");
+    let reason = format!(" The emitter refused it: {}", err.message);
+    let owner = match face_gap(interface, err) {
+        FaceGap::CallShape => {
+            " A call the face cannot carry — an interaction that does not declare \
+             exactly one named parameter, or a query whose reply is not a named \
+             type. The induced argument struct that removes the first is lane M's \
+             parked multi-parameter follow-up."
+        }
+        FaceGap::Clause => {
+            " A contract clause outside the form the narrow translator accepts — \
+             `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
+             Story E5.1 replaces the translator and removes this."
+        }
+        FaceGap::Other => " No story below owns this one: the reason above is the whole of it.",
+    };
+    quote! {
+        #[doc = #headline]
+        ///
+        #[doc = #reason]
+        ///
+        #[doc = #owner]
+        ///
+        /// Its descriptors are absent for the same reason: the refusal is
+        /// raised by the descriptor emitter, which the face is built on. The
+        /// rest of this package — its domain types, its codec, and every
+        /// other interface — is unaffected, which is why the build succeeded
+        /// (E11.14 decision 2).
+        #[allow(dead_code)]
+        const #name: () = ();
+    }
+}
+
+/// Which of decision 2's two owners a skipped interface belongs to.
+///
+/// Decided by the refusal that was actually raised, and only then by reading
+/// the interface. Reading the interface alone reports the wrong owner
+/// whenever an interface has both gaps: it returns `CallShape` for the first
+/// badly shaped call it finds, even when what stopped the build was a clause
+/// on another interaction. The corpus's own `veh.cluster.VehicleStatus` is
+/// that shape, and its note used to name a reason from the clause translator
+/// under an owner line about multi-parameter calls.
+///
+/// The refusal is matched on [`clauses::CLAUSE_REFUSAL`] rather than on a
+/// literal here, so a rewording of the message changes this match with it
+/// instead of silently reclassifying.
+enum FaceGap {
+    /// An interaction the face has no shape for at all.
+    CallShape,
+    /// What was refused is a clause.
+    Clause,
+    /// Neither: the refusal is one no owner below claims, so the note names
+    /// the reason and no story. A `fixed` whose payload is not a named type
+    /// is the case this exists for — naming either owner there would blame a
+    /// story that does not remove it.
+    Other,
+}
+
+fn face_gap(interface: &v2::Interface, err: &GenerateError) -> FaceGap {
+    if err.message.starts_with(clauses::CLAUSE_REFUSAL) {
+        return FaceGap::Clause;
+    }
+    for decl in &interface.interactions {
+        let params = match decl.kind.as_ref() {
+            Some(v2::decl::Kind::CommandDef(command)) => &command.params,
+            Some(v2::decl::Kind::QueryDef(query)) => {
+                if descriptors::query_reply_type(query, &decl.name).is_err() {
+                    return FaceGap::CallShape;
+                }
+                &query.params
+            }
+            _ => continue,
+        };
+        if descriptors::single_param_type(params, &decl.name).is_err() {
+            return FaceGap::CallShape;
+        }
+    }
+    // Not a clause by the message, and every call has a face shape: the
+    // refusal came from somewhere neither owner claims.
+    FaceGap::Other
+}
+
+/// The name [`wire_alias`] emits at package scope.
+const WIRE_ALIAS: &str = "Wire";
+
+/// Refuses a package that declares an item whose emitted name is the encoding
+/// alias's (driftsys/ridl#476).
+///
+/// `generate_face_with` emits `pub type Wire` at package scope, and a typl
+/// declaration named `Wire` emits `pub struct Wire` at the same scope; rustc
+/// reports E0428 on the pair, in the consumer's build rather than here. This
+/// refuses it where the cause is, naming the declaration.
+///
+/// **Refusing rather than renaming** is E11.14 decision 5. The alias name is
+/// fixed by design note D-11 of the FlatBuffers codec and is named by every
+/// record and every consumer that follows it, so renaming it — or escaping the
+/// declaration — would move a name many documents state, to spare one package
+/// a name it is free to change. The rejected alternative is exactly that
+/// rename.
+///
+/// It is a **build error, not decision 2's per-interface skip**: the collision
+/// is a property of the package, not of one interface, so there is no interface
+/// to omit that would leave the rest of the package usable.
+///
+/// [`generate`] is unaffected — it emits no alias, so `Wire` is an ordinary
+/// declaration there, and a package built without a face keeps compiling.
+fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
+    // Both namespaces, because both land at package scope: a declaration is
+    // emitted as its own item, and an interface is emitted as
+    // `pub struct <Interface>;` by the descriptor emitter. Scanning only the
+    // declarations let `interface Wire` through to a rustc E0428 in the
+    // emitted source, which is the failure this refusal exists to replace.
+    //
+    // The interface half walks `shapes()` rather than `interfaces`, which is
+    // the complete set of interface bodies (`xtask`'s `shape_walk` guard
+    // holds every reader to it), and then skips a service's inline shape for
+    // the same reason `descriptors::interface_items` does: no identity struct
+    // is emitted for one, so it collides with nothing.
+    //
+    // No case reaches that skip today — an inline shape's name is the
+    // service's own, which rsdl requires to be dotted and lowercase, so it
+    // can never be `Wire`. It is here so this walk and the emitter's stay the
+    // same shape, not because it changes an outcome.
+    let declared = package
+        .decls
+        .iter()
+        .map(|decl| (decl.name.as_str(), "declaration"));
+    let shapes = package
+        .shapes()
+        .filter(|shape| shape.service.is_none())
+        .map(|shape| (shape.name, "interface"));
+    for (name, kind) in declared.chain(shapes) {
+        if name == WIRE_ALIAS {
+            return Err(GenerateError {
+                message: format!(
+                    "`{}.{}` collides with the `{}` encoding alias the interaction \
+                     face emits at package scope; rename the {kind}",
+                    package.name, name, WIRE_ALIAS
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// The domain types and the codec over them — what [`generate`] emits, and
@@ -849,6 +1097,14 @@ fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateE
 /// backend generates one package at a time).
 pub(crate) struct Ctx<'a> {
     decls: HashMap<&'a str, &'a v2::Decl>,
+    /// The other packages of the same build, in the shape
+    /// `ridl-backend-flatbuffers::generate_with` already gives them
+    /// (ADR-0017 decision 1). Empty for the single-package entry points.
+    ///
+    /// The codec reads them through the projection's `Packages` so a
+    /// cross-package reference can be sized and encoded rather than withheld
+    /// (driftsys/ridl#467).
+    pub(crate) others: &'a [&'a v2::Package],
     /// The set of declaration names currently being expanded by the
     /// Default-derivation recursion. It guards against a cyclic IR: a
     /// same-package composite that reaches itself would otherwise recurse
@@ -859,6 +1115,12 @@ pub(crate) struct Ctx<'a> {
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(package: &'a v2::Package) -> Self {
+        Ctx::with_others(package, &[])
+    }
+
+    /// [`Ctx::new`] with the other packages of the same build, which the
+    /// codec resolves a cross-package reference through (driftsys/ridl#467).
+    pub(crate) fn with_others(package: &'a v2::Package, others: &'a [&'a v2::Package]) -> Self {
         let decls = package
             .decls
             .iter()
@@ -866,6 +1128,7 @@ impl<'a> Ctx<'a> {
             .collect();
         Ctx {
             decls,
+            others,
             visiting: RefCell::new(HashSet::new()),
         }
     }
@@ -993,11 +1256,16 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
             }
 
             /// Checks `value` against this type's typl constraints, without
-            /// constructing it. Not `pub`: every caller outside `new` is a
-            /// function generated into this same module, which can see a
-            /// private item here the way any other item of the module can.
+            /// constructing it. `pub(crate)` rather than `pub`: a caller
+            /// outside `new` is a function generated into this crate — since
+            /// driftsys/ridl#467 that includes the codec of *another* package
+            /// of the same build, which reaches this type through the module
+            /// tree and so cannot see a private item here. The emitted crate
+            /// is one crate per build, so `pub(crate)` reaches every such
+            /// caller while adding nothing to the crate's public surface.
+            /// Whether this becomes `pub` is Epic 10's call, still open.
             /// `new` is the composition of this and `new_unchecked`.
-            fn check(
+            pub(crate) fn check(
                 value: #check_param_ty,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
                 #check_shadow

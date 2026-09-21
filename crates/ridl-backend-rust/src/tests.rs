@@ -2,7 +2,7 @@
 //! Default derivation behaviour (the leaf-recursion rule), and the C header
 //! snapshot.
 
-use super::{Ctx, Generated, check_flatbuffers_bound, generate};
+use super::{Ctx, Generated, check_flatbuffers_bound, generate, generate_face, generate_with};
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -334,6 +334,69 @@ fn counter_decl() -> v2::Decl {
             Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
         ),
     )
+}
+
+// ---------------------------------------------------------------------------
+// The `Wire` alias and a declaration that would collide with it (#476).
+// ---------------------------------------------------------------------------
+
+/// A declaration named `Wire`, the collision #476 reports.
+///
+/// The **width** is load-bearing, not a range: a named scalar with no declared
+/// width has no finite FlatBuffers bound, and both entry points then refuse it
+/// for that reason (K4's D-7 refusal) rather than for the collision — which
+/// would make the assertion below pass vacuously. This carries `Counter`'s
+/// width for that reason.
+fn wire_named_decl() -> v2::Decl {
+    public_decl(
+        "Wire",
+        primitive_type(
+            v2::PrimitiveType::Integer,
+            init_value(true, Some("0")),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
+        ),
+    )
+}
+
+/// A package declaring `Wire` is refused by the face entry point rather than
+/// emitting two items of that name.
+///
+/// `generate_face` emits `pub type Wire` at package scope, and a typl
+/// declaration named `Wire` emits `pub struct Wire` at the same scope; rustc
+/// reports E0428 on the pair. The refusal names the declaration so the cause
+/// is the package's, not a line of generated source the author never wrote.
+/// E11.14 decision 5: the collision is in the package rather than in one
+/// interface, so it is a build error and not decision 2's per-interface skip.
+#[test]
+fn a_declaration_named_wire_is_refused_by_the_face() {
+    let error = generate_face(&package("veh.common", vec![wire_named_decl()]))
+        .expect_err("a declaration named `Wire` collides with the encoding alias");
+    // Asserting only that the message names `Wire` would be satisfied by an
+    // unrelated refusal that happens to carry the declaration's path — an
+    // unconstrained `integer` has no finite FlatBuffers bound and is refused
+    // by both entry points, which is why this fixture carries a range.
+    assert!(
+        error.message.contains("collide") || error.message.contains("alias"),
+        "the refusal must state the collision, got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("Wire"),
+        "the refusal must name the declaration, got: {}",
+        error.message
+    );
+}
+
+/// The plain entry point is unaffected: it emits no alias, so `Wire` is an
+/// ordinary declaration there. This is what keeps decision 5 scoped to the
+/// face rather than narrowing what `generate` accepts.
+#[test]
+fn a_declaration_named_wire_generates_without_a_face() {
+    let source = generate(&package("veh.common", vec![wire_named_decl()]))
+        .expect("the plain entry point emits no alias")
+        .rust_source;
+    assert!(source.contains("pub struct Wire("), "got:\n{source}");
+    assert!(!source.contains("pub type Wire"), "got:\n{source}");
 }
 
 // ---------------------------------------------------------------------------
@@ -5257,5 +5320,72 @@ fn flatbuffers_bound_leaves_a_cycle_alone() {
         check_flatbuffers_bounds(&pkg),
         Ok(()),
         "a same-package cycle must not be refused before K5 has a codec to withhold"
+    );
+}
+
+/// `generate_with` resolves a reference into another package of the build,
+/// and `generate` — which is `generate_with(package, &[])` — does not
+/// (driftsys/ridl#467).
+///
+/// This is the entry point's own guard. Every other test of cross-package
+/// resolution goes through the pipeline or through a corpus fixture that
+/// happens to name a standard type, so a change to the standard package's
+/// shape could take the only coverage away without anything here failing.
+///
+/// The two halves matter together: the withheld note is what a consumer used
+/// to get for every such type, and the point of the story is that it is gone
+/// when the other package is in hand.
+#[test]
+fn generate_with_resolves_a_reference_into_another_package() {
+    let foreign = package(
+        "px.a",
+        vec![public_decl(
+            "Point",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "x",
+                    1,
+                    "Level",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        )],
+    );
+    // `Level` is the foreign package's own named scalar, so `Point` is a
+    // type that only resolves once `px.a` is in hand.
+    let mut foreign = foreign;
+    foreign.decls.push(public_decl(
+        "Level",
+        primitive_type(
+            v2::PrimitiveType::Integer,
+            init_value(true, Some("0")),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
+        ),
+    ));
+
+    let local = package(
+        "px.b",
+        vec![struct_with_field("Line", "from", "px.a.Point")],
+    );
+
+    let alone = generate(&local).expect("the package generates").rust_source;
+    assert!(
+        alone.contains("__RIDL_FB_NO_CODEC"),
+        "without the other package the type is withheld a codec, got:\n{alone}"
+    );
+
+    let with_others = generate_with(&local, &[&foreign])
+        .expect("the package generates against the build")
+        .rust_source;
+    assert!(
+        !with_others.contains("__RIDL_FB_NO_CODEC"),
+        "with the other package in hand nothing is withheld, got:\n{with_others}"
+    );
+    assert!(
+        with_others.contains("crate :: px :: a :: PointFbView")
+            || with_others.contains("crate::px::a::PointFbView"),
+        "the foreign view is named by a path through the module tree, got:\n{with_others}"
     );
 }

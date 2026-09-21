@@ -13,10 +13,12 @@
 //!   items, `type Iface` and `const MEMBER`) and the kind's trait — `Signal`,
 //!   `Event`, `Command`, `Query` or `Fixed`.
 //!
-//! It is reached only from [`crate::generate_face`], never from the pipeline
-//! [`crate::generate`]: the descriptors name the runtime and translate
-//! contract clauses, neither of which the pipeline output may carry yet (see
-//! the two entry points' documentation).
+//! Since E11.14 it is reached from [`crate::generate_pipeline`], which is
+//! what `ridl build --emit rust` calls, as well as from
+//! [`crate::generate_face`]. It is not reached from [`crate::generate`],
+//! whose output is unchanged and carries neither the descriptors nor the
+//! face — which is what is unchanged about it, rather than its bytes (see
+//! the entry points' own documentation).
 
 use crate::clauses::{self, ClauseKind};
 use crate::{Ctx, GenerateError, ident, type_path};
@@ -45,6 +47,21 @@ pub(crate) fn interface_items(
         }
         one_interface(ctx, &package.name, shape.name, shape.interface, &mut items)?;
     }
+    Ok(items)
+}
+
+/// The descriptor items of one interface, for the pipeline's per-interface
+/// walk (E11.14 decision 2). [`interface_items`] is the whole-package walk;
+/// this is one shape of it, so a caller that means to skip a refusing
+/// interface can catch the refusal at the interface it belongs to.
+pub(crate) fn one_interface_items(
+    ctx: &Ctx,
+    package_name: &str,
+    iface_name: &str,
+    interface: &v2::Interface,
+) -> Result<Vec<TokenStream>, GenerateError> {
+    let mut items = Vec::new();
+    one_interface(ctx, package_name, iface_name, interface, &mut items)?;
     Ok(items)
 }
 

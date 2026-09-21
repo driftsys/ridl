@@ -279,9 +279,21 @@ fn param_named_type(param: &v2::Param) -> Option<&str> {
     }
 }
 
+/// The opening of every refusal this translator raises.
+///
+/// `skipped_interface_note` reads it to tell a clause gap from a call-shape
+/// one, because the refusal that was actually raised is the only thing that
+/// says which gap an interface was skipped for — reading the interface
+/// instead reports the wrong owner when it has a call-shape gap on one
+/// interaction and an untranslatable clause on another, which the corpus's
+/// own `veh.cluster.VehicleStatus` does. Sharing the constant is what keeps a
+/// rewording from reclassifying silently: change this and the note's match
+/// changes with it.
+pub(crate) const CLAUSE_REFUSAL: &str = "cannot translate contract clause";
+
 fn refuse(source: &str, reason: &str) -> GenerateError {
     GenerateError {
-        message: format!("cannot translate contract clause `{source}`: {reason}"),
+        message: format!("{CLAUSE_REFUSAL} `{source}`: {reason}"),
     }
 }
 

@@ -64,7 +64,7 @@ use ridl_ir::v2;
 
 use crate::{
     Ctx, GenerateError, InducedTuple, ScalarBacking, backing_scalar, check_flatbuffers_bound,
-    field_type_tokens, ident, unjudgeable_members, vis_tokens,
+    field_type_tokens, ident, type_path, unjudgeable_members, vis_tokens,
 };
 
 /// The alignment every buffer this codec writes is finished at: eight, the
@@ -315,12 +315,12 @@ impl Scalar {
         match &self.repr {
             Repr::Bool | Repr::Int | Repr::Float => widened,
             Repr::Named(named) => {
-                let ty = ident(&named.name);
+                let ty = type_path(&named.name);
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#widened) }
             }
             Repr::Enum { name, first } => {
-                let ty = ident(name);
+                let ty = type_path(name);
                 let variant = ident(first);
                 quote! {
                     <#ty as ::core::convert::TryFrom<i64>>::try_from(#widened)
@@ -328,7 +328,7 @@ impl Scalar {
                 }
             }
             Repr::EnumSet { name } => {
-                let ty = ident(name);
+                let ty = type_path(name);
                 quote! {
                     <#ty as ::core::convert::TryFrom<i64>>::try_from(#widened)
                         .unwrap_or(#ty(0i64))
@@ -482,6 +482,73 @@ fn decode_ident(owner: &str) -> Ident {
     format_ident!("__ridl_fb_decode_{}", snake_case(owner))
 }
 
+/// An owner as written at a *reference* site: the declared name for a type of
+/// this package, and the dotted reference for one of another package of the
+/// same build (driftsys/ridl#467).
+///
+/// The four `*_ident` functions above name an item where it is **defined**,
+/// which is always this package — every root the codec emits comes from
+/// `self.package.decls`, so a definition never carries a module prefix. The
+/// four `*_path` functions below name one where it is **used**, which may be
+/// another package's module in the tree `ridlc` writes.
+///
+/// This is why every `__ridl_fb_*` function is emitted `pub(crate)` rather
+/// than as the bare `fn` it was before #467: a caller may now sit in another
+/// module of the emitted crate. The emitted crate is one crate per build, so
+/// `pub(crate)` reaches every generated caller and adds nothing to the
+/// crate's public surface. The generated `check` of a named scalar carries
+/// the same visibility, for the same reason, and says so where it is
+/// emitted.
+fn split_owner(owner: &str) -> (Option<&str>, &str) {
+    match owner.rsplit_once('.') {
+        Some((package, name)) => (Some(package), name),
+        None => (None, owner),
+    }
+}
+
+/// `crate::<segments>::` for a foreign owner, and nothing for a local one.
+///
+/// The segments are spelled through [`crate::ident`], which is the same
+/// spelling [`crate::module_segment`] gives the module tree `ridlc` writes, so
+/// a path emitted here and the module it names cannot drift apart.
+fn owner_prefix(package: Option<&str>) -> TokenStream {
+    match package {
+        Some(package) => {
+            let segments = package.split('.').map(ident);
+            quote! { crate #(:: #segments)* :: }
+        }
+        None => quote! {},
+    }
+}
+
+fn view_path(owner: &str) -> TokenStream {
+    let (package, name) = split_owner(owner);
+    let prefix = owner_prefix(package);
+    let id = view_ident(name);
+    quote! { #prefix #id }
+}
+
+fn encode_path(owner: &str) -> TokenStream {
+    let (package, name) = split_owner(owner);
+    let prefix = owner_prefix(package);
+    let id = encode_ident(name);
+    quote! { #prefix #id }
+}
+
+fn verify_path(owner: &str) -> TokenStream {
+    let (package, name) = split_owner(owner);
+    let prefix = owner_prefix(package);
+    let id = verify_ident(name);
+    quote! { #prefix #id }
+}
+
+fn decode_path(owner: &str) -> TokenStream {
+    let (package, name) = split_owner(owner);
+    let prefix = owner_prefix(package);
+    let id = decode_ident(name);
+    quote! { #prefix #id }
+}
+
 /// The typl constraint check for a named scalar's value, over a borrow
 /// (design note D-4, plan Task 5, stage K6). `value` is an expression
 /// already of `check`'s own parameter type — `&f64`/`&i64`/`&bool` for a
@@ -497,7 +564,9 @@ fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenSt
     if named.ctor != "new_unchecked" {
         return None;
     }
-    let ty = ident(&named.name);
+    // The owner may name another package of the build (driftsys/ridl#467), so
+    // this is a path rather than an identifier.
+    let ty = type_path(&named.name);
     Some(quote! {
         #ty::check(#value)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
@@ -509,10 +578,41 @@ fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenSt
 // ---------------------------------------------------------------------------
 
 impl<'a> Codec<'a> {
+    /// Resolves a type reference against this package first and then the
+    /// others of the build, returning the declaration and the owner string a
+    /// reference site writes (driftsys/ridl#467).
+    ///
+    /// The owner is the bare declared name for a type of this package, and the
+    /// dotted reference for one of another package — which is what
+    /// [`split_owner`] reads back to decide whether a path carries a module
+    /// prefix. A same-package name shadows a foreign one, which is the
+    /// resolution order the rest of the backend already uses.
+    fn resolve(&self, reference: &str) -> Option<(&'a v2::Decl, String)> {
+        if let Some(decl) = self.ctx.lookup(reference) {
+            return Some((decl, decl.name.clone()));
+        }
+        let (package_name, name) = reference.rsplit_once('.')?;
+        let package = self
+            .ctx
+            .others
+            .iter()
+            .find(|other| other.name == package_name)?;
+        let decl = package.decls.iter().find(|decl| decl.name == name)?;
+        Some((decl, reference.to_string()))
+    }
+
+    /// The projection's view of this build: this package, and the others the
+    /// caller handed in.
+    ///
+    /// `others` was `&[]` until E11.14 (driftsys/ridl#467): the codec read one
+    /// package and withheld every type that reached another, because a foreign
+    /// named scalar's FlatBuffers width is a fact of the package that declares
+    /// it. The pipeline now hands every package of the build, so a
+    /// cross-package reference is sized like a local one.
     fn packages(&self) -> fb_projection::Packages<'_> {
         fb_projection::Packages {
             package: self.package,
-            others: &[],
+            others: self.ctx.others,
         }
     }
 
@@ -555,8 +655,12 @@ impl<'a> Codec<'a> {
     /// A type this backend cannot judge gets no `Payload<FlatBuffers>`
     /// implementation, which a consumer otherwise meets as an unsatisfied
     /// trait bound in their own crate, far from the cause. The note names the
-    /// type, the member that could not be judged, and the issue tracking it
-    /// (driftsys/ridl#467), so what the consumer meets is a reason.
+    /// type and the member that could not be judged, so what the consumer
+    /// meets is a reason.
+    ///
+    /// A cross-package reference is no longer one of those causes: since
+    /// driftsys/ridl#467 the codec is handed the other packages of the build
+    /// and resolves one. What remains is a same-package cycle and a stream.
     ///
     /// It is a `const` rather than a bare comment because `quote!` emits
     /// tokens, and a doc attribute is the only comment that survives into
@@ -569,12 +673,26 @@ impl<'a> Codec<'a> {
             snake_case(&decl.name).to_uppercase()
         );
         let members = unjudgeable_members(self.ctx, decl);
+        // Which causes are possible depends on what this call was handed. A
+        // caller that passed the other packages of the build resolves a
+        // cross-package reference, so only a cycle and a stream are left; a
+        // caller that passed none — `generate`, which is
+        // `generate_with(package, &[])` — cannot resolve one, and a
+        // cross-package reference is a cause again. Naming the causes the
+        // other case has would make this note false for the reference that
+        // produced it, which is how it read before driftsys/ridl#467 was
+        // closed for the pipeline but not for `generate`.
+        let causes = if self.ctx.others.is_empty() {
+            "a reference into another package, which this call was handed no \
+             package to resolve, a same-package cycle, or a stream"
+        } else {
+            "a same-package cycle, or a stream"
+        };
         let cause = if members.is_empty() {
             " No member of it could be judged.".to_string()
         } else {
             format!(
-                " The member{} {} reach{} a reference this backend does not resolve — a \
-                 cross-package reference, a same-package cycle, or a stream.",
+                " The member{} {} reach{} a reference this backend does not resolve — {causes}.",
                 if members.len() == 1 { "" } else { "s" },
                 members
                     .iter()
@@ -592,15 +710,16 @@ impl<'a> Codec<'a> {
             #[doc = #headline]
             ///
             #[doc = #cause]
-            /// `ridl-backend-rust` generates one package at a time and reads
-            /// no other, so it can neither size nor encode such a type: a
-            /// foreign named scalar's FlatBuffers width is a fact of the
-            /// package that declares it.
+            /// A reference into another package of the same build resolves
+            /// when the caller hands the codec that build, which
+            /// `ridl build --emit rust` does and a bare `generate` does not;
+            /// a resolved one is named by a path through the emitted module
+            /// tree. The causes above are the ones this call could meet.
+            /// A type that reaches itself, and a stream, which has no single
+            /// value to size, are never resolvable by any caller.
             ///
             /// This is a silent omission in the sense ADR-0016 decision 6 and
             /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-            /// driftsys/ridl#467 tracks it and states the fix: `generate`
-            /// handed the other packages.
             #[allow(dead_code)]
             const #name: () = ();
         }
@@ -725,11 +844,11 @@ impl<'a> Codec<'a> {
             }
             Some(v2::field_type::Kind::InlineScalar(td)) => self.scalar_wire(td, None),
             Some(v2::field_type::Kind::Named(reference)) => {
-                let Some(decl) = self.ctx.lookup(reference) else {
+                let Some((decl, owner)) = self.resolve(reference) else {
                     return Err(GenerateError {
                         message: format!(
-                            "`{reference}` does not resolve in this package, so no FlatBuffers \
-                             codec can be emitted for it"
+                            "`{reference}` resolves in no package of this build, so no \
+                             FlatBuffers codec can be emitted for it"
                         ),
                     });
                 };
@@ -737,7 +856,7 @@ impl<'a> Codec<'a> {
                     Some(v2::decl::Kind::TypeDef(td)) => self.scalar_wire(
                         td,
                         Some(NamedScalar {
-                            name: decl.name.clone(),
+                            name: owner.clone(),
                             ctor: if v2::constraint_is_vacuous(td.constraint.as_ref()) {
                                 "new"
                             } else {
@@ -761,7 +880,7 @@ impl<'a> Codec<'a> {
                             // charges it.
                             prim: Prim::I64,
                             repr: Repr::Enum {
-                                name: decl.name.clone(),
+                                name: owner.clone(),
                                 first: first.name.clone(),
                             },
                         }))
@@ -771,11 +890,11 @@ impl<'a> Codec<'a> {
                             message: format!("`{}` carries no integer width", decl.name),
                         })?,
                         repr: Repr::EnumSet {
-                            name: decl.name.clone(),
+                            name: owner.clone(),
                         },
                     })),
-                    Some(v2::decl::Kind::StructDef(_)) => Ok(Wire::Table(decl.name.clone())),
-                    Some(v2::decl::Kind::UnionDef(_)) => Ok(Wire::Union(decl.name.clone())),
+                    Some(v2::decl::Kind::StructDef(_)) => Ok(Wire::Table(owner.clone())),
+                    Some(v2::decl::Kind::UnionDef(_)) => Ok(Wire::Union(owner.clone())),
                     _ => Err(GenerateError {
                         message: format!(
                             "`{reference}` names a declaration a FlatBuffers codec cannot carry"
@@ -1077,8 +1196,13 @@ impl<'a> Codec<'a> {
             #[derive(Debug, Clone, Copy, PartialEq, Eq)]
             #[allow(deprecated)]
             #vis struct #view<'a> {
-                buf: &'a [u8],
-                table: usize,
+                // `pub(crate)`, not private: since driftsys/ridl#467 the codec of
+                // another package of this build names this view by a path and
+                // builds it with a struct literal, which needs both fields where
+                // it stands. One crate per build, so this adds nothing to the
+                // crate's public surface.
+                pub(crate) buf: &'a [u8],
+                pub(crate) table: usize,
             }
 
             #[allow(deprecated)]
@@ -1156,7 +1280,7 @@ impl<'a> Codec<'a> {
             Wire::Text(_) => quote! { &'a str },
             Wire::Bytes(_) => quote! { &'a [u8] },
             Wire::Table(name) | Wire::Union(name) => {
-                let view = view_ident(name);
+                let view = view_path(name);
                 quote! { #view<'a> }
             }
             _ => {
@@ -1183,7 +1307,7 @@ impl<'a> Codec<'a> {
                 }
             },
             Wire::Table(name) | Wire::Union(name) => {
-                let view = view_ident(name);
+                let view = view_path(name);
                 quote! {
                     #view {
                         buf: self.buf,
@@ -1211,7 +1335,7 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[doc = #doc]
             #[allow(deprecated)]
-            fn #name(
+            pub(crate) fn #name(
                 value: &#ty,
                 builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
             ) -> ::core::result::Result<
@@ -1333,7 +1457,7 @@ impl<'a> Codec<'a> {
                 quote! { builder.push_vector(#bytes, 1usize)? }
             }
             Wire::Table(name) | Wire::Union(name) => {
-                let call = encode_ident(name);
+                let call = encode_path(name);
                 quote! { #call(#reference, builder)? }
             }
             Wire::Vector { element, .. } => {
@@ -1417,7 +1541,7 @@ impl<'a> Codec<'a> {
             ///   `match` written at the field, not through a named scalar)
             ///   is not checked here at all (driftsys/ridl#469).
             #[allow(deprecated)]
-            fn #name(
+            pub(crate) fn #name(
                 buf: &[u8],
                 table: usize,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1475,7 +1599,7 @@ impl<'a> Codec<'a> {
                 let read = scalar.read(&buf, at);
                 match &scalar.repr {
                     Repr::Enum { name, .. } | Repr::EnumSet { name } => {
-                        let ty = ident(name);
+                        let ty = type_path(name);
                         let widened = scalar.widen(quote! { __raw });
                         quote! {
                             let __raw = #read
@@ -1535,7 +1659,7 @@ impl<'a> Codec<'a> {
                 }
             }
             Wire::Table(name) | Wire::Union(name) => {
-                let call = verify_ident(name);
+                let call = verify_path(name);
                 quote! {
                     let __t = ::ridl_rt::flatbuffers::follow(buf, #at)
                         .map_err(::ridl_rt::payload::VerifyError::Structure)?;
@@ -1602,7 +1726,7 @@ impl<'a> Codec<'a> {
             /// value `verify` has already range-checked (`check`), so this
             /// never re-checks and never fails.
             #[allow(deprecated)]
-            fn #name(buf: &[u8], table: usize) -> #ty {
+            pub(crate) fn #name(buf: &[u8], table: usize) -> #ty {
                 #ty { #(#fields),* }
             }
         })
@@ -1652,7 +1776,7 @@ impl<'a> Codec<'a> {
                 };
                 match named {
                     Some(named) => {
-                        let ty = ident(&named.name);
+                        let ty = type_path(&named.name);
                         let ctor = format_ident!("{}", named.ctor);
                         quote! { #ty::#ctor(#text) }
                     }
@@ -1669,7 +1793,7 @@ impl<'a> Codec<'a> {
                 };
                 match named {
                     Some(named) => {
-                        let ty = ident(&named.name);
+                        let ty = type_path(&named.name);
                         let ctor = format_ident!("{}", named.ctor);
                         quote! { #ty::#ctor(#bytes) }
                     }
@@ -1677,7 +1801,7 @@ impl<'a> Codec<'a> {
                 }
             }
             Wire::Table(name) | Wire::Union(name) => {
-                let call = decode_ident(name);
+                let call = decode_path(name);
                 quote! {
                     #call(#buf, ::ridl_rt::flatbuffers::follow(#buf, #at).unwrap_or(0usize))
                 }
@@ -1816,8 +1940,13 @@ impl<'a> Codec<'a> {
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {
-                    buf: &'a [u8],
-                    table: usize,
+                    // `pub(crate)`, not private: since driftsys/ridl#467 the codec of
+                    // another package of this build names this view by a path and
+                    // builds it with a struct literal, which needs both fields where
+                    // it stands. One crate per build, so this adds nothing to the
+                    // crate's public surface.
+                    pub(crate) buf: &'a [u8],
+                    pub(crate) table: usize,
                 }
 
                 #[allow(deprecated)]
@@ -1835,7 +1964,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                fn #encode_name(
+                pub(crate) fn #encode_name(
                     value: &#ty,
                     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
                 ) -> ::core::result::Result<
@@ -1862,7 +1991,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                fn #verify_name(
+                pub(crate) fn #verify_name(
                     buf: &[u8],
                     table: usize,
                 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1892,7 +2021,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                fn #decode_name(buf: &[u8], table: usize) -> #ty {
+                pub(crate) fn #decode_name(buf: &[u8], table: usize) -> #ty {
                     let __d = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
                         .unwrap_or(::core::option::Option::None)
                         .map(|__p| ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8))
@@ -2152,8 +2281,13 @@ impl<'a> Codec<'a> {
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {
-                    buf: &'a [u8],
-                    table: usize,
+                    // `pub(crate)`, not private: since driftsys/ridl#467 the codec of
+                    // another package of this build names this view by a path and
+                    // builds it with a struct literal, which needs both fields where
+                    // it stands. One crate per build, so this adds nothing to the
+                    // crate's public surface.
+                    pub(crate) buf: &'a [u8],
+                    pub(crate) table: usize,
                 }
 
                 #[allow(deprecated)]
@@ -2172,7 +2306,7 @@ impl<'a> Codec<'a> {
             quote! {
                 #[doc = #encode_doc]
                 #[allow(deprecated)]
-                fn #encode_name(
+                pub(crate) fn #encode_name(
                     value: &#ty,
                     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
                 ) -> ::core::result::Result<
@@ -2184,7 +2318,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                fn #verify_name(
+                pub(crate) fn #verify_name(
                     buf: &[u8],
                     table: usize,
                 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2194,7 +2328,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                fn #decode_name(buf: &[u8], table: usize) -> #ty {
+                pub(crate) fn #decode_name(buf: &[u8], table: usize) -> #ty {
                     #decode_body
                 }
             },

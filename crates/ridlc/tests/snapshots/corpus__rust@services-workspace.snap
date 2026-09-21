@@ -16,11 +16,18 @@ impl DoorId {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &i64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -77,11 +84,18 @@ impl Percent {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -137,11 +151,18 @@ impl Odometer {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &i64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &i64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -269,8 +290,8 @@ impl Default for DoorFault {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorIdFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> DoorIdFbView<'a> {
@@ -285,7 +306,7 @@ impl<'a> DoorIdFbView<'a> {
 }
 /// Writes `DoorId` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_door_id(
+pub(crate) fn __ridl_fb_encode_door_id(
     value: &DoorId,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -307,7 +328,7 @@ fn __ridl_fb_encode_door_id(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_door_id(
+pub(crate) fn __ridl_fb_verify_door_id(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -331,7 +352,7 @@ fn __ridl_fb_verify_door_id(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_door_id(buf: &[u8], table: usize) -> DoorId {
+pub(crate) fn __ridl_fb_decode_door_id(buf: &[u8], table: usize) -> DoorId {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
             .unwrap_or(::core::option::Option::None)
@@ -406,8 +427,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct PercentFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> PercentFbView<'a> {
@@ -422,7 +443,7 @@ impl<'a> PercentFbView<'a> {
 }
 /// Writes `Percent` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_percent(
+pub(crate) fn __ridl_fb_encode_percent(
     value: &Percent,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -444,7 +465,7 @@ fn __ridl_fb_encode_percent(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_percent(
+pub(crate) fn __ridl_fb_verify_percent(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -468,7 +489,7 @@ fn __ridl_fb_verify_percent(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_percent(buf: &[u8], table: usize) -> Percent {
+pub(crate) fn __ridl_fb_decode_percent(buf: &[u8], table: usize) -> Percent {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -543,8 +564,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct OdometerFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> OdometerFbView<'a> {
@@ -559,7 +580,7 @@ impl<'a> OdometerFbView<'a> {
 }
 /// Writes `Odometer` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_odometer(
+pub(crate) fn __ridl_fb_encode_odometer(
     value: &Odometer,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -581,7 +602,7 @@ fn __ridl_fb_encode_odometer(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_odometer(
+pub(crate) fn __ridl_fb_verify_odometer(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -605,7 +626,7 @@ fn __ridl_fb_verify_odometer(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_odometer(buf: &[u8], table: usize) -> Odometer {
+pub(crate) fn __ridl_fb_decode_odometer(buf: &[u8], table: usize) -> Odometer {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -683,8 +704,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LockStateFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> LockStateFbView<'a> {
@@ -699,7 +720,7 @@ impl<'a> LockStateFbView<'a> {
 }
 /// Writes `LockState` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_lock_state(
+pub(crate) fn __ridl_fb_encode_lock_state(
     value: &LockState,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -721,7 +742,7 @@ fn __ridl_fb_encode_lock_state(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_lock_state(
+pub(crate) fn __ridl_fb_verify_lock_state(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -745,7 +766,7 @@ fn __ridl_fb_verify_lock_state(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_lock_state(buf: &[u8], table: usize) -> LockState {
+pub(crate) fn __ridl_fb_decode_lock_state(buf: &[u8], table: usize) -> LockState {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
             .unwrap_or(::core::option::Option::None)
@@ -825,8 +846,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorReportFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> DoorReportFbView<'a> {
@@ -856,7 +877,7 @@ impl<'a> DoorReportFbView<'a> {
 }
 /// Writes `DoorReport` as a FlatBuffers table and returns its position.
 #[allow(deprecated)]
-fn __ridl_fb_encode_door_report(
+pub(crate) fn __ridl_fb_encode_door_report(
     value: &DoorReport,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -910,7 +931,7 @@ fn __ridl_fb_encode_door_report(
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
 #[allow(deprecated)]
-fn __ridl_fb_verify_door_report(
+pub(crate) fn __ridl_fb_verify_door_report(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -960,7 +981,7 @@ fn __ridl_fb_verify_door_report(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated)]
-fn __ridl_fb_decode_door_report(buf: &[u8], table: usize) -> DoorReport {
+pub(crate) fn __ridl_fb_decode_door_report(buf: &[u8], table: usize) -> DoorReport {
     DoorReport {
         door: {
             let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
@@ -1049,8 +1070,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorFaultFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> DoorFaultFbView<'a> {
@@ -1065,7 +1086,7 @@ impl<'a> DoorFaultFbView<'a> {
 }
 /// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_door_fault(
+pub(crate) fn __ridl_fb_encode_door_fault(
     value: &DoorFault,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1087,7 +1108,7 @@ fn __ridl_fb_encode_door_fault(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_door_fault(
+pub(crate) fn __ridl_fb_verify_door_fault(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1111,7 +1132,7 @@ fn __ridl_fb_verify_door_fault(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault {
+pub(crate) fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
             .unwrap_or(::core::option::Option::None)
@@ -1225,8 +1246,8 @@ impl Default for DoorFault {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorFaultFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> DoorFaultFbView<'a> {
@@ -1241,7 +1262,7 @@ impl<'a> DoorFaultFbView<'a> {
 }
 /// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_door_fault(
+pub(crate) fn __ridl_fb_encode_door_fault(
     value: &DoorFault,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1263,7 +1284,7 @@ fn __ridl_fb_encode_door_fault(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_door_fault(
+pub(crate) fn __ridl_fb_verify_door_fault(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1287,7 +1308,7 @@ fn __ridl_fb_verify_door_fault(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault {
+pub(crate) fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
             .unwrap_or(::core::option::Option::None)

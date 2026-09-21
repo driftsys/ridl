@@ -76,7 +76,22 @@ never stated.
 
 2. **The face is emitted from a companion entry point, `generate_face`;
    `generate` is left producing exactly what it produced before this story.**
-   `generate(package)` is the pipeline's entry point (`ridl --emit rust`), and
+
+   **Consequence note (2026-09-21) — the CLI calls a third entry point, and the
+   decision stands.** Story E11.14 (driftsys/ridl#444) gives the pipeline
+   `generate_pipeline`, which emits the face and the descriptors beside the
+   domain types and the codec, and `ridlc::run_build` calls that. So
+   `ridl build --emit rust` does now emit the face, and the sentences below that
+   say it does not are the state this decision was taken in, not the state
+   today. The decision itself is not amended: `generate` still produces exactly
+   what it produced before, unchanged and still bound by the two `crates/ridlc`
+   tests named below; what changed is which entry point the pipeline calls, not
+   what this one emits. The as-built record is the E11.14 section of
+   [`interaction-face.md`](../design/interaction-face.md).
+
+   The decision as taken, unamended, follows.
+
+   `generate(package)` was the pipeline's entry point (`ridl --emit rust`), and
    two of `crates/ridlc`'s own tests bind what it may emit:
    `corpus_entries_compile_to_reviewed_snapshots` calls it over every clean
    corpus entry, several of which carry contract clauses the translator of
@@ -232,7 +247,10 @@ argument for it in the command case.
 - Positive: `generate`'s contract is untouched by this story — every existing
   consumer of `ridl --emit rust` and every corpus proof keeps behaving exactly
   as before E11.13, because the face's code is reachable only through
-  `generate_face`.
+  `generate_face`. **(2026-09-21: `generate`'s contract is still untouched, but
+  the face is no longer reachable only through `generate_face` — E11.14 added
+  `generate_pipeline` and pointed the CLI at it. See the consequence note on
+  decision 2.)**
 - Positive: the entry-point split repeats a pattern the backend workspace
   already has one instance of (ADR-0017 decision 1), rather than inventing a
   second shape for the same problem.
@@ -248,6 +266,9 @@ argument for it in the command case.
   backend's own test tree can generate one yet. This is deliberate (ADR-0018
   decision 15) and is expected to be revisited once Epic 10 Task 3 lands the
   `--extern ridl_rt` proof `generate`'s own tests currently withhold.
+  **(2026-09-21: closed. E11.14 made `ridl build --emit rust` emit the face, and
+  `crates/ridlc/tests/cabin_example.rs` compiles and runs a consumer against the
+  emitted crate. This bullet records the cost as it stood, not a live limit.)**
 - Positive — added 2026-09-20: once these amendments land, a face can be built
   over an owned handle, a borrowed port or any wrapper that forwards the port
   traits, rather than only over a mutable borrow of a runtime's own value

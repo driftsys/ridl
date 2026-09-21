@@ -45,8 +45,8 @@ impl Default for GearPosition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> GearPositionFbView<'a> {
@@ -61,7 +61,7 @@ impl<'a> GearPositionFbView<'a> {
 }
 /// Writes `GearPosition` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_gear_position(
+pub(crate) fn __ridl_fb_encode_gear_position(
     value: &GearPosition,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -83,7 +83,7 @@ fn __ridl_fb_encode_gear_position(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_gear_position(
+pub(crate) fn __ridl_fb_verify_gear_position(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -107,7 +107,7 @@ fn __ridl_fb_verify_gear_position(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPosition {
+pub(crate) fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPosition {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
             .unwrap_or(::core::option::Option::None)

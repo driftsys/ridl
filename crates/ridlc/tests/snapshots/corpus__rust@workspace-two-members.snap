@@ -19,11 +19,18 @@ impl Speed {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -82,11 +89,18 @@ impl Temperature {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < -40.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -138,8 +152,8 @@ impl Default for Temperature {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
@@ -154,7 +168,7 @@ impl<'a> SpeedFbView<'a> {
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_speed(
+pub(crate) fn __ridl_fb_encode_speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -176,7 +190,7 @@ fn __ridl_fb_encode_speed(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_speed(
+pub(crate) fn __ridl_fb_verify_speed(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -200,7 +214,7 @@ fn __ridl_fb_verify_speed(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
+pub(crate) fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -275,8 +289,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> TemperatureFbView<'a> {
@@ -291,7 +305,7 @@ impl<'a> TemperatureFbView<'a> {
 }
 /// Writes `Temperature` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_temperature(
+pub(crate) fn __ridl_fb_encode_temperature(
     value: &Temperature,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -313,7 +327,7 @@ fn __ridl_fb_encode_temperature(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_temperature(
+pub(crate) fn __ridl_fb_verify_temperature(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -337,7 +351,7 @@ fn __ridl_fb_verify_temperature(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_temperature(buf: &[u8], table: usize) -> Temperature {
+pub(crate) fn __ridl_fb_decode_temperature(buf: &[u8], table: usize) -> Temperature {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -425,15 +439,16 @@ impl Default for ClusterReading {
 }
 /// `ClusterReading` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `speed` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The member `speed` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
+/// A reference into another package of the same build resolves
+/// when the caller hands the codec that build, which
+/// `ridl build --emit rust` does and a bare `generate` does not;
+/// a resolved one is named by a path through the emitted module
+/// tree. The causes above are the ones this call could meet.
+/// A type that reaches itself, and a stream, which has no single
+/// value to size, are never resolvable by any caller.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_CLUSTER_READING: () = ();

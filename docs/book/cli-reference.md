@@ -458,6 +458,44 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 [`ridlc build --frozen`](#ridlc-build), documented word for word since
 [ADR-0010][adr-0010].
 
+**`rust` is a language backend**, and it writes the whole generated surface of
+a package in one file: the domain types (a struct, an enum, an enum set, a
+union and a named scalar, each with its typl constraints enforced at
+construction), the FlatBuffers codec — `encode`, `verify`,
+`decode` and a `MAX_SIZE` bound — the interaction descriptors, and the
+interaction face. Each interface gets the parts its own interactions need: a
+`Client` for the consumer side when it carries any interaction at all; a
+`Publisher` for the producer side when it carries a signal or an event; and a
+`Provider` trait the application implements plus a `dispatch` function that
+settles the claims waiting on a port, when it carries a command or a query. So
+a signal-only interface gets a `Client` and a `Publisher` and nothing to settle
+with, a command-only interface gets a `Client`, a `Provider` and a `dispatch`
+and no `Publisher`, and an interface carrying only `fixed` declarations gets no
+face module at all. Beside the per-package files it writes a `lib.rs` crate
+root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
+
+**Two things it may leave out, each with a note in the source it writes.** A
+type whose size the compiler cannot bound — one that reaches itself, or a
+stream — carries no codec, and gets a `__RIDL_FB_NO_CODEC_<NAME>` constant
+whose documentation names the member and the reason. An interface the face
+cannot carry — a call that does not take exactly one named parameter, a query
+whose reply is not a named type, or a contract clause outside the form the
+translator accepts — is skipped along with its descriptors, and gets a
+`__RIDL_NO_FACE_<NAME>` constant naming the interface, the reason and the
+story that removes the limit. Neither is an error: the rest of the package is
+emitted, and the build succeeds.
+
+The face names the `ridl-rt` port traits and nothing else: the crate carries no
+runtime and opens no socket, so an application supplies the ports. The one
+runtime in this workspace is `ridl-loopback`, which runs in process.
+`examples/cabin/` is a worked example — a schema, and a consumer program
+against the crate built from it.
+
+There is **no flag for the payload encoding**. A package emits the FlatBuffers
+codec, which is the only one built; the emitted `pub type Wire` names it in one
+line. A `--wire` flag belongs to the story that adds the second codec, and
+[ADR-0010][adr-0010] binds its spelling then rather than now.
+
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
 and enums, with named-scalar constraints carried as comments — plus the
@@ -504,9 +542,16 @@ ridl build --out-dir out && find out -type f | sort
 ```
 
 ```text
+out/Cargo.toml
+out/lib.rs
 out/veh.cluster.rs
 out/veh.common.rs
 ```
+
+The `Cargo.toml` and the `lib.rs` are the crate root: the per-package files
+are flat, and the crate root is what gives them the module paths the generated
+code refers to each other by. Single-file mode writes neither, because one
+file is not a crate.
 
 and a single `.typl` file with `--emit rust,ir-json`:
 
@@ -1452,7 +1497,9 @@ ridlc build . --out-dir out && find out -type f | sort
 ```
 
 ```text
+out/Cargo.toml
 out/cli.demo.rs
+out/lib.rs
 ```
 
 **Exit codes.** 0/1/2 in the same shape as `ridl build` — clean, a diagnostic
