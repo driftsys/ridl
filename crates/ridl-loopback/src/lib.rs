@@ -65,9 +65,12 @@
 //! [`Loopback::fail_next_settle`].
 //!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
-//! `CatalogRef` the runtime was built with, unexamined: a generated face
-//! compares it against its own interface's `CATALOG` when it is built, and the
-//! loopback checks nothing against it.
+//! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
+//! places a check of it against the interface's own `CATALOG` in a generated
+//! face's constructor, once, when the face is built; the constructor the Rust
+//! backend emits today performs no such check (driftsys/ridl#448). Either way
+//! it is the face's check and not the runtime's: the loopback carries the
+//! value and compares nothing.
 //!
 //! The crate's as-built design record, with the reasoning behind each of these
 //! choices, is `docs/design/ridl-loopback.md` in this repository.

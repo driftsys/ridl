@@ -346,7 +346,6 @@ rework rather than a blocker.
 | Placeholder                                                                                    | Replaced by                                  |
 | ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                       |
-| The test-only loopback ports (`tests/support/loopback.rs`)                                     | E11.15, landed — `ridl-loopback`             |
 | The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                    |
 | The all-`None` `EncodedSizes` columns                                                          | E16.2                                        |
 | The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |

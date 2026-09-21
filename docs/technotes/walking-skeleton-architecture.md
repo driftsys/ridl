@@ -197,12 +197,12 @@ count of every crate the workspace holds — see `AGENTS.md` for that.
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
 
 - **`crates/ridl-loopback`** — the in-process reference runtime, and the one
-  implementation of `ridl-rt`'s ports in this workspace (epic E11 story E11.15,
-  ADR-0020 decision 6). It carries values between a provider and a consumer in
-  one program, over one store behind one lock, with a clock a test advances by
-  hand; it has no frame, no socket and no wire format, and `ridl-rt` is its only
-  dependency. The Rust backend's round-trip tests build their generated face
-  over it. See [the design record](../design/ridl-loopback.md).
+  runtime implementing `ridl-rt`'s ports in this workspace (epic E11 story
+  E11.15, ADR-0020 decision 6). It carries values between a provider and a
+  consumer in one program, over one store behind one lock, with a clock a test
+  advances by hand; it has no frame, no socket and no wire format, and `ridl-rt`
+  is its only dependency. The Rust backend's round-trip tests build their
+  generated face over it. See [the design record](../design/ridl-loopback.md).
 
 - **`crates/ridl-lsp`** — the language server; see the LSP section below.
 

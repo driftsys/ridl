@@ -37,9 +37,9 @@ Three layers of the family have a working toolchain in this repository:
 generated ridl package will link and a runtime will implement: identity, time
 and the envelope, samples, the payload traits, the interaction descriptors,
 the ports, and the contract and transport errors. It has no dependency in any
-feature combination. No runtime implements it yet, no transport reaches a
-second process, and no payload codec (FlatBuffers, proto3, `repr(C)`) is
-built.
+feature combination. `ridl-loopback` (story E11.15) implements its ports in
+process, and nothing else does: no transport reaches a second process, and no
+payload codec (FlatBuffers, proto3, `repr(C)`) is built.
 
 `ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a
 FlatBuffers schema, or the IR as JSON, with the lowered rsdl system beside it.

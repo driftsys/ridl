@@ -6,17 +6,18 @@
 //! so `Attached::catalog` can return a reference without reaching through the
 //! lock.
 //!
-//! The split follows the receiver of the port methods, as ADR-0021 decision 12
-//! derives it:
+//! Every handle implements `Attached`, which every port trait but `Clock` has
+//! as a supertrait. The table lists what each handle adds to it, and the split
+//! follows the receiver of those methods, as ADR-0021 decision 12 derives it:
 //!
-//! | Handle          | Port roles                                                                               | Threading    |
-//! | --------------- | ---------------------------------------------------------------------------------------- | ------------ |
-//! | [`ReaderHandle`] | `Attached`, `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
-//! | [`WriterHandle`] | `SignalWriter`                                                                           | `Send`       |
-//! | [`SourceHandle`] | `EventSource`                                                                            | `Send`       |
-//! | [`SinkHandle`]   | `EventSink`                                                                              | `Send`       |
-//! | [`CallerHandle`] | `Caller`                                                                                 | `Send`       |
-//! | [`HandlerHandle`] | `Handler`                                                                               | `Send`       |
+//! | Handle            | Port roles beside `Attached`                                                  | Threading     |
+//! | ----------------- | ----------------------------------------------------------------------------- | ------------- |
+//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
+//! | [`WriterHandle`]  | `SignalWriter`                                                                | `Send`        |
+//! | [`SourceHandle`]  | `EventSource`                                                                 | `Send`        |
+//! | [`SinkHandle`]    | `EventSink`                                                                   | `Send`        |
+//! | [`CallerHandle`]  | `Caller`                                                                      | `Send`        |
+//! | [`HandlerHandle`] | `Handler`                                                                     | `Send`        |
 //!
 //! Every method on the reader handle takes `&self`, so several threads may
 //! read one store at once; every other handle carries a trait with a
@@ -241,12 +242,18 @@ impl EventSource for SourceHandle {
     }
 }
 
-/// The `EventSink` port role. The sequence counter is the handle's own, so
-/// two providers raising on one interface do not share a counter.
+/// The `EventSink` port role.
+///
+/// The sequence counters are the handle's own, one per event channel, for the
+/// same reason the writer handle's are: ridl §3.1 scopes the number to the
+/// channel and has the sender assign it. One counter for the whole handle
+/// would make a consumer subscribed to some of this sink's events see a gap in
+/// `seq` where nothing was lost, and `EventSource::next` states that a gap is
+/// a loss.
 pub struct SinkHandle {
     shared: Shared,
     catalog: CatalogRef,
-    next_seq: u64,
+    seqs: BTreeMap<Key, u64>,
 }
 
 impl SinkHandle {
@@ -254,13 +261,14 @@ impl SinkHandle {
         SinkHandle {
             shared,
             catalog,
-            next_seq: 0,
+            seqs: BTreeMap::new(),
         }
     }
 
-    fn take_seq(&mut self) -> u64 {
-        self.next_seq += 1;
-        self.next_seq
+    fn take_seq(&mut self, key: Key) -> u64 {
+        let counter = self.seqs.entry(key).or_insert(0);
+        *counter += 1;
+        *counter
     }
 }
 
@@ -272,7 +280,7 @@ impl Attached for SinkHandle {
 
 impl EventSink for SinkHandle {
     fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError> {
-        let seq = self.take_seq();
+        let seq = self.take_seq((iface, ord));
         lock(&self.shared).raise(iface, ord, bytes, seq);
         Ok(())
     }
@@ -282,9 +290,12 @@ impl EventSink for SinkHandle {
 // The call handles
 // ---------------------------------------------------------------------------
 
-/// The `Caller` port role. The sequence counter is the handle's own, which is
-/// what keeps two callers on one provider from colliding
-/// (driftsys/ridl#308).
+/// The `Caller` port role.
+///
+/// One counter for the whole handle, not one per channel: on a call the scope
+/// is the caller instance (ADR-0021 decision 5, and driftsys/ridl#308's own
+/// report), so every call this caller sends draws from one sequence. That is
+/// what keeps two callers on one provider from colliding.
 pub struct CallerHandle {
     shared: Shared,
     catalog: CatalogRef,
@@ -352,13 +363,13 @@ impl Caller for CallerHandle {
 
 /// The `Handler` port role.
 ///
-/// `serve` records the members this handler was asked to present, and
-/// `next_claim` presents every call waiting in the store regardless of that
-/// set. The set is recorded and not enforced because the generated `dispatch`
-/// never calls `serve` (`crates/ridl-backend-rust/src/face.rs`), so a
-/// handler that presented only served members would present nothing to it.
-/// `served` reads the recorded set back, so a test or an application that does
-/// call `serve` can see what it asked for.
+/// A handler that has served nothing is presented every call waiting in the
+/// store; once it has served anything, it is presented only the members it
+/// served, and another handler's calls stay waiting for that handler. The
+/// empty set means no filter rather than no members, because the generated
+/// `dispatch` never calls `serve` (`crates/ridl-backend-rust/src/face.rs`) and
+/// a handler that filtered on an empty set would be presented nothing at all.
+/// [`served`](HandlerHandle::served) reads the set back.
 pub struct HandlerHandle {
     shared: Shared,
     catalog: CatalogRef,
@@ -399,7 +410,12 @@ impl Handler for HandlerHandle {
     }
 
     fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
-        lock(&self.shared).next_claim(out)
+        let served = if self.served.is_empty() {
+            None
+        } else {
+            Some(self.served.as_slice())
+        };
+        lock(&self.shared).next_claim(served, out)
     }
 
     fn settle(

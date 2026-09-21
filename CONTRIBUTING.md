@@ -165,8 +165,9 @@ Failures name the Markdown file and the exact line, because each block is staged
 with the line offset it has in its source file.
 
 The harness checks syntax, never claims. Prose about delivery, timing behaviour,
-or provider-side enforcement describes a specification, not this workspace —
-there is no runtime here. Write it so a reader cannot mistake the two.
+or provider-side enforcement describes a specification, not this workspace: the
+one runtime here is `ridl-loopback`, which runs in process and is not reachable
+from anything the CLI emits. Write it so a reader cannot mistake the two.
 
 ## Recipes
 

@@ -81,6 +81,12 @@ struct CallEntry {
     /// `None` while unsettled, which is what `Caller::ack` and `Caller::reply`
     /// report as `None`.
     outcome: Option<Result<Vec<u8>, CallError>>,
+    /// `true` once the caller has released the correlation. The entry stays,
+    /// because the provider's side of the call is not the caller's to revoke:
+    /// a claim already presented is still settled, and a call still waiting is
+    /// still presented. What changes is that `ack` and `reply` answer as they
+    /// do for a call they never heard of.
+    forgotten: bool,
 }
 
 /// Everything two handles must agree on.
@@ -99,6 +105,12 @@ pub(crate) struct Store {
     calls: BTreeMap<u64, CallEntry>,
     pending: VecDeque<u64>,
     next_call_id: u64,
+    /// The calls presented and not yet settled: a claim identity of its own,
+    /// minted by `next_claim`, to the call it presented. A `ClaimId` is
+    /// therefore never a correlation that was never presented, and never one
+    /// already settled.
+    claims: BTreeMap<u64, u64>,
+    next_claim_id: u64,
     fail_next_settle: bool,
 }
 
@@ -114,6 +126,8 @@ impl Store {
             calls: BTreeMap::new(),
             pending: VecDeque::new(),
             next_call_id: 0,
+            claims: BTreeMap::new(),
+            next_claim_id: 0,
             fail_next_settle: false,
         }
     }
@@ -125,7 +139,8 @@ impl Store {
     }
 
     pub(crate) fn advance(&mut self, by: ridl_rt::sample::Duration) {
-        self.now = Timestamp(self.now.0 + by.0);
+        assert!(by.0 >= 0, "the clock advances forward: `by` is {}", by.0);
+        self.now = Timestamp(self.now.0.saturating_add(by.0));
     }
 
     // -- signals -----------------------------------------------------------
@@ -157,6 +172,11 @@ impl Store {
         seqs: &mut BTreeMap<Key, u64>,
     ) {
         let stamp = self.now;
+        // A `touch` of a channel with no publication re-affirms nothing, so it
+        // is dropped here rather than publishing a zero-length value as
+        // `Live`. It is dropped before the generation is advanced, so a commit
+        // whose every staged change is such a touch changes nothing at all.
+        staged.retain(|key, op| !matches!(op, Staged::Touch) || self.signals.contains_key(key));
         let mut bumped = BTreeSet::new();
         for (iface, _) in staged.keys() {
             if bumped.insert(*iface) {
@@ -175,10 +195,10 @@ impl Store {
             let (bytes, invalid) = match op {
                 Staged::Set(bytes) => (bytes, false),
                 Staged::Invalidate => (previous.map(|e| e.bytes.clone()).unwrap_or_default(), true),
-                Staged::Touch => match previous {
-                    None => (Vec::new(), false),
-                    Some(entry) => (entry.bytes.clone(), entry.invalid),
-                },
+                Staged::Touch => {
+                    let entry = previous.expect("an unpublished touch was dropped above");
+                    (entry.bytes.clone(), entry.invalid)
+                }
             };
             self.signals.insert(
                 key,
@@ -408,6 +428,7 @@ impl Store {
                 args: args.to_vec(),
                 envelope,
                 outcome: None,
+                forgotten: false,
             },
         );
         self.pending.push_back(id);
@@ -416,6 +437,9 @@ impl Store {
 
     pub(crate) fn ack(&self, c: Correlation) -> Option<Result<(), CallError>> {
         let entry = self.calls.get(&c.0)?;
+        if entry.forgotten {
+            return None;
+        }
         if entry.kind != CallKind::Command {
             // A query's correlation always answers `None` here, which
             // `Caller::ack` states: a query's outcome comes from `reply`.
@@ -436,6 +460,9 @@ impl Store {
         let Some(entry) = self.calls.get(&c.0) else {
             return Ok(None);
         };
+        if entry.forgotten {
+            return Ok(None);
+        }
         match &entry.outcome {
             None => Ok(None),
             Some(Err(error)) => Ok(Some(Err(*error))),
@@ -451,26 +478,56 @@ impl Store {
         }
     }
 
+    /// Releases the caller's interest in a correlation.
+    ///
+    /// A call whose outcome is already recorded has nothing left to happen to
+    /// it, so its entry goes. A call still in flight keeps its entry and is
+    /// marked forgotten: the provider still sees it at `next_claim` and still
+    /// settles it — `Handler`'s contract is that every claim is settled, and a
+    /// caller losing interest is not the provider's business — and the entry
+    /// goes when that settlement lands. Either way the correlation answers
+    /// `None` from `ack` and `reply` afterwards.
     pub(crate) fn forget(&mut self, c: Correlation) {
-        self.calls.remove(&c.0);
+        let Some(entry) = self.calls.get_mut(&c.0) else {
+            return;
+        };
+        if entry.outcome.is_some() {
+            self.calls.remove(&c.0);
+        } else {
+            entry.forgotten = true;
+        }
     }
 
-    pub(crate) fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
-        let Some(&id) = self.pending.front() else {
+    /// Presents the next waiting call this handler serves.
+    ///
+    /// `served` is the handler's served set, or `None` when it has served
+    /// nothing, in which case it is presented every waiting call. The claim
+    /// carries an identity of its own, minted here, so a `ClaimId` names a
+    /// call that was actually presented.
+    pub(crate) fn next_claim(
+        &mut self,
+        served: Option<&[Key]>,
+        out: &mut [u8],
+    ) -> Result<Option<Claim>, ReadError> {
+        let position = self.pending.iter().position(|id| {
+            let entry = &self.calls[id];
+            served.is_none_or(|set| set.contains(&(entry.iface, entry.ord)))
+        });
+        let Some(position) = position else {
             return Ok(None);
         };
-        let entry = self
-            .calls
-            .get(&id)
-            .expect("a pending call id is always in the call table");
+        let id = self.pending[position];
+        let entry = &self.calls[&id];
         if out.len() < entry.args.len() {
             return Err(ReadError::Short {
                 needed: entry.args.len(),
             });
         }
         out[..entry.args.len()].copy_from_slice(&entry.args);
+        let claim_id = self.next_claim_id;
+        self.next_claim_id += 1;
         let claim = Claim {
-            id: ClaimId(id),
+            id: ClaimId(claim_id),
             iface: entry.iface,
             ord: entry.ord,
             envelope: entry.envelope,
@@ -479,24 +536,41 @@ impl Store {
             remaining: None,
             len: entry.args.len(),
         };
-        self.pending.pop_front();
+        self.pending.remove(position);
+        self.claims.insert(claim_id, id);
         Ok(Some(claim))
     }
 
+    /// Records a claim's outcome.
+    ///
+    /// The claim is looked up before the injected failure is consumed, so
+    /// `fail_next_settle` fails the next settlement of a claim that exists
+    /// rather than being spent on one that does not. An injected failure
+    /// leaves the claim settleable, which is what makes one failed settlement
+    /// followed by a successful one expressible.
     pub(crate) fn settle(
         &mut self,
         claim: ClaimId,
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
+        let Some(&id) = self.claims.get(&claim.0) else {
+            return Err(SettleError::UnknownClaim);
+        };
         if self.fail_next_settle {
             self.fail_next_settle = false;
             return Err(SettleError::TooLarge { cap: 0 });
         }
-        let Some(entry) = self.calls.get_mut(&claim.0) else {
-            return Err(SettleError::UnknownClaim);
-        };
-        if entry.outcome.is_some() {
-            return Err(SettleError::UnknownClaim);
+        self.claims.remove(&claim.0);
+        let entry = self
+            .calls
+            .get_mut(&id)
+            .expect("a claim names a call that is in the call table");
+        if entry.forgotten {
+            // The caller released it while it was in flight. It was still
+            // presented and is still settled; nothing can read the outcome, so
+            // the entry goes with the settlement.
+            self.calls.remove(&id);
+            return Ok(());
         }
         entry.outcome = Some(outcome.map(<[u8]>::to_vec));
         Ok(())

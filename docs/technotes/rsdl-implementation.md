@@ -161,6 +161,7 @@ there is no runtime, and every fact it states about the lowered system and about
   emitter over these facts, specified with the runtime. The runtime descriptors
   design defines two artifacts and the roadmap plans only the catalog half (Epic
   16); the per-deployment system descriptor takes its own rows now that Epic 6
-  has landed, and has none yet. This workspace has no runtime, so nothing reads
-  the lowered system at run time.
+  has landed, and has none yet. No runtime reads the lowered system: the one in
+  this workspace, `ridl-loopback`, is given its catalog by its caller and reads
+  no descriptor at all.
 - **Backend namespace claims.** See RSDL-804 above.

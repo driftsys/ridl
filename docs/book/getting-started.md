@@ -33,11 +33,11 @@ Several sections below describe what happens when a contract runs: that a
 subscriber is delivered the last value, that an occurrence past its staleness
 bound is discarded, that a provider checks a `require` clause before your code
 sees the call. **Every one of those is a requirement the specification places on
-a future runtime and its transport bindings. None of it is implemented.** The
-one runtime in this repository, `ridl-loopback`, carries values between a
-provider and a consumer inside one program and measures nothing against a
-staleness bound; nothing the compiler emits links it, so no command in this
-chapter delivers a message.
+a runtime and its transport bindings, and no command in this chapter runs one.**
+The repository does hold an in-process runtime, `ridl-loopback`, which carries a
+last value from a provider to a consumer inside one program; it measures nothing
+against a staleness bound, and nothing the compiler emits links it. So what you
+run below neither delivers a message nor enforces a contract.
 
 The sentences are written in the present tense because they describe what the
 contract means, which is the thing you are designing against. They do not

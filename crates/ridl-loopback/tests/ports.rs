@@ -16,9 +16,9 @@ use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
-    Attached, Caller, Changed, Clock, CoherentSignals, EventSink, EventSource, FixedReader,
-    Handler, RawSample, ReadError, ScannableSignals, SettleError, SignalReader, SignalWriter,
-    Watermark,
+    Attached, Caller, Changed, ClaimId, Clock, CoherentSignals, EventSink, EventSource,
+    FixedReader, Handler, RawSample, ReadError, ScannableSignals, SettleError, SignalReader,
+    SignalWriter, Watermark,
 };
 use ridl_rt::sample::{Cause, Duration, Envelope, Freshness, Provenance, Timestamp};
 
@@ -298,6 +298,34 @@ fn touch_republishes_the_current_value_without_changing_it() {
 }
 
 #[test]
+fn touch_on_a_channel_with_no_publication_publishes_nothing() {
+    // A re-affirmation of nothing is nothing. Publishing here would put a
+    // zero-length value on the channel as `Live`, which a consumer's binding
+    // reads as a corrupt payload rather than as the init value it should see.
+    let mut rt = runtime();
+    rt.touch(IFACE, ORD).expect("touch staged");
+    rt.commit();
+
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.read(IFACE, ORD, &mut out).expect("read").provenance,
+        Provenance::Init
+    );
+    assert_eq!(
+        rt.generation(IFACE),
+        0,
+        "and a commit whose every staged change was such a touch changes nothing"
+    );
+}
+
+#[test]
+#[should_panic(expected = "the clock advances forward")]
+fn the_clock_refuses_to_run_backwards() {
+    let mut rt = runtime();
+    rt.advance(Duration(-1));
+}
+
+#[test]
 fn a_short_buffer_reports_what_the_read_needs_and_consumes_nothing() {
     let mut rt = runtime();
     rt.set(IFACE, ORD, &[1, 2, 3, 4]).expect("set");
@@ -530,7 +558,39 @@ fn a_short_buffer_leaves_the_occurrence_for_the_next_call() {
 }
 
 #[test]
-fn a_sink_sequence_number_counts_that_sink_occurrences() {
+fn a_sink_sequence_number_counts_one_channel_publications() {
+    // One sink raising on two of its events, with a consumer subscribed to
+    // one of them. A counter per handle rather than per channel would number
+    // this consumer's two occurrences 1 and 3, and `EventSource::next` states
+    // that a gap in seq is a loss -- so the consumer would read a loss that
+    // did not happen.
+    let rt = runtime();
+    let mut source = rt.source();
+    let mut sink = rt.sink();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, OTHER, &[2]).expect("raise");
+    sink.raise(IFACE, ORD, &[3]).expect("raise");
+
+    let mut out = [0u8; 8];
+    let mut seqs = Vec::new();
+    while let Some(occurrence) = source.next(&mut out).expect("next") {
+        seqs.push(occurrence.envelope.seq);
+    }
+    assert_eq!(
+        seqs,
+        vec![1, 2],
+        "no gap: the other event has its own counter"
+    );
+}
+
+#[test]
+fn a_sink_counts_its_own_channel_and_not_another_sinks() {
+    // Two sinks on one event channel is a misuse the loopback does not police,
+    // the same way two writer handles on one signal are: an event channel has
+    // one provider (ridl 5). What this pins is that a sink's counters are its
+    // own, so the second sink's first raise is its own seq 1.
     let rt = runtime();
     let mut source = rt.source();
     let mut first = rt.sink();
@@ -546,11 +606,7 @@ fn a_sink_sequence_number_counts_that_sink_occurrences() {
     while let Some(occurrence) = source.next(&mut out).expect("next") {
         seqs.push(occurrence.envelope.seq);
     }
-    assert_eq!(
-        seqs,
-        vec![1, 1, 2],
-        "each sink counts its own occurrences, so the second sink's first raise is seq 1"
-    );
+    assert_eq!(seqs, vec![1, 1, 2]);
 }
 
 // ---------------------------------------------------------------------------
@@ -558,11 +614,13 @@ fn a_sink_sequence_number_counts_that_sink_occurrences() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn two_callers_on_one_provider_do_not_collide() {
-    // driftsys/ridl#308: with one counter per channel the two calls below
-    // would carry the same sequence number and a provider deduplicating on it
-    // alone would drop the second. Each caller handle owns its counter, and
-    // the claims are two.
+fn two_callers_on_one_provider_are_two_claims_under_one_seq() {
+    // driftsys/ridl#308, and the rule ADR-0021 decision 5 fixes over it: a
+    // caller's sequence number is unique per caller, not per channel, so two
+    // callers on their first call both carry seq 1 -- and they are still two
+    // claims, never merged. A provider deduplicating on the number alone is
+    // what #308 reports as wrong; what tells these two apart here is the
+    // claim.
     let rt = runtime();
     let mut first = rt.caller();
     let mut second = rt.caller();
@@ -583,8 +641,9 @@ fn two_callers_on_one_provider_do_not_collide() {
         .expect("next_claim")
         .expect("waiting");
     assert_eq!(&buf[..second_claim.len], &[2]);
+    assert_eq!(first_claim.envelope.seq, 1);
     assert_eq!(
-        first_claim.envelope.seq, second_claim.envelope.seq,
+        second_claim.envelope.seq, 1,
         "both callers are on their first call, so both carry seq 1"
     );
     assert_ne!(
@@ -679,7 +738,7 @@ fn a_short_buffer_leaves_the_claim_for_the_next_call() {
 }
 
 #[test]
-fn forget_releases_a_correlation() {
+fn forget_releases_a_settled_correlation() {
     let mut rt = runtime();
     let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
     let mut buf = [0u8; 8];
@@ -696,12 +755,148 @@ fn forget_releases_a_correlation() {
 }
 
 #[test]
+fn forget_before_the_claim_is_presented_leaves_the_call_for_the_provider() {
+    // `Caller::forget` releases the caller's interest in an outcome. It is not
+    // a cancellation: `Handler`'s contract is that every claim is settled, and
+    // a call already sent is the provider's.
+    let mut rt = runtime();
+    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    rt.forget(correlation);
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the call is still presented");
+    assert_eq!(&buf[..claim.len], &[1]);
+    rt.settle(claim.id, Ok(&[])).expect("and is still settled");
+    assert_eq!(
+        rt.ack(correlation),
+        None,
+        "but the caller asked not to be told"
+    );
+}
+
+#[test]
+fn forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid() {
+    let mut rt = runtime();
+    let correlation = rt.query(IFACE, ORD, &[1]).expect("send");
+    let mut buf = [0u8; 8];
+    let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
+    rt.forget(correlation);
+
+    rt.settle(claim.id, Ok(&[7]))
+        .expect("the provider's settlement is not the caller's to revoke");
+    let mut out = [0u8; 8];
+    assert!(
+        rt.reply(correlation, &mut out)
+            .expect("reply read")
+            .is_none()
+    );
+}
+
+#[test]
+fn a_claim_that_was_never_presented_cannot_be_settled() {
+    // A correlation is not a claim. Before this call is presented there is no
+    // claim to settle, and a settlement accepted here would acknowledge a call
+    // the provider has not seen.
+    let mut rt = runtime();
+    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(
+        rt.settle(ClaimId(correlation.0), Ok(&[])),
+        Err(SettleError::UnknownClaim)
+    );
+    assert_eq!(rt.ack(correlation), None, "and nothing was acknowledged");
+
+    let mut buf = [0u8; 8];
+    let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
+    rt.settle(claim.id, Ok(&[]))
+        .expect("the real claim settles");
+    assert_eq!(rt.ack(correlation), Some(Ok(())));
+}
+
+#[test]
+fn an_injected_settle_failure_is_not_spent_on_an_unknown_claim() {
+    let mut rt = runtime();
+    rt.command(IFACE, ORD, &[1]).expect("send");
+    let mut buf = [0u8; 8];
+    let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
+
+    rt.fail_next_settle();
+    assert_eq!(
+        rt.settle(ClaimId(9999), Ok(&[])),
+        Err(SettleError::UnknownClaim),
+        "the claim is checked before the injected failure is consumed"
+    );
+    assert_eq!(
+        rt.settle(claim.id, Ok(&[])),
+        Err(SettleError::TooLarge { cap: 0 }),
+        "so the injected failure still has the next real settlement to fail"
+    );
+}
+
+#[test]
 fn serve_records_what_it_was_asked_to_present() {
     let rt = runtime();
     let mut handler = rt.handler();
     handler.serve(IFACE, &[ORD, OTHER]).expect("serve");
     handler.serve(IFACE, &[ORD]).expect("serve again");
     assert_eq!(handler.served(), &[(IFACE, ORD), (IFACE, OTHER)]);
+}
+
+#[test]
+fn a_handler_that_served_nothing_is_presented_every_call() {
+    // The generated `dispatch` never calls `serve`, so an empty served set is
+    // no filter rather than no members.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    caller.command(InterfaceNo(2), OTHER, &[1]).expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(claim.iface, InterfaceNo(2));
+}
+
+#[test]
+fn two_handlers_each_receive_only_what_they_served() {
+    // Two components providing different interfaces in one process: the
+    // obvious use of an in-process runtime. A handler presented another
+    // handler's call would settle it `UnknownInteraction` through the
+    // generated dispatch, and the call would be lost.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    first.serve(IFACE, &[ORD]).expect("serve");
+    second.serve(InterfaceNo(2), &[ORD]).expect("serve");
+
+    caller.command(InterfaceNo(2), ORD, &[7]).expect("send");
+    caller.command(IFACE, ORD, &[8]).expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(claim.iface, IFACE, "the call the first handler served");
+    assert_eq!(&buf[..claim.len], &[8]);
+
+    let claim = second
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(claim.iface, InterfaceNo(2), "and the second handler's own");
+    assert_eq!(&buf[..claim.len], &[7]);
+
+    assert!(
+        first.next_claim(&mut buf).expect("next_claim").is_none(),
+        "neither handler consumed the other's call"
+    );
+    assert!(second.next_claim(&mut buf).expect("next_claim").is_none());
 }
 
 // ---------------------------------------------------------------------------
@@ -757,25 +952,41 @@ fn a_writer_handle_publishes_on_one_thread_while_a_reader_reads_on_another() {
 
     let publisher = std::thread::spawn(move || {
         for value in 1..=50u8 {
-            writer.set(IFACE, ORD, &[value]).expect("set");
+            // Four bytes that must agree: a read that saw part of one
+            // publication and part of the next would not.
+            writer.set(IFACE, ORD, &[value; 4]).expect("set");
             writer.commit();
         }
     });
 
     // Reading while the other thread publishes: every read succeeds, and the
-    // value seen is one of the values published, never a mixture of two.
+    // value seen is one whole publication, never a mixture of two.
     let mut out = [0u8; 8];
-    for _ in 0..200 {
+    let mut seen = 0u32;
+    while seen < 200 {
         let raw = reader.read(IFACE, ORD, &mut out).expect("read");
-        assert!(raw.len <= 1);
-        if raw.len == 1 {
-            assert!((1..=50).contains(&out[0]));
+        if raw.len == 0 {
+            continue;
         }
+        assert_eq!(raw.len, 4);
+        let value = out[0];
+        assert!((1..=50).contains(&value));
+        assert_eq!(
+            &out[..4],
+            &[value; 4],
+            "a publication is read whole or not at all"
+        );
+        assert_eq!(
+            raw.envelope.seq,
+            u64::from(value),
+            "and its envelope belongs to the value read"
+        );
+        seen += 1;
     }
 
     publisher.join().expect("the publishing thread finished");
     let raw = reader.read(IFACE, ORD, &mut out).expect("read");
-    assert_eq!(&out[..raw.len], &[50]);
+    assert_eq!(&out[..raw.len], &[50; 4]);
     assert_eq!(raw.envelope.seq, 50);
 }
 

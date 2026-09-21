@@ -54,7 +54,8 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridl-backend-flatbuffers/   FlatBuffers schema generation over the IR (the second wire backend, ADR-0019)
 ├── ridl-diff/                  The `ridl diff` IR-snapshot compare engine + classifier
 ├── ridl-fmt/                   The `ridl fmt` engine (rowan-based)
-└── ridl-rt/                    The runtime library generated code links (no_std, no dependency)
+├── ridl-rt/                    The runtime library generated code links (no_std, no dependency)
+└── ridl-loopback/              The in-process reference runtime over those ports (ADR-0020 decision 6)
 editors/vscode/                 VS Code extension (TextMate grammars + LSP client)
 xtask/                          Workspace automation (ungrammar codegen, drift checks)
 Cargo.toml                      Cargo workspace root

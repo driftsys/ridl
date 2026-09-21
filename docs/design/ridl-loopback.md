@@ -63,12 +63,12 @@ generated code links — and a host runtime is not among them.
 generation counters, the provisioned `fixed` values, one queue per event source,
 the call table, and the clock.
 
-Every port method takes the lock, does its work and returns. None waits for data
-while holding it, which is what `ridl_rt::port` requires of every port method:
-`EventSource::next` returns `Ok(None)` when nothing is queued, `Caller::reply`
-returns `Ok(None)` while the outcome is unknown, and `Handler::next_claim`
-returns `Ok(None)` when no call is waiting. A critical section that reads or
-writes a map and returns is not waiting.
+A port method that reaches the store takes the lock, does its work and returns.
+None waits for data while holding it, which is what `ridl_rt::port` requires of
+every port method: `EventSource::next` returns `Ok(None)` when nothing is
+queued, `Caller::reply` returns `Ok(None)` while the outcome is unknown, and
+`Handler::next_claim` returns `Ok(None)` when no call is waiting. A critical
+section that reads or writes a map and returns is not waiting.
 
 **`RwLock` is rejected for 0.1.** The property ADR-0021 decision 12 protects is
 that a signal read does not block on a publication, and the decision's own
@@ -76,11 +76,12 @@ rejected alternative — one runtime struct implementing every port, shared behi
 a mutex — fails it for a different reason than lock kind: there, every read
 waits behind every commit **for the lifetime of the borrow a face holds**, not
 for the length of a critical section. Here the handles are separate values, and
-a read waits only for the microseconds a commit spends writing its maps. In an
-in-process reference that is not the bottleneck, and one lock keeps the
-invariants — a commit's generation increment, its one timestamp, and the entries
-it writes — in one place rather than spread across a read path and a write path
-that must agree.
+a read waits only for the length of a commit's own critical section, which
+writes the staged entries and increments the generation of one interface. In an
+in-process reference that is not the bottleneck, and a `Mutex` is the lock whose
+cost matches what this store does: every path that is not a plain read —
+`commit`, `raise`, `send`, `next_claim`, `settle` — writes, so a lock that let
+readers in together would be taken for writing on most calls anyway.
 
 A reader that must not block at all is the seqlock store, which is the engine's
 and outside this repository.
@@ -99,14 +100,17 @@ runtime a test compares output against has no reason to be nondeterministic.
 **One handle type per port role, plus an aggregate**, which is ADR-0021 decision
 12's shape and this story's `Done when`.
 
-| Handle          | Port roles                                                                                | Threading     |
-| --------------- | ----------------------------------------------------------------------------------------- | ------------- |
-| `ReaderHandle`  | `Attached`, `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
-| `WriterHandle`  | `SignalWriter`                                                                            | `Send`        |
-| `SourceHandle`  | `EventSource`                                                                             | `Send`        |
-| `SinkHandle`    | `EventSink`                                                                               | `Send`        |
-| `CallerHandle`  | `Caller`                                                                                  | `Send`        |
-| `HandlerHandle` | `Handler`                                                                                 | `Send`        |
+Every handle implements `Attached`, which every port trait but `Clock` carries
+as a supertrait. The table lists what each handle adds to it.
+
+| Handle          | Port roles beside `Attached`                                                  | Threading     |
+| --------------- | ----------------------------------------------------------------------------- | ------------- |
+| `ReaderHandle`  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
+| `WriterHandle`  | `SignalWriter`                                                                | `Send`        |
+| `SourceHandle`  | `EventSource`                                                                 | `Send`        |
+| `SinkHandle`    | `EventSink`                                                                   | `Send`        |
+| `CallerHandle`  | `Caller`                                                                      | `Send`        |
+| `HandlerHandle` | `Handler`                                                                     | `Send`        |
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
 on the reader handle takes `&self`, so several threads may read one store at
@@ -157,6 +161,50 @@ Staging on the writer handle is the visible consequence: `set`, `invalidate` and
 `touch` take no lock at all, and `commit` takes it once. A test pins that a
 staged value is not visible to a reader until the commit.
 
+One staged operation is dropped rather than applied: a `touch` of a channel with
+no publication. `touch` re-affirms the current value without a new one, and a
+channel that has never published has nothing to re-affirm, so applying it would
+publish a zero-length value as `Provenance::Live` — which a consumer's binding
+reads as a corrupt payload rather than as the init value ridl §4.4 gives it. It
+is dropped before the generation is advanced, so a commit whose every staged
+change is such a touch changes nothing at all.
+
+## A claim is not a correlation
+
+The call table holds one entry per call sent, from the caller's send to the
+provider's settlement. Two identities address it, and they are separate:
+
+- a **`Correlation`**, returned by `command` and `query`, is the caller's name
+  for the outcome it will read back;
+- a **`ClaimId`**, minted by `next_claim`, is the provider's name for a call it
+  has been presented.
+
+Minting the claim identity at presentation rather than reusing the correlation
+is what makes `SettleError::UnknownClaim` mean what `ridl_rt::port` says it
+means — "the claim was already settled, or was never issued". A settlement of a
+call the provider has not been presented is refused, so a call cannot be
+acknowledged before the provider has seen it; and a settlement is removed from
+the table when it lands, so a second settlement of one claim is refused too.
+`a_claim_that_was_never_presented_cannot_be_settled` and
+`a_claim_is_presented_once_and_settled_once` are the two cases. The alternative
+rejected is one identity for both ends, which is what the deleted double had:
+with it, `settle(ClaimId(correlation.0))` before any presentation recorded an
+outcome the caller could read as an acknowledgment, and the provider's own
+settlement was then refused as a duplicate.
+
+**`Caller::forget` releases the caller's interest, and cancels nothing.** A call
+whose outcome is already recorded has nothing left to happen to it, so its entry
+goes. A call still in flight keeps its entry, marked forgotten: the provider is
+still presented it and still settles it, because `Handler`'s contract is that
+every claim is settled and a caller losing interest is not the provider's
+business. Either way the correlation answers `None` from `ack` and `reply`
+afterwards, which is what `Caller::forget` tells a caller to expect. The
+alternative rejected is removing the entry outright: it revokes a claim the
+provider may already hold, so the provider's `settle` fails and the generated
+`dispatch` does not count it — and, in the shape this crate first had, it left
+the call's identity in the waiting queue with no entry behind it, which made
+every later `next_claim` on that runtime panic.
+
 ## The two signal extensions are implemented
 
 **`ScannableSignals` and `CoherentSignals` are both implemented on the reader
@@ -198,6 +246,10 @@ publication at an exact time. Two runtimes constructed at different real times
 start at the same logical time, which `the_clock_is_hand_driven_not_wall_clock`
 pins.
 
+`advance` refuses a negative duration and saturates rather than overflowing: a
+clock that ran backwards would put an envelope before one already stamped, and
+the panic a debug build gives on overflow would be a panic inside a port call.
+
 A wall-clock variant is rejected for this story rather than forever: it would
 make every envelope timestamp in every test a value the test cannot state, and
 nothing needs real time until something measures a real bound. A runtime that
@@ -205,37 +257,52 @@ does needs a second clock source, which is a later option and not this story.
 
 ## Sequence numbers are per sender handle
 
-**Each sender handle owns its counter** (driftsys/ridl#308). A caller handle
-counts its own calls, a sink handle counts its own occurrences, and a writer
-handle counts its own publications per channel. The first publication, the first
-occurrence and the first call of a handle are `seq` 1, because `seq` 0 is the
-envelope of a channel with no publication (ADR-0021 decision 5).
+**Each sender handle owns its counters** (driftsys/ridl#308), and what they are
+scoped to follows the interaction:
 
-That is what keeps two callers on one provider from colliding, which is #308's
-report: with one counter per channel, two callers each sending their first call
-would both carry `seq` 1, and a provider deduplicating on the sequence number
-alone would drop the second. `two_callers_on_one_provider_do_not_collide` runs
-exactly that case and shows two claims, not one.
+- a **caller handle** keeps one counter for the whole handle, because on a call
+  the scope is the caller instance — ADR-0021 decision 5 states it as
+  "`envelope.seq` is unique per caller, not per channel";
+- a **writer handle** and a **sink handle** keep one counter per channel,
+  because on a signal or an event ridl §3.1 scopes the number to the channel,
+  and the channel has one provider.
+
+The first publication, the first occurrence and the first call are `seq` 1,
+because `seq` 0 is the envelope of a channel with no publication (ADR-0021
+decision 5).
+
+**What #308 reports is not fixed by the counter, and this runtime shows why.**
+Two callers each sending their first call both carry `seq` 1 — that is what a
+per-caller counter means — and a provider deduplicating on the sequence number
+alone would treat the second as a retransmission of the first.
+`two_callers_on_one_provider_are_two_claims_under_one_seq` runs exactly that
+case and shows two claims under one `seq`, which is the rule ADR-0021 decision 5
+fixes: two callers are never merged even under the same `seq`. What tells them
+apart here is the claim, not the number. A runtime over a real transport keys
+duplicate suppression on the caller's transport identity plus `seq`, below the
+port, for the same reason.
 
 **The loopback deduplicates nothing.** It presents each call once because it
 delivers each call once, not because it recognises a retransmission — nothing
-retransmits in a process. A runtime over a real transport keys duplicate
-suppression on the caller's transport identity plus `seq`, below the port, which
-is ADR-0021 decision 5.
+retransmits in a process.
 
-A writer's counters are per channel and on the handle, which is the one place
-this reading needs care. ridl §3.1 scopes a signal's sequence number to the
-channel, and a signal has one provider; a counter per channel, owned by the
-writer handle that publishes it, satisfies both that scope and the rule that the
-sender assigns the number. The visible consequence is that a writer handle
-dropped and replaced restarts the channel's counter, because the counter went
-with the handle. A runtime with a session would carry it; this one has no
-session.
+A sink's counters are per channel for a reason a single counter per handle would
+break: a consumer subscribed to some of a sink's events would see the numbers of
+the events it did not subscribe to as gaps, and `EventSource::next` states that
+a gap in `seq` is a loss.
+`a_sink_sequence_number_counts_one_channel_publications` is that case.
+
+The visible consequence of a counter living on the handle is that a writer or a
+sink dropped and replaced restarts its channels' counters. A runtime with a
+session would carry them; this one has no session. Two writer handles publishing
+one signal, or two sinks raising one event, restart it the same way — a misuse
+the loopback does not police, because a signal and an event channel each have
+one provider (ridl §4, §5).
 
 The alternative rejected is a counter per channel in the store, shared by every
-writer handle. It survives a handle being replaced, but it moves the assignment
-off the sender, and on a call — where there is no single sender per channel — it
-is exactly what #308 reports as wrong.
+handle. It survives a handle being replaced, but it moves the assignment off the
+sender, which ridl §3.1 gives to the sender; and on a call it would make the
+number unique per channel, which is the reading ADR-0021 decision 5 replaces.
 
 ## Payload bytes are opaque
 
@@ -245,11 +312,16 @@ checks what it reads, and the provider's `dispatch` checks the argument bytes it
 is handed.
 
 So what happens to an invalid event payload is decided entirely by the generated
-face, not here. Today that is what the round-trip tests pin: argument bytes that
-fail the structure check settle `CallError::Transport(Transport::Corrupt)` on
-the handler side, and a signal payload that fails it reads back as
-`Provenance::Invalid(Cause::Detected(Detection::Corrupt))` on the consumer side.
-Nothing in this crate would change if E14.2 chose differently, because this
+face, not here. On the provider side a round trip over this crate pins it:
+argument bytes that fail the structure check settle
+`CallError::Transport(Transport::Corrupt)`
+(`round_trip_malformed_argument_bytes_settle_transport_corrupt`). On the
+consumer side the face reports
+`Provenance::Invalid(Cause::Detected(Detection::Corrupt))`, which is pinned over
+a hand-written port and as an assertion on the emitted text
+(`ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` and
+`crates/ridl-backend-rust/tests/face_generation.rs`), not by a round trip over
+this crate. Nothing here would change if E14.2 chose differently, because this
 crate never looks.
 
 The alternative rejected is a runtime that verifies. It cannot: a port carries
@@ -265,8 +337,11 @@ and therefore:
 
 - **no unknown ordinal.** Nothing here can tell an ordinal that names no member
   from one that names a member with no value yet, so no port error's `Contract`
-  variant is returned except `FixedReader::read_fixed`'s, where the store knows
-  it was given no value to serve.
+  variant is returned except `FixedReader::read_fixed`'s. That one is not an
+  exception to the rule but a case the rule does not reach: a `fixed` is
+  provisioned into the runtime rather than published through a port, so an
+  ordinal with no provisioned value is a read the store cannot serve at all,
+  where an unpublished signal is one it serves as `Init`.
 - **no unowned member.** `WriteError::NotOwner`, `RaiseError::NotOwner` and
   `ServeError::NotOwner` are never returned: a provider's ownership is a fact of
   the descriptor.
@@ -280,24 +355,37 @@ Three more, for reasons other than the descriptor: nothing detaches, because
 every handle holds the store alive, so `Detached` never appears; nothing is
 bounded, so `Busy` and `TooLarge` never appear outside the one injected failure
 below; and `Attached::catalog` returns the `CatalogRef` the runtime was built
-with, unexamined, because the generated constructor performs no catalog check
-either (driftsys/ridl#448, deferred to E16.2 by decision).
+with, unexamined. ADR-0021 decision 3 places the check of it against an
+interface's own `CATALOG` in the generated face's constructor, once, when the
+face is built; the constructor the Rust backend emits today performs no such
+check, which driftsys/ridl#448 is open on. Either way the check is the face's
+and not the runtime's.
 
 Two behaviours are recorded here because they are decisions rather than
 absences:
 
-- **`Handler::serve` records its members and `next_claim` presents every waiting
-  call regardless.** The generated `dispatch` never calls `serve`
-  (`crates/ridl-backend-rust/src/face.rs`), so a handler that presented only
-  served members would present nothing to it. `HandlerHandle::served` reads the
-  recorded set back, so an application that does call `serve` can see what it
-  asked for. Dated 2026-09-21: this changes when a generated `dispatch` serves,
-  or when an application drives a claim loop itself.
+- **An empty served set is no filter, not no members.** A handler that has
+  served nothing is presented every waiting call; once it has served anything,
+  it is presented only the members it served, and another handler's calls stay
+  waiting for that handler. The cliff is deliberate: the generated `dispatch`
+  never calls `serve` (`crates/ridl-backend-rust/src/face.rs`), so a handler
+  that always filtered would be presented nothing at all by it, and a handler
+  that never filtered would take a second component's calls and settle them
+  `UnknownInteraction` — two components providing different interfaces in one
+  process is the plainest use of an in-process runtime.
+  `two_handlers_each_receive_only_what_they_served` is that case, and
+  `a_handler_that_served_nothing_is_presented_every_call` is the other side of
+  the rule. The alternative rejected is recording the set without acting on it,
+  which loses a call whenever more than one handler exists.
+  `HandlerHandle::served` reads the set back.
 - **`Loopback::fail_next_settle` is the one fault this runtime injects.** The
   generated `dispatch` counts a claim only once the handler has accepted its
   settlement, and in an in-process runtime nothing else can make that path fail,
   so the count would be untestable without it. It is the one place a
-  `SettleError` other than `UnknownClaim` comes from.
+  `SettleError` other than `UnknownClaim` comes from. The claim is looked up
+  before the injected failure is consumed, so arming it and then settling a
+  claim that does not exist answers `UnknownClaim` and leaves the injection
+  armed for the next real settlement.
 
 ## What it replaced
 
@@ -332,8 +420,11 @@ that.
   and reports `Provenance::Invalid(Cause::Detected(Detection::Corrupt))`. The
   face reaches that state by ignoring the `Init` the port reported.
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` pins the
-  current behaviour. This is a face question (E11.13's), recorded here because a
-  runtime now makes it reproducible outside a hand-written stub.
+  current behaviour over a hand-written port; no test pins it over this crate,
+  although this crate produces the same `Init` with no bytes (`Store::read` on a
+  channel with no publication). This is a face question (E11.13's), recorded
+  here because the runtime now makes it reachable from a round trip rather than
+  only from a stub written for the purpose.
 - **The settlement ordering is now observable.** The interaction-face record
   lists the command-settled-before, query-settled-after ordering as pinned only
   by an exact-text assertion, because neither settle nor a provider call in the
