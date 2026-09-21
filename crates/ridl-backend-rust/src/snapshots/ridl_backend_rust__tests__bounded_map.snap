@@ -92,3 +92,342 @@ impl Default for Table {
         Table { meta: Vec::new() }
     }
 }
+/// A zero-copy accessor over FlatBuffers bytes `Table`'s `verify` accepted.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct TableFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> TableFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// Reads `Table`'s `meta` field in place.
+    pub fn meta(&self) -> Vec<(Counter, Speed)> {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        {
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 4usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            let mut __out = Vec::with_capacity(__v.len);
+            for __i in 0..__v.len {
+                let __t = ::ridl_rt::flatbuffers::follow(
+                        self.buf,
+                        __v.element(__i, 4usize),
+                    )
+                    .unwrap_or(0usize);
+                __out
+                    .push((
+                        {
+                            let __p = ::ridl_rt::flatbuffers::field(
+                                    self.buf,
+                                    __t,
+                                    0u16,
+                                    2usize,
+                                )
+                                .unwrap_or(::core::option::Option::None)
+                                .unwrap_or(0usize);
+                            Counter::new(
+                                i64::from(
+                                    ::ridl_rt::flatbuffers::read_u16(self.buf, __p)
+                                        .unwrap_or(0u16),
+                                ),
+                            )
+                        },
+                        {
+                            let __p = ::ridl_rt::flatbuffers::field(
+                                    self.buf,
+                                    __t,
+                                    1u16,
+                                    4usize,
+                                )
+                                .unwrap_or(::core::option::Option::None)
+                                .unwrap_or(0usize);
+                            Speed::new_unchecked(
+                                f64::from(
+                                    ::ridl_rt::flatbuffers::read_f32(self.buf, __p)
+                                        .unwrap_or(0.0f32),
+                                ),
+                            )
+                        },
+                    ));
+            }
+            __out
+        }
+    }
+}
+/// Writes `Table` as a FlatBuffers table and returns its position.
+#[allow(deprecated)]
+fn __ridl_fb_encode_table(
+    value: &Table,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 1usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __c = &value.meta;
+            let mut __offsets: Vec<::ridl_rt::flatbuffers::Pos> = Vec::with_capacity(
+                __c.len(),
+            );
+            for __e in __c.iter() {
+                __offsets
+                    .push(
+                        {
+                            let mut __fields = [::ridl_rt::flatbuffers::TableField {
+                                slot: 0u16,
+                                offset: 4u16,
+                                value: ::ridl_rt::flatbuffers::Field::Bool(false),
+                            }; 2usize];
+                            let mut __n = 0usize;
+                            __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+                                slot: 0u16,
+                                offset: 4u16,
+                                value: {
+                                    let __s = __e.0;
+                                    ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+                                },
+                            };
+                            __n += 1;
+                            __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+                                slot: 1u16,
+                                offset: 8u16,
+                                value: {
+                                    let __s = __e.1;
+                                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                                },
+                            };
+                            __n += 1;
+                            builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+                        }?,
+                    );
+            }
+            builder.push_offset_vector(&__offsets)?
+        }),
+    };
+    __n += 1;
+    builder.push_table(8usize, 4usize, 1u16, &__fields[..__n])
+}
+/// Checks the FlatBuffers table at `table` against `Table`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
+#[allow(deprecated)]
+fn __ridl_fb_verify_table(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            if __v.len > 32usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                        type_name: "Table",
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            for __i in 0..__v.len {
+                let table = ::ridl_rt::flatbuffers::follow(buf, __v.element(__i, 4usize))
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                {
+                    ::core::option::Option::Some(__p) => {
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    }
+                    ::core::option::Option::None => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::MissingRequired,
+                            ),
+                        );
+                    }
+                }
+                match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                {
+                    ::core::option::Option::Some(__p) => {
+                        ::ridl_rt::flatbuffers::read_f32(buf, __p)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    }
+                    ::core::option::Option::None => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::MissingRequired,
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+/// Builds `Table` from the FlatBuffers table at `table`.
+///
+/// It cannot fail. A read that could is discharged with the
+/// neutral value of its own type — zero, the empty string or
+/// collection, the first declared enum variant — and `verify` is
+/// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
+#[allow(deprecated)]
+fn __ridl_fb_decode_table(buf: &[u8], table: usize) -> Table {
+    Table {
+        meta: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            {
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
+                    .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                        len: 0,
+                        first: 0,
+                    });
+                let mut __out = Vec::with_capacity(__v.len);
+                for __i in 0..__v.len {
+                    let __t = ::ridl_rt::flatbuffers::follow(
+                            buf,
+                            __v.element(__i, 4usize),
+                        )
+                        .unwrap_or(0usize);
+                    __out
+                        .push((
+                            {
+                                let __p = ::ridl_rt::flatbuffers::field(
+                                        buf,
+                                        __t,
+                                        0u16,
+                                        2usize,
+                                    )
+                                    .unwrap_or(::core::option::Option::None)
+                                    .unwrap_or(0usize);
+                                Counter::new(
+                                    i64::from(
+                                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                                    ),
+                                )
+                            },
+                            {
+                                let __p = ::ridl_rt::flatbuffers::field(
+                                        buf,
+                                        __t,
+                                        1u16,
+                                        4usize,
+                                    )
+                                    .unwrap_or(::core::option::Option::None)
+                                    .unwrap_or(0usize);
+                                Speed::new_unchecked(
+                                    f64::from(
+                                        ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                                    ),
+                                )
+                            },
+                        ));
+                }
+                __out
+            }
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Table {
+    /// The largest FlatBuffers buffer any legal `Table` encodes to: 1657 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 1657usize;
+    type View<'a> = TableFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_table(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: TableFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_table(buf, table)?;
+        ::core::result::Result::Ok(TableFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_table(__view.buf, __view.table)
+    }
+}

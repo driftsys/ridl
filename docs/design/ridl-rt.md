@@ -33,7 +33,7 @@ Six modules, each public item living in exactly one (ADR-0020 decision 5;
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`                                                           |
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
 | `error`       | `Contract`, `Transport`, `CallError`                                                                                                                                                                                                                                 |
-| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`                                                                                    |
+| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -269,11 +269,23 @@ compiled to `wasm32` (ADR-0020 decisions 6 and 7).
 **Since 2026-09-20 (story E11.7, stage K3) `flatbuffers` is no longer empty.**
 It gates the `flatbuffers` module: the byte-order reads, the vtable walk, and
 the tail builder that a generated `Payload<FlatBuffers>` implementation calls.
-The module decides no layout — which slot a field takes, its offset in the table
-and the table's size are the projection's facts, handed to the builder — which
-is what keeps `Payload::MAX_SIZE` and the encoder from disagreeing. It still
-takes no dependency: the FlatBuffers runtime crate ADR-0020 decision 5 permits
-under this feature is not used. `proto3` and `repr-c` remain empty.
+The module decides no layout: it is handed a slot, an offset and a table size
+and writes the bytes they describe. It still takes no dependency: the
+FlatBuffers runtime crate ADR-0020 decision 5 permits under this feature is not
+used. `proto3` and `repr-c` remain empty.
+
+**Stage K5 added one helper and corrected one sentence.**
+`Builder::push_offset_vector` writes a vector of `uoffset_t`s naming objects
+already written, which is what a vector of strings or of tables needs and what
+K3's own module documentation said would arrive with the emitter. The corrected
+sentence is the one above: K3 wrote that a field's offset in its table and the
+table's size are the projection's facts. They are not. The projection owns the
+slot ids, the union discriminant and the size bound, because two emitters have
+to agree on those; a field's inline offset is observable only by the codec,
+since a `.fbs` schema states none, so `ridl-backend-rust` computes it. The bound
+stays sound whatever order is chosen, because it charges one alignment event per
+vtable slot and one more for the table's `soffset`, which is the worst case any
+order can reach.
 
 Because the workspace resolves this crate with default features, `just test`,
 `just lint` and `just wasm-check` each carry a second invocation with

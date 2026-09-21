@@ -1066,7 +1066,11 @@ fn ridl_rt_version_requirement_matches_the_crate() {
     let minor = segments
         .next()
         .expect("a semver version has a minor segment");
-    let expected = format!("ridl-rt = \"{major}.{minor}\"");
+    // The requirement now carries the `flatbuffers` feature, because
+    // `generate`'s output includes the payload codec (E11.7 stage K5). Only
+    // the version half is what this test guards, so it matches the version
+    // string inside the dependency table rather than the whole line.
+    let expected = format!("ridl-rt = {{ version = \"{major}.{minor}\"");
 
     let out = tempfile::tempdir().expect("temp dir");
     let run = ridlc::run_build(

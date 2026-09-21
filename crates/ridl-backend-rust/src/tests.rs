@@ -2,7 +2,7 @@
 //! Default derivation behaviour (the leaf-recursion rule), and the C header
 //! snapshot.
 
-use super::{Generated, check_flatbuffers_bounds, generate};
+use super::{Ctx, Generated, check_flatbuffers_bound, generate};
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -76,6 +76,29 @@ fn primitive_type(
         declared_init: None,
         init: Some(init),
         width,
+    })
+}
+
+/// A `string`-backed named scalar carrying typl §4.4's default `[0..256]`
+/// length bound.
+///
+/// The checker always materializes that bound (TYPL-103), so IR that reaches
+/// a backend always has one; a hand-built fixture without one has no finite
+/// FlatBuffers bound and the codec refuses it (design note D-7, §4a).
+fn bounded_string_type(init: v2::InitValue) -> v2::decl::Kind {
+    v2::decl::Kind::TypeDef(v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::String as i32,
+            )),
+        }),
+        constraint: Some(v2::Constraint {
+            len_max: Some(256),
+            ..Default::default()
+        }),
+        declared_init: None,
+        init: Some(init),
+        width: None,
     })
 }
 
@@ -1139,12 +1162,8 @@ fn struct_with_optional_and_reserved() {
         speed_decl(),
         public_decl(
             "Label",
-            primitive_type(
-                v2::PrimitiveType::String,
-                // A match-constrained string is not derivable.
-                init_value(false, None),
-                None,
-            ),
+            // A match-constrained string is not derivable.
+            bounded_string_type(init_value(false, None)),
         ),
         public_decl("DriverProfile", v2::decl::Kind::StructDef(struct_def)),
     ];
@@ -1604,9 +1623,23 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
                 v2::field_type::Kind::Map(Box::new(v2::MapType {
                     key: Some(Box::new(v2::FieldType {
                         optional: false,
-                        kind: Some(v2::field_type::Kind::Primitive(
-                            v2::PrimitiveType::String as i32,
-                        )),
+                        // A bare `string` map key is lowered with typl
+                        // §4.4's `[0..256]` default (driftsys/ridl#459), so
+                        // it reaches a backend as an inline scalar.
+                        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                            backing: Some(v2::Backing {
+                                kind: Some(v2::backing::Kind::Primitive(
+                                    v2::PrimitiveType::String as i32,
+                                )),
+                            }),
+                            constraint: Some(v2::Constraint {
+                                len_max: Some(256),
+                                ..Default::default()
+                            }),
+                            declared_init: None,
+                            init: None,
+                            width: None,
+                        }))),
                     })),
                     value: Some(Box::new(v2::FieldType {
                         optional: false,
@@ -1894,10 +1927,7 @@ fn leaf_recursion_denies_default_through_a_composite_field() {
         fixed_layout: false,
     };
     let decls = vec![
-        public_decl(
-            "Vin",
-            primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
-        ),
+        public_decl("Vin", bounded_string_type(init_value(false, None))),
         public_decl("Inner", v2::decl::Kind::StructDef(inner)),
         public_decl("Outer", v2::decl::Kind::StructDef(outer)),
     ];
@@ -4008,10 +4038,7 @@ fn an_induced_tuple_struct_carries_its_derives() {
         }),
         ..named_field("range", 1, "", false, init_value(true, None))
     };
-    let label = public_decl(
-        "Label",
-        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
-    );
+    let label = public_decl("Label", bounded_string_type(init_value(true, Some(""))));
     let bounds = public_decl(
         "Bounds",
         v2::decl::Kind::StructDef(v2::StructDef {
@@ -4138,12 +4165,24 @@ fn the_derive_attribute_sits_under_the_doc_comment() {
 }
 
 // ---------------------------------------------------------------------------
-// The FlatBuffers size bound's refusal (design note D-7, stage K4).
+// The FlatBuffers size bound's refusal (design note D-7, stages K4 and K5).
 //
-// `check_flatbuffers_bounds` is not called from `generate` or `generate_face`
-// yet (see its own doc) — these tests call it directly over hand-built IR,
-// which is what stage K4's own `Done when` asks for.
+// `check_flatbuffers_bound` is called per type by the codec emitter (stage
+// K5). These tests call it directly over hand-built IR, because no typl
+// source reaches an unbounded type — D-7's diagnostic is totality over the
+// IR, not a case a user meets.
 // ---------------------------------------------------------------------------
+
+/// Runs the per-type refusal over every declaration of `package`, which is
+/// what the codec emitter does one declaration at a time, and returns the
+/// first refusal.
+fn check_flatbuffers_bounds(package: &v2::Package) -> Result<(), super::GenerateError> {
+    let ctx = Ctx::new(package);
+    for decl in &package.decls {
+        check_flatbuffers_bound(&ctx, package, decl)?;
+    }
+    Ok(())
+}
 
 /// A struct whose only field is a bounded named scalar sizes to a finite
 /// buffer: this is the shape the corpus proves after driftsys/ridl#459, and
@@ -4363,13 +4402,9 @@ fn flatbuffers_bound_names_the_unbounded_union_arm() {
 /// concern here, so this pins that the walk does not error over the cycle
 /// alone).
 ///
-/// **This does not pin the cycle exemption beside an *unbounded* member** —
-/// a struct carrying both a cyclic field and a bare unbounded `string` field
-/// is not covered by any test in this module. A probe confirms
-/// `unbounded_member` refuses over the unbounded field correctly (the cycle
-/// still answers `false` from `member_resolves_locally` and is skipped, the
-/// unbounded field is still probed on its own), but that path is untested;
-/// see design note §4a.
+/// The cycle exemption beside an *unbounded* member is pinned separately, by
+/// [`flatbuffers_bound_names_the_unbounded_member_beside_a_cycle`] — the
+/// third gap design note §4a left to stage K5.
 #[test]
 fn flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member() {
     let recursive = v2::StructDef {
@@ -4396,6 +4431,570 @@ fn flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member() {
         check_flatbuffers_bounds(&pkg),
         Ok(()),
         "a cycle beside a bounded member must not be refused"
+    );
+}
+
+/// A same-package cycle beside a genuinely unbounded member refuses over the
+/// unbounded one and names it. The cycle is exempted, the sibling is not.
+///
+/// This is the third gap design note §4a carried forward: the path was
+/// believed correct and was covered by no test.
+#[test]
+fn flatbuffers_bound_names_the_unbounded_member_beside_a_cycle() {
+    let recursive = v2::StructDef {
+        members: vec![
+            field_member(named_field("next", 1, "S", false, init_value(true, None))),
+            // A bare `string` at a map key, with no length bound: the one
+            // shape this module already uses for "unbounded".
+            field_member(shaped_field(
+                "byId",
+                2,
+                v2::field_type::Kind::Map(Box::new(v2::MapType {
+                    key: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    })),
+                    value: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::Boolean as i32,
+                        )),
+                    })),
+                    min: 0,
+                    max: 8,
+                })),
+            )),
+        ],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("S", v2::decl::Kind::StructDef(recursive))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the map key has no bound");
+    assert_eq!(
+        err.message, "`veh.common.S.byId` has no finite FlatBuffers bound",
+        "the cycle is exempted and the unbounded sibling is still named"
+    );
+}
+
+/// An anonymous composite that mixes a leaf this backend cannot judge with
+/// one that is genuinely unbounded is refused over the unbounded leaf.
+///
+/// This is the first gap design note §4a carried forward. The exemption used
+/// to answer for the whole member: `member_resolves_locally` reached the
+/// cross-package key, said `false`, and the bare `string` value inside the
+/// same map was never probed. `judge` now descends into an array, a map and a
+/// tuple rather than exempting one whole.
+#[test]
+fn flatbuffers_bound_names_an_unbounded_leaf_beside_an_unjudgeable_one() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "byId",
+            1,
+            v2::field_type::Kind::Map(Box::new(v2::MapType {
+                // Cross-package: this backend resolves none, so it cannot
+                // judge the key.
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                // Bare `string`, no length bound: genuinely unbounded.
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                })),
+                min: 0,
+                max: 8,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg)
+        .expect_err("an unbounded leaf beside an unjudgeable one is still unbounded");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "the member is named over its unbounded leaf, not exempted over its unjudgeable one"
+    );
+}
+
+/// A collection whose **count alone** is unbounded is refused, even when its
+/// element is one this backend cannot judge.
+///
+/// `judge` descends into an anonymous composite, but a collection carries a
+/// bound of its own that its elements have nothing to do with:
+/// `fb_projection::max_size` charges `count × element` and answers `None`
+/// when the total overflows `u64` or exceeds `MAX_ENCODABLE`. A count of
+/// 2^40 is over the ceiling at one byte an element, so it is over it
+/// whatever the element turns out to be. Answering `Unjudgeable` for the
+/// whole position would exempt this silently, while the same field over a
+/// local element is refused.
+#[test]
+fn flatbuffers_bound_names_a_collection_whose_count_alone_is_unbounded() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "readings",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                min: 0,
+                // Over `fb_projection::MAX_ENCODABLE` at one byte an element.
+                max: 1 << 40,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the count alone is over the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.readings` has no finite FlatBuffers bound",
+        "the count is judged even though the element is not"
+    );
+}
+
+/// The same, one level down: an unbounded count inside a collection whose own
+/// count is fine. The whole position is probed once over a `boolean` in the
+/// element's place, so the inner count is charged through the outer one.
+#[test]
+fn flatbuffers_bound_names_a_nested_collection_whose_count_alone_is_unbounded() {
+    let inner = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+            })),
+            min: 0,
+            max: 1 << 40,
+        }))),
+    };
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "grid",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(inner)),
+                min: 0,
+                max: 2,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the inner count is over the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.grid` has no finite FlatBuffers bound",
+        "a nested count is judged the same way"
+    );
+}
+
+/// A map's entry count is judged on the same footing as an array's.
+#[test]
+fn flatbuffers_bound_names_a_map_whose_entry_count_alone_is_unbounded() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "byId",
+            1,
+            v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Key".to_string())),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                min: 0,
+                max: 1 << 40,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the entry count is over the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "a map's entry count is judged even though neither half is"
+    );
+}
+
+/// The control for the three above: a collection with a count that fits and
+/// an element this backend cannot judge stays exempt. Without it, the three
+/// would pass for a `judge` that simply stopped exempting a collection.
+#[test]
+fn flatbuffers_bound_leaves_a_collection_with_a_bounded_count_alone() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "readings",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                min: 0,
+                max: 4,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a count that fits leaves the verdict to the element, which is unjudgeable"
+    );
+}
+
+// The four shapes the review of 2026-09-21's second pass found still exempt:
+// each is unbounded by a product of counts, or by a count over a locally
+// known element, that a probe of one nesting level at a time never charged.
+// `judge` now replaces every unjudgeable leaf by a `boolean` and probes the
+// whole position once, so the product is charged (design note §4b).
+
+/// A `boolean`-typed position.
+fn boolean_type() -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Primitive(
+            v2::PrimitiveType::Boolean as i32,
+        )),
+    }
+}
+
+/// A position typed by a reference this backend does not resolve.
+fn foreign_type(reference: &str) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+    }
+}
+
+fn array_type(element: v2::FieldType, max: u64) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(element)),
+            min: 0,
+            max,
+        }))),
+    }
+}
+
+/// A struct `veh.cruise.Holder` over the given fields, ordinals in order.
+fn holder_over(fields: Vec<(&str, v2::FieldType)>) -> v2::Package {
+    let holder = v2::StructDef {
+        members: fields
+            .into_iter()
+            .enumerate()
+            .map(|(index, (name, ty))| {
+                field_member(v2::Field {
+                    ordinal: index as u32 + 1,
+                    r#type: Some(ty),
+                    name: name.to_string(),
+                    ..Default::default()
+                })
+            })
+            .collect(),
+        fixed_layout: false,
+    };
+    package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    )
+}
+
+/// `[[veh.other.Speed; 0..2^20]; 0..2^20]`: each count fits on its own and
+/// their product does not. Its purely local twin, `[[boolean; 0..2^20];
+/// 0..2^20]`, is refused, and this one must be too.
+#[test]
+fn flatbuffers_bound_names_a_nested_collection_whose_counts_multiply_over_the_ceiling() {
+    let pkg = holder_over(vec![(
+        "grid",
+        array_type(
+            array_type(foreign_type("veh.other.Speed"), 1 << 20),
+            1 << 20,
+        ),
+    )]);
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the product of the counts is over");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.grid` has no finite FlatBuffers bound",
+        "the product of two counts is charged even though the element is not judged"
+    );
+    let local = holder_over(vec![(
+        "grid",
+        array_type(array_type(boolean_type(), 1 << 20), 1 << 20),
+    )]);
+    assert_eq!(
+        check_flatbuffers_bounds(&local).map_err(|err| err.message),
+        Err("`veh.cruise.Holder.grid` has no finite FlatBuffers bound".to_string()),
+        "the local twin is refused the same way"
+    );
+}
+
+/// `map<veh.other.Key, [boolean; 0..2^20]; 0..2^20>`: an unjudgeable key
+/// beside a local value whose count, times the entry count, is over.
+#[test]
+fn flatbuffers_bound_names_a_map_whose_entry_count_times_its_value_count_is_over_the_ceiling() {
+    let pkg = holder_over(vec![(
+        "byId",
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(foreign_type("veh.other.Key"))),
+                value: Some(Box::new(array_type(boolean_type(), 1 << 20))),
+                min: 0,
+                max: 1 << 20,
+            }))),
+        },
+    )]);
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the entry count times the value is over");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "a map's entry count is multiplied into its value's own count"
+    );
+}
+
+/// `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]`: the inner array fits on
+/// its own, and four of them exceed `MAX_ENCODABLE`.
+#[test]
+fn flatbuffers_bound_names_an_array_of_tuples_whose_local_half_is_over_the_ceiling_in_total() {
+    let pkg = holder_over(vec![(
+        "rows",
+        array_type(
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                    fields: vec![
+                        v2::TupleField {
+                            name: "speed".to_string(),
+                            r#type: Some(foreign_type("veh.other.Speed")),
+                        },
+                        v2::TupleField {
+                            name: "flags".to_string(),
+                            r#type: Some(array_type(boolean_type(), 1 << 31)),
+                        },
+                    ],
+                })),
+            },
+            4,
+        ),
+    )]);
+    let err = check_flatbuffers_bounds(&pkg).expect_err("four inner arrays exceed the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.rows` has no finite FlatBuffers bound",
+        "the outer count is charged over the tuple's locally known half"
+    );
+}
+
+/// Two local `[boolean; 0..2^31]` members beside one foreign field: each
+/// member is bounded on its own, the two together are over the ceiling, and
+/// the foreign field must not shield that sum. Without it the pair is
+/// refused as an aggregate cause, and with it the pair is refused the same
+/// way.
+#[test]
+fn flatbuffers_bound_names_the_declaration_when_the_aggregate_is_over_beside_a_foreign_member() {
+    let aggregate = "`veh.cruise.Holder` has no finite FlatBuffers bound: every member is bounded \
+                     on its own and the total is not";
+    let with_foreign = holder_over(vec![
+        ("a", array_type(boolean_type(), 1 << 31)),
+        ("b", array_type(boolean_type(), 1 << 31)),
+        ("speed", foreign_type("veh.other.Speed")),
+    ]);
+    assert_eq!(
+        check_flatbuffers_bounds(&with_foreign).map_err(|err| err.message),
+        Err(aggregate.to_string()),
+        "a foreign member does not shield an aggregate over the ceiling"
+    );
+    let without = holder_over(vec![
+        ("a", array_type(boolean_type(), 1 << 31)),
+        ("b", array_type(boolean_type(), 1 << 31)),
+    ]);
+    assert_eq!(
+        check_flatbuffers_bounds(&without).map_err(|err| err.message),
+        Err(aggregate.to_string()),
+        "the same pair without the foreign member is the aggregate case"
+    );
+}
+
+/// The control for the four above, in the shape of the first: a nested
+/// collection whose counts multiply to something that fits, over the same
+/// unjudgeable element, stays exempt. Without it the four would pass for a
+/// `judge` that refused every nested collection over a foreign leaf.
+#[test]
+fn flatbuffers_bound_leaves_a_nested_collection_whose_counts_multiply_under_the_ceiling_alone() {
+    let pkg = holder_over(vec![(
+        "grid",
+        array_type(
+            array_type(foreign_type("veh.other.Speed"), 1 << 10),
+            1 << 10,
+        ),
+    )]);
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a product of counts that fits at one byte an element leaves the element unjudged"
+    );
+}
+
+/// `[veh.other.Speed; 0..2^31]` stays exempt, and that is an honest limit
+/// rather than a hole: at one byte an element the count fits, and this
+/// backend cannot learn the foreign element's width to say more. It is what
+/// the stand-in being a lower bound means — it can prove a position
+/// unbounded and never prove one bounded.
+#[test]
+fn flatbuffers_bound_leaves_a_large_count_over_a_foreign_element_alone_when_one_byte_each_fits() {
+    let pkg = holder_over(vec![(
+        "readings",
+        array_type(foreign_type("veh.other.Speed"), 1 << 31),
+    )]);
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a count that fits at one byte an element says nothing about the real element"
+    );
+}
+
+/// The same shape with **no** unbounded leaf beside the unjudgeable one is
+/// still exempt. Without this, the test above would pass for a `judge` that
+/// simply stopped exempting anything.
+#[test]
+fn flatbuffers_bound_leaves_an_unjudgeable_leaf_alone_when_nothing_beside_it_is_unbounded() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "byId",
+            1,
+            v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::Boolean as i32,
+                    )),
+                })),
+                min: 0,
+                max: 8,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a cross-package leaf with nothing unbounded beside it is exempt"
+    );
+}
+
+/// Two members on one ordinal is a layout error over the whole declaration,
+/// and it is reported as one: every member probes as bounded, so an
+/// attribution that only looked at members would call it an aggregate
+/// overflow. The second gap design note §4a carried forward.
+#[test]
+fn flatbuffers_bound_reports_a_layout_error_over_the_declaration() {
+    let holder = v2::StructDef {
+        members: vec![
+            field_member(named_field("a", 1, "Speed", false, init_value(true, None))),
+            field_member(named_field("b", 1, "Speed", false, init_value(true, None))),
+        ],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![
+            speed_decl(),
+            public_decl("Holder", v2::decl::Kind::StructDef(holder)),
+        ],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("two members on one ordinal");
+    assert!(
+        err.message
+            .starts_with("`veh.common.Holder` has no FlatBuffers table layout:"),
+        "a layout error is told apart from an aggregate overflow, got: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("two struct members with ordinal 1"),
+        "the projection's own message is carried through, got: {}",
+        err.message
+    );
+}
+
+/// A member with no type at all is named as such rather than folded into the
+/// aggregate case. The second gap design note §4a carried forward, second
+/// cause.
+#[test]
+fn flatbuffers_bound_names_a_member_with_no_type() {
+    let holder = v2::StructDef {
+        members: vec![field_member(v2::Field {
+            r#type: None,
+            ..named_field("mystery", 1, "Speed", false, init_value(true, None))
+        })],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("a member with no type has no bound");
+    assert_eq!(
+        err.message,
+        "`veh.common.Holder.mystery` carries no type, so `veh.common.Holder` has no FlatBuffers \
+         bound",
+        "an untyped member is named, and told apart from an aggregate overflow"
+    );
+}
+
+/// An `Unspecified` field primitive is exempted rather than refused, on the
+/// same footing as a `Stream`: both emit `()`, both are charged nothing, and
+/// `derives` lists the two side by side among its refusing positions.
+#[test]
+fn flatbuffers_bound_leaves_an_unspecified_primitive_alone() {
+    let hole = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "nothing",
+            1,
+            v2::field_type::Kind::Primitive(v2::PrimitiveType::Unspecified as i32),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("Hole", v2::decl::Kind::StructDef(hole))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "an unspecified field primitive must not be refused"
     );
 }
 
@@ -4462,7 +5061,9 @@ fn flatbuffers_bound_names_the_declaration_when_the_cause_is_aggregate() {
     );
     let err = check_flatbuffers_bounds(&pkg).expect_err("the summed size exceeds MAX_ENCODABLE");
     assert_eq!(
-        err.message, "`veh.cruise.Holder` has no finite FlatBuffers bound",
+        err.message,
+        "`veh.cruise.Holder` has no finite FlatBuffers bound: every member is bounded on its own \
+         and the total is not",
         "an aggregate cause must name the declaration alone, with no member"
     );
 }

@@ -126,3 +126,17 @@ impl Default for ClusterReading {
         }
     }
 }
+/// `ClusterReading` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `speed` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_CLUSTER_READING: () = ();

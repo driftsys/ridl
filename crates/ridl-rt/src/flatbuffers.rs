@@ -17,15 +17,20 @@
 //! not trust. Writing: [`Builder`], which builds a buffer from the end of a
 //! caller's slice downwards.
 //!
-//! **This module decides no layout.** Which slot a field takes, what its
-//! offset inside the table is, and how large the table is are facts of the
-//! projection, computed once and read by both the size bound and the encoder.
-//! [`Builder::table`] is handed those facts and writes the bytes they
-//! describe; it does not choose them. That is what keeps
-//! `Payload::MAX_SIZE` and the encoder from disagreeing.
+//! **This module decides no layout.** [`Builder::push_table`] is handed a
+//! slot, an offset and a table size and writes the bytes they describe; it
+//! does not choose them. Which slot a field takes is a fact of the
+//! projection, which the size bound and the two emitters all read. A field's
+//! offset inside its table and the table's size are the codec emitter's,
+//! because no other emitter can observe them — a `.fbs` schema states no
+//! offsets — and the bound charges enough alignment slack per slot to hold
+//! whatever order that emitter writes a table's fields in (E11.7 stage K5;
+//! this paragraph corrected what stage K3 wrote here).
 //!
-//! Helpers for a vector of tables and for a union arrive with the emitter that
-//! needs them, whose shape the projection settles.
+//! [`Builder::push_offset_vector`] arrived with that emitter, for a vector of
+//! strings and of tables. A helper for a union has not been needed: a union's
+//! wrapper table and a non-table arm's box are both ordinary tables
+//! (ADR-0019 decisions 1 and 2), and [`Builder::push_table`] writes them.
 //!
 //! # Alignment, and why reads are safe at any alignment
 //!
@@ -440,6 +445,43 @@ impl<'a> Builder<'a> {
         let (position, bytes) = self.reserve_skewed(size, align, skew)?;
         bytes[..OFFSET_SIZE].copy_from_slice(&(count as u32).to_le_bytes());
         bytes[OFFSET_SIZE..].copy_from_slice(elements);
+        Ok(position)
+    }
+
+    /// Writes a vector of `uoffset_t`s naming objects already written, in
+    /// element order.
+    ///
+    /// A vector of strings, of tables, or of anything else the projection
+    /// places out of line is written this way: the elements are pushed first,
+    /// and their positions are handed over here. Each offset is relative to
+    /// its own position in the vector, which is why the caller cannot compute
+    /// them itself — a [`Pos`] carries no arithmetic outside this module.
+    pub fn push_offset_vector(&mut self, targets: &[Pos]) -> Result<Pos, EncodeError> {
+        let capacity = self.out.len();
+        let count = targets.len();
+        let size = match count
+            .checked_add(1)
+            .and_then(|slots| slots.checked_mul(OFFSET_SIZE))
+        {
+            Some(size) => size,
+            None => {
+                return Err(EncodeError::Capacity {
+                    needed: usize::MAX,
+                    available: capacity,
+                })
+            }
+        };
+        let (position, bytes) = self.reserve(size, OFFSET_SIZE)?;
+        bytes[..OFFSET_SIZE].copy_from_slice(&(count as u32).to_le_bytes());
+        for (index, target) in targets.iter().enumerate() {
+            let at = OFFSET_SIZE * (index + 1);
+            // Element `index` sits `at` bytes into the object, and so that
+            // many bytes closer to the end of the buffer than the object's
+            // own position.
+            let here = Pos(position.0 - at);
+            let delta = Builder::delta(here, *target) as u32;
+            bytes[at..at + OFFSET_SIZE].copy_from_slice(&delta.to_le_bytes());
+        }
         Ok(position)
     }
 
