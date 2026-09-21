@@ -799,6 +799,65 @@ fn main() {{
     rustc::run_program("fb_conformance_empty_box", &program(&main));
 }
 
+/// **An empty string box survives a foreign round trip**, which bounds how far
+/// the case above reaches.
+///
+/// A FlatBuffers default applies to a scalar and an enum, not to a string or a
+/// bytes field: an offset is present or absent, and a conforming writer writes
+/// an empty string as a present zero-length one. So the root-level refusal
+/// above does not swallow an empty `Label`, and this is the case that says so —
+/// the review of 2026-09-21 found the records claiming otherwise.
+///
+/// What a non-optional string box does refuse is an **absent** offset, which is
+/// a null string; typl gives a non-optional field no way to state one.
+#[test]
+fn an_empty_string_box_round_trips_through_planus() {
+    let mut builder = planus::Builder::new();
+    let bytes = builder
+        .finish(
+            fb::LabelBox {
+                value: Some(String::new()),
+            },
+            None,
+        )
+        .to_vec();
+
+    // The slot is present, which is what distinguishes this case from
+    // `a_box_root_with_no_value_slot_is_refused`: planus elides a default, and
+    // a string field has none to elide.
+    assert_ne!(
+        voffset(&bytes, 0),
+        0,
+        "a conforming writer writes an empty string as a present slot, or this \
+         case is testing the absent one instead"
+    );
+
+    let hex = to_hex(&bytes);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    let proof: Ref<'_, Label, FlatBuffers> =
+        Ref::verify(&bytes).expect("an empty string box verifies");
+    assert_eq!(
+        proof.decode(),
+        Label::new_unchecked(String::new()),
+        "an empty string is a value, not an absent field"
+    );
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_empty_string_box", &program(&main));
+}
+
 /// The generated codec checks for `wasm32-unknown-unknown`.
 ///
 /// ADR-0020 decision 2 makes the generated Rust compiled to `wasm32` the

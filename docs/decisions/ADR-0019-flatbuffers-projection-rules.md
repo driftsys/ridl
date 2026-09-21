@@ -324,10 +324,12 @@ refused.
   that costs one field, which
   [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md) records as
   driftsys/ridl#472; at a **root** it costs the whole payload, because the
-  payload is that one field. A box carrying a scalar zero, an enum at its zero
-  member or an empty string, written by another implementation, is a buffer this
-  projection's codec refuses. Deciding otherwise is #472's, not decision 8's: it
-  is the same question, met at a position where it is harder to ignore.
+  payload is that one field. A box carrying a scalar zero, or an enum at a zero
+  member its enum declares, written by another implementation, is a buffer this
+  projection's codec refuses. It reaches only the kinds a FlatBuffers default
+  applies to: a string or a bytes box is a present offset whatever its length,
+  so an empty one round-trips. Deciding otherwise is #472's, not decision 8's:
+  it is the same question, met at a position where it is harder to ignore.
 - **Negative — a map lookup is linear.** With no `(key)` there is no generated
   `LookupByKey` and no binary search. The Open item names the story that may
   restore it.

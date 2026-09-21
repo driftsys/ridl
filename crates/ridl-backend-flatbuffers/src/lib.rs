@@ -1055,7 +1055,11 @@ fn emit_induced_tables(
 ///
 /// The slot is read from the projection's own layout rather than written as a
 /// number here, so the table this emits and the table
-/// [`projection::max_size`] charges cannot be two different tables. Nothing
+/// [`projection::max_size`] charges cannot be two different tables. One layout
+/// serves both rules because decision 8 adopted decision 2's idiom:
+/// `projection::root_box_table` delegates to `union_arm_box_table`, and a unit
+/// test in `ridl-ir` pins the two equal, so reading the arm's layout here is
+/// reading the root's as well. Nothing
 /// here can itself induce a further table: the three kinds a box wraps — a
 /// named scalar, an enum, an enum set — each resolve to a scalar or an enum
 /// reference, never a container, so `induced` is not threaded through.

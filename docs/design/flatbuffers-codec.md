@@ -270,7 +270,7 @@ follows the wrong `.fbs`. What this suite proves is that the codec's bytes are
 FlatBuffers and agree with the emitted schema; agreement between the emitted
 schema and ADR-0019 rests on the schema backend's own snapshots.
 
-Seven cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
+Eight cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 
 1. bytes this codec writes are read by planus and compare equal field by field;
 2. bytes planus writes are accepted by `verify` and decode to the same value;
@@ -283,13 +283,17 @@ Seven cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 6. a **scalar root** — a named scalar in its box table (ADR-0019 decision 8) —
    is read by planus in the one direction and written by planus in the other;
 7. a box root **with no value slot** — which is what planus writes for a box at
-   its default — is refused with `MissingRequired`.
+   its default — is refused with `MissingRequired`;
+8. an **empty string box**, which a conforming writer writes as a present
+   zero-length slot rather than eliding, round-trips.
 
-Cases 4 and 5 are the two halves of the one disagreement below, and case 7 is
-that same disagreement met at a root. Case 7 exists because the rule was
-otherwise pinned only as generated text: deleting the branch that enforces it
-turned fourteen snapshots red and left every round trip and every other
-conformance case passing, since nothing built such a buffer.
+Cases 4 and 5 are the two halves of the one disagreement below, case 7 is that
+same disagreement met at a root, and case 8 is the bound on how far it reaches.
+Case 7 exists because the rule was otherwise pinned only as generated text:
+deleting the branch that enforces it turned every snapshot carrying a box root
+red — fourteen under `--lib` and six more across `ridlc` — and left every round
+trip and every other conformance case passing, since nothing built such a
+buffer.
 
 Two mutations were applied and run, and each is what says the suite is not
 decorative. Shifting the union discriminant by one in `codec.rs` leaves every
@@ -322,13 +326,23 @@ declared default. That meets this codec's presence rules from both sides:
 
 **Decision 8 gives this a root-level reach.** A box's `value` is a field like
 any other, so the non-optional half applies to it: a box carrying a scalar zero,
-an enum at its zero member or an empty string, written by a conforming
+or an enum at a zero member its enum declares, written by a conforming
 implementation, is a buffer this codec refuses — and at a root that is not one
 field of a payload, it is the whole payload. Measured by
-`a_box_root_with_no_value_slot_is_refused`. Relaxing it is #472's question, not
-decision 8's; note that accepting an absent slot without also changing `decode`
-would fabricate a value out of the buffer header rather than return the
-FlatBuffers default, so the two move together or not at all.
+`a_box_root_with_no_value_slot_is_refused`.
+
+**It reaches only the kinds a FlatBuffers default applies to.** A string and a
+bytes field have no default: an offset is present or absent, and a conforming
+writer writes an empty string as a present zero-length one, so an empty `Label`
+survives a foreign round trip. Measured rather than reasoned, by
+`an_empty_string_box_round_trips_through_planus`: planus writing
+`LabelBox { value: Some("") }` produces a present slot, and this codec verifies
+it and decodes `Label("")`. What a non-optional string box refuses is an
+**absent** offset, which is a null string, and typl gives a non-optional field
+no way to state one. Relaxing it is #472's question, not decision 8's; note that
+accepting an absent slot without also changing `decode` would fabricate a value
+out of the buffer header rather than return the FlatBuffers default, so the two
+move together or not at all.
 
 Both are decided rather than accidental — the presence rules above state them —
 but together they mean interoperation with a foreign writer is not unconditional
