@@ -8,15 +8,21 @@
 > alternative each one rejected, and the measurement each stage made, including
 > the ones that corrected an earlier stage.
 >
-> **One decision here is not built: D-11**, the interaction face moving off its
-> `ReprC` placeholder. §4d records why stage K7 could not execute it, and the
-> blocker is **driftsys/ridl#470**, a projection decision nobody has taken: a
-> FlatBuffers root is a table, and the projection mints one only for a `struct`
-> or a `union`, so a named-scalar or enum payload has no `Payload<FlatBuffers>`
-> to name. Whoever takes that issue reads the live statement in the design
-> record's "What is not built" first, then §4d and D-11 here for the detail.
-> Three narrower items are tracked as driftsys/ridl#467, driftsys/ridl#469 and
-> driftsys/ridl#472.
+> **Every decision here is built, as of 2026-09-21.** The last was **D-11**, the
+> interaction face moving off its `ReprC` placeholder. §4d records why stage K7
+> could not execute it — a FlatBuffers root is a table, and the projection then
+> minted one only for a `struct` or a `union`, so a named-scalar or enum payload
+> had no `Payload<FlatBuffers>` to name. That blocker was **driftsys/ridl#470**,
+> taken as [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md)
+> decision 8 in stage K9a (driftsys/ridl#474), and D-11 landed over it in stage
+> K9b (driftsys/ridl#475). The design record's "What is not built" section,
+> which an earlier version of this banner pointed at, is gone with it; the live
+> statement of the codec is
+> [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md) and of the
+> face [`../design/interaction-face.md`](../design/interaction-face.md). Read
+> §4d and D-11 here for the detail of how it went. Four narrower items stay
+> open: driftsys/ridl#467, driftsys/ridl#469, driftsys/ridl#472 and
+> driftsys/ridl#476.
 >
 > **§4e is stage K8's own section** and is where two texts this note carries are
 > corrected: D-12's `wasm32` bullet and the plan's Task 7 `Done when` both say

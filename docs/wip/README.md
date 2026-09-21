@@ -148,22 +148,13 @@ design note, from the archive.
   decision with a risk the file names, not an evidence-driven one. It carries
   the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
   learn. Archive it with the lanes plan.
-- **2026-09-20-lane-k-driver.md** — the driver prompt for lane K, the
-  FlatBuffers payload codec (story E11.7). Its stage K0 filed the two rows the
-  codec work surfaced, E11.14 (the face and the codec reach `ridl build`) and
-  E11.15 (`ridl-loopback`, split out of E11.9 so it does not wait on the frame
-  specification). Stage K1 wrote the codec's design note, which takes twelve
-  named decisions, and then its plan; the stages after K1 come from that plan.
-  **Stages K1 to K8 have run and the lane is not closed**: every decision is
-  built except D-11, the interaction face moving off its `ReprC` placeholder,
-  which is blocked on driftsys/ridl#470. That is why this document is still here
-  while its note and plan are archived — a stage, K9, is left to run. The codec
-  as built is
-  [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md).
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
   record. Roadmap: Epic 10.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
-[`../archive/README.md`](../archive/README.md).
+[`../archive/README.md`](../archive/README.md). So is
+2026-09-20-lane-k-driver.md, the lane K driver, which was the one document here
+held back while its own note and plan were archived, because a stage was left to
+run; lane K closed on 2026-09-21 and it went with them.
