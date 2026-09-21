@@ -157,4 +157,4 @@ ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is
 2026-09-20-lane-k-driver.md, the lane K driver, which was the one document here
 held back while its own note and plan were archived, because a stage was left to
-run; lane K closed on 2026-09-21 and it went with them.
+run; lane K closed on 2026-09-21 and it was archived with them.
