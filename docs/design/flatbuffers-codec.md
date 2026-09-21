@@ -157,14 +157,25 @@ reach.** It walks the structure, and beside it checks: an enum and an enum-set
 discriminant, through the `TryFrom` the value-object emission already provides;
 a collection's declared element count; and a named scalar's own range, length
 and pattern, through a `fn check(value: &T)` emitted beside `new` in every
-constrained named scalar's `impl` block. `check` carries no visibility modifier:
-every caller is a function generated into the same module, or a child `pub mod`
-of it, and neither needs it more visible. The named-scalar check hangs off the
-one `Codec::wire` site every position reaches, so it covers every position the
-projection admits a named scalar at — an inline field, a string's or a byte
-sequence's bytes, an array element, a map key, a map value, a tuple field, a
-nested table, a union's table arm and its boxed arm, and any of those behind an
-optional.
+constrained named scalar's `impl` block.
+
+**`check` is `pub(crate)` since E11.14 (2026-09-21); whether it becomes `pub` is
+still Epic 10's call.** It carried no visibility modifier while every caller was
+a function generated into the same module, or a child `pub mod` of it. That
+stopped being true when E11.14 closed driftsys/ridl#467: the codec of one
+package now resolves a reference into another package of the same build and
+calls that type's `check` through the emitted module tree, where a private item
+is unreachable. The emitted crate is one crate per build, so `pub(crate)`
+reaches every generated caller and adds nothing to the crate's public surface —
+which leaves open item 2 of the 2026-09-20 design note exactly where it was:
+making `check` `pub`, for a consumer validating a value it did not build, is a
+surface commitment Epic 10 takes, and `pub(crate)` does not take it. Every
+`__ridl_fb_*` function moved from a bare `fn` to `pub(crate)` in the same change
+and for the same reason. The named-scalar check hangs off the one `Codec::wire`
+site every position reaches, so it covers every position the projection admits a
+named scalar at — an inline field, a string's or a byte sequence's bytes, an
+array element, a map key, a map value, a tuple field, a nested table, a union's
+table arm and its boxed arm, and any of those behind an optional.
 
 What `verify` does **not** check is named in its own doc comment and tracked as
 **driftsys/ridl#469**: an anonymous inline constraint, which carries no named
@@ -409,19 +420,22 @@ the test already performs over the emitter's live output.
 
 | Gap                                                                                                                                                                 | Issue             |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| A type reaching a cross-package reference carries no codec; the emitted source says so per type                                                                     | driftsys/ridl#467 |
 | An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify`                                                                        | driftsys/ridl#469 |
 | A default and presence: a conforming writer's omitted non-optional default is refused, and a present default-valued optional scalar is lost by a foreign round trip | driftsys/ridl#472 |
 | A union-arm retirement would shift wire discriminants silently                                                                                                      | driftsys/ridl#302 |
 
-driftsys/ridl#467 is the widest of these: ten of the corpus's fifteen payload
-types are withheld a codec, every type touching the prelude or an import. Each
-withheld type gets a `const __RIDL_FB_NO_CODEC_<NAME>: () = ()` in the emitted
-source, carrying a doc comment that names the type, the member that could not be
-judged, the reason and the issue, so a consumer meets a reason rather than an
-unsatisfied trait bound far from the cause. The fix it states: hand `generate`
-the other packages, which `fb_projection::Packages` already takes as `others`,
-in E11.14 or in the plugin system's `CodegenRequest`.
+**driftsys/ridl#467 is closed by E11.14 (2026-09-21).** It was the widest of
+these: ten of the corpus's fifteen payload types were withheld a codec, every
+type touching the prelude or an import, each getting a
+`const __RIDL_FB_NO_CODEC_<NAME>: () = ()` in the emitted source whose doc
+comment named the type, the member that could not be judged, the reason and the
+issue. The fix is the one the gap stated — `generate` is handed the other
+packages of the build, which `fb_projection::Packages` already took as `others`
+— plus the naming half it did not: a reference the codec resolves in another
+package is written as a path through the module tree `ridlc` writes, rather than
+as a bare identifier, and the items such a path names are `pub(crate)`. The
+withheld note remains for the causes that are not a cross-package reference,
+which is what it now says.
 
 ## Trace
 

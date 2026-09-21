@@ -1200,7 +1200,18 @@ fn write_emits(
 ) -> std::io::Result<()> {
     let need_codegen = emits.iter().any(|emit| matches!(emit, Emit::Rust));
     let generated = if need_codegen {
-        match ridl_backend_rust::generate(ir) {
+        // E11.14 decision 1: the CLI calls the companion, not `generate`, so a
+        // built crate carries the descriptors and the interaction face beside
+        // its domain types and codec. `others` is every other package of the
+        // build, which is what lets the codec size and encode a cross-package
+        // reference (decision 4, driftsys/ridl#467). An interface the face
+        // cannot carry is skipped with a note rather than failing the build
+        // (decision 2).
+        match ridl_backend_rust::generate_pipeline(
+            ir,
+            ridl_backend_rust::WireEncoding::default(),
+            others,
+        ) {
             Ok(generated) => Some(generated),
             Err(err) => {
                 diagnostics.push(error_diagnostic(

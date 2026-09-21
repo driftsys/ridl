@@ -48,6 +48,21 @@ pub(crate) fn interface_items(
     Ok(items)
 }
 
+/// The descriptor items of one interface, for the pipeline's per-interface
+/// walk (E11.14 decision 2). [`interface_items`] is the whole-package walk;
+/// this is one shape of it, so a caller that means to skip a refusing
+/// interface can catch the refusal at the interface it belongs to.
+pub(crate) fn one_interface_items(
+    ctx: &Ctx,
+    package_name: &str,
+    iface_name: &str,
+    interface: &v2::Interface,
+) -> Result<Vec<TokenStream>, GenerateError> {
+    let mut items = Vec::new();
+    one_interface(ctx, package_name, iface_name, interface, &mut items)?;
+    Ok(items)
+}
+
 fn one_interface(
     ctx: &Ctx,
     package_name: &str,

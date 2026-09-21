@@ -2,7 +2,7 @@
 //! Default derivation behaviour (the leaf-recursion rule), and the C header
 //! snapshot.
 
-use super::{Ctx, Generated, check_flatbuffers_bound, generate};
+use super::{Ctx, Generated, check_flatbuffers_bound, generate, generate_face};
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -334,6 +334,69 @@ fn counter_decl() -> v2::Decl {
             Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
         ),
     )
+}
+
+// ---------------------------------------------------------------------------
+// The `Wire` alias and a declaration that would collide with it (#476).
+// ---------------------------------------------------------------------------
+
+/// A declaration named `Wire`, the collision #476 reports.
+///
+/// The **width** is load-bearing, not a range: a named scalar with no declared
+/// width has no finite FlatBuffers bound, and both entry points then refuse it
+/// for that reason (K4's D-7 refusal) rather than for the collision — which
+/// would make the assertion below pass vacuously. This carries `Counter`'s
+/// width for that reason.
+fn wire_named_decl() -> v2::Decl {
+    public_decl(
+        "Wire",
+        primitive_type(
+            v2::PrimitiveType::Integer,
+            init_value(true, Some("0")),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
+        ),
+    )
+}
+
+/// A package declaring `Wire` is refused by the face entry point rather than
+/// emitting two items of that name.
+///
+/// `generate_face` emits `pub type Wire` at package scope, and a typl
+/// declaration named `Wire` emits `pub struct Wire` at the same scope; rustc
+/// reports E0428 on the pair. The refusal names the declaration so the cause
+/// is the package's, not a line of generated source the author never wrote.
+/// E11.14 decision 5: the collision is in the package rather than in one
+/// interface, so it is a build error and not decision 2's per-interface skip.
+#[test]
+fn a_declaration_named_wire_is_refused_by_the_face() {
+    let error = generate_face(&package("veh.common", vec![wire_named_decl()]))
+        .expect_err("a declaration named `Wire` collides with the encoding alias");
+    // Asserting only that the message names `Wire` would be satisfied by an
+    // unrelated refusal that happens to carry the declaration's path — an
+    // unconstrained `integer` has no finite FlatBuffers bound and is refused
+    // by both entry points, which is why this fixture carries a range.
+    assert!(
+        error.message.contains("collide") || error.message.contains("alias"),
+        "the refusal must state the collision, got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("Wire"),
+        "the refusal must name the declaration, got: {}",
+        error.message
+    );
+}
+
+/// The plain entry point is unaffected: it emits no alias, so `Wire` is an
+/// ordinary declaration there. This is what keeps decision 5 scoped to the
+/// face rather than narrowing what `generate` accepts.
+#[test]
+fn a_declaration_named_wire_generates_without_a_face() {
+    let source = generate(&package("veh.common", vec![wire_named_decl()]))
+        .expect("the plain entry point emits no alias")
+        .rust_source;
+    assert!(source.contains("pub struct Wire("), "got:\n{source}");
+    assert!(!source.contains("pub type Wire"), "got:\n{source}");
 }
 
 // ---------------------------------------------------------------------------

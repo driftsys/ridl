@@ -17,11 +17,18 @@ impl Speed {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -89,7 +96,7 @@ impl<'a> SpeedFbView<'a> {
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_speed(
+pub(crate) fn __ridl_fb_encode_speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -111,7 +118,7 @@ fn __ridl_fb_encode_speed(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_speed(
+pub(crate) fn __ridl_fb_verify_speed(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -135,7 +142,7 @@ fn __ridl_fb_verify_speed(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
+pub(crate) fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)

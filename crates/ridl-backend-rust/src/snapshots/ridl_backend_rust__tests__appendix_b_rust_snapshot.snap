@@ -17,11 +17,18 @@ impl Speed {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -80,11 +87,18 @@ impl Temperature {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < -40.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -143,11 +157,18 @@ impl RPM {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -206,11 +227,18 @@ impl Ratio {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -295,11 +323,18 @@ impl Gain {
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
     /// Checks `value` against this type's typl constraints, without
-    /// constructing it. Not `pub`: every caller outside `new` is a
-    /// function generated into this same module, which can see a
-    /// private item here the way any other item of the module can.
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
-    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+    pub(crate) fn check(
+        value: &f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
@@ -623,7 +658,7 @@ impl<'a> SpeedFbView<'a> {
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_speed(
+pub(crate) fn __ridl_fb_encode_speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -645,7 +680,7 @@ fn __ridl_fb_encode_speed(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_speed(
+pub(crate) fn __ridl_fb_verify_speed(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -669,7 +704,7 @@ fn __ridl_fb_verify_speed(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
+pub(crate) fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -760,7 +795,7 @@ impl<'a> TemperatureFbView<'a> {
 }
 /// Writes `Temperature` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_temperature(
+pub(crate) fn __ridl_fb_encode_temperature(
     value: &Temperature,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -782,7 +817,7 @@ fn __ridl_fb_encode_temperature(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_temperature(
+pub(crate) fn __ridl_fb_verify_temperature(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -806,7 +841,7 @@ fn __ridl_fb_verify_temperature(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_temperature(buf: &[u8], table: usize) -> Temperature {
+pub(crate) fn __ridl_fb_decode_temperature(buf: &[u8], table: usize) -> Temperature {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -900,7 +935,7 @@ impl<'a> RPMFbView<'a> {
 }
 /// Writes `RPM` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_rpm(
+pub(crate) fn __ridl_fb_encode_rpm(
     value: &RPM,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -922,7 +957,7 @@ fn __ridl_fb_encode_rpm(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_rpm(
+pub(crate) fn __ridl_fb_verify_rpm(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -946,7 +981,7 @@ fn __ridl_fb_verify_rpm(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_rpm(buf: &[u8], table: usize) -> RPM {
+pub(crate) fn __ridl_fb_decode_rpm(buf: &[u8], table: usize) -> RPM {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -1037,7 +1072,7 @@ impl<'a> RatioFbView<'a> {
 }
 /// Writes `Ratio` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_ratio(
+pub(crate) fn __ridl_fb_encode_ratio(
     value: &Ratio,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1059,7 +1094,7 @@ fn __ridl_fb_encode_ratio(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_ratio(
+pub(crate) fn __ridl_fb_verify_ratio(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1083,7 +1118,7 @@ fn __ridl_fb_verify_ratio(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_ratio(buf: &[u8], table: usize) -> Ratio {
+pub(crate) fn __ridl_fb_decode_ratio(buf: &[u8], table: usize) -> Ratio {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -1174,7 +1209,7 @@ impl<'a> CounterFbView<'a> {
 }
 /// Writes `Counter` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_counter(
+pub(crate) fn __ridl_fb_encode_counter(
     value: &Counter,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1196,7 +1231,7 @@ fn __ridl_fb_encode_counter(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_counter(
+pub(crate) fn __ridl_fb_verify_counter(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1218,7 +1253,7 @@ fn __ridl_fb_verify_counter(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_counter(buf: &[u8], table: usize) -> Counter {
+pub(crate) fn __ridl_fb_decode_counter(buf: &[u8], table: usize) -> Counter {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
             .unwrap_or(::core::option::Option::None)
@@ -1309,7 +1344,7 @@ impl<'a> GainFbView<'a> {
 }
 /// Writes `Gain` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_gain(
+pub(crate) fn __ridl_fb_encode_gain(
     value: &Gain,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1331,7 +1366,7 @@ fn __ridl_fb_encode_gain(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_gain(
+pub(crate) fn __ridl_fb_verify_gain(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1355,7 +1390,7 @@ fn __ridl_fb_verify_gain(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_gain(buf: &[u8], table: usize) -> Gain {
+pub(crate) fn __ridl_fb_decode_gain(buf: &[u8], table: usize) -> Gain {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
@@ -1446,7 +1481,7 @@ impl<'a> GearPositionFbView<'a> {
 }
 /// Writes `GearPosition` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_gear_position(
+pub(crate) fn __ridl_fb_encode_gear_position(
     value: &GearPosition,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1468,7 +1503,7 @@ fn __ridl_fb_encode_gear_position(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_gear_position(
+pub(crate) fn __ridl_fb_verify_gear_position(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1492,7 +1527,7 @@ fn __ridl_fb_verify_gear_position(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPosition {
+pub(crate) fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPosition {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
             .unwrap_or(::core::option::Option::None)
@@ -1587,7 +1622,7 @@ impl<'a> WarningFbView<'a> {
 }
 /// Writes `Warning` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_warning(
+pub(crate) fn __ridl_fb_encode_warning(
     value: &Warning,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1609,7 +1644,7 @@ fn __ridl_fb_encode_warning(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_warning(
+pub(crate) fn __ridl_fb_verify_warning(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1633,7 +1668,7 @@ fn __ridl_fb_verify_warning(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
+pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
             .unwrap_or(::core::option::Option::None)
@@ -1725,7 +1760,7 @@ impl<'a> WarningFlagsFbView<'a> {
 }
 /// Writes `WarningFlags` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_warning_flags(
+pub(crate) fn __ridl_fb_encode_warning_flags(
     value: &WarningFlags,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1747,7 +1782,7 @@ fn __ridl_fb_encode_warning_flags(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_warning_flags(
+pub(crate) fn __ridl_fb_verify_warning_flags(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1771,7 +1806,7 @@ fn __ridl_fb_verify_warning_flags(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
+pub(crate) fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
             .unwrap_or(::core::option::Option::None)
@@ -1881,7 +1916,7 @@ impl<'a> SpeedLimitPayloadFbView<'a> {
 }
 /// Writes `SpeedLimitPayload` as a FlatBuffers table and returns its position.
 #[allow(deprecated)]
-fn __ridl_fb_encode_speed_limit_payload(
+pub(crate) fn __ridl_fb_encode_speed_limit_payload(
     value: &SpeedLimitPayload,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1935,7 +1970,7 @@ fn __ridl_fb_encode_speed_limit_payload(
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
 #[allow(deprecated)]
-fn __ridl_fb_verify_speed_limit_payload(
+pub(crate) fn __ridl_fb_verify_speed_limit_payload(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1985,7 +2020,10 @@ fn __ridl_fb_verify_speed_limit_payload(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated)]
-fn __ridl_fb_decode_speed_limit_payload(buf: &[u8], table: usize) -> SpeedLimitPayload {
+pub(crate) fn __ridl_fb_decode_speed_limit_payload(
+    buf: &[u8],
+    table: usize,
+) -> SpeedLimitPayload {
     SpeedLimitPayload {
         limit: {
             let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
@@ -2113,7 +2151,7 @@ impl<'a> RawWheelFrameFbView<'a> {
 }
 /// Writes `RawWheelFrame` as a FlatBuffers table and returns its position.
 #[allow(deprecated)]
-fn __ridl_fb_encode_raw_wheel_frame(
+pub(crate) fn __ridl_fb_encode_raw_wheel_frame(
     value: &RawWheelFrame,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -2166,7 +2204,7 @@ fn __ridl_fb_encode_raw_wheel_frame(
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
 #[allow(deprecated)]
-fn __ridl_fb_verify_raw_wheel_frame(
+pub(crate) fn __ridl_fb_verify_raw_wheel_frame(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2212,7 +2250,10 @@ fn __ridl_fb_verify_raw_wheel_frame(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated)]
-fn __ridl_fb_decode_raw_wheel_frame(buf: &[u8], table: usize) -> RawWheelFrame {
+pub(crate) fn __ridl_fb_decode_raw_wheel_frame(
+    buf: &[u8],
+    table: usize,
+) -> RawWheelFrame {
     RawWheelFrame {
         ticks: {
             let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)

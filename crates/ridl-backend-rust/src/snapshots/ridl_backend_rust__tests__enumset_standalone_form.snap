@@ -63,7 +63,7 @@ impl<'a> WarningFlagsFbView<'a> {
 }
 /// Writes `WarningFlags` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-fn __ridl_fb_encode_warning_flags(
+pub(crate) fn __ridl_fb_encode_warning_flags(
     value: &WarningFlags,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -85,7 +85,7 @@ fn __ridl_fb_encode_warning_flags(
     })
 }
 #[allow(deprecated)]
-fn __ridl_fb_verify_warning_flags(
+pub(crate) fn __ridl_fb_verify_warning_flags(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -109,7 +109,7 @@ fn __ridl_fb_verify_warning_flags(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
+pub(crate) fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
             .unwrap_or(::core::option::Option::None)

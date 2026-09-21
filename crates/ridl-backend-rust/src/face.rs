@@ -80,7 +80,10 @@ struct Call<'a> {
     reply_type: Option<&'a str>,
 }
 
-fn one_interface(
+/// The face module of one interface, or `None` when the interface declares
+/// nothing the face carries. Reachable from the crate for the pipeline's
+/// per-interface walk (E11.14 decision 2).
+pub(crate) fn one_interface(
     iface_name: &str,
     interface: &v2::Interface,
 ) -> Result<Option<TokenStream>, GenerateError> {
