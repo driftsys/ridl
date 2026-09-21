@@ -51,6 +51,9 @@ scopes = [
   "ridl-mcp",
   # the runtime library generated code links (docs/ROADMAP.md, E11.0)
   "ridl-rt",
+  # the in-process reference runtime (docs/ROADMAP.md, E11.15;
+  # ADR-0020 decision 6)
+  "ridl-loopback",
   # editor integrations (docs/ROADMAP.md, epic E1.17)
   "editors",
 ]

@@ -7,15 +7,15 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: fifteen crates
+(ADRs), the implementation roadmap, and the compiler workspace: sixteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
-`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`, and
-`ridl-rt` — plus `xtask` at the root and the `editors/vscode` extension. The
-typl v0.1 toolchain (epic E1), the ridl interface layer over it (epic E2) and
-rsdl's checks, lowering and `ridl diff` at the system (epic E6) are built; the
-boundary model (epic E3) is sequenced in the roadmap, and `rmdl` stays a
-Proposed draft with no implementation. See
+`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
+`ridl-rt`, and `ridl-loopback` — plus `xtask` at the root and the
+`editors/vscode` extension. The typl v0.1 toolchain (epic E1), the ridl
+interface layer over it (epic E2) and rsdl's checks, lowering and `ridl diff` at
+the system (epic E6) are built; the boundary model (epic E3) is sequenced in the
+roadmap, and `rmdl` stays a Proposed draft with no implementation. See
 `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Read these before doing anything else in this repo:**
@@ -227,10 +227,11 @@ apart unnoticed — check those two by reading when you touch either file.
   check (issue #189) scans `.rs` sources only, so a `TYPL-`/`RIDL-` code cited
   in `docs/` — including an `allow=<CODE>` fence marker — is not checked against
   the catalogue. Recorded on driftsys/ridl#191.
-- **The book describes the system as built.** There is no runtime in this
-  workspace, so prose about delivery, timing behaviour, or provider-side
-  contract enforcement is describing the specification — say so where it
-  appears.
+- **The book describes the system as built.** The one runtime in this workspace
+  is `ridl-loopback`, which runs in process, is reached only from a test or a
+  program that links it, and is not reachable from anything the CLI emits (story
+  E11.14). So prose about delivery, timing behaviour, or provider-side contract
+  enforcement is still describing the specification — say so where it appears.
 - **Prose — comments, commit messages, docs, PR descriptions — is plain and
   literal**: no idioms, no figures of speech. Technical terms and acronyms stay
   as they are.
