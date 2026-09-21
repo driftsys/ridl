@@ -57,7 +57,7 @@ interface Cabin {
   ]
 }
 
-// ---------- A signal-only interface, for the port-bound test in a later task ----------
+// ---------- A signal-only interface, for the port-bound test ----------
 
 interface Horn {
   signal active : Health @10ms
