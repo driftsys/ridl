@@ -210,7 +210,7 @@ fn dispatch_counts_only_a_settlement_the_handler_accepted() {
     let d = dispatch_source();
 
     assert!(
-        d.contains("h.settle(claim.id,Ok(&buf[..len]))"),
+        d.contains("h.settle(claim.id,Ok(bytes))"),
         "a query's reply is settled through the handler",
     );
     assert!(
@@ -273,7 +273,7 @@ fn a_command_is_settled_before_the_application_method_runs() {
     // A query is the other way round: its settlement carries the reply, so it
     // cannot precede the provider.
     assert!(
-        at(&d, "p.average(&window)") < at(&d, "h.settle(claim.id,Ok(&buf[..len]))"),
+        at(&d, "p.average(&window)") < at(&d, "h.settle(claim.id,Ok(bytes))"),
         "a query is settled after the provider returns",
     );
 }

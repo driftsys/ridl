@@ -700,11 +700,11 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
             let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::ReprC,
             >>::MAX_SIZE];
-            let len = match ::ridl_rt::payload::Ref::<
+            let bytes = match ::ridl_rt::payload::Ref::<
                 super::Level,
                 ::ridl_rt::encoding::ReprC,
             >::encode(&level, &mut buf) {
-                Ok(encoded) => encoded.bytes().len(),
+                Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
                         "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<ReprC>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
@@ -717,7 +717,7 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                 .command(
                     <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(3u32),
-                    &buf[..len],
+                    bytes,
                 )
                 .map(SetLevelCorrelation)
         }
@@ -735,11 +735,11 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
             let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::ReprC,
             >>::MAX_SIZE];
-            let len = match ::ridl_rt::payload::Ref::<
+            let bytes = match ::ridl_rt::payload::Ref::<
                 super::Window,
                 ::ridl_rt::encoding::ReprC,
             >::encode(&window, &mut buf) {
-                Ok(encoded) => encoded.bytes().len(),
+                Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
                         "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<ReprC>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
@@ -752,7 +752,7 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                 .query(
                     <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(4u32),
-                    &buf[..len],
+                    bytes,
                 )
                 .map(AverageCorrelation)
         }
@@ -835,11 +835,11 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
             let mut buf = [0u8; <super::Temperature as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::ReprC,
             >>::MAX_SIZE];
-            let len = match ::ridl_rt::payload::Ref::<
+            let bytes = match ::ridl_rt::payload::Ref::<
                 super::Temperature,
                 ::ridl_rt::encoding::ReprC,
             >::encode(&value, &mut buf) {
-                Ok(encoded) => encoded.bytes().len(),
+                Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
                         "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Temperature as Payload<ReprC>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
@@ -852,7 +852,7 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                 .set(
                     <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &buf[..len],
+                    bytes,
                 )
         }
         ///Stages the invalid state for signal `temperature`, with `Cause::Declared`. It is published by `commit`.
@@ -873,11 +873,11 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
             let mut buf = [0u8; <super::Warning as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::ReprC,
             >>::MAX_SIZE];
-            let len = match ::ridl_rt::payload::Ref::<
+            let bytes = match ::ridl_rt::payload::Ref::<
                 super::Warning,
                 ::ridl_rt::encoding::ReprC,
             >::encode(&value, &mut buf) {
-                Ok(encoded) => encoded.bytes().len(),
+                Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
                         "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<ReprC>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
@@ -890,7 +890,7 @@ The interface number is checked before the ordinal, for the reason `dispatch` ch
                 .raise(
                     <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(2u32),
-                    &buf[..len],
+                    bytes,
                 )
         }
         /// Publishes every staged signal change.
@@ -1056,11 +1056,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                                 )
                                             }
                                             Ok(()) => {
-                                                let len = match ::ridl_rt::payload::Ref::<
+                                                let bytes = match ::ridl_rt::payload::Ref::<
                                                     super::Average,
                                                     ::ridl_rt::encoding::ReprC,
                                                 >::encode(&reply, buf) {
-                                                    Ok(encoded) => encoded.bytes().len(),
+                                                    Ok(encoded) => encoded.bytes(),
                                                     Err(
                                                         ::ridl_rt::payload::EncodeError::Capacity {
                                                             needed,
@@ -1074,7 +1074,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                                     }
                                                     Err(_) => unreachable!("encoding `Average` failed"),
                                                 };
-                                                h.settle(claim.id, Ok(&buf[..len]))
+                                                h.settle(claim.id, Ok(bytes))
                                             }
                                         }
                                     }
@@ -1179,11 +1179,11 @@ pub mod horn {
             let mut buf = [0u8; <super::Health as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::ReprC,
             >>::MAX_SIZE];
-            let len = match ::ridl_rt::payload::Ref::<
+            let bytes = match ::ridl_rt::payload::Ref::<
                 super::Health,
                 ::ridl_rt::encoding::ReprC,
             >::encode(&value, &mut buf) {
-                Ok(encoded) => encoded.bytes().len(),
+                Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
                         "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Health as Payload<ReprC>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
@@ -1196,7 +1196,7 @@ pub mod horn {
                 .set(
                     <super::Horn as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &buf[..len],
+                    bytes,
                 )
         }
         ///Stages the invalid state for signal `active`, with `Cause::Declared`. It is published by `commit`.
