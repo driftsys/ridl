@@ -45,8 +45,8 @@ impl Default for GearPosition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> GearPositionFbView<'a> {

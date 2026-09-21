@@ -152,8 +152,8 @@ impl Default for Temperature {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
@@ -289,8 +289,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> TemperatureFbView<'a> {
@@ -439,15 +439,14 @@ impl Default for ClusterReading {
 }
 /// `ClusterReading` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `speed` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The member `speed` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
+/// A reference into another package of the same build is not
+/// this: the codec resolves one, and names it by a path through
+/// the emitted module tree. What is left is a reference that no
+/// package of the build can settle — a type that reaches itself,
+/// and a stream, which has no single value to size.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_CLUSTER_READING: () = ();

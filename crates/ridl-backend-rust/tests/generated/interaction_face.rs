@@ -327,8 +327,8 @@ impl Default for Warning {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> TemperatureFbView<'a> {
@@ -467,8 +467,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LevelFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> LevelFbView<'a> {
@@ -604,8 +604,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WindowFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> WindowFbView<'a> {
@@ -741,8 +741,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct AverageFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> AverageFbView<'a> {
@@ -878,8 +878,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct HealthFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> HealthFbView<'a> {
@@ -1017,8 +1017,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> WarningFbView<'a> {

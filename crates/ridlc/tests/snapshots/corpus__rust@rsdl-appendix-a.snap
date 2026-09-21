@@ -154,8 +154,8 @@ impl Default for FaultReport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
@@ -291,8 +291,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EngagedFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> EngagedFbView<'a> {
@@ -424,8 +424,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LeverCmdFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> LeverCmdFbView<'a> {
@@ -566,8 +566,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LeverCmd 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FaultReportFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> FaultReportFbView<'a> {

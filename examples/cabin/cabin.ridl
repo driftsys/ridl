@@ -16,10 +16,11 @@ type Temperature : integer [-40..85]
 /// A percentage of full scale.
 type Level : integer [0..100]
 
-/// A averaging window, in milliseconds.
+/// An averaging window, in milliseconds.
 type Window : integer [0..100000]
 
-/// The average a query replies with, on the same scale as `Level`.
+/// The average a query replies with. Its range is wider than `Level`'s,
+/// so a reply is not constrained to the scale the command takes.
 type Average : integer [0..1000]
 
 /// The health of a cabin subsystem.

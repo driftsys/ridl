@@ -144,8 +144,8 @@ impl Default for RawTicks {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
@@ -281,8 +281,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct OldFlagFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> OldFlagFbView<'a> {
@@ -414,8 +414,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for OldFlag {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawTicksFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> RawTicksFbView<'a> {

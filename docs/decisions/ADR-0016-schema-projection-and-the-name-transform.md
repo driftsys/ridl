@@ -72,8 +72,9 @@ variant. Only the parameter namespace is projected through `snake_case` alone.
 
 Neither `camel_case` namespace is checked, and the amendment does not extend to
 either. The struct-field residual is recorded below and on driftsys/ridl#453;
-the member residual on driftsys/ridl#455, which is reached only through
-`generate_face` and so is not on any path `ridl build` takes today.
+the member residual on driftsys/ridl#455, which was reached only through
+`generate_face` until E11.14 put the face in the pipeline on 2026-09-21, and is
+now on the path `ridl build --emit rust` takes.
 
 The cost is stated where it falls. A package whose arms collide under
 `camel_case` only was already broken — the Rust backend emitted E0428 — so the
@@ -367,9 +368,12 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   a unit struct, a correlation type and an enum variant from the member name
   through `camel_case`, so the members `XY` and `x_y` — distinct under
   `snake_case`, identical under `camel_case` — give one generated name twice and
-  rustc rejects it with E0428. Only `generate_face` reaches those sites, and
-  `ridl build` calls `generate`, so no CLI path reaches this today; it becomes
-  reachable when the face joins the pipeline. Recorded on driftsys/ridl#455.
+  rustc rejects it with E0428. Recorded on driftsys/ridl#455. **(2026-09-21: the
+  precondition this bullet named is now met. E11.14 (driftsys/ridl#444) put the
+  face in the pipeline, so `ridl build --emit rust` does reach those sites and a
+  package with such a pair now emits a crate that does not compile. The defect
+  is unchanged and is still driftsys/ridl#455's; what changed is that it is
+  reachable from the CLI rather than from `generate_face` alone.)**
 - **Negative — a struct field name also reaches `camel_case`, and that namespace
   is unchecked.** Decision 4 puts struct fields in RIDL-149 under `snake_case`,
   which is the Rust field name and the wire symbol. The Rust backend also spells

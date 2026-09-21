@@ -13,10 +13,11 @@
 //!   items, `type Iface` and `const MEMBER`) and the kind's trait — `Signal`,
 //!   `Event`, `Command`, `Query` or `Fixed`.
 //!
-//! It is reached only from [`crate::generate_face`], never from the pipeline
-//! [`crate::generate`]: the descriptors name the runtime and translate
-//! contract clauses, neither of which the pipeline output may carry yet (see
-//! the two entry points' documentation).
+//! Since E11.14 it is reached from [`crate::generate_pipeline`], which is
+//! what `ridl build --emit rust` calls, as well as from
+//! [`crate::generate_face`]. It is not reached from [`crate::generate`],
+//! whose output is unchanged and carries neither the descriptors nor the
+//! face (see the entry points' own documentation).
 
 use crate::clauses::{self, ClauseKind};
 use crate::{Ctx, GenerateError, ident, type_path};

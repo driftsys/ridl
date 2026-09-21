@@ -232,12 +232,17 @@ fn skipped_interface_note(
     let name = format_ident!("__RIDL_NO_FACE_{}", snake_case(iface_name).to_uppercase());
     let headline = format!(" Interface `{iface_name}` carries no generated interaction face.");
     let reason = format!(" The emitter refused it: {}", err.message);
-    let owner = match face_gap(interface) {
+    let owner = match face_gap(interface, err) {
         FaceGap::CallShape => {
-            " A call the face cannot carry — an interaction that does not declare exactly one              named parameter, or a query whose reply is not a named type. The induced argument              struct that removes this is lane M's parked multi-parameter follow-up."
+            " A call the face cannot carry — an interaction that does not declare \
+             exactly one named parameter, or a query whose reply is not a named \
+             type. The induced argument struct that removes the first is lane M's \
+             parked multi-parameter follow-up."
         }
         FaceGap::Clause => {
-            " A contract clause outside the form the narrow translator accepts —              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. Story E5.1              replaces the translator and removes this."
+            " A contract clause outside the form the narrow translator accepts — \
+             `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
+             Story E5.1 replaces the translator and removes this."
         }
     };
     quote! {
@@ -259,17 +264,28 @@ fn skipped_interface_note(
 
 /// Which of decision 2's two owners a skipped interface belongs to.
 ///
-/// Decided by reading the interface rather than by matching the refusal's
-/// message: a reworded message would otherwise reclassify the gap silently,
-/// and the message is prose that no test pins.
+/// Decided by the refusal that was actually raised, and only then by reading
+/// the interface. Reading the interface alone reports the wrong owner
+/// whenever an interface has both gaps: it returns `CallShape` for the first
+/// badly shaped call it finds, even when what stopped the build was a clause
+/// on another interaction. The corpus's own `veh.cluster.VehicleStatus` is
+/// that shape, and its note used to name a reason from the clause translator
+/// under an owner line about multi-parameter calls.
+///
+/// The refusal is matched on [`clauses::CLAUSE_REFUSAL`] rather than on a
+/// literal here, so a rewording of the message changes this match with it
+/// instead of silently reclassifying.
 enum FaceGap {
     /// An interaction the face has no shape for at all.
     CallShape,
-    /// Every call has a face shape, so what was refused is a clause.
+    /// What was refused is a clause.
     Clause,
 }
 
-fn face_gap(interface: &v2::Interface) -> FaceGap {
+fn face_gap(interface: &v2::Interface, err: &GenerateError) -> FaceGap {
+    if err.message.starts_with(clauses::CLAUSE_REFUSAL) {
+        return FaceGap::Clause;
+    }
     for decl in &interface.interactions {
         let params = match decl.kind.as_ref() {
             Some(v2::decl::Kind::CommandDef(command)) => &command.params,
@@ -313,12 +329,33 @@ const WIRE_ALIAS: &str = "Wire";
 /// [`generate`] is unaffected — it emits no alias, so `Wire` is an ordinary
 /// declaration there, and a package built without a face keeps compiling.
 fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
-    for decl in &package.decls {
-        if decl.name == WIRE_ALIAS {
+    // Both namespaces, because both land at package scope: a declaration is
+    // emitted as its own item, and an interface is emitted as
+    // `pub struct <Interface>;` by the descriptor emitter. Scanning only the
+    // declarations let `interface Wire` through to a rustc E0428 in the
+    // emitted source, which is the failure this refusal exists to replace.
+    //
+    // The interface half walks `shapes()` rather than `interfaces`, which is
+    // the complete set of interface bodies (`xtask`'s `shape_walk` guard
+    // holds every reader to it), and then skips a service's inline shape for
+    // the same reason `descriptors::interface_items` does: no identity
+    // struct is emitted for one, so it collides with nothing. Refusing on a
+    // shape that emits nothing would reject a package that compiles.
+    let declared = package
+        .decls
+        .iter()
+        .map(|decl| (decl.name.as_str(), "declaration"));
+    let shapes = package
+        .shapes()
+        .filter(|shape| shape.service.is_none())
+        .map(|shape| (shape.name, "interface"));
+    for (name, kind) in declared.chain(shapes) {
+        if name == WIRE_ALIAS {
             return Err(GenerateError {
                 message: format!(
-                    "`{}.{}` collides with the `{}` encoding alias the interaction face emits                      at package scope; rename the declaration",
-                    package.name, decl.name, WIRE_ALIAS
+                    "`{}.{}` collides with the `{}` encoding alias the interaction \
+                     face emits at package scope; rename the {kind}",
+                    package.name, name, WIRE_ALIAS
                 ),
             });
         }

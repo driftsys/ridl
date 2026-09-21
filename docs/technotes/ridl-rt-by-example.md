@@ -762,12 +762,11 @@ what it stands on are placeholders with a named replacement.
 | Every `PayloadInfo.max_size` field, which is `None`                 | E16.2 (driftsys/ridl#378) |
 | The contract-clause translator                                      | E5.1                      |
 
-Two further limits are not placeholders but scope:
-
-**`ridl --emit rust` does not emit the face.** The pipeline calls the backend's
-`generate`, which is unchanged; the face comes from a separate `generate_face`
-entry point. ADR-0018 decision 15 makes the face phase 2, and reaching the
-command line is story E11.14's.
+One further limit is not a placeholder but scope. A second, that
+`ridl --emit rust` did not emit the face at all, closed on 2026-09-21: story
+E11.14 gave the pipeline `generate_pipeline`, which emits the face and the
+descriptors beside the domain types and the codec, so a package built from the
+command line carries one. `generate` is unchanged and still emits neither.
 
 **Every command and query takes exactly one parameter.** Multi-parameter calls
 need induced argument structs, which the Rust backend does not emit from an

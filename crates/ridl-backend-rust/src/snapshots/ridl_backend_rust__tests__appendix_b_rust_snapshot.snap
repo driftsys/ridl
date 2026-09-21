@@ -566,72 +566,67 @@ impl Default for SensorBoundsRange {
 }
 /// `DriverProfile` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `name` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The member `name` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
+/// A reference into another package of the same build is not
+/// this: the codec resolves one, and names it by a path through
+/// the emitted module tree. What is left is a reference that no
+/// package of the build can settle — a type that reaches itself,
+/// and a stream, which has no single value to size.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
 /// `SensorBounds` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The members `labels`, `meta` reach a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The members `labels`, `meta` reach a reference this backend does not resolve — a same-package cycle, or a stream.
+/// A reference into another package of the same build is not
+/// this: the codec resolves one, and names it by a path through
+/// the emitted module tree. What is left is a reference that no
+/// package of the build can settle — a type that reaches itself,
+/// and a stream, which has no single value to size.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
 /// `SensorResult` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The members `ok`, `err` reach a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The members `ok`, `err` reach a reference this backend does not resolve — a same-package cycle, or a stream.
+/// A reference into another package of the same build is not
+/// this: the codec resolves one, and names it by a path through
+/// the emitted module tree. What is left is a reference that no
+/// package of the build can settle — a type that reaches itself,
+/// and a stream, which has no single value to size.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
 /// `SensorReading` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `timestamp` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The member `timestamp` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
+/// A reference into another package of the same build is not
+/// this: the codec resolves one, and names it by a path through
+/// the emitted module tree. What is left is a reference that no
+/// package of the build can settle — a type that reaches itself,
+/// and a stream, which has no single value to size.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_SENSOR_READING: () = ();
 /// `SensorFault` carries no `Payload<FlatBuffers>` implementation.
 ///
-/// The member `message` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
-/// `ridl-backend-rust` generates one package at a time and reads
-/// no other, so it can neither size nor encode such a type: a
-/// foreign named scalar's FlatBuffers width is a fact of the
-/// package that declares it.
+/// The member `message` reaches a reference this backend does not resolve — a same-package cycle, or a stream.
+/// A reference into another package of the same build is not
+/// this: the codec resolves one, and names it by a path through
+/// the emitted module tree. What is left is a reference that no
+/// package of the build can settle — a type that reaches itself,
+/// and a stream, which has no single value to size.
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-/// driftsys/ridl#467 tracks it and states the fix: `generate`
-/// handed the other packages.
 #[allow(dead_code)]
 const __RIDL_FB_NO_CODEC_SENSOR_FAULT: () = ();
 /// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
@@ -642,8 +637,8 @@ const __RIDL_FB_NO_CODEC_SENSOR_FAULT: () = ();
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
@@ -779,8 +774,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> TemperatureFbView<'a> {
@@ -919,8 +914,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RPMFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> RPMFbView<'a> {
@@ -1056,8 +1051,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RatioFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> RatioFbView<'a> {
@@ -1193,8 +1188,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> CounterFbView<'a> {
@@ -1328,8 +1323,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GainFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> GainFbView<'a> {
@@ -1465,8 +1460,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> GearPositionFbView<'a> {
@@ -1606,8 +1601,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> WarningFbView<'a> {
@@ -1744,8 +1739,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> WarningFlagsFbView<'a> {
@@ -1886,8 +1881,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedLimitPayloadFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> SpeedLimitPayloadFbView<'a> {
@@ -2116,8 +2111,8 @@ for SpeedLimitPayload {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawWheelFrameFbView<'a> {
-    buf: &'a [u8],
-    table: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) table: usize,
 }
 #[allow(deprecated)]
 impl<'a> RawWheelFrameFbView<'a> {

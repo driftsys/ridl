@@ -67,7 +67,8 @@ is in `crates/ridl-backend-flatbuffers/src/tests.rs`, over the corpus fixtures.
 The `Payload<FlatBuffers>` implementations are in `generate`'s own output, not
 behind a third entry point beside `generate_face`. A consumer of a generated
 package needs the codec whether or not it ever dispatches, and `generate`
-already names `ridl-rt`. `ridlc::run_build` calls `generate`, so
+already names `ridl-rt`. `ridlc::run_build` calls `generate_pipeline`, whose
+output is `generate`'s plus the descriptors and the face (E11.14), so
 `ridl build --emit rust` carries the codec, and `crates/ridlc/src/lib.rs`
 renders `ridl-rt = { version = "0.1", features = ["flatbuffers"] }` in the
 manifest it writes.

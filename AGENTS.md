@@ -11,8 +11,9 @@ This repository holds the specifications, the architecture decision records
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
-`ridl-rt`, and `ridl-loopback` — plus `xtask` at the root and the
-`editors/vscode` extension. The typl v0.1 toolchain (epic E1), the ridl
+`ridl-rt`, and `ridl-loopback` — plus `xtask` at the root, the `editors/vscode`
+extension, and `examples/`, whose worked examples are compiled and run by the
+test suite rather than being prose. The typl v0.1 toolchain (epic E1), the ridl
 interface layer over it (epic E2) and rsdl's checks, lowering and `ridl diff` at
 the system (epic E6) are built; the boundary model (epic E3) is sequenced in the
 roadmap, and `rmdl` stays a Proposed draft with no implementation. See

@@ -57,6 +57,7 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridl-rt/                    The runtime library generated code links (no_std, no dependency)
 └── ridl-loopback/              The in-process reference runtime over those ports (ADR-0020 decision 6)
 editors/vscode/                 VS Code extension (TextMate grammars + LSP client)
+examples/                       Worked examples — a schema and a program against the crate built from it
 xtask/                          Workspace automation (ungrammar codegen, drift checks)
 Cargo.toml                      Cargo workspace root
 rust-toolchain.toml             The pinned Rust toolchain (ADR-0009)

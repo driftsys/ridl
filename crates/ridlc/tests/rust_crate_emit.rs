@@ -1091,3 +1091,211 @@ fn ridl_rt_version_requirement_matches_the_crate() {
         "expected `{expected}` in the emitted manifest, got:\n{manifest}"
     );
 }
+
+/// Writes a two-package workspace into `dir` and returns its root: `px.a`
+/// holding `source_a`, `px.b` holding `source_b`. The two package
+/// directories and the workspace manifest are what `run_build` needs to see
+/// both packages in one build, which is the condition under which a
+/// cross-package reference resolves at all.
+fn write_two_package_workspace(dir: &Path, source_a: &str, source_b: &str) -> PathBuf {
+    std::fs::write(
+        dir.join("ridl.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .expect("the workspace manifest is written");
+    for (member, name, source) in [("a", "px.a", source_a), ("b", "px.b", source_b)] {
+        let member_dir = dir.join(member);
+        std::fs::create_dir_all(&member_dir).expect("the member directory is created");
+        std::fs::write(
+            member_dir.join("ridl.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        )
+        .expect("the member manifest is written");
+        std::fs::write(member_dir.join("source.ridl"), source)
+            .expect("the member source is written");
+    }
+    dir.to_path_buf()
+}
+
+/// A **struct** and a **union arm** that reach into another package of the
+/// build emit a crate that compiles (driftsys/ridl#467).
+///
+/// The codec names a foreign view type by a path and builds it with a struct
+/// literal, so the view's fields have to be reachable from the other
+/// package's module. They were private, and this was the shape that proved
+/// it: the corpus's own cross-package references are all named scalars, enums
+/// and enum sets, none of which has a view, so nothing else in the tree
+/// reaches the struct literal at all.
+///
+/// The mutation that proves this test: make either field of the emitted
+/// `#view` struct in `codec.rs` private again, and `rustc` reports E0451
+/// twice for the struct and once for the union arm.
+#[test]
+fn a_cross_package_struct_or_union_reference_compiles() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_two_package_workspace(
+        dir.path(),
+        "package px.a\n\nstruct Point {\n  x : integer [0..100]\n  y : integer [0..100]\n}\n",
+        "package px.b\n\nimport px.a.Point\n\n\
+         struct Line {\n  from : Point\n  to : Point\n}\n\n\
+         union Shape {\n  point : Point\n  line : Line\n}\n",
+    );
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let source = std::fs::read_to_string(out.path().join("px.b.rs")).expect("px.b.rs is written");
+    assert!(
+        !source.contains("__RIDL_FB_NO_CODEC"),
+        "no type here may be withheld a codec any more, got:\n{source}"
+    );
+    assert!(
+        source.contains("crate::px::a::PointFbView"),
+        "the foreign view is named by a path, got:\n{source}"
+    );
+
+    compile_crate_root(out.path());
+}
+
+/// An **interface** named `Wire` is refused, the same as a declaration is
+/// (E11.14 decision 5).
+///
+/// The descriptor emitter writes `pub struct <Interface>;` at package scope,
+/// which is the scope `pub type Wire` lands at, so an interface collides with
+/// the alias exactly as a typl declaration does. Refusing only declarations
+/// let this through to a rustc E0428 in the emitted source, which is the
+/// failure the refusal exists to replace.
+///
+/// The mutation that proves this test: drop the `interfaces` half of
+/// `refuse_wire_collision`'s scan, and the build succeeds here.
+#[test]
+fn an_interface_named_wire_is_refused() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    // Written by hand rather than through `write_package_fixture`, which
+    // writes a `.typl` file: an interface is a ridl declaration and draws
+    // "interaction declaration in typl context" from a typl source.
+    let entry = dir.path().join("pkg");
+    std::fs::create_dir_all(&entry).expect("the package directory is created");
+    std::fs::write(
+        entry.join("ridl.toml"),
+        "[package]\nname = \"px.w\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        entry.join("source.ridl"),
+        "package px.w\n\ntype Level : integer [0..100]\n\n\
+         interface Wire {\n  signal level : Level @10ms\n}\n",
+    )
+    .expect("the source is written");
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        run.has_error(),
+        "an interface named `Wire` must be refused, diagnostics: {:?}",
+        run.diagnostics
+    );
+    let message = run
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect::<String>();
+    assert!(
+        message.contains("Wire") && message.contains("collide"),
+        "the refusal must state the collision and name `Wire`, got: {message}"
+    );
+    assert!(
+        message.contains("rename the interface"),
+        "the refusal must name the interface as the thing to rename, got: {message}"
+    );
+}
+
+/// An interface the face cannot carry is skipped with a note, and the rest of
+/// the package is still emitted and still compiles (E11.14 decision 2).
+///
+/// The corpus's `veh-cluster` is the fixture that exercises this without one
+/// being written for it: two of its interfaces carry a contract clause the
+/// narrow translator does not accept, so a build of it emits two notes.
+///
+/// The mutation that proves this test: replace the `Err` arm of
+/// `generate_pipeline`'s per-interface match with `Err(_) => {}`, emitting
+/// nothing on a skip, and the note assertions below fail. Without this test
+/// that arm — and `skipped_interface_note`, `face_gap` and `FaceGap` with it —
+/// could be deleted whole and every other test would stay green.
+#[test]
+fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-cluster"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+    assert!(
+        !run.has_error(),
+        "a skipped interface is not an error, got: {:?}",
+        run.diagnostics
+    );
+
+    let source =
+        std::fs::read_to_string(out.path().join("veh.cluster.rs")).expect("the package is written");
+
+    // The note exists, and names the interface it stands for.
+    assert!(
+        source.contains("__RIDL_NO_FACE_VEHICLE_STATUS"),
+        "a skipped interface leaves a note naming it, got:\n{source}"
+    );
+    assert!(
+        source.contains("Interface `VehicleStatus` carries no generated interaction face."),
+        "the note names the interface in prose, got:\n{source}"
+    );
+    // It carries a reason and the story that removes the limit, which is what
+    // makes it a note rather than a silent omission.
+    assert!(
+        source.contains("The emitter refused it:"),
+        "the note carries the refusal's own reason, got:\n{source}"
+    );
+    // The owner line must match the reason above it. `VehicleStatus` has a
+    // call-shape gap *and* an untranslatable clause, and the refusal that
+    // stopped it is the clause — so a note that reads the interface instead
+    // of the refusal names the multi-parameter story under a clause reason,
+    // which is what this pins.
+    let note = source
+        .split("const __RIDL_NO_FACE_VEHICLE_STATUS")
+        .next()
+        .expect("the note precedes its constant");
+    let note = &note[note
+        .rfind("Interface `VehicleStatus`")
+        .expect("the note's headline")..];
+    assert!(
+        note.contains("cannot translate contract clause"),
+        "this interface is skipped for a clause, got:\n{note}"
+    );
+    assert!(
+        note.contains("Story E5.1") && !note.contains("lane M's"),
+        "the owner line must name the clause story, not the multi-parameter \
+         one, got:\n{note}"
+    );
+    // A run of literal spaces inside the note is a broken line continuation
+    // in the emitter's string, which reaches the reader's source.
+    assert!(
+        !note.contains("     "),
+        "no note may carry a run of literal spaces from a broken \
+         string continuation, got:\n{note}"
+    );
+
+    // The skip is per interface: the package's other interfaces keep their
+    // face, and its payload types are unaffected.
+    assert!(
+        source.contains("pub mod cabin_climate") || source.contains("pub struct Client"),
+        "an interface the face can carry still gets one, got:\n{source}"
+    );
+
+    compile_crate_root(out.path());
+}

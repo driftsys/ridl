@@ -655,8 +655,12 @@ impl<'a> Codec<'a> {
     /// A type this backend cannot judge gets no `Payload<FlatBuffers>`
     /// implementation, which a consumer otherwise meets as an unsatisfied
     /// trait bound in their own crate, far from the cause. The note names the
-    /// type, the member that could not be judged, and the issue tracking it
-    /// (driftsys/ridl#467), so what the consumer meets is a reason.
+    /// type and the member that could not be judged, so what the consumer
+    /// meets is a reason.
+    ///
+    /// A cross-package reference is no longer one of those causes: since
+    /// driftsys/ridl#467 the codec is handed the other packages of the build
+    /// and resolves one. What remains is a same-package cycle and a stream.
     ///
     /// It is a `const` rather than a bare comment because `quote!` emits
     /// tokens, and a doc attribute is the only comment that survives into
@@ -674,7 +678,7 @@ impl<'a> Codec<'a> {
         } else {
             format!(
                 " The member{} {} reach{} a reference this backend does not resolve — a \
-                 cross-package reference, a same-package cycle, or a stream.",
+                 same-package cycle, or a stream.",
                 if members.len() == 1 { "" } else { "s" },
                 members
                     .iter()
@@ -692,15 +696,14 @@ impl<'a> Codec<'a> {
             #[doc = #headline]
             ///
             #[doc = #cause]
-            /// `ridl-backend-rust` generates one package at a time and reads
-            /// no other, so it can neither size nor encode such a type: a
-            /// foreign named scalar's FlatBuffers width is a fact of the
-            /// package that declares it.
+            /// A reference into another package of the same build is not
+            /// this: the codec resolves one, and names it by a path through
+            /// the emitted module tree. What is left is a reference that no
+            /// package of the build can settle — a type that reaches itself,
+            /// and a stream, which has no single value to size.
             ///
             /// This is a silent omission in the sense ADR-0016 decision 6 and
             /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-            /// driftsys/ridl#467 tracks it and states the fix: `generate`
-            /// handed the other packages.
             #[allow(dead_code)]
             const #name: () = ();
         }
@@ -1177,8 +1180,13 @@ impl<'a> Codec<'a> {
             #[derive(Debug, Clone, Copy, PartialEq, Eq)]
             #[allow(deprecated)]
             #vis struct #view<'a> {
-                buf: &'a [u8],
-                table: usize,
+                // `pub(crate)`, not private: since driftsys/ridl#467 the codec of
+                // another package of this build names this view by a path and
+                // builds it with a struct literal, which needs both fields where
+                // it stands. One crate per build, so this adds nothing to the
+                // crate's public surface.
+                pub(crate) buf: &'a [u8],
+                pub(crate) table: usize,
             }
 
             #[allow(deprecated)]
@@ -1916,8 +1924,13 @@ impl<'a> Codec<'a> {
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {
-                    buf: &'a [u8],
-                    table: usize,
+                    // `pub(crate)`, not private: since driftsys/ridl#467 the codec of
+                    // another package of this build names this view by a path and
+                    // builds it with a struct literal, which needs both fields where
+                    // it stands. One crate per build, so this adds nothing to the
+                    // crate's public surface.
+                    pub(crate) buf: &'a [u8],
+                    pub(crate) table: usize,
                 }
 
                 #[allow(deprecated)]
@@ -2252,8 +2265,13 @@ impl<'a> Codec<'a> {
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {
-                    buf: &'a [u8],
-                    table: usize,
+                    // `pub(crate)`, not private: since driftsys/ridl#467 the codec of
+                    // another package of this build names this view by a path and
+                    // builds it with a struct literal, which needs both fields where
+                    // it stands. One crate per build, so this adds nothing to the
+                    // crate's public surface.
+                    pub(crate) buf: &'a [u8],
+                    pub(crate) table: usize,
                 }
 
                 #[allow(deprecated)]

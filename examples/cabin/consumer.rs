@@ -16,8 +16,8 @@
 //! trip's assertions about what is waiting true independently of the order
 //! they run in.
 
-use cabin_api::veh::cabin as api;
 use api::cabin;
+use cabin_api::veh::cabin as api;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef};
 use ridl_rt::sample::Provenance;
@@ -87,7 +87,10 @@ fn main() {
     let correlation = cabin::Client::new(&mut port)
         .set_level(api::Level::new_unchecked(42))
         .expect("send setLevel");
-    let mut provider = Cabin { levels: Vec::new(), average: 0 };
+    let mut provider = Cabin {
+        levels: Vec::new(),
+        average: 0,
+    };
     let mut buf = [0u8; api::Cabin::MAX_BUFFER_SIZE];
     assert_eq!(cabin::dispatch(&mut port, &mut provider, &mut buf), 1);
     assert_eq!(provider.levels, vec![42]);
@@ -102,7 +105,10 @@ fn main() {
     let correlation = cabin::Client::new(&mut port)
         .average(api::Window::new_unchecked(10))
         .expect("send average");
-    let mut provider = Cabin { levels: Vec::new(), average: 7 };
+    let mut provider = Cabin {
+        levels: Vec::new(),
+        average: 7,
+    };
     let mut buf = [0u8; api::Cabin::MAX_BUFFER_SIZE];
     assert_eq!(cabin::dispatch(&mut port, &mut provider, &mut buf), 1);
     let reply = cabin::Client::new(&mut port)

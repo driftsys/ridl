@@ -2,16 +2,28 @@
 //! `ridl build --emit rust` writes is a crate an application outside this
 //! workspace can link against and **run**.
 //!
-//! Every other proof over generated Rust in this workspace stops at
-//! compilation, and compilation is not the property this story claims. The
-//! claim is that the face the CLI now emits carries a working interaction
-//! layer, so this test takes the whole path: it runs the build over
-//! `examples/cabin/`, compiles the emitted crate with plain `rustc`, compiles
-//! `examples/cabin/consumer.rs` against it, runs the program, and requires it
-//! to exit zero having completed one round trip of every interaction kind
-//! that carries a payload — a signal, an event, a command and a query —
-//! through the generated `Client`, `Publisher`, `Provider` and `dispatch`
-//! over `Loopback`.
+//! What is new here is the **path**, not the running. Other proofs already run
+//! generated code: `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`
+//! runs a program built from the codec's output, and
+//! `crates/ridl-backend-rust/tests/interaction_face.rs` already runs these
+//! same four round trips over `ridl-loopback`. Each of those runs the
+//! backend's own output, in this workspace's own test crate.
+//!
+//! This one runs what **the CLI wrote**, linked as a separate crate into a
+//! separate process. It runs the build over `examples/cabin/`, compiles the
+//! emitted crate with plain `rustc`, compiles `examples/cabin/consumer.rs`
+//! against it, runs the program, and requires it to exit zero having
+//! completed one round trip of every interaction kind that carries a payload
+//! — a signal, an event, a command and a query — through the generated
+//! `Client`, `Publisher`, `Provider` and `dispatch` over `Loopback`.
+//!
+//! **What this does not establish.** The round trip is symmetric, so it
+//! cannot see an identity error: a wrong `InterfaceNo`, a wrong ordinal or a
+//! wrong catalog hash would be written and read back consistently and every
+//! assertion here would still hold. Those are pinned by
+//! `crates/ridl-backend-rust/tests/descriptor_generation.rs`. Nor does the
+//! consumer drive a failing `require` or `ensure`; the clause paths are
+//! `interaction_face.rs`'s.
 //!
 //! Nothing here goes through cargo. `rustc` is spawned directly, the same
 //! mechanism the crate's other compile proofs use, because a cargo build of
@@ -22,7 +34,10 @@
 //! The consumer names `cabin_api`, which is this test's `--crate-name` for
 //! the emitted crate and not a name the emitter chose; the emitted
 //! `Cargo.toml` is what names the crate for a cargo consumer, and it is
-//! written but not read here.
+//! written but not read here. For the same reason the `ridl-rt` this links is
+//! built with the three encoding features and not with the `std` and
+//! `validate-pattern` defaults that `Cargo.toml` declares, so a generated
+//! item gated behind either of those two is outside this proof.
 
 use std::path::Path;
 

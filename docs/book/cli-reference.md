@@ -461,14 +461,26 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
 union and a named scalar, each with its typl constraints enforced at
-construction), the FlatBuffers codec for every payload type — `encode`,
-`verify`, `decode` and a `MAX_SIZE` bound — the interaction descriptors, and
-the interaction face: per interface a `Client` for the consumer side, a
-`Publisher` for the producer side, a `Provider` trait the application
-implements, and a `dispatch` function that settles the claims waiting on a
-port. Beside the per-package files it writes a `lib.rs` crate root and a
-`Cargo.toml` naming `ridl-rt` with the encoding's feature, so the output is a
-crate that compiles and links as it stands.
+construction), the FlatBuffers codec — `encode`, `verify`,
+`decode` and a `MAX_SIZE` bound — the interaction descriptors, and the
+interaction face: per interface a `Client` for the consumer side, a
+`Publisher` for the producer side, and, for an interface that carries a
+command or a query, a `Provider` trait the application implements and a
+`dispatch` function that settles the claims waiting on a port. A signal-only
+interface gets the first two and neither of the last two, because it has
+nothing to settle. Beside the per-package files it writes a `lib.rs` crate
+root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
+
+**Two things it may leave out, each with a note in the source it writes.** A
+type whose size the compiler cannot bound — one that reaches itself, or a
+stream — carries no codec, and gets a `__RIDL_FB_NO_CODEC_<NAME>` constant
+whose documentation names the member and the reason. An interface the face
+cannot carry — a call that does not take exactly one named parameter, a query
+whose reply is not a named type, or a contract clause outside the form the
+translator accepts — is skipped along with its descriptors, and gets a
+`__RIDL_NO_FACE_<NAME>` constant naming the interface, the reason and the
+story that removes the limit. Neither is an error: the rest of the package is
+emitted, and the build succeeds.
 
 The face names the `ridl-rt` port traits and nothing else: the crate carries no
 runtime and opens no socket, so an application supplies the ports. The one
@@ -527,9 +539,16 @@ ridl build --out-dir out && find out -type f | sort
 ```
 
 ```text
+out/Cargo.toml
+out/lib.rs
 out/veh.cluster.rs
 out/veh.common.rs
 ```
+
+The `Cargo.toml` and the `lib.rs` are the crate root: the per-package files
+are flat, and the crate root is what gives them the module paths the generated
+code refers to each other by. Single-file mode writes neither, because one
+file is not a crate.
 
 and a single `.typl` file with `--emit rust,ir-json`:
 
@@ -1475,7 +1494,9 @@ ridlc build . --out-dir out && find out -type f | sort
 ```
 
 ```text
+out/Cargo.toml
 out/cli.demo.rs
+out/lib.rs
 ```
 
 **Exit codes.** 0/1/2 in the same shape as `ridl build` — clean, a diagnostic
