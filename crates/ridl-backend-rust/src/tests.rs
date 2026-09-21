@@ -4567,8 +4567,8 @@ fn flatbuffers_bound_names_a_collection_whose_count_alone_is_unbounded() {
 }
 
 /// The same, one level down: an unbounded count inside a collection whose own
-/// count is fine. Each level probes its own count, so nesting is covered by
-/// the recursion rather than by a special case.
+/// count is fine. The whole position is probed once over a `boolean` in the
+/// element's place, so the inner count is charged through the outer one.
 #[test]
 fn flatbuffers_bound_names_a_nested_collection_whose_count_alone_is_unbounded() {
     let inner = v2::FieldType {
@@ -4666,6 +4666,215 @@ fn flatbuffers_bound_leaves_a_collection_with_a_bounded_count_alone() {
         check_flatbuffers_bounds(&pkg),
         Ok(()),
         "a count that fits leaves the verdict to the element, which is unjudgeable"
+    );
+}
+
+// The four shapes the review of 2026-09-21's second pass found still exempt:
+// each is unbounded by a product of counts, or by a count over a locally
+// known element, that a probe of one nesting level at a time never charged.
+// `judge` now replaces every unjudgeable leaf by a `boolean` and probes the
+// whole position once, so the product is charged (design note §4b).
+
+/// A `boolean`-typed position.
+fn boolean_type() -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Primitive(
+            v2::PrimitiveType::Boolean as i32,
+        )),
+    }
+}
+
+/// A position typed by a reference this backend does not resolve.
+fn foreign_type(reference: &str) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+    }
+}
+
+fn array_type(element: v2::FieldType, max: u64) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(element)),
+            min: 0,
+            max,
+        }))),
+    }
+}
+
+/// A struct `veh.cruise.Holder` over the given fields, ordinals in order.
+fn holder_over(fields: Vec<(&str, v2::FieldType)>) -> v2::Package {
+    let holder = v2::StructDef {
+        members: fields
+            .into_iter()
+            .enumerate()
+            .map(|(index, (name, ty))| {
+                field_member(v2::Field {
+                    ordinal: index as u32 + 1,
+                    r#type: Some(ty),
+                    name: name.to_string(),
+                    ..Default::default()
+                })
+            })
+            .collect(),
+        fixed_layout: false,
+    };
+    package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    )
+}
+
+/// `[[veh.other.Speed; 0..2^20]; 0..2^20]`: each count fits on its own and
+/// their product does not. Its purely local twin, `[[boolean; 0..2^20];
+/// 0..2^20]`, is refused, and this one must be too.
+#[test]
+fn flatbuffers_bound_names_a_nested_collection_whose_counts_multiply_over_the_ceiling() {
+    let pkg = holder_over(vec![(
+        "grid",
+        array_type(
+            array_type(foreign_type("veh.other.Speed"), 1 << 20),
+            1 << 20,
+        ),
+    )]);
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the product of the counts is over");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.grid` has no finite FlatBuffers bound",
+        "the product of two counts is charged even though the element is not judged"
+    );
+    let local = holder_over(vec![(
+        "grid",
+        array_type(array_type(boolean_type(), 1 << 20), 1 << 20),
+    )]);
+    assert_eq!(
+        check_flatbuffers_bounds(&local).map_err(|err| err.message),
+        Err("`veh.cruise.Holder.grid` has no finite FlatBuffers bound".to_string()),
+        "the local twin is refused the same way"
+    );
+}
+
+/// `map<veh.other.Key, [boolean; 0..2^20]; 0..2^20>`: an unjudgeable key
+/// beside a local value whose count, times the entry count, is over.
+#[test]
+fn flatbuffers_bound_names_a_map_whose_entry_count_times_its_value_count_is_over_the_ceiling() {
+    let pkg = holder_over(vec![(
+        "byId",
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(foreign_type("veh.other.Key"))),
+                value: Some(Box::new(array_type(boolean_type(), 1 << 20))),
+                min: 0,
+                max: 1 << 20,
+            }))),
+        },
+    )]);
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the entry count times the value is over");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "a map's entry count is multiplied into its value's own count"
+    );
+}
+
+/// `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]`: the inner array fits on
+/// its own, and four of them exceed `MAX_ENCODABLE`.
+#[test]
+fn flatbuffers_bound_names_an_array_of_tuples_whose_local_half_is_over_the_ceiling_in_total() {
+    let pkg = holder_over(vec![(
+        "rows",
+        array_type(
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                    fields: vec![
+                        v2::TupleField {
+                            name: "speed".to_string(),
+                            r#type: Some(foreign_type("veh.other.Speed")),
+                        },
+                        v2::TupleField {
+                            name: "flags".to_string(),
+                            r#type: Some(array_type(boolean_type(), 1 << 31)),
+                        },
+                    ],
+                })),
+            },
+            4,
+        ),
+    )]);
+    let err = check_flatbuffers_bounds(&pkg).expect_err("four inner arrays exceed the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.rows` has no finite FlatBuffers bound",
+        "the outer count is charged over the tuple's locally known half"
+    );
+}
+
+/// Two local `[boolean; 0..2^31]` members beside one foreign field: each
+/// member is bounded on its own, the two together are over the ceiling, and
+/// the foreign field must not shield that sum. Without it the pair is
+/// refused as an aggregate cause, and with it the pair is refused the same
+/// way.
+#[test]
+fn flatbuffers_bound_names_the_declaration_when_the_aggregate_is_over_beside_a_foreign_member() {
+    let aggregate = "`veh.cruise.Holder` has no finite FlatBuffers bound: every member is bounded \
+                     on its own and the total is not";
+    let with_foreign = holder_over(vec![
+        ("a", array_type(boolean_type(), 1 << 31)),
+        ("b", array_type(boolean_type(), 1 << 31)),
+        ("speed", foreign_type("veh.other.Speed")),
+    ]);
+    assert_eq!(
+        check_flatbuffers_bounds(&with_foreign).map_err(|err| err.message),
+        Err(aggregate.to_string()),
+        "a foreign member does not shield an aggregate over the ceiling"
+    );
+    let without = holder_over(vec![
+        ("a", array_type(boolean_type(), 1 << 31)),
+        ("b", array_type(boolean_type(), 1 << 31)),
+    ]);
+    assert_eq!(
+        check_flatbuffers_bounds(&without).map_err(|err| err.message),
+        Err(aggregate.to_string()),
+        "the same pair without the foreign member is the aggregate case"
+    );
+}
+
+/// The control for the four above, in the shape of the first: a nested
+/// collection whose counts multiply to something that fits, over the same
+/// unjudgeable element, stays exempt. Without it the four would pass for a
+/// `judge` that refused every nested collection over a foreign leaf.
+#[test]
+fn flatbuffers_bound_leaves_a_nested_collection_whose_counts_multiply_under_the_ceiling_alone() {
+    let pkg = holder_over(vec![(
+        "grid",
+        array_type(
+            array_type(foreign_type("veh.other.Speed"), 1 << 10),
+            1 << 10,
+        ),
+    )]);
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a product of counts that fits at one byte an element leaves the element unjudged"
+    );
+}
+
+/// `[veh.other.Speed; 0..2^31]` stays exempt, and that is an honest limit
+/// rather than a hole: at one byte an element the count fits, and this
+/// backend cannot learn the foreign element's width to say more. It is what
+/// the stand-in being a lower bound means — it can prove a position
+/// unbounded and never prove one bounded.
+#[test]
+fn flatbuffers_bound_leaves_a_large_count_over_a_foreign_element_alone_when_one_byte_each_fits() {
+    let pkg = holder_over(vec![(
+        "readings",
+        array_type(foreign_type("veh.other.Speed"), 1 << 31),
+    )]);
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a count that fits at one byte an element says nothing about the real element"
     );
 }
 

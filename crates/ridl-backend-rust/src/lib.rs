@@ -247,12 +247,15 @@ enum Attribution {
     Layout(String),
     /// Every member is bounded on its own and the total is not: the summed
     /// size overflows `u64`, or it exceeds
-    /// [`fb_projection::MAX_ENCODABLE`].
+    /// [`fb_projection::MAX_ENCODABLE`]. A member this backend cannot judge
+    /// does not shield the sum: it is charged as a `boolean` and the total
+    /// is over the ceiling even so.
     Aggregate,
-    /// Every member that could be judged is individually bounded, and at
-    /// least one could not be judged — a cross-package reference this backend
-    /// does not resolve, or a same-package cycle. `decl`'s own `None` is
-    /// explained by that member, not by an unbounded shape.
+    /// Every member that could be judged is individually bounded, at least
+    /// one could not be judged — a cross-package reference this backend does
+    /// not resolve, or a same-package cycle — and the struct as a whole still
+    /// fits with each unjudged leaf charged as a `boolean`. `decl`'s own
+    /// `None` is explained by that member, not by an unbounded shape.
     Exempt,
 }
 
@@ -317,11 +320,49 @@ fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attrib
         }
         _ => {}
     }
-    if any_exempt {
-        Attribution::Exempt
-    } else {
-        Attribution::Aggregate
+    if !any_exempt {
+        return Attribution::Aggregate;
     }
+    // Every judged member is bounded and at least one member could not be
+    // judged, so the aggregate is still open: two members each under the
+    // ceiling can sum over it, and a member this backend cannot judge must
+    // not shield that sum. The whole struct is charged once more over
+    // `lower_bound_stand_in`'s copy of each member, which charges the
+    // unjudged leaves no more than the real ones would, so `None` here is
+    // an aggregate cause whatever those leaves turn out to be. A union is
+    // its largest arm rather than a sum, so it has no aggregate to charge.
+    if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
+        let stand_in = v2::Decl {
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: def
+                    .members
+                    .iter()
+                    .map(|member| match &member.member {
+                        Some(v2::struct_member::Member::Field(field)) => v2::StructMember {
+                            member: Some(v2::struct_member::Member::Field(v2::Field {
+                                r#type: field
+                                    .r#type
+                                    .as_ref()
+                                    .map(|ty| lower_bound_stand_in(ctx, ty)),
+                                ..field.clone()
+                            })),
+                        },
+                        _ => member.clone(),
+                    })
+                    .collect(),
+                fixed_layout: def.fixed_layout,
+            })),
+            ..decl.clone()
+        };
+        let packages = fb_projection::Packages {
+            package,
+            others: &[],
+        };
+        if fb_projection::max_size(packages, &stand_in).is_none() {
+            return Attribution::Aggregate;
+        }
+    }
+    Attribution::Exempt
 }
 
 /// One type position's verdict.
@@ -330,14 +371,20 @@ fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attrib
 /// the cheapest and the most faithful answer: [`probe_field_type`] charges it
 /// exactly what [`fb_projection::max_size`] charges it as one member.
 ///
-/// A position it cannot resolve in full is **descended into**, which is the
-/// first gap §4a carried forward to this stage. An anonymous composite can
-/// mix an unjudgeable leaf with an unbounded one — `map<veh.other.Speed,
-/// string>` is the recorded example — and answering for the whole member
-/// would exempt the unbounded value along with the unresolved key. Only a
-/// named reference and a stream are unjudgeable in themselves; an array, a
-/// map and a tuple hand the question to their own leaves, and one unbounded
-/// leaf refuses the member whatever else is beside it.
+/// A position it cannot resolve in full is probed as a whole too, over
+/// [`lower_bound_stand_in`]'s copy of it: every leaf this backend cannot
+/// judge is replaced by a `boolean`, the smallest thing the projection
+/// charges anything for, and what is left is charged once by the same
+/// `max_size` the real position would be charged by. That charges every
+/// count, every product of nested counts, and every locally known leaf in
+/// the position together, which neither a leaf-by-leaf descent nor a
+/// level-by-level probe of each count does — `[[veh.other.Speed; 0..2^20];
+/// 0..2^20]` is unbounded by the product of its two counts and by nothing
+/// else, and `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]` by an outer
+/// count over a local inner one. Because each stand-in is a lower bound on
+/// the leaf it replaces, a stand-in that is unbounded proves the real
+/// position is, and a stand-in that fits says nothing about the real leaves,
+/// which is what `Unjudgeable` means.
 fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
     if member_resolves_locally(ctx, ty) {
         return if probe_field_type(package, ty).is_some() {
@@ -346,101 +393,71 @@ fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
             Verdict::Unbounded
         };
     }
-    fn worst(verdicts: Vec<Verdict>) -> Verdict {
-        if verdicts.contains(&Verdict::Unbounded) {
-            Verdict::Unbounded
-        } else {
-            Verdict::Unjudgeable
-        }
-    }
-    match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Array(array)) => worst(vec![
-            array
-                .element
-                .as_deref()
-                .map_or(Verdict::Unjudgeable, |element| judge(ctx, package, element)),
-            count_verdict(package, ty),
-        ]),
-        Some(v2::field_type::Kind::Map(map)) => worst(
-            [map.key.as_deref(), map.value.as_deref()]
-                .into_iter()
-                .flatten()
-                .map(|half| judge(ctx, package, half))
-                .chain(std::iter::once(count_verdict(package, ty)))
-                .collect(),
-        ),
-        Some(v2::field_type::Kind::Tuple(tuple)) => worst(
-            tuple
-                .fields
-                .iter()
-                .filter_map(|field| field.r#type.as_ref())
-                .map(|field| judge(ctx, package, field))
-                .collect(),
-        ),
-        // A named reference this backend does not resolve, a cycle, or a
-        // stream: the position itself is what cannot be judged.
-        _ => Verdict::Unjudgeable,
-    }
-}
-
-/// Whether a collection's **own element count** is bounded, judged
-/// independently of what its elements are.
-///
-/// A collection charges `count × element` plus the element's out-of-line
-/// cost, and `fb_projection::max_size` answers `None` when that overflows
-/// `u64` or exceeds `fb_projection::MAX_ENCODABLE`. That can be true of the
-/// count alone: `[veh.other.Speed; 0..2^40]` has an element this backend
-/// cannot judge and a count no FlatBuffers buffer can hold, and answering
-/// `Unjudgeable` for the whole position would exempt it silently, while the
-/// same field over a local element is refused. So the count is probed with
-/// the smallest element the projection charges anything for — a `boolean`,
-/// one inline byte and nothing out of line. A count that is unbounded even
-/// at one byte an element is unbounded whatever the element turns out to be;
-/// a count that fits at one byte says nothing about the real element, which
-/// is what the element's own verdict is for.
-fn count_verdict(package: &v2::Package, ty: &v2::FieldType) -> Verdict {
-    let Some(minimal) = minimal_elements(ty) else {
-        return Verdict::Unjudgeable;
-    };
-    if probe_field_type(package, &minimal).is_some() {
-        Verdict::Bounded
+    if probe_field_type(package, &lower_bound_stand_in(ctx, ty)).is_some() {
+        Verdict::Unjudgeable
     } else {
         Verdict::Unbounded
     }
 }
 
-/// The same collection with every element position replaced by a `boolean`,
-/// so that what is left to charge is the count and nothing else. `None` for
-/// a position that is not a collection.
-fn minimal_elements(ty: &v2::FieldType) -> Option<v2::FieldType> {
-    fn boolean() -> v2::FieldType {
+/// `ty` with every leaf this backend cannot judge replaced by a `boolean`,
+/// so that [`fb_projection::max_size`] can charge the rest.
+///
+/// A `boolean` is one inline byte and nothing out of line, and the
+/// projection charges every other leaf at least that: a named scalar its
+/// declared width, an enum eight bytes, a struct, a union or a string an
+/// offset plus its own table or body. A vector's charge and a table's bound
+/// are both monotone in the charge of what they hold, so the stand-in is
+/// charged no more than the real position, and `None` over the stand-in is
+/// `None` over the real position whatever the unjudged leaves turn out to be.
+/// The replaced leaves are the ones [`member_resolves_locally`] answers
+/// `false` for: a named reference that does not resolve in this package or
+/// reaches a cycle, a stream, and an unspecified primitive. A `FieldType` with
+/// no `kind` is kept, so it still probes to `Unbounded` (design note §4b).
+fn lower_bound_stand_in(ctx: &Ctx, ty: &v2::FieldType) -> v2::FieldType {
+    fn boolean(optional: bool) -> v2::FieldType {
         v2::FieldType {
-            optional: false,
+            optional,
             kind: Some(v2::field_type::Kind::Primitive(
                 v2::PrimitiveType::Boolean as i32,
             )),
         }
     }
-    let kind = match ty.kind.as_ref()? {
-        v2::field_type::Kind::Array(array) => {
+    let stand_in = |leaf: &v2::FieldType| Box::new(lower_bound_stand_in(ctx, leaf));
+    let kind = match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Array(array)) => {
             v2::field_type::Kind::Array(Box::new(v2::ArrayType {
-                element: Some(Box::new(boolean())),
+                element: array.element.as_deref().map(stand_in),
                 min: array.min,
                 max: array.max,
             }))
         }
-        v2::field_type::Kind::Map(map) => v2::field_type::Kind::Map(Box::new(v2::MapType {
-            key: Some(Box::new(boolean())),
-            value: Some(Box::new(boolean())),
+        Some(v2::field_type::Kind::Map(map)) => v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: map.key.as_deref().map(stand_in),
+            value: map.value.as_deref().map(stand_in),
             min: map.min,
             max: map.max,
         })),
-        _ => return None,
+        Some(v2::field_type::Kind::Tuple(tuple)) => v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: tuple
+                .fields
+                .iter()
+                .map(|field| v2::TupleField {
+                    r#type: field.r#type.as_ref().map(|leaf| *stand_in(leaf)),
+                    ..field.clone()
+                })
+                .collect(),
+        }),
+        _ if member_resolves_locally(ctx, ty) => return ty.clone(),
+        // A named reference this backend does not resolve, a cycle, a
+        // stream, or an unspecified primitive: the leaf itself is what
+        // cannot be judged, and it is replaced.
+        _ => return boolean(ty.optional),
     };
-    Some(v2::FieldType {
-        optional: false,
+    v2::FieldType {
+        optional: ty.optional,
         kind: Some(kind),
-    })
+    }
 }
 
 /// The members of `decl` this backend cannot judge — a cross-package
