@@ -159,8 +159,9 @@ member; rsdl is the apex.
                          and as edition 2024 with the rust-toolchain.toml pin,
                          and check its LICENSE (ADR-0021 decision 10)
     just demo            generate examples/cabin's crate with ridl build and run
-                         the program that links it — the four round trips print
-                         and a non-zero exit fails. examples/cabin is its own
+                         the program that links it — each round trip's value
+                         is matched, and a missing one or a non-zero exit
+                         fails. examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
                          this workspace cannot reach

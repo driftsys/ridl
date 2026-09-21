@@ -296,9 +296,9 @@ compat-check: toolchain-check
 # does not hold, so a green run is the demo working rather than merely
 # compiling.
 #
-# `examples/cabin` is its own cargo workspace, outside this repository's, which
-# excludes `examples`. Its `generated/` member is written here and is not in
-# git, so nothing in the repository's own workspace depends on a build output.
+# `examples/cabin` is its own cargo workspace, outside this repository's. Its
+# `generated/` member is written here and is not in git, so nothing in the
+# repository's own workspace depends on a build output.
 # `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
 # change that the lock does not carry fails rather than silently resolving.
 #
@@ -315,10 +315,13 @@ compat-check: toolchain-check
 # silencing them one at a time would be a standing tax on the emitter.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
-# `install-check` does, rather than through a hardcoded `./target`: a
+# `compat-check` reads it, rather than through a hardcoded `./target`: a
 # contributor who exports that variable would otherwise get a missing-file
 # failure from a member of `just build` rather than from this recipe's own
-# work.
+# work — or, worse, run a stale binary left at the default path. The variable
+# is the only spelling handled: `build.target-dir` in a cargo config, and a
+# `--target` triple, both move the binary somewhere this does not look, which
+# `compat-check` shares and neither closes.
 #
 # Fails on: the build drawing an error; the emitted crate or the consumer
 # failing to compile; the program exiting non-zero or not reporting all four
@@ -342,13 +345,28 @@ demo:
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
-    # The output is checked, not just the status. A change that weakened or
-    # removed the consumer's assertions would still exit 0, and both this and
-    # `cabin_example` read that same source, so nothing else in the tree
-    # would notice that no round trip ran.
-    output="$(cargo run --manifest-path examples/cabin/Cargo.toml -p consumer --locked)"
+    # The output is checked, not just the status, and each line carries the
+    # value its round trip carried rather than the bare word `ok`. So the
+    # match is on what travelled: a codec or a face returning a wrong value
+    # fails here even if the consumer's own `assert` were weakened, and a
+    # round trip that aborts part-way takes its line with it. Checking the
+    # status alone caught neither, and `cabin_example` reads this same source,
+    # so nothing else in the tree would have noticed.
+    #
+    # What it does not catch, because nothing can: a round trip deleted and
+    # its line replaced by the literal this loop looks for. That is editing
+    # the proof rather than the code, the same as deleting a test.
+    # Captured rather than streamed so the lines can be matched, and printed
+    # on both paths: a panic part-way through would otherwise take the round
+    # trips that did complete with it, which is what tells a reader how far
+    # the demo got.
+    if ! output="$(cargo run --manifest-path examples/cabin/Cargo.toml -p consumer --locked)"; then
+        printf '%s\n' "$output"
+        echo "demo: the consumer did not run to completion" >&2
+        exit 1
+    fi
     printf '%s\n' "$output"
-    for round_trip in "signal ok" "event ok" "command ok" "query ok"; do
+    for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7"; do
         if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
             echo "demo: the consumer did not report \"$round_trip\"" >&2
             exit 1

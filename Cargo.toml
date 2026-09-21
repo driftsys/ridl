@@ -14,9 +14,11 @@
 resolver = "2"
 members = ["crates/*", "xtask"]
 # `examples/cabin` is its own workspace (`just demo`). One of its two members,
-# `generated/`, is written by `ridl build --emit rust` and is not in git, so a
-# member of this workspace it cannot be: every gate command would fail on a
-# fresh clone until the demo had been run once.
+# `generated/`, is written by `ridl build --emit rust` and is not in git, so it
+# has no place in the workspace the gate builds. This exclusion states that
+# where a reader of this file looks; it is not what enforces it, since
+# `members` above never globbed the directory and `examples/cabin` declares a
+# `[workspace]` of its own.
 exclude = ["examples"]
 
 [workspace.package]
