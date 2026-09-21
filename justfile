@@ -174,10 +174,15 @@ wasm-check:
 # a packaging mistake a hand copy cannot, such as a resolver value the minimum
 # toolchain cannot parse.
 #
-# The package is extracted to target/compat-check/pkg, a fixed path rather
-# than a fresh mktemp each run, so CARGO_TARGET_DIR=target/compat-check/build
-# lets cargo reuse the build across repeated runs instead of adding new build
-# artifacts every time.
+# target/compat-check is removed at the start of the recipe, so both the
+# extracted package (target/compat-check/pkg) and the build it feeds
+# (CARGO_TARGET_DIR=target/compat-check/build) start clean every run. This
+# gate exists to build the packaged crate from scratch under a different
+# toolchain, so it must reuse no cache: a fixed build directory kept across
+# runs let cargo's fingerprints for that path outlive the source they once
+# described, so a passing tree could read as failing or the reverse (issue
+# #442). ridl-rt is no_std with no dependency of its own in any feature
+# combination (ADR-0021 decision 8), so the rebuild this costs is small.
 #
 # `toolchain-check` is a dependency, and has already proven the running
 # toolchain matches the rust-toolchain.toml pin, so this recipe reads the pin
@@ -195,6 +200,7 @@ wasm-check:
 compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
+    rm -rf "$PWD/target/compat-check"
     manifest="crates/ridl-rt/Cargo.toml"
     minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
     if [ -z "$minimum" ]; then
@@ -228,7 +234,6 @@ compat-check: toolchain-check
     cargo package -p ridl-rt --no-verify --allow-dirty
 
     pkg="$PWD/target/compat-check/pkg"
-    rm -rf "$pkg"
     mkdir -p "$pkg"
     tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-rt-$version.crate" -C "$pkg" --strip-components=1
 
