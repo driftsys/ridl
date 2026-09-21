@@ -276,3 +276,22 @@ provenance. Nothing here is normative — the current references live in
   `ridl_descriptor::hash::catalog_hash` (driftsys/ridl#324). Read the rest as a
   plan: its tasks are the sequence the implementation followed, not a
   description of the result.
+- **2026-09-20-flatbuffers-codec-design.md** and
+  **2026-09-20-flatbuffers-codec-plan.md** — the design note and the seven-task
+  plan for the FlatBuffers payload codec, story E11.7, run as lane K of the same
+  coordination (driftsys/ridl#328). Twelve decisions: where the
+  `Payload<FlatBuffers>` implementations are emitted, how `encode` builds a
+  back-to-front format into a caller's slice, where the typl constraint check
+  runs so `decode` stays infallible, who owns the `MAX_SIZE` computation Epic 16
+  also needs, and how the generated face stops being bound to `ReprC`. The
+  durable record is
+  [the FlatBuffers codec design record](../design/flatbuffers-codec.md), with
+  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) for the
+  projection the codec agrees with and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 7
+  and 8 for what `ridl-rt` owes it. Read the note for the reasoning behind a
+  decision and for §4a to §4e, each stage's record of what it measured and what
+  it corrected in the stage before — not as a description of the result. **One
+  of its decisions is not built**: D-11, the face on the codec, blocked on
+  driftsys/ridl#470, so [the lane driver](../wip/2026-09-20-lane-k-driver.md) is
+  still live.

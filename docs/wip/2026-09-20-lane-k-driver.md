@@ -1,5 +1,25 @@
 # Lane K driver — the FlatBuffers payload codec
 
+> **State, 2026-09-21: K1 to K8 have run, and the lane is not closed.** Every
+> decision of the design note is built except **D-11**, the interaction face
+> moving off its `ReprC` placeholder onto the codec. Stage K7 could not execute
+> it: a FlatBuffers root is a table and the projection mints one only for a
+> `struct` or a `union`, so a named-scalar or enum payload — which is what most
+> of the corpus writes — has no `Payload<FlatBuffers>` to name. That is a
+> projection decision nobody has taken, **driftsys/ridl#470**, and it awaits
+> Sebastien.
+>
+> The design note and the plan are archived:
+> [`../archive/2026-09-20-flatbuffers-codec-design.md`](../archive/2026-09-20-flatbuffers-codec-design.md)
+> and
+> [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
+> The codec as built is
+> [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md), and its
+> "What is not built" section is the live statement of D-11. This document stays
+> here, rather than archiving with the other two, because the lane has a stage
+> left to run: whoever takes #470 runs D-11 as **K9**, with the Mechanics and
+> the review rule below unchanged.
+
 Status: driver prompt, 2026-09-20. One lane. Each stage is a fresh session. Set
 the `THIS SESSION RUNS` line below before starting a session, and do only that
 stage.
@@ -34,7 +54,8 @@ Then read the code the codec has to fit: `crates/ridl-rt/src/payload.rs`,
 `crates/ridl-backend-rust/src/descriptors.rs` and `src/face.rs` (the two places
 the generated face names an encoding).
 
-**THIS SESSION RUNS: K1**
+**THIS SESSION RUNS: K9** — D-11, once driftsys/ridl#470 is decided. Nothing
+else in this lane is left to run.
 
 ## Stages
 
@@ -93,9 +114,18 @@ note.
 ### K2 to K8 — the plan's tasks, one stage each
 
 Added by the plan's pull request, as K1 requires. The plan is
-[`2026-09-20-flatbuffers-codec-plan.md`](2026-09-20-flatbuffers-codec-plan.md)
+[`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md)
 and each stage is one of its tasks, with the files, the test and the
 must-not-break set stated there.
+
+**What each stage landed**, for a reader arriving at this document after the
+fact: K2 the shared projection facts and the size bound (driftsys/ridl#458), K3
+the `ridl-rt` helpers, `Encoded.bytes` as a subslice and the proof mechanism
+(#461), K4 D-7's refusal (#462), K5 the codec in `generate`'s output (#465), K6
+`check` beside `new` (#468), K7 the encoded-subslice fix in the face and #448's
+disposition — **not** D-11 (#471), and K8 conformance against planus,
+determinism pinned across runs, the `wasm32` check over generated code, and the
+gardening. **K9 is D-11**, unstarted and blocked on driftsys/ridl#470.
 
 - **K2 — the shared projection facts and the size bound.** Outside any backend,
   in `ridl-ir` or a small projection crate; the stage chooses between them and
@@ -295,16 +325,19 @@ Gate before a pull request: `just verify`. Review per the lanes plan §7
 merge. One pull request open at a time. Never push a tag, publish to a registry,
 add a secret, or push to `main`.
 
-**Two container facts to check before trusting a gate.** `git-std` and `prim`
-are installed in some containers and not others; when the release installer
-answers 403 through the agent proxy, install `git-std` with the fallback
-`ci.yml` already carries,
-`cargo install --git https://github.com/driftsys/git-std git-std --locked`. And
-driftsys/ridl#430 and driftsys/ridl#434 fail `just test` in a container that
-runs as root, because both assert on permission bits that do not apply to uid 0;
-if those are the only failures, push with `GIT_STD_SKIP_HOOKS=1`, name the
-issues in the pull request, and run `lint`, `wasm-check`, `compat-check` and
-`check` yourself, because `just build` stops at `test`.
+**One container fact to check before trusting a gate.** `git-std` and `prim` are
+installed in some containers and not others; when the release installer answers
+403 through the agent proxy, install `git-std` with the fallback `ci.yml`
+already carries,
+`cargo install --git https://github.com/driftsys/git-std git-std --locked`.
+
+**The second container fact this document carried is stale and is removed.** It
+said driftsys/ridl#430 and driftsys/ridl#434 fail `just test` in a container
+running as root, because both assert on permission bits that do not apply to uid
+0, and told a stage to push with `GIT_STD_SKIP_HOOKS=1` and run four recipes by
+hand. Both issues are **fixed on `main` since driftsys/ridl#451**, so
+`just test` passes under uid 0 and `just build` no longer stops there. Run the
+whole gate, and push with hooks on.
 
 ## After each stage
 

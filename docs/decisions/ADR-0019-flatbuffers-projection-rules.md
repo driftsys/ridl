@@ -216,7 +216,7 @@ refused.
 | A hand-rolled discriminant-plus-arms table (note §4.4's remedy)   | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both) |
 | Refusing a named scalar, enum or enum set union arm               | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                        |
 | The FlatBuffers `struct` form for a `fixed_layout` struct         | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                              |
-| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — reopenable in E11.7 (see Open)                                                   |
+| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — parked, not reopenable in a named story (see Open item 1, amended 2026-09-21)    |
 | Lifting `ridl-backend-proto`'s `SymbolScope`                      | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
 | Defaulting a zero-less enum field to its lowest declared value    | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
 | Refusing or escaping a name that reaches a `planus` reserved word | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                   |
@@ -265,6 +265,33 @@ refused.
    E9.11's scope into Epic 11. Taking it would also want a contract-level
    statement that the map is ordered — which typl does not have — and a validity
    oracle that parses the attribute, which `planus` today does not.
+
+   **Amended 2026-09-21, at the end of E11.7's implementation.** **E11.7 did not
+   take it, and this item no longer names a story.** The codec landed and writes
+   a map as a vector of entry tables with no `(key)`, with entries in the order
+   of the generated `Vec<(K, V)>` and nothing sorting — decision 4 as written.
+   **The ground is the language, and it has not moved: typl states no ordering
+   on a map (§12.2).** Emitting `(key)` would assert an ordering the contract
+   does not make, and oblige every producer to sort for a guarantee no typl
+   declaration asks for. That is independent of any tool and is sufficient on
+   its own.
+
+   A practical note, subordinate to it and deliberately **not** the reason: this
+   repository's validity oracle and its conformance round trip both run on
+   `planus`, which parses no `(key)`
+   ([`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)), so
+   emitting the attribute today would cost both. This must not become the ground
+   — it is the reasoning the alternatives table above rejects for the
+   reserved-word question, where a refusal would let a test dependency constrain
+   the language, and it evaporates the moment planus gains support or a second
+   oracle arrives.
+
+   The item is parked rather than closed, and reopens on either of two
+   observations: a consumer needs keyed lookup into a map without decoding it,
+   which nothing in the roadmap asks for; or the oracle changes — planus gaining
+   `(key)`, or a second implementation joining it — which removes the practical
+   note and leaves the language ground to be answered on its own. Whoever
+   reopens it files the story then.
 2. **The `fixed_layout` flag has no consumer.** Decision 3 leaves it in the IR
    for a target where a fixed layout is safe — one whose schema evolution is
    closed, or a deployment that pins both schema versions. The first backend

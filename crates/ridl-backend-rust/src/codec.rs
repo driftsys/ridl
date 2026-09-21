@@ -1,6 +1,12 @@
 //! The FlatBuffers payload codec, emitted into [`crate::generate`]'s output
 //! (design note D-1 as amended, plan Task 4, stage K5).
 //!
+//! The codec as built, including what it does not promise and what is not
+//! built, is `docs/design/flatbuffers-codec.md`. The design note this
+//! module's comments cite by decision number is archived at
+//! `docs/archive/2026-09-20-flatbuffers-codec-design.md`; read it for the
+//! reasoning behind a decision, not for what the code does.
+//!
 //! For every declaration that mints a root table — a struct or a union
 //! ([`fb_projection::mints_root_table`]) — this module emits, beside the
 //! domain type:

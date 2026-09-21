@@ -1,5 +1,23 @@
 # The FlatBuffers payload codec — implementation plan
 
+> **Archived 2026-09-21. Every task is executed except one half of Task 6.**
+> Task 1 landed as driftsys/ridl#458, Task 2 as #461, Task 3 as #462, Task 4 as
+> #465, Task 5 as #468, Task 6 in part as #471, and Task 7 as the pull request
+> that archived this file. What Task 6 did not land is D-11, the face on the
+> codec, which is blocked on **driftsys/ridl#470**. The codec as built is
+> [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md); the
+> reasoning is
+> [`2026-09-20-flatbuffers-codec-design.md`](2026-09-20-flatbuffers-codec-design.md),
+> archived beside this file.
+>
+> Read this as the work breakdown that was followed, not as work to do. Where a
+> task's text and what landed differ, the design note's §4a to §4e record the
+> difference and say why. **Task 7's `Done when` is one of those**: it says
+> `just wasm-check` covers the fixture, which it cannot — the recipe takes
+> packages and the generated codec is text with no manifest. Task 7's own body
+> offered the two shapes and asked the stage to name the one taken; §4e names
+> it, a test that runs the same check over the emitted source.
+
 **Status:** plan, 2026-09-20. It implements
 [`2026-09-20-flatbuffers-codec-design.md`](2026-09-20-flatbuffers-codec-design.md)
 as that note's pull request disposed of it: D-2, D-3, D-5, D-8, D-9 and D-10 as

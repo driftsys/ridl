@@ -23,6 +23,15 @@ choices, see [`../decisions/`](../decisions/).
   11 and 12, with
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
   for the face its handles are passed to.
+- **flatbuffers-codec.md** — the generated `Payload<FlatBuffers>` implementation
+  a package carries, story E11.7: where the projection facts both emitters read
+  live, what `generate` emits per table, what `encode`, `verify`, `decode` and
+  `MAX_SIZE` do and do not promise, determinism, conformance against an
+  independent implementation, and the one decision of the story that is not
+  built. The decisions behind its choices are
+  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decisions 2, 5, 6 and 7.
 - **interaction-face.md** — the generated `Client`/`Publisher`/`Provider`/
   `dispatch` face over `ridl-rt`, story E11.13's in-process MVP: the two emitter
   entry points, the descriptors, the clause translator, the settlement table,

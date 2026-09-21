@@ -1,4 +1,4 @@
-//! The schema-compiler dependency-boundary guard.
+//! The test-time dependency-boundary guard.
 //!
 //! `ridl-backend-proto` and `ridl-backend-flatbuffers` each carry a schema
 //! compiler — `protox`, `planus-translation` — as a test-time validity
@@ -21,6 +21,21 @@
 //! repeated here as an automated check, because reproducing it would mean
 //! shipping the very promotion this guard exists to prevent).
 //!
+//! E11.7 stage K8 widened this guard past the two schema compilers.
+//! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
+//! runtime and code generator, and emits the `.fbs` it feeds them with
+//! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
+//! same reason and one more: the E11.7 design note's D-12 keeps a
+//! third-party FlatBuffers implementation out of the shipped path, and
+//! ADR-0020 decision 9 makes a backend an executable rather than a library
+//! other crates link.
+//!
+//! **The authority is D-12, not ADR-0020 decision 5.** Decision 5 *permits*
+//! one FlatBuffers runtime crate, in `ridl-rt` under its `flatbuffers`
+//! feature; D-12 leaves that permission unused, so ADR-0020's RA-01
+//! dependency ceiling stays unspent. Citing decision 5 as the prohibition
+//! would be citing a permission.
+//!
 //! This guard reads the resolved dependency graph instead, via
 //! `cargo metadata --format-version 1`, because that is the one place the
 //! *kind* of a dependency edge — normal, dev, or build — is recorded
@@ -38,8 +53,7 @@ use std::process::Command;
 struct Boundary {
     /// The backend crate under the constraint.
     package: &'static str,
-    /// The schema-compiler crate `package` may reach only through
-    /// `[dev-dependencies]`.
+    /// The crate `package` may reach only through `[dev-dependencies]`.
     oracle: &'static str,
 }
 
@@ -51,6 +65,33 @@ const BOUNDARIES: &[Boundary] = &[
     Boundary {
         package: "ridl-backend-proto",
         oracle: "protox",
+    },
+    // E11.7 stage K8 added planus's runtime and code generator to
+    // `ridl-backend-rust` for the FlatBuffers codec's conformance test. They
+    // are the same kind of oracle under a stronger rule: the design note's
+    // D-12 keeps a third-party FlatBuffers implementation out of the shipped
+    // path, and this crate emits the codec rather than linking one. A
+    // promotion here would put planus behind `ridlc`, and so behind the
+    // `ridl` CLI.
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "planus",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "planus-codegen",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "planus-translation",
+    },
+    // Not an oracle, the same rule: the conformance test emits the `.fbs`
+    // with the schema backend so that the schema and the codec come from one
+    // IR. ADR-0020 decision 9 makes a backend an executable rather than a
+    // library other crates link, so that edge stays inside the test binary.
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "ridl-backend-flatbuffers",
     },
 ];
 
@@ -87,67 +128,140 @@ fn package_names(metadata: &serde_json::Value) -> HashMap<&str, &str> {
         .collect()
 }
 
-/// The dependency kinds of every resolved edge from `package` to `oracle`:
-/// `cargo metadata`'s `dep_kinds[].kind`, where `None` marks a NORMAL
-/// dependency (`Some("dev")` and `Some("build")` are the other two). Empty
-/// when `package` does not depend on `oracle` at all.
-fn dependency_kinds(
-    metadata: &serde_json::Value,
-    package: &str,
-    oracle: &str,
-) -> Vec<Option<String>> {
+/// Every package reachable from `package` by NORMAL dependency edges only,
+/// each mapped to the edge that first reached it, so a failure can print the
+/// path rather than only the endpoint.
+///
+/// **A normal edge is one whose `dep_kinds[].kind` is JSON null.** `"dev"`
+/// and `"build"` are the other two, and an edge can carry several kinds at
+/// once — a crate that is both a dependency and a dev-dependency has a node
+/// with both, which is why the check is "does any kind read null" rather
+/// than "does the first".
+///
+/// **Reachability, not a direct edge.** Checking only `package`'s own edges
+/// would pass a promotion one hop away: `planus` moved into `ridl-ir`'s
+/// `[dependencies]` puts it in `ridl-backend-rust`'s shipped graph, and so
+/// behind `ridlc` and the `ridl` CLI, while producing no direct
+/// `ridl-backend-rust` → `planus` edge at all. The walk starts at
+/// `package`'s normal edges, so its own dev-dependencies are excluded at the
+/// first step and every step after that is normal by construction.
+///
+/// **An optional dependency is caught whether or not its feature is on.**
+/// `cargo metadata` resolves a node's `deps` with the features of the
+/// current invocation, but an optional dependency that no feature activates
+/// still appears in `packages[].dependencies` and, once any feature in the
+/// resolve activates it, in `resolve.nodes[].deps`. This walk reads the
+/// resolved nodes, so it catches an optional normal dependency that is
+/// activated in this workspace's own resolve — which is the case that would
+/// actually ship — and does **not** catch one that nothing activates. That
+/// second case cannot reach a downstream build either, so the gap is not a
+/// hole in the property this guard states.
+///
+/// **A build-dependency is a real gap, named here rather than closed.**
+/// `[build-dependencies] planus` in `ridl-ir` would compile planus in every
+/// downstream build — which is what the failure text below warns of — while
+/// producing no normal edge, so this walk passes it. It does not reach the
+/// linked artefact, which is the narrower property the guard actually
+/// enforces. Following build edges too was considered and rejected on a
+/// measurement rather than on taste: `ridl-ir` already carries `protox` as
+/// a build-dependency, for compiling the IR's own `.proto` files, and
+/// `ridl-backend-proto` depends on `ridl-ir` normally — so a walk over
+/// normal-and-build edges fails the `ridl-backend-proto` / `protox`
+/// boundary today, on a legitimate edge that has nothing to do with that
+/// backend's test oracle. Separating the two would need the guard to know
+/// which use of a crate it is looking at, which is a distinction the
+/// resolved graph does not carry.
+fn normal_closure<'a>(
+    metadata: &'a serde_json::Value,
+    package: &'a str,
+) -> HashMap<&'a str, &'a str> {
     let names = package_names(metadata);
     let nodes = metadata["resolve"]["nodes"]
         .as_array()
         .expect("cargo metadata carries `resolve.nodes`");
-    let node = nodes
-        .iter()
-        .find(|node| {
-            let id = node["id"].as_str().expect("a node id is a string");
-            names.get(id) == Some(&package)
-        })
-        .unwrap_or_else(|| panic!("cargo metadata's resolved graph has no node for `{package}` — is it still a workspace member?"));
 
-    node["deps"]
-        .as_array()
-        .expect("a resolved node carries a `deps` array")
-        .iter()
-        .filter(|dep| {
-            let dep_id = dep["pkg"].as_str().expect("a dep's `pkg` is a string");
-            names.get(dep_id) == Some(&oracle)
-        })
-        .flat_map(|dep| {
-            dep["dep_kinds"]
-                .as_array()
-                .expect("a dependency edge carries a `dep_kinds` array")
-                .iter()
-                .map(|entry| entry["kind"].as_str().map(str::to_string))
-        })
-        .collect()
+    // Every node's normal dependency names, by the node's own name.
+    let mut normal: HashMap<&str, Vec<&str>> = HashMap::new();
+    for node in nodes {
+        let id = node["id"].as_str().expect("a node id is a string");
+        let from = *names.get(id).expect("every node id names a package");
+        let deps = node["deps"]
+            .as_array()
+            .expect("a resolved node carries a `deps` array")
+            .iter()
+            .filter(|dep| {
+                dep["dep_kinds"]
+                    .as_array()
+                    .expect("a dependency edge carries a `dep_kinds` array")
+                    .iter()
+                    .any(|entry| entry["kind"].is_null())
+            })
+            .map(|dep| {
+                let dep_id = dep["pkg"].as_str().expect("a dep's `pkg` is a string");
+                *names.get(dep_id).expect("every dep id names a package")
+            })
+            .collect();
+        normal.insert(from, deps);
+    }
+
+    assert!(
+        normal.contains_key(package),
+        "cargo metadata's resolved graph has no node for `{package}` — is it \
+         still a workspace member?"
+    );
+
+    let mut reached: HashMap<&str, &str> = HashMap::new();
+    let mut queue: Vec<&str> = vec![package];
+    while let Some(from) = queue.pop() {
+        for &to in normal.get(from).into_iter().flatten() {
+            if reached.contains_key(to) || to == package {
+                continue;
+            }
+            reached.insert(to, from);
+            queue.push(to);
+        }
+    }
+    reached
 }
 
-/// Every [`Boundary`] holds: neither schema-compiler oracle reaches its
-/// backend crate as a normal dependency in the resolved graph.
+/// The chain of normal edges from `package` to `oracle`, as
+/// `a -> b -> oracle`, read back out of [`normal_closure`]'s predecessor
+/// map.
+fn normal_path(reached: &HashMap<&str, &str>, package: &str, oracle: &str) -> String {
+    let mut chain = vec![oracle];
+    let mut at = oracle;
+    while let Some(&from) = reached.get(at) {
+        chain.push(from);
+        if from == package {
+            break;
+        }
+        at = from;
+    }
+    chain.reverse();
+    chain.join(" -> ")
+}
+
+/// Every [`Boundary`] holds: no oracle is reachable from its backend crate
+/// through normal dependency edges, at any distance.
 #[test]
 fn schema_compilers_stay_dev_dependencies() {
     let metadata = cargo_metadata();
     for boundary in BOUNDARIES {
-        let kinds = dependency_kinds(&metadata, boundary.package, boundary.oracle);
+        let reached = normal_closure(&metadata, boundary.package);
         assert!(
-            !kinds.iter().any(Option::is_none),
+            !reached.contains_key(boundary.oracle),
             "\n\
-             `{package}` depends on `{oracle}` as a NORMAL dependency in the \
-             resolved graph (resolved kinds: {kinds:?}).\n\
+             `{oracle}` is in `{package}`'s NORMAL dependency closure: \
+             {path}\n\
              \n\
-             `{oracle}` is a test-time validity oracle for `{package}`, not \
-             part of emission — see `{package}`'s own `Cargo.toml` doc \
-             comment. Promoting it out of `[dev-dependencies]` drags a \
-             schema compiler and its whole dependency tree into every \
-             downstream build. Move `{oracle}` back to \
-             `[dev-dependencies]`.\n",
+             `{oracle}` is test-time only for `{package}` and plays no part \
+             in emission — see `{package}`'s own `Cargo.toml` doc comment. A \
+             normal edge anywhere on that chain drags `{oracle}` and its \
+             whole dependency tree into every downstream build. Move the \
+             offending edge back to `[dev-dependencies]`.\n",
             package = boundary.package,
             oracle = boundary.oracle,
-            kinds = kinds,
+            path = normal_path(&reached, boundary.package, boundary.oracle),
         );
     }
 }
