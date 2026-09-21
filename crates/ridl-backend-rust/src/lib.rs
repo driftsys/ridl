@@ -169,7 +169,7 @@ fn domain_items(
 // ---------------------------------------------------------------------------
 
 /// Refuses one struct or union with no finite FlatBuffers bound (design note
-/// D-7 of `docs/wip/2026-09-20-flatbuffers-codec-design.md`; §4a of that note
+/// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that note
 /// records what stage K4 built and what stage K5 closed).
 ///
 /// **Called per type, by the codec emitter**, at the point where it is about

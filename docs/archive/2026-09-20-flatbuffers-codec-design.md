@@ -1,5 +1,31 @@
 # The FlatBuffers payload codec — design note
 
+> **Archived 2026-09-21, at the end of E11.7's implementation. Read this as the
+> reasoning trail, not as the current design.** The codec as built is
+> [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md), and where
+> that record and this note differ, that record is right. What this note still
+> holds and that one summarizes is the ground for each decision — the
+> alternative each one rejected, and the measurement each stage made, including
+> the ones that corrected an earlier stage.
+>
+> **One decision here is not built: D-11**, the interaction face moving off its
+> `ReprC` placeholder. §4d records why stage K7 could not execute it, and the
+> blocker is **driftsys/ridl#470**, a projection decision nobody has taken: a
+> FlatBuffers root is a table, and the projection mints one only for a `struct`
+> or a `union`, so a named-scalar or enum payload has no `Payload<FlatBuffers>`
+> to name. Whoever takes that issue reads the live statement in the design
+> record's "What is not built" first, then §4d and D-11 here for the detail.
+> Three narrower items are tracked as driftsys/ridl#467, driftsys/ridl#469 and
+> driftsys/ridl#472.
+>
+> §5's records have moved, each with the stage that needed it. What remained at
+> the end — `2026-09-13-catalog-descriptor-plan.md` Task 7, amended to call the
+> bound of D-6 rather than derive a second one — moved with stage K8, and so did
+> `docs/ROADMAP.md`'s E11.14 row. ADR-0019's open item 1 records that **K-10 was
+> never taken**: the note did not dispose of `(key)` and sorted-vector lookup,
+> and the item is parked there with the ground rather than left pointing at a
+> story that has finished.
+
 **Status: disposed of, 2026-09-20.** The disposition comment on this note's pull
 request took D-2, D-3, D-5, D-8, D-9 and D-10 as proposed; D-4, D-7, D-11 and
 D-12 with an addition each; and amended **D-1 and D-6** together on where the
@@ -1133,6 +1159,6 @@ follows the disposition:
 - Design records: [`../design/ridl-rt.md`](../design/ridl-rt.md),
   [`../design/interaction-face.md`](../design/interaction-face.md)
 - Adjacent plans:
-  [`2026-09-13-catalog-descriptor-plan.md`](2026-09-13-catalog-descriptor-plan.md),
-  [`typl-value-objects-plan.md`](typl-value-objects-plan.md)
+  [`2026-09-13-catalog-descriptor-plan.md`](../wip/2026-09-13-catalog-descriptor-plan.md),
+  [`typl-value-objects-plan.md`](../wip/typl-value-objects-plan.md)
 - Defect: driftsys/ridl#302

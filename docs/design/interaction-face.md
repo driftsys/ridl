@@ -367,14 +367,26 @@ same all-zero hash the face declares.
 
 ## What is provisional
 
-| Placeholder                                                                                    | Replaced by                                  |
-| ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                       |
-| The zero `CatalogHash`, and with it the unemitted catalog check                                | E16.2 (driftsys/ridl#378)                    |
-| The all-`None` `EncodedSizes` columns                                                          | E16.2                                        |
-| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
-| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                    | Replaced by                                   |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| The hand-written `Payload<ReprC>` implementations                                              | blocked: driftsys/ridl#470, then E11.7's D-11 |
+| The zero `CatalogHash`, and with it the unemitted catalog check                                | E16.2 (driftsys/ridl#378)                     |
+| The all-`None` `EncodedSizes` columns                                                          | E16.2                                         |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                          |
+| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                    |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written  |
+
+**The first row's replacement is blocked, 2026-09-21.** E11.7's FlatBuffers
+codec landed and `generate` emits it, but the face cannot move onto it yet: a
+`Payload<FlatBuffers>` implementation is written only for a declaration the
+projection mints a root table for, which is a `struct` or a `union`, and this
+face's payloads are four named scalars and one enum beside one struct. Measured
+by adding the codec to `generate_face` and regenerating the fixture, exactly one
+implementation appears. What is missing is a projection rule for a root that is
+not a struct or a union — **driftsys/ridl#470** — and until it is decided the
+`ReprC` placeholder is still what this face names.
+[`flatbuffers-codec.md`](flatbuffers-codec.md)'s "What is not built" carries the
+detail.
 
 `ridl --emit rust` emitting the face itself is not on this list as a defect:
 ADR-0018 decision 15 places that behind the frame specification and the

@@ -216,7 +216,7 @@ refused.
 | A hand-rolled discriminant-plus-arms table (note §4.4's remedy)   | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both) |
 | Refusing a named scalar, enum or enum set union arm               | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                        |
 | The FlatBuffers `struct` form for a `fixed_layout` struct         | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                              |
-| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — reopenable in E11.7 (see Open)                                                   |
+| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — parked, not reopenable in a named story (see Open item 1, amended 2026-09-21)    |
 | Lifting `ridl-backend-proto`'s `SymbolScope`                      | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
 | Defaulting a zero-less enum field to its lowest declared value    | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
 | Refusing or escaping a name that reaches a `planus` reserved word | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                   |
@@ -265,6 +265,21 @@ refused.
    E9.11's scope into Epic 11. Taking it would also want a contract-level
    statement that the map is ordered — which typl does not have — and a validity
    oracle that parses the attribute, which `planus` today does not.
+
+   **Amended 2026-09-21, at the end of E11.7's implementation.** **E11.7 did not
+   take it, and this item no longer names a story.** The codec landed and writes
+   a map as a vector of entry tables with no `(key)`, with entries in the order
+   of the generated `Vec<(K, V)>` and nothing sorting — decision 4 as written.
+   Three of the four things the item wanted are still missing and none of them
+   moved: typl states no ordering on a map (§12.2), `planus` still parses no
+   `(key)`, and this repository's conformance obligation now **rests** on planus
+   parsing what the schema emitter writes
+   ([`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)), so
+   emitting the attribute today would cost the oracle that proves the schema
+   valid and the round trip that proves the bytes are FlatBuffers. The item is
+   parked rather than closed: it reopens on the observation that a consumer
+   needs keyed lookup into a map without decoding it, which nothing in the
+   roadmap asks for. Whoever reopens it files the story then.
 2. **The `fixed_layout` flag has no consumer.** Decision 3 leaves it in the IR
    for a target where a fixed layout is safe — one whose schema evolution is
    closed, or a deployment that pins both schema versions. The first backend

@@ -2167,6 +2167,63 @@ git commit -m "feat(ridl-descriptor): derive the proto3 upper bound of every pay
 ---
 ### Task 7: The FlatBuffers upper bound
 
+> **Amended 2026-09-21, E11.7 stage K8.** **Do not implement the bound this
+> task describes.** It was written before the FlatBuffers bound existed
+> anywhere, and E11.7's design note D-6 has since decided that the bound has
+> **one** implementation and that it is the projection's. That
+> implementation is `ridl_ir::projection::flatbuffers::max_size`, landed by
+> stage K2 (driftsys/ridl#458), and it is what the Rust codec's
+> `Payload<FlatBuffers>::MAX_SIZE` is emitted from. The catalog descriptor
+> advertises the same number to an engine, so a second derivation here would
+> be two implementations of one rule and a silent disagreement the moment
+> either changed. The steps below stay as written, because they record what
+> the charges are and what the expected numbers were; read them as the
+> specification of the bound, not as work to do.
+>
+> **What this task becomes.** `size::flatbuffers::payload_size` calls
+> `ridl_ir::projection::flatbuffers::max_size` and does not compute a
+> charge of its own. Three things stand between the two signatures, and each
+> is this task's, not the projection's:
+>
+> 1. **`max_size` takes a declaration, and a `PayloadShape` is not always
+>    one.** Its signature is
+>    `max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64>`, and
+>    it answers `None` for any declaration
+>    `ridl_ir::projection::flatbuffers::mints_root_table` rejects. A
+>    `PayloadShape::Field`, `::Params`, `::Return` or `::Element` is a
+>    payload with no declaration of its own. The bridge is the one stage K4
+>    already uses to charge a single member: build a synthetic `v2::Decl` in
+>    the same package that carries the shape as its body — a one-field
+>    struct for a `Field` or an `Element`, a struct of the parameters for
+>    `Params`, the projected union for a fallible `Return` — and hand that
+>    to `max_size`. The synthetic declaration must be projected exactly as
+>    the real payload is, or the advertised bound is not the emitted one;
+>    that equality is what the test below asserts.
+> 2. **`Packages` is how a cross-package reference resolves.** `Ctx` already
+>    carries the package and its imports; `Packages` is the projection's own
+>    view of the same thing. Build one from `Ctx` rather than resolving
+>    names here.
+> 3. **`None` keeps its meaning.** The projection answers `None` for an
+>    unresolved reference, a cycle, a `u64` overflow, and a bound above
+>    `MAX_ENCODABLE`. The descriptor's column stays `None` for all four, as
+>    the last test in this task already expects for `"Missing"`.
+>
+> **The test this task owes, which the cases below do not cover.** One case
+> that takes a payload the Rust backend emits a codec for, reads
+> `<T as Payload<FlatBuffers>>::MAX_SIZE` out of the generated source, and
+> asserts the descriptor advertises the same number. That is the only test
+> that fails when the two drift, and it is why the numbers in the steps
+> below are not re-derived here: if a charge changes in the projection, this
+> task's expected numbers change with it, in the same commit.
+>
+> **The numbers below are the pre-K2 draft's and are not pinned by
+> anything.** They were computed by hand from the same charges the
+> projection now implements — a table its `soffset`, its inline fields, its
+> vtable and one alignment event per slot; a string four bytes per declared
+> character plus a terminator; a collection its declared maximum — but they
+> were never run. Take the projection's output as the expected value, not
+> these literals.
+
 **Files:**
 - Modify: `crates/ridl-descriptor/src/size/flatbuffers.rs`
 - Modify: `crates/ridl-descriptor/src/size.rs` (the `Encoding::FlatBuffers` arm of `max_size`)

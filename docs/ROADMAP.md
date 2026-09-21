@@ -451,9 +451,32 @@ makes the generated surface reachable by a consumer who runs the compiler rather
 than a test in this workspace, and the first of the three codecs to land is what
 unblocks it.
 
-| ID     | Story                                                                                                                                                                                                    | Done when                                                                                                                                                                               | Size |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.14 | The face and the codec reach `ridl build` — `--emit rust` writes the descriptors, the face and a codec's `Payload` implementations, and the emitted `Cargo.toml` names that encoding's `ridl-rt` feature | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
+| ID     | Story                                                                                                                                            | Done when                                                                                                                                                                               | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.14 | The face reaches `ridl build` — `--emit rust` writes the descriptors and the face beside the domain types and the codec `generate` already emits | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
+
+**E11.7 moved two of that row's clauses out of it, 2026-09-21.** The row above
+said `--emit rust` had still to learn to write "a codec's `Payload`
+implementations" and a `Cargo.toml` naming the encoding's `ridl-rt` feature.
+Both are already true. E11.7's design note D-1, as its disposition amended it,
+puts the `Payload<FlatBuffers>` implementations in `generate`'s own output
+rather than behind a third entry point, and `ridlc::run_build` calls `generate`
+— so `ridl build --emit rust` has carried the codec since stage K5
+(driftsys/ridl#465), and `crates/ridlc/src/lib.rs` has rendered
+`ridl-rt = { version = "0.1", features = ["flatbuffers"] }` since the same
+stage. What remains to E11.14 is the descriptors and the face, which
+`generate_face` emits and which `run_build` does not call.
+
+**Two limits on what that emitted codec covers**, neither of them E11.14's to
+close. A type that reaches a cross-package reference carries no codec at all,
+because `ridl-backend-rust` resolves no such reference — ten of the corpus's
+fifteen payload types, tracked as **driftsys/ridl#467**, whose fix is to hand
+`generate` the other packages. And an interaction whose payload is a named
+scalar or an enum carries no `Payload` implementation either, because a
+FlatBuffers root is a table and the projection mints one only for a `struct` or
+a `union`; that is **driftsys/ridl#470**, and it is what blocks E11.7's own
+D-11, the generated face moving off `ReprC`. E11.14's `Done when` is written
+over a payload that has a codec.
 
 ## Epic 14 — typl and ridl finalization
 
@@ -547,6 +570,25 @@ ADR-0018 amendments.
 | E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
 | E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
 | E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
+
+**E11.7's `Done when` is met, and one of its decisions is not.** A payload
+round-trips through the library, and the conformance obligation the story's
+design note took beyond that row — a round trip through an independent
+FlatBuffers implementation rather than byte equality against one, since
+FlatBuffers fixes no canonical encoding — is discharged against `planus` in
+`crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`. The one decision of
+the note that did not land is **D-11**, the generated interaction face moving
+off the `ReprC` placeholder and onto the codec: it needs a
+`Payload<FlatBuffers>` implementation for a named scalar and an enum payload,
+which the projection mints no root table for, and that is a projection decision
+nobody has taken — **driftsys/ridl#470**. The story is not closed until it is.
+Two narrower gaps are tracked beside it: **driftsys/ridl#467**, a type reaching
+a cross-package reference carries no codec, and **driftsys/ridl#469**, an
+anonymous inline constraint, a `step` and a map key's uniqueness are not checked
+by the generated `verify`. A fourth, **driftsys/ridl#472**, is a decided
+divergence rather than a gap: this codec refuses a buffer in which a conforming
+FlatBuffers writer omitted a default-valued non-optional field, which design
+note D-9 chose and the conformance suite measures.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

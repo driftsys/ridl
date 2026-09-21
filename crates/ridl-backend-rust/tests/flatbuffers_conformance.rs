@@ -1,6 +1,6 @@
 //! Conformance against an independent FlatBuffers implementation, and the
 //! `wasm32` check over generated code (E11.7 stage K8, plan Task 7 of
-//! `docs/wip/2026-09-20-flatbuffers-codec-plan.md`).
+//! `docs/archive/2026-09-20-flatbuffers-codec-plan.md`).
 //!
 //! Design note D-8 chose a round trip through a second implementation over
 //! byte equality with one, because FlatBuffers fixes no canonical encoding:

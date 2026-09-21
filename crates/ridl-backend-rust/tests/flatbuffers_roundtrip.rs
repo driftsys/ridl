@@ -1,5 +1,5 @@
 //! The FlatBuffers codec round trip — E11.7's own `Done when` (stage K5,
-//! plan Task 4 of `docs/wip/2026-09-20-flatbuffers-codec-plan.md`).
+//! plan Task 4 of `docs/archive/2026-09-20-flatbuffers-codec-plan.md`).
 //!
 //! `generate` emits a `Payload<FlatBuffers>` implementation per root table
 //! (design note D-1 as amended). This target compiles that output as a

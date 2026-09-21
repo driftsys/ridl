@@ -1,5 +1,5 @@
 // The FlatBuffers codec round-trip fixture (E11.7 stage K5, plan Task 4,
-// docs/wip/2026-09-20-flatbuffers-codec-design.md).
+// docs/archive/2026-09-20-flatbuffers-codec-design.md).
 //
 // One declaration per shape the codec has to carry, so that a round trip over
 // `Report` exercises all of them at once: a constrained named scalar over each
