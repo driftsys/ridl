@@ -84,23 +84,51 @@ ADR-0019 decision 8 gives them. A constant projects no type and gets none.
 **The box root is decision 2's box read at the root.**
 `table <Name>Box { value:
 <resolved type> (id: 0); }` is the same table a
-non-table union arm is isolated in, so the three bodies are the three the
-arm-box branch already wrote — the one difference being that a root table is
-already followed, where an arm's is behind the union's value offset. The box's
-`value` field is not optional, so a buffer with no slot for it is
-`Malformed::MissingRequired`. The view a box hands back is the value rather than
-a borrow: a box holds exactly one value, and decoding it costs a read.
+non-table union arm is isolated in, and the two share one implementation rather
+than two that agree: `Codec::box_bodies` writes the encode, the verify and the
+decode once, and decision 2's arm and decision 8's root both call it. The slot
+comes from the layout the projection hands over, so the table the codec writes
+and the table `max_size` charges cannot be two different tables, and the `.fbs`
+emitter reads the same layout for the same reason. The one difference between
+the two call sites is that a root table is already followed by the time
+`Payload::verify` reaches it, where an arm's sits behind the union's value
+offset and is followed first. The box's `value` field is not optional, so a
+buffer with no slot for it is `Malformed::MissingRequired`. The view a box hands
+back is the value rather than a borrow, and what that costs depends on the
+backing: a scalar or an enum is one read, and nothing a nested view would save,
+while a string or a bytes backing **allocates**, where a struct field of the
+same type is borrowed in place as `&'a str` or `&'a [u8]`. The generated doc
+comment on `value()` says which of the two a given box is, since a caller in a
+hot path needs to know. Handing back a borrow instead would mean a second view
+type for those two backings alone, which is not worth the surface; a caller that
+wants the bytes without the allocation reads them off `bytes()`.
 
-Decision 8 narrowed what `generate` accepts, in one direction worth naming: a
-named scalar whose IR carries no width, or a `string` or `bytes` one carrying no
-length bound, now has no bound of its own and the per-type refusal names it —
-`` `pkg.Name.value` has no finite FlatBuffers bound ``, over the box's own
-field. The compiler produces no such IR (typl §4.4–§4.5 default a length to
-`[0..256]` with TYPL-103, and the checker derives a width for every numeric
-named scalar), so this is the same totality-over-IR-handed-in-directly standing
-every other case of that refusal has. It did change the hand-built fixtures in
+Decision 8 narrowed what `generate` accepts, in one direction worth naming. A
+declaration whose box cannot be charged is now refused in its own right, over
+the box's own field: a named scalar with no width, a `string` or `bytes` one
+with no length bound, and an enum set with an unspecified width all answer
+`` `pkg.Name.value` has no finite FlatBuffers bound ``. A named scalar with **no
+backing at all** — what the front end leaves after a parse error such as
+`type X:` — is told apart from those and answers
+`` `pkg.Name.value` carries no type ``, because it is malformed IR rather than
+an unbounded shape. (The `.fbs` emitter is more tolerant of that one: it
+defaults a backing-less named scalar to `string` and emits the box without
+complaint. That predates decision 8 and is left alone.) The compiler produces no
+such IR (typl §4.4–§4.5 default a length to `[0..256]` with TYPL-103, and the
+checker derives a width for every numeric named scalar), so this is the same
+totality-over-IR-handed-in-directly standing every other case of that refusal
+has. It did change the hand-built fixtures in
 `crates/ridl-backend-rust/src/tests.rs`, which now carry what the compiler
 emits.
+
+One consequence of that is worth stating rather than leaving a reader to infer
+it from a missing fixture. The **vacuous** constructor path — `new` rather than
+`new_unchecked` — is still live and still tested for a `boolean`, `integer` or
+`float` backing, but for a `string` or a `bytes` one it is now unreachable: such
+a type is vacuous only if it carries no length bound, and a type with no length
+bound has no box bound, so no IR that `generate` accepts can reach it. It is
+dead code rather than an undertested path, and there is no fixture for it
+because there can be none.
 
 ## `encode`, `verify`, `decode`, `MAX_SIZE`
 
@@ -242,7 +270,7 @@ follows the wrong `.fbs`. What this suite proves is that the codec's bytes are
 FlatBuffers and agree with the emitted schema; agreement between the emitted
 schema and ADR-0019 rests on the schema backend's own snapshots.
 
-Six cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
+Seven cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 
 1. bytes this codec writes are read by planus and compare equal field by field;
 2. bytes planus writes are accepted by `verify` and decode to the same value;
@@ -253,9 +281,15 @@ Six cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 5. an optional scalar present at its default is lost by a codec → planus → codec
    round trip;
 6. a **scalar root** — a named scalar in its box table (ADR-0019 decision 8) —
-   is read by planus in the one direction and written by planus in the other.
+   is read by planus in the one direction and written by planus in the other;
+7. a box root **with no value slot** — which is what planus writes for a box at
+   its default — is refused with `MissingRequired`.
 
-Cases 4 and 5 are the two halves of the one disagreement below.
+Cases 4 and 5 are the two halves of the one disagreement below, and case 7 is
+that same disagreement met at a root. Case 7 exists because the rule was
+otherwise pinned only as generated text: deleting the branch that enforces it
+turned fourteen snapshots red and left every round trip and every other
+conformance case passing, since nothing built such a buffer.
 
 Two mutations were applied and run, and each is what says the suite is not
 decorative. Shifting the union discriminant by one in `codec.rs` leaves every
@@ -285,6 +319,16 @@ declared default. That meets this codec's presence rules from both sides:
 - **Optional.** This codec writes a present default-valued optional scalar as a
   slot, and the schema gives no other reader a way to see that as presence, so a
   foreign re-encode drops it and `Some(0)` becomes `None`.
+
+**Decision 8 gives this a root-level reach.** A box's `value` is a field like
+any other, so the non-optional half applies to it: a box carrying a scalar zero,
+an enum at its zero member or an empty string, written by a conforming
+implementation, is a buffer this codec refuses — and at a root that is not one
+field of a payload, it is the whole payload. Measured by
+`a_box_root_with_no_value_slot_is_refused`. Relaxing it is #472's question, not
+decision 8's; note that accepting an absent slot without also changing `decode`
+would fabricate a value out of the buffer header rather than return the
+FlatBuffers default, so the two move together or not at all.
 
 Both are decided rather than accidental — the presence rules above state them —
 but together they mean interoperation with a foreign writer is not unconditional

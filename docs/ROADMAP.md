@@ -471,12 +471,14 @@ stage. What remains to E11.14 is the descriptors and the face, which
 close. A type that reaches a cross-package reference carries no codec at all,
 because `ridl-backend-rust` resolves no such reference — ten of the corpus's
 fifteen payload types, tracked as **driftsys/ridl#467**, whose fix is to hand
-`generate` the other packages. And an interaction whose payload is a named
-scalar or an enum carries no `Payload` implementation either, because a
-FlatBuffers root is a table and the projection mints one only for a `struct` or
-a `union`; that is **driftsys/ridl#470**, and it is what blocks E11.7's own
-D-11, the generated face moving off `ReprC`. E11.14's `Done when` is written
-over a payload that has a codec.
+`generate` the other packages. An interaction whose payload is a named scalar or
+an enum used to carry no `Payload` implementation either, because a FlatBuffers
+root is a table and the projection minted one only for a `struct` or a `union`;
+that was **driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated
+face moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21: every
+declaration has a root table, and a named scalar, an enum and an enum set are
+rooted in a box. E11.14's `Done when` is written over a payload that has a
+codec.
 
 ## Epic 14 — typl and ridl finalization
 
@@ -577,18 +579,20 @@ design note took beyond that row — a round trip through an independent
 FlatBuffers implementation rather than byte equality against one, since
 FlatBuffers fixes no canonical encoding — is discharged against `planus` in
 `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`. The one decision of
-the note that did not land is **D-11**, the generated interaction face moving
-off the `ReprC` placeholder and onto the codec: it needs a
+the note that did not land with the rest is **D-11**, the generated interaction
+face moving off the `ReprC` placeholder and onto the codec: it needs a
 `Payload<FlatBuffers>` implementation for a named scalar and an enum payload,
-which the projection mints no root table for, and that is a projection decision
-nobody has taken — **driftsys/ridl#470**. The story is not closed until it is.
-Two narrower gaps are tracked beside it: **driftsys/ridl#467**, a type reaching
-a cross-package reference carries no codec, and **driftsys/ridl#469**, an
-anonymous inline constraint, a `step` and a map key's uniqueness are not checked
-by the generated `verify`. A fourth, **driftsys/ridl#472**, is a decided
-divergence rather than a gap: this codec refuses a buffer in which a conforming
-FlatBuffers writer omitted a default-valued non-optional field, which design
-note D-9 chose and the conformance suite measures.
+which the projection minted no root table for. That projection decision is taken
+— **driftsys/ridl#470**, ADR-0019 decision 8, 2026-09-21 — and every such
+declaration now carries a codec, so what is left of D-11 is the face-side change
+itself. The story is not closed until it lands. Two narrower gaps are tracked
+beside it: **driftsys/ridl#467**, a type reaching a cross-package reference
+carries no codec, and **driftsys/ridl#469**, an anonymous inline constraint, a
+`step` and a map key's uniqueness are not checked by the generated `verify`. A
+fourth, **driftsys/ridl#472**, is a decided divergence rather than a gap: this
+codec refuses a buffer in which a conforming FlatBuffers writer omitted a
+default-valued non-optional field, which design note D-9 chose and the
+conformance suite measures.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

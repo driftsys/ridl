@@ -230,8 +230,15 @@ refused.
    `.fbs` emitter writes the box for every such declaration, whether or not an
    interaction carries it. The bound of such a root is the box table's, charged
    as decision 2's arm box is. **No `root_type` is written**, as none was
-   before. `<Name>Box` joins the generated names decision 5 and decision 7 check
-   against declared ones.
+   before. `<Name>Box` joins the generated names decision 5 checks against
+   declared ones.
+
+   _On the numbering._ The disposition on driftsys/ridl#470 said the box joins
+   the names "decision 7 checks against declared ones". Decision 7 checks
+   nothing — it is the rule that a name reaching a `planus` reserved word is
+   emitted as-is and never refused. The collision guard, and the only decision
+   that checks a generated name against a declared one, is decision 5, so that
+   is what this names.
 
    The question this answers is the one the codec could not get past: a
    FlatBuffers root is a table, and a named scalar or an enum as an interaction
@@ -302,13 +309,25 @@ refused.
   Decision 6's `= null` renders absence where the contract states requiredness —
   a faithfulness loss, though not a new one: the target cannot express a
   required scalar or enum field at all.
-- **Negative — every FlatBuffers snapshot moved when decision 8 landed, and a
-  box table is emitted that nothing may reference.** Decision 8 adds one table
-  per named scalar, per enum and per enum set to every emitted schema. The
-  earlier stage constraint that no FlatBuffers snapshot may move was a
-  constraint on one stage, not a standing rule; the `planus` oracle checks each
-  new schema. An unreferenced box table costs nothing on the wire, because
-  nothing writes it unless it is a root.
+- **Negative — every schema over a package that declares one of the three kinds
+  gained tables, and a box table is emitted that nothing may reference.**
+  Decision 8 adds one table per named scalar, per enum and per enum set. A
+  schema over a package that declares none of them is unchanged, which is why
+  one of this repository's three `.fbs` snapshots did not move. The earlier
+  stage constraint that no FlatBuffers snapshot may move was a constraint on one
+  stage, not a standing rule; every emitted schema that has a snapshot is
+  compiled by the `planus` oracle. An unreferenced box table costs nothing on
+  the wire, because nothing writes it unless it is a root.
+- **Negative — decision 8 gives the default-elision divergence a root-level
+  reach.** A conforming FlatBuffers writer omits a field equal to its declared
+  default, and a box's `value` is a field like any other. At a field position
+  that costs one field, which
+  [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md) records as
+  driftsys/ridl#472; at a **root** it costs the whole payload, because the
+  payload is that one field. A box carrying a scalar zero, an enum at its zero
+  member or an empty string, written by another implementation, is a buffer this
+  projection's codec refuses. Deciding otherwise is #472's, not decision 8's: it
+  is the same question, met at a position where it is harder to ignore.
 - **Negative — a map lookup is linear.** With no `(key)` there is no generated
   `LookupByKey` and no binary search. The Open item names the story that may
   restore it.
