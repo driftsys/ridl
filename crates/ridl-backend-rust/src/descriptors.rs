@@ -120,11 +120,11 @@ fn one_interface(
     });
 
     let max_buffer_doc = "The largest argument or reply payload of this \
-        interface, over `<T as Payload<ReprC>>::MAX_SIZE`. A dispatch buffer \
+        interface, over `<T as Payload<Wire>>::MAX_SIZE`. A dispatch buffer \
         must be at least this large, because a reply is encoded into the same \
         buffer as the arguments. `0` when the interface declares no call.";
     let event_buffer_doc = "The largest event payload of this interface, over \
-        `<T as Payload<ReprC>>::MAX_SIZE`. `0` when the interface declares no \
+        `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no \
         event.";
 
     items.push(quote! {
@@ -340,13 +340,16 @@ fn payload_info(type_name: &str) -> TokenStream {
     }
 }
 
-/// The `<T as Payload<ReprC>>::MAX_SIZE` const-evaluable path for a payload
-/// type. Buffer sizes are written in terms of it, never as a literal, because
-/// the payload implementations are hand-written in the test tree.
+/// The `<T as Payload<Wire>>::MAX_SIZE` const-evaluable path for a payload
+/// type. Buffer sizes are written in terms of it, never as a literal, so a
+/// buffer is sized by the codec's own bound rather than by a number this
+/// emitter would have to keep equal to it. `Wire` is the package's own alias
+/// (design note D-11), emitted at the same module scope these descriptors
+/// are.
 fn max_size_path(type_name: &str) -> TokenStream {
     let path = type_path(type_name);
     quote! {
-        <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::ReprC>>::MAX_SIZE
+        <#path as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE
     }
 }
 
@@ -512,7 +515,7 @@ mod tests {
     /// `max_size_const` must compute the maximum of its inputs, not their sum,
     /// minimum, first, or last — design §6 requires `MAX_BUFFER_SIZE` and
     /// `EVENT_SOURCE_BUFFER_SIZE` to be the maximum over the relevant
-    /// `<T as Payload<ReprC>>::MAX_SIZE` values.
+    /// `<T as Payload<Wire>>::MAX_SIZE` values.
     ///
     /// `max_size_const` emits a const-evaluable block, not a literal number, so
     /// asserting on the emitted token text cannot distinguish "compute the

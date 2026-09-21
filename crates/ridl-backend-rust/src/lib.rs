@@ -79,9 +79,7 @@ pub struct GenerateError {
 /// as a `GenerateError` instead of unformatted output.
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
-    let (mut items, tuples) = domain_items(&ctx, package)?;
-    items.extend(codec::package_items(&ctx, package, &tuples)?);
-    render(items)
+    render(package_items(&ctx, package)?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
@@ -96,18 +94,95 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// conversions. The domain types come from the same call because the
 /// checked-in fixture is brought in
 /// with a single `include!`: the face names those types, and the orphan rule
-/// needs them local to the test crate for the hand-written `Payload<ReprC>`
-/// implementations.
+/// needs them local to the test crate. The codec comes from the same call for
+/// the same reason: the face names `Payload<Wire>` for every payload type, and
+/// the implementations that satisfy it are the ones [`generate`] emits.
 ///
 /// Total for the same reason [`generate`] is: it returns [`GenerateError`]
 /// rather than panicking, and additionally refuses a contract clause outside
 /// the accepted form and a call the M3 restriction cannot represent.
 pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> {
+    generate_face_with(package, WireEncoding::default())
+}
+
+/// [`generate_face`] with the package's wire encoding stated rather than
+/// defaulted (design note D-11 of
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`).
+///
+/// `generate_face(package)` is
+/// `generate_face_with(package, WireEncoding::default())`, which is the
+/// relation `ridl-backend-proto` and `ridl-backend-flatbuffers` already give
+/// their own `generate_with`. The encoding reaches the output as one alias,
+/// `pub type Wire`, emitted once per package and named by every buffer the
+/// face sizes and every `Ref` it builds.
+///
+/// The alias is emitted here and not by [`generate`]: it exists so that the
+/// face names one thing rather than repeating an encoding at each of its
+/// sites, and a package generated with no face names it nowhere. What
+/// [`generate`] emits is unchanged by this entry point's existence.
+pub fn generate_face_with(
+    package: &v2::Package,
+    wire: WireEncoding,
+) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
-    let (mut items, _tuples) = domain_items(&ctx, package)?;
+    let mut items = vec![wire_alias(wire)];
+    items.extend(package_items(&ctx, package)?);
     items.extend(descriptors::interface_items(&ctx, package)?);
     items.extend(face::interface_items(package)?);
     render(items)
+}
+
+/// The domain types and the codec over them — what [`generate`] emits, and
+/// what a face is appended to.
+///
+/// There is one codec emitter and one call to it, which is why the face
+/// compiles over the codec `generate` emits rather than over one written for
+/// it (design note D-11, stage K9b).
+fn package_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
+    let (mut items, tuples) = domain_items(ctx, package)?;
+    items.extend(codec::package_items(ctx, package, &tuples)?);
+    Ok(items)
+}
+
+/// The payload encoding a generated package's face encodes and verifies over
+/// (design note D-11; ADR-0020 decision 1 names the three encodings).
+///
+/// It is a per-package build-time choice rather than a type parameter on the
+/// face: the alternative would put an `E: Encoding` on every descriptor, every
+/// provider trait and every caller, and a `where` bound per payload type on
+/// every impl, for a choice made once per generated package.
+///
+/// One variant today. `ridl-backend-rust` emits a `Payload` implementation for
+/// one encoding — the FlatBuffers codec of story E11.7 — so naming another
+/// here would emit a face over implementations that do not exist. `repr(C)`
+/// and proto3 join when E11.12 and E11.8 emit their codecs, which is what
+/// `#[non_exhaustive]` says to a caller that matches on this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum WireEncoding {
+    /// The FlatBuffers codec of story E11.7, which [`generate`] emits into
+    /// every package's own output.
+    #[default]
+    FlatBuffers,
+}
+
+/// The one `pub type Wire` alias a generated package carries.
+fn wire_alias(wire: WireEncoding) -> TokenStream {
+    let (path, doc) = match wire {
+        WireEncoding::FlatBuffers => (
+            quote! { ::ridl_rt::encoding::FlatBuffers },
+            "The payload encoding this package's generated interaction face \
+             encodes and verifies over, and the one the `Payload` \
+             implementations below implement: FlatBuffers (ADR-0019, ADR-0020 \
+             decision 2). It is named once here rather than repeated at every \
+             buffer and every `Ref` the face builds, so the package's \
+             encoding is one line to read and one line to change.",
+        ),
+    };
+    quote! {
+        #[doc = #doc]
+        pub type Wire = #path;
+    }
 }
 
 /// The domain-type items of `package` — the shared work of both entry points
@@ -118,10 +193,9 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 /// (ADR-0019 decision 3), and only this walk knows which tuples exist and
 /// what each one is named.
 ///
-/// This does not emit the codec. [`generate`] appends it, and
-/// [`generate_face`] does not: the codec is `generate`'s output (design note
-/// D-1 as amended), and the face fixture moves onto it in stage K7, which is
-/// the stage that regenerates that file.
+/// This does not emit the codec. [`package_items`] appends it, for both entry
+/// points: the codec is `generate`'s output (design note D-1 as amended), and
+/// the face compiles over that same output (D-11, stage K9b).
 #[allow(clippy::type_complexity)]
 fn domain_items(
     ctx: &Ctx,

@@ -39,7 +39,11 @@ ridl-loopback = { path = "../ridl-loopback" }
 # is a dev-dependency only: the integration tests that compile the checked-in
 # generated face need it, for the vocabulary the face names and for the port
 # traits the round trip calls.
-ridl-rt = { path = "../ridl-rt" }
+# The `flatbuffers` feature is what makes `::ridl_rt::flatbuffers` exist, and
+# the generated codec the face is compiled over names it at every read and
+# every write. It is enabled here, on the dev-dependency, and nowhere else:
+# this crate's library links no runtime at all.
+ridl-rt = { path = "../ridl-rt", features = ["flatbuffers"] }
 # The independent FlatBuffers implementation the conformance test round trips
 # against (E11.7 design note D-8), and the code generator that turns the
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
