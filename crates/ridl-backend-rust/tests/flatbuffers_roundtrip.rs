@@ -525,9 +525,85 @@ fn main() {
     rustc::run_program("fb_union_discriminant", &program(&main));
 }
 
+/// The hazard stage K5 left and stage K6 closes (design note §4b): before
+/// K6, `verify` checked the structural walk, an enum and an enum-set
+/// discriminant and a collection's declared element count, but not a named
+/// scalar's own range, length or pattern — a `Speed` of 9000 or a `Label` of
+/// sixty-four characters passed `verify`, and `Ref::decode()`, a safe call,
+/// returned a value outside its declared typl bound.
+///
+/// `Speed::new_unchecked` and `Label::new_unchecked` bypass `new`'s own
+/// checks by design — they are how `decode` itself builds a value over bytes
+/// `verify` has already accepted — so a value built with them here, and
+/// handed to `encode` (which never rechecks a constraint either), is exactly
+/// the hostile buffer the design note describes. If `verify`'s call to
+/// `check` were removed, this test is the one that catches it: every other
+/// case in this file uses a value within every typl bound.
+#[test]
+fn verify_refuses_a_named_scalar_outside_its_declared_bound() {
+    let main = format!(
+        "{VALUE}{}",
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref, Rule, VerifyError};
+
+fn main() {
+    // A `Speed` past its declared [0..300] range.
+    let mut over_range = sample();
+    over_range.range.min = Speed::new_unchecked(9000);
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = over_range
+        .encode(&mut out)
+        .expect("encode does not check constraints")
+        .bytes
+        .to_vec();
+    match Ref::<'_, Report, FlatBuffers>::verify(&bytes).err() {
+        Some(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, Rule::Range);
+            assert_eq!(violation.type_name, "Speed");
+        }
+        other => panic!("a Speed of 9000 is outside [0..300], got {other:?}"),
+    }
+
+    // A `Label` past its declared [0..16] length.
+    let mut over_length = sample();
+    over_length.name = Label::new_unchecked("x".repeat(20));
+    let mut out2 = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes2 = over_length
+        .encode(&mut out2)
+        .expect("encode does not check constraints")
+        .bytes
+        .to_vec();
+    match Ref::<'_, Report, FlatBuffers>::verify(&bytes2).err() {
+        Some(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, Rule::Length);
+            assert_eq!(violation.type_name, "Label");
+        }
+        other => panic!("a Label of 20 characters is outside [0..16], got {other:?}"),
+    }
+
+    // And a value within every bound still verifies, so the checks above
+    // are not vacuously refusing everything.
+    let ok = sample();
+    let mut out3 = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes3 = ok.encode(&mut out3).expect("encode").bytes.to_vec();
+    Ref::<'_, Report, FlatBuffers>::verify(&bytes3)
+        .expect("a value within every declared bound verifies");
+}
+"#
+    );
+    rustc::run_program("fb_named_scalar_bound", &program(&main));
+}
+
 /// A union arm this type does not declare is `Malformed::Union`, and an enum
 /// discriminant no variant carries is a contract violation — the two checks
 /// that keep `decode` from having to answer for a value it cannot build.
+///
+/// Since stage K6, a byte flip can also land inside a named scalar's own
+/// inline bytes and read as a value outside its typl bound — a `Speed` past
+/// 300, a `Ratio` past 1.0 — which `check` (called from `verify`, beside
+/// `new`) now catches too, as `Rule::Range` or `Rule::Pattern` beside the
+/// `Rule::Variant`/`Rule::Length` an enum or a collection count produces.
 #[test]
 fn verify_refuses_an_undeclared_discriminant() {
     let main = format!(
@@ -559,9 +635,12 @@ fn main() {
             Ref::<'_, Report, FlatBuffers>::verify(&broken)
         {
             assert!(
-                matches!(violation.rule, Rule::Variant | Rule::Length),
-                "a wire-level corruption shows up as a variant or a length \
-                 violation, got {:?}",
+                matches!(
+                    violation.rule,
+                    Rule::Variant | Rule::Length | Rule::Range | Rule::Pattern
+                ),
+                "a wire-level corruption shows up as a variant, a length, a \
+                 range or a pattern violation, got {:?}",
                 violation.rule
             );
             hits += 1;

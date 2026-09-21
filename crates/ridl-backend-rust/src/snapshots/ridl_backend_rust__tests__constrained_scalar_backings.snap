@@ -10,6 +10,15 @@ impl Name {
     pub fn new(
         value: String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
+    /// one caller outside `new`, and it shares this module (E11.7
+    /// stage K6). `new` is the composition of this and
+    /// `new_unchecked`.
+    fn check(value: &str) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Name",
@@ -22,7 +31,7 @@ impl Name {
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -58,13 +67,22 @@ impl Digest {
     pub fn new(
         value: Vec<u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
+    /// one caller outside `new`, and it shares this module (E11.7
+    /// stage K6). `new` is the composition of this and
+    /// `new_unchecked`.
+    fn check(value: &[u8]) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.len() as u64) > 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Digest",
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -105,6 +123,16 @@ impl Ratio {
     pub fn new(
         value: f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. Not `pub`: the codec (`crate::codec`) is the
+    /// one caller outside `new`, and it shares this module (E11.7
+    /// stage K6). `new` is the composition of this and
+    /// `new_unchecked`.
+    fn check(value: &f64) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",
@@ -117,7 +145,7 @@ impl Ratio {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        ::core::result::Result::Ok(Self(value))
+        ::core::result::Result::Ok(())
     }
     /// Constructs the value without checking its constraints.
     ///

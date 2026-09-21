@@ -398,6 +398,50 @@ fn vacuous_scalar_constructs_infallibly() {
     );
 }
 
+/// `constraint_is_vacuous` excludes `step` (`crates/ridl-ir/src/lib.rs`), so a
+/// constraint carrying only a `step` is vacuous and takes the infallible
+/// `emit_vacuous_type_def` path — the same path `Enabled` above takes with no
+/// constraint at all. `unchecked_doc` still names the gap on a type reached
+/// this way, because it reads `step` unconditionally, off the same
+/// `td.constraint`, regardless of which path emitted the type. Deleting the
+/// `step` exclusion from `constraint_is_vacuous` would route this type
+/// through `emit_type_def` instead and stop `unchecked_doc`'s note from
+/// matching a constructor that had gone fallible; this test catches that.
+#[test]
+fn step_only_scalar_is_vacuous_and_still_names_the_gap() {
+    let source = rust_for(vec![public_decl(
+        "Rounded",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Float as i32,
+                )),
+            }),
+            constraint: Some(constraint(None, None, Some("0.5"))),
+            declared_init: None,
+            init: Some(init_value(true, Some("0.0"))),
+            width: None,
+        }),
+    )]);
+    // The vacuous path: infallible `new`, no `new_unchecked`, no manual
+    // `TryFrom`.
+    assert!(source.contains("pub const fn new(value: f64) -> Self"));
+    assert!(source.contains("impl ::core::convert::From<f64> for Rounded"));
+    assert!(
+        !source.contains("Rounded::new_unchecked")
+            && !source.contains("fn new_unchecked(value: f64)"),
+        "new_unchecked would duplicate new on a vacuous type, got:\n{source}"
+    );
+    assert!(
+        !source.contains("impl ::core::convert::TryFrom<f64> for Rounded")
+            && !source.contains("impl TryFrom<f64> for Rounded"),
+        "a manual TryFrom collides with core's blanket impl, got:\n{source}"
+    );
+    // And the quantization gap is still named on the type, although `new`
+    // cannot fail.
+    assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
+}
+
 #[test]
 fn constant_of_a_constrained_type_uses_new_unchecked() {
     let decls = vec![
