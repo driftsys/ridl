@@ -290,6 +290,18 @@ included. There is one codec emitter and one call to it, so the face compiles
 over the same implementations a consumer of `generate` gets rather than over a
 second set written for it, and the checked-in fixture stays a single `include!`.
 
+**The alias is an unprefixed item at package scope, and one name can collide.**
+A declaration named `Wire` emits `pub struct Wire(..)` beside the alias and the
+generated crate does not compile. Measured over a package that declares
+`type Wire : integer [0..10]`: the compiler draws no diagnostic and
+`generate_face` returns source carrying both items. It reaches `generate_face`
+only — `generate` emits no alias — so `ridl build --emit rust` is unaffected
+until E11.14 makes the CLI emit the face. Fixing it means either refusing a
+legal typl package or changing the name D-11 fixes, neither of which D-11 takes,
+so it is **driftsys/ridl#476** rather than a patch here. The codec has no such
+exposure: its free functions carry a `__ridl_fb_` prefix, which typl §15.1 makes
+uncollidable.
+
 Through stage K7 this was a placeholder instead: `ReprC`, with
 `tests/interaction_face.rs` hand-writing `Payload<ReprC>` for the fixture's
 types, marked throwaway in its own module documentation. Both are gone.

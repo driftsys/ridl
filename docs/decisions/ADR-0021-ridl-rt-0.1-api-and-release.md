@@ -201,12 +201,17 @@ trusted with no `unsafe` and no second verification pass.
    that subslice on unchanged, at all four sites — a command's and a query's
    `send`, a signal's `set`, an event's `raise`, and a query reply's `settle`.
    The paragraph above expected this to land with D-11, in the stage that moves
-   the face onto `Wire`; D-11 did not land, because a payload type that mints no
-   root table has no FlatBuffers root at all (driftsys/ridl#470), and the fix
-   was taken on its own instead. The emitted code still names `ReprC`, so
-   nothing observable changed — what changed is that it is now
-   encoding-independent, which is the property this amendment asked for, and it
-   no longer waits on D-11 to become true.
+   the face onto `Wire`; it landed a stage early instead, because D-11 was then
+   blocked: a payload type that mints no root table has no FlatBuffers root at
+   all (driftsys/ridl#470). At the time the emitted code still named `ReprC`, so
+   nothing observable changed — what changed is that it became
+   encoding-independent, which is the property this amendment asked for. **D-11
+   has since landed** (stage K9b): the emitted code names the package's own
+   `Wire` alias, which is `::ridl_rt::encoding::FlatBuffers`, and the subslice
+   the face passes on is now a suffix rather than a prefix at every send site.
+   Restoring `&buf[..len]` in the emitter turns seven of the round-trip tests in
+   `crates/ridl-backend-rust/tests/interaction_face.rs` red — applied and run,
+   not inferred.
 
    The same amendment settles what `EncodeError::Capacity`'s `needed` means,
    which the FlatBuffers encoder is the first to make a question. An encoder
