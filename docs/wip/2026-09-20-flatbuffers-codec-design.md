@@ -109,6 +109,15 @@ its children are placed, which is the allocator this design does not have.
 
 ### D-3 — `View<'a>` is a generated accessor over the verified bytes
 
+**Amended 2026-09-21 (stage K5), on which fields the accessor reads in place.**
+A scalar, a string, a byte sequence and a nested table are read in place, which
+is the property ADR-0020 decision 2 rests on. **A union and a collection decode
+on access**: a union's arms have no one view type, and an indexable vector view
+needs a view type per element shape and per nesting level. That is a scope
+decision, not a rejection of the fuller form — the trait does not change when a
+later stage adds an element-wise view — and §4b records it. The text below is
+otherwise as disposed.
+
 For a type `T`, `<T as Payload<FlatBuffers>>::View<'a>` is a generated
 `TFbView<'a>` holding the verified buffer and the root offset, with one accessor
 method per field returning the field's own view — a scalar by value, a string as
@@ -172,6 +181,14 @@ table's vtable and each field the type declares, recursing.
 | a string that is not UTF-8                                       | `Malformed::Utf8`                  |
 | a union discriminant with no arm, or a present tag with no value | `Malformed::Union`                 |
 | a leaf outside its typl constraint                               | `VerifyError::Contract(Violation)` |
+
+**Amended 2026-09-21 (stage K5), on the last row of that table.** A leaf outside
+its typl constraint is `VerifyError::Contract` for an enum and an enum-set
+discriminant and for a collection's declared element count, all three as
+written. **A named scalar's own range, length and pattern are not checked yet**:
+checking them over a borrow needs the `check` beside `new` that D-4 asks Epic 10
+for, which stage K6 adds and calls from here. §4b states what a hostile buffer
+produces in the meantime. Every other row of the table is as disposed.
 
 **Every scalar is read with `from_le_bytes` over a copied byte array**, so the
 walk never dereferences an unaligned pointer and a generated `verify` never
@@ -558,6 +575,18 @@ decided that the note above did not already carry.
    again, `probe_field_type`, which writes ordinal 1 rather than copying the
    member's, so a malformed ordinal is attributed as a layout error instead of
    being mistaken for an unbounded member.
+
+   **A collection's own count is judged too**, which the first pass of this
+   stage missed and the review of 2026-09-21 found. A collection charges
+   `count × element`, and `max_size` answers `None` when that overflows `u64` or
+   exceeds `MAX_ENCODABLE`; a count can be over the ceiling on its own.
+   `[veh.other.Speed; 0..2^40]` was exempted — the element is unjudgeable, so
+   the whole position was — while the same field over a local element was
+   refused. `count_verdict` now probes the count with the smallest element the
+   projection charges anything for, a `boolean` at one inline byte: a count
+   unbounded at one byte an element is unbounded whatever the element is, and a
+   count that fits leaves the verdict to the element. Each level of nesting
+   probes its own count, so a nested collection is covered by the recursion.
 2. **`Attribution::Declaration` is split into three.** `Layout(String)` carries
    `fb_projection::struct_table`'s own message for a declaration-wide layout
    error — two members on one ordinal, or an ordinal of 0 — and is checked
@@ -568,6 +597,11 @@ decided that the note above did not already carry.
 3. **The untested path §4a noted is now tested.** A same-package cycle beside a
    genuinely unbounded member refuses over the unbounded one and names it
    (`flatbuffers_bound_names_the_unbounded_member_beside_a_cycle`).
+
+Each of the three has a control beside it, so none of them would pass for an
+attribution that simply stopped exempting: the same anonymous composite with
+nothing unbounded beside the unjudgeable leaf is still exempt, and so is a
+collection whose count fits.
 
 **An `Unspecified` field primitive is exempted, not refused.** It emits `()` and
 is charged nothing, exactly as a `Stream` is, and `derives` already lists the
@@ -584,6 +618,50 @@ cannot judge and that one type carries no codec. The five hand-built fixtures
 §4a named are repaired: four gave their `string`-backed named scalar typl §4.4's
 default `[0..256]` bound, which the checker always materializes, and the fifth
 is the `Unspecified` primitive above.
+
+**What the round trip runs, and what is only compiled.** One round trip over
+`Report` runs every scalar width, a string, bytes, an enum, an enum set, a
+nested struct, a union's boxed arm, an induced tuple, a fixed array, a bounded
+array of scalars, a map, a vector of strings, a vector of tables, a vector of
+unions, a vector of tuples, a reserved tombstone, an optional composite, an
+optional string and an optional scalar. A second case runs the union as a root
+payload and decodes its **table** arm, which the `Report` round trip does not
+reach, and runs a struct as a root payload. A third runs the D-9 case: every
+field at the value a FlatBuffers writer would omit, with the optionals present
+at those values.
+
+The first pass of this stage claimed "one declaration per shape the codec
+reaches", which the review of 2026-09-21 showed was overstated — an optional
+composite, a vector of strings, of tables, of unions and of tuples, a union as a
+payload and the union's table arm were none of them run, so
+`Builder::push_offset_vector` was reached at run time only through map entry
+tables. The fixture carries all of them now. What is still compile-only rather
+than run: a tuple nested inside an array, a map or another tuple, and a
+cross-package reference, which has no codec to run at all (driftsys/ridl#467).
+
+**Four behavioural tests, each pinned by a mutation.** The review found three
+defences that no test isolated — a present default-valued field, the union
+discriminant, and the tightness of `MAX_SIZE` — and each now has a case that
+fails alone when that one defence is broken, checked by applying the mutation
+and running the suite:
+
+- skipping a present optional whose value equals the FlatBuffers default fails
+  only `a_present_default_valued_field_survives_the_round_trip`;
+- accepting any discriminant in the union `verify`'s wildcard arm fails only
+  `verify_refuses_a_union_discriminant_that_names_no_arm`, which writes one byte
+  at the position the wrapper table puts its discriminant rather than flipping
+  every byte in the buffer;
+- `bound.saturating_sub(1)` fails only
+  `max_size_is_pinned_and_holds_the_largest_legal_value`.
+
+The third pins the two bounds as numbers, which an inequality cannot do: the
+bound charges seven bytes of slack per vtable slot, so a bound short by one
+still holds every value a fixture can build. The constant is wire-visible — a
+consumer sizes a buffer from it — so the literal is what it deserves, and a
+deliberate change to the projection's charges changes it in the same commit. The
+same case encodes the largest legal value a fixture admits, a sixteen- character
+label at four UTF-8 bytes a character, which is what keeps the pinned numbers
+honest as upper bounds rather than merely current.
 
 **`MAX_SIZE` is a literal with a doc comment naming the rule.** Task 4 rules out
 a const-evaluable expression over the field types. The constant is the number
@@ -636,15 +714,33 @@ than a value no run can reach. A generated enum with no value and a union with
 no arm have no neutral value at all, so the emitter refuses both with a
 `GenerateError` rather than emitting a `decode` it cannot complete.
 
-**What `verify` checks at this stage.** The structural walk of D-5 in full, plus
-two constraints: an enum and an enum-set discriminant, through the `TryFrom`
-Epic 10 already emits, reported as `VerifyError::Contract`; and a collection's
-declared element count, reported as `Rule::Length`. Both are what keeps
-`decode`'s neutral discharge from being reachable. A named scalar's own range,
-length and pattern are **not** checked yet: that is stage K6, which adds `check`
-beside `new` (D-4) and calls it from `verify`. Until it lands, `decode` builds a
-named scalar with the unchecked constructor over a value `verify` has not
-range-checked, and the type's own invariant is not enforced on the receive path.
+**What `verify` checks at this stage, and the hazard the rest leaves.** The
+structural walk of D-5 in full, plus two constraints: an enum and an enum-set
+discriminant, through the `TryFrom` Epic 10 already emits, reported as
+`VerifyError::Contract`; and a collection's declared element count, reported as
+`Rule::Length`. Both are what keeps `decode`'s neutral discharge unreachable. A
+named scalar's own range, length and pattern are **not** checked: that is stage
+K6, which adds `check` beside `new` (D-4) and calls it from `verify`.
+
+Stated as what a hostile buffer produces today: a buffer carrying a `Label` of
+four hundred characters, or a `Speed` of 9000, passes `verify`, and
+`Ref::decode()` — a safe call, over a proof type whose whole purpose is to make
+this unreachable — returns a value outside its declared typl bound. It is
+memory-safe and contract-broken, and it is exactly the hazard D-4 names when it
+rules out a `verify` that checks structure only. The window is narrow and closed
+by design rather than left open: K6 is the next stage, and nothing in the tree
+consumes the codec until K7 moves the face onto `Wire`. It is not implicit
+either — the generated `verify` and `decode` each carry a doc comment saying the
+typl constraints are not checked yet, and K6 removes both comments with the same
+change that removes the hazard.
+
+**One inconsistency in the attribution, noted rather than fixed.** A `FieldType`
+whose `kind` is `None` probes to `Unbounded` and is attributed as an unbounded
+member, while its neighbours among the malformed-IR cases are handled
+differently: a member with no `r#type` at all is `Attribution::Untyped` and a
+stream or an unspecified primitive is exempt. All three are malformed IR that no
+typl source reaches, and the messages differ only in which of them a reader is
+told about, so this is recorded rather than smoothed over.
 
 **An optional marker outside a table field is refused.** A FlatBuffers vector
 has no absent element and a map entry no absent half, so `T?` in one of those
@@ -681,14 +777,28 @@ carries the feature's contents — the release coupling D-12 records — and not
 here can test it, because every proof links `ridl-rt`'s source rather than a
 release. E11.14 owns the manifest.
 
-**What a cross-package reference gets: no codec, and no diagnostic.**
-`ridl-backend-rust` resolves no cross-package reference, so it can neither size
-nor encode a type that reaches one — it cannot even learn a foreign named
-scalar's width. Such a type is exempt, not refused, so the corpus's
-`ClimateReport` generates its domain type and no `Payload<FlatBuffers>`
-implementation. Closing that needs the emitter to be handed the other packages,
-which is a change to `generate`'s signature and belongs with E11.14 or the
-plugin system's `CodegenRequest`, not here.
+**What a cross-package reference gets: no codec, and a note saying why
+(driftsys/ridl#467).** `ridl-backend-rust` resolves no cross-package reference,
+so it can neither size nor encode a type that reaches one — it cannot even learn
+a foreign named scalar's width. Such a type is exempt, not refused.
+
+**This is a silent omission in the sense ADR-0016 decision 6 and ADR-0017
+decision 4 rule out, and it is the majority of the corpus.** Nine types are
+withheld — `DriverProfile`, `SensorBounds`, `SensorResult`, `SensorReading`,
+`SensorFault`, `DiagFilter`, `FaultEvent`, `FaultPage` and `ClimateReport`,
+every type touching the prelude or an import — and five get a codec. The
+deferral is deliberate, but a doctrine deviation this wide cannot be tracked
+only in a note that archives at the end of the lane, so it has its own issue,
+**driftsys/ridl#467**, linked from driftsys/ridl#263. The fix it states:
+`generate` handed the other packages, which `fb_projection::Packages` already
+takes as `others`, in E11.14 or in the plugin system's `CodegenRequest`. It
+binds E11.8 and E11.12 the moment either emits a codec.
+
+Until then the emitted source says so where it happens. Each withheld type gets
+a `const __RIDL_FB_NO_CODEC_<NAME>: () = ()` carrying a doc comment that names
+the type, the member that could not be judged, the reason, and the issue, so a
+consumer meets a reason rather than an unsatisfied trait bound in their own
+crate far from the cause.
 
 ## 5. Records this changes, if the disposition takes it
 
