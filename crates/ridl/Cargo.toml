@@ -17,15 +17,15 @@ num-rational.workspace = true
 # property runner needs proptest's seeded `TestRunner`. This is the CLI binary,
 # which the E1.19 wasm check does not build, so nothing here reaches that gate.
 proptest = { workspace = true, features = ["std"] }
-ridl-core = { path = "../ridl-core" }
-ridl-diff = { path = "../ridl-diff" }
-ridl-fmt = { path = "../ridl-fmt" }
-ridl-ir = { path = "../ridl-ir" }
-ridl-lsp = { path = "../ridl-lsp" }
-ridl-mcp = { path = "../ridl-mcp" }
-ridl-sem = { path = "../ridl-sem" }
-ridl-syntax = { path = "../ridl-syntax" }
-ridlc = { path = "../ridlc" }
+ridl-core.workspace = true
+ridl-diff.workspace = true
+ridl-fmt.workspace = true
+ridl-ir.workspace = true
+ridl-lsp.workspace = true
+ridl-mcp.workspace = true
+ridl-sem.workspace = true
+ridl-syntax.workspace = true
+ridlc.workspace = true
 rowan.workspace = true
 serde_json.workspace = true
 # `ridl-mcp`'s `serve_stdio` is async, so `ridl mcp` builds the process's one

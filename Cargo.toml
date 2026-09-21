@@ -22,7 +22,11 @@ members = ["crates/*", "xtask"]
 exclude = ["examples"]
 
 [workspace.package]
-version = "0.0.0"
+# Every crate in the workspace shares this version and moves with it: a
+# `v<version>` tag publishes every crate whose manifest does not set
+# `publish = false` to crates.io (ADR-0007 decision 14's 2026-09-21
+# amendment, `.github/workflows/crates-io-release.yml`).
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/driftsys/ridl"
@@ -85,6 +89,28 @@ protox = "0.9.1"
 pulldown-cmark = { version = "0.13.4", default-features = false }
 quote = "1.0.46"
 regress = "0.11.1"
+# Every internal crate carries a `version` alongside its `path`: a path-only
+# dependency has no registry version for `cargo publish` to substitute once a
+# crate leaves the workspace, so without this block none of them could be
+# published regardless of the version number (ADR-0007 decision 14's
+# 2026-09-21 amendment). Each consumer below writes `{ workspace = true }`
+# rather than repeating the path and version by hand.
+ridl = { path = "crates/ridl", version = "0.2.0" }
+ridl-backend-flatbuffers = { path = "crates/ridl-backend-flatbuffers", version = "0.2.0" }
+ridl-backend-proto = { path = "crates/ridl-backend-proto", version = "0.2.0" }
+ridl-backend-rust = { path = "crates/ridl-backend-rust", version = "0.2.0" }
+ridl-backend-ts = { path = "crates/ridl-backend-ts", version = "0.2.0" }
+ridl-core = { path = "crates/ridl-core", version = "0.2.0" }
+ridl-diff = { path = "crates/ridl-diff", version = "0.2.0" }
+ridl-fmt = { path = "crates/ridl-fmt", version = "0.2.0" }
+ridl-ir = { path = "crates/ridl-ir", version = "0.2.0" }
+ridl-loopback = { path = "crates/ridl-loopback", version = "0.2.0" }
+ridl-lsp = { path = "crates/ridl-lsp", version = "0.2.0" }
+ridl-mcp = { path = "crates/ridl-mcp", version = "0.2.0" }
+ridl-rt = { path = "crates/ridl-rt", version = "0.2.0" }
+ridl-sem = { path = "crates/ridl-sem", version = "0.2.0" }
+ridl-syntax = { path = "crates/ridl-syntax", version = "0.2.0" }
+ridlc = { path = "crates/ridlc", version = "0.2.0" }
 # The Model Context Protocol SDK behind `ridl mcp` (ADR-0005 Layer B,
 # docs/ROADMAP.md epic E8.6). Default features off: `base64` is for content
 # blocks this server never emits. `server` pulls in `schemars`, which rmcp

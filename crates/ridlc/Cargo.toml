@@ -7,14 +7,14 @@ repository.workspace = true
 
 [dependencies]
 clap.workspace = true
-ridl-backend-flatbuffers = { path = "../ridl-backend-flatbuffers" }
-ridl-backend-proto = { path = "../ridl-backend-proto" }
-ridl-backend-rust = { path = "../ridl-backend-rust" }
-ridl-backend-ts = { path = "../ridl-backend-ts" }
-ridl-core = { path = "../ridl-core" }
-ridl-ir = { path = "../ridl-ir" }
-ridl-sem = { path = "../ridl-sem" }
-ridl-syntax = { path = "../ridl-syntax" }
+ridl-backend-flatbuffers.workspace = true
+ridl-backend-proto.workspace = true
+ridl-backend-rust.workspace = true
+ridl-backend-ts.workspace = true
+ridl-core.workspace = true
+ridl-ir.workspace = true
+ridl-sem.workspace = true
+ridl-syntax.workspace = true
 rowan.workspace = true
 
 [dev-dependencies]

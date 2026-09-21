@@ -860,7 +860,7 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// which is the release coupling design note D-12 records and E11.14's
 /// manifest work settles; nothing here can test it, because a `rustc` proof
 /// links `ridl-rt`'s source rather than a release.
-/// The `ridl-rt = "0.1"` requirement is a literal, not read from
+/// The `ridl-rt = "0.2"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
@@ -881,7 +881,7 @@ validate-pattern = ["dep:regex"]
 std = []
 
 [dependencies]
-ridl-rt = {{ version = "0.1", features = ["flatbuffers"] }}
+ridl-rt = {{ version = "0.2", features = ["flatbuffers"] }}
 regex = {{ version = "1", optional = true }}
 
 [lib]

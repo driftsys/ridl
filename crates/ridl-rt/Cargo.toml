@@ -1,8 +1,6 @@
 [package]
 name = "ridl-rt"
-# Its own version, not the workspace's 0.0.0: `ridl-rt` is released on its own
-# and tagged `ridl-rt@<version>`.
-version = "0.1.0"
+version.workspace = true
 # The crate compiles as edition 2021 because its rust-version minimum (1.83)
 # predates edition 2024, which Rust cannot build before 1.85; source ridl
 # emits, copied or generated into a consuming crate, compiles as that crate's

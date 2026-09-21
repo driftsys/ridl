@@ -23,9 +23,14 @@ proptest = { workspace = true, features = ["std"], optional = true }
 # even with `--no-default-features` on ridl-sem itself (ADR-0007 decision 5,
 # E1.19).
 regress.workspace = true
-ridl-core = { path = "../ridl-core", default-features = false }
-ridl-ir = { path = "../ridl-ir" }
-ridl-syntax = { path = "../ridl-syntax" }
+# Not `{ workspace = true, default-features = false }`: cargo refuses a
+# `default-features = false` override on a workspace-inherited dependency
+# outright, so this one dependency is declared directly instead. The version
+# is the one literal in the workspace outside `[workspace.dependencies]` —
+# bump it alongside `[workspace.package].version` in the root `Cargo.toml`.
+ridl-core = { path = "../ridl-core", version = "0.2.0", default-features = false }
+ridl-ir.workspace = true
+ridl-syntax.workspace = true
 rowan.workspace = true
 salsa.workspace = true
 

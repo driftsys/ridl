@@ -6,5 +6,5 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-ridl-syntax = { path = "../ridl-syntax" }
+ridl-syntax.workspace = true
 rowan.workspace = true

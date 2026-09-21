@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-ridl-ir = { path = "../ridl-ir" }
+ridl-ir.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

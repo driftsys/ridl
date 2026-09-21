@@ -1040,6 +1040,11 @@ fn crate_name_falls_back_for_a_workspace_manifest() {
 /// this test is what keeps the literal and the crate's real version from
 /// drifting apart silently (Task 7's own rationale for reading the version at
 /// emit time, redirected into a guard test instead).
+///
+/// `ridl-rt` shares the workspace version (ADR-0007 decision 14's 2026-09-21
+/// amendment) rather than pinning one of its own, so its manifest says
+/// `version.workspace = true`, not a literal string; `PackageVersion` reads
+/// through that indirection to the root manifest's `[workspace.package]`.
 #[test]
 fn ridl_rt_version_requirement_matches_the_crate() {
     #[derive(serde::Deserialize)]
@@ -1048,7 +1053,13 @@ fn ridl_rt_version_requirement_matches_the_crate() {
     }
     #[derive(serde::Deserialize)]
     struct CargoPackage {
-        version: String,
+        version: PackageVersion,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum PackageVersion {
+        Literal(String),
+        Inherited { workspace: bool },
     }
 
     let ridl_rt_manifest_text = std::fs::read_to_string(concat!(
@@ -1058,7 +1069,34 @@ fn ridl_rt_version_requirement_matches_the_crate() {
     .expect("crates/ridl-rt/Cargo.toml must exist");
     let ridl_rt_manifest: CargoManifest = toml::from_str(&ridl_rt_manifest_text)
         .expect("crates/ridl-rt/Cargo.toml must be valid TOML");
-    let version = ridl_rt_manifest.package.version;
+    let version = match ridl_rt_manifest.package.version {
+        PackageVersion::Literal(version) => version,
+        PackageVersion::Inherited { workspace: true } => {
+            let root_manifest_text =
+                std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml"))
+                    .expect("the workspace root Cargo.toml must exist");
+            let root_manifest: RootManifest = toml::from_str(&root_manifest_text)
+                .expect("the workspace root Cargo.toml must be valid TOML");
+            root_manifest.workspace.package.version
+        }
+        PackageVersion::Inherited { workspace: false } => {
+            panic!("crates/ridl-rt/Cargo.toml: version is a table but not `{{ workspace = true }}`")
+        }
+    };
+
+    #[derive(serde::Deserialize)]
+    struct RootManifest {
+        workspace: RootWorkspace,
+    }
+    #[derive(serde::Deserialize)]
+    struct RootWorkspace {
+        package: RootWorkspacePackage,
+    }
+    #[derive(serde::Deserialize)]
+    struct RootWorkspacePackage {
+        version: String,
+    }
+
     let mut segments = version.split('.');
     let major = segments
         .next()
