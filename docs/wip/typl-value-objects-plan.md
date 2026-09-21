@@ -1016,14 +1016,42 @@ let allow_deprecated = if decl.deprecated.is_some() {
 
 and prefixes each impl block with `#allow_deprecated`. Do the same here.
 
-- [ ] **Step 1: Write the failing test**
+**Two corrections made while executing this task on 2026-09-20.** Both are in
+the tree; the steps below are the text as executed.
+
+1. **`emit_type_def` and `decl_attrs` both take a `derived: &TokenStream`**,
+   which Task 6 added after this text was written. `emit_vacuous_type_def` takes
+   it too, and it computes its own attribute prefix rather than calling
+   `decl_attrs`: a `step`-only constraint is vacuous (`constraint_is_vacuous`
+   excludes `step`), so the vacuous path still emits `unchecked_doc`'s note and
+   the blank doc line that separates it from the declaration's own paragraph,
+   and `decl_attrs` does not carry either.
+2. **Dropping `new_unchecked` moves every emitter that names it.** A constant of
+   a named scalar (`emit_const`) and a derived `Default` (`defaults.rs`, in
+   `type_def_default` and `named_default`) wrap their value through
+   `new_unchecked` unconditionally, and on a vacuous type that function no
+   longer exists. Both now read one shared `scalar_ctor(td)`, which yields `new`
+   for a vacuous type and `new_unchecked` otherwise. A vacuous `new` is `const`,
+   so a `const` item and the body of `fn default()` both accept it. Two tests
+   move with it: `a_boolean_constant_uses_new_unchecked` is renamed
+   `a_boolean_constant_constructs_through_new`, and
+   `same_package_declared_init_gets_the_correct_default` gains a range on its
+   `GearIndex` fixture so it keeps testing the constrained wrapping, with a new
+   sibling, `same_package_declared_init_of_a_vacuous_type_wraps_through_new`,
+   for the other branch.
+
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
 fn vacuous_scalar_constructs_infallibly() {
     let decls = vec![public_decl(
         "Enabled",
-        primitive_type(v2::PrimitiveType::Boolean, init_value(true, Some("false")), None),
+        primitive_type(
+            v2::PrimitiveType::Boolean,
+            init_value(true, Some("false")),
+            None,
+        ),
     )];
     let source = rust_for(decls);
     assert!(source.contains("pub const fn new(value: bool) -> Self"));
@@ -1031,55 +1059,75 @@ fn vacuous_scalar_constructs_infallibly() {
     assert!(source.contains("impl ::core::convert::From<Enabled> for bool"));
     // No escape hatch is emitted: `new` already is one.
     assert!(
-        !source.contains("Enabled::new_unchecked") && !source.contains("fn new_unchecked(value: bool)"),
-        "new_unchecked would duplicate new on a vacuous type"
+        !source.contains("Enabled::new_unchecked")
+            && !source.contains("fn new_unchecked(value: bool)"),
+        "new_unchecked would duplicate new on a vacuous type, got:\n{source}"
     );
     // And no manual TryFrom, which would collide with core's blanket impl.
     assert!(
         !source.contains("impl ::core::convert::TryFrom<bool> for Enabled")
-            && !source.contains("impl TryFrom<bool> for Enabled")
+            && !source.contains("impl TryFrom<bool> for Enabled"),
+        "a manual TryFrom collides with core's blanket impl, got:\n{source}"
     );
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 `cargo test -p ridl-backend-rust --locked vacuous_scalar_constructs_infallibly`
 Expected: FAIL — `emit_vacuous_type_def` does not exist yet, so `Enabled` still
 takes the constrained path.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Add the branch at the top of `emit_type_def`, before it computes the checks and
 the getter. Task 3's quoted copy of that function does not show it, because it
 had not landed when Task 3 was executed:
 
 ```rust
-if ridl_ir::v2::constraint_is_vacuous(td.constraint.as_ref()) {
-    return emit_vacuous_type_def(decl, td);
+if v2::constraint_is_vacuous(td.constraint.as_ref()) {
+    return emit_vacuous_type_def(decl, td, derived);
 }
 ```
 
 Then add the function itself:
 
 ```rust
-/// A named scalar whose constraint checks nothing: `boolean`, and `integer` or
-/// `float` with no declared range.
+/// A named scalar whose constraint checks nothing: `boolean`, and `integer`
+/// or `float` with no declared range. A `String` or `Vec<u8>` backing reaches
+/// this only from hand-built IR: the checker always materializes the typl §4.4
+/// default `[0..256]` length bound, so both are constrained on the source
+/// route.
 ///
 /// Construction is infallible, so `From<Inner>` is correct here — there is no
 /// invariant for it to bypass. Core's blanket `impl<T, U: Into<T>> TryFrom<U>
 /// for T` then supplies `TryFrom<Inner>` with `Error = Infallible`, so generic
-/// consumer code calling `try_from` compiles against both kinds of scalar.
-/// `new_unchecked` is deliberately absent: `new` already is the unchecked path.
+/// consumer code calling `try_from` compiles against both kinds of scalar. A
+/// manual `TryFrom` would collide with that blanket impl (`rustc` reports
+/// `E0119`), which is the second reason it is absent.
 ///
-/// `From` is named by absolute path for the reason Task 3 records: a typl
-/// package may declare `type From`, and that declaration shadows the prelude
-/// in the module the generated impl shares with it.
-fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
+/// `new_unchecked` is deliberately absent: `new` already is the unchecked
+/// path, and on this type it is `const`, so [`scalar_ctor`] routes a constant
+/// and a derived default through `new` instead.
+///
+/// The prelude names are absolute for the reason [`emit_type_def`] records: a
+/// typl package may declare `type From`, and that declaration shadows the
+/// prelude in the module the generated impl shares with it.
+fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
-    let attrs = decl_attrs(decl);
+    let doc = doc_attrs(&decl.doc);
+    // A `step`-only constraint is vacuous (`constraint_is_vacuous` excludes
+    // `step`), and that is exactly the case `unchecked_doc` still speaks for,
+    // so the note and its separator are computed here too.
+    let unchecked = unchecked_doc(td);
+    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
+        quote! {}
+    } else {
+        quote! { #[doc = ""] }
+    };
+    let deprecated = deprecated_attr(decl.deprecated.as_deref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
     } else {
@@ -1088,10 +1136,12 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let vis = vis_tokens(decl.visibility);
     let getter = scalar_getter(td, vis.clone(), inner.clone());
 
-    // A `String`/`Vec<u8>` backing cannot appear here: the checker always
-    // materializes the typl §4.4 default `[0..256]`, so both are non-vacuous.
     quote! {
-        #attrs
+        #doc
+        #separator
+        #unchecked
+        #derived
+        #deprecated
         #[repr(transparent)]
         #vis struct #name(#inner);
 
@@ -1099,24 +1149,48 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
         impl #name {
             /// Constructs the value. This type declares no constraint, so
             /// construction cannot fail.
-            #vis const fn new(value: #inner) -> Self { Self(value) }
+            #vis const fn new(value: #inner) -> Self {
+                Self(value)
+            }
+
             #getter
         }
 
         #allow_deprecated
         impl ::core::convert::From<#inner> for #name {
-            fn from(value: #inner) -> Self { Self(value) }
+            fn from(value: #inner) -> Self {
+                Self(value)
+            }
         }
 
         #allow_deprecated
         impl ::core::convert::From<#name> for #inner {
-            fn from(value: #name) -> Self { value.0 }
+            fn from(value: #name) -> Self {
+                value.0
+            }
         }
     }
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+and the shared constructor selector the two other emitters read:
+
+```rust
+/// The associated function a constant or a derived default constructs a named
+/// scalar through. A constrained type keeps `new_unchecked`, whose value is
+/// checked by `ridlc` rather than at run time; a vacuous type has no
+/// `new_unchecked` ([`emit_vacuous_type_def`]) and its `new` is `const`, so
+/// both positions — a `const` item and the body of `fn default()` — accept it.
+pub(crate) fn scalar_ctor(td: &v2::TypeDef) -> TokenStream {
+    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
+        quote! { new }
+    } else {
+        quote! { new_unchecked }
+    }
+}
+```
+
+- [x] **Step 4: Run the tests**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. The
@@ -1128,7 +1202,7 @@ property of this hand-built fixture rather than of the language: the checker
 materializes the typl §4.4 default length bound, so a string or bytes type
 reaching the backend through the compiler is never vacuous.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-backend-rust/

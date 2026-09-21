@@ -59,28 +59,18 @@ impl Default for Speed {
 #[repr(transparent)]
 pub struct Counter(i64);
 impl Counter {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: i64,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: i64) -> Self {
         Self(value)
     }
     pub const fn get(self) -> i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Counter {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<i64> for Counter {
+    fn from(value: i64) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Counter> for i64 {
@@ -90,7 +80,7 @@ impl ::core::convert::From<Counter> for i64 {
 }
 impl Default for Counter {
     fn default() -> Self {
-        Counter::new_unchecked(0)
+        Counter::new(0)
     }
 }
 #[derive(Debug, Clone, PartialEq)]

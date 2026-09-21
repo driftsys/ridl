@@ -61,18 +61,9 @@ pub const MAX_GEAR: i64 = 6;
 #[repr(transparent)]
 pub struct Greeting(String);
 impl Greeting {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: String,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: String) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: String) -> Self {
         Self(value)
     }
     pub fn get(&self) -> &str {
@@ -82,10 +73,9 @@ impl Greeting {
         self.0
     }
 }
-impl ::core::convert::TryFrom<String> for Greeting {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: String) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<String> for Greeting {
+    fn from(value: String) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Greeting> for String {
@@ -95,7 +85,7 @@ impl ::core::convert::From<Greeting> for String {
 }
 impl Default for Greeting {
     fn default() -> Self {
-        Greeting::new_unchecked(String::new())
+        Greeting::new(String::new())
     }
 }
 pub const BANNER: &str = "hello";

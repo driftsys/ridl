@@ -62,28 +62,18 @@ impl Default for Speed {
 #[repr(transparent)]
 pub struct Engaged(bool);
 impl Engaged {
-    /// Constructs the value, enforcing its typl constraints.
-    pub fn new(
-        value: bool,
-    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
-        ::core::result::Result::Ok(Self(value))
-    }
-    /// Constructs the value without checking its constraints.
-    ///
-    /// Safe: nothing here relies on the invariant for memory
-    /// soundness. Use it only for a value already known to satisfy
-    /// the contract.
-    pub const fn new_unchecked(value: bool) -> Self {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: bool) -> Self {
         Self(value)
     }
     pub const fn get(self) -> bool {
         self.0
     }
 }
-impl ::core::convert::TryFrom<bool> for Engaged {
-    type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: bool) -> ::core::result::Result<Self, Self::Error> {
-        Self::new(value)
+impl ::core::convert::From<bool> for Engaged {
+    fn from(value: bool) -> Self {
+        Self(value)
     }
 }
 impl ::core::convert::From<Engaged> for bool {
@@ -93,7 +83,7 @@ impl ::core::convert::From<Engaged> for bool {
 }
 impl Default for Engaged {
     fn default() -> Self {
-        Engaged::new_unchecked(false)
+        Engaged::new(false)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
