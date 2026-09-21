@@ -261,6 +261,541 @@ impl Default for DoorFault {
         DoorFault::JAMMED
     }
 }
+/// A zero-copy accessor over FlatBuffers bytes `DoorId`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one `value` field, at id 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct DoorIdFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> DoorIdFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// The value the box carries. `DoorId` is one value, so this decodes it rather than borrowing it.
+    pub fn value(&self) -> DoorId {
+        __ridl_fb_decode_door_id(self.buf, self.table)
+    }
+}
+/// Writes `DoorId` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated)]
+fn __ridl_fb_encode_door_id(
+    value: &DoorId,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let __box = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 4u16,
+            value: {
+                let __s = *value;
+                ::ridl_rt::flatbuffers::Field::U8(__s.get() as u8)
+            },
+        },
+    ];
+    builder.push_table(5usize, 4usize, 1u16, &__box)
+}
+#[allow(deprecated)]
+fn __ridl_fb_verify_door_id(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            DoorId::check(&(i64::from(__raw)))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated)]
+fn __ridl_fb_decode_door_id(buf: &[u8], table: usize) -> DoorId {
+    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    DoorId::new_unchecked(
+        i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
+    )
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
+    /// The largest FlatBuffers buffer any legal `DoorId` encodes to: 43 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 43usize;
+    type View<'a> = DoorIdFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_door_id(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: DoorIdFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_door_id(buf, table)?;
+        ::core::result::Result::Ok(DoorIdFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_door_id(__view.buf, __view.table)
+    }
+}
+/// A zero-copy accessor over FlatBuffers bytes `Percent`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one `value` field, at id 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct PercentFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> PercentFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// The value the box carries. `Percent` is one value, so this decodes it rather than borrowing it.
+    pub fn value(&self) -> Percent {
+        __ridl_fb_decode_percent(self.buf, self.table)
+    }
+}
+/// Writes `Percent` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated)]
+fn __ridl_fb_encode_percent(
+    value: &Percent,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let __box = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 4u16,
+            value: {
+                let __s = *value;
+                ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+            },
+        },
+    ];
+    builder.push_table(8usize, 4usize, 1u16, &__box)
+}
+#[allow(deprecated)]
+fn __ridl_fb_verify_percent(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Percent::check(&(f64::from(__raw)))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated)]
+fn __ridl_fb_decode_percent(buf: &[u8], table: usize) -> Percent {
+    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    Percent::new_unchecked(
+        f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+    )
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
+    /// The largest FlatBuffers buffer any legal `Percent` encodes to: 46 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 46usize;
+    type View<'a> = PercentFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_percent(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: PercentFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_percent(buf, table)?;
+        ::core::result::Result::Ok(PercentFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_percent(__view.buf, __view.table)
+    }
+}
+/// A zero-copy accessor over FlatBuffers bytes `Odometer`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one `value` field, at id 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct OdometerFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> OdometerFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// The value the box carries. `Odometer` is one value, so this decodes it rather than borrowing it.
+    pub fn value(&self) -> Odometer {
+        __ridl_fb_decode_odometer(self.buf, self.table)
+    }
+}
+/// Writes `Odometer` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated)]
+fn __ridl_fb_encode_odometer(
+    value: &Odometer,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let __box = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 4u16,
+            value: {
+                let __s = *value;
+                ::ridl_rt::flatbuffers::Field::U32(__s.get() as u32)
+            },
+        },
+    ];
+    builder.push_table(8usize, 4usize, 1u16, &__box)
+}
+#[allow(deprecated)]
+fn __ridl_fb_verify_odometer(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_u32(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Odometer::check(&(i64::from(__raw)))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated)]
+fn __ridl_fb_decode_odometer(buf: &[u8], table: usize) -> Odometer {
+    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    Odometer::new_unchecked(
+        i64::from(::ridl_rt::flatbuffers::read_u32(buf, __p).unwrap_or(0u32)),
+    )
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer {
+    /// The largest FlatBuffers buffer any legal `Odometer` encodes to: 46 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 46usize;
+    type View<'a> = OdometerFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_odometer(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: OdometerFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_odometer(buf, table)?;
+        ::core::result::Result::Ok(OdometerFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_odometer(__view.buf, __view.table)
+    }
+}
+/// A zero-copy accessor over FlatBuffers bytes `LockState`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one `value` field, at id 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct LockStateFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> LockStateFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// The value the box carries. `LockState` is one value, so this decodes it rather than borrowing it.
+    pub fn value(&self) -> LockState {
+        __ridl_fb_decode_lock_state(self.buf, self.table)
+    }
+}
+/// Writes `LockState` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated)]
+fn __ridl_fb_encode_lock_state(
+    value: &LockState,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let __box = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 8u16,
+            value: {
+                let __s = *value;
+                ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+            },
+        },
+    ];
+    builder.push_table(16usize, 8usize, 1u16, &__box)
+}
+#[allow(deprecated)]
+fn __ridl_fb_verify_lock_state(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            <LockState as ::core::convert::TryFrom<i64>>::try_from(__raw)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated)]
+fn __ridl_fb_decode_lock_state(buf: &[u8], table: usize) -> LockState {
+    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    <LockState as ::core::convert::TryFrom<
+        i64,
+    >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+        .unwrap_or(LockState::UNLOCKED)
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState {
+    /// The largest FlatBuffers buffer any legal `LockState` encodes to: 50 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 50usize;
+    type View<'a> = LockStateFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_lock_state(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: LockStateFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_lock_state(buf, table)?;
+        ::core::result::Result::Ok(LockStateFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_lock_state(__view.buf, __view.table)
+    }
+}
 /// A zero-copy accessor over FlatBuffers bytes `DoorReport`'s `verify` accepted.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
@@ -486,6 +1021,142 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
         __ridl_fb_decode_door_report(__view.buf, __view.table)
     }
 }
+/// A zero-copy accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one `value` field, at id 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct DoorFaultFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> DoorFaultFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// The value the box carries. `DoorFault` is one value, so this decodes it rather than borrowing it.
+    pub fn value(&self) -> DoorFault {
+        __ridl_fb_decode_door_fault(self.buf, self.table)
+    }
+}
+/// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated)]
+fn __ridl_fb_encode_door_fault(
+    value: &DoorFault,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let __box = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 8u16,
+            value: {
+                let __s = *value;
+                ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+            },
+        },
+    ];
+    builder.push_table(16usize, 8usize, 1u16, &__box)
+}
+#[allow(deprecated)]
+fn __ridl_fb_verify_door_fault(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            <DoorFault as ::core::convert::TryFrom<i64>>::try_from(__raw)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated)]
+fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault {
+    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    <DoorFault as ::core::convert::TryFrom<
+        i64,
+    >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+        .unwrap_or(DoorFault::JAMMED)
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault {
+    /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 50 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 50usize;
+    type View<'a> = DoorFaultFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_door_fault(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: DoorFaultFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_door_fault(buf, table)?;
+        ::core::result::Result::Ok(DoorFaultFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_door_fault(__view.buf, __view.table)
+    }
+}
 
 
 // ===== package fleet.legacy =====
@@ -519,6 +1190,142 @@ impl ::core::convert::From<DoorFault> for i64 {
 impl Default for DoorFault {
     fn default() -> Self {
         DoorFault::STUCK
+    }
+}
+/// A zero-copy accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one `value` field, at id 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct DoorFaultFbView<'a> {
+    buf: &'a [u8],
+    table: usize,
+}
+#[allow(deprecated)]
+impl<'a> DoorFaultFbView<'a> {
+    /// The verified bytes this view reads.
+    pub fn bytes(&self) -> &'a [u8] {
+        self.buf
+    }
+    /// The value the box carries. `DoorFault` is one value, so this decodes it rather than borrowing it.
+    pub fn value(&self) -> DoorFault {
+        __ridl_fb_decode_door_fault(self.buf, self.table)
+    }
+}
+/// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated)]
+fn __ridl_fb_encode_door_fault(
+    value: &DoorFault,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let __box = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 8u16,
+            value: {
+                let __s = *value;
+                ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+            },
+        },
+    ];
+    builder.push_table(16usize, 8usize, 1u16, &__box)
+}
+#[allow(deprecated)]
+fn __ridl_fb_verify_door_fault(
+    buf: &[u8],
+    table: usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            <DoorFault as ::core::convert::TryFrom<i64>>::try_from(__raw)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated)]
+fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault {
+    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    <DoorFault as ::core::convert::TryFrom<
+        i64,
+    >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+        .unwrap_or(DoorFault::STUCK)
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault {
+    /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 50 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: usize = 50usize;
+    type View<'a> = DoorFaultFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_door_fault(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: DoorFaultFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[u8],
+    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_door_fault(buf, table)?;
+        ::core::result::Result::Ok(DoorFaultFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_door_fault(__view.buf, __view.table)
     }
 }
 

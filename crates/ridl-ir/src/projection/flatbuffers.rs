@@ -7,14 +7,17 @@
 //! this module, and a drift test asserts that what each of them puts on the
 //! wire is what the other one reads.
 //!
-//! Three kinds of fact live here:
+//! Four kinds of fact live here:
 //!
 //! - **the tables and their field slots** ([`TableLayout`]) — which id each
 //!   struct field, tuple position, map-entry position and union slot takes;
 //! - **a union arm's discriminant** ([`union_arm_discriminant`]);
 //! - **the size bound** ([`max_size`]) — the largest buffer any legal value of
 //!   a type can encode to, which the codec emits as `MAX_SIZE` and the catalog
-//!   descriptor advertises as `EncodedSizes.flatbuffers`.
+//!   descriptor advertises as `EncodedSizes.flatbuffers`;
+//! - **which table a declaration is rooted in** ([`root_table`]) — its own for
+//!   a struct, its wrapper for a union, and a generated `<Name>Box` for a
+//!   named scalar, an enum and an enum set (ADR-0019 decision 8).
 //!
 //! Nothing here names a FlatBuffers *type* or writes a line of schema text.
 //! The spelling of a type stays with the emitter that spells it; what is
@@ -231,6 +234,21 @@ pub fn union_arm_box_table() -> TableLayout {
     }
 }
 
+/// The layout of the box table a named scalar, an enum or an enum set is
+/// **rooted** in (ADR-0019 decision 8): `table <Name>Box { value: <resolved
+/// type> (id: 0); }`.
+///
+/// It is the same shape as the box a non-table union arm is isolated in, which
+/// is why this delegates to [`union_arm_box_table`] rather than restating the
+/// slot: decision 8 adopts decision 2's idiom deliberately, and a change to
+/// one is a change to both. The two boxes still carry different *names* —
+/// `<Name>Box` here, `<Union><Arm>Box` there — which ADR-0019 Open item 3
+/// records as the one thing decision 8 left open.
+#[must_use]
+pub fn root_box_table() -> TableLayout {
+    union_arm_box_table()
+}
+
 /// The discriminant a union arm carries on the wire: `UnionArm.ordinal`, which
 /// is 1-based, follows declaration order, and which a tombstone keeps occupied
 /// (typl §7.4).
@@ -284,16 +302,43 @@ pub struct Packages<'a> {
     pub others: &'a [&'a v2::Package],
 }
 
-/// Whether a declaration gets a root table of its own, and so has a buffer to
-/// bound. A struct and a union do; a named scalar, an enum, an enum set and a
-/// constant inline at each use site and never become a buffer, so asking
-/// [`max_size`] about one is a category error rather than an unbounded type.
+/// Which table a declaration is rooted in, or `None` when it projects no type
+/// at all (ADR-0019 decision 8).
+///
+/// Decision 8 made this total over the declaration kinds this projection
+/// carries: every one of them has a root table, and so a buffer to bound and a
+/// payload codec to emit. Before it, only a struct and a union had one, and a
+/// named scalar or an enum as an interaction payload had no root at all — the
+/// gap that blocked the generated face from naming this encoding
+/// (driftsys/ridl#470).
+///
+/// A constant is never emitted (ADR-0013 decision 5), and an interaction, a
+/// service and a boundary declaration are not types, so those answer `None`:
+/// they project no FlatBuffers declaration for a root table to be.
 #[must_use]
-pub fn mints_root_table(decl: &v2::Decl) -> bool {
-    matches!(
-        decl.kind,
-        Some(v2::decl::Kind::StructDef(_)) | Some(v2::decl::Kind::UnionDef(_))
-    )
+pub fn root_table(decl: &v2::Decl) -> Option<RootTable> {
+    match decl.kind {
+        Some(v2::decl::Kind::StructDef(_)) => Some(RootTable::Own),
+        Some(v2::decl::Kind::UnionDef(_)) => Some(RootTable::UnionWrapper),
+        Some(v2::decl::Kind::TypeDef(_))
+        | Some(v2::decl::Kind::EnumDef(_))
+        | Some(v2::decl::Kind::EnumSetDef(_)) => Some(RootTable::Box),
+        _ => None,
+    }
+}
+
+/// Which table one declaration's root is ([`root_table`], ADR-0019
+/// decision 8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RootTable {
+    /// The declaration's own table: a struct (ADR-0019 decision 3).
+    Own,
+    /// The wrapper table the declared name goes to: a union
+    /// (ADR-0019 decision 1).
+    UnionWrapper,
+    /// A generated `table <Name>Box { value: <resolved type> (id: 0); }`: a
+    /// named scalar, an enum or an enum set ([`root_box_table`]).
+    Box,
 }
 
 /// The largest FlatBuffers buffer any legal value of `decl` can encode to, or
@@ -329,7 +374,10 @@ pub fn mints_root_table(decl: &v2::Decl) -> bool {
 ///   element's inline width, [`ALIGN_SLACK`], and the maximum element count
 ///   times whatever each element places out of line;
 /// - a union: its wrapper table, whose discriminant costs one vtable slot and
-///   one inline byte, plus the largest of its arms.
+///   one inline byte, plus the largest of its arms;
+/// - a named scalar, an enum or an enum set as a **root**: its box table, plus
+///   whatever that one value places inline and out of line (ADR-0019
+///   decision 8).
 ///
 /// An optional field is charged as present, since absence only shrinks a
 /// buffer.
@@ -356,9 +404,14 @@ pub fn mints_root_table(decl: &v2::Decl) -> bool {
 /// than refused. TYPL-202 makes both bounds mandatory, so a zero maximum is a
 /// container that carries nothing, not a missing bound.
 ///
-/// Ask only about a declaration [`mints_root_table`] accepts; any other kind
-/// answers `None` because it has no buffer of its own, not because it is
-/// unbounded.
+/// Ask only about a declaration [`root_table`] accepts; a kind that projects
+/// no type at all answers `None` because it has no buffer of its own, not
+/// because it is unbounded.
+///
+/// A named scalar, an enum and an enum set are charged their box table
+/// ([`root_box_table`], ADR-0019 decision 8) around the inline charge each of
+/// them takes at an ordinary field position — the same charge decision 2's arm
+/// box takes, which is the rule the disposition on driftsys/ridl#470 fixed.
 #[must_use]
 pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
     let mut sizer = Sizer {
@@ -373,6 +426,9 @@ pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
         Some(v2::decl::Kind::UnionDef(def)) => {
             sizer.union_wrapper_bound(packages.package, &decl.name, def)?
         }
+        Some(v2::decl::Kind::TypeDef(_))
+        | Some(v2::decl::Kind::EnumDef(_))
+        | Some(v2::decl::Kind::EnumSetDef(_)) => sizer.root_box_bound(packages.package, decl)?,
         _ => return None,
     };
     match ROOT.checked_add(body) {
@@ -577,6 +633,21 @@ impl<'a> Sizer<'a> {
             }
             _ => None,
         }
+    }
+
+    /// A named scalar, an enum or an enum set as a root: its box table
+    /// (ADR-0019 decision 8), charged exactly as [`union_arm_bound`] charges
+    /// decision 2's arm box, because it is the same table.
+    ///
+    /// The charge inside the box is [`Sizer::named_charge`] over the
+    /// declaration's own name, which is what an ordinary field position would
+    /// pay for it — a reference to a declaration in the package that declares
+    /// it, so nothing here follows a cross-package edge.
+    ///
+    /// [`union_arm_bound`]: Sizer::union_arm_bound
+    fn root_box_bound(&mut self, home: &'a v2::Package, decl: &v2::Decl) -> Option<u64> {
+        let charge = self.named_charge(home, &decl.name)?;
+        self.table_bound(&root_box_table(), charge.inline, charge.out_of_line)
     }
 
     fn tuple_table_bound(&mut self, home: &'a v2::Package, tuple: &v2::TupleType) -> Option<u64> {

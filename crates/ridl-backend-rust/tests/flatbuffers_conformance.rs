@@ -39,6 +39,12 @@
 //!   schema gives another reader nothing to read presence from
 //!   ([`an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip`]).
 //!
+//! **A scalar root is a root like any other** (ADR-0019 decision 8). A named
+//! scalar, an enum and an enum set are rooted in a box table, and
+//! [`a_scalar_root_round_trips_through_planus_both_ways`] measures both
+//! directions over one — the same obligation the composite cases carry, on the
+//! shape that had no root at all until decision 8.
+//!
 //! Both are decided divergences rather than defects, both are measured here
 //! rather than described, and driftsys/ridl#472 carries the pair. The
 //! optional half also bounds what D-9 claims: a present default is
@@ -654,6 +660,84 @@ fn main() {{
 "#
     );
     rustc::run_program("fb_conformance_spare_lost", &program(&main));
+}
+
+/// **A scalar root, both directions** (ADR-0019 decision 8).
+///
+/// `Speed` is a named scalar, so before decision 8 it had no root table and
+/// no `Payload<FlatBuffers>` at all. Its root is now
+/// `table SpeedBox { value: ushort (id: 0); }`, and what this case measures is
+/// that the box is a FlatBuffers root like any other: planus reads the buffer
+/// this codec writes for one, and this codec accepts the buffer planus writes
+/// for one.
+///
+/// The value is 150, which is not `ushort`'s default, so the disagreement
+/// [`a_buffer_planus_wrote_omitting_a_default_is_refused`] measures is not in
+/// the way — it applies to a box's `value` field exactly as it does to any
+/// other non-optional field, since decision 8 resolves that field as an
+/// ordinary one.
+#[test]
+fn a_scalar_root_round_trips_through_planus_both_ways() {
+    // Direction one: this codec writes the box, planus reads it.
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_scalar_root_encode",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let value = Speed::new_unchecked(150);
+    let mut out = vec![0u8; <Speed as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    let mut text = String::new();
+    for byte in bytes {
+        text.push_str(&format!("{byte:02x}"));
+    }
+    println!("{text}");
+}
+"#,
+        ),
+    );
+
+    let ours = from_hex(&transcript);
+    let read = <fb::SpeedBoxRef<'_> as planus::ReadAsRoot>::read_as_root(&ours)
+        .expect("planus reads the box table this codec rooted a named scalar in");
+    assert_eq!(
+        fb::SpeedBox::try_from(read).expect("planus reads the box's one field"),
+        fb::SpeedBox { value: 150 },
+        "an independent reader must see the value this codec boxed"
+    );
+
+    // Direction two: planus writes the box, this codec verifies and decodes
+    // it. planus lays the one-field table out its own way, so a `verify` that
+    // depended on this encoder's own placement fails here.
+    let mut builder = planus::Builder::new();
+    let theirs = builder.finish(fb::SpeedBox { value: 150 }, None).to_vec();
+    let hex = to_hex(&theirs);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+const FOREIGN: &str = "{hex}";
+
+fn main() {{
+    let bytes: Vec<u8> = (0..FOREIGN.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
+        .collect();
+    let proof: Ref<'_, Speed, FlatBuffers> =
+        Ref::verify(&bytes).expect("a box another implementation wrote verifies");
+    assert_eq!(
+        proof.decode(),
+        Speed::new_unchecked(150),
+        "a box another implementation wrote decodes to the same scalar"
+    );
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_scalar_root_decode", &program(&main));
 }
 
 /// The generated codec checks for `wasm32-unknown-unknown`.

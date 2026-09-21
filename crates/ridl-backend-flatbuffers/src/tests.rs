@@ -305,8 +305,15 @@ fn a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment() {
 
     let generated = generate(&package).expect("generate");
     assert!(
-        !generated.fbs_source.contains("table Speed"),
-        "a named scalar must inline:\n{}",
+        !generated.fbs_source.contains("table Speed {"),
+        "a named scalar must inline at a field position:\n{}",
+        generated.fbs_source
+    );
+    // ADR-0019 decision 8: it is rooted in a box all the same, under a
+    // generated name, which is not the declaration taking a table of its own.
+    assert!(
+        generated.fbs_source.contains("table SpeedBox {"),
+        "got:\n{}",
         generated.fbs_source
     );
     assert!(
@@ -1684,8 +1691,9 @@ fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
 }
 
 /// The layout of every table the projection generates for `package` — one per
-/// map, one per tuple, one per union arm that is not itself a table — derived
-/// from the IR, never from what was emitted.
+/// map, one per tuple, one per union arm that is not itself a table, and one
+/// per declaration rooted in a box (ADR-0019 decision 8) — derived from the IR,
+/// never from what was emitted.
 ///
 /// The walk follows the same paths `emit_structs` does: a struct's fields, a
 /// tuple's fields, a map's key and value, an array's element, and a union's
@@ -1718,6 +1726,16 @@ fn induced_layouts(package: &v2::Package, others: &[&v2::Package]) -> Vec<projec
                 }
             }
             _ => {}
+        }
+        // ADR-0019 decision 8: a named scalar, an enum and an enum set are
+        // each rooted in a box of their own, emitted whether or not anything
+        // references them. They are generated tables like the three above, so
+        // the multiset the schema owes gains one layout per such declaration.
+        if matches!(
+            projection::root_table(decl),
+            Some(projection::RootTable::Box)
+        ) {
+            layouts.push(projection::root_box_table());
         }
     }
     layouts
@@ -2061,6 +2079,52 @@ fn a_retired_arm_drifts_the_union_discriminant() {
 }
 
 #[test]
+fn every_boxed_declaration_of_the_corpus_gets_its_root_table() {
+    // ADR-0019 decision 8. The drift walk compares the multiset of generated
+    // layouts, which counts the boxes but does not say which declaration each
+    // one belongs to, so the names are checked here: one `<Name>Box` per named
+    // scalar, per enum and per enum set, holding one `value` field at id 0.
+    let package = cruise_package();
+    let generated = generate(&package).expect("generate");
+    let schema = read_back(&generated.fbs_source);
+
+    let mut boxed: Vec<String> = Vec::new();
+    for decl in &package.decls {
+        if !matches!(
+            projection::root_table(decl),
+            Some(projection::RootTable::Box)
+        ) {
+            continue;
+        }
+        let name = format!("{}Box", decl.name);
+        assert_eq!(
+            schema.tables.get(&name),
+            Some(&expected_fields(&projection::root_box_table(), &[])),
+            "`{name}` must be the box ADR-0019 decision 8 asks for; got:\n{}",
+            generated.fbs_source
+        );
+        boxed.push(decl.name.clone());
+    }
+
+    assert_eq!(
+        boxed,
+        vec![
+            "Speed".to_string(),
+            "Percent".to_string(),
+            "Delta".to_string(),
+            "EngageState".to_string(),
+            "Warnings".to_string(),
+        ],
+        "the fixture exists to carry one of each kind, and the list pins that it still does"
+    );
+    // A box is written whether or not anything references it: `Warnings` is a
+    // field type of `Telemetry`, `Speed` of three members, and `Delta` of one,
+    // while nothing in this package references `Percent` or `EngageState`
+    // through a struct field at all.
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
+}
+
+#[test]
 fn the_corpus_fixtures_map_key_is_bounded() {
     // `Telemetry.byId` is the one corpus member whose key is a `string`, and
     // a string with no length bound is the one shape `max_size` cannot
@@ -2077,7 +2141,10 @@ fn the_corpus_fixtures_map_key_is_bounded() {
         .find(|decl| decl.name == "Telemetry")
         .expect("the fixture declares it");
 
-    assert!(projection::mints_root_table(telemetry));
+    assert_eq!(
+        projection::root_table(telemetry),
+        Some(projection::RootTable::Own)
+    );
     assert!(
         projection::max_size(
             projection::Packages {

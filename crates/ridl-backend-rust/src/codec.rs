@@ -290,10 +290,16 @@ impl Scalar {
     }
 
     /// The language-layer value (`i64`, `f64` or `bool`) of a primitive read.
+    ///
+    /// The `u64` cast carries no parentheses of its own: every caller either
+    /// uses the result as a whole expression or passes it as a sole call
+    /// argument, where `as` binds tightly enough, and a redundant pair draws
+    /// `unused_parens` in a consumer's build. The one caller that needs
+    /// grouping — the borrow `verify` hands `check` — writes its own.
     fn widen(&self, raw: TokenStream) -> TokenStream {
         match self.prim {
             Prim::Bool | Prim::I64 | Prim::F64 => raw,
-            Prim::U64 => quote! { (#raw as i64) },
+            Prim::U64 => quote! { #raw as i64 },
             Prim::F32 => quote! { f64::from(#raw) },
             _ => quote! { i64::from(#raw) },
         }
@@ -512,7 +518,7 @@ impl<'a> Codec<'a> {
         let mut roots: Vec<&v2::Decl> = Vec::new();
         let mut withheld: Vec<&v2::Decl> = Vec::new();
         for decl in &self.package.decls {
-            if !fb_projection::mints_root_table(decl) {
+            if fb_projection::root_table(decl).is_none() {
                 continue;
             }
             match fb_projection::max_size(self.packages(), decl) {
@@ -667,7 +673,18 @@ impl<'a> Codec<'a> {
                 items.push(self.payload_impl(decl)?);
                 Ok(items)
             }
-            // `mints_root_table` admits nothing else.
+            // A named scalar, an enum and an enum set are rooted in a box
+            // table (ADR-0019 decision 8).
+            Some(
+                v2::decl::Kind::TypeDef(_)
+                | v2::decl::Kind::EnumDef(_)
+                | v2::decl::Kind::EnumSetDef(_),
+            ) => {
+                let mut items = self.root_box_items(decl)?;
+                items.push(self.payload_impl(decl)?);
+                Ok(items)
+            }
+            // `root_table` admits nothing else.
             _ => Ok(Vec::new()),
         }
     }
@@ -1967,6 +1984,146 @@ impl<'a> Codec<'a> {
                 })
             }
         }
+    }
+
+    // -----------------------------------------------------------------
+    // The box root (ADR-0019 decision 8)
+    // -----------------------------------------------------------------
+
+    /// The view struct and the three functions for a declaration rooted in a
+    /// box table: a named scalar, an enum or an enum set.
+    ///
+    /// A FlatBuffers root is a table, and each of these three kinds inlines to
+    /// a bare scalar at a field position, so before ADR-0019 decision 8 none of
+    /// them had a root and none of them carried a codec — which is what left
+    /// the generated face on its `ReprC` placeholder (driftsys/ridl#470). The
+    /// box is `table <Name>Box { value: <resolved type> (id: 0); }`, the same
+    /// table decision 2 gives a non-table union arm, so the three bodies are
+    /// the same three [`Codec::union_arm`] writes for that arm — read at the
+    /// root rather than behind a union's value offset, which is the one
+    /// difference: the root table is already followed, so nothing here
+    /// dereferences an offset first.
+    ///
+    /// The view hands back the value rather than a borrow: a box holds exactly
+    /// one value and decoding it costs a read, so there is nothing a nested
+    /// view would save.
+    fn root_box_items(&self, decl: &v2::Decl) -> Result<Vec<TokenStream>, GenerateError> {
+        let owner = decl.name.as_str();
+        let wire = self.wire(
+            &v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named(owner.to_string())),
+            },
+            "",
+        )?;
+        let vis = vis_tokens(decl.visibility);
+        let ty = ident(owner);
+        let view = view_ident(owner);
+        let encode_name = encode_ident(owner);
+        let verify_name = verify_ident(owner);
+        let decode_name = decode_ident(owner);
+
+        let width = wire.inline_width();
+        let (offsets, size, align) = place(&[width]);
+        let offset = Literal::u16_suffixed(offsets[0]);
+        let size = Literal::usize_suffixed(size);
+        let align = Literal::usize_suffixed(align);
+        let width_lit = Literal::usize_suffixed(width);
+        let slots = Literal::u16_suffixed(
+            u16::try_from(fb_projection::UNION_ARM_BOX_VALUE_ID + 1).unwrap(),
+        );
+
+        let field = self.encode_field(&wire, &Operand::borrowed(quote! { value }))?;
+        let inner_verify = self.verify_at(owner, &wire, &quote! { __p })?;
+        let inner_decode = self.decode_expr(&wire, &quote! { buf }, &quote! { __p })?;
+
+        let doc =
+            format!(" A zero-copy accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+        let value_doc = format!(
+            " The value the box carries. `{owner}` is one value, so this decodes it rather \
+             than borrowing it."
+        );
+        let encode_doc = format!(
+            " Writes `{owner}` as its box table and returns its position (ADR-0019 decision 8)."
+        );
+
+        Ok(vec![
+            quote! {
+                #[doc = #doc]
+                ///
+                /// The buffer's root is the box table ADR-0019 decision 8
+                /// gives this declaration: one `value` field, at id 0.
+                #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+                #[allow(deprecated)]
+                #vis struct #view<'a> {
+                    buf: &'a [u8],
+                    table: usize,
+                }
+
+                #[allow(deprecated)]
+                impl<'a> #view<'a> {
+                    /// The verified bytes this view reads.
+                    #vis fn bytes(&self) -> &'a [u8] {
+                        self.buf
+                    }
+
+                    #[doc = #value_doc]
+                    #vis fn value(&self) -> #ty {
+                        #decode_name(self.buf, self.table)
+                    }
+                }
+            },
+            quote! {
+                #[doc = #encode_doc]
+                #[allow(deprecated)]
+                fn #encode_name(
+                    value: &#ty,
+                    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+                ) -> ::core::result::Result<
+                    ::ridl_rt::flatbuffers::Pos,
+                    ::ridl_rt::payload::EncodeError,
+                > {
+                    let __box = [::ridl_rt::flatbuffers::TableField {
+                        slot: 0u16,
+                        offset: #offset,
+                        value: #field,
+                    }];
+                    builder.push_table(#size, #align, #slots, &__box)
+                }
+            },
+            quote! {
+                #[allow(deprecated)]
+                fn #verify_name(
+                    buf: &[u8],
+                    table: usize,
+                ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+                    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, #width_lit)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                    {
+                        ::core::option::Option::Some(__p) => { #inner_verify }
+                        // The box's one field is not optional, so an absent
+                        // slot is a buffer with no value in it.
+                        ::core::option::Option::None => {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::MissingRequired,
+                                ),
+                            );
+                        }
+                    }
+                    ::core::result::Result::Ok(())
+                }
+            },
+            quote! {
+                #[allow(deprecated)]
+                fn #decode_name(buf: &[u8], table: usize) -> #ty {
+                    let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, #width_lit)
+                        .unwrap_or(::core::option::Option::None)
+                        .unwrap_or(0usize);
+                    #inner_decode
+                }
+            },
+        ])
     }
 
     // -----------------------------------------------------------------

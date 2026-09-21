@@ -102,6 +102,40 @@ fn bounded_string_type(init: v2::InitValue) -> v2::decl::Kind {
     })
 }
 
+/// A `bytes`-backed named scalar carrying typl §4.5's default `[0..256]`
+/// length bound, the `bytes` counterpart of [`bounded_string_type`].
+fn bounded_bytes_type(init: v2::InitValue) -> v2::decl::Kind {
+    v2::decl::Kind::TypeDef(v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        }),
+        constraint: Some(v2::Constraint {
+            len_max: Some(256),
+            ..Default::default()
+        }),
+        declared_init: None,
+        init: Some(init),
+        width: None,
+    })
+}
+
+/// The `integer` width the checker derives for a named scalar with no
+/// range — typl Appendix D's `long`, which every backend sees on IR the
+/// compiler produced. ADR-0019 decision 8 roots such a declaration in a box,
+/// so a hand-built fixture with no width has no finite FlatBuffers bound and
+/// the codec refuses it.
+fn derived_int_width() -> Option<v2::type_def::Width> {
+    Some(v2::type_def::Width::IntWidth(v2::IntWidth::I64 as i32))
+}
+
+/// The `float` width the checker derives for a named scalar with no unit —
+/// `double`. The `integer` counterpart is [`derived_int_width`].
+fn derived_float_width() -> Option<v2::type_def::Width> {
+    Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32))
+}
+
 fn named_field(
     name: &str,
     ordinal: u32,
@@ -330,14 +364,8 @@ fn named_scalar_backings() {
                 None,
             ),
         ),
-        public_decl(
-            "Label",
-            primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
-        ),
-        public_decl(
-            "Blob",
-            primitive_type(v2::PrimitiveType::Bytes, init_value(true, Some("")), None),
-        ),
+        public_decl("Label", bounded_string_type(init_value(true, Some("")))),
+        public_decl("Blob", bounded_bytes_type(init_value(true, Some("")))),
     ];
     insta::assert_snapshot!(rust_for(decls));
 }
@@ -420,7 +448,7 @@ fn step_only_scalar_is_vacuous_and_still_names_the_gap() {
             constraint: Some(constraint(None, None, Some("0.5"))),
             declared_init: None,
             init: Some(init_value(true, Some("0.0"))),
-            width: None,
+            width: derived_float_width(),
         }),
     )]);
     // The vacuous path: infallible `new`, no `new_unchecked`, no manual
@@ -501,7 +529,7 @@ fn ratio_decl() -> v2::Decl {
             constraint: Some(constraint(Some("0.0"), Some("1.0"), None)),
             declared_init: None,
             init: Some(init_value(true, Some("0.0"))),
-            width: None,
+            width: derived_float_width(),
         }),
     )
 }
@@ -587,7 +615,7 @@ fn a_maximum_at_the_inner_types_maximum_emits_no_check() {
             constraint: Some(constraint(Some("0"), Some("9223372036854775807"), None)),
             declared_init: None,
             init: Some(init_value(true, Some("0"))),
-            width: None,
+            width: derived_int_width(),
         }),
     )]);
     assert!(
@@ -617,7 +645,7 @@ fn a_maximum_below_the_inner_types_maximum_still_emits_a_check() {
             constraint: Some(constraint(Some("0"), Some("9223372036854775806"), None)),
             declared_init: None,
             init: Some(init_value(true, Some("0"))),
-            width: None,
+            width: derived_int_width(),
         }),
     )]);
     assert!(
@@ -644,7 +672,7 @@ fn a_float_maximum_spelling_the_integer_maximum_still_emits_a_check() {
             constraint: Some(constraint(Some("0.0"), Some("9223372036854775807"), None)),
             declared_init: None,
             init: Some(init_value(true, Some("0.0"))),
-            width: None,
+            width: derived_float_width(),
         }),
     )]);
     assert!(
@@ -800,6 +828,9 @@ fn a_step_and_a_literal_pattern_are_both_named() {
             }),
             constraint: Some(v2::Constraint {
                 pattern: Some("/x/".to_string()),
+                // typl §4.4's default length bound, which the checker always
+                // materializes and the box root needs to be sizable.
+                len_max: Some(256),
                 ..constraint(None, None, Some("0.5"))
             }),
             declared_init: None,
@@ -1046,10 +1077,14 @@ fn a_deprecated_scalar_allows_deprecated_on_its_impls() {
         source.matches("#[allow(deprecated)]").count() >= 3,
         "each generated impl of a deprecated type allows the lint, got:\n{source}"
     );
+    // The comparison is against the same declaration undeprecated, not against
+    // zero: the codec allows the lint on every item it writes, deprecated or
+    // not, and ADR-0019 decision 8 gave a named scalar codec items of its own.
     let plain = rust_for(vec![speed_decl()]);
     assert!(
-        !plain.contains("allow(deprecated)"),
-        "a type that is not deprecated allows nothing, got:\n{plain}"
+        source.matches("#[allow(deprecated)]").count()
+            >= plain.matches("#[allow(deprecated)]").count() + 3,
+        "a type that is not deprecated allows the lint only where the codec does, got:\n{plain}"
     );
 }
 
@@ -1154,10 +1189,7 @@ fn constants_all_forms() {
                 regex: None,
             }),
         ),
-        public_decl(
-            "Greeting",
-            primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
-        ),
+        public_decl("Greeting", bounded_string_type(init_value(true, Some("")))),
         public_decl(
             "BANNER",
             v2::decl::Kind::ConstDef(v2::ConstDef {
@@ -1397,10 +1429,14 @@ fn a_deprecated_enum_and_enum_set_allow_deprecated_on_their_impls() {
         source.matches("#[allow(deprecated)]").count() >= 5,
         "each generated impl of a deprecated enum or enum set allows the lint, got:\n{source}"
     );
+    // As above: the codec's own items carry the attribute whatever the
+    // declaration says, and decision 8 gave an enum and an enum set some.
     let plain = rust_for(vec![gear_position_decl(), features_decl()]);
     assert!(
-        !plain.contains("allow(deprecated)"),
-        "declarations that are not deprecated allow nothing, got:\n{plain}"
+        source.matches("#[allow(deprecated)]").count()
+            >= plain.matches("#[allow(deprecated)]").count() + 5,
+        "declarations that are not deprecated allow the lint only where the codec does, \
+         got:\n{plain}"
     );
 }
 
@@ -3366,7 +3402,7 @@ fn a_typl_only_package_may_declare_a_vocabulary_name() {
         primitive_type(
             v2::PrimitiveType::Integer,
             init_value(true, Some("0")),
-            None,
+            derived_int_width(),
         ),
     )]);
     assert!(source.contains("struct Provenance"), "got:\n{source}");
@@ -3515,7 +3551,7 @@ fn integer_backed_scalar_derives_the_full_ordering_set() {
 fn string_backed_scalar_is_not_copy() {
     let decls = vec![public_decl(
         "Label",
-        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
+        bounded_string_type(init_value(true, Some(""))),
     )];
     let source = rust_for(decls);
     let derived = derives_of(&source, "pub struct Label(String);");
@@ -4412,13 +4448,12 @@ fn flatbuffers_bound_names_the_unbounded_member_after_an_exempt_one() {
 /// struct field is.
 #[test]
 fn flatbuffers_bound_names_the_unbounded_union_arm() {
-    // `Reading` is a named scalar (a `TypeDef`), not a struct or a union, so
-    // `fb_projection::mints_root_table` is false for it and the outer walk
-    // in `check_flatbuffers_bounds` never checks it on its own — only the
-    // union arm that names it does, through `probe_union_arm`. That is what
-    // this test needs to isolate: an arm whose own reference is unbounded,
-    // with nothing else in the package that would independently refuse it
-    // first.
+    // `Reading` is a named scalar, and ADR-0019 decision 8 gives one a box
+    // root of its own, so the outer walk in `check_flatbuffers_bounds` now
+    // refuses it in its own right too — over the box's `value` field, which
+    // `flatbuffers_bound_names_an_unbounded_box_root` covers. What this test
+    // isolates is the arm, so the union is declared first and the walk reaches
+    // it before the scalar.
     let bad_arm = v2::UnionArm {
         name: "reading".to_string(),
         ordinal: 1,
@@ -4433,17 +4468,40 @@ fn flatbuffers_bound_names_the_unbounded_union_arm() {
     let pkg = package(
         "veh.cruise",
         vec![
+            public_decl("Outcome", v2::decl::Kind::UnionDef(union_def)),
             public_decl(
                 "Reading",
                 primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
             ),
-            public_decl("Outcome", v2::decl::Kind::UnionDef(union_def)),
         ],
     );
     let err = check_flatbuffers_bounds(&pkg).expect_err("an unbounded union arm has no bound");
     assert_eq!(
         err.message, "`veh.cruise.Outcome.reading` has no finite FlatBuffers bound",
         "the refusal must name the union's arm"
+    );
+}
+
+/// A named scalar with no finite bound is refused in its own right, over the
+/// `value` field of the box ADR-0019 decision 8 roots it in.
+#[test]
+fn flatbuffers_bound_names_an_unbounded_box_root() {
+    // A bare `string` with no length bound is the one shape `max_size` cannot
+    // charge, and the compiler never hands one over (typl §4.4 defaults it to
+    // `[0..256]`), so this is totality over IR handed in directly — the same
+    // standing every other case of this refusal has.
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl(
+            "Reading",
+            primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
+        )],
+    );
+
+    let err = check_flatbuffers_bounds(&pkg).expect_err("an unbounded box root has no bound");
+    assert_eq!(
+        err.message, "`veh.cruise.Reading.value` has no finite FlatBuffers bound",
+        "the refusal must name the box's own field"
     );
 }
 

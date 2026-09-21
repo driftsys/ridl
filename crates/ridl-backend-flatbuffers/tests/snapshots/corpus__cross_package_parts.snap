@@ -12,3 +12,7 @@ enum Grade : long {
   A = 0,
   B = 1,
 }
+
+table GradeBox {
+  value: Grade (id: 0);
+}
