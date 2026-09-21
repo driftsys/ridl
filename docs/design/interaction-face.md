@@ -437,9 +437,9 @@ transport, and nothing in E11.13 changes that gate. It is story E11.14
   generation decisions specific to this face
 - Depends on: `crates/ridl-rt` 0.1.0 (E11.0, landed); the IR's provisional
   interface numbering (the lock design's L4, driftsys/ridl#391)
-- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E16.2 (the
-  catalog hash and the encoded sizes), E5.1 (the clause translator). E11.15
-  replaced the test-only ports and has landed
+- Replaced later by: E16.2 (the catalog hash and the encoded sizes), E5.1 (the
+  clause translator). E11.7 replaced the payload stand-in and E11.15 the
+  test-only ports; both have landed
 - Reasoning trail (archived):
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),

@@ -26,9 +26,8 @@ choices, see [`../decisions/`](../decisions/).
 - **flatbuffers-codec.md** — the generated `Payload<FlatBuffers>` implementation
   a package carries, story E11.7: where the projection facts both emitters read
   live, what `generate` emits per table, what `encode`, `verify`, `decode` and
-  `MAX_SIZE` do and do not promise, determinism, conformance against an
-  independent implementation, and the one decision of the story that is not
-  built. The decisions behind its choices are
+  `MAX_SIZE` do and do not promise, determinism, and conformance against an
+  independent implementation. The decisions behind its choices are
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6 and 7.
