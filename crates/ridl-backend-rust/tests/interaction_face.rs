@@ -17,6 +17,7 @@
 //! ahead of the face by a set of `support_*` tests; both the double and those
 //! tests are gone, the tests having moved to `crates/ridl-loopback/tests/`
 //! as tests of the runtime itself.
+
 mod support;
 
 use ridl_loopback::Loopback;

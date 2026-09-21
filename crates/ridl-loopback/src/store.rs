@@ -65,6 +65,12 @@ struct SourceState {
     queue: VecDeque<QueuedEvent>,
 }
 
+/// A presented claim: the call it presented, and the handler holding it.
+struct ClaimOwner {
+    call: u64,
+    handler: usize,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CallKind {
     Command,
@@ -106,11 +112,13 @@ pub(crate) struct Store {
     pending: VecDeque<u64>,
     next_call_id: u64,
     /// The calls presented and not yet settled: a claim identity of its own,
-    /// minted by `next_claim`, to the call it presented. A `ClaimId` is
-    /// therefore never a correlation that was never presented, and never one
-    /// already settled.
-    claims: BTreeMap<u64, u64>,
+    /// minted by `next_claim`, to the call it presented and the handler it was
+    /// presented to. A `ClaimId` is therefore never a correlation that was
+    /// never presented, never one already settled, and never one another
+    /// handler holds.
+    claims: BTreeMap<u64, ClaimOwner>,
     next_claim_id: u64,
+    next_handler_id: usize,
     fail_next_settle: bool,
 }
 
@@ -128,6 +136,7 @@ impl Store {
             next_call_id: 0,
             claims: BTreeMap::new(),
             next_claim_id: 0,
+            next_handler_id: 0,
             fail_next_settle: false,
         }
     }
@@ -504,8 +513,15 @@ impl Store {
     /// nothing, in which case it is presented every waiting call. The claim
     /// carries an identity of its own, minted here, so a `ClaimId` names a
     /// call that was actually presented.
+    pub(crate) fn open_handler(&mut self) -> usize {
+        let id = self.next_handler_id;
+        self.next_handler_id += 1;
+        id
+    }
+
     pub(crate) fn next_claim(
         &mut self,
+        handler: usize,
         served: Option<&[Key]>,
         out: &mut [u8],
     ) -> Result<Option<Claim>, ReadError> {
@@ -537,7 +553,8 @@ impl Store {
             len: entry.args.len(),
         };
         self.pending.remove(position);
-        self.claims.insert(claim_id, id);
+        self.claims
+            .insert(claim_id, ClaimOwner { call: id, handler });
         Ok(Some(claim))
     }
 
@@ -550,11 +567,16 @@ impl Store {
     /// followed by a successful one expressible.
     pub(crate) fn settle(
         &mut self,
+        handler: usize,
         claim: ClaimId,
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
-        let Some(&id) = self.claims.get(&claim.0) else {
-            return Err(SettleError::UnknownClaim);
+        let id = match self.claims.get(&claim.0) {
+            // A claim another handler holds is unknown to this one: two
+            // providers in one process settle their own calls and not each
+            // other's.
+            Some(owner) if owner.handler == handler => owner.call,
+            _ => return Err(SettleError::UnknownClaim),
         };
         if self.fail_next_settle {
             self.fail_next_settle = false;

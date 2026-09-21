@@ -97,8 +97,12 @@ runtime a test compares output against has no reason to be nondeterministic.
 
 ## The handles
 
-**One handle type per port role, plus an aggregate**, which is ADR-0021 decision
-12's shape and this story's `Done when`.
+**One handle type per port role rather than one type implementing them all, plus
+an aggregate**, which is ADR-0021 decision 12's shape and this story's
+`Done when`. The six here group the eleven roles the way that decision derives
+the threading split: a handle each for the five roles with a `&mut self` method,
+and one handle for the six whose methods all take `&self`, which are exactly the
+roles several threads may hold at once.
 
 Every handle implements `Attached`, which every port trait but `Clock` carries
 as a supertrait. The table lists what each handle adds to it.
@@ -161,13 +165,40 @@ Staging on the writer handle is the visible consequence: `set`, `invalidate` and
 `touch` take no lock at all, and `commit` takes it once. A test pins that a
 staged value is not visible to a reader until the commit.
 
+Staging is one entry per channel, and two rules decide what a second operation
+on one channel does before the commit:
+
+- **A `set` or an `invalidate` replaces whatever is staged**, because each is a
+  newer decision about that channel. An `invalidate` staged over a `set`
+  publishes the invalid state carrying the last good value, which is the value
+  the channel last published, not the one this commit staged: the staged value
+  was never published, so it was never good (ridl §4.5).
+- **A `touch` stages only when nothing else is staged.** It re-affirms the
+  current value without a new one, and a `set` or an `invalidate` already staged
+  is itself a publication, so a touch adds nothing to it. Letting it replace one
+  would discard a value this writer staged, which is not what `touch` means.
+  `a_touch_does_not_discard_a_value_staged_before_it` and
+  `a_touch_does_not_discard_an_invalidation_staged_before_it` are the two cases.
+
 One staged operation is dropped rather than applied: a `touch` of a channel with
-no publication. `touch` re-affirms the current value without a new one, and a
-channel that has never published has nothing to re-affirm, so applying it would
-publish a zero-length value as `Provenance::Live` — which a consumer's binding
-reads as a corrupt payload rather than as the init value ridl §4.4 gives it. It
-is dropped before the generation is advanced, so a commit whose every staged
-change is such a touch changes nothing at all.
+no publication. A channel that has never published has nothing to re-affirm, so
+applying it would publish a zero-length value as `Provenance::Live` — which a
+consumer's binding reads as a corrupt payload rather than as the init value ridl
+§4.4 gives it. It is dropped before the generation is advanced, so a commit
+whose every staged change is such a touch changes nothing at all.
+
+**An `invalidate` of a channel with no publication is not dropped**, although it
+publishes a zero-length value too. The two differ in what they assert: a touch
+asserts nothing a consumer did not already have, while an invalidate is the ridl
+§4.5 transition to the invalid state, and dropping it would lose a provider's
+declared state change silently. What a consumer sees for it today is the face's:
+the generated client runs `Payload::verify` over the bytes whatever provenance
+the port reported, so zero bytes come back as
+`Provenance::Invalid(Cause::Detected(Detection::Corrupt))` and the provider's
+`Declared` cause is replaced. That is the same face gap the observation at the
+end of this record describes for an unpublished read, reached through a second
+door, and the generated `Publisher` does emit `invalidate_<name>`, so a provider
+that invalidates before its first `set` reaches it.
 
 ## A claim is not a correlation
 
@@ -179,18 +210,27 @@ provider's settlement. Two identities address it, and they are separate:
 - a **`ClaimId`**, minted by `next_claim`, is the provider's name for a call it
   has been presented.
 
-Minting the claim identity at presentation rather than reusing the correlation
-is what makes `SettleError::UnknownClaim` mean what `ridl_rt::port` says it
-means — "the claim was already settled, or was never issued". A settlement of a
-call the provider has not been presented is refused, so a call cannot be
-acknowledged before the provider has seen it; and a settlement is removed from
-the table when it lands, so a second settlement of one claim is refused too.
-`a_claim_that_was_never_presented_cannot_be_settled` and
-`a_claim_is_presented_once_and_settled_once` are the two cases. The alternative
-rejected is one identity for both ends, which is what the deleted double had:
-with it, `settle(ClaimId(correlation.0))` before any presentation recorded an
-outcome the caller could read as an acknowledgment, and the provider's own
-settlement was then refused as a duplicate.
+A claim also records the handler it was presented to. Between them, those two
+facts make `SettleError::UnknownClaim` mean what `ridl_rt::port` says it means —
+"the claim was already settled, or was never issued":
+
+- a settlement of a call that was never presented is refused, so a call cannot
+  be acknowledged before a provider has seen it;
+- a settlement of a claim another handler holds is refused, so two providers in
+  one process settle their own calls and not each other's;
+- a claim leaves the table when it settles, so a second settlement of it is
+  refused too.
+
+`a_claim_that_was_never_presented_cannot_be_settled`,
+`a_handler_cannot_settle_another_handlers_claim` and
+`a_claim_is_presented_once_and_settled_once` are the three cases. The
+alternative rejected is one identity for both ends, which is what the deleted
+double had and what this crate had before its review: with it,
+`settle(ClaimId(correlation.0))` before any presentation recorded an outcome the
+caller could read as an acknowledgment.
+
+`Loopback::fail_next_settle` is not scoped this way: it is the runtime's, so it
+fails whichever handler settles next.
 
 **`Caller::forget` releases the caller's interest, and cancels nothing.** A call
 whose outcome is already recorded has nothing left to happen to it, so its entry
@@ -246,9 +286,11 @@ publication at an exact time. Two runtimes constructed at different real times
 start at the same logical time, which `the_clock_is_hand_driven_not_wall_clock`
 pins.
 
-`advance` refuses a negative duration and saturates rather than overflowing: a
+`advance` panics on a negative duration and saturates rather than overflowing: a
 clock that ran backwards would put an envelope before one already stamped, and
-the panic a debug build gives on overflow would be a panic inside a port call.
+the panic a debug build gives on overflow would be a panic inside a port call. A
+panic is the failure mode because `advance` is the aggregate's own method and
+not a port method, so no port contract has a way to report it.
 
 A wall-clock variant is rejected for this story rather than forever: it would
 make every envelope timestamp in every test a value the test cannot state, and
@@ -361,18 +403,36 @@ face is built; the constructor the Rust backend emits today performs no such
 check, which driftsys/ridl#448 is open on. Either way the check is the face's
 and not the runtime's.
 
+Three more that are the runtime's own shape rather than the descriptor's:
+
+- **A settled outcome is kept until the caller releases it.** The call table
+  holds one entry per call sent, and the only thing that reclaims a settled one
+  is `Caller::forget`, which nothing the Rust backend emits calls. A program
+  that makes calls over this runtime and never forgets a correlation therefore
+  grows its call table with them. A runtime with a session, or one that bounded
+  the outcome table, would reclaim; this one holds the outcome because nothing
+  else can know the caller has read it.
+- **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
+  the channel was created.** `Envelope`'s own documentation gives the creation
+  time; this runtime has no channel-creation event — a channel exists when
+  something publishes to it — so 0 is the only answer it has.
+- **`serve` with an empty slice records nothing**, so it leaves the handler
+  unfiltered, the same as never having called it.
+
 Two behaviours are recorded here because they are decisions rather than
 absences:
 
-- **An empty served set is no filter, not no members.** A handler that has
-  served nothing is presented every waiting call; once it has served anything,
-  it is presented only the members it served, and another handler's calls stay
-  waiting for that handler. The cliff is deliberate: the generated `dispatch`
-  never calls `serve` (`crates/ridl-backend-rust/src/face.rs`), so a handler
-  that always filtered would be presented nothing at all by it, and a handler
-  that never filtered would take a second component's calls and settle them
-  `UnknownInteraction` — two components providing different interfaces in one
-  process is the plainest use of an in-process runtime.
+- **An empty served set is no filter, not no members** — a deliberate deviation
+  from `Handler::serve`, which says delivery starts at the members listed. A
+  handler that has served nothing is presented every waiting call; once it has
+  served anything, it is presented only the members it served, and another
+  handler's calls stay waiting for that handler. The deviation is taken with its
+  eyes open: the generated `dispatch` never calls `serve`
+  (`crates/ridl-backend-rust/src/face.rs`), so a handler that always filtered
+  would be presented nothing at all by it, and a handler that never filtered
+  would take a second component's calls and settle them `UnknownInteraction` —
+  two components providing different interfaces in one process is the plainest
+  use of an in-process runtime.
   `two_handlers_each_receive_only_what_they_served` is that case, and
   `a_handler_that_served_nothing_is_presented_every_call` is the other side of
   the rule. The alternative rejected is recording the set without acting on it,

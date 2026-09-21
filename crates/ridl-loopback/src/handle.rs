@@ -1,6 +1,11 @@
-//! The six handle types, one per port role, and their port implementations.
+//! The six handle types and their port implementations.
 //!
-//! A **port role** is one port trait (ADR-0021 decision 12). Every handle here
+//! A **port role** is one port trait, and a runtime presents one handle type
+//! per role rather than one type implementing them all (ADR-0021 decision 12).
+//! The six here group the eleven roles the way that decision derives the
+//! threading split: the five roles with a `&mut self` method take a handle
+//! each, and the six whose methods all take `&self` share one, because they
+//! are exactly the roles several threads may hold at once. Every handle here
 //! holds the same `Arc<Mutex<Store>>` and its own copy of the
 //! [`CatalogRef`](ridl_rt::contract::CatalogRef) the runtime was built with,
 //! so `Attached::catalog` can return a reference without reaching through the
@@ -179,7 +184,14 @@ impl SignalWriter for WriterHandle {
     }
 
     fn touch(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError> {
-        self.staged.insert((iface, ord), Staged::Touch);
+        // A touch re-affirms the current value. It stages one only when
+        // nothing else is staged for the channel: a `set` or an `invalidate`
+        // already staged is itself a publication, and a re-affirmation adds
+        // nothing to it. Replacing one here would discard a value this writer
+        // staged, which is not what `touch` means. A later `set` or
+        // `invalidate` does replace a staged touch, because each is a newer
+        // decision about the same channel.
+        self.staged.entry((iface, ord)).or_insert(Staged::Touch);
         Ok(())
     }
 
@@ -365,22 +377,31 @@ impl Caller for CallerHandle {
 ///
 /// A handler that has served nothing is presented every call waiting in the
 /// store; once it has served anything, it is presented only the members it
-/// served, and another handler's calls stay waiting for that handler. The
-/// empty set means no filter rather than no members, because the generated
-/// `dispatch` never calls `serve` (`crates/ridl-backend-rust/src/face.rs`) and
-/// a handler that filtered on an empty set would be presented nothing at all.
-/// [`served`](HandlerHandle::served) reads the set back.
+/// served, and another handler's calls stay waiting for that handler. A claim
+/// belongs to the handler it was presented to, so another handler's `settle`
+/// of it answers [`SettleError::UnknownClaim`].
+///
+/// The empty set meaning no filter is a deliberate deviation from
+/// [`Handler::serve`], which says delivery starts at the members listed. The
+/// generated `dispatch` never calls `serve`
+/// (`crates/ridl-backend-rust/src/face.rs`), so a handler that always filtered
+/// would be presented nothing at all by it. `serve` with an empty slice
+/// records nothing and so leaves the handler unfiltered, the same as never
+/// having called it. [`served`](HandlerHandle::served) reads the set back.
 pub struct HandlerHandle {
     shared: Shared,
     catalog: CatalogRef,
+    id: usize,
     served: Vec<Key>,
 }
 
 impl HandlerHandle {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
+        let id = lock(&shared).open_handler();
         HandlerHandle {
             shared,
             catalog,
+            id,
             served: Vec::new(),
         }
     }
@@ -415,7 +436,7 @@ impl Handler for HandlerHandle {
         } else {
             Some(self.served.as_slice())
         };
-        lock(&self.shared).next_claim(served, out)
+        lock(&self.shared).next_claim(self.id, served, out)
     }
 
     fn settle(
@@ -423,6 +444,6 @@ impl Handler for HandlerHandle {
         claim: ClaimId,
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
-        lock(&self.shared).settle(claim, outcome)
+        lock(&self.shared).settle(self.id, claim, outcome)
     }
 }

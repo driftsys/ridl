@@ -50,10 +50,13 @@ this book describes them as usable. rmdl is parked, with no implementation
 scheduled; rxdl keeps only its unrestricted profile, narrowed to types,
 interfaces and wiring, scheduled in step 2.
 
-**There is no runtime you can run a contract over.** The transport bindings, the
-delivery semantics, and the provider-side contract enforcement are all specified
-and none of them are implemented. `ridl-rt` (above) is the library a runtime
-implements, not a runtime itself — it performs no I/O and links no codec. The
+**There is no runtime you can run a contract over.** The transport bindings and
+the delivery semantics are specified and not implemented. Provider-side contract
+enforcement is: the generated `dispatch` evaluates a `require` and an `ensure`
+clause and settles the contract error, and the Rust backend's tests run that
+over the in-process runtime below. Nothing the compiler emits links a runtime,
+so none of it is reachable from a command in this book. `ridl-rt` (above) is the
+library a runtime implements, not a runtime itself — it performs no I/O and links no codec. The
 repository does hold one runtime, `ridl-loopback`: an in-process reference that
 carries values between a provider and a consumer in one program, with no
 transport, no wire format and a clock a test advances by hand. Nothing the

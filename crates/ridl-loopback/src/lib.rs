@@ -20,10 +20,14 @@
 //!
 //! # The handles
 //!
-//! A runtime presents one handle type per port role, and may also offer an
-//! aggregate handle covering the port set one interface's face needs
-//! (ADR-0021 decision 12). This crate offers both. [`Loopback`] is the
-//! aggregate: it implements all eleven port traits by delegating to the six
+//! A runtime presents one handle type per port role rather than one type
+//! implementing them all, and may also offer an aggregate handle covering the
+//! port set one interface's face needs (ADR-0021 decision 12). This crate
+//! offers both. Its six handles group the eleven roles the way that decision
+//! derives the threading split: a handle each for the five roles with a
+//! `&mut self` method, and one handle for the six whose methods all take
+//! `&self`, which are exactly the roles several threads may hold at once.
+//! [`Loopback`] is the aggregate: it implements all eleven port traits by delegating to the six
 //! role handles it holds, and it is what a generated `Client`, `Publisher` or
 //! `dispatch` is normally built over.
 //!
@@ -194,8 +198,12 @@ impl Loopback {
         CallerHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
-    /// An additional handler on the same store. Every handler of one runtime
-    /// draws from the one queue of waiting calls.
+    /// An additional handler on the same store.
+    ///
+    /// Every handler draws from the one queue of waiting calls, filtered by
+    /// what it has served: a handler that has served nothing is presented
+    /// every waiting call, and one that has served members is presented only
+    /// those. A claim belongs to the handler it was presented to.
     #[must_use]
     pub fn handler(&self) -> HandlerHandle {
         HandlerHandle::new(Arc::clone(&self.shared), self.catalog)
@@ -205,7 +213,13 @@ impl Loopback {
     ///
     /// The clock is a counter this method moves and nothing else moves. It
     /// never reads wall-clock time, so a round trip over this runtime produces
-    /// the same timestamps on every run and on every machine.
+    /// the same timestamps on every run and on every machine. It saturates
+    /// rather than overflowing.
+    ///
+    /// # Panics
+    ///
+    /// When `by` is negative. A clock that ran backwards would stamp an
+    /// envelope before one already stamped.
     pub fn advance(&mut self, by: Duration) {
         lock(&self.shared).advance(by);
     }

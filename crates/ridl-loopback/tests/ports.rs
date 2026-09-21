@@ -298,6 +298,53 @@ fn touch_republishes_the_current_value_without_changing_it() {
 }
 
 #[test]
+fn a_touch_does_not_discard_a_value_staged_before_it() {
+    // `touch` re-affirms the current value. A `set` already staged is itself
+    // a publication, so a touch after it adds nothing -- and must not replace
+    // it, which would discard the value this writer staged.
+    let mut rt = runtime();
+    rt.set(IFACE, ORD, &[7]).expect("set");
+    rt.touch(IFACE, ORD).expect("touch");
+    rt.commit();
+
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(raw.provenance, Provenance::Live);
+    assert_eq!(&out[..raw.len], &[7]);
+}
+
+#[test]
+fn a_touch_does_not_discard_an_invalidation_staged_before_it() {
+    let mut rt = runtime();
+    rt.set(IFACE, ORD, &[1]).expect("set");
+    rt.commit();
+    rt.invalidate(IFACE, ORD).expect("invalidate");
+    rt.touch(IFACE, ORD).expect("touch");
+    rt.commit();
+
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(raw.provenance, Provenance::Invalid(Cause::Declared));
+    assert_eq!(&out[..raw.len], &[1]);
+}
+
+#[test]
+fn a_set_after_a_touch_replaces_it() {
+    // The other direction: a `set` is a newer decision about the channel than
+    // a touch already staged, so it replaces it.
+    let mut rt = runtime();
+    rt.set(IFACE, ORD, &[1]).expect("set");
+    rt.commit();
+    rt.touch(IFACE, ORD).expect("touch");
+    rt.set(IFACE, ORD, &[2]).expect("set");
+    rt.commit();
+
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(&out[..raw.len], &[2]);
+}
+
+#[test]
 fn touch_on_a_channel_with_no_publication_publishes_nothing() {
     // A re-affirmation of nothing is nothing. Publishing here would put a
     // zero-length value on the channel as `Live`, which a consumer's binding
@@ -833,6 +880,41 @@ fn an_injected_settle_failure_is_not_spent_on_an_unknown_claim() {
         Err(SettleError::TooLarge { cap: 0 }),
         "so the injected failure still has the next real settlement to fail"
     );
+}
+
+#[test]
+fn a_handler_cannot_settle_another_handlers_claim() {
+    // Two providers in one process settle their own calls and not each
+    // other's: a claim belongs to the handler it was presented to.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    first.serve(IFACE, &[ORD]).expect("serve");
+    second.serve(InterfaceNo(2), &[ORD]).expect("serve");
+
+    let correlation = caller.command(IFACE, ORD, &[1]).expect("send");
+    let mut buf = [0u8; 8];
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+
+    assert_eq!(
+        second.settle(claim.id, Ok(&[])),
+        Err(SettleError::UnknownClaim),
+        "the claim is not the second handler's to settle"
+    );
+    assert_eq!(
+        caller.ack(correlation),
+        None,
+        "and nothing was acknowledged in the caller's name"
+    );
+
+    first
+        .settle(claim.id, Ok(&[]))
+        .expect("its own handler settles it");
+    assert_eq!(caller.ack(correlation), Some(Ok(())));
 }
 
 #[test]
