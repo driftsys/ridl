@@ -182,6 +182,15 @@ fn __ridl_fb_encode_fault_report(
     builder.push_table(5usize, 4usize, 1u16, &__fields[..__n])
 }
 /// Checks the FlatBuffers table at `table` against `FaultReport`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
 #[allow(deprecated)]
 fn __ridl_fb_verify_fault_report(
     buf: &[u8],
@@ -210,6 +219,12 @@ fn __ridl_fb_verify_fault_report(
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
 /// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
 #[allow(deprecated)]
 fn __ridl_fb_decode_fault_report(buf: &[u8], table: usize) -> FaultReport {
     FaultReport {

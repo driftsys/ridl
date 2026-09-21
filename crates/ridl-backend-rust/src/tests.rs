@@ -4526,6 +4526,149 @@ fn flatbuffers_bound_names_an_unbounded_leaf_beside_an_unjudgeable_one() {
     );
 }
 
+/// A collection whose **count alone** is unbounded is refused, even when its
+/// element is one this backend cannot judge.
+///
+/// `judge` descends into an anonymous composite, but a collection carries a
+/// bound of its own that its elements have nothing to do with:
+/// `fb_projection::max_size` charges `count × element` and answers `None`
+/// when the total overflows `u64` or exceeds `MAX_ENCODABLE`. A count of
+/// 2^40 is over the ceiling at one byte an element, so it is over it
+/// whatever the element turns out to be. Answering `Unjudgeable` for the
+/// whole position would exempt this silently, while the same field over a
+/// local element is refused.
+#[test]
+fn flatbuffers_bound_names_a_collection_whose_count_alone_is_unbounded() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "readings",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                min: 0,
+                // Over `fb_projection::MAX_ENCODABLE` at one byte an element.
+                max: 1 << 40,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the count alone is over the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.readings` has no finite FlatBuffers bound",
+        "the count is judged even though the element is not"
+    );
+}
+
+/// The same, one level down: an unbounded count inside a collection whose own
+/// count is fine. Each level probes its own count, so nesting is covered by
+/// the recursion rather than by a special case.
+#[test]
+fn flatbuffers_bound_names_a_nested_collection_whose_count_alone_is_unbounded() {
+    let inner = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+            })),
+            min: 0,
+            max: 1 << 40,
+        }))),
+    };
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "grid",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(inner)),
+                min: 0,
+                max: 2,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the inner count is over the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.grid` has no finite FlatBuffers bound",
+        "a nested count is judged the same way"
+    );
+}
+
+/// A map's entry count is judged on the same footing as an array's.
+#[test]
+fn flatbuffers_bound_names_a_map_whose_entry_count_alone_is_unbounded() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "byId",
+            1,
+            v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Key".to_string())),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                min: 0,
+                max: 1 << 40,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the entry count is over the ceiling");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "a map's entry count is judged even though neither half is"
+    );
+}
+
+/// The control for the three above: a collection with a count that fits and
+/// an element this backend cannot judge stays exempt. Without it, the three
+/// would pass for a `judge` that simply stopped exempting a collection.
+#[test]
+fn flatbuffers_bound_leaves_a_collection_with_a_bounded_count_alone() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "readings",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("veh.other.Speed".to_string())),
+                })),
+                min: 0,
+                max: 4,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a count that fits leaves the verdict to the element, which is unjudgeable"
+    );
+}
+
 /// The same shape with **no** unbounded leaf beside the unjudgeable one is
 /// still exempt. Without this, the test above would pass for a `judge` that
 /// simply stopped exempting anything.

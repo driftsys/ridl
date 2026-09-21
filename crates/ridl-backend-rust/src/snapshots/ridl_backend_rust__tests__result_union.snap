@@ -173,6 +173,15 @@ fn __ridl_fb_encode_sensor_reading(
     builder.push_table(8usize, 4usize, 1u16, &__fields[..__n])
 }
 /// Checks the FlatBuffers table at `table` against `SensorReading`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
 #[allow(deprecated)]
 fn __ridl_fb_verify_sensor_reading(
     buf: &[u8],
@@ -201,6 +210,12 @@ fn __ridl_fb_verify_sensor_reading(
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
 /// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
 #[allow(deprecated)]
 fn __ridl_fb_decode_sensor_reading(buf: &[u8], table: usize) -> SensorReading {
     SensorReading {
@@ -329,6 +344,15 @@ fn __ridl_fb_encode_sensor_fault(
     builder.push_table(6usize, 4usize, 1u16, &__fields[..__n])
 }
 /// Checks the FlatBuffers table at `table` against `SensorFault`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
 #[allow(deprecated)]
 fn __ridl_fb_verify_sensor_fault(
     buf: &[u8],
@@ -357,6 +381,12 @@ fn __ridl_fb_verify_sensor_fault(
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
 /// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
 #[allow(deprecated)]
 fn __ridl_fb_decode_sensor_fault(buf: &[u8], table: usize) -> SensorFault {
     SensorFault {

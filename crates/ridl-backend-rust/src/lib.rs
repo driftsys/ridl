@@ -354,15 +354,19 @@ fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
         }
     }
     match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Array(array)) => array
-            .element
-            .as_deref()
-            .map_or(Verdict::Unjudgeable, |element| judge(ctx, package, element)),
+        Some(v2::field_type::Kind::Array(array)) => worst(vec![
+            array
+                .element
+                .as_deref()
+                .map_or(Verdict::Unjudgeable, |element| judge(ctx, package, element)),
+            count_verdict(package, ty),
+        ]),
         Some(v2::field_type::Kind::Map(map)) => worst(
             [map.key.as_deref(), map.value.as_deref()]
                 .into_iter()
                 .flatten()
                 .map(|half| judge(ctx, package, half))
+                .chain(std::iter::once(count_verdict(package, ty)))
                 .collect(),
         ),
         Some(v2::field_type::Kind::Tuple(tuple)) => worst(
@@ -377,6 +381,100 @@ fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
         // stream: the position itself is what cannot be judged.
         _ => Verdict::Unjudgeable,
     }
+}
+
+/// Whether a collection's **own element count** is bounded, judged
+/// independently of what its elements are.
+///
+/// A collection charges `count × element` plus the element's out-of-line
+/// cost, and `fb_projection::max_size` answers `None` when that overflows
+/// `u64` or exceeds `fb_projection::MAX_ENCODABLE`. That can be true of the
+/// count alone: `[veh.other.Speed; 0..2^40]` has an element this backend
+/// cannot judge and a count no FlatBuffers buffer can hold, and answering
+/// `Unjudgeable` for the whole position would exempt it silently, while the
+/// same field over a local element is refused. So the count is probed with
+/// the smallest element the projection charges anything for — a `boolean`,
+/// one inline byte and nothing out of line. A count that is unbounded even
+/// at one byte an element is unbounded whatever the element turns out to be;
+/// a count that fits at one byte says nothing about the real element, which
+/// is what the element's own verdict is for.
+fn count_verdict(package: &v2::Package, ty: &v2::FieldType) -> Verdict {
+    let Some(minimal) = minimal_elements(ty) else {
+        return Verdict::Unjudgeable;
+    };
+    if probe_field_type(package, &minimal).is_some() {
+        Verdict::Bounded
+    } else {
+        Verdict::Unbounded
+    }
+}
+
+/// The same collection with every element position replaced by a `boolean`,
+/// so that what is left to charge is the count and nothing else. `None` for
+/// a position that is not a collection.
+fn minimal_elements(ty: &v2::FieldType) -> Option<v2::FieldType> {
+    fn boolean() -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Primitive(
+                v2::PrimitiveType::Boolean as i32,
+            )),
+        }
+    }
+    let kind = match ty.kind.as_ref()? {
+        v2::field_type::Kind::Array(array) => {
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(boolean())),
+                min: array.min,
+                max: array.max,
+            }))
+        }
+        v2::field_type::Kind::Map(map) => v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(boolean())),
+            value: Some(Box::new(boolean())),
+            min: map.min,
+            max: map.max,
+        })),
+        _ => return None,
+    };
+    Some(v2::FieldType {
+        optional: false,
+        kind: Some(kind),
+    })
+}
+
+/// The members of `decl` this backend cannot judge — a cross-package
+/// reference it does not resolve, a same-package cycle, a stream, or an
+/// unspecified primitive.
+///
+/// [`check_flatbuffers_bound`] answers `Ok(())` for a declaration whose only
+/// obstacle is one of these, and the codec emitter then withholds that type's
+/// implementation. This is what lets the emitted source say which member is
+/// the reason, rather than leaving a consumer with a missing trait
+/// implementation and nothing to read.
+pub(crate) fn unjudgeable_members(ctx: &Ctx, decl: &v2::Decl) -> Vec<String> {
+    let mut names = Vec::new();
+    match &decl.kind {
+        Some(v2::decl::Kind::StructDef(def)) => {
+            for member in &def.members {
+                if let Some(v2::struct_member::Member::Field(field)) = &member.member
+                    && let Some(ty) = field.r#type.as_ref()
+                    && !member_resolves_locally(ctx, ty)
+                {
+                    names.push(field.name.clone());
+                }
+            }
+        }
+        Some(v2::decl::Kind::UnionDef(def)) => {
+            for arm in &def.arms {
+                if !decl_resolves_locally(ctx, &arm.type_ref, &mut HashSet::new()) {
+                    names.push(arm.name.clone());
+                }
+            }
+        }
+        _ => {}
+    }
+    names
 }
 
 /// The bound of one type position alone, charged the way

@@ -215,22 +215,47 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
     let face = generate_face(&package).expect("generate_face").rust_source;
 
     assert_ne!(plain, face, "the two entry points must differ");
-    // The modules the pipeline entry point may name: `payload` for a named
-    // scalar's `Violation` and `Rule` and for the codec's `Payload` trait,
-    // `flatbuffers` for the codec's shared reading and writing helpers, and
-    // `encoding` for the `FlatBuffers` marker the implementation is written
-    // over. `contract` and `port` are the face's, and neither may appear.
-    let permitted = [
-        "ridl_rt::payload::",
-        "ridl_rt::flatbuffers::",
+    // Every runtime item the pipeline entry point may name, spelled in full
+    // and matched to the end of the item, so a name that only starts with a
+    // permitted one does not pass. The first two are a named scalar's
+    // constructor (typl value objects, Task 3); the rest are the codec's.
+    // `flatbuffers` is matched by its module, because the codec names a
+    // dozen reading and writing helpers from it and enumerating them here
+    // would pin the helper set rather than the boundary this test is about.
+    //
+    // This is weaker than what the test asserted before stage K5, when the
+    // only permitted items were `Violation` and `Rule`. It has to be: the
+    // codec names `Payload`, `Ref`, `Encoded` and the two error types, and
+    // `Ref` is the face's as well, so no list of `payload` items can
+    // separate the two any more. The separation the test still makes is the
+    // one that matters — `contract` and `port` are the face's alone, and the
+    // two negative assertions below are what carry the invariant.
+    let permitted_items = [
+        "ridl_rt::payload::Violation",
+        "ridl_rt::payload::Rule",
+        "ridl_rt::payload::Payload",
+        "ridl_rt::payload::Ref",
+        "ridl_rt::payload::Encoded",
+        "ridl_rt::payload::EncodeError",
+        "ridl_rt::payload::VerifyError",
+        "ridl_rt::payload::Malformed",
         "ridl_rt::encoding::FlatBuffers",
     ];
     let dense_plain = dense(&plain);
     for (index, _) in dense_plain.match_indices("ridl_rt") {
         let rest = &dense_plain[index..];
-        let permitted = permitted
-            .iter()
-            .any(|path| dense_plain[..index].ends_with("::") && rest.starts_with(path));
+        if !dense_plain[..index].ends_with("::") {
+            panic!(
+                "the pipeline generate must name the runtime by absolute path, found `{}`",
+                rest.chars().take(48).collect::<String>(),
+            );
+        }
+        let permitted = rest.starts_with("ridl_rt::flatbuffers::")
+            || permitted_items.iter().any(|item| {
+                rest.strip_prefix(item).is_some_and(|after| {
+                    !after.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                })
+            });
         assert!(
             permitted,
             "the pipeline generate must name no runtime path outside the constructors and the \

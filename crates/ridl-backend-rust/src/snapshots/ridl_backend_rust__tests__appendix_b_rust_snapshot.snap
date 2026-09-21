@@ -479,6 +479,76 @@ impl Default for SensorBoundsRange {
         }
     }
 }
+/// `DriverProfile` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `name` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
+/// `SensorBounds` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The members `labels`, `meta` reach a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
+/// `SensorResult` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The members `ok`, `err` reach a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
+/// `SensorReading` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `timestamp` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_READING: () = ();
+/// `SensorFault` carries no `Payload<FlatBuffers>` implementation.
+///
+/// The member `message` reaches a reference this backend does not resolve — a cross-package reference, a same-package cycle, or a stream.
+/// `ridl-backend-rust` generates one package at a time and reads
+/// no other, so it can neither size nor encode such a type: a
+/// foreign named scalar's FlatBuffers width is a fact of the
+/// package that declares it.
+///
+/// This is a silent omission in the sense ADR-0016 decision 6 and
+/// ADR-0017 decision 4 rule out, and it is deliberate for now.
+/// driftsys/ridl#467 tracks it and states the fix: `generate`
+/// handed the other packages.
+#[allow(dead_code)]
+const __RIDL_FB_NO_CODEC_SENSOR_FAULT: () = ();
 /// A zero-copy accessor over FlatBuffers bytes `SpeedLimitPayload`'s `verify` accepted.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
@@ -552,6 +622,15 @@ fn __ridl_fb_encode_speed_limit_payload(
     builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
 /// Checks the FlatBuffers table at `table` against `SpeedLimitPayload`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
 #[allow(deprecated)]
 fn __ridl_fb_verify_speed_limit_payload(
     buf: &[u8],
@@ -595,6 +674,12 @@ fn __ridl_fb_verify_speed_limit_payload(
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
 /// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
 #[allow(deprecated)]
 fn __ridl_fb_decode_speed_limit_payload(buf: &[u8], table: usize) -> SpeedLimitPayload {
     SpeedLimitPayload {
@@ -757,6 +842,15 @@ fn __ridl_fb_encode_raw_wheel_frame(
     builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
 /// Checks the FlatBuffers table at `table` against `RawWheelFrame`'s shape.
+///
+/// **The typl constraints of a named scalar are not checked
+/// here yet.** The structure is checked in full, and so are an
+/// enum and an enum-set discriminant and a collection's declared
+/// element count. A named scalar's range, length and pattern are
+/// not: checking them over a borrow needs the `check` beside
+/// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+/// this function accepts can hold a named scalar outside its
+/// declared bound.
 #[allow(deprecated)]
 fn __ridl_fb_verify_raw_wheel_frame(
     buf: &[u8],
@@ -800,6 +894,12 @@ fn __ridl_fb_verify_raw_wheel_frame(
 /// neutral value of its own type — zero, the empty string or
 /// collection, the first declared enum variant — and `verify` is
 /// what makes those branches unreachable.
+///
+/// **A named scalar is built with its unchecked constructor over
+/// a value `verify` has not range-checked**, because `verify`
+/// does not check one yet — story E11.7 stage K6 adds that. Until
+/// it lands, a hostile buffer yields a value outside its declared
+/// typl bound through a safe call.
 #[allow(deprecated)]
 fn __ridl_fb_decode_raw_wheel_frame(buf: &[u8], table: usize) -> RawWheelFrame {
     RawWheelFrame {

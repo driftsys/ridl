@@ -56,7 +56,7 @@ use ridl_ir::v2;
 
 use crate::{
     Ctx, GenerateError, InducedTuple, ScalarBacking, backing_scalar, check_flatbuffers_bound,
-    field_type_tokens, ident, vis_tokens,
+    field_type_tokens, ident, unjudgeable_members, vis_tokens,
 };
 
 /// The alignment every buffer this codec writes is finished at: eight, the
@@ -482,20 +482,27 @@ impl<'a> Codec<'a> {
 
     fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
         let mut roots: Vec<&v2::Decl> = Vec::new();
+        let mut withheld: Vec<&v2::Decl> = Vec::new();
         for decl in &self.package.decls {
             if !fb_projection::mints_root_table(decl) {
                 continue;
             }
             match fb_projection::max_size(self.packages(), decl) {
                 Some(_) => roots.push(decl),
-                // D-7's refusal, wired in per type: an `Ok` here means the
-                // cause is one this backend cannot judge, and the type
-                // carries no codec.
-                None => check_flatbuffers_bound(self.ctx, self.package, decl)?,
+                // D-7's refusal, wired in per type. An `Ok` here means the
+                // cause is one this backend cannot judge, so the type
+                // carries no codec and says so.
+                None => {
+                    check_flatbuffers_bound(self.ctx, self.package, decl)?;
+                    withheld.push(decl);
+                }
             }
         }
 
         let mut items: Vec<TokenStream> = Vec::new();
+        for decl in &withheld {
+            items.push(self.withheld_note(decl));
+        }
         for decl in &roots {
             items.extend(self.decl_items(decl)?);
         }
@@ -505,6 +512,62 @@ impl<'a> Codec<'a> {
             items.extend(self.table_items(&induced.name, induced.visibility, &table)?);
         }
         Ok(items)
+    }
+
+    /// The note left in the generated source where a codec is withheld.
+    ///
+    /// A type this backend cannot judge gets no `Payload<FlatBuffers>`
+    /// implementation, which a consumer otherwise meets as an unsatisfied
+    /// trait bound in their own crate, far from the cause. The note names the
+    /// type, the member that could not be judged, and the issue tracking it
+    /// (driftsys/ridl#467), so what the consumer meets is a reason.
+    ///
+    /// It is a `const` rather than a bare comment because `quote!` emits
+    /// tokens, and a doc attribute is the only comment that survives into
+    /// `prettyplease`'s output. The name cannot collide with a typl constant:
+    /// typl §15.1 gives one a SCREAMING_SNAKE name, and no typl name begins
+    /// with an underscore.
+    fn withheld_note(&self, decl: &v2::Decl) -> TokenStream {
+        let name = format_ident!(
+            "__RIDL_FB_NO_CODEC_{}",
+            snake_case(&decl.name).to_uppercase()
+        );
+        let members = unjudgeable_members(self.ctx, decl);
+        let cause = if members.is_empty() {
+            " No member of it could be judged.".to_string()
+        } else {
+            format!(
+                " The member{} {} reach{} a reference this backend does not resolve — a \
+                 cross-package reference, a same-package cycle, or a stream.",
+                if members.len() == 1 { "" } else { "s" },
+                members
+                    .iter()
+                    .map(|member| format!("`{member}`"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                if members.len() == 1 { "es" } else { "" },
+            )
+        };
+        let headline = format!(
+            " `{}` carries no `Payload<FlatBuffers>` implementation.",
+            decl.name
+        );
+        quote! {
+            #[doc = #headline]
+            ///
+            #[doc = #cause]
+            /// `ridl-backend-rust` generates one package at a time and reads
+            /// no other, so it can neither size nor encode such a type: a
+            /// foreign named scalar's FlatBuffers width is a fact of the
+            /// package that declares it.
+            ///
+            /// This is a silent omission in the sense ADR-0016 decision 6 and
+            /// ADR-0017 decision 4 rule out, and it is deliberate for now.
+            /// driftsys/ridl#467 tracks it and states the fix: `generate`
+            /// handed the other packages.
+            #[allow(dead_code)]
+            const #name: () = ();
+        }
     }
 
     /// The induced tuples reachable from `roots`, in discovery order.
@@ -1287,6 +1350,15 @@ impl<'a> Codec<'a> {
         let doc = format!(" Checks the FlatBuffers table at `table` against `{owner}`'s shape.");
         Ok(quote! {
             #[doc = #doc]
+            ///
+            /// **The typl constraints of a named scalar are not checked
+            /// here yet.** The structure is checked in full, and so are an
+            /// enum and an enum-set discriminant and a collection's declared
+            /// element count. A named scalar's range, length and pattern are
+            /// not: checking them over a borrow needs the `check` beside
+            /// `new` that story E11.7 stage K6 adds. Until it lands, bytes
+            /// this function accepts can hold a named scalar outside its
+            /// declared bound.
             #[allow(deprecated)]
             fn #name(
                 buf: &[u8],
@@ -1431,6 +1503,12 @@ impl<'a> Codec<'a> {
             /// neutral value of its own type — zero, the empty string or
             /// collection, the first declared enum variant — and `verify` is
             /// what makes those branches unreachable.
+            ///
+            /// **A named scalar is built with its unchecked constructor over
+            /// a value `verify` has not range-checked**, because `verify`
+            /// does not check one yet — story E11.7 stage K6 adds that. Until
+            /// it lands, a hostile buffer yields a value outside its declared
+            /// typl bound through a safe call.
             #[allow(deprecated)]
             fn #name(buf: &[u8], table: usize) -> #ty {
                 #ty { #(#fields),* }

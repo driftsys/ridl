@@ -7,7 +7,11 @@
 // different constructors), a string, a bytes, an enum, an enum set, a nested
 // struct, a union with a table arm and a boxed non-table arm (ADR-0019
 // decisions 1 and 2), an induced tuple, a fixed array, a bounded array, a map,
-// and an optional field present as well as absent (D-9).
+// a vector of strings, of tables, of unions and of tuples, an optional scalar
+// and an optional composite, and a reserved tombstone.
+//
+// `Outcome` and `Inner` are root tables in their own right, so the same file
+// also carries a union as a payload and a struct as a payload.
 //
 // Kept self-contained, with no cross-package import: the compile path this
 // fixture is read through (`ridlc::compile`) wraps one file as a single-file
@@ -76,6 +80,12 @@ struct Report {
   readings : [Speed; 3]
   faults   : [Health; 0..4]
   meta     : [Label : Count; 0..3]
+  names    : [Label; 0..3]
+  inners   : [Inner; 0..2]
+  outcomes : [Outcome; 0..2]
+  points   : [(x: Speed, y: Speed); 0..2]
+  reserved legacyChecksum
+  pair     : (lo: Speed, inner: Inner)?
   note     : Label?
   spare    : Speed?
 }
