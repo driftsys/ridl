@@ -169,8 +169,8 @@ member; rsdl is the apex.
                          compile + test + lint + wasm-check + compat-check +
                          demo + check — the full local gate: every member ADR-0008
                          decision 11 names, the four CI checks ADR-0009 brought
-                         back to this side, and doc-path-check, which postdates
-                         both
+                         back to this side, and doc-path-check and demo, which
+                         postdate both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just verify          lint-commits, then build — run before a PR

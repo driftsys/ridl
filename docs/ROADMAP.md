@@ -474,17 +474,17 @@ calls `generate_pipeline` for.
 `generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the
 interaction face beside the domain types and the codec. The proof is
 `crates/ridlc/tests/cabin_example.rs`, which builds `examples/cabin/`, compiles
-the emitted crate and `examples/cabin/consumer.rs` against it with plain
-`rustc`, runs the program, and requires one round trip of every interaction kind
-that carries a payload — a signal, an event, a command and a query — through the
-generated `Client`, `Publisher`, `Provider` and `dispatch` over `ridl-loopback`.
-What is new in it is the path rather than the running: other proofs run
-generated code, and the interaction-face round trips already run these same four
-over `ridl-loopback`, but each runs the backend's own output or a checked-in
-fixture. This one runs what the CLI wrote, linked as a separate crate into a
-separate process. The limit that stood beside the one below closed with it: the
-story resolves a cross-package reference, so no type is withheld a codec for
-that reason any more. Its as-built record is the E11.14 section of
+the emitted crate and `examples/cabin/consumer/src/main.rs` against it with
+plain `rustc`, runs the program, and requires one round trip of every
+interaction kind that carries a payload — a signal, an event, a command and a
+query — through the generated `Client`, `Publisher`, `Provider` and `dispatch`
+over `ridl-loopback`. What is new in it is the path rather than the running:
+other proofs run generated code, and the interaction-face round trips already
+run these same four over `ridl-loopback`, but each runs the backend's own output
+or a checked-in fixture. This one runs what the CLI wrote, linked as a separate
+crate into a separate process. The limit that stood beside the one below closed
+with it: the story resolves a cross-package reference, so no type is withheld a
+codec for that reason any more. Its as-built record is the E11.14 section of
 [`interaction-face.md`](design/interaction-face.md).
 
 **One limit on what that emitted codec covers**, not E11.14's to close. An

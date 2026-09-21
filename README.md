@@ -133,8 +133,8 @@ the crate that came out. It prints one line per round trip — a signal, an even
 a command and a query — each travelling through the generated `Client`,
 `Publisher`, `Provider` and `dispatch` over the in-process `ridl-loopback`
 runtime. The consumer names the generated face and the runtime and nothing of
-the compiler that produced them, so it is the shortest thing in the repository
-that shows what a RIDL interface becomes.
+the compiler that produced them, so it shows what a RIDL interface becomes for
+the application that uses one.
 
 ## Development
 

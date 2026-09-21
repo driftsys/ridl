@@ -197,42 +197,6 @@ wasm-check:
 # runs let cargo's fingerprints for that path outlive the source they once
 # described, so a passing tree could read as failing or the reverse (issue
 # #442). ridl-rt is no_std with no dependency of its own in any feature
-# Generate the cabin example's crate and run the program that links it.
-#
-# This is the one place the whole chain runs as a person runs it: `ridl build`
-# writes a crate from `examples/cabin/cabin.ridl`, and `cargo` builds a program
-# against it and executes it. The program prints one line per round trip — a
-# signal, an event, a command and a query — and exits non-zero if any of them
-# does not hold, so a green run is the demo working rather than merely
-# compiling.
-#
-# `examples/cabin` is its own cargo workspace, outside this repository's, which
-# excludes `examples`. Its `generated/` member is written here and is not in
-# git, so nothing in the repository's own workspace depends on a build output.
-# `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
-# change that the lock does not carry fails rather than silently resolving.
-#
-# The format and lint checks are here rather than in `fmt-check` and `lint`,
-# which run `--all` over this repository's workspace and so cannot see a crate
-# outside it. They run over the consumer only — `--no-deps` for clippy, whose
-# default is to lint a path dependency built from source. `generated/` is
-# emitter output, held to the emitter's own proofs, and is not something a
-# contributor edits; it draws `clippy::module_inception` for the module a
-# package named `veh.cabin` and an interface named `Cabin` give
-# (`veh::cabin::cabin`), which is the emitter's naming and not a defect here.
-#
-# Fails on: the build drawing an error; the emitted crate or the consumer
-# failing to compile; the program exiting non-zero; the lock being out of
-# date; the consumer being unformatted or drawing a clippy warning.
-demo:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build --locked -p ridl
-    ./target/debug/ridl build examples/cabin --emit rust --out-dir examples/cabin/generated
-    cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
-    cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
-    cargo run --manifest-path examples/cabin/Cargo.toml -p consumer --locked
-
 # combination (ADR-0021 decision 8), so the rebuild this costs is small.
 #
 # `toolchain-check` is a dependency, and has already proven the running
@@ -322,6 +286,74 @@ compat-check: toolchain-check
 
     echo "compat-check: $pin, edition 2024 (packaged)"
     cargo "+$pin" test --all-features --offline --manifest-path "$pkg/Cargo.toml"
+
+# Generate the cabin example's crate and run the program that links it.
+#
+# This is the one place the whole chain runs as a person runs it: `ridl build`
+# writes a crate from `examples/cabin/cabin.ridl`, and `cargo` builds a program
+# against it and executes it. The program prints one line per round trip — a
+# signal, an event, a command and a query — and exits non-zero if any of them
+# does not hold, so a green run is the demo working rather than merely
+# compiling.
+#
+# `examples/cabin` is its own cargo workspace, outside this repository's, which
+# excludes `examples`. Its `generated/` member is written here and is not in
+# git, so nothing in the repository's own workspace depends on a build output.
+# `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
+# change that the lock does not carry fails rather than silently resolving.
+#
+# The format and lint checks are here rather than in `fmt-check` and `lint`,
+# which run `--all` over this repository's workspace and so cannot see a crate
+# outside it. They run over the consumer only — `--no-deps` for clippy, whose
+# default is to lint a path dependency built from source. `generated/` is
+# emitter output, held to the emitter's own proofs, and is not something a
+# contributor edits. Without `--no-deps` it draws three: one
+# `clippy::module_inception`, for the module a package named `veh.cabin` and an
+# interface named `Cabin` give (`veh::cabin::cabin`), and two
+# `clippy::derivable_impls`, for a `Default` the emitter writes out rather than
+# derives. All three are the emitter's own shape, not a defect here, and
+# silencing them one at a time would be a standing tax on the emitter.
+#
+# The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
+# `install-check` does, rather than through a hardcoded `./target`: a
+# contributor who exports that variable would otherwise get a missing-file
+# failure from a member of `just build` rather than from this recipe's own
+# work.
+#
+# Fails on: the build drawing an error; the emitted crate or the consumer
+# failing to compile; the program exiting non-zero or not reporting all four
+# round trips; the lock being out of date; the consumer being unformatted or
+# drawing a clippy warning.
+#
+# The lock pins `ridl-rt`, whose version this recipe does not own, and the
+# generated crate, whose dependencies come from the emitter. A version bump or
+# a schema change that moves either one fails here with cargo's own `--locked`
+# message, which does not name its remedy: rerun without `--locked` once and
+# commit the new `examples/cabin/Cargo.lock`.
+demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build --locked -p ridl
+    # Cleared first: `--out-dir` writes over what it writes and leaves
+    # everything else, so a file the emitter stops writing would survive here
+    # and keep this green while a fresh clone failed.
+    rm -rf examples/cabin/generated
+    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
+    # The output is checked, not just the status. A change that weakened or
+    # removed the consumer's assertions would still exit 0, and both this and
+    # `cabin_example` read that same source, so nothing else in the tree
+    # would notice that no round trip ran.
+    output="$(cargo run --manifest-path examples/cabin/Cargo.toml -p consumer --locked)"
+    printf '%s\n' "$output"
+    for round_trip in "signal ok" "event ok" "command ok" "query ok"; do
+        if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
+            echo "demo: the consumer did not report \"$round_trip\"" >&2
+            exit 1
+        fi
+    done
 
 # Check Rust formatting without writing. Separate from `just fmt`, which owns
 # the connective tissue (prim) and does not touch Rust.

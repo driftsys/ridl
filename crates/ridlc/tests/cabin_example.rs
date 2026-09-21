@@ -11,7 +11,8 @@
 //!
 //! This one runs what **the CLI wrote**, linked as a separate crate into a
 //! separate process. It runs the build over `examples/cabin/`, compiles the
-//! emitted crate with plain `rustc`, compiles `examples/cabin/consumer.rs`
+//! emitted crate with plain `rustc`, compiles
+//! `examples/cabin/consumer/src/main.rs`
 //! against it, runs the program, and requires it to exit zero having
 //! completed one round trip of every interaction kind that carries a payload
 //! — a signal, an event, a command and a query — through the generated
@@ -41,10 +42,13 @@
 //! person does, through cargo and the committed `examples/cabin/Cargo.lock`,
 //! with `ridl-rt` patched to this repository's copy. This test builds with
 //! bare `rustc` against an `ridl-rt` rlib it builds itself, so it needs no
-//! manifest, no lock and no registry, and it is what runs under `just test`. For the same reason the `ridl-rt` this links is
-//! built with the three encoding features and not with the `std` and
-//! `validate-pattern` defaults that `Cargo.toml` declares, so a generated
-//! item gated behind either of those two is outside this proof.
+//! manifest, no lock and no registry, and it is what runs under `just test`.
+//!
+//! That is also why the `ridl-rt` this links is built with the three encoding
+//! features and not with the `std` and `validate-pattern` defaults the
+//! emitted `Cargo.toml` declares: a generated item gated behind either of
+//! those two is outside this proof, and inside `just demo`'s, which builds
+//! the generated crate with its default features through cargo.
 
 use std::path::Path;
 
