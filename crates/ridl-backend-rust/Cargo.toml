@@ -30,8 +30,13 @@ ridlc = { path = "../ridlc" }
 # source-to-IR path, so a later descriptor test that constructs a
 # `RidlDatabase` itself has the crate available.
 ridl-core = { path = "../ridl-core" }
+# The in-process reference runtime the round-trip tests build the generated
+# face over (story E11.15). A dev-dependency for the same reason as `ridl-rt`
+# below: the backend emits text that links a runtime and links none itself.
+ridl-loopback = { path = "../ridl-loopback" }
 # The generated interaction face names `::ridl_rt` (Lane M stage M3). The
 # backend itself emits text that links `ridl-rt` and does not link it, so this
 # is a dev-dependency only: the integration tests that compile the checked-in
-# generated face, and the disposable loopback ports, need it.
+# generated face need it, for the vocabulary the face names and for the port
+# traits the round trip calls.
 ridl-rt = { path = "../ridl-rt" }
