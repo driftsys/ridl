@@ -458,6 +458,29 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 [`ridlc build --frozen`](#ridlc-build), documented word for word since
 [ADR-0010][adr-0010].
 
+**`rust` is a language backend**, and it writes the whole generated surface of
+a package in one file: the domain types (a struct, an enum, an enum set, a
+union and a named scalar, each with its typl constraints enforced at
+construction), the FlatBuffers codec for every payload type — `encode`,
+`verify`, `decode` and a `MAX_SIZE` bound — the interaction descriptors, and
+the interaction face: per interface a `Client` for the consumer side, a
+`Publisher` for the producer side, a `Provider` trait the application
+implements, and a `dispatch` function that settles the claims waiting on a
+port. Beside the per-package files it writes a `lib.rs` crate root and a
+`Cargo.toml` naming `ridl-rt` with the encoding's feature, so the output is a
+crate that compiles and links as it stands.
+
+The face names the `ridl-rt` port traits and nothing else: the crate carries no
+runtime and opens no socket, so an application supplies the ports. The one
+runtime in this workspace is `ridl-loopback`, which runs in process.
+`examples/cabin/` is a worked example — a schema, and a consumer program
+against the crate built from it.
+
+There is **no flag for the payload encoding**. A package emits the FlatBuffers
+codec, which is the only one built; the emitted `pub type Wire` names it in one
+line. A `--wire` flag belongs to the story that adds the second codec, and
+[ADR-0010][adr-0010] binds its spelling then rather than now.
+
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
 and enums, with named-scalar constraints carried as comments — plus the

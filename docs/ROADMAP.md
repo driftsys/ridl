@@ -468,15 +468,26 @@ rather than behind a third entry point, and `ridlc::run_build` calls `generate`
 stage. What remains to E11.14 is the descriptors and the face, which
 `generate_face` emits and which `run_build` does not call.
 
-**Two limits on what that emitted codec covers**, neither of them E11.14's to
-close. A type that reaches a cross-package reference carries no codec at all,
-because `ridl-backend-rust` resolves no such reference — ten of the corpus's
-fifteen payload types, tracked as **driftsys/ridl#467**, whose fix is to hand
-`generate` the other packages. An interaction whose payload is a named scalar or
-an enum used to carry no `Payload` implementation either, because a FlatBuffers
-root is a table and the projection minted one only for a `struct` or a `union`;
-that was **driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated
-face moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
+**E11.14 landed** (driftsys/ridl#479). `ridlc::run_build` calls
+`generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the
+interaction face beside the domain types and the codec. The proof is
+`crates/ridlc/tests/cabin_example.rs`, which builds `examples/cabin/`, compiles
+the emitted crate and `examples/cabin/consumer.rs` against it with plain
+`rustc`, runs the program, and requires one round trip of every interaction kind
+that carries a payload — a signal, an event, a command and a query — through the
+generated `Client`, `Publisher`, `Provider` and `dispatch` over `ridl-loopback`.
+That is the first proof in this workspace that runs generated code rather than
+stopping at compilation. The first of the two limits below closed with it: the
+story resolves a cross-package reference, so no type is withheld a codec for
+that reason any more. Its as-built record is the E11.14 section of
+[`interaction-face.md`](design/interaction-face.md).
+
+**One limit on what that emitted codec covers**, not E11.14's to close. An
+interaction whose payload is a named scalar or an enum used to carry no
+`Payload` implementation, because a FlatBuffers root is a table and the
+projection minted one only for a `struct` or a `union`; that was
+**driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated face
+moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
 declaration has a root table, and a named scalar, an enum and an enum set are
 rooted in a box — and D-11 landed over it in stage K9b. E11.14's `Done when` is
 written over a payload that has a codec.

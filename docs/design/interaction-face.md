@@ -439,6 +439,13 @@ settle open item 2 of the 2026-09-20 codec design note — whether `check` is
 `pub`, for a consumer validating a value it did not build, is a surface
 commitment Epic 10 takes, and `pub(crate)` does not take it.
 
+**No flag selects the encoding, in this story.** `--emit rust` writes the
+FlatBuffers codec because it is the only one built, and the emitted
+`pub type Wire` names it in one line. A `--wire` flag is E11.8's, when a second
+codec exists to choose between; ADR-0010 binds its spelling then. Adding one now
+would be a CLI surface with one legal value, which the next story would have to
+change rather than fill in.
+
 **A package declaring an item named `Wire` is refused** (driftsys/ridl#476).
 `generate_face_with` refuses rather than emitting a package where the
 declaration and the encoding alias `pub type Wire = …` collide.
