@@ -29,10 +29,10 @@ the pull request that added it.
 - `just verify` before every pull request. It runs the commit lint and the full
   gate, including `just demo`, which builds the compiler and runs
   `examples/cabin`. Expect several minutes.
-- One pull request open at a time. Open it ready, never as a draft. Merge it
-  yourself by squash once the review below is done and CI is green, with a
-  Conventional Commits subject; add `!` when the change breaks a consumer of a
-  public function or of the emitted crate.
+- One pull request open at a time, with the one exception §4 names for P5. Open
+  it ready, never as a draft. Merge it yourself by squash once the review below
+  is done and CI is green, with a Conventional Commits subject; add `!` when the
+  change breaks a consumer of a public function or of the emitted crate.
 - Every GitHub comment you post ends with a blank line, a `---` line, and one
   italic line naming the tool that wrote it, the way every comment on
   driftsys/ridl#328 does. No model identifier in any repository file or in a
@@ -174,21 +174,30 @@ mechanical work, and the driver session on Opus. Fable is available again since
 stage boundary; a Sonnet row may go to a subagent with the model set, since the
 "no subagents" rule in §0 is about the review, not the authoring.
 
-| Stage  | Work                                                                                | Model  | Effort |
-| ------ | ----------------------------------------------------------------------------------- | ------ | ------ |
-| Driver | The session that runs the lane and the three review passes                          | Opus   | medium |
-| P0     | The roadmap amendment; the wording is in this driver                                | Sonnet | —      |
-| P1a    | The IR stability design note, with #231's measurement reproduced                    | Fable  | —      |
-| P1b    | The ADR-0014 amendment, the policy in the specification, the #231 fix               | Opus   | high   |
-| P1b    | Snapshot regeneration and fixture updates                                           | Sonnet | —      |
-| P2a    | The lowered codegen model design note                                               | Fable  | —      |
-| P2b    | The model types and the lowering step                                               | Opus   | high   |
-| P2b    | One drift test per in-tree backend                                                  | Sonnet | —      |
-| P3     | The backend contract, the process host protocol, the ADR-0020 decision 11 amendment | Fable  | —      |
-| P3     | The process host implementation and the reference plugin                            | Opus   | high   |
-| P3     | The cli-reference chapter and the as-built design record                            | Sonnet | —      |
-| P4     | The Rust backend ported in three byte-identical layers                              | Opus   | high   |
-| P5     | E11.1, the logical frame specification with AIDL named as a binding                 | Fable  | —      |
+| Stage  | Work                                                                                | Model  | Effort | After                                         |
+| ------ | ----------------------------------------------------------------------------------- | ------ | ------ | --------------------------------------------- |
+| Driver | The session that runs the lane and the three review passes                          | Opus   | medium | —                                             |
+| P0     | The roadmap amendment; the wording is in this driver                                | Sonnet | —      | now                                           |
+| P1a    | The IR stability design note, with #231's measurement reproduced                    | Fable  | —      | P0 merged                                     |
+| P1b    | The ADR-0014 amendment, the policy in the specification, the #231 fix               | Opus   | high   | P1a disposed                                  |
+| P1b    | Snapshot regeneration and fixture updates                                           | Sonnet | —      | same pull request, after the code             |
+| P2a    | The lowered codegen model design note                                               | Fable  | —      | P1b merged; may be drafted during P1a's wait  |
+| P2b    | The model types and the lowering step                                               | Opus   | high   | P2a disposed                                  |
+| P2b    | One drift test per in-tree backend                                                  | Sonnet | —      | same pull request, after the model            |
+| P3     | The backend contract, the process host protocol, the ADR-0020 decision 11 amendment | Fable  | —      | P2b merged                                    |
+| P3     | The process host implementation and the reference plugin                            | Opus   | high   | same pull request, after the contract         |
+| P3     | The cli-reference chapter and the as-built design record                            | Sonnet | —      | same pull request, last                       |
+| P4     | The Rust backend ported in three byte-identical layers                              | Opus   | high   | P3 merged; three pull requests in layer order |
+| P5     | E11.1, the logical frame specification with AIDL named as a binding                 | Fable  | —      | P0 merged; in parallel with P1 to P4          |
+
+**Sequential and parallel.** The lane is one chain, P0, P1a, P1b, P2a, P2b, P3,
+P4, each stage merged before the next branches, and each design note stopped for
+its disposition before its code. P5 is the one parallel item: it depends on P0
+alone (the roadmap's E11.1 row) and touches no file P1 to P4 touch, so it runs
+in a second session, or in the wait for a disposition, as the one exception to
+§0's one-open-pull-request rule. Within a stage the rows run in the order
+listed, in the same pull request. P4's three layers are three pull requests in
+order.
 
 Why the split lands where it does:
 
