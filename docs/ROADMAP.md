@@ -424,6 +424,16 @@ link it.
 | E11.9  | `ridl-transport-ws` — the WebSocket transport crate                                                                       | a contract reaches a second process over the transport, and E11.15's loopback runs the same tests with no socket                                                                                                                                                                                                                               | M    |
 | E11.15 | `ridl-loopback` — the in-process reference runtime: every port over a queue and a map, no IO                              | the loopback exposes one handle per port role with a `Sync` reader handle, plus the aggregate handle the generated face is built over, which ADR-0021 decision 12 permits a runtime to offer and this story requires; the interaction-face round trips run over the crate, and `crates/ridl-backend-rust/tests/support/loopback.rs` is deleted | M    |
 
+**E11.1 landed** (driftsys/ridl#257). The frame specification is
+[`docs/specification/frame-specification.md`](specification/frame-specification.md):
+the logical frame, binding-agnostic — what crosses a boundary per interaction
+kind, the ordinal, the kind, the envelope, the provenance, the correlation and
+the payload, in `ridl-rt`'s own vocabulary — the control plane, the
+invalid-payload behaviour, the rule that a binding is written from the document
+alone, and the two bindings by name: E11.9's WebSocket transport and the Kotlin
+backend's AIDL over Binder. No binding is written yet, and nothing in this
+workspace speaks the frame; `ridl-loopback` runs in process.
+
 **E11.15 landed** (driftsys/ridl#445). `crates/ridl-loopback` is the first
 runtime in this workspace: six handles, one per port role, with a `Send + Sync`
 reader handle carrying the two signal extensions, and an aggregate handle
