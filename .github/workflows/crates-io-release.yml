@@ -3,12 +3,17 @@ name: crates-io-release
 # Publishes every workspace crate whose manifest does not set `publish = false`
 # to crates.io, on a `v<version>` tag a maintainer pushes — `just release`
 # (git-std bump) cuts the tag; the push itself is the maintainer act (ADR-0007
-# decision 14, amended 2026-09-21). `ridl`, `ridl-lsp`, `ridl-mcp` and `xtask`
-# keep `publish = false` and are untouched by this workflow: the `ridl` binary
-# reaches a user through the separate `editor-v*` train instead
-# (`.github/workflows/vscode-release.yaml`), and the other two are internal
-# tooling. Because this train ships no binary of its own, it has no
-# build/smoke matrix — only a gate re-run before the publish step.
+# decision 14, amended 2026-09-21 and 2026-09-22). `xtask` is the one crate
+# left `publish = false`: it is workspace tooling, never published. The `ridl`
+# CLI publishes as `ridl-cli` (crates/ridl/Cargo.toml explains the name),
+# alongside `ridl-lsp` and `ridl-mcp`, which it depends on directly — `cargo
+# publish` needs every normal dependency resolvable on the registry, so the
+# CLI could not publish while either stayed internal-only. The compiled
+# binary is still named `ridl`, and the `editor-v*` train
+# (`.github/workflows/vscode-release.yaml`) still ships it bundled with the
+# VS Code extension; crates.io is now a second, direct `cargo install
+# ridl-cli` path alongside it. Because this train ships no binary of its own,
+# it has no build/smoke matrix — only a gate re-run before the publish step.
 #
 # The `publish` job's shape is driftsys/git-std's and driftsys/prim's own
 # `publish` job: a shell function skips a crate already at its manifest
@@ -126,7 +131,10 @@ jobs:
           # Dependency order: a crate publishes only once crates.io already
           # has every crate it depends on. ridl-syntax, ridl-ir and ridl-rt
           # have no internal dependency and lead; ridlc depends on the rest
-          # of this list and is last.
+          # of the compiler crates. ridl-lsp and ridl-mcp depend on ridlc (and
+          # not on each other, so their relative order does not matter);
+          # ridl-cli — the `ridl` binary — depends on both of them plus
+          # ridlc, so it is last of all.
           publish ridl-syntax
           publish ridl-ir
           publish ridl-rt
@@ -140,5 +148,8 @@ jobs:
           publish ridl-backend-rust
           publish ridl-backend-ts
           publish ridlc
+          publish ridl-lsp
+          publish ridl-mcp
+          publish ridl-cli
 
           echo "==> All crates published."

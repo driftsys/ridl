@@ -208,9 +208,12 @@ apart unnoticed — check those two by reading when you touch either file.
 - **Conventional Commits**, linted by git-std against `.git-std.toml` — types
   and scopes are enumerated there. Never push directly to `main`; use a PR.
 - **Every crate lives at `crates/<crate-name>/`** — the directory name equals
-  the crate name. `xtask` at the root is the one exception. A new crate adds its
-  own scope to `.git-std.toml`, which is an explicit list, not path-derived
-  (issue #180).
+  the crate name. `xtask` at the root is one exception; `crates/ridl/`, whose
+  manifest names its package `ridl-cli` because `ridl` is already an unrelated
+  crate on crates.io, is the other — the compiled binary and every doc mention
+  of the command still say `ridl`, only the crates.io publish identity differs.
+  A new crate adds its own scope to `.git-std.toml`, which is an explicit list,
+  not path-derived (issue #180).
 - **prim owns the connective tissue** (Markdown/JSON/YAML/TOML) — it honors
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.

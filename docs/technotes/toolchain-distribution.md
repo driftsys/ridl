@@ -17,8 +17,12 @@ The repository has two independent release trains:
   manifest does not set `publish = false` to crates.io: a `verify` job checks
   the tag's commit is an ancestor of `main` and runs `just build`, then a
   `publish` job runs the crates in dependency order, skipping one already at
-  that version on crates.io. `ridl`, `ridl-lsp`, `ridl-mcp` and `xtask` stay
-  `publish = false` and are not touched by this train. `ridl-rt` used to have a
+  that version on crates.io. `xtask` is the one crate left `publish = false`, as
+  workspace tooling never published; every other crate, including `ridl`
+  (published under the crates.io package name `ridl-cli` — `ridl` is already
+  someone else's crate — with an explicit `[[bin]] name = "ridl"` so the
+  installed binary is unchanged), `ridl-lsp` and `ridl-mcp`, is on this train
+  (ADR-0007 decision 14's 2026-09-22 amendment). `ridl-rt` used to have a
   version and a tag of its own (`ridl-rt@<version>`,
   [R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md)); it
   now shares the workspace version and this tag like every other published

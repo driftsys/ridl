@@ -1,10 +1,19 @@
 [package]
-name = "ridl"
+# The crates.io package name, not the installed binary's: `ridl` is already
+# an unrelated crate on crates.io (a crypto library), so this crate publishes
+# as `ridl-cli` and the `[[bin]]` section below names the binary `ridl`
+# regardless, unchanged for every existing install and every doc that says
+# `ridl check`, `ridl build`, and so on.
+name = "ridl-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+description = "The `ridl` command-line toolchain: check, build, fmt, lock, diff, lsp, and mcp, over the shared compiler crates."
+
+[[bin]]
+name = "ridl"
+path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true

@@ -112,9 +112,9 @@ jobs:
           RIDL_BUILD_VERSION: ${{ github.ref_name }}
         run: |
           if [ -n "${{ matrix.glibc-floor }}" ]; then
-            cargo zigbuild --release --locked --target "${{ matrix.target }}.${{ matrix.glibc-floor }}" -p ridl
+            cargo zigbuild --release --locked --target "${{ matrix.target }}.${{ matrix.glibc-floor }}" -p ridl-cli
           else
-            cargo build --release --locked --target ${{ matrix.target }} -p ridl
+            cargo build --release --locked --target ${{ matrix.target }} -p ridl-cli
           fi
       - name: tarball and checksum
         env:
