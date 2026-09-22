@@ -758,12 +758,12 @@ out-of-tree executable generates from the IR through the documented contract,
 and the in-tree Rust backend run through the process host produces
 byte-identical output to the in-process path.
 
-| ID    | Story                                                                                                                                         | Done when                                                                              | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---- |
-| E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                          | the policy names a canonical encoding that round-trips every IR the front end admits   | M    |
-| E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; the Rust backend ported onto it | the Rust backend run through the process host is byte-identical to the in-process path | L    |
-| E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                  | scaffolds a valid workspace; vendors deps                                              | S    |
-| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                | colliding key across profiles fails CI                                                 | S    |
+| ID    | Story                                                                                                                                         | Done when                                                                                           | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---- |
+| E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                          | the policy names a canonical encoding that round-trips every IR the front end admits                | M    |
+| E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; the Rust backend ported onto it | **landed** — the Rust backend run through the process host is byte-identical to the in-process path | L    |
+| E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                  | scaffolds a valid workspace; vendors deps                                                           | S    |
+| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                | colliding key across profiles fails CI                                                              | S    |
 
 **E4.5a landed** (driftsys/ridl#321). The policy is
 [`docs/specification/ir-specification.md`](specification/ir-specification.md):
@@ -787,19 +787,22 @@ the TypeScript, proto3 and FlatBuffers backends follow in their own stories (the
 [lane P driver](wip/2026-09-22-lane-p-driver.md) decision D-P1, corrected on
 2026-09-22 from "both in-tree backends").
 
-**E4.5b, first half landed (2026-09-22).** The lowering step
+**E4.5b landed (2026-09-22).** The lowering step
 (`ridl build --emit codegen-model`, `ridl.codegen.v1`), the contract
 (`CodegenRequest` and `CodegenResponse` in the same package, with `schema` and
 `toolchain` leading per the IR specification §7), the in-process host — every
 in-tree backend behind one trait, `ridl_ir::codegen::Backend` — the process host
 behind `--plugin <language>[=<path>]` with `ridlc-gen-<language>` on `PATH`, and
 the reference plugin `ridlc-gen-model`, whose parity test runs under
-`just test`. The as-built record is
-[`docs/design/codegen-plugins.md`](design/codegen-plugins.md). What remains is
-the row's `Done when`: the Rust backend still reads the raw IR, so it is not a
-plugin yet; its port onto the model, one layer at a time and byte-identical
-against the existing snapshots, is the driver's stage P4, and the parity test
-then runs over `ridlc-gen-rust`.
+`just test`. Then the Rust backend itself, ported onto the lowered model in
+three layers — the domain types, the FlatBuffers codec, the descriptors and the
+face — each byte-identical against the snapshots that pin its output, and run as
+the reference plugin `ridlc-gen-rust`: the row's `Done when` is
+`crates/ridlc-gen-rust/tests/parity.rs`, over every corpus package at the
+contract's level and every corpus entry at the command's level. The as-built
+record is [`docs/design/codegen-plugins.md`](design/codegen-plugins.md). The
+TypeScript, proto3 and FlatBuffers backends still read the raw IR and follow in
+their own stories.
 
 ## Epic 7 — the `.rxdl` unrestricted profile, trimmed
 

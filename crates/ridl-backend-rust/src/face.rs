@@ -31,25 +31,27 @@
 //! [`crate::generate_face`]. It is not reached from [`crate::generate`],
 //! which still emits no face.
 
-use crate::descriptors::{query_reply_type, single_param_type};
-use crate::{GenerateError, ident, type_path};
+use crate::descriptors::{
+    declared_name, interactions, query_param_type, query_reply_type, single_param_type,
+};
+use crate::{GenerateError, camel_of, declared, ident, snake_of, type_path};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
-use ridl_ir::name::camel_case;
-use ridl_ir::v2;
+use ridl_ir::codegen::v1;
 
-/// The face module for every named interface in `package`, in source order.
+/// The face module for every named interface of the lowered model, in source
+/// order.
 ///
-/// The walk is over [`Package::shapes()`](ridl_ir::v2::Package::shapes), and a
-/// service's inline shape is skipped, for the same two reasons the descriptor
-/// layer gives.
-pub(crate) fn interface_items(package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
+/// The model's `interfaces` list is `Package::shapes()` order, and a service's
+/// inline shape is skipped, for the same two reasons the descriptor layer
+/// gives.
+pub(crate) fn interface_items(model: &v1::Model) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = Vec::new();
-    for shape in package.shapes() {
-        if shape.service.is_some() {
+    for interface in &model.interfaces {
+        if declared_name(interface).is_none() {
             continue;
         }
-        if let Some(module) = one_interface(shape.name, shape.interface)? {
+        if let Some(module) = one_interface(interface)? {
             items.push(module);
         }
     }
@@ -67,6 +69,9 @@ struct Member<'a> {
     descriptor: TokenStream,
     /// The declared name, for a generated doc comment.
     declared: &'a str,
+    /// The pinned CamelCase of the declared name, which the correlation
+    /// newtype and the event enum's variant are spelled with.
+    camel: &'a str,
 }
 
 /// One command or query, with the declared argument name and type the face
@@ -86,11 +91,11 @@ struct Call<'a> {
 /// nothing the face carries. Reachable from the crate for the pipeline's
 /// per-interface walk (E11.14 decision 2).
 pub(crate) fn one_interface(
-    iface_name: &str,
-    interface: &v2::Interface,
+    interface: &v1::Interface,
 ) -> Result<Option<TokenStream>, GenerateError> {
+    let iface_name = declared_name(interface).unwrap_or_default();
     let iface = ident(iface_name);
-    let module = ident(&snake_case(iface_name));
+    let module = ident(interface_snake(interface));
 
     // Payload type names are kept beside each member, because the face names
     // the declared type directly (M3 emits no induced argument struct).
@@ -99,40 +104,42 @@ pub(crate) fn one_interface(
     let mut commands: Vec<Call> = Vec::new();
     let mut queries: Vec<Call> = Vec::new();
 
-    for decl in &interface.interactions {
+    for (ordinal, interaction) in interactions(interface) {
+        let name = declared(interaction.name.as_ref());
         let member = Member {
             ordinal: {
-                let value = Literal::u32_suffixed(decl.ordinal);
+                let value = Literal::u32_suffixed(ordinal);
                 quote! { ::ridl_rt::contract::Ordinal(#value) }
             },
-            method: ident(&snake_case(&decl.name)),
+            method: ident(snake_of(interaction.name.as_ref())),
             descriptor: {
-                let name = ident(&format!("{iface}{}", camel_case(&decl.name)));
-                quote! { super::#name }
+                let ident = ident(&format!("{iface}{}", camel_of(interaction.name.as_ref())));
+                quote! { super::#ident }
             },
-            declared: decl.name.as_str(),
+            declared: name,
+            camel: camel_of(interaction.name.as_ref()),
         };
-        match decl.kind.as_ref() {
-            Some(v2::decl::Kind::SignalDef(signal)) => {
-                signals.push((member, signal.payload.as_str()));
+        match interaction.shape.as_ref() {
+            Some(v1::interaction::Shape::Signal(signal)) => {
+                signals.push((member, payload_reference(signal.payload.as_ref())));
             }
-            Some(v2::decl::Kind::EventDef(event)) => {
-                events.push((member, event.payload.as_str()));
+            Some(v1::interaction::Shape::Event(event)) => {
+                events.push((member, payload_reference(event.payload.as_ref())));
             }
-            Some(v2::decl::Kind::CommandDef(command)) => {
+            Some(v1::interaction::Shape::Command(command)) => {
                 commands.push(Call {
-                    arg_type: single_param_type(&command.params, &decl.name)?,
+                    arg_type: single_param_type(command, name)?,
                     arg: single_param_name(&command.params),
                     member,
                     reply_type: None,
                 });
             }
-            Some(v2::decl::Kind::QueryDef(query)) => {
+            Some(v1::interaction::Shape::Query(query)) => {
                 queries.push(Call {
-                    arg_type: single_param_type(&query.params, &decl.name)?,
+                    arg_type: query_param_type(query, name)?,
                     arg: single_param_name(&query.params),
                     member,
-                    reply_type: Some(query_reply_type(query, &decl.name)?),
+                    reply_type: Some(query_reply_type(query, name)?),
                 });
             }
             // A `fixed` is provisioned, not interacted with, so the MVP's face
@@ -179,7 +186,7 @@ pub(crate) fn one_interface(
 
 /// The name of one call's correlation newtype, `<Name>Correlation`.
 fn correlation_type(call: &Call) -> Ident {
-    ident(&format!("{}Correlation", camel_case(call.member.declared)))
+    ident(&format!("{}Correlation", call.member.camel))
 }
 
 /// One `Copy` correlation newtype per command and per query.
@@ -303,7 +310,7 @@ fn client(
         let buffer = quote! { [0u8; super::#iface::EVENT_SOURCE_BUFFER_SIZE] };
         let arms = events.iter().map(|(member, payload)| {
             let ordinal = &member.ordinal;
-            let variant = ident(&camel_case(member.declared));
+            let variant = ident(member.camel);
             let path = ty(payload);
             quote! {
                 #ordinal => Ok(Some(Event::#variant(::ridl_rt::sample::Occurrence {
@@ -526,7 +533,7 @@ fn send(
 /// The occurrence enum one `next_event` routes into.
 fn event_enum(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
     let variants = events.iter().map(|(member, payload)| {
-        let variant = ident(&camel_case(member.declared));
+        let variant = ident(member.camel);
         let path = ty(payload);
         let doc = format!("An occurrence of event `{}`.", member.declared);
         quote! {
@@ -975,34 +982,32 @@ fn decode_args(type_name: &str) -> TokenStream {
 /// [`single_param_type`] has already refused an interaction that does not
 /// declare exactly one parameter, so the fallback is unreachable; it is a
 /// value rather than a panic because codegen is total.
-fn single_param_name(params: &[v2::Param]) -> Ident {
-    params
-        .first()
-        .map_or_else(|| ident("value"), |param| ident(&snake_case(&param.name)))
+fn single_param_name(params: &[v1::Param]) -> Ident {
+    params.first().map_or_else(
+        || ident("value"),
+        |param| ident(snake_of(param.name.as_ref())),
+    )
 }
 
-/// The snake case of a declared name: `Cabin` becomes `cabin`, `setLevel`
-/// becomes `set_level`. It is the only spelling of a generated module or
-/// method name.
-fn snake_case(name: &str) -> String {
-    let mut out = String::new();
-    let mut previous_was_lower = false;
-    for ch in name.chars() {
-        if ch == '_' {
-            out.push('_');
-            previous_was_lower = false;
-            continue;
-        }
-        if ch.is_uppercase() {
-            if previous_was_lower {
-                out.push('_');
-            }
-            out.extend(ch.to_lowercase());
-            previous_was_lower = false;
-        } else {
-            out.push(ch);
-            previous_was_lower = ch.is_lowercase() || ch.is_numeric();
-        }
+/// The canonical IR text of the type one payload names.
+fn payload_reference(payload: Option<&v1::Payload>) -> &str {
+    payload
+        .and_then(|payload| payload.r#type.as_ref())
+        .map(|reference| reference.reference.as_str())
+        .unwrap_or_default()
+}
+
+/// The pinned `snake_case` of an interface's declared name, which names its
+/// generated module.
+///
+/// Before stage P4 this module had a `snake_case` of its own, which differed
+/// from the transform ADR-0016 decision 1 pins on an acronym followed by a
+/// word — `HTTPServer` became `httpserver` rather than `http_server`
+/// (driftsys/ridl#450). The model carries the pinned spelling only, so
+/// reading it closes that divergence.
+fn interface_snake(interface: &v1::Interface) -> &str {
+    match interface.identity.as_ref() {
+        Some(v1::interface::Identity::Declared(name)) => name.snake.as_str(),
+        _ => "",
     }
-    out
 }

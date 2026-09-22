@@ -361,7 +361,13 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   `single_param_name`; that last one its own docstring does not admit. It is
   outside this record's scope as the arm transform was, and is unchecked in the
   same way. Stated here rather than discovered later. Recorded on
-  driftsys/ridl#450.
+  driftsys/ridl#450. **(2026-09-22: closed. Stage P4 of the lane P driver put
+  the Rust backend on the lowered codegen model, which carries the pinned
+  spelling only, so the private transform is gone and every face name is
+  `Spellings.snake` or `Spellings.camel`. No snapshot moved: the one corpus name
+  the two transforms spell differently, `parseHTTPResponse`, is in
+  `ridl-diag-showcase`, which fails RIDL-149 and has no generated-code
+  snapshot.)**
 - **Negative — an interaction member name also reaches `camel_case`, and that
   namespace is unchecked.** Decision 4 puts interface members in RIDL-149 under
   `snake_case`, which is the wire symbol. The generated face additionally spells

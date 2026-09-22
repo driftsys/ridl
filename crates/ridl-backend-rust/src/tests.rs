@@ -4327,9 +4327,10 @@ fn the_derive_attribute_sits_under_the_doc_comment() {
 /// what the codec emitter does one declaration at a time, and returns the
 /// first refusal.
 fn check_flatbuffers_bounds(package: &v2::Package) -> Result<(), super::GenerateError> {
-    let ctx = Ctx::new(package);
-    for decl in &package.decls {
-        check_flatbuffers_bound(&ctx, package, decl)?;
+    let model = ridl_ir::codegen::lower(package, &[]);
+    let ctx = Ctx::new(package, &model);
+    for index in 0..package.decls.len() {
+        check_flatbuffers_bound(&ctx, index as u32)?;
     }
     Ok(())
 }

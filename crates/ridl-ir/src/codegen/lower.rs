@@ -558,7 +558,14 @@ impl<'a> Lowering<'a> {
             && let Some(index) = self.tuple_at.get(&at.rust).copied()
         {
             let existing = &self.tuples[index];
-            if existing.source == *tuple {
+            // One name is one generated type, so the claim is reused only
+            // when the shape *and* the visibility match. A tuple has no
+            // visibility of its own — it carries the one of the declaration
+            // that reached it — so two paths that spell one name from
+            // declarations of different visibility have no sound answer
+            // either, and each printer refuses that pair the way it refuses
+            // two different shapes.
+            if existing.source == *tuple && existing.path.visibility == at.visibility {
                 return index as u32;
             }
             self.collisions.push(v1::TupleCollision {

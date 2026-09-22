@@ -7,18 +7,19 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: seventeen crates
+(ADRs), the implementation roadmap, and the compiler workspace: eighteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
-`ridl-rt`, `ridl-loopback`, and `ridlc-gen-model` (the reference codegen plugin,
-test-only) — plus `xtask` at the root, the `editors/vscode` extension, and
-`examples/`, whose worked examples are compiled and run by the test suite rather
-than being prose. The typl v0.1 toolchain (epic E1), the ridl interface layer
-over it (epic E2) and rsdl's checks, lowering and `ridl diff` at the system
-(epic E6) are built; the boundary model (epic E3) is sequenced in the roadmap,
-and `rmdl` stays a Proposed draft with no implementation. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+`ridl-rt`, `ridl-loopback`, and `ridlc-gen-model` and `ridlc-gen-rust` (the
+reference codegen plugins, test-only) — plus `xtask` at the root, the
+`editors/vscode` extension, and `examples/`, whose worked examples are compiled
+and run by the test suite rather than being prose. The typl v0.1 toolchain (epic
+E1), the ridl interface layer over it (epic E2) and rsdl's checks, lowering and
+`ridl diff` at the system (epic E6) are built; the boundary model (epic E3) is
+sequenced in the roadmap, and `rmdl` stays a Proposed draft with no
+implementation. See `docs/technotes/walking-skeleton-architecture.md` for the
+as-built map.
 
 **Read these before doing anything else in this repo:**
 

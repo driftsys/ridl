@@ -20,11 +20,19 @@
 //! of one kind are conjoined with `&&`. Any other clause form is refused with a
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.
+//!
+//! Since stage P4 the parser and the subject resolution are the lowering's
+//! (`ridl_ir::codegen`, design note D-9): the model carries either the
+//! accepted comparison or the reason the clause was refused, verbatim, and
+//! what is left here is the rendering — and the one rule this printer keeps
+//! for itself, that a subject whose scalar the scope resolved in another
+//! package is refused all the same, because this backend resolves nothing
+//! across packages (design note §3.5).
 
-use crate::{Ctx, GenerateError, ScalarBacking, numeric_tokens, same_package_scalar_backing};
+use crate::{Ctx, GenerateError, ScalarBacking, class_backing, numeric_tokens};
 use proc_macro2::TokenStream;
 use quote::quote;
-use ridl_ir::v2;
+use ridl_ir::codegen::v1;
 
 /// Which clause kind a translation covers.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -47,37 +55,37 @@ pub(crate) struct ClauseBody {
     pub uses_reply: bool,
 }
 
-/// Translates every clause of `kind` on one interaction into a method body.
+/// Renders every clause of `kind` on one interaction into a method body.
 ///
 /// `params` is the interaction's declared parameters (M3 restricts a call to
-/// one). `reply_named` is the query's reply named type, present only for a
-/// query's `ensure`, so `result` can be resolved and refused everywhere else.
+/// one). `reply` is the query's reply reference, present only for a query's
+/// `ensure`, so `result` can be resolved and refused everywhere else.
 pub(crate) fn translate(
     ctx: &Ctx,
-    contracts: &[v2::Contract],
+    clauses: &[v1::Clause],
     kind: ClauseKind,
-    params: &[v2::Param],
-    reply_named: Option<&str>,
+    params: &[v1::Param],
+    reply: Option<&v1::TypeRef>,
 ) -> Result<ClauseBody, GenerateError> {
     let wanted = match kind {
-        ClauseKind::Require => v2::ContractKind::Require,
-        ClauseKind::Ensure => v2::ContractKind::Ensure,
+        ClauseKind::Require => v1::ContractKind::Require,
+        ClauseKind::Ensure => v1::ContractKind::Ensure,
     };
 
     let mut predicates: Vec<TokenStream> = Vec::new();
     let mut uses_args = false;
     let mut uses_reply = false;
 
-    for contract in contracts {
-        if v2::ContractKind::try_from(contract.kind).ok() != Some(wanted) {
+    for clause in clauses {
+        if v1::ContractKind::try_from(clause.kind).ok() != Some(wanted) {
             continue;
         }
-        let clause = translate_one(ctx, &contract.source, params, reply_named)?;
-        match clause.subject {
+        let rendered = render_one(ctx, clause, params, reply)?;
+        match rendered.subject {
             Subject::Arg => uses_args = true,
             Subject::Reply => uses_reply = true,
         }
-        predicates.push(clause.expr);
+        predicates.push(rendered.expr);
     }
 
     let expr = match predicates.into_iter().reduce(|a, b| quote! { #a && #b }) {
@@ -98,153 +106,89 @@ pub(crate) fn translate(
     })
 }
 
-/// Which method parameter a translated clause reaches.
+/// Which method parameter a rendered clause reaches.
 enum Subject {
     Arg,
     Reply,
 }
 
-struct Clause {
+struct Rendered {
     expr: TokenStream,
     subject: Subject,
 }
 
-/// The six accepted comparisons.
-#[derive(Clone, Copy)]
-enum Comparison {
-    Lt,
-    Le,
-    Gt,
-    Ge,
-    Eq,
-    Ne,
-}
-
-impl Comparison {
-    fn tokens(self) -> TokenStream {
-        match self {
-            Comparison::Lt => quote! { < },
-            Comparison::Le => quote! { <= },
-            Comparison::Gt => quote! { > },
-            Comparison::Ge => quote! { >= },
-            Comparison::Eq => quote! { == },
-            Comparison::Ne => quote! { != },
-        }
+/// The Rust operator of one accepted comparison.
+fn operator(op: i32) -> TokenStream {
+    match v1::ComparisonOp::try_from(op).unwrap_or(v1::ComparisonOp::Unspecified) {
+        v1::ComparisonOp::Lt => quote! { < },
+        v1::ComparisonOp::Le => quote! { <= },
+        v1::ComparisonOp::Gt => quote! { > },
+        v1::ComparisonOp::Ge => quote! { >= },
+        v1::ComparisonOp::Eq => quote! { == },
+        // `Unspecified` is unreachable from the lowering, which writes one of
+        // the six it accepted. Kept total.
+        v1::ComparisonOp::Ne | v1::ComparisonOp::Unspecified => quote! { != },
     }
 }
 
-fn translate_one(
+fn render_one(
     ctx: &Ctx,
-    source: &str,
-    params: &[v2::Param],
-    reply_named: Option<&str>,
-) -> Result<Clause, GenerateError> {
-    let (subject, comparison, literal) = parse(source)?;
-
-    if subject == "result" {
-        let named = reply_named.ok_or_else(|| {
-            refuse(
-                source,
-                "`result` is only a subject on a query's `ensure` clause",
-            )
-        })?;
-        let backing = scalar_backing(ctx, named)
-            .ok_or_else(|| refuse(source, "`result` is not a named integer or float scalar"))?;
-        let value = literal_tokens(&literal, backing).ok_or_else(|| {
-            refuse(
-                source,
-                "the literal does not match the reply's numeric type",
-            )
-        })?;
-        let op = comparison.tokens();
-        return Ok(Clause {
-            expr: quote! { reply.0 #op #value },
-            subject: Subject::Reply,
-        });
-    }
-
-    // The subject must be the interaction's single declared parameter.
-    let [param] = params else {
-        return Err(refuse(
-            source,
-            "a translated clause needs exactly one declared parameter",
-        ));
+    clause: &v1::Clause,
+    params: &[v1::Param],
+    reply: Option<&v1::TypeRef>,
+) -> Result<Rendered, GenerateError> {
+    let source = clause.source.as_str();
+    let comparison = match clause.translation.as_ref() {
+        Some(v1::clause::Translation::Comparison(comparison)) => comparison,
+        // The lowering states the reason it refused, and this printer prints
+        // it: a refusal reaches the generated source as the note
+        // `skipped_interface_note` writes.
+        Some(v1::clause::Translation::Refused(reason)) => return Err(refuse(source, reason)),
+        None => return Err(refuse(source, "no accepted comparison")),
     };
-    if param.name != subject {
-        return Err(refuse(
-            source,
-            "the subject is not the interaction's declared parameter",
-        ));
-    }
-    let Some(named) = param_named_type(param) else {
-        return Err(refuse(source, "the parameter is not a named type"));
-    };
-    let backing = scalar_backing(ctx, named).ok_or_else(|| {
-        refuse(
-            source,
-            "the parameter is not a named integer or float scalar",
-        )
-    })?;
-    let value = literal_tokens(&literal, backing).ok_or_else(|| {
-        refuse(
-            source,
-            "the literal does not match the parameter's numeric type",
-        )
-    })?;
-    let op = comparison.tokens();
-    Ok(Clause {
-        expr: quote! { args.0 #op #value },
-        subject: Subject::Arg,
-    })
-}
 
-/// Parses `<subject> <comparison> <numeric literal>`, refusing every other
-/// shape. The two-character comparisons are tried before the one-character
-/// ones so `<=` is not read as `<`.
-fn parse(source: &str) -> Result<(String, Comparison, String), GenerateError> {
-    let text = source.trim();
-    let comparisons = [
-        ("<=", Comparison::Le),
-        (">=", Comparison::Ge),
-        ("==", Comparison::Eq),
-        ("!=", Comparison::Ne),
-        ("<", Comparison::Lt),
-        (">", Comparison::Gt),
-    ];
-    for (symbol, comparison) in comparisons {
-        let Some(position) = text.find(symbol) else {
-            continue;
-        };
-        let left = text[..position].trim();
-        let right = text[position + symbol.len()..].trim();
-        if is_identifier(left) && is_number(right) {
-            return Ok((left.to_string(), comparison, right.to_string()));
+    match comparison.subject.as_ref() {
+        Some(v1::comparison::Subject::Result(_)) => {
+            let backing = reply
+                .and_then(|reference| scalar_backing(ctx, reference))
+                .ok_or_else(|| refuse(source, "`result` is not a named integer or float scalar"))?;
+            let value = literal_tokens(&comparison.literal, backing).ok_or_else(|| {
+                refuse(
+                    source,
+                    "the literal does not match the reply's numeric type",
+                )
+            })?;
+            let op = operator(comparison.op);
+            Ok(Rendered {
+                expr: quote! { reply.0 #op #value },
+                subject: Subject::Reply,
+            })
         }
-        // The clause has a comparison but not the accepted operand shape:
-        // refuse rather than try to read a different operator out of it.
-        return Err(refuse(
-            source,
-            "not `<subject> <comparison> <numeric literal>`",
-        ));
+        Some(v1::comparison::Subject::Param(index)) => {
+            let backing = params
+                .get(*index as usize)
+                .and_then(param_named_type)
+                .and_then(|reference| scalar_backing(ctx, reference))
+                .ok_or_else(|| {
+                    refuse(
+                        source,
+                        "the parameter is not a named integer or float scalar",
+                    )
+                })?;
+            let value = literal_tokens(&comparison.literal, backing).ok_or_else(|| {
+                refuse(
+                    source,
+                    "the literal does not match the parameter's numeric type",
+                )
+            })?;
+            let op = operator(comparison.op);
+            Ok(Rendered {
+                expr: quote! { args.0 #op #value },
+                subject: Subject::Arg,
+            })
+        }
+        None => Err(refuse(source, "no accepted comparison")),
     }
-    Err(refuse(source, "no accepted comparison"))
-}
-
-fn is_identifier(text: &str) -> bool {
-    let mut chars = text.chars();
-    match chars.next() {
-        Some(first) if first.is_ascii_alphabetic() || first == '_' => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-fn is_number(text: &str) -> bool {
-    !text.is_empty()
-        && text
-            .chars()
-            .all(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e' | 'E'))
-        && text.parse::<f64>().is_ok()
 }
 
 /// The literal tokens in the subject's Rust numeric type: an integer-backed
@@ -263,18 +207,27 @@ fn literal_tokens(value: &str, backing: ScalarBacking) -> Option<TokenStream> {
     }
 }
 
-/// The backing of a same-package named scalar, restricted to the integer and
-/// float classes the accepted form allows.
-fn scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
-    match same_package_scalar_backing(ctx, reference)? {
+/// The backing of a **same-package** named scalar, restricted to the integer
+/// and float classes the accepted form allows.
+///
+/// The lowering resolves a reference over the whole scope, and this backend
+/// resolves nothing across packages: a subject whose scalar is declared in
+/// another package is refused here, which is what it was before stage P4 and
+/// what byte identity requires. Lifting it is a change to what the generated
+/// crate contains, made on its own (design note §9 item 6).
+fn scalar_backing(ctx: &Ctx, reference: &v1::TypeRef) -> Option<ScalarBacking> {
+    let Some(v1::declaration::Kind::Scalar(sc)) = ctx.local(reference)?.kind.as_ref() else {
+        return None;
+    };
+    match class_backing(sc.class) {
         backing @ (ScalarBacking::Integer | ScalarBacking::Float) => Some(backing),
         _ => None,
     }
 }
 
-fn param_named_type(param: &v2::Param) -> Option<&str> {
+fn param_named_type(param: &v1::Param) -> Option<&v1::TypeRef> {
     match param.r#type.as_ref()?.kind.as_ref()? {
-        v2::field_type::Kind::Named(name) => Some(name),
+        v1::r#type::Kind::Named(reference) => Some(reference),
         _ => None,
     }
 }
@@ -301,20 +254,87 @@ fn refuse(source: &str, reason: &str) -> GenerateError {
 mod tests {
     use super::{ClauseKind, translate};
     use crate::Ctx;
+    use ridl_ir::codegen::v1;
     use ridl_ir::v2;
 
-    /// A package declaring one integer scalar and one float scalar, so a
-    /// subject's backing resolves.
-    fn scalar_package() -> v2::Package {
+    /// A package declaring one integer scalar, one float scalar and one
+    /// interface whose single call carries the parameters and the clauses
+    /// under test. The clause translation is a model fact since stage P4, so
+    /// a test states the source the lowering reads and reads the translation
+    /// back out of the model.
+    fn call_package(
+        params: Vec<v2::Param>,
+        contracts: Vec<v2::Contract>,
+        reply: Option<&str>,
+    ) -> v2::Package {
+        let kind = match reply {
+            Some(reply) => v2::decl::Kind::QueryDef(v2::QueryDef {
+                params,
+                return_type: Some(v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Named(reply.to_string())),
+                    })),
+                }),
+                timing: None,
+                contracts,
+            }),
+            None => v2::decl::Kind::CommandDef(v2::CommandDef {
+                params,
+                timing: None,
+                contracts,
+            }),
+        };
         v2::Package {
             name: "p".to_string(),
             decls: vec![
                 scalar_decl("Level", v2::PrimitiveType::Integer),
                 scalar_decl("Rate", v2::PrimitiveType::Float),
             ],
-            interfaces: Vec::new(),
+            interfaces: vec![v2::Interface {
+                name: "Iface".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+                number: 1,
+                provisional: false,
+                interactions: vec![v2::Decl {
+                    name: "call".to_string(),
+                    visibility: v2::Visibility::Public as i32,
+                    is_error: false,
+                    doc: String::new(),
+                    labels: Vec::new(),
+                    deprecated: None,
+                    ordinal: 1,
+                    kind: Some(kind),
+                }],
+            }],
             services: Vec::new(),
             retired: Vec::new(),
+        }
+    }
+
+    /// The lowered parameters, clauses and reply reference of the one call.
+    fn shape_of(model: &v1::Model) -> (&[v1::Param], &[v1::Clause], Option<&v1::TypeRef>) {
+        let slot = &model.interfaces[0].slots[0];
+        let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = slot.occupant.as_ref()
+        else {
+            panic!("the lowered interface carries no interaction");
+        };
+        match interaction.shape.as_ref() {
+            Some(v1::interaction::Shape::Command(command)) => {
+                (&command.params, &command.clauses, None)
+            }
+            Some(v1::interaction::Shape::Query(query)) => (
+                &query.params,
+                &query.clauses,
+                query
+                    .reply_payload
+                    .as_ref()
+                    .and_then(|payload| payload.r#type.as_ref()),
+            ),
+            _ => panic!("the lowered interaction is neither a command nor a query"),
         }
     }
 
@@ -370,13 +390,16 @@ mod tests {
 
     #[test]
     fn an_accepted_parameter_clause_reaches_the_newtype_field() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "level < 100")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(v2::ContractKind::Require, "level < 100")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        let body =
-            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        let body = translate(&ctx, clauses, ClauseKind::Require, params, reply).expect("accepted");
         assert!(body.uses_args);
         assert!(!body.uses_reply);
         assert_eq!(
@@ -390,13 +413,16 @@ mod tests {
     /// mutation emitting `<` for `Comparison::Le` passed the whole suite.
     #[test]
     fn a_le_comparison_emits_the_le_operator() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "level <= 100")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(v2::ContractKind::Require, "level <= 100")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        let body =
-            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        let body = translate(&ctx, clauses, ClauseKind::Require, params, reply).expect("accepted");
         assert_eq!(
             dense(&body.expr),
             "ifargs.0<=100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
@@ -409,13 +435,16 @@ mod tests {
     /// suite.
     #[test]
     fn an_eq_comparison_emits_the_eq_operator() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "level == 100")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(v2::ContractKind::Require, "level == 100")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        let body =
-            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        let body = translate(&ctx, clauses, ClauseKind::Require, params, reply).expect("accepted");
         assert_eq!(
             dense(&body.expr),
             "ifargs.0==100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
@@ -428,13 +457,16 @@ mod tests {
     /// suite.
     #[test]
     fn a_ne_comparison_emits_the_ne_operator() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "level != 100")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(v2::ContractKind::Require, "level != 100")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        let body =
-            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        let body = translate(&ctx, clauses, ClauseKind::Require, params, reply).expect("accepted");
         assert_eq!(
             dense(&body.expr),
             "ifargs.0!=100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
@@ -443,13 +475,16 @@ mod tests {
 
     #[test]
     fn a_float_backed_result_clause_emits_a_float_literal() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("window", "Level")];
-        let contracts = [clause(v2::ContractKind::Ensure, "result >= 0")];
+        let package = call_package(
+            vec![param("window", "Level")],
+            vec![clause(v2::ContractKind::Ensure, "result >= 0")],
+            Some("Rate"),
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        let body = translate(&ctx, &contracts, ClauseKind::Ensure, &params, Some("Rate"))
-            .expect("accepted");
+        let body = translate(&ctx, clauses, ClauseKind::Ensure, params, reply).expect("accepted");
         assert!(body.uses_reply);
         assert!(!body.uses_args);
         // Rate is float-backed, so the literal is a float.
@@ -461,16 +496,19 @@ mod tests {
 
     #[test]
     fn several_clauses_of_one_kind_are_conjoined() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [
-            clause(v2::ContractKind::Require, "level < 100"),
-            clause(v2::ContractKind::Require, "level >= 0"),
-        ];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![
+                clause(v2::ContractKind::Require, "level < 100"),
+                clause(v2::ContractKind::Require, "level >= 0"),
+            ],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        let body =
-            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        let body = translate(&ctx, clauses, ClauseKind::Require, params, reply).expect("accepted");
         assert_eq!(
             dense(&body.expr),
             "ifargs.0<100&&args.0>=0{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
@@ -479,14 +517,17 @@ mod tests {
 
     #[test]
     fn no_clause_of_a_kind_emits_ok() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "level < 100")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(v2::ContractKind::Require, "level < 100")],
+            Some("Level"),
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
         // No ensure clause present.
-        let body =
-            translate(&ctx, &contracts, ClauseKind::Ensure, &params, Some("Level")).expect("empty");
+        let body = translate(&ctx, clauses, ClauseKind::Ensure, params, reply).expect("empty");
         assert!(!body.uses_args);
         assert!(!body.uses_reply);
         assert_eq!(dense(&body.expr), "::core::result::Result::Ok(())");
@@ -494,47 +535,64 @@ mod tests {
 
     #[test]
     fn a_compound_clause_is_refused() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(
-            v2::ContractKind::Require,
-            "level < 100 || level == 0",
-        )];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(
+                v2::ContractKind::Require,
+                "level < 100 || level == 0",
+            )],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
         let error =
-            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect_err("refused");
+            translate(&ctx, clauses, ClauseKind::Require, params, reply).expect_err("refused");
         assert!(error.message.contains("cannot translate contract clause"));
     }
 
     #[test]
     fn a_unit_literal_is_refused() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("window", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "window > 0ms")];
+        let package = call_package(
+            vec![param("window", "Level")],
+            vec![clause(v2::ContractKind::Require, "window > 0ms")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect_err("refused");
+        translate(&ctx, clauses, ClauseKind::Require, params, reply).expect_err("refused");
     }
 
     #[test]
     fn a_result_subject_outside_an_ensure_is_refused() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        // `result` with no reply type in scope (a require clause) is refused.
-        let contracts = [clause(v2::ContractKind::Require, "result >= 0")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            // `result` with no reply type in scope (a require clause) is
+            // refused.
+            vec![clause(v2::ContractKind::Require, "result >= 0")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect_err("refused");
+        translate(&ctx, clauses, ClauseKind::Require, params, reply).expect_err("refused");
     }
 
     #[test]
     fn a_fractional_literal_on_an_integer_subject_is_refused() {
-        let package = scalar_package();
-        let ctx = Ctx::new(&package);
-        let params = [param("level", "Level")];
-        let contracts = [clause(v2::ContractKind::Require, "level < 1.5")];
+        let package = call_package(
+            vec![param("level", "Level")],
+            vec![clause(v2::ContractKind::Require, "level < 1.5")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
 
-        translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect_err("refused");
+        translate(&ctx, clauses, ClauseKind::Require, params, reply).expect_err("refused");
     }
 }

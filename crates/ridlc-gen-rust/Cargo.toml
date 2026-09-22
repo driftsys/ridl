@@ -1,0 +1,31 @@
+[package]
+name = "ridlc-gen-rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The reference codegen plugin over the Rust backend, for the process host's parity test."
+# Test-only: the plugin exists so that `ridlc`'s process host has a real
+# executable to run under `just test`, with no network and no installation
+# (the lane P driver, stage P4; `docs/design/codegen-plugins.md`). It is not
+# a backend a user would run — `--emit rust` writes the same file in process
+# — so it is not published.
+publish = false
+
+[[bin]]
+name = "ridlc-gen-rust"
+path = "src/main.rs"
+
+# The plugin reads the request and writes the response through the
+# contract's own encodings, and generates through the same `Backend` the
+# in-process host calls. Nothing else: no filesystem, no front end.
+[dependencies]
+ridl-backend-rust.workspace = true
+ridl-ir.workspace = true
+
+# The parity test drives the built binary through `ridlc`'s process host
+# over every corpus package, against the in-process path.
+[dev-dependencies]
+ridl-core.workspace = true
+ridlc = { path = "../ridlc" }
+tempfile = "3.15.0"

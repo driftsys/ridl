@@ -1378,14 +1378,15 @@ fn write_response(
 /// the interaction face and the descriptors beside the domain types and the
 /// codec (E11.14); TypeScript, proto3 and FlatBuffers are their own crates'
 /// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
-/// written back. Until stage P4 of the lane P driver each of the four
-/// language backends still reads the raw IR, so each is constructed with a
-/// [`codegen::RawIr`] — the package and `others`, the caller's full package
-/// list ([`run_build`]), which proto3, FlatBuffers and — since E11.14 —
-/// Rust read to resolve a cross-package reference themselves — and reads
-/// that in place of the request's model. A backend that cannot render this
-/// package answers with an error diagnostic and no file, and only its own
-/// artifact is skipped.
+/// written back. Since stage P4 of the lane P driver the Rust backend reads
+/// the request's model and nothing else, as `codegen-model` does and as a
+/// plugin must; the other three still read the raw IR, so each is
+/// constructed with a [`codegen::RawIr`] — the package and `others`, the
+/// caller's full package list ([`run_build`]), which proto3 and FlatBuffers
+/// read to resolve a cross-package reference themselves — and reads that in
+/// place of the request's model. A backend that cannot render this package
+/// answers with an error diagnostic and no file, and only its own artifact
+/// is skipped.
 ///
 /// The `ir-json`, `ir-text` and `ir-binary` emits are direct IR dumps, not
 /// backends: they need no request. When the package cannot be rendered in
@@ -1428,7 +1429,7 @@ fn write_emits(
             clippy::match_wildcard_for_single_variants
         )]
         let backend: Box<dyn codegen::Backend + '_> = match emit {
-            Emit::Rust => Box::new(ridl_backend_rust::Backend::new(raw)),
+            Emit::Rust => Box::new(ridl_backend_rust::Backend),
             Emit::TypeScript => Box::new(ridl_backend_ts::Backend::new(raw)),
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),

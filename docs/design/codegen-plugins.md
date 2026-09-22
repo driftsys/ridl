@@ -20,27 +20,27 @@ one), D-P2 (the request carries the model, never the raw IR) and D-P3 (the
 plugin never touches the filesystem) this record implements.
 
 **What is built and what is not.** The contract, the in-process host over every
-in-tree backend, the process host, the `--plugin` flag and the reference plugin
-are built, and the parity test runs under `just test`. What is not built is the
-Rust backend as a plugin: it still reads the raw IR, so it cannot be run from a
-request, and its port onto the model is the driver's stage P4. The parity test
-therefore runs over the reference plugin today — the one backend whose output is
-a function of the request alone — and gains `ridlc-gen-rust` when the port
-lands. §6 says why this is the honest form of the test and what it does and does
-not prove.
+in-tree backend, the process host, the `--plugin` flag and the two reference
+plugins are built, and both parity tests run under `just test`. Stage P4 of the
+driver ported the **Rust backend** onto the lowered model, so it reads the
+request's model and nothing else and is run as a plugin, `ridlc-gen-rust`; the
+parity test over it is the exit test D-P1 asks for. The other three in-tree
+backends — TypeScript, proto3 and FlatBuffers — still read the raw IR through
+`RawIr` and are not plugins; each is ported by its own story. §6 says what each
+parity test proves.
 
 ## 1. Where the code is
 
-| What                                                                                                 | Where                                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, in the package `ridl.codegen.v1` beside `model.proto`, compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                                                                      |
-| The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path` | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                        |
-| The four in-tree backends behind the trait                                                           | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`, each `pub struct Backend<'a>` over `generate_pipeline` (Rust), `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                                   |
-| The in-process host: one request per package, every emit through the trait, the response written     | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                     |
-| The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error            | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                         |
-| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin` and `--plugin-timeout` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                       |
-| The reference plugin                                                                                 | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, `publish = false`                                                                                                                                                                                                                                                                           |
-| The parity test                                                                                      | `crates/ridlc-gen-model/tests/parity.rs`, over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
+| What                                                                                                 | Where                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, in the package `ridl.codegen.v1` beside `model.proto`, compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                                                                                                                       |
+| The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path` | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                                                                         |
+| The four in-tree backends behind the trait                                                           | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other three are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                           |
+| The in-process host: one request per package, every emit through the trait, the response written     | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
+| The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error            | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
+| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin` and `--plugin-timeout` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                                        |
+| The reference plugins                                                                                | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, and `crates/ridlc-gen-rust/`, a binary over the Rust backend; both `publish = false`                                                                                                                                                                                                                                                         |
+| The parity tests                                                                                     | `crates/ridlc-gen-model/tests/parity.rs` and `crates/ridlc-gen-rust/tests/parity.rs`, each over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
 
 ## 2. The contract
 
@@ -217,7 +217,7 @@ findings, beside a compile error, and an in-tree backend's refusal already
 exits 1. A `--plugin` value that does not parse (`=/x`, `a/b`) is a usage error
 and exits 2 before anything is compiled.
 
-## 5. The reference plugin
+## 5. The reference plugins
 
 `crates/ridlc-gen-model/` builds `ridlc-gen-model`: `--emit codegen-model` as a
 process. It reads one `CodegenRequest` from its standard input, refuses a
@@ -228,27 +228,46 @@ generates through the same `ModelBackend` the in-process host calls — one file
 a message on standard error and exit 1, which the host reports. It opens no
 file. It depends on `ridl-ir` alone.
 
-It is test-only: `publish = false`, not installed by any release, never on a
-user's `PATH`. The test suite reaches it as `CARGO_BIN_EXE_ridlc-gen-model`,
-which cargo sets for the crate's own integration tests and which is why the
-parity test lives in that crate rather than in `ridlc`: no installation, no
-`PATH`, no network, under `just test` as it is.
+`crates/ridlc-gen-rust/` builds `ridlc-gen-rust`, the same shape over the Rust
+backend: `--emit rust` as a process. It reads one `CodegenRequest`, refuses an
+unknown `schema` the same way, generates through the same
+`ridl_backend_rust::Backend` the in-process host calls — one file,
+`<artifact_base>.rs`, from `generate_pipeline` over the request's model — and
+writes the response to its standard output. It opens no file. It depends on
+`ridl-ir` and `ridl-backend-rust`. It exists because stage P4 ported the Rust
+backend onto the model: before that the backend read the raw IR, and a plugin
+has none.
+
+Both are test-only: `publish = false`, not installed by any release, never on a
+user's `PATH`. The test suite reaches each as `CARGO_BIN_EXE_<name>`, which
+cargo sets for the crate's own integration tests and which is why each parity
+test lives in its own crate rather than in `ridlc`: no installation, no `PATH`,
+no network, under `just test` as it is. Each adds its own scope to
+`.git-std.toml`.
 
 ## 6. The parity test, and what it proves
 
 ADR-0020 decision 11, as amended 2026-09-22, makes the parity test the in-tree
-Rust backend run as a plugin; the driver's D-P1 says the same. The Rust backend
-reads the raw IR until stage P4 ports it, and a plugin has no raw IR (D-P2), so
-the Rust backend cannot be run from a request today, and no test can make it
-byte-identical through the host before the port. The two ways to run the test
-this stage anyway — carry the raw IR in the request during the transition, or
-reconstruct the IR from the model in the plugin — were rejected: the first
-violates D-P2 and, under the compatibility rule, leaves a field in
+Rust backend run as a plugin; the driver's D-P1 says the same. That test exists
+since stage P4, in `crates/ridlc-gen-rust/tests/parity.rs`, on the two levels
+below with `ridl_backend_rust::Backend` and `ridlc-gen-rust` in place of
+`ModelBackend` and `ridlc-gen-model`, and `--emit rust` in place of
+`--emit codegen-model`. Its command's level compares the per-package `.rs`
+sources: `lib.rs` and `Cargo.toml` are what `ridlc` writes for itself, no
+backend produces them, and a build that names only a plugin writes neither.
+
+It could not be written before the port. The Rust backend read the raw IR, a
+plugin has none (D-P2), so no test could make it byte-identical through the
+host. The two ways to run it anyway — carry the raw IR in the request during the
+transition, or reconstruct the IR from the model in the plugin — were rejected:
+the first violates D-P2 and, under the compatibility rule, leaves a field in
 `ridl.codegen.v1` that can never be removed; the second is a second lowering in
 reverse, thrown away at P4.
 
-So the test runs over `ridlc-gen-model`, on two levels, in
-`crates/ridlc-gen-model/tests/parity.rs`:
+The `ridlc-gen-model` test stays beside it, and is the one described below: it
+is the narrower proof, over the one backend whose output is a function of the
+request alone, and it is what a change to the host itself fails first. It runs
+on two levels, in `crates/ridlc-gen-model/tests/parity.rs`:
 
 - **At the contract's level.** For every package of every corpus entry, with the
   scope the CLI gives the backends (every sibling plus `ridl.std`), one
@@ -262,15 +281,25 @@ So the test runs over `ridlc-gen-model`, on two levels, in
   build writes nothing either way, and the test asserts the two builds agree on
   that too.
 
-What it proves: the host, end to end — the request rendered and parsed, the
-response parsed and written, the file under `--out-dir` with the same name and
-bytes, the process started and reaped — and that the model survives a parse and
-a re-render byte for byte, which is the canonical form's own conformance
-obligation. What it does not prove: that the model is sufficient for a language
-backend. That is P4's proof, and it is the same test with `ridlc-gen-rust` in
-place of `ridlc-gen-model`, over `--emit rust`, against the same snapshots. The
-other three backends stay on the raw IR until their own stories and are not
-plugins until then.
+What the `ridlc-gen-model` test proves: the host, end to end — the request
+rendered and parsed, the response parsed and written, the file under `--out-dir`
+with the same name and bytes, the process started and reaped — and that the
+model survives a parse and a re-render byte for byte, which is the canonical
+form's own conformance obligation. What it does not prove: that the model is
+sufficient for a language backend. That is what the `ridlc-gen-rust` test
+proves, over a backend whose output is a whole Rust crate's source, and what the
+unmoved snapshots of `crates/ridl-backend-rust/src/snapshots/`,
+`crates/ridlc/tests/snapshots/` and
+`crates/ridl-backend-rust/tests/generated/interaction_face.rs` prove beside it:
+the model carries every fact that output is a function of.
+
+**The other three backends stay on the raw IR** — TypeScript, proto3 and
+FlatBuffers — until their own stories port them, and are not plugins until then.
+Each keeps the fact-level drift test of the model design note §8.1
+(`crates/ridl-backend-{ts,proto,flatbuffers}/tests/model_drift.rs`), which is
+what catches the model and a backend deriving one fact differently. The Rust
+backend's is deleted: every fact it compared is a function of the model by
+construction now, so the test could not fail.
 
 ## 7. What a plugin author reads
 
@@ -298,7 +327,8 @@ section (how the plugin is found and what `ridlc` does with the response).
    for the request's fields.
 3. **The driver's P3 bullet names the reference plugin as "a binary that wraps
    the in-process Rust backend".** §6 above: not possible before P4 without
-   violating D-P2, so it wraps `ModelBackend`, and the Rust wrapper is P4's.
+   violating D-P2, so P3's wraps `ModelBackend`, and P4 added the Rust wrapper
+   `ridlc-gen-rust` beside it.
 4. **The design note §8.3 says "no second entry point over the model is added:
    `generate_with` keeps its signature".** True; the trait is a second face over
    the same entry points, not a second entry point, and `generate_with` is

@@ -395,6 +395,13 @@ message Init {
   // The canonical scalar init text, where the position is scalar-valued.
   optional string value = 2;
   InitSource source = 3;
+  // The IR's own one-level `InitValue.derivable`, before the transitive rule
+  // of typl §5.8 is applied over the scope. It is the fact a printer reads at
+  // a position the scope does not resolve, and `derivable` is not that fact:
+  // `derivable` is the resolved answer for the whole position. False where
+  // the IR carries no `InitValue` at all — a tuple field, a collection
+  // element, a constant.
+  bool one_level = 4;
 }
 
 // What a declaration transitively contains, stated as facts rather than as

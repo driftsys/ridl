@@ -42,7 +42,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -79,7 +80,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -116,7 +118,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -153,7 +156,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -190,7 +194,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
@@ -225,7 +230,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -345,7 +351,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "enum": {
         "values": [
@@ -417,7 +424,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "enum": {
         "values": [
@@ -489,7 +497,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "enumSet": {
         "backingEnum": {
@@ -568,7 +577,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -595,7 +605,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -624,7 +635,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -656,7 +668,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": false,
-        "source": "INIT_SOURCE_NONE"
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -682,7 +695,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": false,
-                "source": "INIT_SOURCE_NONE"
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
               },
               "doc": "",
               "labels": []
@@ -711,7 +725,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -739,7 +754,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -770,7 +786,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "6",
-                "source": "INIT_SOURCE_DECLARED"
+                "source": "INIT_SOURCE_DECLARED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -802,7 +819,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": false,
-        "source": "INIT_SOURCE_NONE"
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -823,7 +841,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -858,7 +877,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -893,7 +913,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": false,
-                "source": "INIT_SOURCE_NONE"
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
               },
               "doc": "",
               "labels": []
@@ -940,7 +961,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -972,7 +994,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "union": {
         "arms": [
@@ -1041,7 +1064,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -1068,7 +1092,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -1097,7 +1122,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -1129,7 +1155,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": false,
-        "source": "INIT_SOURCE_NONE"
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -1156,7 +1183,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -1184,7 +1212,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": false,
-                "source": "INIT_SOURCE_NONE"
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
               },
               "doc": "",
               "labels": []
@@ -1216,7 +1245,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": false,
-        "source": "INIT_SOURCE_NONE"
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -1243,7 +1273,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -1271,7 +1302,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": false,
-                "source": "INIT_SOURCE_NONE"
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
               },
               "doc": "",
               "labels": []
@@ -1309,7 +1341,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -1334,7 +1367,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -1352,7 +1386,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "flatbuffersTable": 16,
       "declaration": {
@@ -1958,7 +1993,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -1986,7 +2022,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2008,7 +2045,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "false",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2040,7 +2078,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -2068,7 +2107,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2096,7 +2136,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2128,7 +2169,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": false,
-        "source": "INIT_SOURCE_NONE"
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -2156,7 +2198,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2184,7 +2227,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": false,
-                "source": "INIT_SOURCE_NONE"
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
               },
               "doc": "",
               "labels": []
@@ -2213,7 +2257,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2245,7 +2290,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "enum": {
         "values": [
@@ -2307,7 +2353,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -2340,7 +2387,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2373,7 +2421,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
@@ -2407,7 +2456,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -2428,7 +2478,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2458,7 +2509,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "init": {
                 "derivable": true,
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2491,7 +2543,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
@@ -2525,7 +2578,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -2553,7 +2607,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2575,7 +2630,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "false",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2607,7 +2663,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -2634,7 +2691,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2663,7 +2721,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2692,7 +2751,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []
@@ -2724,7 +2784,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "enum": {
         "values": [
@@ -2846,7 +2907,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "init": {
         "derivable": true,
         "value": "unset",
-        "source": "INIT_SOURCE_DECLARED"
+        "source": "INIT_SOURCE_DECLARED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_STRING",
@@ -2932,7 +2994,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -2957,7 +3020,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -2975,7 +3039,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "flatbuffersTable": 9,
       "declaration": {
@@ -3011,7 +3076,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3036,7 +3102,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3054,7 +3121,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "flatbuffersTable": 10,
       "declaration": {
@@ -3091,7 +3159,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3116,7 +3185,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3134,7 +3204,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "interaction": {
         "interface": 2,
@@ -3170,7 +3241,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3195,7 +3267,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": true,
-            "source": "INIT_SOURCE_DERIVED"
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3213,7 +3286,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "interaction": {
         "interface": 2,
@@ -3250,7 +3324,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": false,
-            "source": "INIT_SOURCE_NONE"
+            "source": "INIT_SOURCE_NONE",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3275,7 +3350,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           },
           "init": {
             "derivable": false,
-            "source": "INIT_SOURCE_NONE"
+            "source": "INIT_SOURCE_NONE",
+            "oneLevel": false
           },
           "doc": "",
           "labels": []
@@ -3293,7 +3369,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       },
       "init": {
         "derivable": false,
-        "source": "INIT_SOURCE_NONE"
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
       },
       "interaction": {
         "interface": 5,
@@ -3349,7 +3426,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -3387,7 +3465,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -3425,7 +3504,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -3908,7 +3988,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -3957,7 +4038,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4001,7 +4083,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4055,7 +4138,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4308,7 +4392,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4362,7 +4447,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4471,7 +4557,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4509,7 +4596,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4546,7 +4634,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4584,7 +4673,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               }
             }
           }
@@ -4623,7 +4713,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "12.5",
-                "source": "INIT_SOURCE_DECLARED"
+                "source": "INIT_SOURCE_DECLARED",
+                "oneLevel": true
               }
             }
           }
