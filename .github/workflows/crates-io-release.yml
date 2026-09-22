@@ -110,22 +110,43 @@ jobs:
 
           publish() {
             local crate="$1"
-            # Skip if already published (crates.io's API, not `cargo search`,
-            # which is disabled on crates.io).
+            # Skip if already published — by trying to publish and reading
+            # cargo's own answer, not by asking a second, separate source
+            # first. An earlier version of this function asked crates.io's
+            # own API ahead of time and skipped when the answer matched the
+            # local version; that source needs a `User-Agent` header, which
+            # it never sent, so crates.io 403'd every single call, on every
+            # run, silently — `curl -sf ... || true` turned the 403 into an
+            # empty "not published" answer, indistinguishable from a crate
+            # that genuinely was not published yet. That stayed harmless
+            # only by accident, for as long as every crate this function
+            # ever checked really was still unpublished; the first run to
+            # reach an already-published crate (driftsys/ridl, 2026-09-22,
+            # the second `v0.2.0` attempt) sent `ridl-syntax` — published
+            # minutes earlier by this same workflow — through `cargo
+            # publish` again. Cargo itself refused the duplicate, so nothing
+            # was corrupted, but the job aborted before any crate still
+            # pending got a turn. Asking cargo directly has no second source
+            # to fall out of sync with in the first place.
             local pkg_version
             pkg_version=$(cargo metadata --no-deps --format-version 1 \
               | jq -r ".packages[] | select(.name == \"$crate\") | .version")
-            local published
-            published=$(curl -sf "https://crates.io/api/v1/crates/$crate" \
-              | jq -r '.crate.newest_version // ""' || true)
-            if [ "$pkg_version" = "$published" ]; then
+            echo "==> Publishing $crate $pkg_version"
+            local output
+            if output=$(cargo publish -p "$crate" 2>&1); then
+              echo "$output"
+              # Wait for the crate index to update before publishing
+              # dependents. Only needed after an actual new publish; a
+              # skipped one has already had time to propagate.
+              sleep 30
+              return 0
+            fi
+            echo "$output"
+            if echo "$output" | grep -q "already exists on crates.io index"; then
               echo "==> $crate $pkg_version already published, skipping"
               return 0
             fi
-            echo "==> Publishing $crate $pkg_version"
-            cargo publish -p "$crate"
-            # Wait for the crate index to update before publishing dependents.
-            sleep 30
+            return 1
           }
 
           # Dependency order: a crate publishes only once crates.io already
