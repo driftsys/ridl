@@ -37,7 +37,9 @@ the pull request that added it.
   italic line naming the tool that wrote it, the way every comment on
   driftsys/ridl#328 does. No model identifier in any repository file or in a
   pull request title or body; a commit trailer naming the tool is the
-  repository's convention and stays.
+  repository's convention and stays, and a routing table naming which model does
+  a stage (§4 below, as in `2026-09-13-step1-lanes-plan.md` §4) is a plan fact,
+  not an identifier.
 - A new crate adds its own scope to `.git-std.toml`, which is an explicit list
   (AGENTS.md, issue #180); the commit lint fails until it does. P2's
   `ridl-codegen`, if that home is chosen, and P3's reference plugin are new
@@ -162,6 +164,46 @@ Each stage is one or more pull requests, each with the review above, each merged
 before the next stage branches. After each stage, one comment on issue #328, the
 step-1 lanes' coordination issue, which lane P joins as a new lane (its body is
 never edited): the merge SHA, what landed, what another lane must know.
+
+### Model routing
+
+The rule is the step-1 lanes plan's (`2026-09-13-step1-lanes-plan.md` §4): Fable
+for the design-sensitive half of a stage, Opus for the rest, Sonnet for
+mechanical work, and the driver session on Opus. Fable is available again since
+2026-09-19; no substitution applies. In the CLI this is a `/model` switch at a
+stage boundary; a Sonnet row may go to a subagent with the model set, since the
+"no subagents" rule in §0 is about the review, not the authoring.
+
+| Stage  | Work                                                                                | Model  | Effort |
+| ------ | ----------------------------------------------------------------------------------- | ------ | ------ |
+| Driver | The session that runs the lane and the three review passes                          | Opus   | medium |
+| P0     | The roadmap amendment; the wording is in this driver                                | Sonnet | —      |
+| P1a    | The IR stability design note, with #231's measurement reproduced                    | Fable  | —      |
+| P1b    | The ADR-0014 amendment, the policy in the specification, the #231 fix               | Opus   | high   |
+| P1b    | Snapshot regeneration and fixture updates                                           | Sonnet | —      |
+| P2a    | The lowered codegen model design note                                               | Fable  | —      |
+| P2b    | The model types and the lowering step                                               | Opus   | high   |
+| P2b    | One drift test per in-tree backend                                                  | Sonnet | —      |
+| P3     | The backend contract, the process host protocol, the ADR-0020 decision 11 amendment | Fable  | —      |
+| P3     | The process host implementation and the reference plugin                            | Opus   | high   |
+| P3     | The cli-reference chapter and the as-built design record                            | Sonnet | —      |
+| P4     | The Rust backend ported in three byte-identical layers                              | Opus   | high   |
+| P5     | E11.1, the logical frame specification with AIDL named as a binding                 | Fable  | —      |
+
+Why the split lands where it does:
+
+- The four Fable rows are the ones a later record cites: P1a decides the
+  encoding every plugin reads, P2a decides what a plugin can see at all (D-P4
+  rests on it), P3's contract is what an external Kotlin plugin is written
+  against, and P5 binds every runtime. A wrong call there is expensive to
+  reverse. Every other row has a test that catches drift.
+- P4 stays on Opus because the byte-identity test is the oracle. The lanes plan
+  gave the earlier breaking change to the Rust backend to Fable, but that change
+  had no such oracle. Escalate a layer to Fable only if it fails to reach byte
+  identity after two attempts.
+- The three review passes run at Opus high whoever wrote the change: a
+  Fable-authored note read by Opus is a different model reading it, which is
+  what the seat is for.
 
 ### P0 — the roadmap amendment (docs, S)
 
