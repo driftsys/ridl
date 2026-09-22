@@ -10,9 +10,10 @@
 //!
 //! What is compared, per table the model lists: the table exists in the
 //! schema under that name, its field ids are the model's `FbSlot.id` in the
-//! model's order, its `= null` markers are the model's `needs_null_default`,
-//! and each field's type text is what the model's `FbWire` spells. Beyond the
-//! tables: each union's member names, and each interface's identity table.
+//! model's order, each field's **name** is the one the model's `FbSlot.source`
+//! spells, its `= null` markers are the model's `needs_null_default`, and each
+//! field's type text is what the model's `FbWire` spells. Beyond the tables:
+//! each union's member names, and each interface's identity table.
 //!
 //! It is the form of drift test stage P2b can write. When a backend stops
 //! deriving a fact and reads it from the model instead, that fact is a
@@ -184,6 +185,45 @@ fn wire_text(model: &v1::Model, wire: Option<&v1::FbWire>) -> Option<String> {
 
 /// Every table the model lists is in the schema, with the ids, the `= null`
 /// markers and the type texts the model states.
+/// The field name a slot spells, from the model alone.
+///
+/// The emitter's rules, in `crates/ridl-backend-flatbuffers/src/lib.rs`: a
+/// live field takes its own `snake_case` spelling, a retired ordinal takes
+/// `reserved_<ordinal>`, a tuple position takes `field_<position>`, a map
+/// entry's two slots are `key` and `value`, and a wrapped union value is
+/// `value`. Every one of them is a name two emitters must agree on, which is
+/// what makes it a model fact rather than a printer's business.
+fn expected_field_name(
+    model: &v1::Model,
+    table: &v1::FbTable,
+    slot: &v1::FbSlot,
+) -> Option<String> {
+    match slot.source.as_ref()? {
+        v1::fb_slot::Source::Field(index) => {
+            let declaration = match table.source.as_ref()? {
+                v1::fb_table::Source::StructDeclaration(decl) => {
+                    model.declarations.get(*decl as usize)?
+                }
+                _ => return None,
+            };
+            let v1::declaration::Kind::Struct(structure) = declaration.kind.as_ref()? else {
+                return None;
+            };
+            let slot = structure.slots.get(*index as usize)?;
+            let v1::slot::Occupant::Field(field) = slot.occupant.as_ref()? else {
+                return None;
+            };
+            Some(field.name.as_ref()?.snake.clone())
+        }
+        v1::fb_slot::Source::RetiredOrdinal(ordinal) => Some(format!("reserved_{ordinal}")),
+        v1::fb_slot::Source::TuplePosition(position) => Some(format!("field_{position}")),
+        v1::fb_slot::Source::Key(_) => Some("key".to_string()),
+        v1::fb_slot::Source::Value(_) | v1::fb_slot::Source::Wrapped(_) => {
+            Some("value".to_string())
+        }
+    }
+}
+
 fn assert_tables_agree(label: &str, model: &v1::Model, schema: &Schema) {
     let projection = model.flatbuffers.as_ref().expect("a lowered projection");
     assert!(
@@ -203,6 +243,13 @@ fn assert_tables_agree(label: &str, model: &v1::Model, schema: &Schema) {
             table.name
         );
         for (slot, field) in table.slots.iter().zip(emitted.iter()) {
+            if let Some(name) = expected_field_name(model, table, slot) {
+                assert_eq!(
+                    field.name, name,
+                    "{label}: table `{}` emits the field `{}` where the model spells `{name}`",
+                    table.name, field.name
+                );
+            }
             assert_eq!(
                 field.null, slot.needs_null_default,
                 "{label}: `{}.{}` emits `= null` = {}, the model states {}",
