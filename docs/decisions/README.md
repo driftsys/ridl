@@ -57,9 +57,12 @@
   rendering on every surface — artifacts, baselines, and goldens — because the
   rendering that shipped is serde's view of the generated Rust structs and no
   conformant protobuf parser can read it. Adds prototext and binary emits, fixes
-  the canonical-form policy E4.5 cites (binary is canonical, JSON is derived and
-  conformance-obliged, prototext is for inspection), and makes the `ridl.std`
-  emit filter an exhaustive classification. Supersedes the rendering clause of
+  the canonical-form policy E4.5 cites — canonical protobuf JSON is canonical,
+  binary and prototext are derived, prototext is for inspection (decision 9 as
+  amended 2026-09-22; it named binary canonical until a measurement showed that
+  binary cannot read back every package the front end admits, and the policy is
+  now written out in the IR specification) — and makes the `ridl.std` emit
+  filter an exhaustive classification. Supersedes the rendering clause of
   ADR-0004 §4. Not epic-scoped: it binds the artifact every future backend
   consumes. Three amendments came out of implementation: decision 12 retracts
   the infallible serialization return, decision 13 contains the prototext

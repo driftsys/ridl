@@ -235,7 +235,7 @@ apart unnoticed — check those two by reading when you touch either file.
   verified — do not replace it with pattern matching, and do not widen the
   options. **The one exception is `{{#include}}`**, which the harness does not
   expand: fences inside an included file are not compiled. That is what keeps
-  the seven Language reference chapters — thin wrappers over
+  the eight Language reference chapters — thin wrappers over
   `docs/specification/` — out of the harness. A fence you want verified must sit
   in a `docs/book/` file directly. See `CONTRIBUTING.md`, "Writing examples in
   the book".

@@ -13,6 +13,18 @@ scoping the `serde`→JSON rendering to "debugging and golden tests". Everything
 else in ADR-0004 §4 stands: protobuf compiled with `prost` remains the canonical
 IR, and the rejected alternatives remain rejected.
 
+**Amended 2026-09-22 — decision 9, the canonical encoding, and a correction to
+decision 14.** The canonical encoding is now canonical protobuf JSON; the binary
+and prototext encodings are derived. Decision 9 said the reverse, and a
+measurement made for roadmap story E4.5a showed that the encoding it named
+canonical cannot read back every package the front end admits, while the one it
+named derived can. Decisions 1 to 8 and 10 to 13 are unchanged; decision 14 is
+corrected on two facts it stated wrongly, in place. The amendment's reasoning
+trail is
+[the IR stability design note](../wip/2026-09-22-ir-stability-design.md), and
+the policy that follows from it is
+[the IR specification](../specification/ir-specification.md).
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -151,6 +163,50 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    Kotlin, and TypeScript backends; C++, Java, Python, and Go have solid
    text-format parsers, and TypeScript has essentially none — neither
    protobuf.js nor ts-proto implements it.
+
+   **Amendment (2026-09-22) — the canonical encoding is canonical protobuf JSON;
+   binary and prototext are derived.** The clause above naming binary canonical
+   is retracted. The prototext clause stands unchanged: prototext is for
+   inspection, it is not a recommended interchange form, and the TypeScript
+   reason for that is still the reason.
+
+   The trigger is a measurement, reproduced on 2026-09-22 against this workspace
+   and recorded in
+   [the IR stability design note](../wip/2026-09-22-ir-stability-design.md) §2.
+   `from_binary` refuses what `to_binary` writes at 101 message levels below the
+   `Package` root and reads 100 — a bound legal source reaches, at a struct
+   field nesting 48 arrays, 47 maps or 32 tuples, well inside the 127 levels the
+   parser admits. The canonical encoding this record named derived has no such
+   bound: every package the front end admits round-trips through it, at every
+   depth, in every shape. A canonical form that the reference toolchain cannot
+   read back for input it accepted is not a form a third-party backend can be
+   told to rely on, which is the obligation roadmap story E4.5a exists to
+   discharge.
+
+   Two facts were weighed against the change and did not carry it. Binary is 6
+   to 11 times smaller and 5 to 9 times faster than JSON on the two
+   `veh-cluster` corpus packages, but no consumer reads binary today, and on the
+   one path that would carry the cost — a codegen plugin's standard input
+   (ADR-0020 decision 9) — the largest corpus package costs 64 µs to write, 239
+   µs to read and 55 kB to cross a pipe, against a process start measured in
+   milliseconds. And lowering `MAX_TYPE_DEPTH` until every admitted package fits
+   binary would put the limit at 31 levels for the tightest shape, which is
+   decision 12's rejected checker-level nesting limit under another name: a
+   language change made to work around one library's default.
+
+   What this amendment does not move: the schema of record. ADR-0004 §4's
+   "protobuf compiled with `prost` remains the canonical IR" is about the
+   schema, and stands. The `.proto` files stay the schema of record and the JSON
+   is the protobuf JSON mapping applied to them; only which of the three
+   encodings is named canonical changes. Every emit, every artifact name and
+   every byte this toolchain writes is unchanged — no golden and no corpus
+   snapshot moved with this amendment, which is the check that the canonical
+   form itself did not change.
+
+   The policy this decision exists to be cited for is now written out, in
+   [the IR specification](../specification/ir-specification.md): what canonical
+   fixes, the nesting bound in both units, the compatibility rule, and the
+   versioning rule.
 
 10. **The `ridl.std` emit filter becomes a predicate over "is this an IR dump",
     not an enumeration of one variant.** `crates/ridlc/src/lib.rs` filters
@@ -314,9 +370,15 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     levels (FORM-102, `MAX_TYPE_DEPTH` in `crates/ridl-syntax/src/parser.rs`),
     and the deepest package that limit admits emits JSON **262 brackets** deep —
     so 1,000 leaves a factor of 3.8 over anything `ridlc` can write, and the
-    deepest nesting in the corpus is single digits. The cap exists for input
-    this toolchain did not write: a hand-edited baseline, or a snapshot from
-    elsewhere.
+    deepest nesting in the corpus is single digits. **Corrected 2026-09-22: 262
+    brackets is the array shape, not the deepest. A tuple costs four brackets
+    per source level where an array costs two, so the deepest package the parser
+    admits emits 516 brackets and the factor in hand is 1.9, not 3.8. The claim
+    this sentence makes — that the cap cannot bind on IR this toolchain produces
+    — holds at either figure, and
+    [the IR specification](../specification/ir-specification.md) states the
+    measured numbers.** The cap exists for input this toolchain did not write: a
+    hand-edited baseline, or a snapshot from elsewhere.
 
     That FORM-102 ceiling is also why the writer needs no cap of its own. The
     pbjson serializer recurses, so a sufficiently deep package would exhaust the
@@ -359,6 +421,24 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     produces" above is a claim about JSON specifically. The limit predates this
     amendment, and prost does not expose it for configuration, so it is
     recorded, not fixed.
+
+    **Corrected 2026-09-22, on two facts.** First, the numbers. The limit is
+    exact rather than "roughly": `from_binary` reads 100 message levels below
+    the `Package` root and refuses 101, which for a struct field is source depth
+    47 for arrays, 46 for maps and 31 for tuples read back, and 48, 47 and 32
+    refused. Second, the configurability. `prost` 0.14.4 does expose the limit,
+    as a cargo feature — `no-recursion-limit`, which compiles `DecodeContext`
+    without its counter. It is not configurable per call or per message, which
+    is what this paragraph meant, but "does not expose it for configuration" is
+    wrong as written. The feature was weighed and not enabled: it is
+    workspace-global, so every crate linking `prost` here would lose the guard
+    without choosing to, it fixes the Rust reader alone while protobuf-java and
+    the C++ runtime default to the same 100, and the binary wire format cannot
+    be depth-measured without the schema, so there is no equivalent of the JSON
+    reader's bracket cap to put in place of the limit. Decision 9's 2026-09-22
+    amendment makes JSON canonical instead, and
+    [the IR specification](../specification/ir-specification.md) states binary's
+    bound as a property of a derived encoding.
 
     Measured on the two `veh-cluster` corpus packages (release build, 55 kB and
     16 kB artifacts): serialization is 3.9 to 4.5 times faster than the
@@ -441,6 +521,20 @@ trigger rather than this cost, with the measurement recorded there.**
    E4.5's "a third-party backend consumes the IR" criterion. Recorded as a known
    limit rather than left implicit.
 
+## Documents amended
+
+The 2026-09-22 amendment of decision 9 moved the canonical label, which every
+record that repeated the old label states wrongly. Each was corrected in the
+same change.
+
+| Document                                                                          | Change                                                                                                                                      |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [the typl language reference](../specification/typl-language-reference.md) §17.10 | "decision 9 makes the binary encoding canonical" now names canonical protobuf JSON; the section's own resolution is unaffected              |
+| [the family overview](../specification/ridl-family-overview.md) §2                | the IR specification's inventory row moves from "not started" to the document this amendment's policy is written into                       |
+| [the ADR index](README.md)                                                        | this record's entry states the canonical-form policy as amended                                                                             |
+| `crates/ridl-ir/src/lib.rs`                                                       | `to_binary`'s doc comment no longer calls binary the canonical interchange encoding; `MAX_JSON_NESTING`'s carries the corrected 516 and 1.9 |
+| `crates/ridlc/src/lib.rs`, `crates/ridlc/tests/corpus.rs`                         | the same correction where `Emit::IrBinary` and the corpus round-trip repeated it                                                            |
+
 ## References
 
 - [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md)
@@ -453,6 +547,11 @@ trigger rather than this cost, with the measurement recorded there.**
 - [`docs/ROADMAP.md`](../ROADMAP.md) — E9.1, E9.2, E9.3 (the stories this record
   binds) and E4.5 (the IR stability policy that cites the canonical-form policy
   of decision 9)
+- [the IR specification](../specification/ir-specification.md) — the policy
+  decision 9 is cited for, written out: what canonical fixes, the nesting bound,
+  the compatibility rule, the versioning rule
+- [the IR stability design note](../wip/2026-09-22-ir-stability-design.md) — the
+  measurement and the reasoning behind the 2026-09-22 amendment
 - `crates/ridl-ir/build.rs`, `crates/ridl-ir/src/lib.rs` — the descriptor set
   and the serialization surface
 - `crates/ridlc/src/lib.rs` — the emit filter of decision 10
