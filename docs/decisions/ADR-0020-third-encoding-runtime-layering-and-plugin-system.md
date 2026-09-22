@@ -355,10 +355,15 @@ as its public contract.
    step, a `ridlc` step, or an artifact published beside the package is not
    settled, and roadmap story E12.1's "a Deno program constructs and validates a
    payload without a TypeScript codec" depends on the answer.
-5. **Whether the lowered model is a public artifact.** Decision 9 puts it in
-   ADR-0014's canonical encoding on the wire to a plugin, which makes it a
-   versioned surface; whether it is also emittable by a `ridlc` subcommand for a
-   plugin author to inspect is not settled.
+5. ~~**Whether the lowered model is a public artifact.**~~ **Closed
+   2026-09-22.** It is: `ridl build --emit codegen-model` writes
+   `<base>.codegen.json`, one per package, in the canonical encoding — the
+   request's `model` field byte for byte, so a plugin author's fixture is a file
+   `ridlc` wrote. The emit is classified with the code emits, not with the IR
+   dumps: the model is lowered over the same scope a code emit reads, `ridl.std`
+   included, and `ridl baseline` publishes only `.ir.json`. The schema is
+   `ridl.codegen.v1` (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`); the
+   reasoning is the codegen model design note's D-12 and D-14.
 6. **Whether the codec loader checks the generated-unit coupling at
    instantiation.** Decision 2 requires a package's wasm codec and its
    TypeScript caller to be one generated unit; it does not say whether the
