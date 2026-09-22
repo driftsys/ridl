@@ -1,0 +1,744 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.codegen
+input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
+---
+// ===== package veh.adas =====
+{
+  "name": {
+    "dotted": "veh.adas",
+    "segments": [
+      "veh",
+      "adas"
+    ],
+    "joinedCamel": "VehAdas",
+    "underscored": "veh_adas"
+  },
+  "scope": {
+    "package": "veh.adas",
+    "others": []
+  },
+  "declarations": [],
+  "tuples": [],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "engaged",
+              "snake": "engaged",
+              "camel": "Engaged",
+              "screaming": "ENGAGED"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Engaged",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "target",
+              "snake": "target",
+              "camel": "Target",
+              "screaming": "TARGET"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Speed",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "setLever",
+              "snake": "set_lever",
+              "camel": "SetLever",
+              "screaming": "SET_LEVER"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 2,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "cmd",
+                    "snake": "cmd",
+                    "camel": "Cmd",
+                    "screaming": "CMD"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "veh.common.LeverCmd",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "veh.common.LeverCmd",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": []
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "CruiseControl",
+        "snake": "cruise_control",
+        "camel": "CruiseControl",
+        "screaming": "CRUISE_CONTROL"
+      }
+    },
+    {
+      "number": 2,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "active",
+              "snake": "active",
+              "camel": "Active",
+              "screaming": "ACTIVE"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Engaged",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "LaneAssist",
+        "snake": "lane_assist",
+        "camel": "LaneAssist",
+        "screaming": "LANE_ASSIST"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": {
+        "dotted": "veh.adas.cruise",
+        "segments": [
+          "veh",
+          "adas",
+          "cruise"
+        ],
+        "joinedCamel": "VehAdasCruise",
+        "underscored": "veh_adas_cruise"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interfaceRefs": [
+        "CruiseControl"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "veh.adas.lane",
+        "segments": [
+          "veh",
+          "adas",
+          "lane"
+        ],
+        "joinedCamel": "VehAdasLane",
+        "underscored": "veh_adas_lane"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interfaceRefs": [
+        "LaneAssist"
+      ]
+    }
+  ],
+  "catalog": {
+    "package": "veh.adas",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [],
+    "tables": []
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package veh.common =====
+{
+  "name": {
+    "dotted": "veh.common",
+    "segments": [
+      "veh",
+      "common"
+    ],
+    "joinedCamel": "VehCommon",
+    "underscored": "veh_common"
+  },
+  "scope": {
+    "package": "veh.common",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "Speed",
+        "snake": "speed",
+        "camel": "Speed",
+        "screaming": "SPEED"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "km/h",
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Engaged",
+        "snake": "engaged",
+        "camel": "Engaged",
+        "screaming": "ENGAGED"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "false",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_BOOLEAN",
+        "vacuous": true
+      }
+    },
+    {
+      "name": {
+        "declared": "LeverCmd",
+        "snake": "lever_cmd",
+        "camel": "LeverCmd",
+        "screaming": "LEVER_CMD"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "SET",
+              "snake": "set",
+              "camel": "SET",
+              "screaming": "SET"
+            },
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "CANCEL",
+              "snake": "cancel",
+              "camel": "CANCEL",
+              "screaming": "CANCEL"
+            },
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "RESUME",
+              "snake": "resume",
+              "camel": "RESUME",
+              "screaming": "RESUME"
+            },
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "FaultReport",
+        "snake": "fault_report",
+        "camel": "FaultReport",
+        "screaming": "FAULT_REPORT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "count",
+                "snake": "count",
+                "camel": "Count",
+                "screaming": "COUNT"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_INTEGER",
+                  "constraint": {
+                    "min": "0",
+                    "max": "255"
+                  },
+                  "vacuous": false,
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [],
+  "services": [],
+  "catalog": {
+    "package": "veh.common",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 1,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 2,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 3,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 43
+      }
+    ],
+    "tables": [
+      {
+        "name": "FaultReport",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          }
+        ],
+        "vtableSlots": 1,
+        "structDeclaration": 3
+      },
+      {
+        "name": "SpeedBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      },
+      {
+        "name": "EngagedBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BOOL",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 1
+      },
+      {
+        "name": "LeverCmdBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "LeverCmd",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 2,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": true,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 2
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package veh.diag =====
+{
+  "name": {
+    "dotted": "veh.diag",
+    "segments": [
+      "veh",
+      "diag"
+    ],
+    "joinedCamel": "VehDiag",
+    "underscored": "veh_diag"
+  },
+  "scope": {
+    "package": "veh.diag",
+    "others": []
+  },
+  "declarations": [],
+  "tuples": [],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "readFaults",
+              "snake": "read_faults",
+              "camel": "ReadFaults",
+              "screaming": "READ_FAULTS"
+            },
+            "kind": "KIND_QUERY",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "veh.common.FaultReport",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "veh.common.FaultReport",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": []
+            }
+          }
+        }
+      ],
+      "inlineOfService": 0,
+      "service": {
+        "dotted": "veh.diag.access",
+        "segments": [
+          "veh",
+          "diag",
+          "access"
+        ],
+        "joinedCamel": "VehDiagAccess",
+        "underscored": "veh_diag_access"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": {
+        "dotted": "veh.diag.access",
+        "segments": [
+          "veh",
+          "diag",
+          "access"
+        ],
+        "joinedCamel": "VehDiagAccess",
+        "underscored": "veh_diag_access"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interfaceRefs": [],
+      "inlineShape": 0
+    }
+  ],
+  "catalog": {
+    "package": "veh.diag",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [],
+    "tables": []
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package veh.topology =====
+{
+  "name": {
+    "dotted": "veh.topology",
+    "segments": [
+      "veh",
+      "topology"
+    ],
+    "joinedCamel": "VehTopology",
+    "underscored": "veh_topology"
+  },
+  "scope": {
+    "package": "veh.topology",
+    "others": []
+  },
+  "declarations": [],
+  "tuples": [],
+  "interfaces": [],
+  "services": [],
+  "catalog": {
+    "package": "veh.topology",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [],
+    "tables": []
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}

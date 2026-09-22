@@ -1,0 +1,275 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.codegen
+input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
+---
+// ===== package veh.common =====
+{
+  "name": {
+    "dotted": "veh.common",
+    "segments": [
+      "veh",
+      "common"
+    ],
+    "joinedCamel": "VehCommon",
+    "underscored": "veh_common"
+  },
+  "scope": {
+    "package": "veh.common",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "Speed",
+        "snake": "speed",
+        "camel": "Speed",
+        "screaming": "SPEED"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Vehicle speed over ground",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "km/h",
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Temperature",
+        "snake": "temperature",
+        "camel": "Temperature",
+        "screaming": "TEMPERATURE"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Coolant temperature",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "Cel",
+        "constraint": {
+          "min": "-40",
+          "max": "125",
+          "step": "0.1"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [],
+  "services": [],
+  "catalog": {
+    "package": "veh.common",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 1,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      }
+    ],
+    "tables": [
+      {
+        "name": "SpeedBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      },
+      {
+        "name": "TemperatureBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 1
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package veh.cluster =====
+{
+  "name": {
+    "dotted": "veh.cluster",
+    "segments": [
+      "veh",
+      "cluster"
+    ],
+    "joinedCamel": "VehCluster",
+    "underscored": "veh_cluster"
+  },
+  "scope": {
+    "package": "veh.cluster",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "ClusterReading",
+        "snake": "cluster_reading",
+        "camel": "ClusterReading",
+        "screaming": "CLUSTER_READING"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Instrument-cluster reading, carrying a speed from the common package.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "speed",
+                "snake": "speed",
+                "camel": "Speed",
+                "screaming": "SPEED"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "veh.common.Speed",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [],
+  "services": [],
+  "catalog": {
+    "package": "veh.cluster",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "speed"
+          ]
+        }
+      }
+    ],
+    "tables": [
+      {
+        "name": "ClusterReading",
+        "slots": [
+          {
+            "id": 0,
+            "needsNullDefault": false,
+            "field": 0
+          }
+        ],
+        "vtableSlots": 1,
+        "structDeclaration": 0
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}

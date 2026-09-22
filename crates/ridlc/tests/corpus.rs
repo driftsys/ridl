@@ -79,7 +79,7 @@ use ridl_sem::{
 
 mod support;
 
-/// The four snapshotted artifacts of one compiled corpus entry.
+/// The snapshotted artifacts of one compiled corpus entry.
 struct Compiled {
     /// The rendered diagnostics, or a placeholder when the entry compiles
     /// clean.
@@ -93,6 +93,12 @@ struct Compiled {
     /// The generated TypeScript of every package in the entry (one section per
     /// package), or a one-line note when the entry has error diagnostics.
     typescript: String,
+    /// The lowered codegen model of every package in the entry (one section
+    /// per package), or a one-line note when the entry has error diagnostics.
+    /// Lowered over the harness's own scope — one package at a time, with no
+    /// sibling in hand — which is the scope the Rust and TypeScript sections
+    /// above are generated over.
+    codegen: String,
     /// The lowered system's IR JSON (rsdl reference §13), for an entry that
     /// declares a `system` and has no error diagnostic; `None` otherwise, and
     /// then no system snapshot is taken.
@@ -213,11 +219,11 @@ fn compile_entry(entry: &Path) -> Compiled {
     let has_errors = diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error);
-    let (ir_json, rust, typescript) = if has_errors {
+    let (ir_json, rust, typescript, codegen) = if has_errors {
         let note = "(entry has error diagnostics; IR and generated code are omitted \
                     — see the diagnostics snapshot)\n"
             .to_string();
-        (note.clone(), note.clone(), note)
+        (note.clone(), note.clone(), note.clone(), note)
     } else {
         let ir = checked_irs
             .iter()
@@ -248,7 +254,19 @@ fn compile_entry(entry: &Path) -> Compiled {
             })
             .collect::<Vec<_>>()
             .join("\n\n");
-        (ir, rust, typescript)
+        let codegen = checked_irs
+            .iter()
+            .map(|(name, ir)| {
+                let model = ridl_ir::codegen::lower(ir, &[]);
+                format!(
+                    "// ===== package {name} =====\n{}",
+                    ridl_ir::codegen::to_json_pretty(&model)
+                        .expect("a clean entry's model serializes as canonical JSON")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        (ir, rust, typescript, codegen)
     };
     // The lowered system, read from the same package IR the pipeline built
     // (rsdl reference §13). An entry with an error diagnostic gets none, for
@@ -300,6 +318,7 @@ fn compile_entry(entry: &Path) -> Compiled {
         ir_json,
         rust,
         typescript,
+        codegen,
         system_json,
         coded,
     }
@@ -321,9 +340,10 @@ fn crate_relative_entry(manifest: &Path) -> (String, PathBuf) {
     (name.clone(), Path::new("tests/corpus").join(name))
 }
 
-/// Compiles every corpus entry and snapshots its diagnostics, IR JSON, and
-/// generated Rust and TypeScript. Each entry's four snapshots are suffixed with
-/// the entry directory name (`@veh-common`, `@diag-showcase`, …).
+/// Compiles every corpus entry and snapshots its diagnostics, IR JSON,
+/// generated Rust and TypeScript, and lowered codegen model. Each entry's
+/// snapshots are suffixed with the entry directory name (`@veh-common`,
+/// `@diag-showcase`, …).
 #[test]
 fn corpus_entries_compile_to_reviewed_snapshots() {
     insta::glob!("corpus", "*/ridl.toml", |manifest| {
@@ -335,6 +355,7 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
             insta::assert_snapshot!("ir", compiled.ir_json);
             insta::assert_snapshot!("rust", compiled.rust);
             insta::assert_snapshot!("typescript", compiled.typescript);
+            insta::assert_snapshot!("codegen", compiled.codegen);
             // Only an entry that declares a `system` and checks clean has one,
             // so no placeholder snapshot is written for the others.
             if let Some(system) = &compiled.system_json {
