@@ -162,6 +162,13 @@ design note, from the archive.
   bound the canonical form nests to, what "canonical" fixes, the compatibility
   rule and the versioning rule. A recommendation for Sebastien's disposition;
   stage P1b implements it.
+- **2026-09-22-codegen-model-design.md** — lane P stage P2a: the lowered codegen
+  model, message by message — names already transformed per target namespace,
+  widths, inits, constraints, tombstones resolved into slots, the FlatBuffers
+  layouts and bounds, and the interface, interaction, timing, clause and catalog
+  facts an IPC binding needs (driver decision D-P4). It carries the recommended
+  disposition of O-P2, the model's home. A recommendation for Sebastien's
+  disposition; stage P2b implements it.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
