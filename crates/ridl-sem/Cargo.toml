@@ -50,3 +50,8 @@ insta.workspace = true
 # built by `cargo check`, so this does not re-enter the E1.19 wasm build. The
 # workspace pins default-features off, so `std` is requested here explicitly.
 proptest = { workspace = true, features = ["std"] }
+# tests/manifest_version.rs reads this crate's own Cargo.toml and the
+# workspace root's, to guard the one hand-written version literal in this
+# crate's manifest against drifting from [workspace.package].version.
+serde = { workspace = true }
+toml.workspace = true

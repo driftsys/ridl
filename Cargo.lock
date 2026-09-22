@@ -1936,6 +1936,8 @@ dependencies = [
  "ridl-syntax",
  "rowan",
  "salsa",
+ "serde",
+ "toml",
 ]
 
 [[package]]

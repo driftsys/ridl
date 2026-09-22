@@ -23,17 +23,25 @@ tempfile = "3.15.0"
 # used to build this crate as a library, only of the graph used to build its
 # own test binaries, so the `ridlc` this pulls in links against the ordinary
 # (non-test) build of this crate.
-ridlc.workspace = true
+#
+# Not `ridlc.workspace = true`: that pulls in the workspace entry's version
+# alongside the path, and cargo only strips a dev-dependency on a workspace
+# member at packaging time when it carries no version — so a versioned one
+# here would need `ridlc` already published before this crate can be, while
+# `ridlc` normal-depends on this crate and so needs the reverse. A plain path
+# with no version is what keeps that cycle harmless; the same reasoning holds
+# for every other internal dev-dependency below.
+ridlc = { path = "../ridlc" }
 # `ridl_core` is not reached only through `ridlc`: the compile helper names
 # nothing from it today, but it is added alongside `ridlc` to match the
 # sibling proto backend's documented dev-dependency set for the same
 # source-to-IR path, so a later descriptor test that constructs a
 # `RidlDatabase` itself has the crate available.
-ridl-core.workspace = true
+ridl-core = { path = "../ridl-core" }
 # The in-process reference runtime the round-trip tests build the generated
 # face over (story E11.15). A dev-dependency for the same reason as `ridl-rt`
 # below: the backend emits text that links a runtime and links none itself.
-ridl-loopback.workspace = true
+ridl-loopback = { path = "../ridl-loopback" }
 # The generated interaction face names `::ridl_rt` (Lane M stage M3). The
 # backend itself emits text that links `ridl-rt` and does not link it, so this
 # is a dev-dependency only: the integration tests that compile the checked-in
@@ -43,7 +51,7 @@ ridl-loopback.workspace = true
 # the generated codec the face is compiled over names it at every read and
 # every write. It is enabled here, on the dev-dependency, and nowhere else:
 # this crate's library links no runtime at all.
-ridl-rt = { workspace = true, features = ["flatbuffers"] }
+ridl-rt = { path = "../ridl-rt", features = ["flatbuffers"] }
 # The independent FlatBuffers implementation the conformance test round trips
 # against (E11.7 design note D-8), and the code generator that turns the
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
@@ -57,7 +65,7 @@ ridl-rt = { workspace = true, features = ["flatbuffers"] }
 # dev-dependency only: nothing in this crate's library links it, and ADR-0020
 # decision 9's rule that a backend is not a library other crates link is
 # about the shipped graph, not about a test binary.
-ridl-backend-flatbuffers.workspace = true
+ridl-backend-flatbuffers = { path = "../ridl-backend-flatbuffers" }
 planus.workspace = true
 planus-codegen.workspace = true
 planus-translation.workspace = true
