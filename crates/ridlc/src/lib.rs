@@ -369,7 +369,9 @@ pub enum Emit {
     /// The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`,
     /// and the lowered system to `<pkg.Name>.system.binpb`.
     ///
-    /// The canonical interchange encoding (ADR-0014 decisions 4 and 9).
+    /// A derived encoding (ADR-0014 decisions 4 and 9, the latter amended
+    /// 2026-09-22): the compact form, whose reader stops 100 message levels
+    /// below the root where the canonical JSON has no such bound.
     IrBinary,
     /// Idiomatic TypeScript source, written to `<base>.ts`.
     ///

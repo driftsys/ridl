@@ -15,3 +15,4 @@
 - [rsdl — architecture](reference/rsdl.md)
 - [expr-core — contract terms](reference/expr-core.md)
 - [frame — the logical frame of the runtime](reference/frame.md)
+- [IR — encodings and stability](reference/ir.md)

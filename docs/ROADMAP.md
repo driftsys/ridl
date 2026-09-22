@@ -765,6 +765,16 @@ byte-identical output to the in-process path.
 | E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                       | scaffolds a valid workspace; vendors deps                                              | S    |
 | E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                     | colliding key across profiles fails CI                                                 | S    |
 
+**E4.5a landed** (driftsys/ridl#321). The policy is
+[`docs/specification/ir-specification.md`](specification/ir-specification.md):
+the canonical encoding and what canonical fixes, the nesting bound in the front
+end's units and the encoding's, the compatibility rule, and the versioning rule.
+[ADR-0014](decisions/ADR-0014-ir-encodings.md) decision 9 is amended in place to
+name canonical protobuf JSON as the canonical encoding, with binary and
+prototext derived, because the encoding it had named canonical cannot read back
+every package the front end admits and the one it had named derived can
+(driftsys/ridl#231). No artifact and no golden moved: only the label moved.
+
 **The lowering step is the reason the contract is worth having.** Each backend
 re-derives the same semantics from the raw IR today — the name transforms, the
 width derivation, the init resolution, the tombstone handling. A codegen model

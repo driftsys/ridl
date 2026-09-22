@@ -394,9 +394,9 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
         "each reference is canonicalized on its own, in source order",
     );
 
-    // Both interchange encodings carry the shape list unchanged (the JSON
-    // dialect is the baseline format, the binary the canonical interchange —
-    // ADR-0014 decisions 5 and 9).
+    // Both encodings carry the shape list unchanged (JSON is the canonical
+    // encoding and the baseline format, binary the derived compact form —
+    // ADR-0014 decisions 5 and 9, the latter amended 2026-09-22).
     let json = ridl_ir::v2::to_json_pretty(&checked.ir).expect("the IR serializes as JSON");
     assert_eq!(
         ridl_ir::v2::from_json(&json).expect("the JSON parses back"),
