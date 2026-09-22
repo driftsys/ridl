@@ -15,11 +15,10 @@ Version: 0.1.0 — Draft
 > [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) fixed for
 > `ridl-rt` 0.1, over the interaction semantics of the
 > [ridl language reference](ridl-language-reference.md) and the RPC bounds of
-> [ADR-0015](../decisions/ADR-0015-qos-absorption-rpc-bounds-and-coherence.md).
-> Its exit criterion is that a second implementation — a runtime, or a binding —
-> can be written from it alone, without reading the code in this repository.
-> Where this document and an ADR disagree, the ADR wins and this document is
-> corrected.
+> [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md). Its exit
+> criterion is that a second implementation — a runtime, or a binding — can be
+> written from it alone, without reading the code in this repository. Where this
+> document and an ADR disagree, the ADR wins and this document is corrected.
 
 > **As built.** Nothing in this workspace speaks this frame. The one runtime
 > here, `ridl-loopback`, runs in process: it carries bytes from a provider
@@ -311,8 +310,8 @@ present `CoherentSignals` over them. A binding that delivers each frame
 separately does not present `CoherentSignals`, which `ridl-rt` permits a runtime
 to omit. The frame requires no grouping: production coherence is the provider's
 (one commit, one stamp) and delivery coherence is the binding's
-([ADR-0015](../decisions/ADR-0015-qos-absorption-rpc-bounds-and-coherence.md)
-decision 10).
+([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision
+10).
 
 **Subscribing delivers the current state immediately.** The first `publish` a
 consumer receives after the `answer` is the channel's current state — `Init`
@@ -397,8 +396,7 @@ command is rejected whole or accepted whole; it is never partially executed
 `correlation` names no call in flight is discarded. No `response` within the
 command's response bound is `Transport::Undelivered` (§8), detected by the
 caller's runtime; the response bound covers acceptance, not execution
-([ADR-0015](../decisions/ADR-0015-qos-absorption-rpc-bounds-and-coherence.md)
-decision 3).
+([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision 3).
 
 ### 5.4 Query
 
@@ -941,8 +939,8 @@ Each item is left out on purpose, with the record that takes it.
   decisions 2, 6 and 7;
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 2,
   3, 5, 6 and 7;
-  [ADR-0015](../decisions/ADR-0015-qos-absorption-rpc-bounds-and-coherence.md)
-  decisions 3, 10 and 17
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decisions
+  3, 10 and 17
 - Vocabulary: [the `ridl-rt` design record](../design/ridl-rt.md), and
   `crates/ridl-rt/src/` — `contract.rs`, `sample.rs`, `port.rs`, `error.rs`,
   `payload.rs`, `encoding.rs`

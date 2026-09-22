@@ -1359,7 +1359,9 @@ property, and the one ordering typl controls is a map's key order. The rule is
 **Deferred, v0.3:** a reproducible byte sequence for a transmitted unit is a
 property of an encoding and its frame, so the rule belongs to the frame
 specification (roadmap story E11.1) and to each projection record, not to this
-reference.
+reference. **Written 2026-09-22**: that document is
+[the frame specification](frame-specification.md), whose §4 makes the frame
+header canonical and leaves the payload's part to each projection record.
 
 ### 17.11 Explicit Wire-Width Floor — a deferred `wire` clause, v0.2
 

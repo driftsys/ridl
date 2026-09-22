@@ -235,9 +235,10 @@ apart unnoticed — check those two by reading when you touch either file.
   verified — do not replace it with pattern matching, and do not widen the
   options. **The one exception is `{{#include}}`**, which the harness does not
   expand: fences inside an included file are not compiled. That is what keeps
-  the six Language reference chapters — thin wrappers over `docs/specification/`
-  — out of the harness. A fence you want verified must sit in a `docs/book/`
-  file directly. See `CONTRIBUTING.md`, "Writing examples in the book".
+  the seven Language reference chapters — thin wrappers over
+  `docs/specification/` — out of the harness. A fence you want verified must sit
+  in a `docs/book/` file directly. See `CONTRIBUTING.md`, "Writing examples in
+  the book".
 - **Diagnostic codes written in Markdown are unguarded.** The catalogue drift
   check (issue #189) scans `.rs` sources only, so a `TYPL-`/`RIDL-` code cited
   in `docs/` — including an `allow=<CODE>` fence marker — is not checked against

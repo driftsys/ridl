@@ -482,13 +482,14 @@ ADR-0021 decision 9. Every error type here is `Copy` and owns nothing.
 Streams (`stream`-typed fields) and `Inline` payloads; `Constrained` (nothing
 calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
 (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
-wire tag values, added with story E11.1); `Access` (the trust constant the Rust
-codegen generates once the rsdl lowering exists); the three payload codecs
-(stories E11.7, E11.8 and E11.12); the runtimes — `ridl-loopback` is its own
-crate (story E11.15, [its design record](ridl-loopback.md)) and
-`ridl-transport-ws` is story E11.9; and the engine. `Family` returns as a
-`Member` field, which is a breaking change (ADR-0021 decision 10); streams have
-no story yet.
+wire tag values — story E11.1 landed as a specification and fixed the values, 1
+FlatBuffers, 2 proto3, 3 `repr(C)`; the constant itself is a later 0.x minor);
+`Access` (the trust constant the Rust codegen generates once the rsdl lowering
+exists); the three payload codecs (stories E11.7, E11.8 and E11.12); the
+runtimes — `ridl-loopback` is its own crate (story E11.15,
+[its design record](ridl-loopback.md)) and `ridl-transport-ws` is story E11.9;
+and the engine. `Family` returns as a `Member` field, which is a breaking change
+(ADR-0021 decision 10); streams have no story yet.
 
 ## Versioning
 
