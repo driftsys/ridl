@@ -156,6 +156,12 @@ design note, from the archive.
   prior context, so it carries the working rules and the facts a driver prompt
   otherwise leaves to the conversation. Six stages; two design notes inside it
   stop for Sebastien's disposition. Coordination issue: #328.
+- **2026-09-22-ir-stability-design.md** — lane P stage P1a: the recommended
+  disposition of O-P1 (canonical protobuf JSON becomes the canonical encoding,
+  binary and prototext derived), with #231 reproduced as measured numbers, the
+  bound the canonical form nests to, what "canonical" fixes, the compatibility
+  rule and the versioning rule. A recommendation for Sebastien's disposition;
+  stage P1b implements it.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
