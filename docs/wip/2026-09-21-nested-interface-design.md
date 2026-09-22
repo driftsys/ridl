@@ -163,6 +163,29 @@ The indexed form uses the family's array spelling, `[T; N]`. A body mixes its
 own interactions and nested members freely. Interface members start with a
 keyword today, so a line starting with an identifier is unambiguous.
 
+**An inline service shape takes both forms too.** An inline shape is an
+interface: ridl reference §14.5 gives it its own `interfaces.lock` entry, keyed
+`service:` followed by the service's dotted name (ADR-0015 decision 14). So once
+a nested member is legal in an interface body, it is legal in a service body for
+the same price, with no rule of its own:
+
+```ridl,ignore
+service veh.body.doors {
+  left  : DoorControl
+  right : DoorControl
+  signal  allLocked : boolean @[100ms..]
+  command lockAll()           @[..100ms]
+}
+```
+
+This is `interface Doors { ... }` listed by `service veh.body.doors : Doors`,
+with `Doors` unnamed. It is not the rejected form of §3: the instances are
+members of an interface body, so each has an interface number and the service's
+list is untouched. The trade is the inline form's own — no reuse — and ADR-0015
+decision 15 still applies: extracting the body into a named interface later is
+breaking for any fallible query in it, so a set of instances that will be shared
+is named from the start.
+
 ### 4.2 Rules
 
 - **One level, as a limit.** The interface a nested member names may not itself
@@ -213,6 +236,10 @@ Screen.slots.3 10
 Screen.slots.4 11
 Screen.slot0   12
 ```
+
+An inline shape's instances take the same form under the shape's own key:
+`service:veh.body.doors.left` and `service:veh.body.doors.right` for the §4.1
+example.
 
 Each entry is an interface on the wire, with `Widget`'s ordinal space. The port
 key is unchanged. The per-interface sequence counter and `commit` are then per
