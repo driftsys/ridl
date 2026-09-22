@@ -29,10 +29,17 @@
 //! [`run_check`] and [`run_build`] are the stable command drivers shared by the
 //! `ridlc` plumbing binary and the `ridl` porcelain facade (concept note §8.1):
 //! they add the remote-import lockfile round trip on top of `compile_workspace`
-//! and, for `build`, write the selected [`Emit`] artifacts.
+//! and, for `build`, write the selected [`Emit`] artifacts. [`run_build_with`]
+//! is `run_build` plus the codegen plugins of `--plugin`, run through the
+//! process host in [`plugin`] (ADR-0020 decision 10); every code emit and
+//! every plugin is reached through one contract, [`codegen::Backend`], over
+//! the request [`codegen_request`] builds (ADR-0020 decision 9).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+pub mod plugin;
 
 use ridl_core::db::InputFile;
 use ridl_core::diag::{
@@ -43,6 +50,7 @@ use ridl_core::{
     Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, load_workspace,
     materialize_imports, parse_file, parse_manifest, read_lockfile, std_package, write_lockfile,
 };
+use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
     CheckedPackage, CheckedSystem, Resolution, check_package, check_system, lower_system,
     resolve_package, unclaimed_backend_keys,
@@ -573,6 +581,32 @@ pub fn run_build(
     emits: &[Emit],
     frozen: Frozen,
 ) -> std::io::Result<CliRun> {
+    run_build_with(
+        entry,
+        out_dir,
+        emits,
+        &[],
+        Duration::from_secs(plugin::DEFAULT_TIMEOUT_SECONDS),
+        frozen,
+    )
+}
+
+/// [`run_build`] with codegen plugins: each `--plugin` value is resolved to
+/// an executable before the build ([`plugin::resolve`]) — a plugin that
+/// cannot be found is an error diagnostic that, like a compile error,
+/// suppresses every artifact — and then run once per package the code emits
+/// are written for, `ridl.std` included, through the process host
+/// ([`plugin::run`]) with `plugin_timeout` as its limit. A plugin's files
+/// are written under `out_dir` exactly as an in-tree backend's are
+/// ([`write_response`]).
+pub fn run_build_with(
+    entry: &Path,
+    out_dir: &Path,
+    emits: &[Emit],
+    plugins: &[plugin::PluginSpec],
+    plugin_timeout: Duration,
+    frozen: Frozen,
+) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
         workspace,
@@ -590,6 +624,24 @@ pub fn run_build(
     // compile diagnostics and suppresses code generation, exactly like a
     // compile error does.
     diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
+
+    // A plugin that cannot be found is known before anything is generated,
+    // and is reported the way a manifest error is: an error that joins the
+    // compile diagnostics and suppresses every artifact, so a build with a
+    // misspelled `--plugin` writes nothing rather than every artifact but
+    // one.
+    let mut resolved_plugins = Vec::with_capacity(plugins.len());
+    for spec in plugins {
+        match plugin::resolve(spec) {
+            Ok(resolved) => resolved_plugins.push(resolved),
+            Err(err) => diagnostics.push(error_diagnostic(
+                "",
+                err.to_string(),
+                FileId::DETACHED,
+                TextRange::default(),
+            )),
+        }
+    }
 
     // A build must not emit artifacts for a workspace that failed: code
     // generation over error-bearing IR produces invalid or misleading output,
@@ -654,8 +706,12 @@ pub fn run_build(
             .copied()
             .filter(|emit| !emit.is_ir_dump())
             .collect();
-        let std_ir = (references_std && !code_emits.is_empty())
-            .then(|| check_package(&db, workspace, std, std).ir);
+        // A plugin is a code emit by the same argument: what it generates
+        // names `ridl.std`'s types by package path, so it is given the
+        // standard package whenever the in-tree code emits are.
+        let generates_code = !code_emits.is_empty() || !resolved_plugins.is_empty();
+        let std_ir =
+            (references_std && generates_code).then(|| check_package(&db, workspace, std, std).ir);
 
         // Every other package a package's cross-package reference might
         // name: every sibling in the workspace, plus `ridl.std` when
@@ -681,6 +737,8 @@ pub fn run_build(
                 &package.ir,
                 &others,
                 emits,
+                &resolved_plugins,
+                plugin_timeout,
                 &mut diagnostics,
             )?;
         }
@@ -692,6 +750,8 @@ pub fn run_build(
                 std_ir,
                 &others,
                 &code_emits,
+                &resolved_plugins,
+                plugin_timeout,
                 &mut diagnostics,
             )?;
         }
@@ -1191,114 +1251,171 @@ fn materialize_and_lock(
     diagnostics
 }
 
-/// Writes the selected `emits` for one package's IR into `out_dir`.
+/// The codegen request for one package (ADR-0020 decision 9; the IR
+/// specification §7): the schema name and this toolchain's version first,
+/// the model lowered over `others` — the same scope every code emit reads,
+/// so the request's `model` is the `--emit codegen-model` artifact byte for
+/// byte — the backend `options`, and the artifact base `ridlc` names this
+/// package's files after. The one request per package every in-tree backend
+/// and every plugin is handed; a test that wants the bytes a plugin sees
+/// builds it here.
+pub fn codegen_request(
+    base: &str,
+    package: &ridl_ir::v2::Package,
+    others: &[&ridl_ir::v2::Package],
+    options: Vec<v1::BackendOption>,
+) -> v1::CodegenRequest {
+    v1::CodegenRequest {
+        schema: codegen::SCHEMA.to_string(),
+        toolchain: env!("CARGO_PKG_VERSION").to_string(),
+        model: Some(codegen::lower(package, others)),
+        options,
+        artifact_base: base.to_string(),
+    }
+}
+
+/// Where a response came from, for the diagnostics and the refusals it
+/// draws: an in-tree backend's message is reported as it is, because the
+/// backend is part of `ridlc` and its messages are pinned by the corpus
+/// snapshots; a plugin's is prefixed with the plugin's name, because the
+/// plugin is not.
+#[derive(Clone, Copy)]
+enum Origin<'a> {
+    InTree { language: &'a str },
+    Plugin { name: &'a str },
+}
+
+impl Origin<'_> {
+    fn describe(self) -> String {
+        match self {
+            Origin::InTree { language } => format!("the {language} backend"),
+            Origin::Plugin { name } => format!("plugin `{name}`"),
+        }
+    }
+}
+
+/// Writes the files of one response under `out_dir`, or none of them.
 ///
-/// The Rust emit is one
-/// [`generate_pipeline`](ridl_backend_rust::generate_pipeline) call, which
-/// emits the interaction face and the descriptors beside the domain types and
-/// the codec (E11.14); a codegen failure is recorded as a diagnostic and the
-/// emit is skipped. The `ir-json` and `ir-text` emits (direct IR dumps) follow the
-/// same rule: when the package cannot be rendered in that encoding (ADR-0014
-/// decisions 12 and 14), the failure is recorded as a diagnostic and no
-/// artifact is written. The `ir-binary` dump has no failure path — binary
-/// needs no descriptors and no transcode (ADR-0014 decision 7). The TypeScript
-/// emit is a second, independent backend
-/// ([`generate`](ridl_backend_ts::generate)) over the same IR, with its own
-/// result type and its own failure path — a backend that cannot render this
-/// package skips only its own artifact. The proto3 emit is a third,
-/// independent backend on the same pattern
-/// ([`generate_with`](ridl_backend_proto::generate_with)). Three of the
-/// backends resolve a cross-package reference themselves rather than leaving
-/// it to the target language's own import statement, so all three take
-/// `others`, the caller's full package list (see [`run_build`]): proto3,
-/// FlatBuffers, and — since E11.14 — Rust, whose codec reads it to size and
-/// encode a type that reaches another package.
+/// The response's diagnostics are recorded first, each at its own severity,
+/// an unset or unknown severity counting as an error (`plugin.proto`). Then,
+/// if any is an error, no file is written — a backend that failed produced
+/// no artifact, as before the contract. Otherwise every path is checked
+/// against [`codegen::check_path`] before any file is written, so a
+/// response with one path that would escape `out_dir` writes nothing at
+/// all, and the refusal names its origin and the path. A path with
+/// directories in it has them created.
+fn write_response(
+    out_dir: &Path,
+    origin: Origin<'_>,
+    response: &v1::CodegenResponse,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> std::io::Result<()> {
+    for diagnostic in &response.diagnostics {
+        let severity = match v1::DiagnosticSeverity::try_from(diagnostic.severity) {
+            Ok(v1::DiagnosticSeverity::Warning) => Severity::Warning,
+            Ok(v1::DiagnosticSeverity::Info) => Severity::Info,
+            Ok(v1::DiagnosticSeverity::Error | v1::DiagnosticSeverity::Unspecified) | Err(_) => {
+                Severity::Error
+            }
+        };
+        let message = match origin {
+            Origin::InTree { .. } => diagnostic.message.clone(),
+            Origin::Plugin { name } => format!("plugin `{name}`: {}", diagnostic.message),
+        };
+        diagnostics.push(Diagnostic {
+            severity,
+            ..error_diagnostic("", message, FileId::DETACHED, TextRange::default())
+        });
+    }
+    if codegen::has_error(response) {
+        return Ok(());
+    }
+
+    let mut refused = false;
+    for file in &response.files {
+        if let Err(reason) = codegen::check_path(&file.path) {
+            refused = true;
+            diagnostics.push(error_diagnostic(
+                "",
+                format!(
+                    "{} returned a file path `{}` that ridlc will not write: {reason}",
+                    origin.describe(),
+                    file.path
+                ),
+                FileId::DETACHED,
+                TextRange::default(),
+            ));
+        }
+    }
+    if refused {
+        return Ok(());
+    }
+
+    for file in &response.files {
+        let path = out_dir.join(&file.path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => std::fs::write(&path, text)?,
+            Some(v1::generated_file::Content::Binary(bytes)) => std::fs::write(&path, bytes)?,
+            None => std::fs::write(&path, b"")?,
+        }
+    }
+    Ok(())
+}
+
+/// Writes the selected `emits`, then the `plugins`, for one package's IR
+/// into `out_dir`.
+///
+/// Every code emit goes through the backend contract
+/// ([`codegen::Backend`], ADR-0020 decision 9): one [`codegen_request`] is
+/// built for the package — the model lowered once — and each in-tree
+/// backend is called over it as a plugin would be, the response written by
+/// [`write_response`]. The Rust backend is
+/// [`ridl_backend_rust::Backend`] over
+/// [`generate_pipeline`](ridl_backend_rust::generate_pipeline), which emits
+/// the interaction face and the descriptors beside the domain types and the
+/// codec (E11.14); TypeScript, proto3 and FlatBuffers are their own crates'
+/// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
+/// written back. Until stage P4 of the lane P driver each of the four
+/// language backends still reads the raw IR, so each is constructed with a
+/// [`codegen::RawIr`] — the package and `others`, the caller's full package
+/// list ([`run_build`]), which proto3, FlatBuffers and — since E11.14 —
+/// Rust read to resolve a cross-package reference themselves — and reads
+/// that in place of the request's model. A backend that cannot render this
+/// package answers with an error diagnostic and no file, and only its own
+/// artifact is skipped.
+///
+/// The `ir-json`, `ir-text` and `ir-binary` emits are direct IR dumps, not
+/// backends: they need no request. When the package cannot be rendered in
+/// that encoding (ADR-0014 decisions 12 and 14) the failure is a diagnostic
+/// and no artifact is written; `ir-binary` has no failure path (decision 7).
+///
+/// Each plugin runs after the emits, over the same request, through the
+/// process host ([`plugin::run`]); a host failure is an error diagnostic
+/// naming the plugin, and a response is written as an in-tree backend's is.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the build's per-package facts, passed once from `run_build_with`"
+)]
 fn write_emits(
     out_dir: &Path,
     base: &str,
     ir: &ridl_ir::v2::Package,
     others: &[&ridl_ir::v2::Package],
     emits: &[Emit],
+    plugins: &[plugin::Plugin],
+    plugin_timeout: Duration,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
-    let need_codegen = emits.iter().any(|emit| matches!(emit, Emit::Rust));
-    let generated = if need_codegen {
-        // E11.14: the CLI calls `generate_pipeline`, not `generate`, so a
-        // built crate carries the descriptors and the interaction face beside
-        // its domain types and codec. `others` is every other package of the
-        // build, which is what lets the codec size and encode a cross-package
-        // reference (decision 4, driftsys/ridl#467). An interface the face
-        // cannot carry is skipped with a note rather than failing the build
-        // (decision 2).
-        match ridl_backend_rust::generate_pipeline(
-            ir,
-            ridl_backend_rust::WireEncoding::default(),
-            others,
-        ) {
-            Ok(generated) => Some(generated),
-            Err(err) => {
-                diagnostics.push(error_diagnostic(
-                    "",
-                    err.message,
-                    FileId::DETACHED,
-                    TextRange::default(),
-                ));
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    let generated_ts = if emits.iter().any(|emit| matches!(emit, Emit::TypeScript)) {
-        match ridl_backend_ts::generate(ir) {
-            Ok(generated) => Some(generated),
-            Err(ridl_backend_ts::GenerateError::Unrepresentable(message)) => {
-                diagnostics.push(error_diagnostic(
-                    "",
-                    message,
-                    FileId::DETACHED,
-                    TextRange::default(),
-                ));
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    let generated_proto = if emits.iter().any(|emit| matches!(emit, Emit::Proto)) {
-        match ridl_backend_proto::generate_with(ir, others) {
-            Ok(generated) => Some(generated),
-            Err(err) => {
-                diagnostics.push(error_diagnostic(
-                    "",
-                    err.message,
-                    FileId::DETACHED,
-                    TextRange::default(),
-                ));
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    let generated_flatbuffers = if emits.iter().any(|emit| matches!(emit, Emit::Flatbuffers)) {
-        match ridl_backend_flatbuffers::generate_with(ir, others) {
-            Ok(generated) => Some(generated),
-            Err(err) => {
-                diagnostics.push(error_diagnostic(
-                    "",
-                    err.message,
-                    FileId::DETACHED,
-                    TextRange::default(),
-                ));
-                None
-            }
-        }
-    } else {
-        None
+    // One request per package, built only when something reads it: an IR
+    // dump alone lowers nothing.
+    let needs_request = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
+    let request = needs_request.then(|| codegen_request(base, ir, others, Vec::new()));
+    let raw = codegen::RawIr {
+        package: ir,
+        others,
     };
 
     for emit in emits {
@@ -1310,22 +1427,22 @@ fn write_emits(
             clippy::wildcard_enum_match_arm,
             clippy::match_wildcard_for_single_variants
         )]
-        match emit {
-            Emit::Rust => {
-                if let Some(generated) = &generated {
-                    std::fs::write(out_dir.join(format!("{base}.rs")), &generated.rust_source)?;
-                }
-            }
+        let backend: Box<dyn codegen::Backend + '_> = match emit {
+            Emit::Rust => Box::new(ridl_backend_rust::Backend::new(raw)),
+            Emit::TypeScript => Box::new(ridl_backend_ts::Backend::new(raw)),
+            Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
+            Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
+            Emit::CodegenModel => Box::new(codegen::ModelBackend),
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;
+                    continue;
                 }
                 // The pbjson-generated writer has no nesting limit (ADR-0014
                 // decision 14); its one remaining failure is an enum field
                 // holding a discriminant outside the schema — a tool-level
-                // failure with no source span, reported the way the
-                // TypeScript backend's `Unrepresentable` is, with no artifact
-                // written.
+                // failure with no source span, reported the way a backend's
+                // refusal is, with no artifact written.
                 Err(err) => {
                     diagnostics.push(error_diagnostic(
                         "",
@@ -1333,6 +1450,7 @@ fn write_emits(
                         FileId::DETACHED,
                         TextRange::default(),
                     ));
+                    continue;
                 }
             },
             // Prototext still transcodes through the descriptor pool and
@@ -1342,6 +1460,7 @@ fn write_emits(
             Emit::IrText => match ridl_ir::v2::to_text_format(ir) {
                 Ok(text) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), text)?;
+                    continue;
                 }
                 Err(err) => {
                     diagnostics.push(error_diagnostic(
@@ -1350,6 +1469,7 @@ fn write_emits(
                         FileId::DETACHED,
                         TextRange::default(),
                     ));
+                    continue;
                 }
             },
             // Binary needs no descriptors and no transcode, so it has no
@@ -1359,45 +1479,39 @@ fn write_emits(
                     ir_dump_path(out_dir, base, *emit),
                     ridl_ir::v2::to_binary(ir),
                 )?;
+                continue;
             }
-            Emit::TypeScript => {
-                if let Some(generated) = &generated_ts {
-                    std::fs::write(out_dir.join(format!("{base}.ts")), &generated.source)?;
-                }
+        };
+        let request = request.as_ref().expect("a code emit builds the request");
+        let response = backend.generate(request);
+        write_response(
+            out_dir,
+            Origin::InTree {
+                language: backend.language(),
+            },
+            &response,
+            diagnostics,
+        )?;
+    }
+
+    for plugin in plugins {
+        let request = request.as_ref().expect("a plugin builds the request");
+        let name = plugin.name();
+        match plugin::run(plugin, request, plugin_timeout) {
+            Ok(response) => {
+                write_response(
+                    out_dir,
+                    Origin::Plugin { name: &name },
+                    &response,
+                    diagnostics,
+                )?;
             }
-            Emit::Proto => {
-                if let Some(generated) = &generated_proto {
-                    std::fs::write(
-                        out_dir.join(format!("{base}.proto")),
-                        &generated.proto_source,
-                    )?;
-                }
-            }
-            Emit::Flatbuffers => {
-                if let Some(generated) = &generated_flatbuffers {
-                    std::fs::write(out_dir.join(format!("{base}.fbs")), &generated.fbs_source)?;
-                }
-            }
-            // The model is lowered over the same scope the code emits read,
-            // so the artifact is the request's payload byte for byte. Its one
-            // failure path is the JSON writer's, reported as the `ir-json`
-            // emit's is, with no artifact written.
-            Emit::CodegenModel => {
-                let model = ridl_ir::codegen::lower(ir, others);
-                match ridl_ir::codegen::to_json_pretty(&model) {
-                    Ok(json) => {
-                        std::fs::write(out_dir.join(format!("{base}.codegen.json")), json)?;
-                    }
-                    Err(err) => {
-                        diagnostics.push(error_diagnostic(
-                            "",
-                            err.to_string(),
-                            FileId::DETACHED,
-                            TextRange::default(),
-                        ));
-                    }
-                }
-            }
+            Err(err) => diagnostics.push(error_diagnostic(
+                "",
+                err.to_string(),
+                FileId::DETACHED,
+                TextRange::default(),
+            )),
         }
     }
     Ok(())

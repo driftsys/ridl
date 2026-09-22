@@ -25,6 +25,10 @@ use std::collections::{BTreeSet, HashMap};
 use ridl_ir::projection::flatbuffers as projection;
 use ridl_ir::v2;
 
+mod contract;
+
+pub use contract::Backend;
+
 #[cfg(test)]
 mod tests;
 
