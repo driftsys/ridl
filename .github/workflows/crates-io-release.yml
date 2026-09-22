@@ -25,6 +25,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   JUST_VERSION: 1.38.0
+  MDBOOK_VERSION: 0.4.40
 
 jobs:
   verify:
@@ -54,6 +55,32 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
+      # `just build` runs every member in one recipe, unlike ci.yml's split
+      # across jobs — so this one job needs every tool ci.yml provisions
+      # across all of them: mdbook for book-check, prim for the trailing
+      # `check` recipe.
+      - name: install mdbook
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/mdbook" --version
+      - name: install prim
+        # See ci.yml's own comment on this same step for the rate-limit and
+        # pipefail rationale; copied verbatim rather than factored out, since
+        # a reusable composite action is more indirection than two workflows
+        # share this much of.
+        run: |
+          set -o pipefail
+          curl -fsSL https://raw.githubusercontent.com/driftsys/prim/main/install.sh | bash \
+            || cargo install --git https://github.com/driftsys/prim --locked
+          command -v prim
+        env:
+          PRIM_INSTALL_DIR: /usr/local/bin
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # The full local gate, re-run on the tagged commit rather than trusted
       # from its earlier run on main: a crates.io publish cannot be retracted,
       # only yanked, so the version number is spent either way.
