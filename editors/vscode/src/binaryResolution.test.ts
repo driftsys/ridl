@@ -11,7 +11,7 @@ import {
   shouldStartClientForLanguage,
 } from "./binaryResolution";
 
-const EXT = "/fake/extensions/driftsys.ridl-vscode-0.1.0";
+const EXT = "/fake/extensions/driftsys.ridl-lang-0.1.0";
 
 test("tier 1: an explicit setting wins even when a bundled binary exists", () => {
   const resolved = resolveBinary({

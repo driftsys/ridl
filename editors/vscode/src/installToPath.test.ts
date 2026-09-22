@@ -12,7 +12,7 @@ import {
   planInstall,
 } from "./installToPath";
 
-const EXT = "/fake/extensions/driftsys.ridl-vscode-0.1.0";
+const EXT = "/fake/extensions/driftsys.ridl-lang-0.1.0";
 const HOME = "/home/dev";
 
 test("planInstall on Linux: ~/.local/bin/ridl, chmod", () => {

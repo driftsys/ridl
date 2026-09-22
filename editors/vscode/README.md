@@ -36,7 +36,7 @@ To build a `.vsix` with the binary bundled:
 
 ```sh
 just package-vscode
-code --install-extension editors/vscode/ridl-vscode-<version>.vsix
+code --install-extension editors/vscode/ridl-lang-<version>.vsix
 ```
 
 ## Usage

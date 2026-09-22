@@ -231,8 +231,8 @@ jobs:
         run: just package-vsix ${{ matrix.vsce-target }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ridl-vscode-${{ matrix.vsce-target }}-vsix
-          path: editors/vscode/ridl-vscode-${{ matrix.vsce-target }}.vsix
+          name: ridl-lang-${{ matrix.vsce-target }}-vsix
+          path: editors/vscode/ridl-lang-${{ matrix.vsce-target }}.vsix
 
   release:
     name: github release
@@ -271,7 +271,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: vsix
-          pattern: ridl-vscode-*-vsix
+          pattern: ridl-lang-*-vsix
           merge-multiple: true
       - name: install the extension's pinned tools
         run: npm ci
@@ -304,7 +304,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: vsix
-          pattern: ridl-vscode-*-vsix
+          pattern: ridl-lang-*-vsix
           merge-multiple: true
       - name: install the extension's pinned tools
         run: npm ci
