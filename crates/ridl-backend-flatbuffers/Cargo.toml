@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Compiles a RIDL IR package to a FlatBuffers schema."
 
 [dependencies]
 ridl-ir.workspace = true

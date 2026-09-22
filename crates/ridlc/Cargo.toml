@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The `ridlc` compile pipeline as a library: source to IR to generated code."
 
 [dependencies]
 clap.workspace = true
