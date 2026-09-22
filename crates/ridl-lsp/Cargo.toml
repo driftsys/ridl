@@ -15,10 +15,10 @@ publish = false
 [dependencies]
 lsp-server.workspace = true
 lsp-types.workspace = true
-ridl-core = { path = "../ridl-core" }
-ridl-ir = { path = "../ridl-ir" }
-ridl-sem = { path = "../ridl-sem" }
-ridl-syntax = { path = "../ridl-syntax" }
+ridl-core.workspace = true
+ridl-ir.workspace = true
+ridl-sem.workspace = true
+ridl-syntax.workspace = true
 rowan.workspace = true
 salsa.workspace = true
 serde_json.workspace = true

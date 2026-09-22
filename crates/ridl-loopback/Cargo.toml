@@ -9,4 +9,4 @@ repository.workspace = true
 # dependency, and it declares no feature: the crate implements the port traits
 # and nothing else, so there is nothing for a consumer to turn off.
 [dependencies]
-ridl-rt = { path = "../ridl-rt" }
+ridl-rt.workspace = true

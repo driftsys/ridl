@@ -9,7 +9,7 @@ repository.workspace = true
 prettyplease.workspace = true
 proc-macro2.workspace = true
 quote.workspace = true
-ridl-ir = { path = "../ridl-ir" }
+ridl-ir.workspace = true
 serde.workspace = true
 syn.workspace = true
 
@@ -23,6 +23,14 @@ tempfile = "3.15.0"
 # used to build this crate as a library, only of the graph used to build its
 # own test binaries, so the `ridlc` this pulls in links against the ordinary
 # (non-test) build of this crate.
+#
+# Not `ridlc.workspace = true`: that pulls in the workspace entry's version
+# alongside the path, and cargo only strips a dev-dependency on a workspace
+# member at packaging time when it carries no version — so a versioned one
+# here would need `ridlc` already published before this crate can be, while
+# `ridlc` normal-depends on this crate and so needs the reverse. A plain path
+# with no version is what keeps that cycle harmless; the same reasoning holds
+# for every other internal dev-dependency below.
 ridlc = { path = "../ridlc" }
 # `ridl_core` is not reached only through `ridlc`: the compile helper names
 # nothing from it today, but it is added alongside `ridlc` to match the

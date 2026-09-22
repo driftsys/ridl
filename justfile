@@ -239,9 +239,14 @@ compat-check: toolchain-check
         rustup toolchain install "$minimum" --profile minimal
     fi
 
-    version="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
+    # Not a `sed` read of `$manifest`: `ridl-rt` shares the workspace version
+    # (ADR-0007 decision 14's 2026-09-21 amendment) via `version.workspace =
+    # true`, so the manifest itself names no literal to extract. `cargo pkgid`
+    # resolves the inheritance the same way `cargo package` below does.
+    pkgid="$(cargo pkgid -p ridl-rt)"
+    version="${pkgid##*#}"
     if [ -z "$version" ]; then
-        echo "compat-check: $manifest names no version." >&2
+        echo "compat-check: could not read ridl-rt's version from 'cargo pkgid'." >&2
         exit 1
     fi
 

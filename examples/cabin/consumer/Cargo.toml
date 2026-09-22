@@ -21,4 +21,4 @@ ridl-loopback = { path = "../../../crates/ridl-loopback" }
 # Named directly for `CatalogRef`, `CatalogHash` and `Provenance`. The
 # `[patch.crates-io]` block in `examples/cabin/Cargo.toml` resolves this to
 # `crates/ridl-rt`.
-ridl-rt = "0.1"
+ridl-rt = "0.2"

@@ -17,8 +17,8 @@ fetch = ["fs", "dep:ureq", "dep:sha2", "dep:tar"]
 
 [dependencies]
 codespan-reporting.workspace = true
-ridl-ir = { path = "../ridl-ir" }
-ridl-syntax = { path = "../ridl-syntax" }
+ridl-ir.workspace = true
+ridl-syntax.workspace = true
 rowan.workspace = true
 salsa.workspace = true
 serde.workspace = true
