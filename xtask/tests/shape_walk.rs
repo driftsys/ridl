@@ -120,6 +120,14 @@ const ALLOWED: &[Allowed] = &[
         why: "the AST-side helper itself",
     },
     Allowed {
+        path: "crates/ridlc/tests/codegen_model.rs",
+        lines: 3,
+        why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, not \
+              of `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()` and already holds an inline shape, and the \
+              test asserts exactly that correspondence",
+    },
+    Allowed {
         path: "crates/ridlc/tests/corpus.rs",
         lines: 1,
         why: "a test reading one slot out of a single-interface fixture",
