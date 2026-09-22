@@ -637,9 +637,10 @@ pub(crate) struct Ctx<'a> {
     /// The lowered codegen model of this package over this scope
     /// (`ridl_ir::codegen::lower`), which the domain-type emitters, the
     /// default derivation and the derive pass read instead of the IR (lane P
-    /// stage P4, design note §8.3). The remaining unported emitters read the
-    /// IR beside it, paired by index: `model.declarations[i]` is lowered from
-    /// `package.decls[i]`.
+    /// stage P4, design note §8.3). Since that stage's third layer every
+    /// emitter reads it and none reads the IR, so the pairing by index that
+    /// held during the port — `model.declarations[i]` lowered from
+    /// `package.decls[i]` — is no longer something an emitter relies on.
     pub(crate) model: &'a v1::Model,
     /// The set of declaration names currently being expanded by the
     /// Default-derivation recursion. It guards against a cyclic IR: a
