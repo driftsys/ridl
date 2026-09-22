@@ -19,7 +19,9 @@ The plan runs in two steps. **Step 1** finalizes rsdl, builds the runtime
 library, clears the typl debt, and finalizes the Rust codegen with its three
 payload codecs. **Step 2** adds the TypeScript framework and the codegen plugin
 system. Kotlin, the first external plugin, follows step 2 because it depends on
-the backend contract.
+the backend contract. The plugin protocol, E4.5a and E4.5b, runs ahead of the
+two remaining Rust payload codecs, E11.8 and E11.12, and ahead of the TypeScript
+framework, E12; the sequence below states why.
 
 **Supersedes
 [ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)'s
@@ -210,7 +212,8 @@ E14.1 typl §17 dispositions ─────────────────
 E10 value objects, E10.10 last ────────────────┘     drop "Draft"
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
-      ─→ E11.7 FlatBuffers · E11.8 proto3 · E11.12 repr(C)
+      ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
+                                                 ─→ E11.8 proto3 · E11.12 repr(C)
 
 E6 rsdl finalized and lowered to the IR — beside the lock; only E6.17 waits
 E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ E11.9 ridl-transport-ws
@@ -236,6 +239,15 @@ block every derivation over assurance levels, since `SIL_B` and `CAL_2` are
 free-form tokens today. The width floor is inside the typl debt above, as E14.1;
 the second is not — E3.1 sits in the Epic 3 thread that runs beside this step,
 and the grammar edit the `labels` promotion needs is E9.12.
+
+**The sequence changed again on 2026-09-22.** E4.5a and E4.5b, the plugin
+protocol, now run ahead of E11.8, E11.12 and the TypeScript framework, E12,
+rather than after them: the Kotlin plugin depends on E4.5a and E4.5b, so the
+plugin seam precedes the remaining payload codecs and the TypeScript framework.
+Epic 4 keeps its place under the step 2 heading and the milestone summary keeps
+its step column: the steps are the release scope's, and this reorder did not
+re-scope the release. See the [lane P driver](wip/2026-09-22-lane-p-driver.md)
+decision D-P1.
 
 ## Epic 15 — interface identity and the lock
 
@@ -733,15 +745,15 @@ domain extension, every wire beyond the three core encodings, and every language
 beyond Rust and TypeScript reaches the platform through this seam — and until it
 exists, each of them would enter this workspace instead. **Exit criteria:** an
 out-of-tree executable generates from the IR through the documented contract,
-and the in-tree TypeScript backend run through the process host produces
+and the in-tree Rust backend run through the process host produces
 byte-identical output to the in-process path.
 
-| ID    | Story                                                                                                                                              | Done when                                                                            | Size |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
-| E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                               | the policy names a canonical encoding that round-trips every IR the front end admits | M    |
-| E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; both in-tree backends ported onto it | `ridlc-gen-ts` through the process host is byte-identical to the in-process path     | L    |
-| E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                       | scaffolds a valid workspace; vendors deps                                            | S    |
-| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                     | colliding key across profiles fails CI                                               | S    |
+| ID    | Story                                                                                                                                              | Done when                                                                              | Size |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---- |
+| E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                               | the policy names a canonical encoding that round-trips every IR the front end admits   | M    |
+| E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; both in-tree backends ported onto it | the Rust backend run through the process host is byte-identical to the in-process path | L    |
+| E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                       | scaffolds a valid workspace; vendors deps                                              | S    |
+| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                     | colliding key across profiles fails CI                                                 | S    |
 
 **The lowering step is the reason the contract is worth having.** Each backend
 re-derives the same semantics from the raw IR today — the name transforms, the
@@ -770,13 +782,20 @@ to match.
 
 # After step 2 — Kotlin, the first external plugin
 
-Not parked, and not in either step above: it depends on the backend contract of
-E4.5b. A Kotlin consumer needs Kotlin types with validation, deserialization,
-and a Kotlin runtime library to read and write signals — the full shape of a
-language: a hand-written runtime library plus a generated layer of value classes
-with checked constructors, a codec, and the faces. The generated layer is a
+Not parked, and not in either step above: it depends on E4.5a and E4.5b, the
+plugin protocol, and on E11.1, the logical frame specification — not on the
+TypeScript framework and not on E11.9, the WebSocket transport. A Kotlin
+consumer needs Kotlin types with validation, deserialization, and a Kotlin
+runtime library to read and write signals — the full shape of a language: a
+hand-written runtime library plus a generated layer of value classes with
+checked constructors, a codec, and the faces. The generated layer is a
 `ridlc-gen-kotlin` executable over the backend contract, most likely written in
 Kotlin by the people who maintain the Kotlin side.
+
+**The Kotlin backend owns its IPC binding.** It is AIDL over Binder on Android,
+generated by the Kotlin backend from the same lowered model as its types and
+faces, not a binding this repository writes. E11.9's WebSocket transport is not
+on Kotlin's path.
 
 It is the real test of the plugin protocol from outside, which the in-tree round
 trip of E4.5b cannot be. No JNI binding is planned.
@@ -784,6 +803,11 @@ trip of E4.5b cannot be. No JNI binding is planned.
 Until it lands, a language without a ridl backend reads payloads through the
 emitted schema and its own generator, restricted to inline or trusted reads,
 because such a reader has no verifier and no typl constraint checks (§3.13).
+
+**Open item O-P3.** Whether a Rust Binder runtime (`ridl-transport-binder`,
+Android only) is in scope for the first Kotlin demo is undecided; it is not
+needed before the Kotlin side starts. Proposed in the
+[lane P driver](wip/2026-09-22-lane-p-driver.md).
 
 ---
 
