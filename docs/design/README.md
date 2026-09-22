@@ -31,6 +31,15 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6 and 7.
+- **codegen-plugins.md** — the backend contract
+  `generate(CodegenRequest) → CodegenResponse`, its in-process host over every
+  in-tree backend, the process host behind `--plugin` (`ridlc-gen-<language>` on
+  `PATH` or by path, the pipe, the timeout, the errors), the reference plugin
+  `ridlc-gen-model`, and the parity test with what it does and does not prove —
+  roadmap story E4.5b's first half, as built. The decisions behind its choices
+  are
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decisions 8 to 12, with decision 11 as amended 2026-09-22.
 - **interaction-face.md** — the generated `Client`/`Publisher`/`Provider`/
   `dispatch` face over `ridl-rt`, story E11.13's in-process MVP: the two emitter
   entry points, the descriptors, the clause translator, the settlement table,

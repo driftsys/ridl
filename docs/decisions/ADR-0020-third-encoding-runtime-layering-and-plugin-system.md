@@ -22,6 +22,16 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-09-22 — decision 11, the parity test.** The parity test runs over
+the in-tree Rust backend, not the TypeScript one: Kotlin precedes TypeScript in
+the sequence (the lane P driver's D-P1), so the TypeScript backend is not the
+next backend written against the contract and a `ridlc-gen-ts` binary would
+prove the protocol for a backend that is not on the critical path. The amendment
+is written into decision 11 in place, with what stands until the Rust backend is
+ported. Decisions 8, 9, 10 and 12 are unchanged; the as-built record of the
+contract and the two hosts is
+[`docs/design/codegen-plugins.md`](../design/codegen-plugins.md).
+
 Its reasoning trail is
 [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md),
 whose §3.3, §3.4, §3.5 and §3.8 carry the alternatives this record summarises,
@@ -282,6 +292,32 @@ as its public contract.
     this workspace provides — roadmap's Kotlin plugin is the first of those, and
     it is sequenced after this release.
 
+    **Amendment (2026-09-22) — the parity test is the in-tree Rust backend run
+    as a plugin, `ridlc-gen-rust`; until the Rust backend is ported onto the
+    lowered model, the test runs over the reference plugin `ridlc-gen-model`.**
+    The clause above naming the TypeScript backend is retracted. The reason is
+    the sequence: the Kotlin plugin, which needs this contract, precedes the
+    TypeScript framework (the lane P driver's D-P1; `docs/ROADMAP.md`, "The
+    sequence changed again on 2026-09-22"), so the Rust backend is the one
+    in-tree backend written against the contract next, and its parity —
+    byte-identical through the process host to the in-process path, against the
+    snapshots that already pin its output — is the test that proves the seam for
+    the backend that ships.
+
+    What stands until then. The Rust backend reads the raw IR, and the request
+    carries the model and never the raw IR (decision 9; the driver's D-P2), so
+    the Rust backend cannot be run from a request before its port (the driver's
+    stage P4). The test suite therefore runs `ridlc-gen-model` — the one in-tree
+    backend whose output is a function of the request alone,
+    `--emit codegen-model` as a process — through the process host over every
+    corpus package, at the contract's level and at the command's level, and
+    asserts byte identity with the in-process path. That proves the host and the
+    two encodings on the pipe; the model's sufficiency for a language backend is
+    what the Rust backend's port proves, with the same test over
+    `ridlc-gen-rust`. The other three in-tree backends are not plugins until
+    their own stories. The as-built record is
+    [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md) §6.
+
 12. **The contract is the IR encoding, so the IR stability policy lands first.**
     Roadmap story E4.5a is a prerequisite of the lowering step and the contract,
     and driftsys/ridl#231 — the canonical binary encoding cannot round-trip the
@@ -382,7 +418,7 @@ as its public contract.
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | decision-ledger row 35 (decisions 1 to 4), and the open-question index's cross-cutting entry (decision 12)                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §17.13 sends the `repr(C)` string rules to decision 4's projection record                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md)                 | the library's placement is decisions 5 and 6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12)                                                                                                                                                                                     |
+| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12); E4.5b's row corrected 2026-09-22 with decision 11's amendment — the Rust backend ported onto the contract, not both in-tree backends                                               |
 
 ## References
 
