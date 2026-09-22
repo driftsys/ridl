@@ -70,6 +70,13 @@ pub mod v2 {
         descriptor("ridl.ir.v2.System")
     }
 
+    /// The `ridl.codegen.v1.Model` message descriptor — the prototext entry
+    /// point of the lowered codegen model, from the same pool, because
+    /// `build.rs` compiles both schemas in one `protox` call.
+    pub(crate) fn codegen_model_descriptor() -> prost_reflect::MessageDescriptor {
+        descriptor("ridl.codegen.v1.Model")
+    }
+
     /// Rebuilds a message as a `DynamicMessage` over its descriptor — the
     /// step `prost-reflect` needs before rendering a text encoding.
     /// Transcoding goes through the wire encoding, whose decoder enforces
@@ -183,7 +190,7 @@ pub mod v2 {
     /// The one JSON writer behind [`to_json_pretty`] and
     /// [`system_to_json_pretty`]: the pbjson-generated `Serialize` impl of
     /// the message, pretty-printed.
-    fn render_json<M: serde::Serialize>(message: &M) -> Result<String, SerializeError> {
+    pub(crate) fn render_json<M: serde::Serialize>(message: &M) -> Result<String, SerializeError> {
         let mut buf = Vec::new();
         let mut serializer = serde_json::Serializer::pretty(&mut buf);
         serde::Serialize::serialize(message, &mut serializer).map_err(SerializeError::Json)?;
@@ -208,7 +215,7 @@ pub mod v2 {
     /// failure mode is a stack-overflow abort, which no caller can catch, so
     /// the cap turns an abort into a diagnostic (ADR-0014 decisions 12
     /// and 14).
-    const MAX_JSON_NESTING: usize = 1_000;
+    pub(crate) const MAX_JSON_NESTING: usize = 1_000;
 
     /// The stack `from_json` parses on, in bytes. An explicit size makes the
     /// depth that fits a constant of this crate rather than of the ambient
@@ -286,7 +293,7 @@ pub mod v2 {
 
     /// The one JSON reader behind [`from_json`] and [`system_from_json`]:
     /// the nesting cap, then the parse on its own stack.
-    fn read_json<M>(text: &str) -> Result<M, serde_json::Error>
+    pub(crate) fn read_json<M>(text: &str) -> Result<M, serde_json::Error>
     where
         M: serde::de::DeserializeOwned + Send,
     {
@@ -347,19 +354,19 @@ pub mod v2 {
     /// panicked on. JSON lost this failure mode when it moved off the
     /// transcode (decision 14); prototext keeps it.
     pub fn to_text_format(package: &Package) -> Result<String, SerializeError> {
-        render_text(package_descriptor(), package)
+        render_text_for(package_descriptor(), package)
     }
 
     /// Renders a lowered system in the protobuf text format — the
     /// `<pkg.Name>.system.txtpb` artifact, under the rules of
     /// [`to_text_format`].
     pub fn system_to_text_format(system: &System) -> Result<String, SerializeError> {
-        render_text(system_descriptor(), system)
+        render_text_for(system_descriptor(), system)
     }
 
     /// The one prototext writer behind [`to_text_format`] and
     /// [`system_to_text_format`].
-    fn render_text<M: prost::Message>(
+    pub(crate) fn render_text_for<M: prost::Message>(
         descriptor: prost_reflect::MessageDescriptor,
         message: &M,
     ) -> Result<String, SerializeError> {
@@ -816,6 +823,7 @@ pub mod v2 {
     }
 }
 
+pub mod codegen;
 pub mod name;
 pub mod projection;
 
