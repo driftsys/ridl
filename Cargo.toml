@@ -95,11 +95,13 @@ regress = "0.11.1"
 # published regardless of the version number (ADR-0007 decision 14's
 # 2026-09-21 amendment). Each consumer below writes `{ workspace = true }`
 # rather than repeating the path and version by hand.
-ridl = { path = "crates/ridl", version = "0.2.0" }
 ridl-backend-flatbuffers = { path = "crates/ridl-backend-flatbuffers", version = "0.2.0" }
 ridl-backend-proto = { path = "crates/ridl-backend-proto", version = "0.2.0" }
 ridl-backend-rust = { path = "crates/ridl-backend-rust", version = "0.2.0" }
 ridl-backend-ts = { path = "crates/ridl-backend-ts", version = "0.2.0" }
+# The crates.io package name for crates/ridl, the CLI — see that crate's own
+# Cargo.toml for why it is not published as `ridl`.
+ridl-cli = { path = "crates/ridl", version = "0.2.0" }
 ridl-core = { path = "crates/ridl-core", version = "0.2.0" }
 ridl-diff = { path = "crates/ridl-diff", version = "0.2.0" }
 ridl-fmt = { path = "crates/ridl-fmt", version = "0.2.0" }

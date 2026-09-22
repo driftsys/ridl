@@ -9,7 +9,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+description = "The RIDL MCP server: a thin consumer of the shared compiler crates, exposing the compiler's single-file check as an MCP tool."
 
 [dependencies]
 ridl-core.workspace = true

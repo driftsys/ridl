@@ -342,7 +342,7 @@ demo:
     #!/usr/bin/env bash
     set -euo pipefail
     target="${CARGO_TARGET_DIR:-target}"
-    cargo build --locked -p ridl
+    cargo build --locked -p ridl-cli
     # Cleared first: `--out-dir` writes over what it writes and leaves
     # everything else, so a file the emitter stops writing would survive here
     # and keep this green while a fresh clone failed.
@@ -1317,7 +1317,7 @@ package-vsix vsce-target="":
 package-vscode:
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release --locked -p ridl
+    cargo build --release --locked -p ridl-cli
     bin=target/release/ridl
     if [ -f target/release/ridl.exe ]; then bin=target/release/ridl.exe; fi
     mkdir -p editors/vscode/bin

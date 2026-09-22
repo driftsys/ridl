@@ -202,10 +202,20 @@ at epic close) and cites these decisions by number.
     `workspace.package` version engine). A `v<version>` tag builds no binaries —
     it triggers `.github/workflows/crates-io-release.yml`, which publishes every
     workspace crate whose manifest does not set `publish = false` to crates.io.
-    `ridl`, `ridl-lsp` and `ridl-mcp` keep `publish = false`: the CLI reaches a
-    user through the separate `editor-v*` train this decision already describes,
-    not crates.io, and `ridl-mcp`/`ridl-lsp` are internal to it. `xtask` is
-    workspace tooling, never published either.
+    `xtask` is workspace tooling, never published.
+
+    _Amended (2026-09-22)._ `ridl-lsp` and `ridl-mcp` join the publish train,
+    dropping `publish = false`: the `ridl` CLI depends on both of them directly,
+    and `cargo publish` refuses a crate whose normal dependency has no
+    resolvable registry version, so the CLI could not publish at all while
+    either stayed internal-only. `ridl` itself publishes under the crates.io
+    package name `ridl-cli` — `ridl` is already an unrelated crate on crates.io
+    (a crypto library, owned by someone else) — with an explicit
+    `[[bin]] name = "ridl"` in its manifest, so the installed binary and every
+    existing invocation (`ridl check`, `ridl build`, …) are unchanged. The
+    `editor-v*` train this decision describes above still ships that same binary
+    bundled with the VS Code extension; crates.io is a second, direct
+    `cargo install ridl-cli` path alongside it, not a replacement for it.
 
     `ridl-rt` joins the shared version and the `v*` tag; its standalone
     `ridl-rt@<version>` tag and its by-hand `cargo publish -p ridl-rt` are
