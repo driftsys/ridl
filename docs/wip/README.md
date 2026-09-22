@@ -171,7 +171,9 @@ design note, from the archive.
   disposition; **implemented by P2b** as it stands — `ridl.codegen.v1` in
   `crates/ridl-ir`, `ridl build --emit codegen-model`, and one fact-level drift
   test per backend. §9 of the note is still open, and its items belong to the
-  stages it names.
+  stages it names. Stage P3 built the contract over it —
+  [`../design/codegen-plugins.md`](../design/codegen-plugins.md) — and its §10's
+  last item, ADR-0020 open item 5, was closed by P2b.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

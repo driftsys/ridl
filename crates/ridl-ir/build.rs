@@ -15,10 +15,12 @@
 //! E2 plan), mirroring the E0 v0 retirement.
 //!
 //! `proto/ridl/codegen/v1/model.proto` — the lowered codegen model
-//! (`ridl.codegen.v1`, the codegen model design note §3) — is compiled in the
-//! same `protox` call and registered with the same `pbjson-build` builder, so
-//! the model is written in the exact dialect ADR-0014 decision 14 fixes for
-//! the IR, and the two schemas share one descriptor pool.
+//! (`ridl.codegen.v1`, the codegen model design note §3) — and
+//! `proto/ridl/codegen/v1/plugin.proto` — the backend contract's request and
+//! response over it (ADR-0020 decision 9) — are compiled in the same `protox`
+//! call and registered with the same `pbjson-build` builder, so the model
+//! and the request are written in the exact dialect ADR-0014 decision 14
+//! fixes for the IR, and the schemas share one descriptor pool.
 
 use std::error::Error;
 
@@ -29,6 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "proto/ridl/ir/v2/ir.proto",
         "proto/ridl/ir/v2/system.proto",
         "proto/ridl/codegen/v1/model.proto",
+        "proto/ridl/codegen/v1/plugin.proto",
     ];
     let include = "proto";
 

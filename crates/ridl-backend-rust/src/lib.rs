@@ -33,10 +33,13 @@ use std::collections::{HashMap, HashSet};
 
 mod clauses;
 mod codec;
+mod contract;
 mod defaults;
 mod derives;
 mod descriptors;
 mod face;
+
+pub use contract::{Backend, WIRE_ENCODING_OPTION};
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]

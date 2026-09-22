@@ -26,12 +26,18 @@
 //! decision 14 fixes for the IR and through the same generated impls and the
 //! same reader guards ([`to_json_pretty`], [`from_json`]). Binary and
 //! prototext are derived, as they are for the IR.
+//!
+//! The backend contract over the model — [`Backend`], the request and
+//! response messages of `proto/ridl/codegen/v1/plugin.proto`, their JSON on
+//! the pipe, and the path rule every host applies — is the `contract`
+//! submodule (ADR-0020 decision 9; `docs/design/codegen-plugins.md`).
 
 use crate::v2::{MAX_JSON_NESTING, read_json, render_json};
 
 pub mod v1 {
-    //! The generated types of `ridl.codegen.v1`
-    //! (`proto/ridl/codegen/v1/model.proto`).
+    //! The generated types of `ridl.codegen.v1`: the model
+    //! (`proto/ridl/codegen/v1/model.proto`) and the backend contract's
+    //! request and response over it (`proto/ridl/codegen/v1/plugin.proto`).
 
     include!(concat!(env!("OUT_DIR"), "/ridl.codegen.v1.rs"));
 
@@ -48,6 +54,7 @@ pub mod v1 {
 }
 
 mod clauses;
+mod contract;
 mod facts;
 mod flatbuffers;
 mod lower;
@@ -55,6 +62,10 @@ mod names;
 mod resolve;
 mod unbounded;
 
+pub use contract::{
+    Backend, ModelBackend, RawIr, SCHEMA, check_path, error, has_error, request_from_json,
+    request_to_json, response_from_json, response_to_json, text_file,
+};
 pub use lower::lower;
 
 /// The error [`to_json_pretty`] and [`to_text_format`] return, on the two
@@ -88,6 +99,18 @@ impl std::fmt::Display for SerializeError {
     }
 }
 
+impl SerializeError {
+    /// The IR's error, re-labelled as the model's: the model and the request
+    /// are written through the IR's own machinery, so the causes are the
+    /// same two.
+    fn from_v2(error: crate::v2::SerializeError) -> Self {
+        match error {
+            crate::v2::SerializeError::Json(source) => Self::Json(source),
+            crate::v2::SerializeError::Text(source) => Self::Text(source),
+        }
+    }
+}
+
 impl std::error::Error for SerializeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -101,10 +124,7 @@ impl std::error::Error for SerializeError {
 /// `--emit codegen-model` artifact and the payload the codegen request
 /// carries, byte for byte.
 pub fn to_json_pretty(model: &v1::Model) -> Result<String, SerializeError> {
-    render_json(model).map_err(|error| match error {
-        crate::v2::SerializeError::Json(source) => SerializeError::Json(source),
-        crate::v2::SerializeError::Text(source) => SerializeError::Text(source),
-    })
+    render_json(model).map_err(SerializeError::from_v2)
 }
 
 /// Reads a lowered model from canonical protobuf JSON — the inverse of
@@ -126,12 +146,8 @@ pub const MAX_JSON_NESTING_LEVELS: usize = MAX_JSON_NESTING;
 /// Renders a lowered model in the protobuf text format — the inspection
 /// encoding, derived from the same descriptor pool the IR's prototext uses.
 pub fn to_text_format(model: &v1::Model) -> Result<String, SerializeError> {
-    crate::v2::render_text_for(crate::v2::codegen_model_descriptor(), model).map_err(|error| {
-        match error {
-            crate::v2::SerializeError::Json(source) => SerializeError::Json(source),
-            crate::v2::SerializeError::Text(source) => SerializeError::Text(source),
-        }
-    })
+    crate::v2::render_text_for(crate::v2::codegen_model_descriptor(), model)
+        .map_err(SerializeError::from_v2)
 }
 
 /// Encodes a lowered model in the protobuf binary wire format — the derived

@@ -29,6 +29,10 @@
 use ridl_ir::v2;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+mod contract;
+
+pub use contract::Backend;
+
 #[cfg(test)]
 mod tests;
 

@@ -298,3 +298,177 @@ fn the_model_round_trips_through_each_encoding() {
         "prototext comes from the same descriptor pool the IR's does"
     );
 }
+
+/// The backend contract's messages (`plugin.proto`): the request round-trips
+/// through the encoding the process host puts on the pipe, its model is the
+/// `--emit codegen-model` artifact one indentation level deeper, and the two
+/// version fields lead.
+#[test]
+fn a_request_round_trips_and_leads_with_its_two_version_fields() {
+    let request = v1::CodegenRequest {
+        schema: super::SCHEMA.to_string(),
+        toolchain: "0.2.0".to_string(),
+        model: Some(model()),
+        options: vec![v1::BackendOption {
+            key: "wire-encoding".to_string(),
+            value: "flatbuffers".to_string(),
+        }],
+        artifact_base: "veh.common".to_string(),
+    };
+    let json = super::request_to_json(&request).expect("the request renders");
+    assert_eq!(
+        super::request_from_json(&json).expect("the JSON parses back"),
+        request
+    );
+    let keys: Vec<&str> = json
+        .lines()
+        .filter_map(|line| line.strip_prefix("  \""))
+        .filter_map(|line| line.split_once('"'))
+        .map(|(key, _)| key)
+        .collect();
+    assert_eq!(
+        keys,
+        ["schema", "toolchain", "model", "options", "artifactBase"],
+        "the top-level keys, in schema order, with the two version fields first"
+    );
+    assert_eq!(super::SCHEMA, "ridl.codegen.v1");
+
+    // The artifact's first line is its opening brace, which the request
+    // spells as `"model": {`; every line after it appears indented once more.
+    let model_json = to_json_pretty(&model()).expect("the model renders");
+    let nested: String = model_json
+        .lines()
+        .skip(1)
+        .map(|line| format!("  {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        json.contains(&format!("  \"model\": {{\n{nested}")),
+        "the request's model is the artifact byte for byte, indented once more"
+    );
+}
+
+/// A response round-trips, a text file's content is a JSON string and not
+/// base64, and the error test counts an unset severity as an error.
+#[test]
+fn a_response_round_trips_with_text_content_as_a_string() {
+    let response = v1::CodegenResponse {
+        files: vec![
+            super::text_file(
+                "veh.common.rs".to_string(),
+                "pub struct Speed;\n".to_string(),
+            ),
+            v1::GeneratedFile {
+                path: "veh.common.bin".to_string(),
+                content: Some(v1::generated_file::Content::Binary(vec![0, 255])),
+            },
+        ],
+        diagnostics: vec![v1::Diagnostic {
+            severity: v1::DiagnosticSeverity::Warning as i32,
+            message: "w".to_string(),
+        }],
+    };
+    let json = super::response_to_json(&response).expect("the response renders");
+    assert!(
+        json.contains("\"text\": \"pub struct Speed;\\n\""),
+        "{json}"
+    );
+    assert!(json.contains("\"binary\": \"AP8=\""), "{json}");
+    assert_eq!(
+        super::response_from_json(&json).expect("the JSON parses back"),
+        response
+    );
+    assert!(!super::has_error(&response));
+
+    for severity in [
+        v1::DiagnosticSeverity::Error as i32,
+        v1::DiagnosticSeverity::Unspecified as i32,
+        // Outside the schema: a value a lenient reader can carry.
+        77,
+    ] {
+        let failed = v1::CodegenResponse {
+            files: Vec::new(),
+            diagnostics: vec![v1::Diagnostic {
+                severity,
+                message: "e".to_string(),
+            }],
+        };
+        assert!(super::has_error(&failed), "severity {severity} is an error");
+    }
+    assert!(!super::has_error(&v1::CodegenResponse {
+        files: Vec::new(),
+        diagnostics: vec![v1::Diagnostic {
+            severity: v1::DiagnosticSeverity::Info as i32,
+            message: "i".to_string(),
+        }],
+    }));
+}
+
+/// The path rule every host applies before it writes a file.
+#[test]
+fn a_generated_file_path_is_relative_and_plain() {
+    for path in ["veh.common.rs", "com/acme/veh/Speed.kt", "a.b/c-d_e"] {
+        assert_eq!(super::check_path(path), Ok(()), "{path}");
+    }
+    for path in [
+        "",
+        "/etc/passwd",
+        "../escape.rs",
+        "a/../b.rs",
+        "./a.rs",
+        "a//b.rs",
+        "a/",
+        "a\\b.rs",
+        "C:file.rs",
+        "a\0b",
+    ] {
+        assert!(super::check_path(path).is_err(), "{path:?} must be refused");
+    }
+}
+
+/// The model backend writes the request's model back as
+/// `<artifact_base>.codegen.json`, takes no option, and answers a request
+/// with no model with a diagnostic rather than a panic.
+#[test]
+fn the_model_backend_writes_the_model_back() {
+    use super::Backend as _;
+
+    let request = v1::CodegenRequest {
+        schema: super::SCHEMA.to_string(),
+        toolchain: "0.2.0".to_string(),
+        model: Some(model()),
+        options: Vec::new(),
+        artifact_base: "veh.common".to_string(),
+    };
+    let response = super::ModelBackend.generate(&request);
+    assert_eq!(super::ModelBackend.language(), "model");
+    assert!(response.diagnostics.is_empty());
+    assert_eq!(response.files.len(), 1);
+    assert_eq!(response.files[0].path, "veh.common.codegen.json");
+    assert_eq!(
+        response.files[0].content,
+        Some(v1::generated_file::Content::Text(
+            to_json_pretty(&model()).expect("the model renders")
+        ))
+    );
+
+    let with_option = v1::CodegenRequest {
+        options: vec![v1::BackendOption {
+            key: "indent".to_string(),
+            value: "2".to_string(),
+        }],
+        ..request.clone()
+    };
+    let response = super::ModelBackend.generate(&with_option);
+    assert!(super::has_error(&response));
+    assert!(response.files.is_empty());
+    assert!(response.diagnostics[0].message.contains("`indent`"));
+
+    let without_model = v1::CodegenRequest {
+        model: None,
+        ..request
+    };
+    let response = super::ModelBackend.generate(&without_model);
+    assert!(super::has_error(&response));
+    assert!(response.files.is_empty());
+}

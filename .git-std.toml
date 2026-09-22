@@ -54,6 +54,9 @@ scopes = [
   # the in-process reference runtime (docs/ROADMAP.md, E11.15;
   # ADR-0020 decision 6)
   "ridl-loopback",
+  # the reference codegen plugin, test-only (docs/ROADMAP.md, E4.5b;
+  # ADR-0020 decisions 10 and 11)
+  "ridlc-gen-model",
   # editor integrations (docs/ROADMAP.md, epic E1.17)
   "editors",
 ]
