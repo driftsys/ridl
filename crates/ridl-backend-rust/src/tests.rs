@@ -4329,8 +4329,8 @@ fn the_derive_attribute_sits_under_the_doc_comment() {
 fn check_flatbuffers_bounds(package: &v2::Package) -> Result<(), super::GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    for decl in &package.decls {
-        check_flatbuffers_bound(&ctx, package, decl)?;
+    for index in 0..package.decls.len() {
+        check_flatbuffers_bound(&ctx, index as u32)?;
     }
     Ok(())
 }

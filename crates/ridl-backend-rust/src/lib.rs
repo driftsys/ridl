@@ -26,8 +26,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use ridl_ir::codegen::v1;
-use ridl_ir::name::{camel_case, snake_case};
-use ridl_ir::projection::flatbuffers as fb_projection;
+use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -395,9 +394,9 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
 /// compiles over the codec `generate` emits rather than over one written for
 /// it (design note D-11, stage K9b).
 fn package_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
-    let tuples = collect_tuples(package)?;
-    let mut items = domain_items(ctx);
-    items.extend(codec::package_items(ctx, package, &tuples)?);
+    let _ = package;
+    let mut items = domain_items(ctx)?;
+    items.extend(codec::package_items(ctx)?);
     Ok(items)
 }
 
@@ -442,29 +441,21 @@ fn wire_alias(wire: WireEncoding) -> TokenStream {
     }
 }
 
-/// The domain-type items of `package` — the shared work of both entry points
-/// — and the induced tuple structs the walk discovered.
+/// The domain-type items of the package, emitted from the lowered model.
 ///
-/// The tuples travel back out because the FlatBuffers codec needs them:
-/// a tuple's generated struct is a FlatBuffers table like any other
-/// (ADR-0019 decision 3), and only this walk knows which tuples exist and
-/// what each one is named.
-///
-/// This does not emit the codec. [`package_items`] appends it, for both entry
-/// points: the codec is `generate`'s output (design note D-1 as amended), and
-/// the face compiles over that same output (D-11, stage K9b).
-/// The domain-type items of `package`, emitted from the lowered model.
-///
-/// Stage P4 layer 1: every declaration is read from `Ctx::model`, not from
-/// the IR. `model.declarations[i]` is lowered from `package.decls[i]`, so the
-/// order and the count are the IR's; the induced tuple structs come from
+/// Stage P4 layers 1 and 2: every declaration is read from `Ctx::model`, not
+/// from the IR. `model.declarations[i]` is lowered from `package.decls[i]`, so
+/// the order and the count are the IR's; the induced tuple structs come from
 /// `model.tuples`, which the lowering discovers in the same worklist order
 /// this walk used to and names with `InducedName.rust`.
 ///
 /// This does not emit the codec. [`package_items`] appends it, for both entry
 /// points: the codec is `generate`'s output (design note D-1 as amended), and
 /// the face compiles over that same output (D-11, stage K9b).
-fn domain_items(ctx: &Ctx) -> Vec<TokenStream> {
+fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
+    if let Some(collision) = ctx.model.tuple_collisions.first() {
+        return Err(tuple_collision(collision));
+    }
     let mut items: Vec<TokenStream> = Vec::new();
     for decl in &ctx.model.declarations {
         items.push(emit_decl(ctx, decl));
@@ -480,62 +471,44 @@ fn domain_items(ctx: &Ctx) -> Vec<TokenStream> {
         }
         items.push(emit_tuple_struct(ctx, tuple));
     }
-    items
+    Ok(items)
 }
 
-/// The induced tuple set the FlatBuffers codec needs, discovered over the IR.
+/// Refuses a package in which two different tuples generate one struct name.
 ///
-/// Stage P4 layer 1 ports the domain-type emitters onto the model; the codec
-/// is layer 2 and still reads `v2::TupleType`, so the worklist that finds
-/// those tuples stays here until then. It is the walk [`domain_items`] used to
-/// make, with the emitted tokens discarded: the same discovery order, the same
-/// one-name-one-struct rule, and the same refusal when two different tuples
-/// spell one name ([`tuple_collision`]).
-fn collect_tuples(package: &v2::Package) -> Result<Vec<InducedTuple>, GenerateError> {
-    let mut tuples: Vec<InducedTuple> = Vec::new();
-    let mut discovered: Vec<InducedTuple> = Vec::new();
-
-    for decl in &package.decls {
-        let Some(v2::decl::Kind::StructDef(sd)) = &decl.kind else {
-            // Only a struct field carries a tuple position; a union arm and an
-            // enum member name a type, and a constant has none.
-            continue;
-        };
-        for member in &sd.members {
-            let Some(v2::struct_member::Member::Field(field)) = &member.member else {
-                continue;
-            };
-            let Some(ft) = field.r#type.as_ref() else {
-                continue;
-            };
-            let hint = format!("{}{}", camel_case(&decl.name), camel_case(&field.name));
-            field_type_tokens(ft, &hint, decl.visibility, &mut tuples);
-        }
+/// The name is the CamelCase of the path that reaches the tuple, and nothing
+/// upstream keeps two paths from mangling to one string: `struct AB { c : … }`
+/// and `struct A { bC : … }` both reach `ABC`, and neither draws a ridl
+/// diagnostic. There is no sound way to pick between them, which is why this is
+/// a refusal rather than a rule:
+///
+/// - **Keeping the first** gives the second declaration the *first one's
+///   shape*. `ridlc check` exits 0, the module compiles, and the contract is
+///   silently wrong. It is also how carrying an inducing declaration's
+///   visibility (issue #167) could narrow a struct a public declaration uses,
+///   turning a silent wrong shape into a `private_interfaces` build failure.
+/// - **Keeping the widest visibility** would publish a package-private type's
+///   shape to escape that build failure, which is the defect #167 fixed.
+///
+/// So neither dedup rule is sound and only rejection is. This is the same
+/// answer codegen gives every other generated-name clash: it names the failure
+/// itself rather than handing rustc a module whose meaning it cannot state.
+///
+/// The lowering finds the clash once, over the model, and carries it as a
+/// fact; the message is this backend's own. The two shapes are named because
+/// the mangled name cannot distinguish them — that is the whole defect — and
+/// the field lists are what a reader greps for.
+fn tuple_collision(collision: &v1::TupleCollision) -> GenerateError {
+    GenerateError {
+        message: format!(
+            "the generated name {name} is claimed by two different tuple types, ({a}) and ({b}); \
+             a tuple generates a struct named for the path that reaches it, and these two paths \
+             spell one name — rename a field or a declaration so they differ",
+            name = collision.name,
+            a = collision.first_fields.join(", "),
+            b = collision.second_fields.join(", "),
+        ),
     }
-
-    let mut seen: HashMap<String, InducedTuple> = HashMap::new();
-    let mut index = 0;
-    while index < tuples.len() {
-        let induced = tuples[index].clone();
-        index += 1;
-        if let Some(previous) = seen.get(&induced.name) {
-            if previous.tuple != induced.tuple || previous.visibility != induced.visibility {
-                return Err(tuple_collision(previous, &induced));
-            }
-            continue;
-        }
-        seen.insert(induced.name.clone(), induced.clone());
-        for field in &induced.tuple.fields {
-            let Some(ft) = field.r#type.as_ref() else {
-                continue;
-            };
-            let hint = format!("{}{}", induced.name, camel_case(&field.name));
-            field_type_tokens(ft, &hint, induced.visibility, &mut tuples);
-        }
-        discovered.push(induced);
-    }
-
-    Ok(discovered)
 }
 
 // ---------------------------------------------------------------------------
@@ -543,8 +516,8 @@ fn collect_tuples(package: &v2::Package) -> Result<Vec<InducedTuple>, GenerateEr
 // ---------------------------------------------------------------------------
 
 /// Refuses one declaration with no finite FlatBuffers bound (design note
-/// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that note
-/// records what stage K4 built and what stage K5 closed).
+/// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that
+/// note records what stage K4 built and what stage K5 closed).
 ///
 /// **Called per type, by the codec emitter**, at the point where it is about
 /// to emit that type's `Payload<FlatBuffers>` implementation — which is what
@@ -559,494 +532,69 @@ fn collect_tuples(package: &v2::Package) -> Result<Vec<InducedTuple>, GenerateEr
 /// cross-package reference it does not resolve, or a same-package cycle — and
 /// that one type simply carries no codec.
 ///
-/// The refusal names the member wherever [`unbounded_member`] can name one,
-/// and says which of the other three causes it found otherwise.
-pub(crate) fn check_flatbuffers_bound(
-    ctx: &Ctx,
-    package: &v2::Package,
-    decl: &v2::Decl,
-) -> Result<(), GenerateError> {
-    if fb_projection::root_table(decl).is_none() {
+/// The attribution is the lowering's (`FbRoot.bound`), computed over the
+/// package alone as this backend computed it for itself before stage P4; the
+/// message is this backend's own. It names the member wherever the
+/// attribution names one, and says which of the other three causes it found
+/// otherwise.
+pub(crate) fn check_flatbuffers_bound(ctx: &Ctx, index: u32) -> Result<(), GenerateError> {
+    // A declaration the projection gives no root is one `root_table` does not
+    // name, and it has no bound to refuse.
+    let Some(root) = ctx.root(index) else {
         return Ok(());
-    }
-    let packages = fb_projection::Packages {
-        package,
-        others: &[],
     };
-    if fb_projection::max_size(packages, decl).is_some() {
-        return Ok(());
-    }
-    let pkg = &package.name;
-    let name = &decl.name;
-    match unbounded_member(ctx, package, decl) {
-        Attribution::Member(member) => Err(GenerateError {
+    let unbounded = match root.bound.as_ref() {
+        Some(v1::fb_root::Bound::Unbounded(unbounded)) => unbounded,
+        _ => return Ok(()),
+    };
+    let pkg = ctx.package_name();
+    let name = ctx
+        .declaration(index)
+        .map(|decl| declared(decl.name.as_ref()))
+        .unwrap_or_default();
+    let member = unbounded.member.as_deref().unwrap_or_default();
+    match v1::FbUnboundedCause::try_from(unbounded.cause)
+        .unwrap_or(v1::FbUnboundedCause::Unspecified)
+    {
+        // One member — a struct field's name, a union arm's name, or the
+        // `value` field of a box root (ADR-0019 decision 8) — is individually
+        // unbounded.
+        v1::FbUnboundedCause::Member => Err(GenerateError {
             message: format!("`{pkg}.{name}.{member}` has no finite FlatBuffers bound"),
         }),
-        Attribution::Untyped(member) => Err(GenerateError {
+        // One member carries no type at all — a struct field with no type, or
+        // the `value` of a box root whose declaration names no backing —
+        // which is malformed IR rather than an unbounded shape.
+        v1::FbUnboundedCause::Untyped => Err(GenerateError {
             message: format!(
                 "`{pkg}.{name}.{member}` carries no type, so `{pkg}.{name}` has no FlatBuffers \
                  bound"
             ),
         }),
-        Attribution::Layout(message) => Err(GenerateError {
-            message: format!("`{pkg}.{name}` has no FlatBuffers table layout: {message}"),
-        }),
-        Attribution::Aggregate => Err(GenerateError {
-            message: format!(
-                "`{pkg}.{name}` has no finite FlatBuffers bound: every member is bounded on its \
-                 own and the total is not"
-            ),
-        }),
-        Attribution::Exempt => Ok(()),
-    }
-}
-
-/// What [`check_flatbuffers_bound`] found when `decl`'s own
-/// [`fb_projection::max_size`] answered `None`.
-///
-/// Stage K5 split what stage K4 called `Declaration` into three, closing the
-/// second gap §4a of the design note carried forward: the three causes that
-/// one variant covered are now told apart, and each writes its own message.
-enum Attribution {
-    /// One member — a struct field's name, a union arm's name, or the
-    /// `value` field of a box root (ADR-0019 decision 8) — is individually
-    /// unbounded.
-    Member(String),
-    /// One member carries no type at all — a struct field with no type, or
-    /// the `value` of a box root whose declaration names no backing — which
-    /// is malformed IR rather than an unbounded shape, and which no probe can
-    /// charge.
-    Untyped(String),
-    /// `fb_projection::struct_table` refused the declaration's layout — two
-    /// members sharing one ordinal, or an ordinal of 0. It is a property of
-    /// the whole declaration and no single-member probe reproduces it, so the
-    /// projection's own message is carried through.
-    Layout(String),
-    /// Every member is bounded on its own and the total is not: the summed
-    /// size overflows `u64`, or it exceeds
-    /// [`fb_projection::MAX_ENCODABLE`]. A member this backend cannot judge
-    /// does not shield the sum: it is charged as a `boolean` and the total
-    /// is over the ceiling even so.
-    Aggregate,
-    /// Every member that could be judged is individually bounded, at least
-    /// one could not be judged — a cross-package reference this backend does
-    /// not resolve, or a same-package cycle — and the struct as a whole still
-    /// fits with each unjudged leaf charged as a `boolean`. `decl`'s own
-    /// `None` is explained by that member, not by an unbounded shape.
-    Exempt,
-}
-
-/// What one type position contributes to the attribution.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Verdict {
-    /// It has a finite bound of its own.
-    Bounded,
-    /// It has none, and this backend can say so.
-    Unbounded,
-    /// This backend cannot say: the position reaches a cross-package
-    /// reference or a cycle.
-    Unjudgeable,
-}
-
-/// Attributes `decl`'s unbounded [`fb_projection::max_size`] — see
-/// [`Attribution`].
-///
-/// Each member is judged on its own by [`judge`], never by trusting one
-/// member's unboundedness to explain another's. A struct with both a bare
-/// unbounded `string` map key and an unrelated cross-package field is refused
-/// over the first and exempted from nothing on account of the second.
-fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attribution {
-    let mut any_exempt = false;
-    match &decl.kind {
-        Some(v2::decl::Kind::StructDef(def)) => {
-            // The layout is refused for the declaration as a whole, and it is
-            // checked first: with two members on one ordinal, every member
-            // probes as bounded and only the aggregate answers `None`, which
-            // is exactly the confusion §4a asked K5 to end.
-            if let Err(err) = fb_projection::struct_table(&decl.name, def) {
-                return Attribution::Layout(err.message);
-            }
-            for member in &def.members {
-                let Some(v2::struct_member::Member::Field(field)) = &member.member else {
-                    // A reserved tombstone emits no field and charges one
-                    // slack byte only (typl §7.4); it is never the cause.
-                    continue;
-                };
-                let Some(ty) = field.r#type.as_ref() else {
-                    return Attribution::Untyped(field.name.clone());
-                };
-                match judge(ctx, package, ty) {
-                    Verdict::Unbounded => return Attribution::Member(field.name.clone()),
-                    Verdict::Unjudgeable => any_exempt = true,
-                    Verdict::Bounded => {}
-                }
-            }
-        }
-        Some(v2::decl::Kind::UnionDef(def)) => {
-            for arm in &def.arms {
-                let ty = v2::FieldType {
-                    optional: false,
-                    kind: Some(v2::field_type::Kind::Named(arm.type_ref.clone())),
-                };
-                match judge(ctx, package, &ty) {
-                    Verdict::Unbounded => return Attribution::Member(arm.name.clone()),
-                    Verdict::Unjudgeable => any_exempt = true,
-                    Verdict::Bounded => {}
-                }
-            }
-        }
-        // A declaration rooted in a box (ADR-0019 decision 8) has one member:
-        // the box's `value` field, holding the declaration itself. It is
-        // resolved in the package that declares it, so it is never
-        // unjudgeable — only bounded, or unbounded because the IR carries no
-        // width or no length bound for it.
-        Some(
-            v2::decl::Kind::TypeDef(_) | v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_),
-        ) => {
-            // A named scalar with no backing at all is malformed IR rather
-            // than an unbounded shape, which is what `Untyped` is for. The
-            // front end leaves one behind after a parse error such as
-            // `type X:`, so this is the shape such a declaration reaches the
-            // backend in — not one a length or a width would fix.
-            if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind
-                && td.backing.is_none()
-            {
-                return Attribution::Untyped("value".to_string());
-            }
-            let ty = v2::FieldType {
-                optional: false,
-                kind: Some(v2::field_type::Kind::Named(decl.name.clone())),
-            };
-            match judge(ctx, package, &ty) {
-                Verdict::Unbounded => return Attribution::Member("value".to_string()),
-                Verdict::Unjudgeable => any_exempt = true,
-                Verdict::Bounded => {}
-            }
-        }
-        _ => {}
-    }
-    if !any_exempt {
-        return Attribution::Aggregate;
-    }
-    // Every judged member is bounded and at least one member could not be
-    // judged, so the aggregate is still open: two members each under the
-    // ceiling can sum over it, and a member this backend cannot judge must
-    // not shield that sum. The whole struct is charged once more over
-    // `lower_bound_stand_in`'s copy of each member, which charges the
-    // unjudged leaves no more than the real ones would, so `None` here is
-    // an aggregate cause whatever those leaves turn out to be. A union is
-    // its largest arm rather than a sum, so it has no aggregate to charge.
-    if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
-        let stand_in = v2::Decl {
-            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
-                members: def
-                    .members
-                    .iter()
-                    .map(|member| match &member.member {
-                        Some(v2::struct_member::Member::Field(field)) => v2::StructMember {
-                            member: Some(v2::struct_member::Member::Field(v2::Field {
-                                r#type: field
-                                    .r#type
-                                    .as_ref()
-                                    .map(|ty| lower_bound_stand_in(ctx, ty)),
-                                ..field.clone()
-                            })),
-                        },
-                        _ => member.clone(),
-                    })
-                    .collect(),
-                fixed_layout: def.fixed_layout,
-            })),
-            ..decl.clone()
-        };
-        let packages = fb_projection::Packages {
-            package,
-            others: &[],
-        };
-        if fb_projection::max_size(packages, &stand_in).is_none() {
-            return Attribution::Aggregate;
-        }
-    }
-    Attribution::Exempt
-}
-
-/// One type position's verdict.
-///
-/// A position this backend can resolve in full is probed as a whole, which is
-/// the cheapest and the most faithful answer: [`probe_field_type`] charges it
-/// exactly what [`fb_projection::max_size`] charges it as one member.
-///
-/// A position it cannot resolve in full is probed as a whole too, over
-/// [`lower_bound_stand_in`]'s copy of it: every leaf this backend cannot
-/// judge is replaced by a `boolean`, the smallest thing the projection
-/// charges anything for, and what is left is charged once by the same
-/// `max_size` the real position would be charged by. That charges every
-/// count, every product of nested counts, and every locally known leaf in
-/// the position together, which neither a leaf-by-leaf descent nor a
-/// level-by-level probe of each count does — `[[veh.other.Speed; 0..2^20];
-/// 0..2^20]` is unbounded by the product of its two counts and by nothing
-/// else, and `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]` by an outer
-/// count over a local inner one. Because each stand-in is a lower bound on
-/// the leaf it replaces, a stand-in that is unbounded proves the real
-/// position is, and a stand-in that fits says nothing about the real leaves,
-/// which is what `Unjudgeable` means.
-fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
-    if member_resolves_locally(ctx, ty) {
-        return if probe_field_type(package, ty).is_some() {
-            Verdict::Bounded
-        } else {
-            Verdict::Unbounded
-        };
-    }
-    if probe_field_type(package, &lower_bound_stand_in(ctx, ty)).is_some() {
-        Verdict::Unjudgeable
-    } else {
-        Verdict::Unbounded
-    }
-}
-
-/// `ty` with every leaf this backend cannot judge replaced by a `boolean`,
-/// so that [`fb_projection::max_size`] can charge the rest.
-///
-/// A `boolean` is one inline byte and nothing out of line, and the
-/// projection charges every other leaf at least that: a named scalar its
-/// declared width, an enum eight bytes, a struct, a union or a string an
-/// offset plus its own table or body. A vector's charge and a table's bound
-/// are both monotone in the charge of what they hold, so the stand-in is
-/// charged no more than the real position, and `None` over the stand-in is
-/// `None` over the real position whatever the unjudged leaves turn out to be.
-/// The replaced leaves are the ones [`member_resolves_locally`] answers
-/// `false` for: a named reference that does not resolve in this package or
-/// reaches a cycle, a stream, and an unspecified primitive. A `FieldType` with
-/// no `kind` is kept, so it still probes to `Unbounded` (design note §4b).
-fn lower_bound_stand_in(ctx: &Ctx, ty: &v2::FieldType) -> v2::FieldType {
-    fn boolean(optional: bool) -> v2::FieldType {
-        v2::FieldType {
-            optional,
-            kind: Some(v2::field_type::Kind::Primitive(
-                v2::PrimitiveType::Boolean as i32,
-            )),
-        }
-    }
-    let stand_in = |leaf: &v2::FieldType| Box::new(lower_bound_stand_in(ctx, leaf));
-    let kind = match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Array(array)) => {
-            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
-                element: array.element.as_deref().map(stand_in),
-                min: array.min,
-                max: array.max,
-            }))
-        }
-        Some(v2::field_type::Kind::Map(map)) => v2::field_type::Kind::Map(Box::new(v2::MapType {
-            key: map.key.as_deref().map(stand_in),
-            value: map.value.as_deref().map(stand_in),
-            min: map.min,
-            max: map.max,
-        })),
-        Some(v2::field_type::Kind::Tuple(tuple)) => v2::field_type::Kind::Tuple(v2::TupleType {
-            fields: tuple
-                .fields
-                .iter()
-                .map(|field| v2::TupleField {
-                    r#type: field.r#type.as_ref().map(|leaf| *stand_in(leaf)),
-                    ..field.clone()
-                })
-                .collect(),
-        }),
-        _ if member_resolves_locally(ctx, ty) => return ty.clone(),
-        // A named reference this backend does not resolve, a cycle, a
-        // stream, or an unspecified primitive: the leaf itself is what
-        // cannot be judged, and it is replaced.
-        _ => return boolean(ty.optional),
-    };
-    v2::FieldType {
-        optional: ty.optional,
-        kind: Some(kind),
-    }
-}
-
-/// The members of `decl` this backend cannot judge — a cross-package
-/// reference it does not resolve, a same-package cycle, a stream, or an
-/// unspecified primitive.
-///
-/// [`check_flatbuffers_bound`] answers `Ok(())` for a declaration whose only
-/// obstacle is one of these, and the codec emitter then withholds that type's
-/// implementation. This is what lets the emitted source say which member is
-/// the reason, rather than leaving a consumer with a missing trait
-/// implementation and nothing to read.
-pub(crate) fn unjudgeable_members(ctx: &Ctx, decl: &v2::Decl) -> Vec<String> {
-    let mut names = Vec::new();
-    match &decl.kind {
-        Some(v2::decl::Kind::StructDef(def)) => {
-            for member in &def.members {
-                if let Some(v2::struct_member::Member::Field(field)) = &member.member
-                    && let Some(ty) = field.r#type.as_ref()
-                    && !member_resolves_locally(ctx, ty)
-                {
-                    names.push(field.name.clone());
-                }
-            }
-        }
-        Some(v2::decl::Kind::UnionDef(def)) => {
-            for arm in &def.arms {
-                if !decl_resolves_locally(ctx, &arm.type_ref, &mut HashSet::new()) {
-                    names.push(arm.name.clone());
-                }
-            }
-        }
-        _ => {}
-    }
-    names
-}
-
-/// The bound of one type position alone, charged the way
-/// [`fb_projection::max_size`] charges it as one member of a struct:
-/// `struct_table_bound` sums each member's own `field_charge` independently
-/// and propagates the first `None`, so a struct of exactly this one field
-/// reproduces the charge the position contributes, with nothing else able to
-/// answer `None` in its place.
-fn probe_field_type(package: &v2::Package, ty: &v2::FieldType) -> Option<u64> {
-    let probe = v2::Decl {
-        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
-            members: vec![v2::StructMember {
-                member: Some(v2::struct_member::Member::Field(v2::Field {
-                    // Ordinal 1 is the first FlatBuffers id. It is written
-                    // here rather than copied from the real member so that a
-                    // declaration whose ordinals are themselves malformed is
-                    // attributed by `Attribution::Layout` and not mistaken
-                    // for an unbounded member.
-                    ordinal: 1,
-                    r#type: Some(ty.clone()),
-                    ..Default::default()
-                })),
-            }],
-            fixed_layout: false,
-        })),
-        ..Default::default()
-    };
-    let packages = fb_projection::Packages {
-        package,
-        others: &[],
-    };
-    fb_projection::max_size(packages, &probe)
-}
-
-/// Whether every named type reachable from `ty` resolves inside the package
-/// `ctx` indexes — the same shape [`fb_projection::max_size`] would have to
-/// resolve to size it.
-///
-/// Two things answer `false`, "this backend cannot judge this member,
-/// exempt it", rather than letting a probe answer for them — both scoped to
-/// the one member being checked, never to the whole declaration, so a
-/// sibling member with a genuine bound problem is still caught:
-///
-/// - **a cross-package (dotted) or unknown reference.** `ridl-backend-rust`
-///   generates one package at a time and resolves no cross-package reference
-///   itself — [`Ctx::lookup`] answers `None` for one by design, the same as
-///   every other same-package-only pass in this backend
-///   (`derives::type_ref_eligibility`, `defaults`). Handed `others: &[]`,
-///   `fb_projection::max_size` cannot tell "this reference does not resolve
-///   here" from "this member has no finite bound" — both answer `None` (its
-///   own doc, "a reference that does not resolve in `packages`"). This
-///   backend already generates a struct across such a reference — the
-///   corpus's `ClimateReport`
-///   (`crates/ridlc/tests/corpus/veh-cluster/cluster/services.ridl`,
-///   `cabin`/`setpoint` typed by the imported `veh.common.Temperature`) is
-///   one.
-/// - **a same-package composite that reaches itself.** typl rejects one
-///   (TYPL-206), so it is IR handed in directly the same as the case above.
-///   This backend already has a considered answer for a cyclic struct that
-///   is not refusal: `recursive_struct_default_terminates` and
-///   `a_cyclic_struct_takes_no_conditional_derives` both pin that a cyclic
-///   struct's *domain type* still generates, because Default derivation and
-///   the conditional-derive walk both guard the same cycle and degrade to
-///   the conservative answer rather than erroring.
-///
-/// A third case is exempted the same way: **a `Stream` field position.**
-/// ridl §12.3 keeps a stream at an interaction position; it never reaches a
-/// struct or tuple field in checked IR, `fb_projection::max_size` charges
-/// nothing for it, and `flatbuffers_bound_leaves_a_stream_field_alone` pins
-/// that this function exempts a member typed by one rather than treating the
-/// `None` `field_charge` gives it as a genuine bound failure.
-fn member_resolves_locally(ctx: &Ctx, ty: &v2::FieldType) -> bool {
-    field_type_resolves_locally(ctx, ty, &mut HashSet::new())
-}
-
-/// Whether `reference` and everything its own shape reaches resolves inside
-/// the package `ctx` indexes. See [`member_resolves_locally`] for the two
-/// cases this answers `false` for, and why each is scoped to one member.
-fn decl_resolves_locally(ctx: &Ctx, reference: &str, visiting: &mut HashSet<String>) -> bool {
-    let Some(decl) = ctx.lookup(reference) else {
-        return false;
-    };
-    if !visiting.insert(reference.to_string()) {
-        // On the path already being walked: a cycle. Left for
-        // `unbounded_member` to exempt this one member over (see the doc
-        // above).
-        return false;
-    }
-    let resolves = match &decl.kind {
-        Some(v2::decl::Kind::StructDef(def)) => {
-            def.members.iter().all(|member| match &member.member {
-                Some(v2::struct_member::Member::Field(field)) => field
-                    .r#type
-                    .as_ref()
-                    .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting)),
-                _ => true,
+        // The projection refused the declaration's layout — two members
+        // sharing one ordinal, or an ordinal of 0. It is a property of the
+        // whole declaration, so the projection's own message is carried
+        // through.
+        v1::FbUnboundedCause::Layout => {
+            let message = unbounded.layout_message.as_deref().unwrap_or_default();
+            Err(GenerateError {
+                message: format!("`{pkg}.{name}` has no FlatBuffers table layout: {message}"),
             })
         }
-        Some(v2::decl::Kind::UnionDef(def)) => def
-            .arms
-            .iter()
-            .all(|arm| decl_resolves_locally(ctx, &arm.type_ref, visiting)),
-        _ => true,
-    };
-    visiting.remove(reference);
-    resolves
-}
-
-/// One type position's contribution to [`decl_resolves_locally`], over the
-/// same [`v2::FieldType`] shape `fb_projection::max_size` walks to size it.
-/// A `Stream` is exempted explicitly — see [`member_resolves_locally`]'s
-/// third bullet — rather than falling through to the `None` arm, which is
-/// reserved for a `FieldType` this walk genuinely does not recognize.
-fn field_type_resolves_locally(
-    ctx: &Ctx,
-    ty: &v2::FieldType,
-    visiting: &mut HashSet<String>,
-) -> bool {
-    match &ty.kind {
-        Some(v2::field_type::Kind::Named(reference)) => {
-            decl_resolves_locally(ctx, reference, visiting)
-        }
-        // An `Unspecified` field primitive emits `()` and is charged
-        // nothing, exactly as a `Stream` is, and `derives` lists the two side
-        // by side among its refusing positions. It is malformed IR rather
-        // than an unbounded shape, so it is exempted rather than refused.
-        Some(v2::field_type::Kind::Primitive(primitive)) => v2::PrimitiveType::try_from(*primitive)
-            .is_ok_and(|primitive| primitive != v2::PrimitiveType::Unspecified),
-        Some(v2::field_type::Kind::InlineScalar(_)) => true,
-        Some(v2::field_type::Kind::Tuple(tuple)) => tuple.fields.iter().all(|field| {
-            field
-                .r#type
-                .as_ref()
-                .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting))
+        // Every member is bounded on its own and the total is not: the summed
+        // size overflows `u64`, or it exceeds the projection's ceiling.
+        v1::FbUnboundedCause::Aggregate | v1::FbUnboundedCause::Unspecified => Err(GenerateError {
+            message: format!(
+                "`{pkg}.{name}` has no finite FlatBuffers bound: every member is bounded on \
+                     its own and the total is not"
+            ),
         }),
-        Some(v2::field_type::Kind::Array(array)) => array
-            .element
-            .as_deref()
-            .is_some_and(|element| field_type_resolves_locally(ctx, element, visiting)),
-        Some(v2::field_type::Kind::Map(map)) => {
-            map.key
-                .as_deref()
-                .is_some_and(|key| field_type_resolves_locally(ctx, key, visiting))
-                && map
-                    .value
-                    .as_deref()
-                    .is_some_and(|value| field_type_resolves_locally(ctx, value, visiting))
-        }
-        Some(v2::field_type::Kind::Stream(_)) => false,
-        None => true,
+        // Every member that could be judged is individually bounded, at least
+        // one could not be judged — a cross-package reference this backend
+        // does not resolve, or a same-package cycle — and the declaration as a
+        // whole still fits with each unjudged leaf charged as a `boolean`. Its
+        // own `None` is explained by that member, not by an unbounded shape.
+        v1::FbUnboundedCause::Exempt => Ok(()),
     }
 }
 
@@ -1061,82 +609,6 @@ fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
     Ok(Generated {
         rust_source: prettyplease::unparse(&file),
     })
-}
-
-/// One tuple type reached from a declaration, with the visibility that
-/// declaration was declared at (typl §11).
-///
-/// A tuple has no name in source; the struct it generates is named after the
-/// path that reached it and is emitted at module scope beside the declaration
-/// that induced it. The visibility travels with the discovery for the same
-/// reason [`v2::InterfaceShape::visibility`] carries a service's: the value is
-/// authoritative at the point of discovery and nowhere else. By the time
-/// [`emit_tuple_struct`] runs, the tuple is one entry in a flat worklist and
-/// the declaration it came from is out of reach — which is exactly how the
-/// struct came to be emitted `pub` over an `internal` declaration's payload
-/// (issue #167).
-///
-/// One name is one struct. The same discovery repeated — the interaction
-/// module pre-discovers a nested tuple's name and the drain finds it again —
-/// is skipped; a repeat under one name with a different shape or visibility is
-/// a collision and is refused ([`tuple_collision`]), because carrying a
-/// visibility onto a name two declarations share has no sound answer. See
-/// [`generate`].
-#[derive(Debug, Clone)]
-pub(crate) struct InducedTuple {
-    /// The generated struct name — the CamelCase of the path that reached the
-    /// tuple.
-    pub(crate) name: String,
-    pub(crate) tuple: v2::TupleType,
-    /// The visibility of the declaration this tuple was reached from: an
-    /// `internal struct`'s field, or an `internal interface`'s query return.
-    pub(crate) visibility: i32,
-}
-
-/// Refuses a package in which two different tuples generate one struct name.
-///
-/// The name is the CamelCase of the path that reaches the tuple, and nothing
-/// upstream keeps two paths from mangling to one string: `struct AB { c : … }`
-/// and `struct A { bC : … }` both reach `ABC`, and neither draws a ridl
-/// diagnostic. There is no sound way to pick between them, which is why this is
-/// a refusal rather than a rule:
-///
-/// - **Keeping the first** — what the worklist did before — gives the second
-///   declaration the *first one's shape*. `ridlc check` exits 0, the module
-///   compiles, and the contract is silently wrong. It is also how carrying an
-///   inducing declaration's visibility (issue #167) could narrow a struct a
-///   public declaration uses, turning a silent wrong shape into a
-///   `private_interfaces` build failure.
-/// - **Keeping the widest visibility** would publish a package-private type's
-///   shape to escape that build failure, which is the defect #167 fixed.
-///
-/// So neither dedup rule is sound and only rejection is. This is the same
-/// answer `interact::check_name_collisions` gives every other generated-name
-/// clash: codegen names the failure itself rather than handing rustc a module
-/// whose meaning it cannot state.
-///
-/// The two shapes are named because the mangled name cannot distinguish them —
-/// that is the whole defect — and the field lists are what a reader greps for.
-fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateError {
-    fn shape(induced: &InducedTuple) -> String {
-        let fields: Vec<String> = induced
-            .tuple
-            .fields
-            .iter()
-            .map(|field| field.name.clone())
-            .collect();
-        format!("({})", fields.join(", "))
-    }
-    GenerateError {
-        message: format!(
-            "the generated name {name} is claimed by two different tuple types, {a} and {b}; \
-             a tuple generates a struct named for the path that reaches it, and these two paths \
-             spell one name — rename a field or a declaration so they differ",
-            name = current.name,
-            a = shape(previous),
-            b = shape(current),
-        ),
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1156,14 +628,6 @@ pub(crate) struct Ctx<'a> {
     /// `package.decls[i]`.
     pub(crate) model: &'a v1::Model,
     decls: HashMap<&'a str, &'a v2::Decl>,
-    /// The other packages of the same build, in the shape
-    /// `ridl-backend-flatbuffers::generate_with` already gives them
-    /// (ADR-0017 decision 1). Empty for the single-package entry points.
-    ///
-    /// The codec reads them through the projection's `Packages` so a
-    /// cross-package reference can be sized and encoded rather than withheld
-    /// (driftsys/ridl#467).
-    pub(crate) others: &'a [&'a v2::Package],
     /// The set of declaration names currently being expanded by the
     /// Default-derivation recursion. It guards against a cyclic IR: a
     /// same-package composite that reaches itself would otherwise recurse
@@ -1189,12 +653,32 @@ impl<'a> Ctx<'a> {
             .iter()
             .map(|decl| (decl.name.as_str(), decl))
             .collect();
+        let _ = others;
         Ctx {
             model,
             decls,
-            others,
             visiting: RefCell::new(HashSet::new()),
         }
+    }
+
+    /// The name of the package this model was lowered for.
+    pub(crate) fn package_name(&self) -> &'a str {
+        self.model
+            .scope
+            .as_ref()
+            .map(|scope| scope.package.as_str())
+            .unwrap_or_default()
+    }
+
+    /// The FlatBuffers root the projection gives the declaration at `index`,
+    /// or `None` where `projection::root_table` names none.
+    pub(crate) fn root(&self, index: u32) -> Option<&'a v1::FbRoot> {
+        self.model
+            .flatbuffers
+            .as_ref()?
+            .roots
+            .iter()
+            .find(|root| root.declaration == index)
     }
 
     /// The declaration the model's `declarations` list holds at `index`.
@@ -2241,93 +1725,6 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
 // ---------------------------------------------------------------------------
 // Type mapping.
 // ---------------------------------------------------------------------------
-
-/// The Rust type of a field. Tuple field types generate a named nested struct
-/// (recorded in `tuples`); the struct name is `hint` (CamelCase of the path).
-///
-/// `visibility` is the visibility of the declaration this position belongs to.
-/// It is carried rather than derived because a tuple is anonymous in source and
-/// declares none of its own, and because it reaches [`emit_tuple_struct`]
-/// through a flat worklist that has forgotten where it came from
-/// ([`InducedTuple`]).
-pub(crate) fn field_type_tokens(
-    ft: &v2::FieldType,
-    hint: &str,
-    visibility: i32,
-    tuples: &mut Vec<InducedTuple>,
-) -> TokenStream {
-    let inner = match &ft.kind {
-        Some(v2::field_type::Kind::Named(name)) => type_path(name),
-        Some(v2::field_type::Kind::Primitive(prim)) => primitive_tokens(*prim),
-        Some(v2::field_type::Kind::InlineScalar(td)) => inline_scalar_tokens(td),
-        Some(v2::field_type::Kind::Tuple(tuple)) => {
-            let tuple_name = hint.to_string();
-            tuples.push(InducedTuple {
-                name: tuple_name.clone(),
-                tuple: tuple.clone(),
-                visibility,
-            });
-            let id = ident(&tuple_name);
-            quote! { #id }
-        }
-        Some(v2::field_type::Kind::Array(array)) => {
-            let element = array
-                .element
-                .as_ref()
-                .map(|el| field_type_tokens(el, &format!("{hint}Element"), visibility, tuples))
-                .unwrap_or_else(|| quote! { () });
-            if array.min == array.max {
-                let len = usize_tokens(array.min);
-                quote! { [#element; #len] }
-            } else {
-                quote! { Vec<#element> }
-            }
-        }
-        Some(v2::field_type::Kind::Map(map)) => {
-            let key = map
-                .key
-                .as_ref()
-                .map(|k| field_type_tokens(k, &format!("{hint}Key"), visibility, tuples))
-                .unwrap_or_else(|| quote! { () });
-            let value = map
-                .value
-                .as_ref()
-                .map(|v| field_type_tokens(v, &format!("{hint}Value"), visibility, tuples))
-                .unwrap_or_else(|| quote! { () });
-            quote! { Vec<(#key, #value)> }
-        }
-        // A stream is an interaction-position type (ridl §12.3); it never
-        // reaches a struct or tuple field in checked IR. Kept total.
-        Some(v2::field_type::Kind::Stream(_)) | None => quote! { () },
-    };
-
-    if ft.optional {
-        quote! { Option<#inner> }
-    } else {
-        inner
-    }
-}
-
-fn inline_scalar_tokens(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
-        ScalarBacking::Float => quote! { f64 },
-        ScalarBacking::Integer => quote! { i64 },
-        ScalarBacking::Boolean => quote! { bool },
-        ScalarBacking::String => quote! { String },
-        ScalarBacking::Bytes => quote! { Vec<u8> },
-    }
-}
-
-pub(crate) fn primitive_tokens(prim: i32) -> TokenStream {
-    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
-        v2::PrimitiveType::Boolean => quote! { bool },
-        v2::PrimitiveType::Integer => quote! { i64 },
-        v2::PrimitiveType::Float => quote! { f64 },
-        v2::PrimitiveType::String => quote! { String },
-        v2::PrimitiveType::Bytes => quote! { Vec<u8> },
-        v2::PrimitiveType::Unspecified => quote! { () },
-    }
-}
 
 /// A resolved type reference: a bare `Ident` for a same-package name, a
 /// `crate::`-anchored path for a cross-package `pkg.Name` reference (typl §3.2).
