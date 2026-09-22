@@ -13,49 +13,57 @@
 //! T15 computed with full resolution.
 
 use crate::{
-    Ctx, ScalarBacking, backing_scalar, bool_tokens, ident, numeric_tokens, scalar_ctor, type_path,
+    Ctx, ScalarBacking, bool_tokens, class_backing, declared, ident, numeric_tokens, scalar_ctor,
+    snake_of, tuple_name, type_path,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
-use ridl_ir::name::{camel_case, snake_case};
-use ridl_ir::v2;
+use ridl_ir::codegen::v1;
 
 /// The right-hand side of `fn default() -> Self` for a top-level declaration,
 /// or `None` when the type is not fully Default-constructible.
-pub(crate) fn decl_default_expr(ctx: &Ctx, decl: &v2::Decl) -> Option<TokenStream> {
-    match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => type_def_default(&decl.name, td),
-        Some(v2::decl::Kind::StructDef(sd)) => struct_default(ctx, &decl.name, sd),
-        Some(v2::decl::Kind::EnumDef(ed)) => enum_default(&decl.name, ed),
-        Some(v2::decl::Kind::EnumSetDef(_)) => Some(enum_set_default(&decl.name)),
-        Some(v2::decl::Kind::UnionDef(ud)) => union_default(ctx, &decl.name, ud),
-        // Interaction kinds ride `Interface.interactions`, never a package
-        // decl; the interaction codegen is E2 task 15. No Default either way.
-        Some(_) | None => None,
+pub(crate) fn decl_default_expr(ctx: &Ctx, decl: &v1::Declaration) -> Option<TokenStream> {
+    let name = declared(decl.name.as_ref());
+    match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Scalar(sc)) => type_def_default(name, decl.init.as_ref()?, sc),
+        Some(v1::declaration::Kind::Struct(sd)) => struct_default(ctx, name, sd),
+        Some(v1::declaration::Kind::Enum(ed)) => enum_default(name, ed),
+        Some(v1::declaration::Kind::EnumSet(_)) => Some(enum_set_default(name)),
+        Some(v1::declaration::Kind::Union(ud)) => union_default(ctx, name, ud),
+        // A constant emits no value to default, and an interaction rides
+        // `Interface.interactions` rather than a package declaration. No
+        // Default either way.
+        Some(v1::declaration::Kind::Constant(_)) | None => None,
     }
 }
 
-/// Reference position: what is known about the slot a value fills. `flag` is the
-/// enclosing field's T15 derivability flag (`Some` for a struct field, `None`
-/// for a tuple field or a collection element, which carry no `InitValue`);
-/// `hint` is the generated tuple-struct name for a tuple in this position.
+/// Reference position: what is known about the slot a value fills. `flag` is
+/// the enclosing field's T15 derivability flag — the IR's own one-level
+/// `InitValue.derivable`, which the model carries as `Init.one_level`:
+/// `Some` for a struct field, `None` for a tuple field or a collection
+/// element, which carry no `InitValue`. A tuple in this position names itself
+/// through the model, so there is no name hint to carry.
 struct Slot<'a> {
     init_value: Option<&'a str>,
     declared_init: Option<&'a str>,
     flag: Option<bool>,
-    hint: &'a str,
 }
 
-fn type_def_default(name: &str, td: &v2::TypeDef) -> Option<TokenStream> {
-    let init = td.init.as_ref()?;
+/// A named scalar's own default.
+///
+/// The model's `Init.derivable` on a scalar declaration is exactly the
+/// condition this used to compute — the IR's flag and a constructible init
+/// text together (`facts::Inits::type_def`) — so it is read rather than
+/// recomputed, and the value it carries is the init text.
+fn type_def_default(name: &str, init: &v1::Init, sc: &v1::Scalar) -> Option<TokenStream> {
     if !init.derivable {
         return None;
     }
-    let inner = scalar_default_value(backing_scalar(td), init.value.as_deref())?;
+    let inner = scalar_default_value(class_backing(sc.class), init.value.as_deref())?;
     let name_id = ident(name);
     // A vacuous type has no `new_unchecked`; its `new` is `const` and
     // infallible, so it stands in here (`scalar_ctor`).
-    let ctor = scalar_ctor(td);
+    let ctor = scalar_ctor(sc);
     Some(quote! { #name_id::#ctor(#inner) })
 }
 
@@ -82,22 +90,20 @@ fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<T
     }
 }
 
-fn struct_default(ctx: &Ctx, name: &str, sd: &v2::StructDef) -> Option<TokenStream> {
+fn struct_default(ctx: &Ctx, name: &str, sd: &v1::Struct) -> Option<TokenStream> {
     let name_id = ident(name);
     let mut inits = Vec::new();
-    for member in &sd.members {
-        if let Some(v2::struct_member::Member::Field(field)) = &member.member {
+    for slot in &sd.slots {
+        if let Some(v1::slot::Occupant::Field(field)) = slot.occupant.as_ref() {
             let ft = field.r#type.as_ref()?;
             // The same projection `emit_field` applies, or the initializer
             // names a field the struct does not have (ADR-0016 decision 2).
-            let fname = ident(&snake_case(&field.name));
-            let hint = format!("{}{}", camel_case(name), camel_case(&field.name));
+            let fname = ident(snake_of(field.name.as_ref()));
             let init = field.init.as_ref();
             let slot = Slot {
                 init_value: init.and_then(|i| i.value.as_deref()),
                 declared_init: field.declared_init.as_deref(),
-                flag: Some(init.map(|i| i.derivable).unwrap_or(false)),
-                hint: &hint,
+                flag: Some(init.is_some_and(|i| i.one_level)),
             };
             let expr = slot_default(ctx, ft, &slot)?;
             inits.push(quote! { #fname: #expr });
@@ -109,24 +115,18 @@ fn struct_default(ctx: &Ctx, name: &str, sd: &v2::StructDef) -> Option<TokenStre
 /// The `Default` body for one generated tuple struct (typl §11). Tuple fields
 /// carry no `InitValue`, so the slot has no flag: cross-package tuple fields
 /// cannot be resolved and make the tuple non-constructible.
-pub(crate) fn tuple_default_expr(
-    ctx: &Ctx,
-    name: &str,
-    tuple: &v2::TupleType,
-) -> Option<TokenStream> {
-    let name_id = ident(name);
+pub(crate) fn tuple_default_expr(ctx: &Ctx, tuple: &v1::InducedTuple) -> Option<TokenStream> {
+    let name_id = ident(tuple_name(tuple));
     let mut inits = Vec::new();
     for field in &tuple.fields {
         let ft = field.r#type.as_ref()?;
         // The same projection `emit_tuple_struct` applies, or the initializer
         // names a field the tuple struct does not have (ADR-0016 decision 2).
-        let fname = ident(&snake_case(&field.name));
-        let hint = format!("{}{}", name, camel_case(&field.name));
+        let fname = ident(snake_of(field.name.as_ref()));
         let slot = Slot {
             init_value: None,
             declared_init: None,
             flag: None,
-            hint: &hint,
         };
         let expr = slot_default(ctx, ft, &slot)?;
         inits.push(quote! { #fname: #expr });
@@ -134,39 +134,40 @@ pub(crate) fn tuple_default_expr(
     Some(quote! { #name_id { #(#inits),* } })
 }
 
-fn slot_default(ctx: &Ctx, ft: &v2::FieldType, slot: &Slot) -> Option<TokenStream> {
+fn slot_default(ctx: &Ctx, ft: &v1::Type, slot: &Slot) -> Option<TokenStream> {
     if ft.optional {
         return Some(quote! { None });
     }
-    match &ft.kind {
-        Some(v2::field_type::Kind::Named(reference)) => named_default(ctx, reference, slot),
-        Some(v2::field_type::Kind::Primitive(prim)) => primitive_default(*prim, slot),
-        Some(v2::field_type::Kind::InlineScalar(td)) => {
+    match ft.kind.as_ref() {
+        Some(v1::r#type::Kind::Named(reference)) => named_default(ctx, reference, slot),
+        Some(v1::r#type::Kind::Primitive(prim)) => primitive_default(*prim, slot),
+        Some(v1::r#type::Kind::Inline(sc)) => {
             if slot.flag == Some(false) {
                 None
             } else {
-                scalar_default_value(backing_scalar(td), slot.init_value)
+                scalar_default_value(class_backing(sc.class), slot.init_value)
             }
         }
-        Some(v2::field_type::Kind::Tuple(tuple)) => {
-            if tuple_default_expr(ctx, slot.hint, tuple).is_some() {
-                let id = ident(slot.hint);
+        Some(v1::r#type::Kind::Tuple(reference)) => {
+            let tuple = ctx.tuple(reference.index)?;
+            if tuple_default_expr(ctx, tuple).is_some() {
+                let id = ident(tuple_name(tuple));
                 Some(quote! { #id::default() })
             } else {
                 None
             }
         }
-        Some(v2::field_type::Kind::Array(array)) => array_default(ctx, array, slot),
-        Some(v2::field_type::Kind::Map(map)) => map_default(ctx, map, slot),
+        Some(v1::r#type::Kind::Array(array)) => array_default(ctx, array, slot),
+        Some(v1::r#type::Kind::Map(map)) => map_default(ctx, map, slot),
         // A stream is an interaction-position type (ridl §12.3); it never
         // reaches a struct or tuple field in checked IR, and it has no
         // Default either way.
-        Some(v2::field_type::Kind::Stream(_)) | None => None,
+        Some(v1::r#type::Kind::Stream(_)) | None => None,
     }
 }
 
-fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream> {
-    if reference.contains('.') {
+fn named_default(ctx: &Ctx, reference: &v1::TypeRef, slot: &Slot) -> Option<TokenStream> {
+    if reference.foreign {
         // Cross-package: the remote backing is not resolvable here. A declared
         // init on such a field cannot be faithfully wrapped without that
         // backing, and substituting the referenced type's own default would
@@ -176,19 +177,19 @@ fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream>
         if slot.declared_init.is_some() {
             None
         } else if slot.flag == Some(true) {
-            let path = type_path(reference);
+            let path = type_path(&reference.reference);
             Some(quote! { #path::default() })
         } else {
             None
         }
-    } else if let Some(decl) = ctx.lookup(reference) {
-        match &decl.kind {
-            Some(v2::decl::Kind::TypeDef(td)) => {
-                type_def_default(reference, td)?;
-                let path = type_path(reference);
+    } else if let Some(decl) = ctx.local(reference) {
+        match decl.kind.as_ref() {
+            Some(v1::declaration::Kind::Scalar(sc)) => {
+                type_def_default(&reference.reference, decl.init.as_ref()?, sc)?;
+                let path = type_path(&reference.reference);
                 if let Some(declared) = slot.declared_init {
-                    let inner = scalar_default_value(backing_scalar(td), Some(declared))?;
-                    let ctor = scalar_ctor(td);
+                    let inner = scalar_default_value(class_backing(sc.class), Some(declared))?;
+                    let ctor = scalar_ctor(sc);
                     Some(quote! { #path::#ctor(#inner) })
                 } else {
                     Some(quote! { #path::default() })
@@ -203,19 +204,19 @@ fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream>
     }
 }
 
-fn named_same_package_default(ctx: &Ctx, reference: &str) -> Option<TokenStream> {
-    let decl = ctx.lookup(reference)?;
+fn named_same_package_default(ctx: &Ctx, reference: &v1::TypeRef) -> Option<TokenStream> {
+    let decl = ctx.local(reference)?;
     // Guard the one recursion point into a same-package declaration's Default.
     // A cyclic composite (`struct S { next: S }`) is TYPL-206 upstream, but the
     // backend must not trust that gate: on a cycle it denies a Default rather
     // than recurse forever and overflow the stack (C1b, defense in depth).
-    if !ctx.enter_default(reference) {
+    if !ctx.enter_default(&reference.reference) {
         return None;
     }
     let derivable = decl_default_expr(ctx, decl).is_some();
-    ctx.leave_default(reference);
+    ctx.leave_default(&reference.reference);
     if derivable {
-        let path = type_path(reference);
+        let path = type_path(&reference.reference);
         Some(quote! { #path::default() })
     } else {
         None
@@ -223,24 +224,22 @@ fn named_same_package_default(ctx: &Ctx, reference: &str) -> Option<TokenStream>
 }
 
 fn primitive_default(prim: i32, slot: &Slot) -> Option<TokenStream> {
-    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
-        v2::PrimitiveType::Integer => Some(numeric_tokens(slot.init_value.unwrap_or("0"), false)),
-        v2::PrimitiveType::Float => Some(numeric_tokens(slot.init_value.unwrap_or("0"), true)),
-        v2::PrimitiveType::Boolean => Some(bool_tokens(slot.init_value.unwrap_or("false"))),
-        v2::PrimitiveType::String if slot.flag != Some(false) => Some(quote! { String::new() }),
-        v2::PrimitiveType::Bytes if slot.flag != Some(false) => Some(quote! { Vec::new() }),
+    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+        v1::PrimitiveType::Integer => Some(numeric_tokens(slot.init_value.unwrap_or("0"), false)),
+        v1::PrimitiveType::Float => Some(numeric_tokens(slot.init_value.unwrap_or("0"), true)),
+        v1::PrimitiveType::Boolean => Some(bool_tokens(slot.init_value.unwrap_or("false"))),
+        v1::PrimitiveType::String if slot.flag != Some(false) => Some(quote! { String::new() }),
+        v1::PrimitiveType::Bytes if slot.flag != Some(false) => Some(quote! { Vec::new() }),
         _ => None,
     }
 }
 
-fn array_default(ctx: &Ctx, array: &v2::ArrayType, slot: &Slot) -> Option<TokenStream> {
-    let element = array.element.as_ref()?;
-    let hint = format!("{}Element", slot.hint);
+fn array_default(ctx: &Ctx, array: &v1::ArrayType, slot: &Slot) -> Option<TokenStream> {
+    let element = array.element.as_deref()?;
     let element_slot = Slot {
         init_value: None,
         declared_init: None,
         flag: slot.flag,
-        hint: &hint,
     };
     if array.min == array.max {
         if array.max == 0 {
@@ -257,39 +256,32 @@ fn array_default(ctx: &Ctx, array: &v2::ArrayType, slot: &Slot) -> Option<TokenS
     }
 }
 
-fn map_default(ctx: &Ctx, map: &v2::MapType, slot: &Slot) -> Option<TokenStream> {
+fn map_default(ctx: &Ctx, map: &v1::MapType, slot: &Slot) -> Option<TokenStream> {
     if map.min == 0 {
         return Some(quote! { Vec::new() });
     }
-    let key_hint = format!("{}Key", slot.hint);
-    let value_hint = format!("{}Value", slot.hint);
     let key_slot = Slot {
         init_value: None,
         declared_init: None,
         flag: slot.flag,
-        hint: &key_hint,
     };
     let value_slot = Slot {
         init_value: None,
         declared_init: None,
         flag: slot.flag,
-        hint: &value_hint,
     };
-    let key = slot_default(ctx, map.key.as_ref()?, &key_slot)?;
-    let value = slot_default(ctx, map.value.as_ref()?, &value_slot)?;
+    let key = slot_default(ctx, map.key.as_deref()?, &key_slot)?;
+    let value = slot_default(ctx, map.value.as_deref()?, &value_slot)?;
     let count = count_tokens(map.min);
     Some(quote! { (0..#count).map(|_| (#key, #value)).collect() })
 }
 
-fn enum_default(name: &str, ed: &v2::EnumDef) -> Option<TokenStream> {
+fn enum_default(name: &str, ed: &v1::Enum) -> Option<TokenStream> {
     // The value 0 if declared, else the lowest declared value (typl §5.8).
-    let chosen = ed
-        .values
-        .iter()
-        .find(|value| value.value == 0)
-        .or_else(|| ed.values.iter().min_by_key(|value| value.value))?;
+    // The lowering picks the member once, as `Enum.init_member`.
+    let chosen = ed.values.get(ed.init_member? as usize)?;
     let name_id = ident(name);
-    let variant = ident(&chosen.name);
+    let variant = ident(declared(chosen.name.as_ref()));
     Some(quote! { #name_id::#variant })
 }
 
@@ -299,16 +291,17 @@ fn enum_set_default(name: &str) -> TokenStream {
     quote! { #name_id(0) }
 }
 
-fn union_default(ctx: &Ctx, name: &str, ud: &v2::UnionDef) -> Option<TokenStream> {
+fn union_default(ctx: &Ctx, name: &str, ud: &v1::Union) -> Option<TokenStream> {
     // The first arm's init (typl §5.8). The arm references a named type.
     let first = ud.arms.first()?;
-    let arm_default = if first.type_ref.contains('.') {
+    let reference = first.r#type.as_ref()?;
+    let arm_default = if reference.foreign {
         None
     } else {
-        named_same_package_default(ctx, &first.type_ref)
+        named_same_package_default(ctx, reference)
     }?;
     let name_id = ident(name);
-    let variant = ident(&camel_case(&first.name));
+    let variant = ident(crate::camel_of(first.name.as_ref()));
     Some(quote! { #name_id::#variant(#arm_default) })
 }
 

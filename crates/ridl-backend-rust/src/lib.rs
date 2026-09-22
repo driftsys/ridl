@@ -25,6 +25,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
+use ridl_ir::codegen::v1;
 use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::projection::flatbuffers as fb_projection;
 use ridl_ir::v2;
@@ -82,7 +83,8 @@ pub struct GenerateError {
 /// stream is parsed with `syn::parse2`; a parse failure (a codegen bug) surfaces
 /// as a `GenerateError` instead of unformatted output.
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
-    let ctx = Ctx::new(package);
+    let model = ridl_ir::codegen::lower(package, &[]);
+    let ctx = Ctx::new(package, &model);
     render(package_items(&ctx, package)?)
 }
 
@@ -129,7 +131,8 @@ pub fn generate_face_with(
     wire: WireEncoding,
 ) -> Result<Generated, GenerateError> {
     refuse_wire_collision(package)?;
-    let ctx = Ctx::new(package);
+    let model = ridl_ir::codegen::lower(package, &[]);
+    let ctx = Ctx::new(package, &model);
     let mut items = vec![wire_alias(wire)];
     items.extend(package_items(&ctx, package)?);
     items.extend(descriptors::interface_items(&ctx, package)?);
@@ -151,7 +154,8 @@ pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    let ctx = Ctx::with_others(package, others);
+    let model = ridl_ir::codegen::lower(package, others);
+    let ctx = Ctx::with_others(package, others, &model);
     render(package_items(&ctx, package)?)
 }
 
@@ -195,7 +199,8 @@ pub fn generate_pipeline(
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
     refuse_wire_collision(package)?;
-    let ctx = Ctx::with_others(package, others);
+    let model = ridl_ir::codegen::lower(package, others);
+    let ctx = Ctx::with_others(package, others, &model);
     let mut items = vec![wire_alias(wire)];
     items.extend(package_items(&ctx, package)?);
     for shape in package.shapes() {
@@ -390,7 +395,8 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
 /// compiles over the codec `generate` emits rather than over one written for
 /// it (design note D-11, stage K9b).
 fn package_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
-    let (mut items, tuples) = domain_items(ctx, package)?;
+    let tuples = collect_tuples(package)?;
+    let mut items = domain_items(ctx);
     items.extend(codec::package_items(ctx, package, &tuples)?);
     Ok(items)
 }
@@ -447,29 +453,66 @@ fn wire_alias(wire: WireEncoding) -> TokenStream {
 /// This does not emit the codec. [`package_items`] appends it, for both entry
 /// points: the codec is `generate`'s output (design note D-1 as amended), and
 /// the face compiles over that same output (D-11, stage K9b).
-#[allow(clippy::type_complexity)]
-fn domain_items(
-    ctx: &Ctx,
-    package: &v2::Package,
-) -> Result<(Vec<TokenStream>, Vec<InducedTuple>), GenerateError> {
+/// The domain-type items of `package`, emitted from the lowered model.
+///
+/// Stage P4 layer 1: every declaration is read from `Ctx::model`, not from
+/// the IR. `model.declarations[i]` is lowered from `package.decls[i]`, so the
+/// order and the count are the IR's; the induced tuple structs come from
+/// `model.tuples`, which the lowering discovers in the same worklist order
+/// this walk used to and names with `InducedName.rust`.
+///
+/// This does not emit the codec. [`package_items`] appends it, for both entry
+/// points: the codec is `generate`'s output (design note D-1 as amended), and
+/// the face compiles over that same output (D-11, stage K9b).
+fn domain_items(ctx: &Ctx) -> Vec<TokenStream> {
     let mut items: Vec<TokenStream> = Vec::new();
+    for decl in &ctx.model.declarations {
+        items.push(emit_decl(ctx, decl));
+    }
+    // A tuple type generates a named nested struct each (typl §11). The
+    // lowering lifted every one of them out of the type graph and gave each
+    // the name the path that reached it spells; an unnamed entry is one no
+    // backend has a rule for — a tuple reached from an interaction position,
+    // or from a declaration of another package — and this backend emits none.
+    for tuple in &ctx.model.tuples {
+        if tuple_name(tuple).is_empty() {
+            continue;
+        }
+        items.push(emit_tuple_struct(ctx, tuple));
+    }
+    items
+}
+
+/// The induced tuple set the FlatBuffers codec needs, discovered over the IR.
+///
+/// Stage P4 layer 1 ports the domain-type emitters onto the model; the codec
+/// is layer 2 and still reads `v2::TupleType`, so the worklist that finds
+/// those tuples stays here until then. It is the walk [`domain_items`] used to
+/// make, with the emitted tokens discarded: the same discovery order, the same
+/// one-name-one-struct rule, and the same refusal when two different tuples
+/// spell one name ([`tuple_collision`]).
+fn collect_tuples(package: &v2::Package) -> Result<Vec<InducedTuple>, GenerateError> {
     let mut tuples: Vec<InducedTuple> = Vec::new();
     let mut discovered: Vec<InducedTuple> = Vec::new();
 
     for decl in &package.decls {
-        items.push(emit_decl(ctx, decl, &mut tuples));
+        let Some(v2::decl::Kind::StructDef(sd)) = &decl.kind else {
+            // Only a struct field carries a tuple position; a union arm and an
+            // enum member name a type, and a constant has none.
+            continue;
+        };
+        for member in &sd.members {
+            let Some(v2::struct_member::Member::Field(field)) = &member.member else {
+                continue;
+            };
+            let Some(ft) = field.r#type.as_ref() else {
+                continue;
+            };
+            let hint = format!("{}{}", camel_case(&decl.name), camel_case(&field.name));
+            field_type_tokens(ft, &hint, decl.visibility, &mut tuples);
+        }
     }
 
-    // Tuple types generate a named nested struct each (typl §11). Process the
-    // worklist: emitting a tuple struct's fields can discover further nested
-    // tuples, which are appended and drained here.
-    //
-    // A name is emitted once. The same tuple genuinely arrives twice — the
-    // interaction module pre-discovers nested tuples to learn their names, and
-    // emitting the outer tuple's fields finds them again — so a repeat of an
-    // *identical* discovery is expected and skipped. A repeat under one name
-    // with a different shape is a collision, and it is refused rather than
-    // deduplicated; see [`tuple_collision`].
     let mut seen: HashMap<String, InducedTuple> = HashMap::new();
     let mut index = 0;
     while index < tuples.len() {
@@ -482,11 +525,17 @@ fn domain_items(
             continue;
         }
         seen.insert(induced.name.clone(), induced.clone());
-        items.push(emit_tuple_struct(ctx, &induced, &mut tuples));
+        for field in &induced.tuple.fields {
+            let Some(ft) = field.r#type.as_ref() else {
+                continue;
+            };
+            let hint = format!("{}{}", induced.name, camel_case(&field.name));
+            field_type_tokens(ft, &hint, induced.visibility, &mut tuples);
+        }
         discovered.push(induced);
     }
 
-    Ok((items, discovered))
+    Ok(discovered)
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,6 +1148,13 @@ fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateE
 /// declaration (cross-package references stay unresolved by design — this
 /// backend generates one package at a time).
 pub(crate) struct Ctx<'a> {
+    /// The lowered codegen model of this package over this scope
+    /// (`ridl_ir::codegen::lower`), which the domain-type emitters, the
+    /// default derivation and the derive pass read instead of the IR (lane P
+    /// stage P4, design note §8.3). The remaining unported emitters read the
+    /// IR beside it, paired by index: `model.declarations[i]` is lowered from
+    /// `package.decls[i]`.
+    pub(crate) model: &'a v1::Model,
     decls: HashMap<&'a str, &'a v2::Decl>,
     /// The other packages of the same build, in the shape
     /// `ridl-backend-flatbuffers::generate_with` already gives them
@@ -1117,23 +1173,60 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    pub(crate) fn new(package: &'a v2::Package) -> Self {
-        Ctx::with_others(package, &[])
+    pub(crate) fn new(package: &'a v2::Package, model: &'a v1::Model) -> Self {
+        Ctx::with_others(package, &[], model)
     }
 
     /// [`Ctx::new`] with the other packages of the same build, which the
     /// codec resolves a cross-package reference through (driftsys/ridl#467).
-    pub(crate) fn with_others(package: &'a v2::Package, others: &'a [&'a v2::Package]) -> Self {
+    pub(crate) fn with_others(
+        package: &'a v2::Package,
+        others: &'a [&'a v2::Package],
+        model: &'a v1::Model,
+    ) -> Self {
         let decls = package
             .decls
             .iter()
             .map(|decl| (decl.name.as_str(), decl))
             .collect();
         Ctx {
+            model,
             decls,
             others,
             visiting: RefCell::new(HashSet::new()),
         }
+    }
+
+    /// The declaration the model's `declarations` list holds at `index`.
+    pub(crate) fn declaration(&self, index: u32) -> Option<&'a v1::Declaration> {
+        self.model.declarations.get(index as usize)
+    }
+
+    /// The induced tuple the model's `tuples` list holds at `index`.
+    pub(crate) fn tuple(&self, index: u32) -> Option<&'a v1::InducedTuple> {
+        self.model.tuples.get(index as usize)
+    }
+
+    /// The Rust name of the induced tuple at `index` — the CamelCase of the
+    /// path that reached it, which the lowering spells once
+    /// (`InducedName.rust`).
+    pub(crate) fn tuple_name(&self, index: u32) -> &'a str {
+        self.tuple(index)
+            .and_then(|tuple| tuple.name.as_ref())
+            .map(|name| name.rust.as_str())
+            .unwrap_or_default()
+    }
+
+    /// The declaration a resolved, same-package reference names, or `None`
+    /// for a cross-package reference, for a name no declaration in this
+    /// package answers to, and for a reference that names a constant — the
+    /// three cases [`Ctx::lookup`] also answers `None` for, kept so the
+    /// printers stay as conservative as they are today (design note §3.5).
+    pub(crate) fn local(&self, reference: &v1::TypeRef) -> Option<&'a v1::Declaration> {
+        if reference.foreign || !reference.resolved {
+            return None;
+        }
+        self.declaration(reference.index)
     }
 
     /// The declaration named `name` in this package, or `None` for a
@@ -1160,28 +1253,170 @@ impl<'a> Ctx<'a> {
 // Declaration emission.
 // ---------------------------------------------------------------------------
 
-fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> TokenStream {
+// ---------------------------------------------------------------------------
+// Reading the lowered model.
+// ---------------------------------------------------------------------------
+
+/// The name the source declared, as the model carries it.
+fn declared(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.declared.as_str()).unwrap_or_default()
+}
+
+/// The pinned `snake_case` of a declared name (ADR-0016 decision 1), spelled
+/// once by the lowering.
+fn snake_of(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.snake.as_str()).unwrap_or_default()
+}
+
+/// The pinned `camel_case` of a declared name (ADR-0016, 2026-09-20
+/// amendment), spelled once by the lowering.
+fn camel_of(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.camel.as_str()).unwrap_or_default()
+}
+
+/// The generated struct name of one induced tuple — the CamelCase of the path
+/// that reached it, which the lowering spells as `InducedName.rust`. Empty for
+/// a tuple no backend has a naming rule for.
+fn tuple_name(induced: &v1::InducedTuple) -> &str {
+    induced
+        .name
+        .as_ref()
+        .map(|name| name.rust.as_str())
+        .unwrap_or_default()
+}
+
+/// The canonical IR text of the type one union arm names.
+fn arm_reference(arm: &v1::Arm) -> &str {
+    arm.r#type
+        .as_ref()
+        .map(|reference| reference.reference.as_str())
+        .unwrap_or_default()
+}
+
+/// The model's scalar class as this backend's own classification. The two are
+/// the same total function of a backing — the lowering's `scalar_class` is
+/// [`backing_scalar`] moved into `ridl-ir` — so this is a rename, not a
+/// second rule.
+pub(crate) fn class_backing(class: i32) -> ScalarBacking {
+    match v1::ScalarClass::try_from(class).unwrap_or(v1::ScalarClass::Unspecified) {
+        v1::ScalarClass::Integer => ScalarBacking::Integer,
+        v1::ScalarClass::Boolean => ScalarBacking::Boolean,
+        v1::ScalarClass::String => ScalarBacking::String,
+        v1::ScalarClass::Bytes => ScalarBacking::Bytes,
+        // A unit backing, an absent backing and a float backing are all
+        // float, and an unspecified class is unreachable from the lowering.
+        v1::ScalarClass::Float | v1::ScalarClass::Unspecified => ScalarBacking::Float,
+    }
+}
+
+/// The Rust type one scalar class is realized as (Appendix D language layer):
+/// unit and float back to `f64`, integer to `i64`.
+fn class_tokens(class: i32) -> TokenStream {
+    match class_backing(class) {
+        ScalarBacking::Float => quote! { f64 },
+        ScalarBacking::Integer => quote! { i64 },
+        ScalarBacking::Boolean => quote! { bool },
+        ScalarBacking::String => quote! { String },
+        ScalarBacking::Bytes => quote! { Vec<u8> },
+    }
+}
+
+/// The Rust newtype inner type for a named scalar (Appendix D language
+/// layer).
+fn newtype_inner(sc: &v1::Scalar) -> TokenStream {
+    class_tokens(sc.class)
+}
+
+/// The Rust type of one type position, read from the lowered model.
+///
+/// It is [`field_type_tokens`] over the model: the same shapes, with the
+/// references already resolved and every induced tuple already named. A tuple
+/// position is a `TupleRef` into `Model.tuples`, so this walk neither
+/// discovers nor names one — [`domain_items`] emits the struct for each named
+/// entry of that list.
+pub(crate) fn model_type_tokens(ctx: &Ctx, ty: &v1::Type) -> TokenStream {
+    let inner = match ty.kind.as_ref() {
+        Some(v1::r#type::Kind::Named(reference)) => type_path(&reference.reference),
+        Some(v1::r#type::Kind::Primitive(prim)) => model_primitive_tokens(*prim),
+        Some(v1::r#type::Kind::Inline(sc)) => class_tokens(sc.class),
+        Some(v1::r#type::Kind::Tuple(reference)) => {
+            let id = ident(ctx.tuple_name(reference.index));
+            quote! { #id }
+        }
+        Some(v1::r#type::Kind::Array(array)) => {
+            let element = array
+                .element
+                .as_deref()
+                .map(|element| model_type_tokens(ctx, element))
+                .unwrap_or_else(|| quote! { () });
+            if array.min == array.max {
+                let len = usize_tokens(array.min);
+                quote! { [#element; #len] }
+            } else {
+                quote! { Vec<#element> }
+            }
+        }
+        Some(v1::r#type::Kind::Map(map)) => {
+            let key = map
+                .key
+                .as_deref()
+                .map(|key| model_type_tokens(ctx, key))
+                .unwrap_or_else(|| quote! { () });
+            let value = map
+                .value
+                .as_deref()
+                .map(|value| model_type_tokens(ctx, value))
+                .unwrap_or_else(|| quote! { () });
+            quote! { Vec<(#key, #value)> }
+        }
+        // A stream is an interaction-position type (ridl §12.3); it never
+        // reaches a struct or tuple field in checked IR. Kept total.
+        Some(v1::r#type::Kind::Stream(_)) | None => quote! { () },
+    };
+
+    if ty.optional {
+        quote! { Option<#inner> }
+    } else {
+        inner
+    }
+}
+
+/// [`primitive_tokens`] over the model's own `PrimitiveType`, which restates
+/// the IR's values (design note §3.8).
+fn model_primitive_tokens(prim: i32) -> TokenStream {
+    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+        v1::PrimitiveType::Boolean => quote! { bool },
+        v1::PrimitiveType::Integer => quote! { i64 },
+        v1::PrimitiveType::Float => quote! { f64 },
+        v1::PrimitiveType::String => quote! { String },
+        v1::PrimitiveType::Bytes => quote! { Vec<u8> },
+        v1::PrimitiveType::Unspecified => quote! { () },
+    }
+}
+
+fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     // The derive attribute is computed once and handed to the emitter, which
     // places it under the declaration's doc comment rather than above it.
     // Prepending it to the finished item would render it above the doc, which
     // is backwards from how Rust is written everywhere else — and `Default` is
     // never among the traits (`derives`, design decision 8).
     let derived = derives::derive_attr(ctx, decl);
-    let item = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td, &derived),
-        Some(v2::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
-        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, &derived, tuples),
-        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed, &derived),
-        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd, &derived),
-        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud, &derived),
-        // Interaction kinds ride `Interface.interactions`, never a package
-        // decl, so none of them reaches this match; nothing emits them today.
-        Some(_) | None => return quote! {},
+    let item = match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(decl, sc, &derived),
+        Some(v1::declaration::Kind::Constant(cd)) => return emit_const(ctx, decl, cd),
+        Some(v1::declaration::Kind::Struct(sd)) => emit_struct(ctx, decl, sd, &derived),
+        Some(v1::declaration::Kind::Enum(ed)) => emit_enum(decl, ed, &derived),
+        Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(decl, esd, &derived),
+        Some(v1::declaration::Kind::Union(ud)) => emit_union(decl, ud, &derived),
+        // An interaction rides `Interface.interactions`, never a package
+        // declaration, so the lowering leaves the kind unset for one and
+        // nothing emits them today.
+        None => return quote! {},
     };
 
     let default_impl = defaults::decl_default_expr(ctx, decl)
         .map(|expr| {
-            let name = ident(&decl.name);
+            let name = ident(declared(decl.name.as_ref()));
             quote! { impl Default for #name { fn default() -> Self { #expr } } }
         })
         .unwrap_or_default();
@@ -1209,11 +1444,11 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
 /// Each covered impl block uses the deprecated type, and without the allow
 /// the consumer's build draws the `deprecated` lint on code the consumer did
 /// not write.
-fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
-    let inner = newtype_inner(td);
+fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
+    let inner = newtype_inner(sc);
     let doc = doc_attrs(&decl.doc);
-    let unchecked = unchecked_doc(td);
+    let unchecked = unchecked_doc(sc);
     // A blank doc line keeps the unchecked note out of the declaration's own
     // doc paragraph.
     let separator = if decl.doc.is_empty() || unchecked.is_empty() {
@@ -1228,16 +1463,16 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
         quote! {}
     };
     let vis = vis_tokens(decl.visibility);
-    let type_name = decl.name.as_str();
+    let type_name = declared(decl.name.as_ref());
 
-    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
-        return emit_vacuous_type_def(decl, td, derived);
+    if sc.vacuous {
+        return emit_vacuous_type_def(decl, sc, derived);
     }
 
-    let check_param_ty = check_param_type(td);
-    let check_shadow = check_deref_shadow(td);
-    let check_body = constraint_checks(td, type_name, quote! { value });
-    let getter = scalar_getter(td, vis.clone(), inner.clone());
+    let check_param_ty = check_param_type(sc);
+    let check_shadow = check_deref_shadow(sc);
+    let check_body = constraint_checks(sc, type_name, quote! { value });
+    let getter = scalar_getter(sc, vis.clone(), inner.clone());
 
     quote! {
         #doc
@@ -1334,14 +1569,18 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
 /// The prelude names are absolute for the reason [`emit_type_def`] records: a
 /// typl package may declare `type From`, and that declaration shadows the
 /// prelude in the module the generated impl shares with it.
-fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
-    let inner = newtype_inner(td);
+fn emit_vacuous_type_def(
+    decl: &v1::Declaration,
+    sc: &v1::Scalar,
+    derived: &TokenStream,
+) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
+    let inner = newtype_inner(sc);
     let doc = doc_attrs(&decl.doc);
     // A `step`-only constraint is vacuous (`constraint_is_vacuous` excludes
     // `step`), and that is exactly the case `unchecked_doc` still speaks for,
     // so the note and its separator are computed here too.
-    let unchecked = unchecked_doc(td);
+    let unchecked = unchecked_doc(sc);
     let separator = if decl.doc.is_empty() || unchecked.is_empty() {
         quote! {}
     } else {
@@ -1354,7 +1593,7 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStrea
         quote! {}
     };
     let vis = vis_tokens(decl.visibility);
-    let getter = scalar_getter(td, vis.clone(), inner.clone());
+    let getter = scalar_getter(sc, vis.clone(), inner.clone());
 
     quote! {
         #doc
@@ -1397,8 +1636,8 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStrea
 /// checked by `ridlc` rather than at run time; a vacuous type has no
 /// `new_unchecked` ([`emit_vacuous_type_def`]) and its `new` is `const`, so
 /// both positions — a `const` item and the body of `fn default()` — accept it.
-pub(crate) fn scalar_ctor(td: &v2::TypeDef) -> TokenStream {
-    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
+pub(crate) fn scalar_ctor(sc: &v1::Scalar) -> TokenStream {
+    if sc.vacuous {
         quote! { new }
     } else {
         quote! { new_unchecked }
@@ -1414,13 +1653,13 @@ pub(crate) fn scalar_ctor(td: &v2::TypeDef) -> TokenStream {
 /// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
 /// emitted only for a float or integer backing; on any other backing the two
 /// are ignored rather than rendered as a literal of the wrong type.
-fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> TokenStream {
-    let Some(c) = td.constraint.as_ref() else {
+fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> TokenStream {
+    let Some(c) = sc.constraint.as_ref() else {
         return quote! {};
     };
     let mut checks = Vec::new();
 
-    let is_float = match backing_scalar(td) {
+    let is_float = match class_backing(sc.class) {
         ScalarBacking::Float => Some(true),
         ScalarBacking::Integer => Some(false),
         ScalarBacking::Boolean | ScalarBacking::String | ScalarBacking::Bytes => None,
@@ -1464,7 +1703,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
     // parenthesized because `as u64 < 8` does not parse: after a cast type,
     // `<` opens a generic-argument list.
     if c.len_min.is_some() || c.len_max.is_some() {
-        let len = match backing_scalar(td) {
+        let len = match class_backing(sc.class) {
             ScalarBacking::String => quote! { (#value.chars().count() as u64) },
             _ => quote! { (#value.len() as u64) },
         };
@@ -1495,7 +1734,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             });
         }
     }
-    if backing_scalar(td) == ScalarBacking::String
+    if class_backing(sc.class) == ScalarBacking::String
         && let Some(pattern) = c.pattern.as_deref()
     {
         // A `match` pattern is checked against text, and `regex::Regex`
@@ -1521,7 +1760,9 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         // names are: the face module of an interface named `Std` or `Regex`
         // is a module of that name in this same module, and it would shadow
         // the extern crate.
-        let source = strip_regex_delimiters(pattern);
+        // The lowering already stripped the typl `/…/` delimiters, which are
+        // syntax rather than pattern content (`Constraint.pattern`).
+        let source = pattern;
         checks.push(quote! {
             #[cfg(feature = "validate-pattern")]
             {
@@ -1553,8 +1794,8 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
 /// the same backing's borrowed form rather than its owned one; the two
 /// matches must stay in lockstep for every backing this function names, and
 /// each names the other for that reason.
-fn check_param_type(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
+fn check_param_type(sc: &v1::Scalar) -> TokenStream {
+    match class_backing(sc.class) {
         ScalarBacking::Float => quote! { &f64 },
         ScalarBacking::Integer => quote! { &i64 },
         ScalarBacking::Boolean => quote! { &bool },
@@ -1570,8 +1811,8 @@ fn check_param_type(td: &v2::TypeDef) -> TokenStream {
 /// expressions type-check unchanged. `String` and `&[u8]` need no shadow:
 /// their methods (`.chars()`, `.len()`) and the `&value` the pattern check
 /// takes both work directly on the borrowed slice form.
-fn check_deref_shadow(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
+fn check_deref_shadow(sc: &v1::Scalar) -> TokenStream {
+    match class_backing(sc.class) {
         ScalarBacking::Float | ScalarBacking::Integer | ScalarBacking::Boolean => {
             quote! { let value = *value; }
         }
@@ -1584,8 +1825,8 @@ fn check_deref_shadow(td: &v2::TypeDef) -> TokenStream {
 ///
 /// `backing_scalar` is total: it maps a unit backing and an absent backing to
 /// `Float`, so every named scalar gets exactly one of the three forms.
-fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> TokenStream {
-    match backing_scalar(td) {
+fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> TokenStream {
+    match class_backing(sc.class) {
         ScalarBacking::String => quote! {
             #vis fn get(&self) -> &str { &self.0 }
             #vis fn into_inner(self) -> String { self.0 }
@@ -1612,15 +1853,15 @@ fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> Toke
 /// leaves `pattern` absent while the type still carries a match constraint,
 /// and no check is emitted for that case either, so it keeps the plain "not
 /// checked" line.
-fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
-    let Some(c) = td.constraint.as_ref() else {
+fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
+    let Some(c) = sc.constraint.as_ref() else {
         return quote! {};
     };
     let mut lines = Vec::new();
     if c.step.is_some() {
         lines.push(" Quantization (`step`) is not checked by `new`.".to_string());
     }
-    if c.pattern.is_some() && backing_scalar(td) == ScalarBacking::String {
+    if c.pattern.is_some() && class_backing(sc.class) == ScalarBacking::String {
         lines.push(
             " The `match` pattern is checked by `new` only when the crate is built with \
               the `validate-pattern` feature."
@@ -1637,93 +1878,97 @@ fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
 /// `&'static str` rather than a value of the newtype: `String` cannot be
 /// constructed in a `const` context. This asymmetry is documented in the C
 /// header and here.
-fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
+fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStream {
     // A constant is a value, not a type: there is nothing to derive on it.
     let attrs = decl_attrs(decl, &quote! {});
     let vis = vis_tokens(decl.visibility);
-    let name = ident(&decl.name);
+    let name = ident(declared(decl.name.as_ref()));
 
-    // A regex constant declares no type; it holds the pattern source text. The
-    // IR stores that text with its typl `/…/` delimiters, which are syntax, not
-    // pattern content, so they are stripped before the `&str` value is emitted:
-    // the const holds the pattern a consumer can feed to a regex engine (M1).
-    if let Some(regex) = &cd.regex {
-        let pattern = strip_regex_delimiters(regex);
-        return quote! { #attrs #vis const #name: &str = #pattern; };
-    }
-
-    let Some(type_ref) = cd.type_ref.as_deref() else {
-        return quote! {};
-    };
-
-    // A named-type constant resolves through the type's backing; a
-    // primitive-keyword constant reads the keyword directly.
-    if let Some(backing) = same_package_scalar_backing(ctx, type_ref) {
-        // `same_package_scalar_ctor` resolves the same declaration through
-        // the same lookup as the `backing` above, so a `Some` here is
-        // guaranteed once `backing` is: there is no reachable case with a
-        // backing and no ctor. A fallback here would be dead code, and a
-        // wrong one besides — `new` is fallible on a constrained type and
-        // does not type-check in this `const` position (`scalar_ctor` names
-        // `new_unchecked` for exactly that type).
-        let ctor = same_package_scalar_ctor(ctx, type_ref)
-            .expect("a same-package scalar backing implies a same-package scalar ctor");
-        match backing {
-            ScalarBacking::Float => {
-                let value = numeric_tokens(&cd.value, true);
-                let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
-            }
-            ScalarBacking::Integer => {
-                let value = numeric_tokens(&cd.value, false);
-                let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
-            }
-            ScalarBacking::Boolean => {
-                let value = bool_tokens(&cd.value);
-                let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
-            }
-            ScalarBacking::String => {
-                let value = cd.value.as_str();
-                quote! { #attrs #vis const #name: &str = #value; }
-            }
-            ScalarBacking::Bytes => quote! {},
+    match cd.typed.as_ref() {
+        // A regex constant declares no type; it holds the pattern source
+        // text. The IR stores that text with its typl `/…/` delimiters, which
+        // are syntax, not pattern content, and the lowering strips them, so
+        // the const holds the pattern a consumer can feed to a regex engine
+        // (M1).
+        Some(v1::constant::Typed::RegexBody(pattern)) => {
+            quote! { #attrs #vis const #name: &str = #pattern; }
         }
-    } else if let Some(prim) = primitive_keyword(type_ref) {
-        match prim {
-            v2::PrimitiveType::Integer => {
-                let value = numeric_tokens(&cd.value, false);
-                quote! { #attrs #vis const #name: i64 = #value; }
+        // A named-type constant resolves through the type's backing. Only a
+        // same-package named scalar is emitted: a reference into another
+        // package is skipped rather than mis-typed, which is the conservative
+        // rule the model's resolution leaves to the printer (design note
+        // §3.5).
+        Some(v1::constant::Typed::Named(reference)) => {
+            let Some(target) = ctx.local(reference) else {
+                return quote! {};
+            };
+            let Some(v1::declaration::Kind::Scalar(sc)) = target.kind.as_ref() else {
+                return quote! {};
+            };
+            // The constructor is read from the same declaration as the class
+            // above: `new` on a vacuous type, whose `new` is `const` and
+            // infallible, and `new_unchecked` on a constrained one, because
+            // `new` is fallible there and does not type-check in a `const`
+            // position (`scalar_ctor`).
+            let ctor = scalar_ctor(sc);
+            match class_backing(sc.class) {
+                ScalarBacking::Float => {
+                    let value = numeric_tokens(&cd.value, true);
+                    let type_name = type_path(&reference.reference);
+                    quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
+                }
+                ScalarBacking::Integer => {
+                    let value = numeric_tokens(&cd.value, false);
+                    let type_name = type_path(&reference.reference);
+                    quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
+                }
+                ScalarBacking::Boolean => {
+                    let value = bool_tokens(&cd.value);
+                    let type_name = type_path(&reference.reference);
+                    quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
+                }
+                ScalarBacking::String => {
+                    let value = cd.value.as_str();
+                    quote! { #attrs #vis const #name: &str = #value; }
+                }
+                ScalarBacking::Bytes => quote! {},
             }
-            v2::PrimitiveType::Float => {
-                let value = numeric_tokens(&cd.value, true);
-                quote! { #attrs #vis const #name: f64 = #value; }
-            }
-            v2::PrimitiveType::Boolean => {
-                let value = bool_tokens(&cd.value);
-                quote! { #attrs #vis const #name: bool = #value; }
-            }
-            v2::PrimitiveType::String => {
-                let value = cd.value.as_str();
-                quote! { #attrs #vis const #name: &str = #value; }
-            }
-            v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => quote! {},
         }
-    } else {
-        // A cross-package or unresolved constant type: the backing is unknown
-        // here, so the constant is skipped rather than mis-typed.
-        quote! {}
+        Some(v1::constant::Typed::Primitive(prim)) => {
+            match v1::PrimitiveType::try_from(*prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+                v1::PrimitiveType::Integer => {
+                    let value = numeric_tokens(&cd.value, false);
+                    quote! { #attrs #vis const #name: i64 = #value; }
+                }
+                v1::PrimitiveType::Float => {
+                    let value = numeric_tokens(&cd.value, true);
+                    quote! { #attrs #vis const #name: f64 = #value; }
+                }
+                v1::PrimitiveType::Boolean => {
+                    let value = bool_tokens(&cd.value);
+                    quote! { #attrs #vis const #name: bool = #value; }
+                }
+                v1::PrimitiveType::String => {
+                    let value = cd.value.as_str();
+                    quote! { #attrs #vis const #name: &str = #value; }
+                }
+                v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => quote! {},
+            }
+        }
+        // A type no package in the scope declares, and a constant that
+        // declares no type at all: the backing is unknown here, so the
+        // constant is skipped rather than mis-typed.
+        Some(v1::constant::Typed::Unresolved(_)) | None => quote! {},
     }
 }
 
 fn emit_struct(
-    decl: &v2::Decl,
-    sd: &v2::StructDef,
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    sd: &v1::Struct,
     derived: &TokenStream,
-    tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
-    let name = ident(&decl.name);
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
     let repr = if sd.fixed_layout {
@@ -1732,14 +1977,15 @@ fn emit_struct(
         quote! {}
     };
 
-    let fields = sd.members.iter().filter_map(|member| match &member.member {
-        Some(v2::struct_member::Member::Field(field)) => {
-            Some(emit_field(&decl.name, decl.visibility, field, tuples))
-        }
-        // A reserved tombstone occupies an ordinal but emits no field
-        // (typl §7.4).
-        Some(v2::struct_member::Member::Reserved(_)) | None => None,
-    });
+    let fields = sd
+        .slots
+        .iter()
+        .filter_map(|slot| match slot.occupant.as_ref() {
+            Some(v1::slot::Occupant::Field(field)) => Some(emit_field(ctx, field)),
+            // A reserved tombstone occupies an ordinal but emits no field
+            // (typl §7.4).
+            Some(v1::slot::Occupant::Retired(_)) | None => None,
+        });
 
     quote! {
         #attrs
@@ -1758,32 +2004,26 @@ fn emit_struct(
 /// projection reaches a namespace RIDL-149 does not check — two field names
 /// distinct under `snake_case` can induce one tuple type name — which is
 /// driftsys/ridl#453, recorded in ADR-0016's consequences.
-fn emit_field(
-    parent: &str,
-    visibility: i32,
-    field: &v2::Field,
-    tuples: &mut Vec<InducedTuple>,
-) -> TokenStream {
-    let field_name = ident(&snake_case(&field.name));
+fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
+    let field_name = ident(snake_of(field.name.as_ref()));
     let attrs = field_attrs(field);
-    let hint = format!("{}{}", camel_case(parent), camel_case(&field.name));
     let ty = field
         .r#type
         .as_ref()
-        .map(|ft| field_type_tokens(ft, &hint, visibility, tuples))
+        .map(|ft| model_type_tokens(ctx, ft))
         .unwrap_or_else(|| quote! { () });
     quote! { #attrs pub #field_name: #ty }
 }
 
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names keep their typl `SCREAMING_SNAKE` spelling.
-fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
+fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
-        let vname = ident(&value.name);
+        let vname = ident(declared(value.name.as_ref()));
         let disc = int_tokens(value.value);
         let vdoc = doc_attrs(&value.doc);
         quote! { #vdoc #vname = #disc }
@@ -1793,11 +2033,11 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenS
     // actually enters a program: a wire backend emits no constructor
     // (ADR-0013 decision 2), so this is the validating seam.
     let arms = ed.values.iter().map(|value| {
-        let vname = ident(&value.name);
+        let vname = ident(declared(value.name.as_ref()));
         let disc = int_tokens(value.value);
         quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
     });
-    let type_name = decl.name.as_str();
+    let type_name = declared(decl.name.as_ref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
     } else {
@@ -1847,13 +2087,13 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenS
 /// because it shares the block. Without the allow the consumer's build draws
 /// the `deprecated` lint on code the consumer did not write — which is what
 /// driftsys/ridl#420 settled for a named scalar's impl blocks.
-fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
+fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let bits = esd.bits.iter().map(|bit| {
-        let bname = ident(&bit.name);
+        let bname = ident(declared(bit.name.as_ref()));
         let shift = int_tokens(bit.value);
         quote! { #vis const #bname: #name = #name(1 << #shift); }
     });
@@ -1887,13 +2127,8 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -
     // build that produces usable output reaches either. The filter keeps the
     // compiler from panicking; it does not make such a package emit sound
     // code.
-    let mask = esd
-        .bits
-        .iter()
-        .filter(|bit| (0..=63).contains(&bit.value))
-        .fold(0i64, |acc, bit| acc | (1i64 << bit.value));
-    let mask_lit = int_tokens(mask);
-    let type_name = decl.name.as_str();
+    let mask_lit = int_tokens(esd.declared_mask);
+    let type_name = declared(decl.name.as_ref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
     } else {
@@ -1938,14 +2173,14 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
+fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ud.arms.iter().map(|arm| {
-        let vname = ident(&camel_case(&arm.name));
-        let ty = type_path(&arm.type_ref);
+        let vname = ident(camel_of(arm.name.as_ref()));
+        let ty = type_path(arm_reference(arm));
         let vdoc = doc_attrs(&arm.doc);
         quote! { #vdoc #vname(#ty) }
     });
@@ -1974,26 +2209,17 @@ fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> Toke
 /// tuple's type name rather than a field name. Neither namespace is checked:
 /// two tuple field names distinct in typl can spell one Rust field name, which
 /// rustc then rejects with E0124 — driftsys/ridl#449.
-fn emit_tuple_struct(
-    ctx: &Ctx,
-    induced: &InducedTuple,
-    tuples: &mut Vec<InducedTuple>,
-) -> TokenStream {
-    let InducedTuple {
-        name,
-        tuple,
-        visibility,
-    } = induced;
+fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
+    let name = tuple_name(induced);
     let name_id = ident(name);
-    let vis = vis_tokens(*visibility);
-    let derived = derives::tuple_derive_attr(ctx, tuple);
-    let fields = tuple.fields.iter().map(|field| {
-        let fname = ident(&snake_case(&field.name));
-        let hint = format!("{}{}", name, camel_case(&field.name));
+    let vis = vis_tokens(induced.visibility);
+    let derived = derives::tuple_derive_attr(ctx, induced);
+    let fields = induced.fields.iter().map(|field| {
+        let fname = ident(snake_of(field.name.as_ref()));
         let ty = field
             .r#type
             .as_ref()
-            .map(|ft| field_type_tokens(ft, &hint, *visibility, tuples))
+            .map(|ft| model_type_tokens(ctx, ft))
             .unwrap_or_else(|| quote! { () });
         quote! { pub #fname: #ty }
     });
@@ -2005,7 +2231,7 @@ fn emit_tuple_struct(
         }
     };
 
-    let default_impl = defaults::tuple_default_expr(ctx, name, tuple)
+    let default_impl = defaults::tuple_default_expr(ctx, induced)
         .map(|expr| quote! { impl Default for #name_id { fn default() -> Self { #expr } } })
         .unwrap_or_default();
 
@@ -2082,22 +2308,6 @@ pub(crate) fn field_type_tokens(
     }
 }
 
-/// The Rust newtype inner type for a named scalar backing (Appendix D language
-/// layer): unit and float back to `f64`, integer to `i64`.
-///
-/// [`check_param_type`] matches on `backing_scalar` the same way, one entry
-/// per backing this function names, in its borrowed form; the two matches
-/// must stay in lockstep, and each names the other for that reason.
-fn newtype_inner(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
-        ScalarBacking::Float => quote! { f64 },
-        ScalarBacking::Integer => quote! { i64 },
-        ScalarBacking::Boolean => quote! { bool },
-        ScalarBacking::String => quote! { String },
-        ScalarBacking::Bytes => quote! { Vec<u8> },
-    }
-}
-
 fn inline_scalar_tokens(td: &v2::TypeDef) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::Float => quote! { f64 },
@@ -2150,15 +2360,6 @@ pub fn module_segment(segment: &str) -> String {
     ident(segment).to_string()
 }
 
-/// Strips a regex literal's surrounding `/…/` delimiters, leaving the pattern
-/// body. A value without both delimiters is returned unchanged.
-fn strip_regex_delimiters(regex: &str) -> &str {
-    regex
-        .strip_prefix('/')
-        .and_then(|rest| rest.strip_suffix('/'))
-        .unwrap_or(regex)
-}
-
 // ---------------------------------------------------------------------------
 // Scalar backing classification (shared by emission and default derivation).
 // ---------------------------------------------------------------------------
@@ -2199,28 +2400,6 @@ pub(crate) fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<
     }
 }
 
-/// [`scalar_ctor`] for a same-package named scalar, read through the same
-/// lookup as [`same_package_scalar_backing`]. A reference that resolves to
-/// anything but a named scalar has no constructor to name.
-fn same_package_scalar_ctor(ctx: &Ctx, reference: &str) -> Option<TokenStream> {
-    match &ctx.lookup(reference)?.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => Some(scalar_ctor(td)),
-        _ => None,
-    }
-}
-
-/// Maps a typl primitive keyword written as a type reference to its primitive.
-fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
-    match reference {
-        "boolean" => Some(v2::PrimitiveType::Boolean),
-        "integer" => Some(v2::PrimitiveType::Integer),
-        "float" => Some(v2::PrimitiveType::Float),
-        "string" => Some(v2::PrimitiveType::String),
-        "bytes" => Some(v2::PrimitiveType::Bytes),
-        _ => None,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
@@ -2230,13 +2409,13 @@ fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
 /// comment because that is where Rust is conventionally written; it sits above
 /// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
 /// looks for the trait list first.
-fn decl_attrs(decl: &v2::Decl, derived: &TokenStream) -> TokenStream {
+fn decl_attrs(decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
     let doc = doc_attrs(&decl.doc);
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     quote! { #doc #derived #deprecated }
 }
 
-fn field_attrs(field: &v2::Field) -> TokenStream {
+fn field_attrs(field: &v1::Field) -> TokenStream {
     let doc = doc_attrs(&field.doc);
     let deprecated = deprecated_attr(field.deprecated.as_deref());
     quote! { #doc #deprecated }

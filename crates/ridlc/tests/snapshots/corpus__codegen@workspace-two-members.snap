@@ -42,7 +42,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -79,7 +80,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "init": {
         "derivable": true,
         "value": "0",
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -196,7 +198,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       },
       "init": {
         "derivable": true,
-        "source": "INIT_SOURCE_DERIVED"
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
       },
       "struct": {
         "slots": [
@@ -223,7 +226,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
               "init": {
                 "derivable": true,
                 "value": "0",
-                "source": "INIT_SOURCE_DERIVED"
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
               },
               "doc": "",
               "labels": []

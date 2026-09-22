@@ -371,7 +371,8 @@ mod tests {
     #[test]
     fn an_accepted_parameter_clause_reaches_the_newtype_field() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "level < 100")];
 
@@ -391,7 +392,8 @@ mod tests {
     #[test]
     fn a_le_comparison_emits_the_le_operator() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "level <= 100")];
 
@@ -410,7 +412,8 @@ mod tests {
     #[test]
     fn an_eq_comparison_emits_the_eq_operator() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "level == 100")];
 
@@ -429,7 +432,8 @@ mod tests {
     #[test]
     fn a_ne_comparison_emits_the_ne_operator() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "level != 100")];
 
@@ -444,7 +448,8 @@ mod tests {
     #[test]
     fn a_float_backed_result_clause_emits_a_float_literal() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("window", "Level")];
         let contracts = [clause(v2::ContractKind::Ensure, "result >= 0")];
 
@@ -462,7 +467,8 @@ mod tests {
     #[test]
     fn several_clauses_of_one_kind_are_conjoined() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [
             clause(v2::ContractKind::Require, "level < 100"),
@@ -480,7 +486,8 @@ mod tests {
     #[test]
     fn no_clause_of_a_kind_emits_ok() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "level < 100")];
 
@@ -495,7 +502,8 @@ mod tests {
     #[test]
     fn a_compound_clause_is_refused() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(
             v2::ContractKind::Require,
@@ -510,7 +518,8 @@ mod tests {
     #[test]
     fn a_unit_literal_is_refused() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("window", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "window > 0ms")];
 
@@ -520,7 +529,8 @@ mod tests {
     #[test]
     fn a_result_subject_outside_an_ensure_is_refused() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         // `result` with no reply type in scope (a require clause) is refused.
         let contracts = [clause(v2::ContractKind::Require, "result >= 0")];
@@ -531,7 +541,8 @@ mod tests {
     #[test]
     fn a_fractional_literal_on_an_integer_subject_is_refused() {
         let package = scalar_package();
-        let ctx = Ctx::new(&package);
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
         let params = [param("level", "Level")];
         let contracts = [clause(v2::ContractKind::Require, "level < 1.5")];
 

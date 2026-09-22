@@ -83,7 +83,13 @@ impl<'a> Inits<'a> {
             Some(v2::decl::Kind::TypeDef(td)) => td.declared_init.clone(),
             _ => None,
         };
-        init(derivable, value, declared.is_some())
+        let one_level = match &decl.kind {
+            Some(v2::decl::Kind::TypeDef(td)) => {
+                td.init.as_ref().is_some_and(|value| value.derivable)
+            }
+            _ => false,
+        };
+        init_with(derivable, value, declared.is_some(), one_level)
     }
 
     /// One struct field's init.
@@ -98,10 +104,11 @@ impl<'a> Inits<'a> {
             Some(ty) => self.position(home, ty, position),
             None => false,
         };
-        init(
+        init_with(
             derivable,
             resolved.and_then(|i| i.value.clone()),
             field.declared_init.is_some(),
+            resolved.is_some_and(|i| i.derivable),
         )
     }
 
@@ -123,10 +130,11 @@ impl<'a> Inits<'a> {
 
     /// A signal's resolved channel init (RIDL-109), as the IR carries it.
     pub fn signal(&mut self, value: Option<&v2::InitValue>, declared: bool) -> v1::Init {
-        init(
+        init_with(
             value.is_some_and(|i| i.derivable),
             value.and_then(|i| i.value.clone()),
             declared,
+            value.is_some_and(|i| i.derivable),
         )
     }
 
@@ -302,6 +310,15 @@ fn scalar_value(class: v1::ScalarClass, value: Option<&str>) -> bool {
 }
 
 fn init(derivable: bool, value: Option<String>, declared: bool) -> v1::Init {
+    init_with(derivable, value, declared, false)
+}
+
+/// [`init`] with the IR's own one-level `InitValue.derivable` stated beside
+/// the resolved answer. The two differ: `derivable` is the transitive rule of
+/// typl §5.8 applied over the scope, `one_level` is the flag the IR carries
+/// on the position itself, which a printer reads where the scope resolves
+/// nothing.
+fn init_with(derivable: bool, value: Option<String>, declared: bool, one_level: bool) -> v1::Init {
     let source = if declared {
         v1::InitSource::Declared
     } else if derivable {
@@ -313,6 +330,7 @@ fn init(derivable: bool, value: Option<String>, declared: bool) -> v1::Init {
         derivable,
         value,
         source: source as i32,
+        one_level,
     }
 }
 
