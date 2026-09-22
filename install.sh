@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# Installs the ridl binary from the newest editor-v* GitHub Release (or the one
-# named in RIDL_VERSION): downloads ridl-<target>.tar.gz and its .sha256,
-# verifies the checksum, and places `ridl` in RIDL_INSTALL_DIR (default
+# Installs a binary from the newest editor-v* GitHub Release (or the one named
+# in RIDL_VERSION): downloads <binary>-<target>.tar.gz and its .sha256,
+# verifies the checksum, and places it in RIDL_INSTALL_DIR (default
 # ~/.local/bin). Usage:
 #   curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | bash
+#
+# RIDL_INSTALL_BINARY selects which binary the release carries to install:
+# `ridl` (default, the porcelain CLI and what the editor extension bundles) or
+# `ridlc` (the plumbing compiler front end, stable flags for CI and build
+# systems). Both are built for the same targets and published to the same
+# release, one tarball per binary per target.
 #
 # RIDL_INSTALL_BASE_URL overrides where release assets are fetched from
 # (default https://github.com/$REPO/releases/download). It exists so
@@ -14,7 +20,14 @@ set -eu
 REPO="driftsys/ridl"
 TAG_PREFIX="editor-v"
 INSTALL_DIR="${RIDL_INSTALL_DIR:-$HOME/.local/bin}"
-BINARY="ridl"
+BINARY="${RIDL_INSTALL_BINARY:-ridl}"
+case "$BINARY" in
+  ridl | ridlc) ;;
+  *)
+    echo "error: RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc', got '$BINARY'" >&2
+    exit 1
+    ;;
+esac
 RIDL_INSTALL_BASE_URL="${RIDL_INSTALL_BASE_URL:-https://github.com/$REPO/releases/download}"
 
 detect_target() {
@@ -57,7 +70,7 @@ main() {
   local target version tarball url
   target="$(detect_target)"
   version="$(get_version)"
-  tarball="ridl-${target}.tar.gz"
+  tarball="${BINARY}-${target}.tar.gz"
   url="$RIDL_INSTALL_BASE_URL/$version/$tarball"
 
   if [ -n "${RIDL_INSTALL_DRY_RUN:-}" ]; then
@@ -65,7 +78,7 @@ main() {
     return
   fi
 
-  echo "Installing ridl $version ($target) to $INSTALL_DIR" >&2
+  echo "Installing $BINARY $version ($target) to $INSTALL_DIR" >&2
   tmpdir="$(mktemp -d)"
   tmpbin=""
   # Cleans up the download staging directory and, if the atomic install below

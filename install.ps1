@@ -1,9 +1,15 @@
 <#
 .SYNOPSIS
-    Installs the ridl binary on Windows from the newest editor-v* GitHub
-    Release (or $env:RIDL_VERSION): downloads ridl-x86_64-pc-windows-msvc.tar.gz
-    and its .sha256, verifies the checksum, and places ridl.exe in
+    Installs a binary on Windows from the newest editor-v* GitHub Release (or
+    $env:RIDL_VERSION): downloads <binary>-x86_64-pc-windows-msvc.tar.gz and
+    its .sha256, verifies the checksum, and places <binary>.exe in
     $env:RIDL_INSTALL_DIR (default $HOME\.local\bin).
+
+    $env:RIDL_INSTALL_BINARY selects which binary the release carries to
+    install: ridl (default, the porcelain CLI and what the editor extension
+    bundles) or ridlc (the plumbing compiler front end, stable flags for CI
+    and build systems). Both are built for the same targets and published to
+    the same release, one tarball per binary per target.
 
     $env:RIDL_INSTALL_BASE_URL overrides where release assets are fetched from
     (default https://github.com/$Repo/releases/download). It is a test hook
@@ -21,7 +27,11 @@ $ProgressPreference = 'SilentlyContinue'
 $Repo = 'driftsys/ridl'
 $TagPrefix = 'editor-v'
 $Target = 'x86_64-pc-windows-msvc'
-$Binary = 'ridl.exe'
+$BinaryName = if ($env:RIDL_INSTALL_BINARY) { $env:RIDL_INSTALL_BINARY } else { 'ridl' }
+if ($BinaryName -ne 'ridl' -and $BinaryName -ne 'ridlc') {
+    Write-Error "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc', got '$BinaryName'"
+}
+$Binary = "$BinaryName.exe"
 $InstallDir = if ($env:RIDL_INSTALL_DIR) { $env:RIDL_INSTALL_DIR } else { Join-Path $HOME '.local\bin' }
 $BaseUrl = if ($env:RIDL_INSTALL_BASE_URL) { $env:RIDL_INSTALL_BASE_URL } else { "https://github.com/$Repo/releases/download" }
 
@@ -45,11 +55,11 @@ function Test-Checksum {
 
 function Main {
     $version = Get-Version
-    $tarball = "ridl-$Target.tar.gz"
+    $tarball = "$BinaryName-$Target.tar.gz"
     $url = "$BaseUrl/$version/$tarball"
     if ($env:RIDL_INSTALL_DRY_RUN) { Write-Output $url; return }
 
-    Write-Host "Installing ridl $version ($Target) to $InstallDir"
+    Write-Host "Installing $BinaryName $version ($Target) to $InstallDir"
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ridl-install-" + [System.Guid]::NewGuid())
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {

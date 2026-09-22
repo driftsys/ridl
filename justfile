@@ -1170,6 +1170,47 @@ install-check:
     fi
     echo "install-check: tamper case correctly rejected by the checksum and installed nothing"
 
+    # RIDL_INSTALL_BINARY=ridlc: a dry run is enough to prove the wiring —
+    # the download/verify/install path past URL construction is the same
+    # code already exercised above for ridl.
+    ridlc_expected="${url/ridl-/ridlc-}"
+    ridlc_url="$(RIDL_VERSION="$version" RIDL_INSTALL_BINARY=ridlc RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
+    if [ "$ridlc_url" != "$ridlc_expected" ]; then
+        echo "install-check: RIDL_INSTALL_BINARY=ridlc dry run printed '$ridlc_url', expected '$ridlc_expected'" >&2
+        exit 1
+    fi
+    echo "install-check: install.sh RIDL_INSTALL_BINARY=ridlc dry run verified ($ridlc_url)"
+
+    if RIDL_INSTALL_BINARY=bogus bash install.sh 2>"$scratch/bad-binary.err"; then
+        echo "install-check: install.sh accepted RIDL_INSTALL_BINARY=bogus" >&2
+        exit 1
+    fi
+    if ! grep -q "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc'" "$scratch/bad-binary.err"; then
+        echo "install-check: install.sh rejected RIDL_INSTALL_BINARY=bogus, but not with the expected message" >&2
+        exit 1
+    fi
+    echo "install-check: install.sh rejects an unknown RIDL_INSTALL_BINARY"
+
+    if command -v pwsh >/dev/null 2>&1; then
+        ridlc_ps1_url="$(pwsh -NoProfile -Command '$env:RIDL_VERSION="editor-v0.1.0"; $env:RIDL_INSTALL_BINARY="ridlc"; $env:RIDL_INSTALL_DRY_RUN="1"; ./install.ps1')"
+        ridlc_ps1_expected="https://github.com/driftsys/ridl/releases/download/editor-v0.1.0/ridlc-x86_64-pc-windows-msvc.tar.gz"
+        if [ "$ridlc_ps1_url" != "$ridlc_ps1_expected" ]; then
+            echo "install-check: install.ps1 RIDL_INSTALL_BINARY=ridlc dry run printed '$ridlc_ps1_url', expected '$ridlc_ps1_expected'" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 RIDL_INSTALL_BINARY=ridlc dry run verified ($ridlc_ps1_url)"
+
+        if pwsh -NoProfile -Command '$env:RIDL_INSTALL_BINARY="bogus"; ./install.ps1' 2>"$scratch/bad-binary-ps1.err"; then
+            echo "install-check: install.ps1 accepted RIDL_INSTALL_BINARY=bogus" >&2
+            exit 1
+        fi
+        if ! grep -q "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc'" "$scratch/bad-binary-ps1.err"; then
+            echo "install-check: install.ps1 rejected RIDL_INSTALL_BINARY=bogus, but not with the expected message" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 rejects an unknown RIDL_INSTALL_BINARY"
+    fi
+
 # Full local gate: confirm the toolchain and CI wiring, check Rust formatting,
 # build the docs book, compile the code, run the tests, lint the Rust, check the
 # wasm target builds, then run the connective-tissue lint checks.
