@@ -148,6 +148,14 @@ design note, from the archive.
   decision with a risk the file names, not an evidence-driven one. It carries
   the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
   learn. Archive it with the lanes plan.
+- **2026-09-22-lane-p-driver.md** — the driver for lane P, the codegen plugin
+  system on the way to a Kotlin backend: E4.5a (the IR stability policy and the
+  canonical encoding, with #231 first), the lowered codegen model, E4.5b (the
+  backend contract and the process host), the Rust backend ported onto the
+  model, and E11.1's logical frame. Written for a session of any vendor with no
+  prior context, so it carries the working rules and the facts a driver prompt
+  otherwise leaves to the conversation. Six stages; two design notes inside it
+  stop for Sebastien's disposition. Coordination issue: #328.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
