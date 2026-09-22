@@ -476,7 +476,12 @@ trusted with no `unsafe` and no second verification pass.
 ## Open
 
 1. **The `u16` fallback for `Ordinal` and `InterfaceNo`** (decision 2), which
-   story E11.1 triggers or not once the frame header is fixed.
+   story E11.1 triggers or not once the frame header is fixed. **Closed
+   2026-09-22 by story E11.1**: the frame specification places no bound on a
+   header's size, so the fallback is not triggered. A binding whose transport
+   carries one of these numbers in a narrower native field range-checks the
+   catalog at attach and refuses the session, rather than narrowing the type
+   ([the frame specification](../specification/frame-specification.md) §4).
 2. **driftsys/ridl#350 items 5, 12, 13 and 14, and `Watermark::seq`** (decision
    10) — the API questions the reviews of 0.1 raised and did not resolve,
    tracked on that issue. The review debt of driftsys/ridl#348 is

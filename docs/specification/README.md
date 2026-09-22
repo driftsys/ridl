@@ -23,3 +23,9 @@ documents in [`../archive/`](../archive/).
 - **expr-core-specification.md** — the cross-profile contract-term grammar: the
   guaranteed subset `require`/`ensure` uses today, the function layer rmdl
   extends it into, the typing rules, and the evaluation domains.
+- **frame-specification.md** — the logical frame of the runtime: what crosses
+  the boundary between a provider's runtime and a consumer's runtime per
+  interaction kind — ordinal, kind, envelope, provenance, correlation, payload —
+  in `ridl-rt`'s vocabulary; the invalid-payload behaviour; the rule that a
+  binding is written from it alone; the WebSocket (E11.9) and AIDL-over-Binder
+  (Kotlin) bindings by name. Specified, not built: no runtime here speaks it.
