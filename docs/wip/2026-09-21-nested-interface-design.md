@@ -165,11 +165,24 @@ keyword today, so a line starting with an identifier is unambiguous.
 
 ### 4.2 Rules
 
-- **One level.** The interface a nested member names may not itself have a
-  nested member. The path is at most `service.member.index.member`, which keeps
-  the audit argument of ridl reference §14.1 intact: a service's complete
+- **One level, as a limit.** The interface a nested member names may not itself
+  have a nested member. The path is at most `service.member.index.member`, which
+  keeps the audit argument of ridl reference §14.1 intact: a service's complete
   contract is read from one declaration plus the interfaces it names, with no
-  closure walk.
+  closure walk. The depth is a stated limit, not a property of the design:
+  nothing below depends on it being 1, and every cost a deeper nesting adds is
+  mechanical (a longer address, a cycle check, more lock entries, a recursive
+  grouping in `ridl diff`), none of it in the runtime or the port key. It starts
+  at 1 because raising a depth limit is additive — a program legal at depth 1
+  stays legal at depth 2 — while starting deeper and retreating is breaking. The
+  first contract that needs depth 2 changes a constant in the checker and adds a
+  paragraph to the ADR; §4.4 and the cycle rule below are written so that
+  nothing else moves.
+- **No cycle.** A nested interface may not reach itself through nested members.
+  At depth 1 this is unreachable, because the nested interface may not nest at
+  all; the rule and its diagnostic (§6) are recorded now so that the day the
+  depth is raised, the check already exists and a cycle is not discovered by
+  accident.
 - **No annotation on the member.** A nested member carries no `@` timing and no
   contract clause; both belong to the interactions inside the named interface.
 - **Names.** A nested member shares the body's namespace with the interactions,
@@ -214,10 +227,14 @@ ADR-0021 is untouched.
 
 ### 4.4 Addressing
 
-Every address gains at most two segments. `ui.screen.slots.2.data` names one
-channel, `ui.screen.slot0.data` another, and `ui.screen.activeSlot` is as today.
-This amends ADR-0015 decision 16 from "always `service.member`" to a path of at
-most four segments below the service.
+Every address gains at most two segments per nesting level: the member name, and
+for the indexed form the index. `ui.screen.slots.2.data` names one channel,
+`ui.screen.slot0.data` another, and `ui.screen.activeSlot` is as today. This
+amends ADR-0015 decision 16 from "always `service.member`" to a path below the
+service, bounded by the nesting depth of §4.2 — four segments at the depth this
+note fixes. The amendment should state the bound in terms of the depth rather
+than as a count, so that raising the depth does not amend decision 16 a second
+time.
 
 ### 4.5 Evolution and `ridl diff`
 
@@ -295,26 +312,28 @@ indexed form by putting a key type in place of the index, and is not proposed.
 
 ## 6. Diagnostics
 
-Three new codes in the RIDL-1xx band, to be allocated in the catalogue:
+Four new codes in the RIDL-1xx band, to be allocated in the catalogue:
 
 - a nested member whose interface itself has a nested member (depth);
+- a nested interface that reaches itself through nested members (cycle) —
+  unreachable while the depth is 1, allocated now for the reason §4.2 gives;
 - a nested member carrying `@` timing or a contract clause;
 - a public interface nesting an `internal` interface.
 
 ## 7. Estimate and stories
 
-| Crate                               | Change                                                                                     | Size |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ | ---- |
-| ridl-syntax                         | one member form, named and indexed, plus AST                                               | S    |
-| ridl-sem                            | resolve the reference, ordinal in the outer space, three codes, skip in timing and clauses | M    |
-| ridl-core (lock)                    | one key form, allocation per index, retire and rename per index                            | S    |
-| ridl-ir                             | one new `Decl` kind on `Interface.interactions`, additive to the v2 schema                 | S    |
-| ridl-diff                           | walk and classify the kind; count raised compatible, lowered breaking; group instances     | M    |
-| ridl-backend-rust                   | descriptors over instances, accessor, `InterfaceNo` by value, `Provider` composition       | M    |
-| ridl-backend-ts, proto, flatbuffers | confirm payload-only; refuse or ignore the member                                          | S    |
-| ridl-lsp, ridl-fmt                  | hover, inlay, layout of the new line                                                       | S    |
-| ridl-rt, ridl-loopback, rsdl        | none                                                                                       | none |
-| docs                                | ADR amending ADR-0015 d16 and d17; ridl reference §11, §14, §15; book chapter; roadmap     | M    |
+| Crate                               | Change                                                                                    | Size |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- | ---- |
+| ridl-syntax                         | one member form, named and indexed, plus AST                                              | S    |
+| ridl-sem                            | resolve the reference, ordinal in the outer space, four codes, skip in timing and clauses | M    |
+| ridl-core (lock)                    | one key form, allocation per index, retire and rename per index                           | S    |
+| ridl-ir                             | one new `Decl` kind on `Interface.interactions`, additive to the v2 schema                | S    |
+| ridl-diff                           | walk and classify the kind; count raised compatible, lowered breaking; group instances    | M    |
+| ridl-backend-rust                   | descriptors over instances, accessor, `InterfaceNo` by value, `Provider` composition      | M    |
+| ridl-backend-ts, proto, flatbuffers | confirm payload-only; refuse or ignore the member                                         | S    |
+| ridl-lsp, ridl-fmt                  | hover, inlay, layout of the new line                                                      | S    |
+| ridl-rt, ridl-loopback, rsdl        | none                                                                                      | none |
+| docs                                | ADR amending ADR-0015 d16 and d17; ridl reference §11, §14, §15; book chapter; roadmap    | M    |
 
 Sequenced so each step ships on its own:
 
