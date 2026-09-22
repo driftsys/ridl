@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The RIDL intermediate representation: the typl surface plus the ridl interaction layer, generated from a versioned protobuf schema."
 
 [dependencies]
 # The runtime the pbjson-generated serde impls call into (ADR-0014
