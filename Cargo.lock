@@ -1972,6 +1972,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridlc-gen-model"
+version = "0.2.0"
+dependencies = [
+ "ridl-core",
+ "ridl-ir",
+ "ridlc",
+ "tempfile",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
