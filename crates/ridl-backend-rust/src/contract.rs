@@ -1,18 +1,16 @@
 //! This backend behind the backend contract (ADR-0020 decision 9): the
-//! in-process face `ridlc` calls, and the shape a `ridlc-gen-rust` plugin
-//! will wrap once the backend reads the model.
+//! in-process face `ridlc` calls, and the one the reference plugin
+//! `ridlc-gen-rust` wraps.
 //!
-//! **Transition.** [`generate_pipeline`](crate::generate_pipeline) still
-//! reads the raw IR; stage P4 of the lane P driver ports it onto the model
-//! one layer at a time (`docs/design/codegen-plugins.md`). Until then the
-//! backend value holds a [`RawIr`] and `generate` reads that in place of
-//! `request.model`, which is what keeps the request the contract's request —
-//! the model and the options, never the raw IR — while the port is under
-//! way.
+//! Since stage P4 of the lane P driver it reads the request and nothing
+//! else: the model the request carries is what every emitter of this crate
+//! reads, so the in-process host and the process host hand the backend the
+//! same thing, and the parity test compares the two
+//! (`docs/design/codegen-plugins.md`).
 
-use ridl_ir::codegen::{self, RawIr, v1};
+use ridl_ir::codegen::{self, v1};
 
-use crate::{WireEncoding, generate_pipeline};
+use crate::{WireEncoding, generate_pipeline_over};
 
 /// The one option this backend reads: the payload encoding the generated
 /// face encodes and verifies over. The only value today is `flatbuffers`,
@@ -21,19 +19,11 @@ use crate::{WireEncoding, generate_pipeline};
 pub const WIRE_ENCODING_OPTION: &str = "wire-encoding";
 
 /// The Rust backend as a [`codegen::Backend`]: one file,
-/// `<artifact_base>.rs`, from [`generate_pipeline`].
-pub struct Backend<'a> {
-    raw: RawIr<'a>,
-}
+/// `<artifact_base>.rs`, from
+/// [`generate_pipeline`](crate::generate_pipeline) over the request's model.
+pub struct Backend;
 
-impl<'a> Backend<'a> {
-    /// A backend over the raw IR it still reads (module documentation).
-    pub fn new(raw: RawIr<'a>) -> Self {
-        Self { raw }
-    }
-}
-
-impl codegen::Backend for Backend<'_> {
+impl codegen::Backend for Backend {
     fn language(&self) -> &str {
         "rust"
     }
@@ -57,7 +47,10 @@ impl codegen::Backend for Backend<'_> {
                 }
             }
         }
-        match generate_pipeline(self.raw.package, wire, self.raw.others) {
+        let Some(model) = &request.model else {
+            return refusal("the request carries no model".to_string());
+        };
+        match generate_pipeline_over(model, wire) {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.rs", request.artifact_base),

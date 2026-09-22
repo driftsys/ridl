@@ -173,7 +173,11 @@ design note, from the archive.
   test per backend. §9 of the note is still open, and its items belong to the
   stages it names. Stage P3 built the contract over it —
   [`../design/codegen-plugins.md`](../design/codegen-plugins.md) — and its §10's
-  last item, ADR-0020 open item 5, was closed by P2b.
+  last item, ADR-0020 open item 5, was closed by P2b. Stage P4 ported the Rust
+  backend onto the model in the three layers §8.2 names, deleted that backend's
+  fact-level drift test — every fact it compared is a function of the model by
+  construction now — and closed §9 item 2 (the private `snake_case` of
+  driftsys/ridl#450) by construction. The other three backends keep theirs.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

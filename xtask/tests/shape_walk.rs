@@ -87,6 +87,34 @@ const ALLOWED: &[Allowed] = &[
               store is the complete set",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/src/clauses.rs",
+        lines: 1,
+        why: "a test fixture building the one interface its package declares; \
+              it declares no service, so the named store is the complete set",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/src/descriptors.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: since stage P4 this backend reads the \
+              lowered model, whose list is `Package::shapes()` order and \
+              already holds an inline shape, which this walk skips by its \
+              identity",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/src/face.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, for \
+              the reason the descriptor layer's is",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/src/lib.rs",
+        lines: 2,
+        why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, for \
+              the reason the descriptor layer's is: the pipeline's \
+              per-interface walk and the encoding alias's collision check",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/src/tests.rs",
         lines: 1,
         why: "a test asserting how many named interfaces one fixture lowers to",

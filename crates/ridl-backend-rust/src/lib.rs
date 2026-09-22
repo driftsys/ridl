@@ -26,10 +26,9 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use ridl_ir::codegen::v1;
-use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 mod clauses;
 mod codec;
@@ -84,7 +83,7 @@ pub struct GenerateError {
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    render(package_items(&ctx, package)?)
+    render(package_items(&ctx)?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
@@ -129,13 +128,13 @@ pub fn generate_face_with(
     package: &v2::Package,
     wire: WireEncoding,
 ) -> Result<Generated, GenerateError> {
-    refuse_wire_collision(package)?;
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
+    refuse_wire_collision(&ctx)?;
     let mut items = vec![wire_alias(wire)];
-    items.extend(package_items(&ctx, package)?);
-    items.extend(descriptors::interface_items(&ctx, package)?);
-    items.extend(face::interface_items(package)?);
+    items.extend(package_items(&ctx)?);
+    items.extend(descriptors::interface_items(&ctx)?);
+    items.extend(face::interface_items(&model)?);
     render(items)
 }
 
@@ -155,7 +154,7 @@ pub fn generate_with(
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
-    render(package_items(&ctx, package)?)
+    render(package_items(&ctx)?)
 }
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
@@ -197,18 +196,31 @@ pub fn generate_pipeline(
     wire: WireEncoding,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    refuse_wire_collision(package)?;
     let model = ridl_ir::codegen::lower(package, others);
-    let ctx = Ctx::with_others(package, others, &model);
+    generate_pipeline_over(&model, wire)
+}
+
+/// [`generate_pipeline`] over a model the caller already has.
+///
+/// It is what the backend contract calls (`contract::Backend`): a plugin is
+/// handed a `CodegenRequest` carrying the model and no IR, so the entry point
+/// it reaches cannot be one that takes a `v2::Package`. `generate_pipeline`
+/// is this function after one `lower`, which is why the two cannot disagree.
+pub(crate) fn generate_pipeline_over(
+    model: &v1::Model,
+    wire: WireEncoding,
+) -> Result<Generated, GenerateError> {
+    let ctx = Ctx::over(model);
+    refuse_wire_collision(&ctx)?;
     let mut items = vec![wire_alias(wire)];
-    items.extend(package_items(&ctx, package)?);
-    for shape in package.shapes() {
-        if shape.service.is_some() {
+    items.extend(package_items(&ctx)?);
+    for interface in &model.interfaces {
+        if descriptors::declared_name(interface).is_none() {
             continue;
         }
-        match faced_interface(&ctx, package, shape.name, shape.interface) {
+        match faced_interface(&ctx, interface) {
             Ok(produced) => items.extend(produced),
-            Err(err) => items.push(skipped_interface_note(shape.name, shape.interface, &err)),
+            Err(err) => items.push(skipped_interface_note(interface, &err)),
         }
     }
     render(items)
@@ -218,12 +230,10 @@ pub fn generate_pipeline(
 /// together for the reason [`generate_pipeline`] records.
 fn faced_interface(
     ctx: &Ctx,
-    package: &v2::Package,
-    iface_name: &str,
-    interface: &v2::Interface,
+    interface: &v1::Interface,
 ) -> Result<Vec<TokenStream>, GenerateError> {
-    let mut items = descriptors::one_interface_items(ctx, &package.name, iface_name, interface)?;
-    if let Some(module) = face::one_interface(iface_name, interface)? {
+    let mut items = descriptors::one_interface_items(ctx, interface)?;
+    if let Some(module) = face::one_interface(interface)? {
         items.push(module);
     }
     Ok(items)
@@ -236,12 +246,9 @@ fn faced_interface(
 /// attribute is the only comment that survives `prettyplease`. The name cannot
 /// collide with a typl constant — typl §15.1 gives one a SCREAMING_SNAKE name,
 /// and no typl name begins with an underscore.
-fn skipped_interface_note(
-    iface_name: &str,
-    interface: &v2::Interface,
-    err: &GenerateError,
-) -> TokenStream {
-    let name = format_ident!("__RIDL_NO_FACE_{}", snake_case(iface_name).to_uppercase());
+fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> TokenStream {
+    let iface_name = descriptors::declared_name(interface).unwrap_or_default();
+    let name = format_ident!("__RIDL_NO_FACE_{}", screaming_of(interface));
     let headline = format!(" Interface `{iface_name}` carries no generated interaction face.");
     let reason = format!(" The emitter refused it: {}", err.message);
     let owner = match face_gap(interface, err) {
@@ -300,23 +307,26 @@ enum FaceGap {
     Other,
 }
 
-fn face_gap(interface: &v2::Interface, err: &GenerateError) -> FaceGap {
+fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
     if err.message.starts_with(clauses::CLAUSE_REFUSAL) {
         return FaceGap::Clause;
     }
-    for decl in &interface.interactions {
-        let params = match decl.kind.as_ref() {
-            Some(v2::decl::Kind::CommandDef(command)) => &command.params,
-            Some(v2::decl::Kind::QueryDef(query)) => {
-                if descriptors::query_reply_type(query, &decl.name).is_err() {
+    for (_, interaction) in descriptors::interactions(interface) {
+        let member = declared(interaction.name.as_ref());
+        match interaction.shape.as_ref() {
+            Some(v1::interaction::Shape::Command(command)) => {
+                if descriptors::single_param_type(command, member).is_err() {
                     return FaceGap::CallShape;
                 }
-                &query.params
+            }
+            Some(v1::interaction::Shape::Query(query)) => {
+                if descriptors::query_reply_type(query, member).is_err()
+                    || descriptors::query_param_type(query, member).is_err()
+                {
+                    return FaceGap::CallShape;
+                }
             }
             _ => continue,
-        };
-        if descriptors::single_param_type(params, &decl.name).is_err() {
-            return FaceGap::CallShape;
         }
     }
     // Not a clause by the message, and every call has a face shape: the
@@ -348,7 +358,7 @@ const WIRE_ALIAS: &str = "Wire";
 ///
 /// [`generate`] is unaffected — it emits no alias, so `Wire` is an ordinary
 /// declaration there, and a package built without a face keeps compiling.
-fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
+fn refuse_wire_collision(ctx: &Ctx) -> Result<(), GenerateError> {
     // Both namespaces, because both land at package scope: a declaration is
     // emitted as its own item, and an interface is emitted as
     // `pub struct <Interface>;` by the descriptor emitter. Scanning only the
@@ -365,21 +375,26 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
     // service's own, which rsdl requires to be dotted and lowercase, so it
     // can never be `Wire`. It is here so this walk and the emitter's stay the
     // same shape, not because it changes an outcome.
-    let declared = package
-        .decls
+    let declarations = ctx
+        .model
+        .declarations
         .iter()
-        .map(|decl| (decl.name.as_str(), "declaration"));
-    let shapes = package
-        .shapes()
-        .filter(|shape| shape.service.is_none())
-        .map(|shape| (shape.name, "interface"));
-    for (name, kind) in declared.chain(shapes) {
+        .map(|decl| (declared(decl.name.as_ref()), "declaration"));
+    let shapes = ctx
+        .model
+        .interfaces
+        .iter()
+        .filter_map(|interface| descriptors::declared_name(interface))
+        .map(|name| (name, "interface"));
+    for (name, kind) in declarations.chain(shapes) {
         if name == WIRE_ALIAS {
             return Err(GenerateError {
                 message: format!(
                     "`{}.{}` collides with the `{}` encoding alias the interaction \
                      face emits at package scope; rename the {kind}",
-                    package.name, name, WIRE_ALIAS
+                    ctx.package_name(),
+                    name,
+                    WIRE_ALIAS
                 ),
             });
         }
@@ -393,8 +408,7 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
 /// There is one codec emitter and one call to it, which is why the face
 /// compiles over the codec `generate` emits rather than over one written for
 /// it (design note D-11, stage K9b).
-fn package_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
-    let _ = package;
+fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = domain_items(ctx)?;
     items.extend(codec::package_items(ctx)?);
     Ok(items)
@@ -627,7 +641,6 @@ pub(crate) struct Ctx<'a> {
     /// IR beside it, paired by index: `model.declarations[i]` is lowered from
     /// `package.decls[i]`.
     pub(crate) model: &'a v1::Model,
-    decls: HashMap<&'a str, &'a v2::Decl>,
     /// The set of declaration names currently being expanded by the
     /// Default-derivation recursion. It guards against a cyclic IR: a
     /// same-package composite that reaches itself would otherwise recurse
@@ -648,15 +661,20 @@ impl<'a> Ctx<'a> {
         others: &'a [&'a v2::Package],
         model: &'a v1::Model,
     ) -> Self {
-        let decls = package
-            .decls
-            .iter()
-            .map(|decl| (decl.name.as_str(), decl))
-            .collect();
-        let _ = others;
+        // Neither the package nor the other packages of the build are read
+        // any more: the lowering resolved every reference over that scope and
+        // the model states the result. They stay in the signature because
+        // `generate_with` and `generate_pipeline` keep theirs (design note
+        // §8.3), and this is what they hand to `lower`.
+        let _ = (package, others);
+        Ctx::over(model)
+    }
+
+    /// The context over a lowered model alone — what a plugin has, and what
+    /// every emitter reads since stage P4.
+    pub(crate) fn over(model: &'a v1::Model) -> Self {
         Ctx {
             model,
-            decls,
             visiting: RefCell::new(HashSet::new()),
         }
     }
@@ -713,12 +731,6 @@ impl<'a> Ctx<'a> {
         self.declaration(reference.index)
     }
 
-    /// The declaration named `name` in this package, or `None` for a
-    /// cross-package (dotted) or unknown reference.
-    pub(crate) fn lookup(&self, name: &str) -> Option<&'a v2::Decl> {
-        self.decls.get(name).copied()
-    }
-
     /// Marks `name` as being expanded by the Default recursion. Returns `true`
     /// when it was newly inserted, `false` when it is already on the expansion
     /// stack — a reference cycle that the caller must not recurse into (C1b).
@@ -756,6 +768,16 @@ fn snake_of(name: Option<&v1::Spellings>) -> &str {
 /// amendment), spelled once by the lowering.
 fn camel_of(name: Option<&v1::Spellings>) -> &str {
     name.map(|name| name.camel.as_str()).unwrap_or_default()
+}
+
+/// The SCREAMING_SNAKE spelling of one interface's declared name — the
+/// `snake_case` of ADR-0016 decision 1, upper-cased, which the lowering
+/// spells once as `Spellings.screaming`.
+fn screaming_of(interface: &v1::Interface) -> &str {
+    match interface.identity.as_ref() {
+        Some(v1::interface::Identity::Declared(name)) => name.screaming.as_str(),
+        _ => "",
+    }
 }
 
 /// The generated struct name of one induced tuple — the CamelCase of the path
@@ -1770,33 +1792,6 @@ pub(crate) enum ScalarBacking {
     Bytes,
 }
 
-/// The Rust-layer scalar class of a type definition's backing. A unit backing
-/// implies float (typl §5.1).
-pub(crate) fn backing_scalar(td: &v2::TypeDef) -> ScalarBacking {
-    match td.backing.as_ref().and_then(|b| b.kind.as_ref()) {
-        Some(v2::backing::Kind::Unit(_)) => ScalarBacking::Float,
-        Some(v2::backing::Kind::Primitive(prim)) => {
-            match v2::PrimitiveType::try_from(*prim).unwrap_or(v2::PrimitiveType::Unspecified) {
-                v2::PrimitiveType::Boolean => ScalarBacking::Boolean,
-                v2::PrimitiveType::Integer => ScalarBacking::Integer,
-                v2::PrimitiveType::Float => ScalarBacking::Float,
-                v2::PrimitiveType::String => ScalarBacking::String,
-                v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => ScalarBacking::Bytes,
-            }
-        }
-        None => ScalarBacking::Float,
-    }
-}
-
-/// The backing class of a same-package named scalar type, or `None` when the
-/// reference does not name a scalar `TypeDef` in this package.
-pub(crate) fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
-    match &ctx.lookup(reference)?.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
-        _ => None,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
@@ -1875,8 +1870,8 @@ pub(crate) fn deprecated_attr(reason: Option<&str>) -> TokenStream {
 /// because the state that breaks it is not generated, not because it cannot be
 /// described.
 pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
-    match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
-        v2::Visibility::Internal => quote! { pub(crate) },
+    match v1::Visibility::try_from(visibility).unwrap_or(v1::Visibility::Unspecified) {
+        v1::Visibility::Internal => quote! { pub(crate) },
         _ => quote! { pub },
     }
 }

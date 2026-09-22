@@ -27,9 +27,11 @@ the in-tree Rust backend, not the TypeScript one: Kotlin precedes TypeScript in
 the sequence (the lane P driver's D-P1), so the TypeScript backend is not the
 next backend written against the contract and a `ridlc-gen-ts` binary would
 prove the protocol for a backend that is not on the critical path. The amendment
-is written into decision 11 in place, with what stands until the Rust backend is
-ported. Decisions 8, 9, 10 and 12 are unchanged; the as-built record of the
-contract and the two hosts is
+is written into decision 11 in place. Its second half, "what stood until the
+port", was amended again the same day when stage P4 ported the Rust backend: the
+Rust parity test exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
+`ridlc-gen-model` one stays beside it. Decisions 8, 9, 10 and 12 are unchanged;
+the as-built record of the contract and the two hosts is
 [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md).
 
 Its reasoning trail is
@@ -304,19 +306,22 @@ as its public contract.
     snapshots that already pin its output — is the test that proves the seam for
     the backend that ships.
 
-    What stands until then. The Rust backend reads the raw IR, and the request
-    carries the model and never the raw IR (decision 9; the driver's D-P2), so
-    the Rust backend cannot be run from a request before its port (the driver's
-    stage P4). The test suite therefore runs `ridlc-gen-model` — the one in-tree
+    What stood until the port, amended in place (2026-09-22, stage P4). The Rust
+    backend read the raw IR, and the request carries the model and never the raw
+    IR (decision 9; the driver's D-P2), so it could not be run from a request
+    before its port, and the test suite ran `ridlc-gen-model` — the one in-tree
     backend whose output is a function of the request alone,
     `--emit codegen-model` as a process — through the process host over every
-    corpus package, at the contract's level and at the command's level, and
-    asserts byte identity with the in-process path. That proves the host and the
-    two encodings on the pipe; the model's sufficiency for a language backend is
-    what the Rust backend's port proves, with the same test over
-    `ridlc-gen-rust`. The other three in-tree backends are not plugins until
-    their own stories. The as-built record is
-    [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md) §6.
+    corpus package. **Stage P4 ported the Rust backend onto the lowered model,
+    and the parity test this decision names exists:
+    `crates/ridlc-gen-rust/tests/parity.rs`**, over `crates/ridlc-gen-rust/`, at
+    the contract's level for every corpus package and at the command's level for
+    every corpus entry, asserting byte identity with `--emit rust` in process.
+    The `ridlc-gen-model` test stays beside it as the narrower proof of the host
+    and the two encodings on the pipe. The other three in-tree backends still
+    read the raw IR and are not plugins until their own stories. The as-built
+    record is [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)
+    §6.
 
 12. **The contract is the IR encoding, so the IR stability policy lands first.**
     Roadmap story E4.5a is a prerequisite of the lowering step and the contract,

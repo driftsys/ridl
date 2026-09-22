@@ -21,33 +21,52 @@
 //! the entry points' own documentation).
 
 use crate::clauses::{self, ClauseKind};
-use crate::{Ctx, GenerateError, ident, type_path};
+use crate::{Ctx, GenerateError, camel_of as camel, declared, ident, type_path};
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
-use ridl_ir::name::camel_case;
-use ridl_ir::v2;
+use ridl_ir::codegen::v1;
 
-/// The descriptor and face items for every named interface in `package`, in
-/// source order.
+/// The descriptor and face items for every named interface of the lowered
+/// model, in source order.
 ///
-/// The walk is over [`Package::shapes()`](ridl_ir::v2::Package::shapes) so an
-/// interface enumerated here is never accidentally the incomplete
-/// `Package::interfaces` field (the shape-walk guard). A service's inline shape
-/// is skipped: its identity name is the dotted service name, which is not a
-/// single Rust identifier, and descriptors for an inline shape are a follow-up
-/// beyond M3.
-pub(crate) fn interface_items(
-    ctx: &Ctx,
-    package: &v2::Package,
-) -> Result<Vec<TokenStream>, GenerateError> {
+/// The model's `interfaces` list is `Package::shapes()` order, so an interface
+/// enumerated here is never accidentally the incomplete `Package::interfaces`
+/// field (the shape-walk guard). A service's inline shape is skipped: its
+/// identity name is the dotted service name, which is not a single Rust
+/// identifier, and descriptors for an inline shape are a follow-up beyond M3.
+pub(crate) fn interface_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = Vec::new();
-    for shape in package.shapes() {
-        if shape.service.is_some() {
+    for interface in &ctx.model.interfaces {
+        if declared_name(interface).is_none() {
             continue;
         }
-        one_interface(ctx, &package.name, shape.name, shape.interface, &mut items)?;
+        one_interface(ctx, interface, &mut items)?;
     }
     Ok(items)
+}
+
+/// The declared name of one interface, or `None` for a service's inline
+/// shape, whose identity is the service's dotted name.
+pub(crate) fn declared_name(interface: &v1::Interface) -> Option<&str> {
+    match interface.identity.as_ref() {
+        Some(v1::interface::Identity::Declared(name)) => Some(name.declared.as_str()),
+        _ => None,
+    }
+}
+
+/// The live interactions of one interface, in slot order. A reserved
+/// tombstone occupies an ordinal and is no interaction.
+pub(crate) fn interactions(interface: &v1::Interface) -> Vec<(u32, &v1::Interaction)> {
+    interface
+        .slots
+        .iter()
+        .filter_map(|slot| match slot.occupant.as_ref() {
+            Some(v1::interaction_slot::Occupant::Interaction(interaction)) => {
+                Some((slot.ordinal, interaction.as_ref()))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// The descriptor items of one interface, for the pipeline's per-interface
@@ -56,44 +75,39 @@ pub(crate) fn interface_items(
 /// interface can catch the refusal at the interface it belongs to.
 pub(crate) fn one_interface_items(
     ctx: &Ctx,
-    package_name: &str,
-    iface_name: &str,
-    interface: &v2::Interface,
+    interface: &v1::Interface,
 ) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = Vec::new();
-    one_interface(ctx, package_name, iface_name, interface, &mut items)?;
+    one_interface(ctx, interface, &mut items)?;
     Ok(items)
 }
 
 fn one_interface(
     ctx: &Ctx,
-    package_name: &str,
-    iface_name: &str,
-    interface: &v2::Interface,
+    interface: &v1::Interface,
     items: &mut Vec<TokenStream>,
 ) -> Result<(), GenerateError> {
+    let package_name = ctx.package_name();
+    let iface_name = declared_name(interface).unwrap_or_default();
     let iface_ident = ident(iface_name);
 
     // Reserved tombstones get no row, so a row's index is not its ordinal
-    // minus one — the index is its position among the live interactions.
-    let interactions: Vec<&v2::Decl> = interface
-        .interactions
-        .iter()
-        .filter(|decl| is_interaction(decl))
-        .collect();
+    // minus one — the index is its position among the live interactions,
+    // which the lowering states as `Interaction.row`.
+    let interactions = interactions(interface);
 
     let mut member_rows: Vec<TokenStream> = Vec::new();
     let mut call_sizes: Vec<TokenStream> = Vec::new();
     let mut event_sizes: Vec<TokenStream> = Vec::new();
     let mut interaction_items: Vec<TokenStream> = Vec::new();
 
-    for (row_index, decl) in interactions.iter().enumerate() {
-        member_rows.push(member_row(decl)?);
+    for (ordinal, interaction) in &interactions {
+        member_rows.push(member_row(*ordinal, interaction)?);
         interaction_items.push(interaction_item(
             ctx,
             &iface_ident,
-            decl,
-            row_index,
+            interaction,
+            interaction.row as usize,
             &mut call_sizes,
             &mut event_sizes,
         )?);
@@ -158,43 +172,42 @@ fn one_interface(
 }
 
 /// The `Member` row for one interaction.
-fn member_row(decl: &v2::Decl) -> Result<TokenStream, GenerateError> {
-    let ordinal = Literal::u32_unsuffixed(decl.ordinal);
-    let name = decl.name.as_str();
+fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, GenerateError> {
+    let ordinal = Literal::u32_unsuffixed(slot);
+    let member = declared(interaction.name.as_ref());
+    let name = member;
+    let timing = timing_tokens(interaction.timing.as_ref());
 
-    let (kind, timing, payloads) = match decl.kind.as_ref() {
-        Some(v2::decl::Kind::SignalDef(signal)) => (
+    let (kind, timing, payloads) = match interaction.shape.as_ref() {
+        Some(v1::interaction::Shape::Signal(signal)) => (
             quote! { ::ridl_rt::contract::Kind::Signal },
-            timing_tokens(signal.timing.as_ref()),
-            vec![payload_info(&signal.payload)],
+            timing,
+            vec![payload_info(payload_reference(signal.payload.as_ref()))],
         ),
-        Some(v2::decl::Kind::EventDef(event)) => (
+        Some(v1::interaction::Shape::Event(event)) => (
             quote! { ::ridl_rt::contract::Kind::Event },
-            timing_tokens(event.timing.as_ref()),
-            vec![payload_info(&event.payload)],
+            timing,
+            vec![payload_info(payload_reference(event.payload.as_ref()))],
         ),
-        Some(v2::decl::Kind::CommandDef(command)) => (
+        Some(v1::interaction::Shape::Command(command)) => (
             quote! { ::ridl_rt::contract::Kind::Command },
-            timing_tokens(command.timing.as_ref()),
-            vec![payload_info(single_param_type(
-                &command.params,
-                &decl.name,
-            )?)],
+            timing,
+            vec![payload_info(single_param_type(command, member)?)],
         ),
-        Some(v2::decl::Kind::QueryDef(query)) => (
+        Some(v1::interaction::Shape::Query(query)) => (
             quote! { ::ridl_rt::contract::Kind::Query },
-            timing_tokens(query.timing.as_ref()),
+            timing,
             vec![
-                payload_info(single_param_type(&query.params, &decl.name)?),
-                payload_info(query_reply_type(query, &decl.name)?),
+                payload_info(query_param_type(query, member)?),
+                payload_info(query_reply_type(query, member)?),
             ],
         ),
-        Some(v2::decl::Kind::FixedDef(fixed)) => (
+        Some(v1::interaction::Shape::Fixed(fixed)) => (
             quote! { ::ridl_rt::contract::Kind::Fixed },
             quote! { None },
-            vec![payload_info(fixed_payload_type(fixed, &decl.name)?)],
+            vec![payload_info(fixed_payload_type(fixed, member)?)],
         ),
-        _ => return Err(not_an_interaction(&decl.name)),
+        None => return Err(not_an_interaction(member)),
     };
 
     Ok(quote! {
@@ -214,17 +227,21 @@ fn member_row(decl: &v2::Decl) -> Result<TokenStream, GenerateError> {
 fn interaction_item(
     ctx: &Ctx,
     iface_ident: &proc_macro2::Ident,
-    decl: &v2::Decl,
+    interaction: &v1::Interaction,
     row_index: usize,
     call_sizes: &mut Vec<TokenStream>,
     event_sizes: &mut Vec<TokenStream>,
 ) -> Result<TokenStream, GenerateError> {
-    let struct_ident = ident(&format!("{iface_ident}{}", camel_case(&decl.name)));
+    let member = declared(interaction.name.as_ref());
+    let struct_ident = ident(&format!(
+        "{iface_ident}{}",
+        camel(interaction.name.as_ref())
+    ));
     let index = Literal::usize_unsuffixed(row_index);
 
-    let kind_impl = match decl.kind.as_ref() {
-        Some(v2::decl::Kind::SignalDef(signal)) => {
-            let payload = type_path(&signal.payload);
+    let kind_impl = match interaction.shape.as_ref() {
+        Some(v1::interaction::Shape::Signal(signal)) => {
+            let payload = type_path(payload_reference(signal.payload.as_ref()));
             // `init()` returns the payload type's default, which is the
             // channel init (ridl §4.4) for a signal with no `= value`
             // override — the fixture's case. A declared init override is a
@@ -238,30 +255,31 @@ fn interaction_item(
                 }
             }
         }
-        Some(v2::decl::Kind::EventDef(event)) => {
-            let payload = type_path(&event.payload);
-            event_sizes.push(max_size_path(&event.payload));
+        Some(v1::interaction::Shape::Event(event)) => {
+            let reference = payload_reference(event.payload.as_ref());
+            let payload = type_path(reference);
+            event_sizes.push(max_size_path(reference));
             quote! {
                 impl ::ridl_rt::contract::Event for #struct_ident {
                     type Payload = #payload;
                 }
             }
         }
-        Some(v2::decl::Kind::FixedDef(fixed)) => {
-            let payload = type_path(fixed_payload_type(fixed, &decl.name)?);
+        Some(v1::interaction::Shape::Fixed(fixed)) => {
+            let payload = type_path(fixed_payload_type(fixed, member)?);
             quote! {
                 impl ::ridl_rt::contract::Fixed for #struct_ident {
                     type Payload = #payload;
                 }
             }
         }
-        Some(v2::decl::Kind::CommandDef(command)) => {
-            let arg_name = single_param_type(&command.params, &decl.name)?;
+        Some(v1::interaction::Shape::Command(command)) => {
+            let arg_name = single_param_type(command, member)?;
             let args = type_path(arg_name);
             call_sizes.push(max_size_path(arg_name));
             let require = clauses::translate(
                 ctx,
-                &command.contracts,
+                &command.clauses,
                 ClauseKind::Require,
                 &command.params,
                 None,
@@ -279,9 +297,9 @@ fn interaction_item(
                 }
             }
         }
-        Some(v2::decl::Kind::QueryDef(query)) => {
-            let arg_name = single_param_type(&query.params, &decl.name)?;
-            let reply_name = query_reply_type(query, &decl.name)?;
+        Some(v1::interaction::Shape::Query(query)) => {
+            let arg_name = query_param_type(query, member)?;
+            let reply_name = query_reply_type(query, member)?;
             let args = type_path(arg_name);
             let reply = type_path(reply_name);
             call_sizes.push(max_size_path(arg_name));
@@ -289,17 +307,20 @@ fn interaction_item(
 
             let require = clauses::translate(
                 ctx,
-                &query.contracts,
+                &query.clauses,
                 ClauseKind::Require,
                 &query.params,
                 None,
             )?;
             let ensure = clauses::translate(
                 ctx,
-                &query.contracts,
+                &query.clauses,
                 ClauseKind::Ensure,
                 &query.params,
-                Some(reply_name),
+                query
+                    .reply_payload
+                    .as_ref()
+                    .and_then(|payload| payload.r#type.as_ref()),
             )?;
 
             let require_param = binding("args", require.uses_args);
@@ -327,7 +348,7 @@ fn interaction_item(
                 }
             }
         }
-        _ => return Err(not_an_interaction(&decl.name)),
+        None => return Err(not_an_interaction(member)),
     };
 
     Ok(quote! {
@@ -392,12 +413,12 @@ fn max_size_const(sizes: &[TokenStream]) -> TokenStream {
     }
 }
 
-fn timing_tokens(timing: Option<&v2::Timing>) -> TokenStream {
+fn timing_tokens(timing: Option<&v1::Timing>) -> TokenStream {
     let Some(timing) = timing else {
         return quote! { None };
     };
-    let mode = match v2::TimingMode::try_from(timing.mode).unwrap_or(v2::TimingMode::Unspecified) {
-        v2::TimingMode::StrictPeriodic => {
+    let mode = match v1::TimingMode::try_from(timing.mode).unwrap_or(v1::TimingMode::Unspecified) {
+        v1::TimingMode::StrictPeriodic => {
             quote! { ::ridl_rt::contract::TimingMode::StrictPeriodic }
         }
         _ => quote! { ::ridl_rt::contract::TimingMode::Range },
@@ -453,55 +474,70 @@ fn clause_doc(kind: &str) -> String {
     )
 }
 
-pub(crate) fn is_interaction(decl: &v2::Decl) -> bool {
-    matches!(
-        decl.kind,
-        Some(
-            v2::decl::Kind::SignalDef(_)
-                | v2::decl::Kind::EventDef(_)
-                | v2::decl::Kind::CommandDef(_)
-                | v2::decl::Kind::QueryDef(_)
-                | v2::decl::Kind::FixedDef(_)
-        )
-    )
+/// The canonical IR text of the type one payload names.
+fn payload_reference(payload: Option<&v1::Payload>) -> &str {
+    payload
+        .and_then(|payload| payload.r#type.as_ref())
+        .map(|reference| reference.reference.as_str())
+        .unwrap_or_default()
 }
 
 /// The single declared parameter's named type. M3 emits no induced argument
 /// struct, so a call with any other parameter shape is refused (a recorded
 /// follow-up).
+///
+/// The lowering states the request payload exactly when the call has that
+/// shape, so its absence is the refusal, and the parameters say which of the
+/// two reasons it is.
 pub(crate) fn single_param_type<'a>(
-    params: &'a [v2::Param],
+    command: &'a v1::CommandShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    let [param] = params else {
-        return Err(GenerateError {
+    match command.request.as_ref() {
+        Some(request) => Ok(payload_reference(Some(request))),
+        None => Err(no_single_param(&command.params, member)),
+    }
+}
+
+/// [`single_param_type`] for a query, which carries the same request payload.
+pub(crate) fn query_param_type<'a>(
+    query: &'a v1::QueryShape,
+    member: &str,
+) -> Result<&'a str, GenerateError> {
+    match query.request.as_ref() {
+        Some(request) => Ok(payload_reference(Some(request))),
+        None => Err(no_single_param(&query.params, member)),
+    }
+}
+
+/// Which of the two reasons a call has no request payload.
+fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
+    if params.len() != 1 {
+        return GenerateError {
             message: format!(
                 "interaction `{member}` must declare exactly one parameter (M3 emits no \
                  induced argument struct)"
             ),
-        });
-    };
-    match param.r#type.as_ref().and_then(|ty| ty.kind.as_ref()) {
-        Some(v2::field_type::Kind::Named(name)) => Ok(name),
-        _ => Err(GenerateError {
-            message: format!("interaction `{member}`'s parameter must be a named type"),
-        }),
+        };
+    }
+    GenerateError {
+        message: format!("interaction `{member}`'s parameter must be a named type"),
     }
 }
 
 /// A query's reply named type. M3 replies with one declared type, so an inline
 /// fallible or non-named return is refused.
 pub(crate) fn query_reply_type<'a>(
-    query: &'a v2::QueryDef,
+    query: &'a v1::QueryShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    match query.return_type.as_ref().and_then(|ret| ret.kind.as_ref()) {
-        Some(v2::return_type::Kind::Value(field)) => match field.kind.as_ref() {
-            Some(v2::field_type::Kind::Named(name)) => Ok(name),
-            _ => Err(GenerateError {
-                message: format!("query `{member}`'s reply must be a named type"),
-            }),
-        },
+    if let Some(payload) = query.reply_payload.as_ref() {
+        return Ok(payload_reference(Some(payload)));
+    }
+    match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {
+        Some(v1::reply::Kind::Value(_)) => Err(GenerateError {
+            message: format!("query `{member}`'s reply must be a named type"),
+        }),
         _ => Err(GenerateError {
             message: format!("query `{member}`'s reply must be a single declared type"),
         }),
@@ -509,10 +545,13 @@ pub(crate) fn query_reply_type<'a>(
 }
 
 /// A `fixed`'s payload named type. M3 provisions a named type.
-fn fixed_payload_type<'a>(fixed: &'a v2::FixedDef, member: &str) -> Result<&'a str, GenerateError> {
-    match fixed.payload.as_ref().and_then(|field| field.kind.as_ref()) {
-        Some(v2::field_type::Kind::Named(name)) => Ok(name),
-        _ => Err(GenerateError {
+fn fixed_payload_type<'a>(
+    fixed: &'a v1::FixedShape,
+    member: &str,
+) -> Result<&'a str, GenerateError> {
+    match fixed.named.as_ref() {
+        Some(named) => Ok(payload_reference(Some(named))),
+        None => Err(GenerateError {
             message: format!("fixed `{member}`'s payload must be a named type"),
         }),
     }
