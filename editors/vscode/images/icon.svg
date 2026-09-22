@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- RIDL marketplace icon. A stacked RxDL monogram in the same graphite
+       and steel-blue family as the MarkSpec extension icon. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c323a"/>
+      <stop offset="1" stop-color="#171b20"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="5" fill="url(#bg)"/>
+
+  <g fill="none" stroke="#e9edf1" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- R -->
+    <path d="M29 58V27H42C51 27 56 31 56 39C56 47 51 50 42 50H29M43 50L56 60"/>
+    <!-- D -->
+    <path d="M29 101V70H40C53 70 59 76 59 85.5C59 95 53 101 40 101H29"/>
+    <!-- L -->
+    <path d="M73 70V101H99"/>
+  </g>
+
+  <!-- The wildcard / extended profile marker. -->
+  <g fill="none" stroke="#5e93b8" stroke-width="7" stroke-linecap="round">
+    <path d="M69 39L87 58"/>
+    <path d="M87 39L69 58"/>
+  </g>
+</svg>

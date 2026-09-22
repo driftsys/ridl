@@ -39,6 +39,18 @@ test("the manifest contributes the rsdl language with its grammar", () => {
   assert.equal(readJson(grammar.path).scopeName, "source.rsdl");
 });
 
+test("the manifest contributes a marketplace icon", () => {
+  const manifest = readJson("package.json");
+  assert.equal(manifest.icon, "images/icon.png");
+  const png = fs.readFileSync(path.join(ROOT, manifest.icon));
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "the marketplace icon is a PNG");
+  assert.equal(png.readUInt32BE(16), 128, "the marketplace icon is 128 pixels wide");
+  assert.equal(png.readUInt32BE(20), 128, "the marketplace icon is 128 pixels high");
+
+  const svg = fs.readFileSync(path.join(ROOT, "images/icon.svg"), "utf8");
+  assert.match(svg, /width="128" height="128" viewBox="0 0 128 128"/, "the editable source uses the same canvas");
+});
+
 test("the rsdl grammar scopes the keys of an attribute block", () => {
   const grammar = readJson("syntaxes/rsdl.tmLanguage.json");
   const includes = (patterns: { include?: string }[]) => patterns.map((pattern) => pattern.include);
