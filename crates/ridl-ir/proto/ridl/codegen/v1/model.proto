@@ -698,7 +698,20 @@ message FbWire {
     uint32 union_wrapper = 14;
     FbVector vector = 15;
     FbMap map = 16;
+    // An enum-typed slot. Beyond the design note's list: a FlatBuffers enum
+    // reference is spelled with the enum's own name, not with the keyword of
+    // the scalar it is stored at, so the two emitters agree on a name here
+    // and a scalar alone cannot state it.
+    FbEnum enum = 17;
   }
+}
+
+// An enum at one slot: the enum it names, and the width it is stored at.
+message FbEnum {
+  TypeRef type = 1;
+  // Always 8: every typl enum is emitted at one underlying width, `long`, so
+  // that a later value can never widen it under an otherwise compatible edit.
+  uint32 width_bytes = 2;
 }
 
 message FbScalar {

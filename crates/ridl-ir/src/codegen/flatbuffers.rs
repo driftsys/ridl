@@ -98,13 +98,18 @@ impl Hints {
     }
 }
 
-pub(crate) fn project<'a>(scope: Scope<'a>, tuple_index: &HashMap<String, u32>) -> Projected {
+pub(crate) fn project<'a>(
+    scope: Scope<'a>,
+    tuple_index: &HashMap<String, u32>,
+    foreign_index: &HashMap<(String, String), u32>,
+) -> Projected {
     let mut walk = Walk {
         scope,
         tables: Vec::new(),
         claimed: HashMap::new(),
         queue: Vec::new(),
         tuple_index,
+        foreign_index,
     };
     walk.declared();
     walk.drain();
@@ -117,6 +122,7 @@ struct Walk<'a, 'i> {
     claimed: HashMap<String, u32>,
     queue: Vec<Table<'a>>,
     tuple_index: &'i HashMap<String, u32>,
+    foreign_index: &'i HashMap<(String, String), u32>,
 }
 
 impl<'a> Walk<'a, '_> {
@@ -299,6 +305,7 @@ impl<'a> Walk<'a, '_> {
             scope,
             tables,
             claimed,
+            foreign_index,
             ..
         } = self;
         let mut tuple_tables = HashMap::new();
@@ -307,6 +314,7 @@ impl<'a> Walk<'a, '_> {
         let filler = Filler {
             scope,
             claimed: &claimed,
+            foreign_index,
         };
 
         let mut out = Vec::with_capacity(tables.len());
@@ -347,6 +355,7 @@ impl<'a> Walk<'a, '_> {
 struct Filler<'a, 'c> {
     scope: Scope<'a>,
     claimed: &'c HashMap<String, u32>,
+    foreign_index: &'c HashMap<(String, String), u32>,
 }
 
 impl Filler<'_, '_> {
@@ -578,6 +587,24 @@ impl Filler<'_, '_> {
         }
     }
 
+    /// Where the model holds the declaration `name` of `declaring`: its own
+    /// index for a declaration of the package being lowered, and the index
+    /// the lowering gave it in `Model.foreign` otherwise.
+    fn declaration_index(&self, declaring: &v2::Package, name: &str, local: bool) -> u32 {
+        if local {
+            declaring
+                .decls
+                .iter()
+                .position(|decl| decl.name == name)
+                .unwrap_or(0) as u32
+        } else {
+            self.foreign_index
+                .get(&(declaring.name.clone(), name.to_string()))
+                .copied()
+                .unwrap_or(0)
+        }
+    }
+
     fn reference_wire(&self, home: &v2::Package, reference: &str) -> (Option<v1::FbWire>, bool) {
         let Some((decl, declaring)) = self.scope.resolve(home, reference) else {
             return (None, false);
@@ -585,9 +612,22 @@ impl Filler<'_, '_> {
         let local = declaring.name == self.scope.package.name;
         match &decl.kind {
             Some(v2::decl::Kind::TypeDef(td)) => (Some(scalar_def_wire(td)), false),
-            // Every typl enum is emitted at one underlying width, `long`.
+            // A FlatBuffers enum field names the enum, and every typl enum is
+            // emitted at one underlying width, `long`.
             Some(v2::decl::Kind::EnumDef(def)) => (
-                Some(scalar_wire(v1::FbScalarType::Long, 8)),
+                Some(v1::FbWire {
+                    kind: Some(v1::fb_wire::Kind::Enum(v1::FbEnum {
+                        r#type: Some(v1::TypeRef {
+                            reference: reference.to_string(),
+                            resolved: true,
+                            package: declaring.name.clone(),
+                            foreign: reference.contains('.'),
+                            index: self.declaration_index(declaring, &decl.name, local),
+                            kind: v1::DeclKind::Enum as i32,
+                        }),
+                        width_bytes: 8,
+                    })),
+                }),
                 fb::enum_field_needs_null_default(def),
             ),
             Some(v2::decl::Kind::EnumSetDef(def)) => (Some(int_width_wire(def.width)), false),

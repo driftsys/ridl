@@ -87,7 +87,7 @@ pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
         .filter(|(_, entry)| entry.named)
         .map(|(index, entry)| (entry.wire.clone(), index as u32))
         .collect();
-    let projected = flatbuffers::project(scope, &tuple_index);
+    let projected = flatbuffers::project(scope, &tuple_index, &lowering.foreign_at);
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
     model
