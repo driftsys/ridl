@@ -1,13 +1,15 @@
 name: vscode-release
 
-# Release train for the ridl binary and the VS Code extension, triggered by an
-# `editor-v*` tag a maintainer pushes (ADR-0007 decision 14: the push is the
-# maintainer act). Builds ridl for five targets with the tag stamped as its
-# version, packages one VSIX per target, creates the GitHub Release, and runs
-# the Marketplace and Open VSX publishes in the `marketplace` environment,
-# which a maintainer must configure with required reviewers. The release job
-# does not depend on the publish jobs, so a publish failure never blocks the
-# release.
+# Release train for the ridl and ridlc binaries and the VS Code extension,
+# triggered by an `editor-v*` tag a maintainer pushes (ADR-0007 decision 14:
+# the push is the maintainer act). Builds both ridl (the porcelain CLI) and
+# ridlc (the plumbing compiler front end, for CI/build-system use) for five
+# targets with the tag stamped as ridl's version, packages one VSIX per target
+# from the ridl binary alone, creates the GitHub Release carrying both
+# binaries' tarballs, and runs the Marketplace and Open VSX publishes in the
+# `marketplace` environment, which a maintainer must configure with required
+# reviewers. The release job does not depend on the publish jobs, so a publish
+# failure never blocks the release.
 #
 # Packaging runs through `just package-vsix` (ADR-0009: the justfile defines
 # it; this file only invokes it), the same recipe `just package-vscode` calls
@@ -76,20 +78,33 @@ jobs:
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-latest,
               binary: ridl,
+              ridlc-binary: ridlc,
               glibc-floor: "2.28",
             }
           - {
               target: aarch64-unknown-linux-gnu,
               os: ubuntu-latest,
               binary: ridl,
+              ridlc-binary: ridlc,
               glibc-floor: "2.28",
             }
-          - { target: x86_64-apple-darwin, os: macos-latest, binary: ridl }
-          - { target: aarch64-apple-darwin, os: macos-latest, binary: ridl }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-latest,
+              binary: ridl,
+              ridlc-binary: ridlc,
+            }
+          - {
+              target: aarch64-apple-darwin,
+              os: macos-latest,
+              binary: ridl,
+              ridlc-binary: ridlc,
+            }
           - {
               target: x86_64-pc-windows-msvc,
               os: windows-latest,
               binary: ridl.exe,
+              ridlc-binary: ridlc.exe,
             }
     steps:
       - uses: actions/checkout@v4
@@ -103,18 +118,25 @@ jobs:
       - name: install cargo-zigbuild
         if: matrix.glibc-floor != ''
         uses: taiki-e/install-action@v2
+        # 0.23.0 is a floor, not an arbitrary pin: Rust 1.98 (this repo's own
+        # toolchain pin) added `--fix-cortex-a53-843419` to
+        # aarch64-unknown-linux-gnu's default linker flags, which zig's `cc`
+        # rejects as an unsupported linker arg — cargo-zigbuild strips it
+        # starting at 0.23.0 (rust-cross/cargo-zigbuild#451). Below that
+        # version, the aarch64-unknown-linux-gnu row of this matrix fails to
+        # link.
         with:
-          tool: cargo-zigbuild@0.22.3
+          tool: cargo-zigbuild@0.23.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: build ridl
+      - name: build ridl and ridlc
         env:
           RIDL_BUILD_VERSION: ${{ github.ref_name }}
         run: |
           if [ -n "${{ matrix.glibc-floor }}" ]; then
-            cargo zigbuild --release --locked --target "${{ matrix.target }}.${{ matrix.glibc-floor }}" -p ridl-cli
+            cargo zigbuild --release --locked --target "${{ matrix.target }}.${{ matrix.glibc-floor }}" -p ridl-cli -p ridlc
           else
-            cargo build --release --locked --target ${{ matrix.target }} -p ridl-cli
+            cargo build --release --locked --target ${{ matrix.target }} -p ridl-cli -p ridlc
           fi
       - name: tarball and checksum
         env:
@@ -124,12 +146,15 @@ jobs:
           # and Windows.
           COPYFILE_DISABLE: 1
         run: |
-          out="target/${{ matrix.target }}/release/${{ matrix.binary }}"
-          tar czf "ridl-${{ matrix.target }}.tar.gz" -C "$(dirname "$out")" "${{ matrix.binary }}"
+          out_dir="target/${{ matrix.target }}/release"
+          tar czf "ridl-${{ matrix.target }}.tar.gz" -C "$out_dir" "${{ matrix.binary }}"
+          tar czf "ridlc-${{ matrix.target }}.tar.gz" -C "$out_dir" "${{ matrix.ridlc-binary }}"
           if command -v sha256sum >/dev/null; then
             sha256sum "ridl-${{ matrix.target }}.tar.gz" > "ridl-${{ matrix.target }}.tar.gz.sha256"
+            sha256sum "ridlc-${{ matrix.target }}.tar.gz" > "ridlc-${{ matrix.target }}.tar.gz.sha256"
           else
             shasum -a 256 "ridl-${{ matrix.target }}.tar.gz" > "ridl-${{ matrix.target }}.tar.gz.sha256"
+            shasum -a 256 "ridlc-${{ matrix.target }}.tar.gz" > "ridlc-${{ matrix.target }}.tar.gz.sha256"
           fi
       - uses: actions/upload-artifact@v4
         with:
@@ -137,6 +162,12 @@ jobs:
           path: |
             ridl-${{ matrix.target }}.tar.gz
             ridl-${{ matrix.target }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ridlc-${{ matrix.target }}
+          path: |
+            ridlc-${{ matrix.target }}.tar.gz
+            ridlc-${{ matrix.target }}.tar.gz.sha256
 
   package-vsix:
     name: package vsix (${{ matrix.vsce-target }})
