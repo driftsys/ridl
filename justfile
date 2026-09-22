@@ -1315,7 +1315,7 @@ vscode-verify:
         chmod +x bin/ridl
         staged=1
     fi
-    npx vsce package --out "$scratch/ridl-vscode.vsix"
+    npx vsce package --out "$scratch/ridl-lang.vsix"
     listing="$(npx vsce ls)"
     if ! grep -qx 'bin/ridl' <<<"$listing"; then
         echo "vscode-verify: bin/ridl is missing from the VSIX — check .vscodeignore" >&2
@@ -1335,7 +1335,7 @@ vscode-verify:
 # already populated editors/vscode/bin/ — this recipe does not build ridl
 # itself. With no argument, a plain `vsce package`. With a vsce-target (a
 # vsce platform identifier, e.g. darwin-arm64), `vsce package --target
-# <vsce-target> --out ridl-vscode-<vsce-target>.vsix`, which is what the
+# <vsce-target> --out ridl-lang-<vsce-target>.vsix`, which is what the
 # release workflow's package-vsix job runs per target after staging that
 # target's binary. Not a member of `build`.
 package-vsix vsce-target="":
@@ -1347,7 +1347,7 @@ package-vsix vsce-target="":
     if [ -z "{{ vsce-target }}" ]; then
         npx vsce package
     else
-        npx vsce package --target "{{ vsce-target }}" --out "ridl-vscode-{{ vsce-target }}.vsix"
+        npx vsce package --target "{{ vsce-target }}" --out "ridl-lang-{{ vsce-target }}.vsix"
     fi
 
 # Build the extension for this machine: a release build of ridl copied into

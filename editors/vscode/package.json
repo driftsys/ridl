@@ -1,8 +1,8 @@
 {
-  "name": "ridl-vscode",
+  "name": "ridl-lang",
   "displayName": "RIDL (typl + ridl + rsdl)",
   "description": "Syntax highlighting and a language server client for the RIDL family: typl, the type language, ridl, the interface description language, and rsdl, the system description language.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "driftsys",
   "license": "MIT",
   "icon": "images/icon.png",
