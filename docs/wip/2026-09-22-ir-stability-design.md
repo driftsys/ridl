@@ -99,17 +99,19 @@ Every package the front end admits round-trips through JSON: `from_json` returns
 a package equal to the one written, for every shape at every depth up to 127.
 Binary does not:
 
-| Shape  | Last source depth that round-trips | Message levels | First source depth that fails | Message levels |
-| ------ | ---------------------------------: | -------------: | ----------------------------: | -------------: |
-| arrays |                                 47 |             99 |                            48 |            101 |
-| maps   |                                 46 |             99 |                            47 |            101 |
-| tuples |                                 31 |             98 |                            32 |            101 |
+| Shape  | Last source depth that round-trips | Levels below root | First source depth that fails | Levels below root |
+| ------ | ---------------------------------: | ----------------: | ----------------------------: | ----------------: |
+| arrays |                                 47 |                99 |                            48 |               101 |
+| maps   |                                 46 |                99 |                            47 |               101 |
+| tuples |                                 31 |                98 |                            32 |               101 |
 
-The hand-built chain confirms the threshold in the schema's own unit: **100
-message levels below the root decode, 101 do not.** `to_binary` writes every one
-of these packages without error; it is `from_binary` that refuses. The exact
-error, for the array shape at source depth 48 (the middle of the stack elided;
-it repeats `ArrayType.element: FieldType.kind:` 48 times):
+Both columns count message levels **below** the `Package` root, which is the
+unit the rest of this section uses; a chain measured from its own root reads one
+higher. The hand-built chain confirms the threshold in that unit: **100 message
+levels below the root decode, 101 do not.** `to_binary` writes every one of
+these packages without error; it is `from_binary` that refuses. The exact error,
+for the array shape at source depth 48 (the middle of the stack elided; it
+repeats `ArrayType.element: FieldType.kind:` 48 times):
 
     failed to decode Protobuf message: ArrayType.element: FieldType.kind:
     ArrayType.element: FieldType.kind: … Field.type: StructMember.member:
