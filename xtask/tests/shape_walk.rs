@@ -55,12 +55,28 @@ struct Allowed {
 
 const ALLOWED: &[Allowed] = &[
     Allowed {
+        path: "crates/ridl-backend-flatbuffers/tests/model_drift.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()` and already holds an inline shape, which is \
+              what the drift test compares the emitted identity tables against",
+    },
+    Allowed {
         path: "crates/ridl-backend-flatbuffers/tests/stability.rs",
         lines: 4,
         why: "the stability property's mutations edit the generated fixture's \
               one interface in place, which needs `&mut` access `shapes()` \
               cannot yield; the fixture declares no service, so the named \
               store is the complete set",
+    },
+    Allowed {
+        path: "crates/ridl-backend-proto/tests/model_drift.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()` and already holds an inline shape, which is \
+              what the drift test compares the emitted identity tables against",
     },
     Allowed {
         path: "crates/ridl-backend-proto/tests/stability.rs",

@@ -12,3 +12,21 @@ ridl-ir.workspace = true
 [dev-dependencies]
 insta.workspace = true
 tempfile = "3.15.0"
+# The source-to-IR compile path for the model drift test
+# (tests/model_drift.rs uses `ridlc::compile`). ridlc depends on this crate as
+# a normal dependency, so this is a dev-dependency cycle back to the crate
+# under test. Cargo supports it: a dev-dependency is not part of the graph
+# used to build this crate as a library, only of the graph used to build its
+# own test binaries, so the `ridlc` this pulls in links against the ordinary
+# (non-test) build of this crate.
+#
+# Not `ridlc.workspace = true`, for the reason the two wire backends' own
+# manifests record: a versioned dev-dependency on a workspace member is not
+# stripped at packaging time, so it would need `ridlc` published before this
+# crate can be, while `ridlc` normal-depends on this crate. A plain path with
+# no version is what keeps that cycle harmless.
+ridlc = { path = "../ridlc" }
+# For `ridl_core::RidlDatabase`, the salsa database `ridlc::compile_workspace`
+# takes — the cross-package half of the drift test constructs one itself, the
+# same way the wire backends' corpus tests do.
+ridl-core = { path = "../ridl-core" }
