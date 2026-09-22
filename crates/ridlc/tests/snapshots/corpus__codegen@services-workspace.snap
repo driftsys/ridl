@@ -1,0 +1,1522 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.codegen
+input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
+---
+// ===== package fleet.contracts =====
+{
+  "name": {
+    "dotted": "fleet.contracts",
+    "segments": [
+      "fleet",
+      "contracts"
+    ],
+    "joinedCamel": "FleetContracts",
+    "underscored": "fleet_contracts"
+  },
+  "scope": {
+    "package": "fleet.contracts",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "DoorId",
+        "snake": "door_id",
+        "camel": "DoorId",
+        "screaming": "DOOR_ID"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "0",
+          "max": "7"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": {
+        "declared": "Percent",
+        "snake": "percent",
+        "camel": "Percent",
+        "screaming": "PERCENT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "%",
+        "constraint": {
+          "min": "0",
+          "max": "100",
+          "step": "0.5"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Odometer",
+        "snake": "odometer",
+        "camel": "Odometer",
+        "screaming": "ODOMETER"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "0",
+          "max": "4294967295"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_U32"
+      }
+    },
+    {
+      "name": {
+        "declared": "LockState",
+        "snake": "lock_state",
+        "camel": "LockState",
+        "screaming": "LOCK_STATE"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "UNLOCKED",
+              "snake": "unlocked",
+              "camel": "UNLOCKED",
+              "screaming": "UNLOCKED"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "LOCKED",
+              "snake": "locked",
+              "camel": "LOCKED",
+              "screaming": "LOCKED"
+            },
+            "value": "1",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "DoorReport",
+        "snake": "door_report",
+        "camel": "DoorReport",
+        "screaming": "DOOR_REPORT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "door",
+                "snake": "door",
+                "camel": "Door",
+                "screaming": "DOOR"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "DoorId",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "locked",
+                "snake": "locked",
+                "camel": "Locked",
+                "screaming": "LOCKED"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "LockState",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "DoorFault",
+        "snake": "door_fault",
+        "camel": "DoorFault",
+        "screaming": "DOOR_FAULT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "JAMMED",
+              "snake": "jammed",
+              "camel": "JAMMED",
+              "screaming": "JAMMED"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "UNPOWERED",
+              "snake": "unpowered",
+              "camel": "UNPOWERED",
+              "screaming": "UNPOWERED"
+            },
+            "value": "1",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Door control — realized by one service per vehicle variant.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "lockState",
+              "snake": "lock_state",
+              "camel": "LockState",
+              "screaming": "LOCK_STATE"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "LockState",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "flatbuffersMaxSize": 50
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "doorMoved",
+              "snake": "door_moved",
+              "camel": "DoorMoved",
+              "screaming": "DOOR_MOVED"
+            },
+            "kind": "KIND_EVENT",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            },
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "DoorReport",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 60
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "lock",
+              "snake": "lock",
+              "camel": "Lock",
+              "screaming": "LOCK"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 2,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "door",
+                    "snake": "door",
+                    "camel": "Door",
+                    "screaming": "DOOR"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "DoorId",
+                      "resolved": true,
+                      "package": "fleet.contracts",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "DoorId",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "readDoor",
+              "snake": "read_door",
+              "camel": "ReadDoor",
+              "screaming": "READ_DOOR"
+            },
+            "kind": "KIND_QUERY",
+            "row": 3,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "door",
+                    "snake": "door",
+                    "camel": "Door",
+                    "screaming": "DOOR"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "DoorId",
+                      "resolved": true,
+                      "package": "fleet.contracts",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "DoorId",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "DoorReport",
+                    "resolved": true,
+                    "package": "fleet.contracts",
+                    "foreign": false,
+                    "index": 4,
+                    "kind": "DECL_KIND_STRUCT"
+                  },
+                  "err": {
+                    "reference": "DoorFault",
+                    "resolved": true,
+                    "package": "fleet.contracts",
+                    "foreign": false,
+                    "index": 5,
+                    "kind": "DECL_KIND_ENUM"
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "doorCount",
+              "snake": "door_count",
+              "camel": "DoorCount",
+              "screaming": "DOOR_COUNT"
+            },
+            "kind": "KIND_FIXED",
+            "row": 4,
+            "doc": "",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "named": {
+                  "reference": "DoorId",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "named": {
+                "type": {
+                  "reference": "DoorId",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              }
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "DoorControl",
+        "snake": "door_control",
+        "camel": "DoorControl",
+        "screaming": "DOOR_CONTROL"
+      }
+    },
+    {
+      "number": 2,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Odometer readout — a second shape, so the cross-package member has more\nthan one interface to reference.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "distance",
+              "snake": "distance",
+              "camel": "Distance",
+              "screaming": "DISTANCE"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "1000000",
+              "maxUs": "10000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Odometer",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 2,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 46
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "fuelLevel",
+              "snake": "fuel_level",
+              "camel": "FuelLevel",
+              "screaming": "FUEL_LEVEL"
+            },
+            "kind": "KIND_QUERY",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Percent",
+                    "resolved": true,
+                    "package": "fleet.contracts",
+                    "foreign": false,
+                    "index": 1,
+                    "kind": "DECL_KIND_SCALAR"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Percent",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 46
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result >= 0.0",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "Telemetry.fuelLevel.ensure[0]",
+                  "comparison": {
+                    "op": "COMPARISON_OP_GE",
+                    "literal": "0.0",
+                    "literalClass": "SCALAR_CLASS_FLOAT",
+                    "result": true
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "Telemetry",
+        "snake": "telemetry",
+        "camel": "Telemetry",
+        "screaming": "TELEMETRY"
+      }
+    }
+  ],
+  "services": [],
+  "catalog": {
+    "package": "fleet.contracts",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 1,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 2,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 3,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 4,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 60
+      },
+      {
+        "declaration": 5,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      }
+    ],
+    "tables": [
+      {
+        "name": "DoorReport",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "LockState",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 4
+      },
+      {
+        "name": "DoorIdBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      },
+      {
+        "name": "PercentBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 1
+      },
+      {
+        "name": "OdometerBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UINT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 2
+      },
+      {
+        "name": "LockStateBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "LockState",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 3
+      },
+      {
+        "name": "DoorFaultBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "DoorFault",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 5
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package fleet.legacy =====
+{
+  "name": {
+    "dotted": "fleet.legacy",
+    "segments": [
+      "fleet",
+      "legacy"
+    ],
+    "joinedCamel": "FleetLegacy",
+    "underscored": "fleet_legacy"
+  },
+  "scope": {
+    "package": "fleet.legacy",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "DoorFault",
+        "snake": "door_fault",
+        "camel": "DoorFault",
+        "screaming": "DOOR_FAULT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "The M1 fleet's door failure set, kept for contracts still on the old wire.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "STUCK",
+              "snake": "stuck",
+              "camel": "STUCK",
+              "screaming": "STUCK"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "NO_POWER",
+              "snake": "no_power",
+              "camel": "NOPOWER",
+              "screaming": "NO_POWER"
+            },
+            "value": "1",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [],
+  "services": [],
+  "catalog": {
+    "package": "fleet.legacy",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      }
+    ],
+    "tables": [
+      {
+        "name": "DoorFaultBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "DoorFault",
+                  "resolved": true,
+                  "package": "fleet.legacy",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package fleet.vehicle =====
+{
+  "name": {
+    "dotted": "fleet.vehicle",
+    "segments": [
+      "fleet",
+      "vehicle"
+    ],
+    "joinedCamel": "FleetVehicle",
+    "underscored": "fleet_vehicle"
+  },
+  "scope": {
+    "package": "fleet.vehicle",
+    "others": []
+  },
+  "declarations": [],
+  "tuples": [],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "foldAngle",
+              "snake": "fold_angle",
+              "camel": "FoldAngle",
+              "screaming": "FOLD_ANGLE"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "200000",
+              "maxUs": "2000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "fleet.contracts.Percent",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "fold",
+              "snake": "fold",
+              "camel": "Fold",
+              "screaming": "FOLD"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "door",
+                    "snake": "door",
+                    "camel": "Door",
+                    "screaming": "DOOR"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "fleet.contracts.DoorId",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "fleet.contracts.DoorId",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "readFold",
+              "snake": "read_fold",
+              "camel": "ReadFold",
+              "screaming": "READ_FOLD"
+            },
+            "kind": "KIND_QUERY",
+            "row": 2,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "door",
+                    "snake": "door",
+                    "camel": "Door",
+                    "screaming": "DOOR"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "fleet.contracts.DoorId",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "fleet.contracts.DoorId",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "fleet.contracts.Percent",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "fleet.contracts.Percent",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "door <= 7",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "door"
+                  ],
+                  "usesResult": false,
+                  "observerId": "fleet.vehicle.mirrors.readFold.require[0]",
+                  "refused": "the parameter is not a named integer or float scalar"
+                },
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result >= 0.0",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]",
+                  "refused": "`result` is not a named integer or float scalar"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "mirrorCount",
+              "snake": "mirror_count",
+              "camel": "MirrorCount",
+              "screaming": "MIRROR_COUNT"
+            },
+            "kind": "KIND_FIXED",
+            "row": 3,
+            "doc": "",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "named": {
+                  "reference": "fleet.contracts.DoorId",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "named": {
+                "type": {
+                  "reference": "fleet.contracts.DoorId",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "readDoor",
+              "snake": "read_door",
+              "camel": "ReadDoor",
+              "screaming": "READ_DOOR"
+            },
+            "kind": "KIND_QUERY",
+            "row": 4,
+            "doc": "Cross-package `T | E`: both arms live in `fleet.contracts`, so the\nsynthesized transport identity carries their fully qualified names.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "door",
+                    "snake": "door",
+                    "camel": "Door",
+                    "screaming": "DOOR"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "fleet.contracts.DoorId",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "fleet.contracts.DoorId",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "fleet.contracts.DoorReport",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  },
+                  "err": {
+                    "reference": "fleet.contracts.DoorFault",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 6,
+          "interaction": {
+            "name": {
+              "declared": "readLegacyDoor",
+              "snake": "read_legacy_door",
+              "camel": "ReadLegacyDoor",
+              "screaming": "READ_LEGACY_DOOR"
+            },
+            "kind": "KIND_QUERY",
+            "row": 5,
+            "doc": "The same, with the error arm reached through an import alias. The alias\nis a source-level convenience; the transport identity must show the\ncanonical `fleet.legacy.DoorFault`, because a registry keying on it has\nto be stable against how a consumer chose to spell its imports.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "door",
+                    "snake": "door",
+                    "camel": "Door",
+                    "screaming": "DOOR"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "fleet.contracts.DoorId",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "fleet.contracts.DoorId",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "fleet.contracts.DoorReport",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  },
+                  "err": {
+                    "reference": "fleet.legacy.DoorFault",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        }
+      ],
+      "inlineOfService": 4,
+      "service": {
+        "dotted": "fleet.vehicle.mirrors",
+        "segments": [
+          "fleet",
+          "vehicle",
+          "mirrors"
+        ],
+        "joinedCamel": "FleetVehicleMirrors",
+        "underscored": "fleet_vehicle_mirrors"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": {
+        "dotted": "fleet.vehicle.doors.front",
+        "segments": [
+          "fleet",
+          "vehicle",
+          "doors",
+          "front"
+        ],
+        "joinedCamel": "FleetVehicleDoorsFront",
+        "underscored": "fleet_vehicle_doors_front"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Two services over one imported shape: the front and rear door controllers\nare separate system-wide addresses realizing the same contract.",
+      "labels": [],
+      "interfaceRefs": [
+        "fleet.contracts.DoorControl"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "fleet.vehicle.doors.rear",
+        "segments": [
+          "fleet",
+          "vehicle",
+          "doors",
+          "rear"
+        ],
+        "joinedCamel": "FleetVehicleDoorsRear",
+        "underscored": "fleet_vehicle_doors_rear"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interfaceRefs": [
+        "fleet.contracts.DoorControl"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "fleet.vehicle.telemetry",
+        "segments": [
+          "fleet",
+          "vehicle",
+          "telemetry"
+        ],
+        "joinedCamel": "FleetVehicleTelemetry",
+        "underscored": "fleet_vehicle_telemetry"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "A second imported shape.",
+      "labels": [],
+      "interfaceRefs": [
+        "fleet.contracts.Telemetry"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "fleet.vehicle.cockpit",
+        "segments": [
+          "fleet",
+          "vehicle",
+          "cockpit"
+        ],
+        "joinedCamel": "FleetVehicleCockpit",
+        "underscored": "fleet_vehicle_cockpit"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "One address composing both shapes (ADR-0015 decision 12): the interface\nstays the generation unit, the service the addressing unit, so this\ndeclaration generates nothing new — it gives the two contracts one more\nglobal name.",
+      "labels": [],
+      "interfaceRefs": [
+        "fleet.contracts.DoorControl",
+        "fleet.contracts.Telemetry"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "fleet.vehicle.mirrors",
+        "segments": [
+          "fleet",
+          "vehicle",
+          "mirrors"
+        ],
+        "joinedCamel": "FleetVehicleMirrors",
+        "underscored": "fleet_vehicle_mirrors"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
+      "labels": [],
+      "interfaceRefs": [],
+      "inlineShape": 0
+    }
+  ],
+  "catalog": {
+    "package": "fleet.vehicle",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [],
+    "tables": []
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}

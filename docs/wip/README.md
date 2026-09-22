@@ -168,7 +168,10 @@ design note, from the archive.
   layouts and bounds, and the interface, interaction, timing, clause and catalog
   facts an IPC binding needs (driver decision D-P4). It carries the recommended
   disposition of O-P2, the model's home. A recommendation for Sebastien's
-  disposition; stage P2b implements it.
+  disposition; **implemented by P2b** as it stands — `ridl.codegen.v1` in
+  `crates/ridl-ir`, `ridl build --emit codegen-model`, and one fact-level drift
+  test per backend. §9 of the note is still open, and its items belong to the
+  stages it names.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

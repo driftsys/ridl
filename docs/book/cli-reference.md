@@ -436,13 +436,14 @@ Options:
 
       --emit <EMIT>
           Possible values:
-          - rust:        Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
-          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
-          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:       The proto3 schema, written to `<base>.proto`
-          - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
+          - rust:          Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:       The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:       The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:     The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
+          - typescript:    Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:         The proto3 schema, written to `<base>.proto`
+          - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
+          - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           
           [default: rust]
 
@@ -512,6 +513,18 @@ map is a vector of generated entry tables with no `(key)`, and enum values are
 not prefixed because FlatBuffers scopes them inside their enum — and are
 recorded in ADR-0019.
 
+**`codegen-model` is not a backend at all**: it writes the lowered codegen
+model — one package, resolved over the scope the build read, with the scalar
+classes, the pinned name transforms, the resolved type references, the typl
+init and closure rules, the tombstones in their slots, the FlatBuffers
+projection and the interaction facts computed once — as canonical protobuf
+JSON, in the schema `ridl.codegen.v1`. It is the payload a codegen request
+carries (ADR-0020 decisions 8 and 9), written byte for byte as the request
+would carry it, so a plugin's fixture is a file `ridlc` wrote. No in-tree
+backend reads it yet: the four backends above still read the IR, and a drift
+test in each of them asserts that what the backend derives and what the model
+states are the same fact.
+
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
@@ -521,8 +534,9 @@ in single-file mode.
 
 When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
-`ridl.std.h`, `ridl.std.ts` — because generated code refers to standard types
-by package path and does not compile without it. The three IR targets —
+`ridl.std.ts`, `ridl.std.codegen.json` — because generated code refers to
+standard types by package path and does not compile without it, and the model
+is lowered over the same scope. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
@@ -1469,16 +1483,17 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`
 
           Possible values:
-          - rust:        Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
-          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
-          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:       The proto3 schema, written to `<base>.proto`
-          - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
+          - rust:          Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:       The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:       The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:     The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
+          - typescript:    Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:         The proto3 schema, written to `<base>.proto`
+          - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
+          - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           
           [default: rust]
 

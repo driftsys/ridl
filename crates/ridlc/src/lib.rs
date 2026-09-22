@@ -399,6 +399,16 @@ pub enum Emit {
     /// A wire backend: the typl surface plus the interaction identity table,
     /// and nothing above them (ADR-0013 decision 2).
     Flatbuffers,
+    /// The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf
+    /// JSON, written to `<base>.codegen.json`.
+    ///
+    /// It is the payload a codegen request carries (ADR-0020 decisions 8 and
+    /// 9), written byte for byte as the request would carry it, so a plugin's
+    /// fixture is a file `ridlc` wrote. It is classified with the code emits
+    /// rather than the IR dumps: the model is lowered over the same scope a
+    /// code emit reads, `ridl.std` included, and `ridl baseline` publishes
+    /// only `.ir.json` artifacts.
+    CodegenModel,
 }
 
 impl Emit {
@@ -449,7 +459,11 @@ impl Emit {
     )]
     pub const fn ir_dump_suffix(self) -> Option<&'static str> {
         match self {
-            Emit::Rust | Emit::TypeScript | Emit::Proto | Emit::Flatbuffers => None,
+            Emit::Rust
+            | Emit::TypeScript
+            | Emit::Proto
+            | Emit::Flatbuffers
+            | Emit::CodegenModel => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -471,7 +485,11 @@ impl Emit {
     )]
     pub const fn system_dump_suffix(self) -> Option<&'static str> {
         match self {
-            Emit::Rust | Emit::TypeScript | Emit::Proto | Emit::Flatbuffers => None,
+            Emit::Rust
+            | Emit::TypeScript
+            | Emit::Proto
+            | Emit::Flatbuffers
+            | Emit::CodegenModel => None,
             Emit::IrJson => Some(".system.json"),
             Emit::IrText => Some(".system.txtpb"),
             Emit::IrBinary => Some(".system.binpb"),
@@ -1360,6 +1378,26 @@ fn write_emits(
                     std::fs::write(out_dir.join(format!("{base}.fbs")), &generated.fbs_source)?;
                 }
             }
+            // The model is lowered over the same scope the code emits read,
+            // so the artifact is the request's payload byte for byte. Its one
+            // failure path is the JSON writer's, reported as the `ir-json`
+            // emit's is, with no artifact written.
+            Emit::CodegenModel => {
+                let model = ridl_ir::codegen::lower(ir, others);
+                match ridl_ir::codegen::to_json_pretty(&model) {
+                    Ok(json) => {
+                        std::fs::write(out_dir.join(format!("{base}.codegen.json")), json)?;
+                    }
+                    Err(err) => {
+                        diagnostics.push(error_diagnostic(
+                            "",
+                            err.to_string(),
+                            FileId::DETACHED,
+                            TextRange::default(),
+                        ));
+                    }
+                }
+            }
         }
     }
     Ok(())
@@ -1382,7 +1420,11 @@ fn write_system_emits(
             clippy::match_wildcard_for_single_variants
         )]
         let rendered = match emit {
-            Emit::Rust | Emit::TypeScript | Emit::Proto | Emit::Flatbuffers => continue,
+            Emit::Rust
+            | Emit::TypeScript
+            | Emit::Proto
+            | Emit::Flatbuffers
+            | Emit::CodegenModel => continue,
             Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
             Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
             Emit::IrBinary => Ok(ridl_ir::v2::system_to_binary(system)),

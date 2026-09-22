@@ -1,0 +1,5957 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.codegen
+input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
+---
+// ===== package veh.common =====
+{
+  "name": {
+    "dotted": "veh.common",
+    "segments": [
+      "veh",
+      "common"
+    ],
+    "joinedCamel": "VehCommon",
+    "underscored": "veh_common"
+  },
+  "scope": {
+    "package": "veh.common",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "Speed",
+        "snake": "speed",
+        "camel": "Speed",
+        "screaming": "SPEED"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Vehicle speed over ground",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "km/h",
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Temperature",
+        "snake": "temperature",
+        "camel": "Temperature",
+        "screaming": "TEMPERATURE"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Coolant / ambient temperature",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "Cel",
+        "constraint": {
+          "min": "-40",
+          "max": "125",
+          "step": "0.1"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "RPM",
+        "snake": "rpm",
+        "camel": "RPM",
+        "screaming": "RPM"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Engine crankshaft speed",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "/min",
+        "constraint": {
+          "min": "0",
+          "max": "8000",
+          "step": "10"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Ratio",
+        "snake": "ratio",
+        "camel": "Ratio",
+        "screaming": "RATIO"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Normalised ratio",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "%",
+        "constraint": {
+          "min": "0",
+          "max": "100",
+          "step": "0.1"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Counter",
+        "snake": "counter",
+        "camel": "Counter",
+        "screaming": "COUNTER"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "0",
+          "max": "65535"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_U16"
+      }
+    },
+    {
+      "name": {
+        "declared": "Gain",
+        "snake": "gain",
+        "camel": "Gain",
+        "screaming": "GAIN"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "constraint": {
+          "min": "0",
+          "max": "1",
+          "step": "0.01"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "MAX_SPEED",
+        "snake": "max_speed",
+        "camel": "MAXSPEED",
+        "screaming": "MAX_SPEED"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "constant": {
+        "value": "250",
+        "named": {
+          "reference": "Speed",
+          "resolved": true,
+          "package": "veh.common",
+          "foreign": false,
+          "index": 0,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "SPEED_LIMIT_EU",
+        "snake": "speed_limit_eu",
+        "camel": "SPEEDLIMITEU",
+        "screaming": "SPEED_LIMIT_EU"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "constant": {
+        "value": "130",
+        "named": {
+          "reference": "Speed",
+          "resolved": true,
+          "package": "veh.common",
+          "foreign": false,
+          "index": 0,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "MAX_GEAR",
+        "snake": "max_gear",
+        "camel": "MAXGEAR",
+        "screaming": "MAX_GEAR"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "constant": {
+        "value": "6",
+        "primitive": "PRIMITIVE_TYPE_INTEGER"
+      }
+    },
+    {
+      "name": {
+        "declared": "IDLE_RPM",
+        "snake": "idle_rpm",
+        "camel": "IDLERPM",
+        "screaming": "IDLE_RPM"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "constant": {
+        "value": "800",
+        "named": {
+          "reference": "RPM",
+          "resolved": true,
+          "package": "veh.common",
+          "foreign": false,
+          "index": 2,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "GearPosition",
+        "snake": "gear_position",
+        "camel": "GearPosition",
+        "screaming": "GEAR_POSITION"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "PARK",
+              "snake": "park",
+              "camel": "PARK",
+              "screaming": "PARK"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "DRIVE",
+              "snake": "drive",
+              "camel": "DRIVE",
+              "screaming": "DRIVE"
+            },
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "REVERSE",
+              "snake": "reverse",
+              "camel": "REVERSE",
+              "screaming": "REVERSE"
+            },
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "NEUTRAL",
+              "snake": "neutral",
+              "camel": "NEUTRAL",
+              "screaming": "NEUTRAL"
+            },
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "Warning",
+        "snake": "warning",
+        "camel": "Warning",
+        "screaming": "WARNING"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "LOW_FUEL",
+              "snake": "low_fuel",
+              "camel": "LOWFUEL",
+              "screaming": "LOW_FUEL"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "CHECK_ENGINE",
+              "snake": "check_engine",
+              "camel": "CHECKENGINE",
+              "screaming": "CHECK_ENGINE"
+            },
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "DOOR_OPEN",
+              "snake": "door_open",
+              "camel": "DOOROPEN",
+              "screaming": "DOOR_OPEN"
+            },
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "SEATBELT",
+              "snake": "seatbelt",
+              "camel": "SEATBELT",
+              "screaming": "SEATBELT"
+            },
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "WarningFlags",
+        "snake": "warning_flags",
+        "camel": "WarningFlags",
+        "screaming": "WARNING_FLAGS"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enumSet": {
+        "backingEnum": {
+          "reference": "Warning",
+          "resolved": true,
+          "package": "veh.common",
+          "foreign": false,
+          "index": 11,
+          "kind": "DECL_KIND_ENUM"
+        },
+        "bits": [
+          {
+            "name": {
+              "declared": "LOW_FUEL",
+              "snake": "low_fuel",
+              "camel": "LOWFUEL",
+              "screaming": "LOW_FUEL"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "CHECK_ENGINE",
+              "snake": "check_engine",
+              "camel": "CHECKENGINE",
+              "screaming": "CHECK_ENGINE"
+            },
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "DOOR_OPEN",
+              "snake": "door_open",
+              "camel": "DOOROPEN",
+              "screaming": "DOOR_OPEN"
+            },
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "SEATBELT",
+              "snake": "seatbelt",
+              "camel": "SEATBELT",
+              "screaming": "SEATBELT"
+            },
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "width": "INT_WIDTH_U8",
+        "declaredMask": "15"
+      }
+    },
+    {
+      "name": {
+        "declared": "SpeedLimitPayload",
+        "snake": "speed_limit_payload",
+        "camel": "SpeedLimitPayload",
+        "screaming": "SPEED_LIMIT_PAYLOAD"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "limit",
+                "snake": "limit",
+                "camel": "Limit",
+                "screaming": "LIMIT"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Speed",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "actual",
+                "snake": "actual",
+                "camel": "Actual",
+                "screaming": "ACTUAL"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Speed",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "DriverProfile",
+        "snake": "driver_profile",
+        "camel": "DriverProfile",
+        "screaming": "DRIVER_PROFILE"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "name",
+                "snake": "name",
+                "camel": "Name",
+                "screaming": "NAME"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Name",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "speed",
+                "snake": "speed",
+                "camel": "Speed",
+                "screaming": "SPEED"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Speed",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 3,
+            "field": {
+              "name": {
+                "declared": "override",
+                "snake": "override",
+                "camel": "Override",
+                "screaming": "OVERRIDE"
+              },
+              "type": {
+                "optional": true,
+                "named": {
+                  "reference": "Speed",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 4,
+            "field": {
+              "name": {
+                "declared": "gears",
+                "snake": "gears",
+                "camel": "Gears",
+                "screaming": "GEARS"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_INTEGER",
+                  "constraint": {
+                    "min": "0",
+                    "max": "6"
+                  },
+                  "vacuous": false,
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "declaredInit": "6",
+              "init": {
+                "derivable": true,
+                "value": "6",
+                "source": "INIT_SOURCE_DECLARED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "SensorBounds",
+        "snake": "sensor_bounds",
+        "camel": "SensorBounds",
+        "screaming": "SENSOR_BOUNDS"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": true,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "range",
+                "snake": "range",
+                "camel": "Range",
+                "screaming": "RANGE"
+              },
+              "type": {
+                "optional": false,
+                "tuple": {
+                  "index": 0
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "readings",
+                "snake": "readings",
+                "camel": "Readings",
+                "screaming": "READINGS"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Speed",
+                      "resolved": true,
+                      "package": "veh.common",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "min": "8",
+                  "max": "8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 3,
+            "field": {
+              "name": {
+                "declared": "labels",
+                "snake": "labels",
+                "camel": "Labels",
+                "screaming": "LABELS"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "ridl.std.Label",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  },
+                  "min": "1",
+                  "max": "16"
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 4,
+            "field": {
+              "name": {
+                "declared": "meta",
+                "snake": "meta",
+                "camel": "Meta",
+                "screaming": "META"
+              },
+              "type": {
+                "optional": false,
+                "map": {
+                  "key": {
+                    "optional": false,
+                    "named": {
+                      "reference": "ridl.std.Label",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  },
+                  "value": {
+                    "optional": false,
+                    "named": {
+                      "reference": "ridl.std.Name",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  },
+                  "min": "0",
+                  "max": "32",
+                  "flatbuffersEntryTable": 17
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "SensorResult",
+        "snake": "sensor_result",
+        "camel": "SensorResult",
+        "screaming": "SENSOR_RESULT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "union": {
+        "arms": [
+          {
+            "name": {
+              "declared": "ok",
+              "snake": "ok",
+              "camel": "Ok",
+              "screaming": "OK"
+            },
+            "ordinal": 1,
+            "type": {
+              "reference": "SensorReading",
+              "resolved": true,
+              "package": "veh.common",
+              "foreign": false,
+              "index": 17,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "",
+            "discriminant": 1
+          },
+          {
+            "name": {
+              "declared": "err",
+              "snake": "err",
+              "camel": "Err",
+              "screaming": "ERR"
+            },
+            "ordinal": 2,
+            "type": {
+              "reference": "SensorFault",
+              "resolved": true,
+              "package": "veh.common",
+              "foreign": false,
+              "index": 18,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "",
+            "discriminant": 2
+          }
+        ],
+        "retired": [],
+        "isResult": true
+      }
+    },
+    {
+      "name": {
+        "declared": "SensorReading",
+        "snake": "sensor_reading",
+        "camel": "SensorReading",
+        "screaming": "SENSOR_READING"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "value",
+                "snake": "value",
+                "camel": "Value",
+                "screaming": "VALUE"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Speed",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "timestamp",
+                "snake": "timestamp",
+                "camel": "Timestamp",
+                "screaming": "TIMESTAMP"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Timestamp",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "SensorFault",
+        "snake": "sensor_fault",
+        "camel": "SensorFault",
+        "screaming": "SENSOR_FAULT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "code",
+                "snake": "code",
+                "camel": "Code",
+                "screaming": "CODE"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Counter",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "message",
+                "snake": "message",
+                "camel": "Message",
+                "screaming": "MESSAGE"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Message",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "RawWheelFrame",
+        "snake": "raw_wheel_frame",
+        "camel": "RawWheelFrame",
+        "screaming": "RAW_WHEEL_FRAME"
+      },
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "ticks",
+                "snake": "ticks",
+                "camel": "Ticks",
+                "screaming": "TICKS"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Counter",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "frame",
+                "snake": "frame",
+                "camel": "Frame",
+                "screaming": "FRAME"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_BYTES",
+                  "constraint": {
+                    "lenMin": "8",
+                    "lenMax": "8"
+                  },
+                  "vacuous": false
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    }
+  ],
+  "tuples": [
+    {
+      "name": {
+        "rust": "SensorBoundsRange",
+        "wire": "SensorBoundsRange"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "min",
+            "snake": "min",
+            "camel": "Min",
+            "screaming": "MIN"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Speed",
+              "resolved": true,
+              "package": "veh.common",
+              "foreign": false,
+              "index": 0,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        },
+        {
+          "name": {
+            "declared": "max",
+            "snake": "max",
+            "camel": "Max",
+            "screaming": "MAX"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Speed",
+              "resolved": true,
+              "package": "veh.common",
+              "foreign": false,
+              "index": 0,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        }
+      ],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "flatbuffersTable": 16,
+      "declaration": {
+        "declaration": 15,
+        "segments": [
+          "range"
+        ]
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": [],
+  "catalog": {
+    "package": "veh.common",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 1,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 2,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 3,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 4,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 44
+      },
+      {
+        "declaration": 5,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 10,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 11,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 12,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 13,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 59
+      },
+      {
+        "declaration": 14,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "name"
+          ]
+        }
+      },
+      {
+        "declaration": 15,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "labels",
+            "meta"
+          ]
+        }
+      },
+      {
+        "declaration": 16,
+        "root": "FB_ROOT_KIND_UNION_WRAPPER",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "ok",
+            "err"
+          ]
+        }
+      },
+      {
+        "declaration": 17,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "timestamp"
+          ]
+        }
+      },
+      {
+        "declaration": 18,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "message"
+          ]
+        }
+      },
+      {
+        "declaration": 19,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 76
+      }
+    ],
+    "tables": [
+      {
+        "name": "SpeedLimitPayload",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 13
+      },
+      {
+        "name": "DriverProfile",
+        "slots": [
+          {
+            "id": 0,
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          },
+          {
+            "id": 2,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "field": 2
+          },
+          {
+            "id": 3,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 3
+          }
+        ],
+        "vtableSlots": 4,
+        "structDeclaration": 14
+      },
+      {
+        "name": "SensorBounds",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "table": 16
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "vector": {
+                "element": {
+                  "scalar": {
+                    "type": "FB_SCALAR_TYPE_FLOAT",
+                    "widthBytes": 4
+                  }
+                },
+                "min": "8",
+                "max": "8"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          },
+          {
+            "id": 2,
+            "needsNullDefault": false,
+            "field": 2
+          },
+          {
+            "id": 3,
+            "wire": {
+              "map": {
+                "entryTable": 17,
+                "min": "0",
+                "max": "32"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 3
+          }
+        ],
+        "vtableSlots": 4,
+        "structDeclaration": 15
+      },
+      {
+        "name": "SensorResult",
+        "slots": [
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 2,
+        "unionWrapper": 16
+      },
+      {
+        "name": "SensorReading",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 17
+      },
+      {
+        "name": "SensorFault",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 18
+      },
+      {
+        "name": "RawWheelFrame",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "bytes": true
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 19
+      },
+      {
+        "name": "SpeedBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      },
+      {
+        "name": "TemperatureBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 1
+      },
+      {
+        "name": "RPMBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 2
+      },
+      {
+        "name": "RatioBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 3
+      },
+      {
+        "name": "CounterBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 4
+      },
+      {
+        "name": "GainBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 5
+      },
+      {
+        "name": "GearPositionBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "GearPosition",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 10,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 10
+      },
+      {
+        "name": "WarningBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "Warning",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 11
+      },
+      {
+        "name": "WarningFlagsBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 12
+      },
+      {
+        "name": "SensorBoundsRange",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 0
+      },
+      {
+        "name": "SensorBoundsMetaEntry",
+        "slots": [
+          {
+            "id": 0,
+            "needsNullDefault": false,
+            "key": true
+          },
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "value": true
+          }
+        ],
+        "vtableSlots": 2,
+        "mapEntry": {
+          "path": [
+            "SensorBoundsMetaEntry"
+          ]
+        }
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
+
+// ===== package veh.cluster =====
+{
+  "name": {
+    "dotted": "veh.cluster",
+    "segments": [
+      "veh",
+      "cluster"
+    ],
+    "joinedCamel": "VehCluster",
+    "underscored": "veh_cluster"
+  },
+  "scope": {
+    "package": "veh.cluster",
+    "others": []
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "DoorPayload",
+        "snake": "door_payload",
+        "camel": "DoorPayload",
+        "screaming": "DOOR_PAYLOAD"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "sensorId",
+                "snake": "sensor_id",
+                "camel": "SensorId",
+                "screaming": "SENSOR_ID"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_INTEGER",
+                  "constraint": {
+                    "min": "0",
+                    "max": "15"
+                  },
+                  "vacuous": false,
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "isOpen",
+                "snake": "is_open",
+                "camel": "IsOpen",
+                "screaming": "IS_OPEN"
+              },
+              "type": {
+                "optional": false,
+                "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "DiagFilter",
+        "snake": "diag_filter",
+        "camel": "DiagFilter",
+        "screaming": "DIAG_FILTER"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "severity",
+                "snake": "severity",
+                "camel": "Severity",
+                "screaming": "SEVERITY"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_INTEGER",
+                  "constraint": {
+                    "min": "0",
+                    "max": "5"
+                  },
+                  "vacuous": false,
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "category",
+                "snake": "category",
+                "camel": "Category",
+                "screaming": "CATEGORY"
+              },
+              "type": {
+                "optional": true,
+                "named": {
+                  "reference": "ridl.std.Label",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "FaultEvent",
+        "snake": "fault_event",
+        "camel": "FaultEvent",
+        "screaming": "FAULT_EVENT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "code",
+                "snake": "code",
+                "camel": "Code",
+                "screaming": "CODE"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_INTEGER",
+                  "constraint": {
+                    "min": "0",
+                    "max": "65535"
+                  },
+                  "vacuous": false,
+                  "intWidth": "INT_WIDTH_U16"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "message",
+                "snake": "message",
+                "camel": "Message",
+                "screaming": "MESSAGE"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Message",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 3,
+            "field": {
+              "name": {
+                "declared": "timestamp",
+                "snake": "timestamp",
+                "camel": "Timestamp",
+                "screaming": "TIMESTAMP"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Timestamp",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "DiagError",
+        "snake": "diag_error",
+        "camel": "DiagError",
+        "screaming": "DIAG_ERROR"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "FILTER_INVALID",
+              "snake": "filter_invalid",
+              "camel": "FILTERINVALID",
+              "screaming": "FILTER_INVALID"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "STORAGE_BUSY",
+              "snake": "storage_busy",
+              "camel": "STORAGEBUSY",
+              "screaming": "STORAGE_BUSY"
+            },
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "ACCESS_DENIED",
+              "snake": "access_denied",
+              "camel": "ACCESSDENIED",
+              "screaming": "ACCESS_DENIED"
+            },
+            "value": "2",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "FaultPage",
+        "snake": "fault_page",
+        "camel": "FaultPage",
+        "screaming": "FAULT_PAGE"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": true,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "faults",
+                "snake": "faults",
+                "camel": "Faults",
+                "screaming": "FAULTS"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "FaultEvent",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 2,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  },
+                  "min": "0",
+                  "max": "64"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "RawTickCount",
+        "snake": "raw_tick_count",
+        "camel": "RawTickCount",
+        "screaming": "RAW_TICK_COUNT"
+      },
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
+      "doc": "A package-private payload type, so the interaction layer's legal\n`internal`-over-`internal` case is exercised inside one package. The\ncross-package counterpart is impossible by construction: a foreign\n`internal` name never resolves (typl §3.3).",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "0",
+          "max": "65535"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_U16"
+      }
+    },
+    {
+      "name": {
+        "declared": "RawWheelSpan",
+        "snake": "raw_wheel_span",
+        "camel": "RawWheelSpan",
+        "screaming": "RAW_WHEEL_SPAN"
+      },
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
+      "doc": "The window of raw tick counts a wheel diagnostic covers.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": true,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "span",
+                "snake": "span",
+                "camel": "Span",
+                "screaming": "SPAN"
+              },
+              "type": {
+                "optional": false,
+                "tuple": {
+                  "index": 0
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "bursts",
+                "snake": "bursts",
+                "camel": "Bursts",
+                "screaming": "BURSTS"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "tuple": {
+                      "index": 1
+                    }
+                  },
+                  "min": "2",
+                  "max": "2"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "FanLevel",
+        "snake": "fan_level",
+        "camel": "FanLevel",
+        "screaming": "FAN_LEVEL"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "0",
+          "max": "7"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": {
+        "declared": "FilterState",
+        "snake": "filter_state",
+        "camel": "FilterState",
+        "screaming": "FILTER_STATE"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "hoursRun",
+                "snake": "hours_run",
+                "camel": "HoursRun",
+                "screaming": "HOURS_RUN"
+              },
+              "type": {
+                "optional": false,
+                "inline": {
+                  "class": "SCALAR_CLASS_INTEGER",
+                  "constraint": {
+                    "min": "0",
+                    "max": "65535"
+                  },
+                  "vacuous": false,
+                  "intWidth": "INT_WIDTH_U16"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "clogged",
+                "snake": "clogged",
+                "camel": "Clogged",
+                "screaming": "CLOGGED"
+              },
+              "type": {
+                "optional": false,
+                "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "ClimateReport",
+        "snake": "climate_report",
+        "camel": "ClimateReport",
+        "screaming": "CLIMATE_REPORT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "cabin",
+                "snake": "cabin",
+                "camel": "Cabin",
+                "screaming": "CABIN"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "setpoint",
+                "snake": "setpoint",
+                "camel": "Setpoint",
+                "screaming": "SETPOINT"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "ordinal": 3,
+            "field": {
+              "name": {
+                "declared": "fan",
+                "snake": "fan",
+                "camel": "Fan",
+                "screaming": "FAN"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    },
+    {
+      "name": {
+        "declared": "HvacError",
+        "snake": "hvac_error",
+        "camel": "HvacError",
+        "screaming": "HVAC_ERROR"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "COMPRESSOR_OFF",
+              "snake": "compressor_off",
+              "camel": "COMPRESSOROFF",
+              "screaming": "COMPRESSOR_OFF"
+            },
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": {
+              "declared": "SENSOR_FAULT",
+              "snake": "sensor_fault",
+              "camel": "SENSORFAULT",
+              "screaming": "SENSOR_FAULT"
+            },
+            "value": "1",
+            "doc": ""
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "MAX_FAN",
+        "snake": "max_fan",
+        "camel": "MAXFAN",
+        "screaming": "MAX_FAN"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A declared constant, so a contract clause can reference one. The guaranteed\nexpression subset admits constants (ridl §13) and nothing in the corpus\nexercised that until these members were added.",
+      "labels": [],
+      "constant": {
+        "value": "7",
+        "named": {
+          "reference": "FanLevel",
+          "resolved": true,
+          "package": "veh.cluster",
+          "foreign": false,
+          "index": 7,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "FAN_CEILING",
+        "snake": "fan_ceiling",
+        "camel": "FANCEILING",
+        "screaming": "FAN_CEILING"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The ceiling a fan request is clamped to.",
+      "labels": [],
+      "constant": {
+        "value": "7",
+        "named": {
+          "reference": "FanLevel",
+          "resolved": true,
+          "package": "veh.cluster",
+          "foreign": false,
+          "index": 7,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "FAN_LIMIT",
+        "snake": "fan_limit",
+        "camel": "FANLIMIT",
+        "screaming": "FAN_LIMIT"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The same ceiling, one hop further along the chain.",
+      "labels": [],
+      "constant": {
+        "value": "7",
+        "named": {
+          "reference": "FanLevel",
+          "resolved": true,
+          "package": "veh.cluster",
+          "foreign": false,
+          "index": 7,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "FanTag",
+        "snake": "fan_tag",
+        "camel": "FanTag",
+        "screaming": "FAN_TAG"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The label a cabin fan reports itself under.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "unset",
+        "source": "INIT_SOURCE_DECLARED"
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_STRING",
+        "constraint": {
+          "lenMin": "1",
+          "lenMax": "32"
+        },
+        "vacuous": false,
+        "declaredInit": "unset"
+      }
+    },
+    {
+      "name": {
+        "declared": "FAN_TAG",
+        "snake": "fan_tag",
+        "camel": "FANTAG",
+        "screaming": "FAN_TAG"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The cabin fan's label.",
+      "labels": [],
+      "constant": {
+        "value": "cabin-fan",
+        "named": {
+          "reference": "FanTag",
+          "resolved": true,
+          "package": "veh.cluster",
+          "foreign": false,
+          "index": 14,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "FAN_LABEL",
+        "snake": "fan_label",
+        "camel": "FANLABEL",
+        "screaming": "FAN_LABEL"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The same label, reached through the constant above.",
+      "labels": [],
+      "constant": {
+        "value": "cabin-fan",
+        "named": {
+          "reference": "FanTag",
+          "resolved": true,
+          "package": "veh.cluster",
+          "foreign": false,
+          "index": 14,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    }
+  ],
+  "tuples": [
+    {
+      "name": {
+        "rust": "RawWheelSpanSpan",
+        "wire": "RawWheelSpanSpan"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "first",
+            "snake": "first",
+            "camel": "First",
+            "screaming": "FIRST"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        },
+        {
+          "name": {
+            "declared": "latest",
+            "snake": "latest",
+            "camel": "Latest",
+            "screaming": "LATEST"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        }
+      ],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "flatbuffersTable": 9,
+      "declaration": {
+        "declaration": 6,
+        "segments": [
+          "span"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "RawWheelSpanBurstsElement",
+        "wire": "RawWheelSpanBurstsElement"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "first",
+            "snake": "first",
+            "camel": "First",
+            "screaming": "FIRST"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        },
+        {
+          "name": {
+            "declared": "latest",
+            "snake": "latest",
+            "camel": "Latest",
+            "screaming": "LATEST"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        }
+      ],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "flatbuffersTable": 10,
+      "declaration": {
+        "declaration": 6,
+        "segments": [
+          "bursts",
+          "Element"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "",
+        "wire": ""
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "min",
+            "snake": "min",
+            "camel": "Min",
+            "screaming": "MIN"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        },
+        {
+          "name": {
+            "declared": "max",
+            "snake": "max",
+            "camel": "Max",
+            "screaming": "MAX"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        }
+      ],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "interaction": {
+        "interface": 2,
+        "slot": 4,
+        "segments": [
+          "reply"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "",
+        "wire": ""
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "low",
+            "snake": "low",
+            "camel": "Low",
+            "screaming": "LOW"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        },
+        {
+          "name": {
+            "declared": "high",
+            "snake": "high",
+            "camel": "High",
+            "screaming": "HIGH"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "RawTickCount",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED"
+          },
+          "doc": "",
+          "labels": []
+        }
+      ],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED"
+      },
+      "interaction": {
+        "interface": 2,
+        "slot": 5,
+        "segments": [
+          "payload",
+          "Element"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "",
+        "wire": ""
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "min",
+            "snake": "min",
+            "camel": "Min",
+            "screaming": "MIN"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "veh.common.Temperature",
+              "resolved": false,
+              "package": "",
+              "foreign": true,
+              "index": 0,
+              "kind": "DECL_KIND_UNSPECIFIED"
+            }
+          },
+          "init": {
+            "derivable": false,
+            "source": "INIT_SOURCE_NONE"
+          },
+          "doc": "",
+          "labels": []
+        },
+        {
+          "name": {
+            "declared": "max",
+            "snake": "max",
+            "camel": "Max",
+            "screaming": "MAX"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "veh.common.Temperature",
+              "resolved": false,
+              "package": "",
+              "foreign": true,
+              "index": 0,
+              "kind": "DECL_KIND_UNSPECIFIED"
+            }
+          },
+          "init": {
+            "derivable": false,
+            "source": "INIT_SOURCE_NONE"
+          },
+          "doc": "",
+          "labels": []
+        }
+      ],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": true,
+        "reachesUnresolved": true,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE"
+      },
+      "interaction": {
+        "interface": 5,
+        "slot": 11,
+        "segments": [
+          "reply"
+        ]
+      }
+    }
+  ],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Main vehicle status interface.",
+      "labels": [
+        "SIL_B",
+        "CAL_2",
+        "PRIVATE"
+      ],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "currentSpeed",
+              "snake": "current_speed",
+              "camel": "CurrentSpeed",
+              "screaming": "CURRENT_SPEED"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "Current vehicle speed — isochronous, drives rmdl clocks downstream",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "10000",
+              "maxUs": "10000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Speed",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "engineTemp",
+              "snake": "engine_temp",
+              "camel": "EngineTemp",
+              "screaming": "ENGINE_TEMP"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 1,
+            "doc": "Engine temperature — change-driven, 100ms freshness SLO",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "20000",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "warnings",
+              "snake": "warnings",
+              "camel": "Warnings",
+              "screaming": "WARNINGS"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 2,
+            "doc": "Active warnings — last-value delivered on subscribe (§4.4)",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.WarningFlags",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "doorOpened",
+              "snake": "door_opened",
+              "camel": "DoorOpened",
+              "screaming": "DOOR_OPENED"
+            },
+            "kind": "KIND_EVENT",
+            "row": 3,
+            "doc": "Raised on every door state change; stale after 500ms",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            },
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "DoorPayload",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 53
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "setGear",
+              "snake": "set_gear",
+              "camel": "SetGear",
+              "screaming": "SET_GEAR"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 4,
+            "doc": "Request a gear change — outcome observed via currentGear, not returned;\ncallers throttle to one request per 20ms, acceptance within 200ms (§9)",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "20000",
+              "maxUs": "200000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "position",
+                    "snake": "position",
+                    "camel": "Position",
+                    "screaming": "POSITION"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "veh.common.GearPosition",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "veh.common.GearPosition",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "position != GearPosition.PARK || currentSpeed == 0.0",
+                  "signalRefs": [
+                    "VehicleStatus.currentSpeed"
+                  ],
+                  "paramRefs": [
+                    "position"
+                  ],
+                  "usesResult": false,
+                  "observerId": "VehicleStatus.setGear.require[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 6,
+          "retired": {
+            "name": {
+              "declared": "resetCounters",
+              "snake": "reset_counters",
+              "camel": "ResetCounters",
+              "screaming": "RESET_COUNTERS"
+            }
+          }
+        },
+        {
+          "ordinal": 7,
+          "interaction": {
+            "name": {
+              "declared": "getAverageSpeed",
+              "snake": "get_average_speed",
+              "camel": "GetAverageSpeed",
+              "screaming": "GET_AVERAGE_SPEED"
+            },
+            "kind": "KIND_QUERY",
+            "row": 5,
+            "doc": "Sliding-window average — replied within 50ms (§9)",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "10000",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "window",
+                    "snake": "window",
+                    "camel": "Window",
+                    "screaming": "WINDOW"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "ridl.std.Duration",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "ridl.std.Duration",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "veh.common.Speed",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "veh.common.Speed",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "window > 0ms",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "window"
+                  ],
+                  "usesResult": false,
+                  "observerId": "VehicleStatus.getAverageSpeed.require[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                },
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result >= 0.0",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "VehicleStatus.getAverageSpeed.ensure[0]",
+                  "refused": "`result` is not a named integer or float scalar"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 8,
+          "interaction": {
+            "name": {
+              "declared": "streamFaults",
+              "snake": "stream_faults",
+              "camel": "StreamFaults",
+              "screaming": "STREAM_FAULTS"
+            },
+            "kind": "KIND_QUERY",
+            "row": 6,
+            "doc": "Fault history as a finite stream",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "filter",
+                    "snake": "filter",
+                    "camel": "Filter",
+                    "screaming": "FILTER"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "DiagFilter",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 1,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "DiagFilter",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 1,
+                  "kind": "DECL_KIND_STRUCT"
+                }
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "FaultEvent",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 2,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 9,
+          "interaction": {
+            "name": {
+              "declared": "getFaultPage",
+              "snake": "get_fault_page",
+              "camel": "GetFaultPage",
+              "screaming": "GET_FAULT_PAGE"
+            },
+            "kind": "KIND_QUERY",
+            "row": 7,
+            "doc": "Paged fault snapshot — fallible query via inline `T | E` (§10.1)",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "filter",
+                    "snake": "filter",
+                    "camel": "Filter",
+                    "screaming": "FILTER"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "DiagFilter",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 1,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "DiagFilter",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 1,
+                  "kind": "DECL_KIND_STRUCT"
+                }
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "FaultPage",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 4,
+                    "kind": "DECL_KIND_STRUCT"
+                  },
+                  "err": {
+                    "reference": "DiagError",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 3,
+                    "kind": "DECL_KIND_ENUM"
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 10,
+          "interaction": {
+            "name": {
+              "declared": "softwareVersion",
+              "snake": "software_version",
+              "camel": "SoftwareVersion",
+              "screaming": "SOFTWARE_VERSION"
+            },
+            "kind": "KIND_FIXED",
+            "row": 8,
+            "doc": "",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Version",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "named": {
+                "type": {
+                  "reference": "ridl.std.Version",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 11,
+          "interaction": {
+            "name": {
+              "declared": "capabilities",
+              "snake": "capabilities",
+              "camel": "Capabilities",
+              "screaming": "CAPABILITIES"
+            },
+            "kind": "KIND_FIXED",
+            "row": 9,
+            "doc": "",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "ridl.std.Label",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  },
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "VehicleStatus",
+        "snake": "vehicle_status",
+        "camel": "VehicleStatus",
+        "screaming": "VEHICLE_STATUS"
+      }
+    },
+    {
+      "number": 3,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Retired members in a named interface. Ordinals 2 and 4 can never be\nreissued; `wheelSlipRate` is ordinal 5, not ordinal 3.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "wheelTicks",
+              "snake": "wheel_ticks",
+              "camel": "WheelTicks",
+              "screaming": "WHEEL_TICKS"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "retired": {
+            "name": {
+              "declared": "legacyWheelPhase",
+              "snake": "legacy_wheel_phase",
+              "camel": "LegacyWheelPhase",
+              "screaming": "LEGACY_WHEEL_PHASE"
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "wheelTemp",
+              "snake": "wheel_temp",
+              "camel": "WheelTemp",
+              "screaming": "WHEEL_TEMP"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "1000000",
+              "maxUs": "10000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "retired": {
+            "value": "4"
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "wheelSlipRate",
+              "snake": "wheel_slip_rate",
+              "camel": "WheelSlipRate",
+              "screaming": "WHEEL_SLIP_RATE"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 2,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "500000",
+              "maxUs": "5000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Ratio",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "WheelHistory",
+        "snake": "wheel_history",
+        "camel": "WheelHistory",
+        "screaming": "WHEEL_HISTORY"
+      }
+    },
+    {
+      "number": 2,
+      "provisional": true,
+      "visibility": "VISIBILITY_INTERNAL",
+      "doc": "A package-private contract shape: realized inside this package, never part\nof the cross-package surface.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "wheelTicks",
+              "snake": "wheel_ticks",
+              "camel": "WheelTicks",
+              "screaming": "WHEEL_TICKS"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "RawTickCount",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 44
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "slipDetected",
+              "snake": "slip_detected",
+              "camel": "SlipDetected",
+              "screaming": "SLIP_DETECTED"
+            },
+            "kind": "KIND_EVENT",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            },
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "FilterState",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 8,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 54
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "readTicks",
+              "snake": "read_ticks",
+              "camel": "ReadTicks",
+              "screaming": "READ_TICKS"
+            },
+            "kind": "KIND_QUERY",
+            "row": 2,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "RawTickCount",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 5,
+                    "kind": "DECL_KIND_SCALAR"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "RawTickCount",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 44
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "resetTicks",
+              "snake": "reset_ticks",
+              "camel": "ResetTicks",
+              "screaming": "RESET_TICKS"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 3,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "seed",
+                    "snake": "seed",
+                    "camel": "Seed",
+                    "screaming": "SEED"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "RawTickCount",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 5,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "RawTickCount",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 44
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "readSpan",
+              "snake": "read_span",
+              "camel": "ReadSpan",
+              "screaming": "READ_SPAN"
+            },
+            "kind": "KIND_QUERY",
+            "row": 4,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "tuple": {
+                    "index": 2
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 6,
+          "interaction": {
+            "name": {
+              "declared": "tickBounds",
+              "snake": "tick_bounds",
+              "camel": "TickBounds",
+              "screaming": "TICK_BOUNDS"
+            },
+            "kind": "KIND_FIXED",
+            "row": 5,
+            "doc": "",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "tuple": {
+                      "index": 3
+                    }
+                  },
+                  "min": "2",
+                  "max": "2"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "WheelDiagnostics",
+        "snake": "wheel_diagnostics",
+        "camel": "WheelDiagnostics",
+        "screaming": "WHEEL_DIAGNOSTICS"
+      }
+    },
+    {
+      "number": 4,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "A public shape beside it, so the generated output shows the two side by\nside and the difference is readable in one snapshot.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "wheelHealth",
+              "snake": "wheel_health",
+              "camel": "WheelHealth",
+              "screaming": "WHEEL_HEALTH"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "1000000",
+              "maxUs": "10000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        }
+      ],
+      "declared": {
+        "declared": "WheelSummary",
+        "snake": "wheel_summary",
+        "camel": "WheelSummary",
+        "screaming": "WHEEL_SUMMARY"
+      }
+    },
+    {
+      "number": 5,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "ticks",
+              "snake": "ticks",
+              "camel": "Ticks",
+              "screaming": "TICKS"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "retired": {
+            "name": {
+              "declared": "legacyTicks",
+              "snake": "legacy_ticks",
+              "camel": "LegacyTicks",
+              "screaming": "LEGACY_TICKS"
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "retired": {
+            "value": "3"
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "slipped",
+              "snake": "slipped",
+              "camel": "Slipped",
+              "screaming": "SLIPPED"
+            },
+            "kind": "KIND_EVENT",
+            "row": 1,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            },
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "FilterState",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 8,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 54
+              }
+            }
+          }
+        }
+      ],
+      "inlineOfService": 0,
+      "service": {
+        "dotted": "veh.cluster.wheels",
+        "segments": [
+          "veh",
+          "cluster",
+          "wheels"
+        ],
+        "joinedCamel": "VehClusterWheels",
+        "underscored": "veh_cluster_wheels"
+      }
+    },
+    {
+      "number": 6,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "cabinTemp",
+              "snake": "cabin_temp",
+              "camel": "CabinTemp",
+              "screaming": "CABIN_TEMP"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "Strict periodic — signal only (ridl §9).",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "1000000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "targetTemp",
+              "snake": "target_temp",
+              "camel": "TargetTemp",
+              "screaming": "TARGET_TEMP"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 1,
+            "doc": "Range with both bounds.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "500000",
+              "maxUs": "5000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "blowerDuty",
+              "snake": "blower_duty",
+              "camel": "BlowerDuty",
+              "screaming": "BLOWER_DUTY"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 2,
+            "doc": "Range, lower bound only — no staleness bound declared.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "200000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Ratio",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "fanLevel",
+              "snake": "fan_level",
+              "camel": "FanLevel",
+              "screaming": "FAN_LEVEL"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 3,
+            "doc": "Range, upper bound only — no rate floor declared.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "2000000",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "compressorLoad",
+              "snake": "compressor_load",
+              "camel": "CompressorLoad",
+              "screaming": "COMPRESSOR_LOAD"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 4,
+            "doc": "Microsecond resolution, and an init override for the channel (ridl §4.4).",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "500",
+              "maxUs": "500",
+              "defaultApplied": false
+            },
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "veh.common.Ratio",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "declaredInit": "12.5",
+              "init": {
+                "derivable": true,
+                "value": "12.5",
+                "source": "INIT_SOURCE_DECLARED"
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 6,
+          "interaction": {
+            "name": {
+              "declared": "filterClogged",
+              "snake": "filter_clogged",
+              "camel": "FilterClogged",
+              "screaming": "FILTER_CLOGGED"
+            },
+            "kind": "KIND_EVENT",
+            "row": 5,
+            "doc": "Untimed: the package `[defaults].timing` is resolved at compile time and\nlands in the IR as concrete bounds with `default_applied` set (ridl §9.1).",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "200000",
+              "maxUs": "2000000",
+              "defaultApplied": true
+            },
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "FilterState",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 8,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 54
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 7,
+          "interaction": {
+            "name": {
+              "declared": "setTarget",
+              "snake": "set_target",
+              "camel": "SetTarget",
+              "screaming": "SET_TARGET"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 6,
+            "doc": "Fire-and-forget, with a precondition over its own parameter and over\nthis shape's own signal (ridl §13).",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "t",
+                    "snake": "t",
+                    "camel": "T",
+                    "screaming": "T"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "veh.common.Temperature",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "t >= -10.0",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "t"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.setTarget.require[0]",
+                  "refused": "the parameter is not a named integer or float scalar"
+                },
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "cabinTemp >= -40.0",
+                  "signalRefs": [
+                    "veh.hvac.cabin.cabinTemp"
+                  ],
+                  "paramRefs": [],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.setTarget.require[1]",
+                  "refused": "the subject is not the interaction's declared parameter"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 8,
+          "retired": {
+            "name": {
+              "declared": "setEcoMode",
+              "snake": "set_eco_mode",
+              "camel": "SetEcoMode",
+              "screaming": "SET_ECO_MODE"
+            }
+          }
+        },
+        {
+          "ordinal": 9,
+          "interaction": {
+            "name": {
+              "declared": "replayTrace",
+              "snake": "replay_trace",
+              "camel": "ReplayTrace",
+              "screaming": "REPLAY_TRACE"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 7,
+            "doc": "Client-produced stream on a parameter (ridl §12.1).",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "samples",
+                    "snake": "samples",
+                    "camel": "Samples",
+                    "screaming": "SAMPLES"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": {
+                        "reference": "FilterState",
+                        "resolved": true,
+                        "package": "veh.cluster",
+                        "foreign": false,
+                        "index": 8,
+                        "kind": "DECL_KIND_STRUCT"
+                      }
+                    }
+                  }
+                }
+              ],
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 10,
+          "interaction": {
+            "name": {
+              "declared": "streamFilterHistory",
+              "snake": "stream_filter_history",
+              "camel": "StreamFilterHistory",
+              "screaming": "STREAM_FILTER_HISTORY"
+            },
+            "kind": "KIND_QUERY",
+            "row": 8,
+            "doc": "Provider-produced stream in return position.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "limit",
+                    "snake": "limit",
+                    "camel": "Limit",
+                    "screaming": "LIMIT"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "FanLevel",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 7,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "FilterState",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 8,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 11,
+          "interaction": {
+            "name": {
+              "declared": "rebalance",
+              "snake": "rebalance",
+              "camel": "Rebalance",
+              "screaming": "REBALANCE"
+            },
+            "kind": "KIND_QUERY",
+            "row": 9,
+            "doc": "Bidirectional — a stream in both positions at once.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "samples",
+                    "snake": "samples",
+                    "camel": "Samples",
+                    "screaming": "SAMPLES"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": {
+                        "reference": "FilterState",
+                        "resolved": true,
+                        "package": "veh.cluster",
+                        "foreign": false,
+                        "index": 8,
+                        "kind": "DECL_KIND_STRUCT"
+                      }
+                    }
+                  }
+                }
+              ],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "ClimateReport",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 9,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 12,
+          "interaction": {
+            "name": {
+              "declared": "getBounds",
+              "snake": "get_bounds",
+              "camel": "GetBounds",
+              "screaming": "GET_BOUNDS"
+            },
+            "kind": "KIND_QUERY",
+            "row": 10,
+            "doc": "A postcondition that reads `result` — tuple-field access is the widest\n`result` shape the guaranteed expression subset admits (ridl §13).",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "tuple": {
+                    "index": 4
+                  }
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "true",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.getBounds.require[0]",
+                  "refused": "no accepted comparison"
+                },
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result.min <= result.max",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "veh.hvac.cabin.getBounds.ensure[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 13,
+          "interaction": {
+            "name": {
+              "declared": "calibrate",
+              "snake": "calibrate",
+              "camel": "Calibrate",
+              "screaming": "CALIBRATE"
+            },
+            "kind": "KIND_QUERY",
+            "row": 11,
+            "doc": "Inline fallible return `T | E` — the canonical spelling in return\nposition (general form §6.1). Its transport identity is synthesized from\nthe enclosing shape and the ordinal, which is exactly what an inline\nshape has to get right without an interface name to borrow.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "axle",
+                    "snake": "axle",
+                    "camel": "Axle",
+                    "screaming": "AXLE"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "FanLevel",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 7,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "ClimateReport",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 9,
+                    "kind": "DECL_KIND_STRUCT"
+                  },
+                  "err": {
+                    "reference": "HvacError",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 10,
+                    "kind": "DECL_KIND_ENUM"
+                  }
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 14,
+          "interaction": {
+            "name": {
+              "declared": "getClimate",
+              "snake": "get_climate",
+              "camel": "GetClimate",
+              "screaming": "GET_CLIMATE"
+            },
+            "kind": "KIND_QUERY",
+            "row": 12,
+            "doc": "A plain named-type return.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "ClimateReport",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 9,
+                    "kind": "DECL_KIND_STRUCT"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "ClimateReport",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 9,
+                  "kind": "DECL_KIND_STRUCT"
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 15,
+          "interaction": {
+            "name": {
+              "declared": "getCabinTemp",
+              "snake": "get_cabin_temp",
+              "camel": "GetCabinTemp",
+              "screaming": "GET_CABIN_TEMP"
+            },
+            "kind": "KIND_QUERY",
+            "row": 13,
+            "doc": "Superseded by `getClimate`.",
+            "labels": [],
+            "deprecated": "use getClimate — this returns only the cabin reading",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "veh.common.Temperature",
+                    "resolved": false,
+                    "package": "",
+                    "foreign": true,
+                    "index": 0,
+                    "kind": "DECL_KIND_UNSPECIFIED"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "veh.common.Temperature",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "clauses": []
+            }
+          }
+        },
+        {
+          "ordinal": 16,
+          "interaction": {
+            "name": {
+              "declared": "unitSerial",
+              "snake": "unit_serial",
+              "camel": "UnitSerial",
+              "screaming": "UNIT_SERIAL"
+            },
+            "kind": "KIND_FIXED",
+            "row": 14,
+            "doc": "Provisioned, immutable for the software-instance lifetime (ridl §8).",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "named": {
+                  "reference": "ridl.std.Label",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              },
+              "named": {
+                "type": {
+                  "reference": "ridl.std.Label",
+                  "resolved": false,
+                  "package": "",
+                  "foreign": true,
+                  "index": 0,
+                  "kind": "DECL_KIND_UNSPECIFIED"
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 17,
+          "interaction": {
+            "name": {
+              "declared": "supportedModes",
+              "snake": "supported_modes",
+              "camel": "SupportedModes",
+              "screaming": "SUPPORTED_MODES"
+            },
+            "kind": "KIND_FIXED",
+            "row": 15,
+            "doc": "A collection-typed fixed.",
+            "labels": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "ridl.std.Label",
+                      "resolved": false,
+                      "package": "",
+                      "foreign": true,
+                      "index": 0,
+                      "kind": "DECL_KIND_UNSPECIFIED"
+                    }
+                  },
+                  "min": "0",
+                  "max": "8"
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 18,
+          "interaction": {
+            "name": {
+              "declared": "setFan",
+              "snake": "set_fan",
+              "camel": "SetFan",
+              "screaming": "SET_FAN"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 16,
+            "doc": "Boolean conjunction.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "level",
+                    "snake": "level",
+                    "camel": "Level",
+                    "screaming": "LEVEL"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "FanLevel",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 7,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "level >= 0 && level <= 7",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "level"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.setFan.require[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 19,
+          "interaction": {
+            "name": {
+              "declared": "trimFan",
+              "snake": "trim_fan",
+              "camel": "TrimFan",
+              "screaming": "TRIM_FAN"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 17,
+            "doc": "Arithmetic over a parameter, and a reference to a declared `const`.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "level",
+                    "snake": "level",
+                    "camel": "Level",
+                    "screaming": "LEVEL"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "FanLevel",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 7,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  }
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "level + 1 <= 7",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "level"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.trimFan.require[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                },
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "level <= MAX_FAN",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "level"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.trimFan.require[1]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "ordinal": 20,
+          "interaction": {
+            "name": {
+              "declared": "scaledFan",
+              "snake": "scaled_fan",
+              "camel": "ScaledFan",
+              "screaming": "SCALED_FAN"
+            },
+            "kind": "KIND_QUERY",
+            "row": 18,
+            "doc": "Arithmetic over `result`.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "FanLevel",
+                    "resolved": true,
+                    "package": "veh.cluster",
+                    "foreign": false,
+                    "index": 7,
+                    "kind": "DECL_KIND_SCALAR"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "FanLevel",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result * 2 >= 0",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "veh.hvac.cabin.scaledFan.ensure[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "inlineOfService": 3,
+      "service": {
+        "dotted": "veh.hvac.cabin",
+        "segments": [
+          "veh",
+          "hvac",
+          "cabin"
+        ],
+        "joinedCamel": "VehHvacCabin",
+        "underscored": "veh_hvac_cabin"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": {
+        "dotted": "veh.cluster.wheels",
+        "segments": [
+          "veh",
+          "cluster",
+          "wheels"
+        ],
+        "joinedCamel": "VehClusterWheels",
+        "underscored": "veh_cluster_wheels"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The same two forms inside a service's inline shape.",
+      "labels": [],
+      "interfaceRefs": [],
+      "inlineShape": 4
+    },
+    {
+      "name": {
+        "dotted": "veh.cluster.status",
+        "segments": [
+          "veh",
+          "cluster",
+          "status"
+        ],
+        "joinedCamel": "VehClusterStatus",
+        "underscored": "veh_cluster_status"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The cluster's published vehicle-status contract.",
+      "labels": [],
+      "interfaceRefs": [
+        "VehicleStatus"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "veh.cluster.standby",
+        "segments": [
+          "veh",
+          "cluster",
+          "standby"
+        ],
+        "joinedCamel": "VehClusterStandby",
+        "underscored": "veh_cluster_standby"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "A redundant twin over the same interface shape — one interface, many\nservices (ridl §14.0). Both services carry the identical member set; only\nthe global address differs.",
+      "labels": [],
+      "interfaceRefs": [
+        "VehicleStatus"
+      ]
+    },
+    {
+      "name": {
+        "dotted": "veh.hvac.cabin",
+        "segments": [
+          "veh",
+          "hvac",
+          "cabin"
+        ],
+        "joinedCamel": "VehHvacCabin",
+        "underscored": "veh_hvac_cabin"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Cabin climate — a one-off global contract, declared inline.",
+      "labels": [
+        "QM",
+        "PRIVATE"
+      ],
+      "interfaceRefs": [],
+      "inlineShape": 5
+    }
+  ],
+  "catalog": {
+    "package": "veh.cluster",
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "retired": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 53
+      },
+      {
+        "declaration": 1,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "category"
+          ]
+        }
+      },
+      {
+        "declaration": 2,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "message",
+            "timestamp"
+          ]
+        }
+      },
+      {
+        "declaration": 3,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 4,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "faults"
+          ]
+        }
+      },
+      {
+        "declaration": 5,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 44
+      },
+      {
+        "declaration": 6,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 210
+      },
+      {
+        "declaration": 7,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 8,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 54
+      },
+      {
+        "declaration": 9,
+        "root": "FB_ROOT_KIND_OWN",
+        "unbounded": {
+          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+          "unjudgeableMembers": [
+            "cabin",
+            "setpoint"
+          ]
+        }
+      },
+      {
+        "declaration": 10,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 14,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 186
+      }
+    ],
+    "tables": [
+      {
+        "name": "DoorPayload",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BOOL",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 0
+      },
+      {
+        "name": "DiagFilter",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 1
+      },
+      {
+        "name": "FaultEvent",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "field": 1
+          },
+          {
+            "id": 2,
+            "needsNullDefault": false,
+            "field": 2
+          }
+        ],
+        "vtableSlots": 3,
+        "structDeclaration": 2
+      },
+      {
+        "name": "FaultPage",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "vector": {
+                "element": {
+                  "table": 2
+                },
+                "min": "0",
+                "max": "64"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          }
+        ],
+        "vtableSlots": 1,
+        "structDeclaration": 4
+      },
+      {
+        "name": "RawWheelSpan",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "table": 9
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "vector": {
+                "element": {
+                  "table": 10
+                },
+                "min": "2",
+                "max": "2"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 6
+      },
+      {
+        "name": "FilterState",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BOOL",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 8
+      },
+      {
+        "name": "ClimateReport",
+        "slots": [
+          {
+            "id": 0,
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "field": 1
+          },
+          {
+            "id": 2,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 2
+          }
+        ],
+        "vtableSlots": 3,
+        "structDeclaration": 9
+      },
+      {
+        "name": "DiagErrorBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "DiagError",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 3
+      },
+      {
+        "name": "RawTickCountBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 5
+      },
+      {
+        "name": "RawWheelSpanSpan",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 0
+      },
+      {
+        "name": "RawWheelSpanBurstsElement",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 1
+      },
+      {
+        "name": "FanLevelBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 7
+      },
+      {
+        "name": "HvacErrorBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "HvacError",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 10,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 10
+      },
+      {
+        "name": "FanTagBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 14
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": []
+}
