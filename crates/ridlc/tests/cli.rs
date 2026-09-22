@@ -410,7 +410,8 @@ fn build_help_documents_every_emit_value() {
             "ir-binary",
             "typescript",
             "proto",
-            "flatbuffers"
+            "flatbuffers",
+            "codegen-model"
         ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
     );
@@ -555,7 +556,8 @@ fn every_emit_variant_is_classified() {
             ridlc::Emit::Rust
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
-            | ridlc::Emit::Flatbuffers => false,
+            | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::CodegenModel => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
         assert_eq!(
@@ -585,7 +587,8 @@ fn every_emit_variant_names_its_intended_suffix() {
             ridlc::Emit::Rust
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
-            | ridlc::Emit::Flatbuffers => None,
+            | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::CodegenModel => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
             ridlc::Emit::IrBinary => Some(".ir.binpb"),
@@ -664,7 +667,8 @@ fn every_emit_variant_names_its_intended_system_suffix() {
             ridlc::Emit::Rust
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
-            | ridlc::Emit::Flatbuffers => None,
+            | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::CodegenModel => None,
             ridlc::Emit::IrJson => Some(".system.json"),
             ridlc::Emit::IrText => Some(".system.txtpb"),
             ridlc::Emit::IrBinary => Some(".system.binpb"),
