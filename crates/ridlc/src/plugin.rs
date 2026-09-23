@@ -139,7 +139,9 @@ pub enum PluginError {
         executable: PathBuf,
         status: std::process::ExitStatus,
     },
-    /// The plugin did not exit within the timeout and was killed.
+    /// The plugin did not complete within the timeout; a still-running
+    /// process is killed, while an exited process may have left its response
+    /// stream open.
     Timeout {
         name: String,
         executable: PathBuf,
@@ -258,8 +260,9 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
 
 /// Runs `plugin` over one request: the request to its standard input, the
 /// response from its standard output, its standard error inherited so a
-/// plugin's own messages reach the terminal as `ridlc`'s do. Kills the
-/// plugin when `timeout` passes.
+/// plugin's own messages reach the terminal as `ridlc`'s do. Bounds both the
+/// plugin's exit and response collection by `timeout`, killing a still-running
+/// plugin when the deadline passes.
 ///
 /// A response that carries an error-severity diagnostic is not a failure of
 /// the host: it is returned, and the caller reports the diagnostic and
