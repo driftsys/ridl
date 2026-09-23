@@ -10,10 +10,12 @@
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use ridl_core::Frozen;
 use ridl_core::diag::render;
+use ridlc::plugin::PluginSpec;
 use ridlc::{CliRun, Emit};
 
 #[derive(Parser)]
@@ -42,9 +44,18 @@ enum Command {
         #[arg(long)]
         out_dir: PathBuf,
         /// The artifacts to emit: `rust` (default), `ir-json`, `ir-text`,
-        /// `ir-binary`, `typescript`, `proto`, `flatbuffers`.
+        /// `ir-binary`, `typescript`, `proto`, `flatbuffers`,
+        /// `codegen-model`.
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         emit: Vec<Emit>,
+        /// A codegen plugin to run beside the emits, once per package:
+        /// `<LANGUAGE>` runs `ridlc-gen-<LANGUAGE>` from PATH,
+        /// `<LANGUAGE>=<PATH>` runs the executable at PATH. Repeatable.
+        #[arg(long, value_name = "LANGUAGE[=PATH]")]
+        plugin: Vec<PluginSpec>,
+        /// Seconds a plugin may run per package before it is killed.
+        #[arg(long, value_name = "SECONDS", default_value_t = ridlc::plugin::DEFAULT_TIMEOUT_SECONDS)]
+        plugin_timeout: u64,
         /// Verify remote imports against `ridl.lock` without fetching or
         /// regenerating it (CI mode, ADR-0002 §7).
         #[arg(long)]
@@ -60,8 +71,17 @@ fn main() -> ExitCode {
             path,
             out_dir,
             emit,
+            plugin,
+            plugin_timeout,
             frozen,
-        } => ridlc::run_build(&path, &out_dir, &emit, Frozen::from(frozen)),
+        } => ridlc::run_build_with(
+            &path,
+            &out_dir,
+            &emit,
+            &plugin,
+            Duration::from_secs(plugin_timeout),
+            Frozen::from(frozen),
+        ),
     };
     finish(run)
 }

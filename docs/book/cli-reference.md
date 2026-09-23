@@ -436,15 +436,24 @@ Options:
 
       --emit <EMIT>
           Possible values:
-          - rust:        Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
-          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
-          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:       The proto3 schema, written to `<base>.proto`
-          - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
+          - rust:          Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:       The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:       The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:     The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
+          - typescript:    Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:         The proto3 schema, written to `<base>.proto`
+          - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
+          - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           
           [default: rust]
+
+      --plugin <LANGUAGE[=PATH]>
+          A codegen plugin to run beside the emits, once per package: `<LANGUAGE>` runs `ridlc-gen-<LANGUAGE>` from PATH, `<LANGUAGE>=<PATH>` runs the executable at PATH. Repeatable
+
+      --plugin-timeout <SECONDS>
+          Seconds a plugin may run per package before it is killed
+          
+          [default: 60]
 
       --frozen
           Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
@@ -512,6 +521,62 @@ map is a vector of generated entry tables with no `(key)`, and enum values are
 not prefixed because FlatBuffers scopes them inside their enum — and are
 recorded in ADR-0019.
 
+**`codegen-model` is not a backend at all**: it writes the lowered codegen
+model — one package, resolved over the scope the build read, with the scalar
+classes, the pinned name transforms, the resolved type references, the typl
+init and closure rules, the tombstones in their slots, the FlatBuffers
+projection and the interaction facts computed once — as canonical protobuf
+JSON, in the schema `ridl.codegen.v1`. It is the payload a codegen request
+carries (ADR-0020 decisions 8 and 9), written byte for byte as the request
+would carry it, so a plugin's fixture is a file `ridlc` wrote. No in-tree
+backend reads it yet: the four backends above still read the IR, and a drift
+test in each of them asserts that what the backend derives and what the model
+states are the same fact.
+
+**`--plugin` runs a codegen plugin beside the emits** — a backend that is an
+executable rather than part of `ridl`, over the contract
+`generate(CodegenRequest) → CodegenResponse` ([ADR-0020][adr-0020] decisions 9
+and 10; the as-built record is
+[`docs/design/codegen-plugins.md`](https://github.com/driftsys/ridl/blob/main/docs/design/codegen-plugins.md)).
+The value is a language, or a language and a path:
+
+- `--plugin kotlin` runs `ridlc-gen-kotlin`, found by walking `PATH` in order
+  and taking the first directory that holds a file of that name (on Windows,
+  `ridlc-gen-kotlin.exe` is also tried). No directory holding it is an error
+  naming `ridlc-gen-kotlin`, and — like a compile error — a build that writes
+  nothing.
+- `--plugin kotlin=/opt/gen/bin/kt-gen` runs the executable at that path and
+  skips the lookup. `ridl` still reports it as `ridlc-gen-kotlin`, with the
+  path beside the name.
+
+The flag repeats, once per plugin. Each plugin runs once per package the code
+emits are written for — `ridl.std` included, under the same rule as above — and
+receives on its standard input one `ridl.codegen.v1.CodegenRequest` in canonical
+protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
+version) first, then `model`, byte for byte the package's `codegen-model`
+artifact one indentation level deeper, `options` (empty from this command
+line; no flag sets one yet) and `artifactBase`, the `<base>` of the emit list
+above. It answers on its standard output with one `CodegenResponse`: `files`,
+each a `path` relative to `--out-dir` with a `text` or `binary` content, and
+`diagnostics`, each a `severity` and a `message`. `ridl` writes the files; the
+plugin never touches the filesystem, so `--out-dir` means for a plugin exactly
+what it means for `rust`. A path that is absolute, has a `..` or `.` or empty
+component, or contains `\` is refused, and no file of that response is written.
+A diagnostic is reported prefixed with the plugin's name, at its severity; an
+error-severity one is a build that exits 1 with none of that response's files
+written, as an in-tree backend's failure is. A non-zero exit, a response that
+does not parse, a plugin that cannot be started, and a plugin still running
+after `--plugin-timeout` seconds (60 by default; the plugin is killed) are each
+one error naming the plugin, and the build exits 1. The plugin's standard error
+is passed through.
+
+The one plugin in this repository is `ridlc-gen-model`, built for the test
+suite and not installed by any release: it is `--emit codegen-model` as a
+process, and the test that runs it through this path proves the host, not a
+language. The Rust backend and the other three still run in process only; the
+Rust backend's own plugin follows its port onto the model (roadmap story
+E4.5b).
+
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
@@ -521,8 +586,9 @@ in single-file mode.
 
 When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
-`ridl.std.h`, `ridl.std.ts` — because generated code refers to standard types
-by package path and does not compile without it. The three IR targets —
+`ridl.std.ts`, `ridl.std.codegen.json` — because generated code refers to
+standard types by package path and does not compile without it, and the model
+is lowered over the same scope. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
@@ -1469,18 +1535,27 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`
 
           Possible values:
-          - rust:        Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
-          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
-          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:       The proto3 schema, written to `<base>.proto`
-          - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
+          - rust:          Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:       The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:       The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:     The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
+          - typescript:    Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:         The proto3 schema, written to `<base>.proto`
+          - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
+          - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           
           [default: rust]
+
+      --plugin <LANGUAGE[=PATH]>
+          A codegen plugin to run beside the emits, once per package: `<LANGUAGE>` runs `ridlc-gen-<LANGUAGE>` from PATH, `<LANGUAGE>=<PATH>` runs the executable at PATH. Repeatable
+
+      --plugin-timeout <SECONDS>
+          Seconds a plugin may run per package before it is killed
+          
+          [default: 60]
 
       --frozen
           Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
@@ -1491,7 +1566,8 @@ Options:
 
 **It writes** the same artifacts as `ridl build` — and `ridl.lock` under the
 same `[imports]` condition — under the `--out-dir` you must now name
-explicitly:
+explicitly. `--plugin` and `--plugin-timeout` are the same two flags as on
+[`ridl build`](#ridl-build), spelled and documented identically:
 
 ```sh
 ridlc build . --out-dir out && find out -type f | sort
@@ -1603,5 +1679,6 @@ argument.
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
+[adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196
 [clig]: https://clig.dev

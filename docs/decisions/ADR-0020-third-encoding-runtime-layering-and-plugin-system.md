@@ -22,6 +22,18 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-09-22 — decision 11, the parity test.** The parity test runs over
+the in-tree Rust backend, not the TypeScript one: Kotlin precedes TypeScript in
+the sequence (the lane P driver's D-P1), so the TypeScript backend is not the
+next backend written against the contract and a `ridlc-gen-ts` binary would
+prove the protocol for a backend that is not on the critical path. The amendment
+is written into decision 11 in place. Its second half, "what stood until the
+port", was amended again the same day when stage P4 ported the Rust backend: the
+Rust parity test exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
+`ridlc-gen-model` one stays beside it. Decisions 8, 9, 10 and 12 are unchanged;
+the as-built record of the contract and the two hosts is
+[`docs/design/codegen-plugins.md`](../design/codegen-plugins.md).
+
 Its reasoning trail is
 [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md),
 whose §3.3, §3.4, §3.5 and §3.8 carry the alternatives this record summarises,
@@ -282,6 +294,35 @@ as its public contract.
     this workspace provides — roadmap's Kotlin plugin is the first of those, and
     it is sequenced after this release.
 
+    **Amendment (2026-09-22) — the parity test is the in-tree Rust backend run
+    as a plugin, `ridlc-gen-rust`; until the Rust backend is ported onto the
+    lowered model, the test runs over the reference plugin `ridlc-gen-model`.**
+    The clause above naming the TypeScript backend is retracted. The reason is
+    the sequence: the Kotlin plugin, which needs this contract, precedes the
+    TypeScript framework (the lane P driver's D-P1; `docs/ROADMAP.md`, "The
+    sequence changed again on 2026-09-22"), so the Rust backend is the one
+    in-tree backend written against the contract next, and its parity —
+    byte-identical through the process host to the in-process path, against the
+    snapshots that already pin its output — is the test that proves the seam for
+    the backend that ships.
+
+    What stood until the port, amended in place (2026-09-22, stage P4). The Rust
+    backend read the raw IR, and the request carries the model and never the raw
+    IR (decision 9; the driver's D-P2), so it could not be run from a request
+    before its port, and the test suite ran `ridlc-gen-model` — the one in-tree
+    backend whose output is a function of the request alone,
+    `--emit codegen-model` as a process — through the process host over every
+    corpus package. **Stage P4 ported the Rust backend onto the lowered model,
+    and the parity test this decision names exists:
+    `crates/ridlc-gen-rust/tests/parity.rs`**, over `crates/ridlc-gen-rust/`, at
+    the contract's level for every corpus package and at the command's level for
+    every corpus entry, asserting byte identity with `--emit rust` in process.
+    The `ridlc-gen-model` test stays beside it as the narrower proof of the host
+    and the two encodings on the pipe. The other three in-tree backends still
+    read the raw IR and are not plugins until their own stories. The as-built
+    record is [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)
+    §6.
+
 12. **The contract is the IR encoding, so the IR stability policy lands first.**
     Roadmap story E4.5a is a prerequisite of the lowering step and the contract,
     and driftsys/ridl#231 — the canonical binary encoding cannot round-trip the
@@ -355,10 +396,15 @@ as its public contract.
    step, a `ridlc` step, or an artifact published beside the package is not
    settled, and roadmap story E12.1's "a Deno program constructs and validates a
    payload without a TypeScript codec" depends on the answer.
-5. **Whether the lowered model is a public artifact.** Decision 9 puts it in
-   ADR-0014's canonical encoding on the wire to a plugin, which makes it a
-   versioned surface; whether it is also emittable by a `ridlc` subcommand for a
-   plugin author to inspect is not settled.
+5. ~~**Whether the lowered model is a public artifact.**~~ **Closed
+   2026-09-22.** It is: `ridl build --emit codegen-model` writes
+   `<base>.codegen.json`, one per package, in the canonical encoding — the
+   request's `model` field byte for byte, so a plugin author's fixture is a file
+   `ridlc` wrote. The emit is classified with the code emits, not with the IR
+   dumps: the model is lowered over the same scope a code emit reads, `ridl.std`
+   included, and `ridl baseline` publishes only `.ir.json`. The schema is
+   `ridl.codegen.v1` (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`); the
+   reasoning is the codegen model design note's D-12 and D-14.
 6. **Whether the codec loader checks the generated-unit coupling at
    instantiation.** Decision 2 requires a package's wasm codec and its
    TypeScript caller to be one generated unit; it does not say whether the
@@ -377,7 +423,7 @@ as its public contract.
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | decision-ledger row 35 (decisions 1 to 4), and the open-question index's cross-cutting entry (decision 12)                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §17.13 sends the `repr(C)` string rules to decision 4's projection record                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md)                 | the library's placement is decisions 5 and 6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12)                                                                                                                                                                                     |
+| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12); E4.5b's row corrected 2026-09-22 with decision 11's amendment — the Rust backend ported onto the contract, not both in-tree backends                                               |
 
 ## References
 

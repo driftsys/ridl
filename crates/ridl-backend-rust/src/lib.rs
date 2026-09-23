@@ -25,18 +25,20 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use ridl_ir::name::{camel_case, snake_case};
-use ridl_ir::projection::flatbuffers as fb_projection;
+use ridl_ir::codegen::v1;
 use ridl_ir::v2;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 mod clauses;
 mod codec;
+mod contract;
 mod defaults;
 mod derives;
 mod descriptors;
 mod face;
+
+pub use contract::{Backend, WIRE_ENCODING_OPTION};
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,8 +81,9 @@ pub struct GenerateError {
 /// stream is parsed with `syn::parse2`; a parse failure (a codegen bug) surfaces
 /// as a `GenerateError` instead of unformatted output.
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
-    let ctx = Ctx::new(package);
-    render(package_items(&ctx, package)?)
+    let model = ridl_ir::codegen::lower(package, &[]);
+    let ctx = Ctx::new(package, &model);
+    render(package_items(&ctx)?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
@@ -125,12 +128,13 @@ pub fn generate_face_with(
     package: &v2::Package,
     wire: WireEncoding,
 ) -> Result<Generated, GenerateError> {
-    refuse_wire_collision(package)?;
-    let ctx = Ctx::new(package);
+    let model = ridl_ir::codegen::lower(package, &[]);
+    let ctx = Ctx::new(package, &model);
+    refuse_wire_collision(&ctx)?;
     let mut items = vec![wire_alias(wire)];
-    items.extend(package_items(&ctx, package)?);
-    items.extend(descriptors::interface_items(&ctx, package)?);
-    items.extend(face::interface_items(package)?);
+    items.extend(package_items(&ctx)?);
+    items.extend(descriptors::interface_items(&ctx)?);
+    items.extend(face::interface_items(&model)?);
     render(items)
 }
 
@@ -148,8 +152,9 @@ pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    let ctx = Ctx::with_others(package, others);
-    render(package_items(&ctx, package)?)
+    let model = ridl_ir::codegen::lower(package, others);
+    let ctx = Ctx::with_others(package, others, &model);
+    render(package_items(&ctx)?)
 }
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
@@ -191,17 +196,31 @@ pub fn generate_pipeline(
     wire: WireEncoding,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    refuse_wire_collision(package)?;
-    let ctx = Ctx::with_others(package, others);
+    let model = ridl_ir::codegen::lower(package, others);
+    generate_pipeline_over(&model, wire)
+}
+
+/// [`generate_pipeline`] over a model the caller already has.
+///
+/// It is what the backend contract calls (`contract::Backend`): a plugin is
+/// handed a `CodegenRequest` carrying the model and no IR, so the entry point
+/// it reaches cannot be one that takes a `v2::Package`. `generate_pipeline`
+/// is this function after one `lower`, which is why the two cannot disagree.
+pub(crate) fn generate_pipeline_over(
+    model: &v1::Model,
+    wire: WireEncoding,
+) -> Result<Generated, GenerateError> {
+    let ctx = Ctx::over(model);
+    refuse_wire_collision(&ctx)?;
     let mut items = vec![wire_alias(wire)];
-    items.extend(package_items(&ctx, package)?);
-    for shape in package.shapes() {
-        if shape.service.is_some() {
+    items.extend(package_items(&ctx)?);
+    for interface in &model.interfaces {
+        if descriptors::declared_name(interface).is_none() {
             continue;
         }
-        match faced_interface(&ctx, package, shape.name, shape.interface) {
+        match faced_interface(&ctx, interface) {
             Ok(produced) => items.extend(produced),
-            Err(err) => items.push(skipped_interface_note(shape.name, shape.interface, &err)),
+            Err(err) => items.push(skipped_interface_note(interface, &err)),
         }
     }
     render(items)
@@ -211,12 +230,10 @@ pub fn generate_pipeline(
 /// together for the reason [`generate_pipeline`] records.
 fn faced_interface(
     ctx: &Ctx,
-    package: &v2::Package,
-    iface_name: &str,
-    interface: &v2::Interface,
+    interface: &v1::Interface,
 ) -> Result<Vec<TokenStream>, GenerateError> {
-    let mut items = descriptors::one_interface_items(ctx, &package.name, iface_name, interface)?;
-    if let Some(module) = face::one_interface(iface_name, interface)? {
+    let mut items = descriptors::one_interface_items(ctx, interface)?;
+    if let Some(module) = face::one_interface(interface)? {
         items.push(module);
     }
     Ok(items)
@@ -229,12 +246,9 @@ fn faced_interface(
 /// attribute is the only comment that survives `prettyplease`. The name cannot
 /// collide with a typl constant — typl §15.1 gives one a SCREAMING_SNAKE name,
 /// and no typl name begins with an underscore.
-fn skipped_interface_note(
-    iface_name: &str,
-    interface: &v2::Interface,
-    err: &GenerateError,
-) -> TokenStream {
-    let name = format_ident!("__RIDL_NO_FACE_{}", snake_case(iface_name).to_uppercase());
+fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> TokenStream {
+    let iface_name = descriptors::declared_name(interface).unwrap_or_default();
+    let name = format_ident!("__RIDL_NO_FACE_{}", screaming_of(interface));
     let headline = format!(" Interface `{iface_name}` carries no generated interaction face.");
     let reason = format!(" The emitter refused it: {}", err.message);
     let owner = match face_gap(interface, err) {
@@ -293,23 +307,26 @@ enum FaceGap {
     Other,
 }
 
-fn face_gap(interface: &v2::Interface, err: &GenerateError) -> FaceGap {
+fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
     if err.message.starts_with(clauses::CLAUSE_REFUSAL) {
         return FaceGap::Clause;
     }
-    for decl in &interface.interactions {
-        let params = match decl.kind.as_ref() {
-            Some(v2::decl::Kind::CommandDef(command)) => &command.params,
-            Some(v2::decl::Kind::QueryDef(query)) => {
-                if descriptors::query_reply_type(query, &decl.name).is_err() {
+    for (_, interaction) in descriptors::interactions(interface) {
+        let member = declared(interaction.name.as_ref());
+        match interaction.shape.as_ref() {
+            Some(v1::interaction::Shape::Command(command)) => {
+                if descriptors::single_param_type(command, member).is_err() {
                     return FaceGap::CallShape;
                 }
-                &query.params
+            }
+            Some(v1::interaction::Shape::Query(query)) => {
+                if descriptors::query_reply_type(query, member).is_err()
+                    || descriptors::query_param_type(query, member).is_err()
+                {
+                    return FaceGap::CallShape;
+                }
             }
             _ => continue,
-        };
-        if descriptors::single_param_type(params, &decl.name).is_err() {
-            return FaceGap::CallShape;
         }
     }
     // Not a clause by the message, and every call has a face shape: the
@@ -341,7 +358,7 @@ const WIRE_ALIAS: &str = "Wire";
 ///
 /// [`generate`] is unaffected — it emits no alias, so `Wire` is an ordinary
 /// declaration there, and a package built without a face keeps compiling.
-fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
+fn refuse_wire_collision(ctx: &Ctx) -> Result<(), GenerateError> {
     // Both namespaces, because both land at package scope: a declaration is
     // emitted as its own item, and an interface is emitted as
     // `pub struct <Interface>;` by the descriptor emitter. Scanning only the
@@ -358,21 +375,26 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
     // service's own, which rsdl requires to be dotted and lowercase, so it
     // can never be `Wire`. It is here so this walk and the emitter's stay the
     // same shape, not because it changes an outcome.
-    let declared = package
-        .decls
+    let declarations = ctx
+        .model
+        .declarations
         .iter()
-        .map(|decl| (decl.name.as_str(), "declaration"));
-    let shapes = package
-        .shapes()
-        .filter(|shape| shape.service.is_none())
-        .map(|shape| (shape.name, "interface"));
-    for (name, kind) in declared.chain(shapes) {
+        .map(|decl| (declared(decl.name.as_ref()), "declaration"));
+    let shapes = ctx
+        .model
+        .interfaces
+        .iter()
+        .filter_map(|interface| descriptors::declared_name(interface))
+        .map(|name| (name, "interface"));
+    for (name, kind) in declarations.chain(shapes) {
         if name == WIRE_ALIAS {
             return Err(GenerateError {
                 message: format!(
                     "`{}.{}` collides with the `{}` encoding alias the interaction \
                      face emits at package scope; rename the {kind}",
-                    package.name, name, WIRE_ALIAS
+                    ctx.package_name(),
+                    name,
+                    WIRE_ALIAS
                 ),
             });
         }
@@ -386,9 +408,9 @@ fn refuse_wire_collision(package: &v2::Package) -> Result<(), GenerateError> {
 /// There is one codec emitter and one call to it, which is why the face
 /// compiles over the codec `generate` emits rather than over one written for
 /// it (design note D-11, stage K9b).
-fn package_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
-    let (mut items, tuples) = domain_items(ctx, package)?;
-    items.extend(codec::package_items(ctx, package, &tuples)?);
+fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
+    let mut items = domain_items(ctx)?;
+    items.extend(codec::package_items(ctx)?);
     Ok(items)
 }
 
@@ -433,57 +455,74 @@ fn wire_alias(wire: WireEncoding) -> TokenStream {
     }
 }
 
-/// The domain-type items of `package` — the shared work of both entry points
-/// — and the induced tuple structs the walk discovered.
+/// The domain-type items of the package, emitted from the lowered model.
 ///
-/// The tuples travel back out because the FlatBuffers codec needs them:
-/// a tuple's generated struct is a FlatBuffers table like any other
-/// (ADR-0019 decision 3), and only this walk knows which tuples exist and
-/// what each one is named.
+/// Stage P4 layers 1 and 2: every declaration is read from `Ctx::model`, not
+/// from the IR. `model.declarations[i]` is lowered from `package.decls[i]`, so
+/// the order and the count are the IR's; the induced tuple structs come from
+/// `model.tuples`, which the lowering discovers in the same worklist order
+/// this walk used to and names with `InducedName.rust`.
 ///
 /// This does not emit the codec. [`package_items`] appends it, for both entry
 /// points: the codec is `generate`'s output (design note D-1 as amended), and
 /// the face compiles over that same output (D-11, stage K9b).
-#[allow(clippy::type_complexity)]
-fn domain_items(
-    ctx: &Ctx,
-    package: &v2::Package,
-) -> Result<(Vec<TokenStream>, Vec<InducedTuple>), GenerateError> {
-    let mut items: Vec<TokenStream> = Vec::new();
-    let mut tuples: Vec<InducedTuple> = Vec::new();
-    let mut discovered: Vec<InducedTuple> = Vec::new();
-
-    for decl in &package.decls {
-        items.push(emit_decl(ctx, decl, &mut tuples));
+fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
+    if let Some(collision) = ctx.model.tuple_collisions.first() {
+        return Err(tuple_collision(collision));
     }
-
-    // Tuple types generate a named nested struct each (typl §11). Process the
-    // worklist: emitting a tuple struct's fields can discover further nested
-    // tuples, which are appended and drained here.
-    //
-    // A name is emitted once. The same tuple genuinely arrives twice — the
-    // interaction module pre-discovers nested tuples to learn their names, and
-    // emitting the outer tuple's fields finds them again — so a repeat of an
-    // *identical* discovery is expected and skipped. A repeat under one name
-    // with a different shape is a collision, and it is refused rather than
-    // deduplicated; see [`tuple_collision`].
-    let mut seen: HashMap<String, InducedTuple> = HashMap::new();
-    let mut index = 0;
-    while index < tuples.len() {
-        let induced = tuples[index].clone();
-        index += 1;
-        if let Some(previous) = seen.get(&induced.name) {
-            if previous.tuple != induced.tuple || previous.visibility != induced.visibility {
-                return Err(tuple_collision(previous, &induced));
-            }
+    let mut items: Vec<TokenStream> = Vec::new();
+    for decl in &ctx.model.declarations {
+        items.push(emit_decl(ctx, decl));
+    }
+    // A tuple type generates a named nested struct each (typl §11). The
+    // lowering lifted every one of them out of the type graph and gave each
+    // the name the path that reached it spells; an unnamed entry is one no
+    // backend has a rule for — a tuple reached from an interaction position,
+    // or from a declaration of another package — and this backend emits none.
+    for tuple in &ctx.model.tuples {
+        if tuple_name(tuple).is_empty() {
             continue;
         }
-        seen.insert(induced.name.clone(), induced.clone());
-        items.push(emit_tuple_struct(ctx, &induced, &mut tuples));
-        discovered.push(induced);
+        items.push(emit_tuple_struct(ctx, tuple));
     }
+    Ok(items)
+}
 
-    Ok((items, discovered))
+/// Refuses a package in which two different tuples generate one struct name.
+///
+/// The name is the CamelCase of the path that reaches the tuple, and nothing
+/// upstream keeps two paths from mangling to one string: `struct AB { c : … }`
+/// and `struct A { bC : … }` both reach `ABC`, and neither draws a ridl
+/// diagnostic. There is no sound way to pick between them, which is why this is
+/// a refusal rather than a rule:
+///
+/// - **Keeping the first** gives the second declaration the *first one's
+///   shape*. `ridlc check` exits 0, the module compiles, and the contract is
+///   silently wrong. It is also how carrying an inducing declaration's
+///   visibility (issue #167) could narrow a struct a public declaration uses,
+///   turning a silent wrong shape into a `private_interfaces` build failure.
+/// - **Keeping the widest visibility** would publish a package-private type's
+///   shape to escape that build failure, which is the defect #167 fixed.
+///
+/// So neither dedup rule is sound and only rejection is. This is the same
+/// answer codegen gives every other generated-name clash: it names the failure
+/// itself rather than handing rustc a module whose meaning it cannot state.
+///
+/// The lowering finds the clash once, over the model, and carries it as a
+/// fact; the message is this backend's own. The two shapes are named because
+/// the mangled name cannot distinguish them — that is the whole defect — and
+/// the field lists are what a reader greps for.
+fn tuple_collision(collision: &v1::TupleCollision) -> GenerateError {
+    GenerateError {
+        message: format!(
+            "the generated name {name} is claimed by two different tuple types, ({a}) and ({b}); \
+             a tuple generates a struct named for the path that reaches it, and these two paths \
+             spell one name — rename a field or a declaration so they differ",
+            name = collision.name,
+            a = collision.first_fields.join(", "),
+            b = collision.second_fields.join(", "),
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -491,8 +530,8 @@ fn domain_items(
 // ---------------------------------------------------------------------------
 
 /// Refuses one declaration with no finite FlatBuffers bound (design note
-/// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that note
-/// records what stage K4 built and what stage K5 closed).
+/// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that
+/// note records what stage K4 built and what stage K5 closed).
 ///
 /// **Called per type, by the codec emitter**, at the point where it is about
 /// to emit that type's `Payload<FlatBuffers>` implementation — which is what
@@ -507,494 +546,69 @@ fn domain_items(
 /// cross-package reference it does not resolve, or a same-package cycle — and
 /// that one type simply carries no codec.
 ///
-/// The refusal names the member wherever [`unbounded_member`] can name one,
-/// and says which of the other three causes it found otherwise.
-pub(crate) fn check_flatbuffers_bound(
-    ctx: &Ctx,
-    package: &v2::Package,
-    decl: &v2::Decl,
-) -> Result<(), GenerateError> {
-    if fb_projection::root_table(decl).is_none() {
+/// The attribution is the lowering's (`FbRoot.bound`), computed over the
+/// package alone as this backend computed it for itself before stage P4; the
+/// message is this backend's own. It names the member wherever the
+/// attribution names one, and says which of the other three causes it found
+/// otherwise.
+pub(crate) fn check_flatbuffers_bound(ctx: &Ctx, index: u32) -> Result<(), GenerateError> {
+    // A declaration the projection gives no root is one `root_table` does not
+    // name, and it has no bound to refuse.
+    let Some(root) = ctx.root(index) else {
         return Ok(());
-    }
-    let packages = fb_projection::Packages {
-        package,
-        others: &[],
     };
-    if fb_projection::max_size(packages, decl).is_some() {
-        return Ok(());
-    }
-    let pkg = &package.name;
-    let name = &decl.name;
-    match unbounded_member(ctx, package, decl) {
-        Attribution::Member(member) => Err(GenerateError {
+    let unbounded = match root.bound.as_ref() {
+        Some(v1::fb_root::Bound::Unbounded(unbounded)) => unbounded,
+        _ => return Ok(()),
+    };
+    let pkg = ctx.package_name();
+    let name = ctx
+        .declaration(index)
+        .map(|decl| declared(decl.name.as_ref()))
+        .unwrap_or_default();
+    let member = unbounded.member.as_deref().unwrap_or_default();
+    match v1::FbUnboundedCause::try_from(unbounded.cause)
+        .unwrap_or(v1::FbUnboundedCause::Unspecified)
+    {
+        // One member — a struct field's name, a union arm's name, or the
+        // `value` field of a box root (ADR-0019 decision 8) — is individually
+        // unbounded.
+        v1::FbUnboundedCause::Member => Err(GenerateError {
             message: format!("`{pkg}.{name}.{member}` has no finite FlatBuffers bound"),
         }),
-        Attribution::Untyped(member) => Err(GenerateError {
+        // One member carries no type at all — a struct field with no type, or
+        // the `value` of a box root whose declaration names no backing —
+        // which is malformed IR rather than an unbounded shape.
+        v1::FbUnboundedCause::Untyped => Err(GenerateError {
             message: format!(
                 "`{pkg}.{name}.{member}` carries no type, so `{pkg}.{name}` has no FlatBuffers \
                  bound"
             ),
         }),
-        Attribution::Layout(message) => Err(GenerateError {
-            message: format!("`{pkg}.{name}` has no FlatBuffers table layout: {message}"),
-        }),
-        Attribution::Aggregate => Err(GenerateError {
-            message: format!(
-                "`{pkg}.{name}` has no finite FlatBuffers bound: every member is bounded on its \
-                 own and the total is not"
-            ),
-        }),
-        Attribution::Exempt => Ok(()),
-    }
-}
-
-/// What [`check_flatbuffers_bound`] found when `decl`'s own
-/// [`fb_projection::max_size`] answered `None`.
-///
-/// Stage K5 split what stage K4 called `Declaration` into three, closing the
-/// second gap §4a of the design note carried forward: the three causes that
-/// one variant covered are now told apart, and each writes its own message.
-enum Attribution {
-    /// One member — a struct field's name, a union arm's name, or the
-    /// `value` field of a box root (ADR-0019 decision 8) — is individually
-    /// unbounded.
-    Member(String),
-    /// One member carries no type at all — a struct field with no type, or
-    /// the `value` of a box root whose declaration names no backing — which
-    /// is malformed IR rather than an unbounded shape, and which no probe can
-    /// charge.
-    Untyped(String),
-    /// `fb_projection::struct_table` refused the declaration's layout — two
-    /// members sharing one ordinal, or an ordinal of 0. It is a property of
-    /// the whole declaration and no single-member probe reproduces it, so the
-    /// projection's own message is carried through.
-    Layout(String),
-    /// Every member is bounded on its own and the total is not: the summed
-    /// size overflows `u64`, or it exceeds
-    /// [`fb_projection::MAX_ENCODABLE`]. A member this backend cannot judge
-    /// does not shield the sum: it is charged as a `boolean` and the total
-    /// is over the ceiling even so.
-    Aggregate,
-    /// Every member that could be judged is individually bounded, at least
-    /// one could not be judged — a cross-package reference this backend does
-    /// not resolve, or a same-package cycle — and the struct as a whole still
-    /// fits with each unjudged leaf charged as a `boolean`. `decl`'s own
-    /// `None` is explained by that member, not by an unbounded shape.
-    Exempt,
-}
-
-/// What one type position contributes to the attribution.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Verdict {
-    /// It has a finite bound of its own.
-    Bounded,
-    /// It has none, and this backend can say so.
-    Unbounded,
-    /// This backend cannot say: the position reaches a cross-package
-    /// reference or a cycle.
-    Unjudgeable,
-}
-
-/// Attributes `decl`'s unbounded [`fb_projection::max_size`] — see
-/// [`Attribution`].
-///
-/// Each member is judged on its own by [`judge`], never by trusting one
-/// member's unboundedness to explain another's. A struct with both a bare
-/// unbounded `string` map key and an unrelated cross-package field is refused
-/// over the first and exempted from nothing on account of the second.
-fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attribution {
-    let mut any_exempt = false;
-    match &decl.kind {
-        Some(v2::decl::Kind::StructDef(def)) => {
-            // The layout is refused for the declaration as a whole, and it is
-            // checked first: with two members on one ordinal, every member
-            // probes as bounded and only the aggregate answers `None`, which
-            // is exactly the confusion §4a asked K5 to end.
-            if let Err(err) = fb_projection::struct_table(&decl.name, def) {
-                return Attribution::Layout(err.message);
-            }
-            for member in &def.members {
-                let Some(v2::struct_member::Member::Field(field)) = &member.member else {
-                    // A reserved tombstone emits no field and charges one
-                    // slack byte only (typl §7.4); it is never the cause.
-                    continue;
-                };
-                let Some(ty) = field.r#type.as_ref() else {
-                    return Attribution::Untyped(field.name.clone());
-                };
-                match judge(ctx, package, ty) {
-                    Verdict::Unbounded => return Attribution::Member(field.name.clone()),
-                    Verdict::Unjudgeable => any_exempt = true,
-                    Verdict::Bounded => {}
-                }
-            }
-        }
-        Some(v2::decl::Kind::UnionDef(def)) => {
-            for arm in &def.arms {
-                let ty = v2::FieldType {
-                    optional: false,
-                    kind: Some(v2::field_type::Kind::Named(arm.type_ref.clone())),
-                };
-                match judge(ctx, package, &ty) {
-                    Verdict::Unbounded => return Attribution::Member(arm.name.clone()),
-                    Verdict::Unjudgeable => any_exempt = true,
-                    Verdict::Bounded => {}
-                }
-            }
-        }
-        // A declaration rooted in a box (ADR-0019 decision 8) has one member:
-        // the box's `value` field, holding the declaration itself. It is
-        // resolved in the package that declares it, so it is never
-        // unjudgeable — only bounded, or unbounded because the IR carries no
-        // width or no length bound for it.
-        Some(
-            v2::decl::Kind::TypeDef(_) | v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_),
-        ) => {
-            // A named scalar with no backing at all is malformed IR rather
-            // than an unbounded shape, which is what `Untyped` is for. The
-            // front end leaves one behind after a parse error such as
-            // `type X:`, so this is the shape such a declaration reaches the
-            // backend in — not one a length or a width would fix.
-            if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind
-                && td.backing.is_none()
-            {
-                return Attribution::Untyped("value".to_string());
-            }
-            let ty = v2::FieldType {
-                optional: false,
-                kind: Some(v2::field_type::Kind::Named(decl.name.clone())),
-            };
-            match judge(ctx, package, &ty) {
-                Verdict::Unbounded => return Attribution::Member("value".to_string()),
-                Verdict::Unjudgeable => any_exempt = true,
-                Verdict::Bounded => {}
-            }
-        }
-        _ => {}
-    }
-    if !any_exempt {
-        return Attribution::Aggregate;
-    }
-    // Every judged member is bounded and at least one member could not be
-    // judged, so the aggregate is still open: two members each under the
-    // ceiling can sum over it, and a member this backend cannot judge must
-    // not shield that sum. The whole struct is charged once more over
-    // `lower_bound_stand_in`'s copy of each member, which charges the
-    // unjudged leaves no more than the real ones would, so `None` here is
-    // an aggregate cause whatever those leaves turn out to be. A union is
-    // its largest arm rather than a sum, so it has no aggregate to charge.
-    if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
-        let stand_in = v2::Decl {
-            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
-                members: def
-                    .members
-                    .iter()
-                    .map(|member| match &member.member {
-                        Some(v2::struct_member::Member::Field(field)) => v2::StructMember {
-                            member: Some(v2::struct_member::Member::Field(v2::Field {
-                                r#type: field
-                                    .r#type
-                                    .as_ref()
-                                    .map(|ty| lower_bound_stand_in(ctx, ty)),
-                                ..field.clone()
-                            })),
-                        },
-                        _ => member.clone(),
-                    })
-                    .collect(),
-                fixed_layout: def.fixed_layout,
-            })),
-            ..decl.clone()
-        };
-        let packages = fb_projection::Packages {
-            package,
-            others: &[],
-        };
-        if fb_projection::max_size(packages, &stand_in).is_none() {
-            return Attribution::Aggregate;
-        }
-    }
-    Attribution::Exempt
-}
-
-/// One type position's verdict.
-///
-/// A position this backend can resolve in full is probed as a whole, which is
-/// the cheapest and the most faithful answer: [`probe_field_type`] charges it
-/// exactly what [`fb_projection::max_size`] charges it as one member.
-///
-/// A position it cannot resolve in full is probed as a whole too, over
-/// [`lower_bound_stand_in`]'s copy of it: every leaf this backend cannot
-/// judge is replaced by a `boolean`, the smallest thing the projection
-/// charges anything for, and what is left is charged once by the same
-/// `max_size` the real position would be charged by. That charges every
-/// count, every product of nested counts, and every locally known leaf in
-/// the position together, which neither a leaf-by-leaf descent nor a
-/// level-by-level probe of each count does — `[[veh.other.Speed; 0..2^20];
-/// 0..2^20]` is unbounded by the product of its two counts and by nothing
-/// else, and `[(veh.other.Speed, [boolean; 0..2^31]); 0..4]` by an outer
-/// count over a local inner one. Because each stand-in is a lower bound on
-/// the leaf it replaces, a stand-in that is unbounded proves the real
-/// position is, and a stand-in that fits says nothing about the real leaves,
-/// which is what `Unjudgeable` means.
-fn judge(ctx: &Ctx, package: &v2::Package, ty: &v2::FieldType) -> Verdict {
-    if member_resolves_locally(ctx, ty) {
-        return if probe_field_type(package, ty).is_some() {
-            Verdict::Bounded
-        } else {
-            Verdict::Unbounded
-        };
-    }
-    if probe_field_type(package, &lower_bound_stand_in(ctx, ty)).is_some() {
-        Verdict::Unjudgeable
-    } else {
-        Verdict::Unbounded
-    }
-}
-
-/// `ty` with every leaf this backend cannot judge replaced by a `boolean`,
-/// so that [`fb_projection::max_size`] can charge the rest.
-///
-/// A `boolean` is one inline byte and nothing out of line, and the
-/// projection charges every other leaf at least that: a named scalar its
-/// declared width, an enum eight bytes, a struct, a union or a string an
-/// offset plus its own table or body. A vector's charge and a table's bound
-/// are both monotone in the charge of what they hold, so the stand-in is
-/// charged no more than the real position, and `None` over the stand-in is
-/// `None` over the real position whatever the unjudged leaves turn out to be.
-/// The replaced leaves are the ones [`member_resolves_locally`] answers
-/// `false` for: a named reference that does not resolve in this package or
-/// reaches a cycle, a stream, and an unspecified primitive. A `FieldType` with
-/// no `kind` is kept, so it still probes to `Unbounded` (design note §4b).
-fn lower_bound_stand_in(ctx: &Ctx, ty: &v2::FieldType) -> v2::FieldType {
-    fn boolean(optional: bool) -> v2::FieldType {
-        v2::FieldType {
-            optional,
-            kind: Some(v2::field_type::Kind::Primitive(
-                v2::PrimitiveType::Boolean as i32,
-            )),
-        }
-    }
-    let stand_in = |leaf: &v2::FieldType| Box::new(lower_bound_stand_in(ctx, leaf));
-    let kind = match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Array(array)) => {
-            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
-                element: array.element.as_deref().map(stand_in),
-                min: array.min,
-                max: array.max,
-            }))
-        }
-        Some(v2::field_type::Kind::Map(map)) => v2::field_type::Kind::Map(Box::new(v2::MapType {
-            key: map.key.as_deref().map(stand_in),
-            value: map.value.as_deref().map(stand_in),
-            min: map.min,
-            max: map.max,
-        })),
-        Some(v2::field_type::Kind::Tuple(tuple)) => v2::field_type::Kind::Tuple(v2::TupleType {
-            fields: tuple
-                .fields
-                .iter()
-                .map(|field| v2::TupleField {
-                    r#type: field.r#type.as_ref().map(|leaf| *stand_in(leaf)),
-                    ..field.clone()
-                })
-                .collect(),
-        }),
-        _ if member_resolves_locally(ctx, ty) => return ty.clone(),
-        // A named reference this backend does not resolve, a cycle, a
-        // stream, or an unspecified primitive: the leaf itself is what
-        // cannot be judged, and it is replaced.
-        _ => return boolean(ty.optional),
-    };
-    v2::FieldType {
-        optional: ty.optional,
-        kind: Some(kind),
-    }
-}
-
-/// The members of `decl` this backend cannot judge — a cross-package
-/// reference it does not resolve, a same-package cycle, a stream, or an
-/// unspecified primitive.
-///
-/// [`check_flatbuffers_bound`] answers `Ok(())` for a declaration whose only
-/// obstacle is one of these, and the codec emitter then withholds that type's
-/// implementation. This is what lets the emitted source say which member is
-/// the reason, rather than leaving a consumer with a missing trait
-/// implementation and nothing to read.
-pub(crate) fn unjudgeable_members(ctx: &Ctx, decl: &v2::Decl) -> Vec<String> {
-    let mut names = Vec::new();
-    match &decl.kind {
-        Some(v2::decl::Kind::StructDef(def)) => {
-            for member in &def.members {
-                if let Some(v2::struct_member::Member::Field(field)) = &member.member
-                    && let Some(ty) = field.r#type.as_ref()
-                    && !member_resolves_locally(ctx, ty)
-                {
-                    names.push(field.name.clone());
-                }
-            }
-        }
-        Some(v2::decl::Kind::UnionDef(def)) => {
-            for arm in &def.arms {
-                if !decl_resolves_locally(ctx, &arm.type_ref, &mut HashSet::new()) {
-                    names.push(arm.name.clone());
-                }
-            }
-        }
-        _ => {}
-    }
-    names
-}
-
-/// The bound of one type position alone, charged the way
-/// [`fb_projection::max_size`] charges it as one member of a struct:
-/// `struct_table_bound` sums each member's own `field_charge` independently
-/// and propagates the first `None`, so a struct of exactly this one field
-/// reproduces the charge the position contributes, with nothing else able to
-/// answer `None` in its place.
-fn probe_field_type(package: &v2::Package, ty: &v2::FieldType) -> Option<u64> {
-    let probe = v2::Decl {
-        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
-            members: vec![v2::StructMember {
-                member: Some(v2::struct_member::Member::Field(v2::Field {
-                    // Ordinal 1 is the first FlatBuffers id. It is written
-                    // here rather than copied from the real member so that a
-                    // declaration whose ordinals are themselves malformed is
-                    // attributed by `Attribution::Layout` and not mistaken
-                    // for an unbounded member.
-                    ordinal: 1,
-                    r#type: Some(ty.clone()),
-                    ..Default::default()
-                })),
-            }],
-            fixed_layout: false,
-        })),
-        ..Default::default()
-    };
-    let packages = fb_projection::Packages {
-        package,
-        others: &[],
-    };
-    fb_projection::max_size(packages, &probe)
-}
-
-/// Whether every named type reachable from `ty` resolves inside the package
-/// `ctx` indexes — the same shape [`fb_projection::max_size`] would have to
-/// resolve to size it.
-///
-/// Two things answer `false`, "this backend cannot judge this member,
-/// exempt it", rather than letting a probe answer for them — both scoped to
-/// the one member being checked, never to the whole declaration, so a
-/// sibling member with a genuine bound problem is still caught:
-///
-/// - **a cross-package (dotted) or unknown reference.** `ridl-backend-rust`
-///   generates one package at a time and resolves no cross-package reference
-///   itself — [`Ctx::lookup`] answers `None` for one by design, the same as
-///   every other same-package-only pass in this backend
-///   (`derives::type_ref_eligibility`, `defaults`). Handed `others: &[]`,
-///   `fb_projection::max_size` cannot tell "this reference does not resolve
-///   here" from "this member has no finite bound" — both answer `None` (its
-///   own doc, "a reference that does not resolve in `packages`"). This
-///   backend already generates a struct across such a reference — the
-///   corpus's `ClimateReport`
-///   (`crates/ridlc/tests/corpus/veh-cluster/cluster/services.ridl`,
-///   `cabin`/`setpoint` typed by the imported `veh.common.Temperature`) is
-///   one.
-/// - **a same-package composite that reaches itself.** typl rejects one
-///   (TYPL-206), so it is IR handed in directly the same as the case above.
-///   This backend already has a considered answer for a cyclic struct that
-///   is not refusal: `recursive_struct_default_terminates` and
-///   `a_cyclic_struct_takes_no_conditional_derives` both pin that a cyclic
-///   struct's *domain type* still generates, because Default derivation and
-///   the conditional-derive walk both guard the same cycle and degrade to
-///   the conservative answer rather than erroring.
-///
-/// A third case is exempted the same way: **a `Stream` field position.**
-/// ridl §12.3 keeps a stream at an interaction position; it never reaches a
-/// struct or tuple field in checked IR, `fb_projection::max_size` charges
-/// nothing for it, and `flatbuffers_bound_leaves_a_stream_field_alone` pins
-/// that this function exempts a member typed by one rather than treating the
-/// `None` `field_charge` gives it as a genuine bound failure.
-fn member_resolves_locally(ctx: &Ctx, ty: &v2::FieldType) -> bool {
-    field_type_resolves_locally(ctx, ty, &mut HashSet::new())
-}
-
-/// Whether `reference` and everything its own shape reaches resolves inside
-/// the package `ctx` indexes. See [`member_resolves_locally`] for the two
-/// cases this answers `false` for, and why each is scoped to one member.
-fn decl_resolves_locally(ctx: &Ctx, reference: &str, visiting: &mut HashSet<String>) -> bool {
-    let Some(decl) = ctx.lookup(reference) else {
-        return false;
-    };
-    if !visiting.insert(reference.to_string()) {
-        // On the path already being walked: a cycle. Left for
-        // `unbounded_member` to exempt this one member over (see the doc
-        // above).
-        return false;
-    }
-    let resolves = match &decl.kind {
-        Some(v2::decl::Kind::StructDef(def)) => {
-            def.members.iter().all(|member| match &member.member {
-                Some(v2::struct_member::Member::Field(field)) => field
-                    .r#type
-                    .as_ref()
-                    .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting)),
-                _ => true,
+        // The projection refused the declaration's layout — two members
+        // sharing one ordinal, or an ordinal of 0. It is a property of the
+        // whole declaration, so the projection's own message is carried
+        // through.
+        v1::FbUnboundedCause::Layout => {
+            let message = unbounded.layout_message.as_deref().unwrap_or_default();
+            Err(GenerateError {
+                message: format!("`{pkg}.{name}` has no FlatBuffers table layout: {message}"),
             })
         }
-        Some(v2::decl::Kind::UnionDef(def)) => def
-            .arms
-            .iter()
-            .all(|arm| decl_resolves_locally(ctx, &arm.type_ref, visiting)),
-        _ => true,
-    };
-    visiting.remove(reference);
-    resolves
-}
-
-/// One type position's contribution to [`decl_resolves_locally`], over the
-/// same [`v2::FieldType`] shape `fb_projection::max_size` walks to size it.
-/// A `Stream` is exempted explicitly — see [`member_resolves_locally`]'s
-/// third bullet — rather than falling through to the `None` arm, which is
-/// reserved for a `FieldType` this walk genuinely does not recognize.
-fn field_type_resolves_locally(
-    ctx: &Ctx,
-    ty: &v2::FieldType,
-    visiting: &mut HashSet<String>,
-) -> bool {
-    match &ty.kind {
-        Some(v2::field_type::Kind::Named(reference)) => {
-            decl_resolves_locally(ctx, reference, visiting)
-        }
-        // An `Unspecified` field primitive emits `()` and is charged
-        // nothing, exactly as a `Stream` is, and `derives` lists the two side
-        // by side among its refusing positions. It is malformed IR rather
-        // than an unbounded shape, so it is exempted rather than refused.
-        Some(v2::field_type::Kind::Primitive(primitive)) => v2::PrimitiveType::try_from(*primitive)
-            .is_ok_and(|primitive| primitive != v2::PrimitiveType::Unspecified),
-        Some(v2::field_type::Kind::InlineScalar(_)) => true,
-        Some(v2::field_type::Kind::Tuple(tuple)) => tuple.fields.iter().all(|field| {
-            field
-                .r#type
-                .as_ref()
-                .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting))
+        // Every member is bounded on its own and the total is not: the summed
+        // size overflows `u64`, or it exceeds the projection's ceiling.
+        v1::FbUnboundedCause::Aggregate | v1::FbUnboundedCause::Unspecified => Err(GenerateError {
+            message: format!(
+                "`{pkg}.{name}` has no finite FlatBuffers bound: every member is bounded on \
+                     its own and the total is not"
+            ),
         }),
-        Some(v2::field_type::Kind::Array(array)) => array
-            .element
-            .as_deref()
-            .is_some_and(|element| field_type_resolves_locally(ctx, element, visiting)),
-        Some(v2::field_type::Kind::Map(map)) => {
-            map.key
-                .as_deref()
-                .is_some_and(|key| field_type_resolves_locally(ctx, key, visiting))
-                && map
-                    .value
-                    .as_deref()
-                    .is_some_and(|value| field_type_resolves_locally(ctx, value, visiting))
-        }
-        Some(v2::field_type::Kind::Stream(_)) => false,
-        None => true,
+        // Every member that could be judged is individually bounded, at least
+        // one could not be judged — a cross-package reference this backend
+        // does not resolve, or a same-package cycle — and the declaration as a
+        // whole still fits with each unjudged leaf charged as a `boolean`. Its
+        // own `None` is explained by that member, not by an unbounded shape.
+        v1::FbUnboundedCause::Exempt => Ok(()),
     }
 }
 
@@ -1011,82 +625,6 @@ fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
     })
 }
 
-/// One tuple type reached from a declaration, with the visibility that
-/// declaration was declared at (typl §11).
-///
-/// A tuple has no name in source; the struct it generates is named after the
-/// path that reached it and is emitted at module scope beside the declaration
-/// that induced it. The visibility travels with the discovery for the same
-/// reason [`v2::InterfaceShape::visibility`] carries a service's: the value is
-/// authoritative at the point of discovery and nowhere else. By the time
-/// [`emit_tuple_struct`] runs, the tuple is one entry in a flat worklist and
-/// the declaration it came from is out of reach — which is exactly how the
-/// struct came to be emitted `pub` over an `internal` declaration's payload
-/// (issue #167).
-///
-/// One name is one struct. The same discovery repeated — the interaction
-/// module pre-discovers a nested tuple's name and the drain finds it again —
-/// is skipped; a repeat under one name with a different shape or visibility is
-/// a collision and is refused ([`tuple_collision`]), because carrying a
-/// visibility onto a name two declarations share has no sound answer. See
-/// [`generate`].
-#[derive(Debug, Clone)]
-pub(crate) struct InducedTuple {
-    /// The generated struct name — the CamelCase of the path that reached the
-    /// tuple.
-    pub(crate) name: String,
-    pub(crate) tuple: v2::TupleType,
-    /// The visibility of the declaration this tuple was reached from: an
-    /// `internal struct`'s field, or an `internal interface`'s query return.
-    pub(crate) visibility: i32,
-}
-
-/// Refuses a package in which two different tuples generate one struct name.
-///
-/// The name is the CamelCase of the path that reaches the tuple, and nothing
-/// upstream keeps two paths from mangling to one string: `struct AB { c : … }`
-/// and `struct A { bC : … }` both reach `ABC`, and neither draws a ridl
-/// diagnostic. There is no sound way to pick between them, which is why this is
-/// a refusal rather than a rule:
-///
-/// - **Keeping the first** — what the worklist did before — gives the second
-///   declaration the *first one's shape*. `ridlc check` exits 0, the module
-///   compiles, and the contract is silently wrong. It is also how carrying an
-///   inducing declaration's visibility (issue #167) could narrow a struct a
-///   public declaration uses, turning a silent wrong shape into a
-///   `private_interfaces` build failure.
-/// - **Keeping the widest visibility** would publish a package-private type's
-///   shape to escape that build failure, which is the defect #167 fixed.
-///
-/// So neither dedup rule is sound and only rejection is. This is the same
-/// answer `interact::check_name_collisions` gives every other generated-name
-/// clash: codegen names the failure itself rather than handing rustc a module
-/// whose meaning it cannot state.
-///
-/// The two shapes are named because the mangled name cannot distinguish them —
-/// that is the whole defect — and the field lists are what a reader greps for.
-fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateError {
-    fn shape(induced: &InducedTuple) -> String {
-        let fields: Vec<String> = induced
-            .tuple
-            .fields
-            .iter()
-            .map(|field| field.name.clone())
-            .collect();
-        format!("({})", fields.join(", "))
-    }
-    GenerateError {
-        message: format!(
-            "the generated name {name} is claimed by two different tuple types, {a} and {b}; \
-             a tuple generates a struct named for the path that reaches it, and these two paths \
-             spell one name — rename a field or a declaration so they differ",
-            name = current.name,
-            a = shape(previous),
-            b = shape(current),
-        ),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Package context — same-package name lookups for the leaf-recursion rules.
 // ---------------------------------------------------------------------------
@@ -1096,15 +634,14 @@ fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateE
 /// declaration (cross-package references stay unresolved by design — this
 /// backend generates one package at a time).
 pub(crate) struct Ctx<'a> {
-    decls: HashMap<&'a str, &'a v2::Decl>,
-    /// The other packages of the same build, in the shape
-    /// `ridl-backend-flatbuffers::generate_with` already gives them
-    /// (ADR-0017 decision 1). Empty for the single-package entry points.
-    ///
-    /// The codec reads them through the projection's `Packages` so a
-    /// cross-package reference can be sized and encoded rather than withheld
-    /// (driftsys/ridl#467).
-    pub(crate) others: &'a [&'a v2::Package],
+    /// The lowered codegen model of this package over this scope
+    /// (`ridl_ir::codegen::lower`), which the domain-type emitters, the
+    /// default derivation and the derive pass read instead of the IR (lane P
+    /// stage P4, design note §8.3). Since that stage's third layer every
+    /// emitter reads it and none reads the IR, so the pairing by index that
+    /// held during the port — `model.declarations[i]` lowered from
+    /// `package.decls[i]` — is no longer something an emitter relies on.
+    pub(crate) model: &'a v1::Model,
     /// The set of declaration names currently being expanded by the
     /// Default-derivation recursion. It guards against a cyclic IR: a
     /// same-package composite that reaches itself would otherwise recurse
@@ -1114,29 +651,85 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    pub(crate) fn new(package: &'a v2::Package) -> Self {
-        Ctx::with_others(package, &[])
+    pub(crate) fn new(package: &'a v2::Package, model: &'a v1::Model) -> Self {
+        Ctx::with_others(package, &[], model)
     }
 
     /// [`Ctx::new`] with the other packages of the same build, which the
     /// codec resolves a cross-package reference through (driftsys/ridl#467).
-    pub(crate) fn with_others(package: &'a v2::Package, others: &'a [&'a v2::Package]) -> Self {
-        let decls = package
-            .decls
-            .iter()
-            .map(|decl| (decl.name.as_str(), decl))
-            .collect();
+    pub(crate) fn with_others(
+        package: &'a v2::Package,
+        others: &'a [&'a v2::Package],
+        model: &'a v1::Model,
+    ) -> Self {
+        // Neither the package nor the other packages of the build are read
+        // any more: the lowering resolved every reference over that scope and
+        // the model states the result. They stay in the signature because
+        // `generate_with` and `generate_pipeline` keep theirs (design note
+        // §8.3), and this is what they hand to `lower`.
+        let _ = (package, others);
+        Ctx::over(model)
+    }
+
+    /// The context over a lowered model alone — what a plugin has, and what
+    /// every emitter reads since stage P4.
+    pub(crate) fn over(model: &'a v1::Model) -> Self {
         Ctx {
-            decls,
-            others,
+            model,
             visiting: RefCell::new(HashSet::new()),
         }
     }
 
-    /// The declaration named `name` in this package, or `None` for a
-    /// cross-package (dotted) or unknown reference.
-    pub(crate) fn lookup(&self, name: &str) -> Option<&'a v2::Decl> {
-        self.decls.get(name).copied()
+    /// The name of the package this model was lowered for.
+    pub(crate) fn package_name(&self) -> &'a str {
+        self.model
+            .scope
+            .as_ref()
+            .map(|scope| scope.package.as_str())
+            .unwrap_or_default()
+    }
+
+    /// The FlatBuffers root the projection gives the declaration at `index`,
+    /// or `None` where `projection::root_table` names none.
+    pub(crate) fn root(&self, index: u32) -> Option<&'a v1::FbRoot> {
+        self.model
+            .flatbuffers
+            .as_ref()?
+            .roots
+            .iter()
+            .find(|root| root.declaration == index)
+    }
+
+    /// The declaration the model's `declarations` list holds at `index`.
+    pub(crate) fn declaration(&self, index: u32) -> Option<&'a v1::Declaration> {
+        self.model.declarations.get(index as usize)
+    }
+
+    /// The induced tuple the model's `tuples` list holds at `index`.
+    pub(crate) fn tuple(&self, index: u32) -> Option<&'a v1::InducedTuple> {
+        self.model.tuples.get(index as usize)
+    }
+
+    /// The Rust name of the induced tuple at `index` — the CamelCase of the
+    /// path that reached it, which the lowering spells once
+    /// (`InducedName.rust`).
+    pub(crate) fn tuple_name(&self, index: u32) -> &'a str {
+        self.tuple(index)
+            .and_then(|tuple| tuple.name.as_ref())
+            .map(|name| name.rust.as_str())
+            .unwrap_or_default()
+    }
+
+    /// The declaration a resolved, same-package reference names, or `None`
+    /// for a cross-package reference, for a name no declaration in this
+    /// package answers to, and for a reference that names a constant — the
+    /// three cases [`Ctx::lookup`] also answers `None` for, kept so the
+    /// printers stay as conservative as they are today (design note §3.5).
+    pub(crate) fn local(&self, reference: &v1::TypeRef) -> Option<&'a v1::Declaration> {
+        if reference.foreign || !reference.resolved {
+            return None;
+        }
+        self.declaration(reference.index)
     }
 
     /// Marks `name` as being expanded by the Default recursion. Returns `true`
@@ -1157,28 +750,180 @@ impl<'a> Ctx<'a> {
 // Declaration emission.
 // ---------------------------------------------------------------------------
 
-fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> TokenStream {
+// ---------------------------------------------------------------------------
+// Reading the lowered model.
+// ---------------------------------------------------------------------------
+
+/// The name the source declared, as the model carries it.
+fn declared(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.declared.as_str()).unwrap_or_default()
+}
+
+/// The pinned `snake_case` of a declared name (ADR-0016 decision 1), spelled
+/// once by the lowering.
+fn snake_of(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.snake.as_str()).unwrap_or_default()
+}
+
+/// The pinned `camel_case` of a declared name (ADR-0016, 2026-09-20
+/// amendment), spelled once by the lowering.
+fn camel_of(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.camel.as_str()).unwrap_or_default()
+}
+
+/// The SCREAMING_SNAKE spelling of one interface's declared name — the
+/// `snake_case` of ADR-0016 decision 1, upper-cased, which the lowering
+/// spells once as `Spellings.screaming`.
+fn screaming_of(interface: &v1::Interface) -> &str {
+    match interface.identity.as_ref() {
+        Some(v1::interface::Identity::Declared(name)) => name.screaming.as_str(),
+        _ => "",
+    }
+}
+
+/// The generated struct name of one induced tuple — the CamelCase of the path
+/// that reached it, which the lowering spells as `InducedName.rust`. Empty for
+/// a tuple no backend has a naming rule for.
+fn tuple_name(induced: &v1::InducedTuple) -> &str {
+    induced
+        .name
+        .as_ref()
+        .map(|name| name.rust.as_str())
+        .unwrap_or_default()
+}
+
+/// The canonical IR text of the type one union arm names.
+fn arm_reference(arm: &v1::Arm) -> &str {
+    arm.r#type
+        .as_ref()
+        .map(|reference| reference.reference.as_str())
+        .unwrap_or_default()
+}
+
+/// The model's scalar class as this backend's own classification. The two are
+/// the same total function of a backing — the lowering's `scalar_class` is
+/// [`backing_scalar`] moved into `ridl-ir` — so this is a rename, not a
+/// second rule.
+pub(crate) fn class_backing(class: i32) -> ScalarBacking {
+    match v1::ScalarClass::try_from(class).unwrap_or(v1::ScalarClass::Unspecified) {
+        v1::ScalarClass::Integer => ScalarBacking::Integer,
+        v1::ScalarClass::Boolean => ScalarBacking::Boolean,
+        v1::ScalarClass::String => ScalarBacking::String,
+        v1::ScalarClass::Bytes => ScalarBacking::Bytes,
+        // A unit backing, an absent backing and a float backing are all
+        // float, and an unspecified class is unreachable from the lowering.
+        v1::ScalarClass::Float | v1::ScalarClass::Unspecified => ScalarBacking::Float,
+    }
+}
+
+/// The Rust type one scalar class is realized as (Appendix D language layer):
+/// unit and float back to `f64`, integer to `i64`.
+fn class_tokens(class: i32) -> TokenStream {
+    match class_backing(class) {
+        ScalarBacking::Float => quote! { f64 },
+        ScalarBacking::Integer => quote! { i64 },
+        ScalarBacking::Boolean => quote! { bool },
+        ScalarBacking::String => quote! { String },
+        ScalarBacking::Bytes => quote! { Vec<u8> },
+    }
+}
+
+/// The Rust newtype inner type for a named scalar (Appendix D language
+/// layer).
+fn newtype_inner(sc: &v1::Scalar) -> TokenStream {
+    class_tokens(sc.class)
+}
+
+/// The Rust type of one type position, read from the lowered model.
+///
+/// It is [`field_type_tokens`] over the model: the same shapes, with the
+/// references already resolved and every induced tuple already named. A tuple
+/// position is a `TupleRef` into `Model.tuples`, so this walk neither
+/// discovers nor names one — [`domain_items`] emits the struct for each named
+/// entry of that list.
+pub(crate) fn model_type_tokens(ctx: &Ctx, ty: &v1::Type) -> TokenStream {
+    let inner = match ty.kind.as_ref() {
+        Some(v1::r#type::Kind::Named(reference)) => type_path(&reference.reference),
+        Some(v1::r#type::Kind::Primitive(prim)) => model_primitive_tokens(*prim),
+        Some(v1::r#type::Kind::Inline(sc)) => class_tokens(sc.class),
+        Some(v1::r#type::Kind::Tuple(reference)) => {
+            let id = ident(ctx.tuple_name(reference.index));
+            quote! { #id }
+        }
+        Some(v1::r#type::Kind::Array(array)) => {
+            let element = array
+                .element
+                .as_deref()
+                .map(|element| model_type_tokens(ctx, element))
+                .unwrap_or_else(|| quote! { () });
+            if array.min == array.max {
+                let len = usize_tokens(array.min);
+                quote! { [#element; #len] }
+            } else {
+                quote! { Vec<#element> }
+            }
+        }
+        Some(v1::r#type::Kind::Map(map)) => {
+            let key = map
+                .key
+                .as_deref()
+                .map(|key| model_type_tokens(ctx, key))
+                .unwrap_or_else(|| quote! { () });
+            let value = map
+                .value
+                .as_deref()
+                .map(|value| model_type_tokens(ctx, value))
+                .unwrap_or_else(|| quote! { () });
+            quote! { Vec<(#key, #value)> }
+        }
+        // A stream is an interaction-position type (ridl §12.3); it never
+        // reaches a struct or tuple field in checked IR. Kept total.
+        Some(v1::r#type::Kind::Stream(_)) | None => quote! { () },
+    };
+
+    if ty.optional {
+        quote! { Option<#inner> }
+    } else {
+        inner
+    }
+}
+
+/// [`primitive_tokens`] over the model's own `PrimitiveType`, which restates
+/// the IR's values (design note §3.8).
+fn model_primitive_tokens(prim: i32) -> TokenStream {
+    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+        v1::PrimitiveType::Boolean => quote! { bool },
+        v1::PrimitiveType::Integer => quote! { i64 },
+        v1::PrimitiveType::Float => quote! { f64 },
+        v1::PrimitiveType::String => quote! { String },
+        v1::PrimitiveType::Bytes => quote! { Vec<u8> },
+        v1::PrimitiveType::Unspecified => quote! { () },
+    }
+}
+
+fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     // The derive attribute is computed once and handed to the emitter, which
     // places it under the declaration's doc comment rather than above it.
     // Prepending it to the finished item would render it above the doc, which
     // is backwards from how Rust is written everywhere else — and `Default` is
     // never among the traits (`derives`, design decision 8).
     let derived = derives::derive_attr(ctx, decl);
-    let item = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td, &derived),
-        Some(v2::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
-        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, &derived, tuples),
-        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed, &derived),
-        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd, &derived),
-        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud, &derived),
-        // Interaction kinds ride `Interface.interactions`, never a package
-        // decl, so none of them reaches this match; nothing emits them today.
-        Some(_) | None => return quote! {},
+    let item = match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(decl, sc, &derived),
+        Some(v1::declaration::Kind::Constant(cd)) => return emit_const(ctx, decl, cd),
+        Some(v1::declaration::Kind::Struct(sd)) => emit_struct(ctx, decl, sd, &derived),
+        Some(v1::declaration::Kind::Enum(ed)) => emit_enum(decl, ed, &derived),
+        Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(decl, esd, &derived),
+        Some(v1::declaration::Kind::Union(ud)) => emit_union(decl, ud, &derived),
+        // An interaction rides `Interface.interactions`, never a package
+        // declaration, so the lowering leaves the kind unset for one and
+        // nothing emits them today.
+        None => return quote! {},
     };
 
     let default_impl = defaults::decl_default_expr(ctx, decl)
         .map(|expr| {
-            let name = ident(&decl.name);
+            let name = ident(declared(decl.name.as_ref()));
             quote! { impl Default for #name { fn default() -> Self { #expr } } }
         })
         .unwrap_or_default();
@@ -1206,11 +951,11 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
 /// Each covered impl block uses the deprecated type, and without the allow
 /// the consumer's build draws the `deprecated` lint on code the consumer did
 /// not write.
-fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
-    let inner = newtype_inner(td);
+fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
+    let inner = newtype_inner(sc);
     let doc = doc_attrs(&decl.doc);
-    let unchecked = unchecked_doc(td);
+    let unchecked = unchecked_doc(sc);
     // A blank doc line keeps the unchecked note out of the declaration's own
     // doc paragraph.
     let separator = if decl.doc.is_empty() || unchecked.is_empty() {
@@ -1225,16 +970,16 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
         quote! {}
     };
     let vis = vis_tokens(decl.visibility);
-    let type_name = decl.name.as_str();
+    let type_name = declared(decl.name.as_ref());
 
-    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
-        return emit_vacuous_type_def(decl, td, derived);
+    if sc.vacuous {
+        return emit_vacuous_type_def(decl, sc, derived);
     }
 
-    let check_param_ty = check_param_type(td);
-    let check_shadow = check_deref_shadow(td);
-    let check_body = constraint_checks(td, type_name, quote! { value });
-    let getter = scalar_getter(td, vis.clone(), inner.clone());
+    let check_param_ty = check_param_type(sc);
+    let check_shadow = check_deref_shadow(sc);
+    let check_body = constraint_checks(sc, type_name, quote! { value });
+    let getter = scalar_getter(sc, vis.clone(), inner.clone());
 
     quote! {
         #doc
@@ -1331,14 +1076,18 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
 /// The prelude names are absolute for the reason [`emit_type_def`] records: a
 /// typl package may declare `type From`, and that declaration shadows the
 /// prelude in the module the generated impl shares with it.
-fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
-    let inner = newtype_inner(td);
+fn emit_vacuous_type_def(
+    decl: &v1::Declaration,
+    sc: &v1::Scalar,
+    derived: &TokenStream,
+) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
+    let inner = newtype_inner(sc);
     let doc = doc_attrs(&decl.doc);
     // A `step`-only constraint is vacuous (`constraint_is_vacuous` excludes
     // `step`), and that is exactly the case `unchecked_doc` still speaks for,
     // so the note and its separator are computed here too.
-    let unchecked = unchecked_doc(td);
+    let unchecked = unchecked_doc(sc);
     let separator = if decl.doc.is_empty() || unchecked.is_empty() {
         quote! {}
     } else {
@@ -1351,7 +1100,7 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStrea
         quote! {}
     };
     let vis = vis_tokens(decl.visibility);
-    let getter = scalar_getter(td, vis.clone(), inner.clone());
+    let getter = scalar_getter(sc, vis.clone(), inner.clone());
 
     quote! {
         #doc
@@ -1394,8 +1143,8 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStrea
 /// checked by `ridlc` rather than at run time; a vacuous type has no
 /// `new_unchecked` ([`emit_vacuous_type_def`]) and its `new` is `const`, so
 /// both positions — a `const` item and the body of `fn default()` — accept it.
-pub(crate) fn scalar_ctor(td: &v2::TypeDef) -> TokenStream {
-    if v2::constraint_is_vacuous(td.constraint.as_ref()) {
+pub(crate) fn scalar_ctor(sc: &v1::Scalar) -> TokenStream {
+    if sc.vacuous {
         quote! { new }
     } else {
         quote! { new_unchecked }
@@ -1411,13 +1160,13 @@ pub(crate) fn scalar_ctor(td: &v2::TypeDef) -> TokenStream {
 /// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
 /// emitted only for a float or integer backing; on any other backing the two
 /// are ignored rather than rendered as a literal of the wrong type.
-fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> TokenStream {
-    let Some(c) = td.constraint.as_ref() else {
+fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> TokenStream {
+    let Some(c) = sc.constraint.as_ref() else {
         return quote! {};
     };
     let mut checks = Vec::new();
 
-    let is_float = match backing_scalar(td) {
+    let is_float = match class_backing(sc.class) {
         ScalarBacking::Float => Some(true),
         ScalarBacking::Integer => Some(false),
         ScalarBacking::Boolean | ScalarBacking::String | ScalarBacking::Bytes => None,
@@ -1461,7 +1210,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
     // parenthesized because `as u64 < 8` does not parse: after a cast type,
     // `<` opens a generic-argument list.
     if c.len_min.is_some() || c.len_max.is_some() {
-        let len = match backing_scalar(td) {
+        let len = match class_backing(sc.class) {
             ScalarBacking::String => quote! { (#value.chars().count() as u64) },
             _ => quote! { (#value.len() as u64) },
         };
@@ -1492,7 +1241,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             });
         }
     }
-    if backing_scalar(td) == ScalarBacking::String
+    if class_backing(sc.class) == ScalarBacking::String
         && let Some(pattern) = c.pattern.as_deref()
     {
         // A `match` pattern is checked against text, and `regex::Regex`
@@ -1518,7 +1267,9 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         // names are: the face module of an interface named `Std` or `Regex`
         // is a module of that name in this same module, and it would shadow
         // the extern crate.
-        let source = strip_regex_delimiters(pattern);
+        // The lowering already stripped the typl `/…/` delimiters, which are
+        // syntax rather than pattern content (`Constraint.pattern`).
+        let source = pattern;
         checks.push(quote! {
             #[cfg(feature = "validate-pattern")]
             {
@@ -1550,8 +1301,8 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
 /// the same backing's borrowed form rather than its owned one; the two
 /// matches must stay in lockstep for every backing this function names, and
 /// each names the other for that reason.
-fn check_param_type(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
+fn check_param_type(sc: &v1::Scalar) -> TokenStream {
+    match class_backing(sc.class) {
         ScalarBacking::Float => quote! { &f64 },
         ScalarBacking::Integer => quote! { &i64 },
         ScalarBacking::Boolean => quote! { &bool },
@@ -1567,8 +1318,8 @@ fn check_param_type(td: &v2::TypeDef) -> TokenStream {
 /// expressions type-check unchanged. `String` and `&[u8]` need no shadow:
 /// their methods (`.chars()`, `.len()`) and the `&value` the pattern check
 /// takes both work directly on the borrowed slice form.
-fn check_deref_shadow(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
+fn check_deref_shadow(sc: &v1::Scalar) -> TokenStream {
+    match class_backing(sc.class) {
         ScalarBacking::Float | ScalarBacking::Integer | ScalarBacking::Boolean => {
             quote! { let value = *value; }
         }
@@ -1581,8 +1332,8 @@ fn check_deref_shadow(td: &v2::TypeDef) -> TokenStream {
 ///
 /// `backing_scalar` is total: it maps a unit backing and an absent backing to
 /// `Float`, so every named scalar gets exactly one of the three forms.
-fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> TokenStream {
-    match backing_scalar(td) {
+fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> TokenStream {
+    match class_backing(sc.class) {
         ScalarBacking::String => quote! {
             #vis fn get(&self) -> &str { &self.0 }
             #vis fn into_inner(self) -> String { self.0 }
@@ -1609,15 +1360,15 @@ fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> Toke
 /// leaves `pattern` absent while the type still carries a match constraint,
 /// and no check is emitted for that case either, so it keeps the plain "not
 /// checked" line.
-fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
-    let Some(c) = td.constraint.as_ref() else {
+fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
+    let Some(c) = sc.constraint.as_ref() else {
         return quote! {};
     };
     let mut lines = Vec::new();
     if c.step.is_some() {
         lines.push(" Quantization (`step`) is not checked by `new`.".to_string());
     }
-    if c.pattern.is_some() && backing_scalar(td) == ScalarBacking::String {
+    if c.pattern.is_some() && class_backing(sc.class) == ScalarBacking::String {
         lines.push(
             " The `match` pattern is checked by `new` only when the crate is built with \
               the `validate-pattern` feature."
@@ -1634,93 +1385,97 @@ fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
 /// `&'static str` rather than a value of the newtype: `String` cannot be
 /// constructed in a `const` context. This asymmetry is documented in the C
 /// header and here.
-fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
+fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStream {
     // A constant is a value, not a type: there is nothing to derive on it.
     let attrs = decl_attrs(decl, &quote! {});
     let vis = vis_tokens(decl.visibility);
-    let name = ident(&decl.name);
+    let name = ident(declared(decl.name.as_ref()));
 
-    // A regex constant declares no type; it holds the pattern source text. The
-    // IR stores that text with its typl `/…/` delimiters, which are syntax, not
-    // pattern content, so they are stripped before the `&str` value is emitted:
-    // the const holds the pattern a consumer can feed to a regex engine (M1).
-    if let Some(regex) = &cd.regex {
-        let pattern = strip_regex_delimiters(regex);
-        return quote! { #attrs #vis const #name: &str = #pattern; };
-    }
-
-    let Some(type_ref) = cd.type_ref.as_deref() else {
-        return quote! {};
-    };
-
-    // A named-type constant resolves through the type's backing; a
-    // primitive-keyword constant reads the keyword directly.
-    if let Some(backing) = same_package_scalar_backing(ctx, type_ref) {
-        // `same_package_scalar_ctor` resolves the same declaration through
-        // the same lookup as the `backing` above, so a `Some` here is
-        // guaranteed once `backing` is: there is no reachable case with a
-        // backing and no ctor. A fallback here would be dead code, and a
-        // wrong one besides — `new` is fallible on a constrained type and
-        // does not type-check in this `const` position (`scalar_ctor` names
-        // `new_unchecked` for exactly that type).
-        let ctor = same_package_scalar_ctor(ctx, type_ref)
-            .expect("a same-package scalar backing implies a same-package scalar ctor");
-        match backing {
-            ScalarBacking::Float => {
-                let value = numeric_tokens(&cd.value, true);
-                let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
-            }
-            ScalarBacking::Integer => {
-                let value = numeric_tokens(&cd.value, false);
-                let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
-            }
-            ScalarBacking::Boolean => {
-                let value = bool_tokens(&cd.value);
-                let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
-            }
-            ScalarBacking::String => {
-                let value = cd.value.as_str();
-                quote! { #attrs #vis const #name: &str = #value; }
-            }
-            ScalarBacking::Bytes => quote! {},
+    match cd.typed.as_ref() {
+        // A regex constant declares no type; it holds the pattern source
+        // text. The IR stores that text with its typl `/…/` delimiters, which
+        // are syntax, not pattern content, and the lowering strips them, so
+        // the const holds the pattern a consumer can feed to a regex engine
+        // (M1).
+        Some(v1::constant::Typed::RegexBody(pattern)) => {
+            quote! { #attrs #vis const #name: &str = #pattern; }
         }
-    } else if let Some(prim) = primitive_keyword(type_ref) {
-        match prim {
-            v2::PrimitiveType::Integer => {
-                let value = numeric_tokens(&cd.value, false);
-                quote! { #attrs #vis const #name: i64 = #value; }
+        // A named-type constant resolves through the type's backing. Only a
+        // same-package named scalar is emitted: a reference into another
+        // package is skipped rather than mis-typed, which is the conservative
+        // rule the model's resolution leaves to the printer (design note
+        // §3.5).
+        Some(v1::constant::Typed::Named(reference)) => {
+            let Some(target) = ctx.local(reference) else {
+                return quote! {};
+            };
+            let Some(v1::declaration::Kind::Scalar(sc)) = target.kind.as_ref() else {
+                return quote! {};
+            };
+            // The constructor is read from the same declaration as the class
+            // above: `new` on a vacuous type, whose `new` is `const` and
+            // infallible, and `new_unchecked` on a constrained one, because
+            // `new` is fallible there and does not type-check in a `const`
+            // position (`scalar_ctor`).
+            let ctor = scalar_ctor(sc);
+            match class_backing(sc.class) {
+                ScalarBacking::Float => {
+                    let value = numeric_tokens(&cd.value, true);
+                    let type_name = type_path(&reference.reference);
+                    quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
+                }
+                ScalarBacking::Integer => {
+                    let value = numeric_tokens(&cd.value, false);
+                    let type_name = type_path(&reference.reference);
+                    quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
+                }
+                ScalarBacking::Boolean => {
+                    let value = bool_tokens(&cd.value);
+                    let type_name = type_path(&reference.reference);
+                    quote! { #attrs #vis const #name: #type_name = #type_name::#ctor(#value); }
+                }
+                ScalarBacking::String => {
+                    let value = cd.value.as_str();
+                    quote! { #attrs #vis const #name: &str = #value; }
+                }
+                ScalarBacking::Bytes => quote! {},
             }
-            v2::PrimitiveType::Float => {
-                let value = numeric_tokens(&cd.value, true);
-                quote! { #attrs #vis const #name: f64 = #value; }
-            }
-            v2::PrimitiveType::Boolean => {
-                let value = bool_tokens(&cd.value);
-                quote! { #attrs #vis const #name: bool = #value; }
-            }
-            v2::PrimitiveType::String => {
-                let value = cd.value.as_str();
-                quote! { #attrs #vis const #name: &str = #value; }
-            }
-            v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => quote! {},
         }
-    } else {
-        // A cross-package or unresolved constant type: the backing is unknown
-        // here, so the constant is skipped rather than mis-typed.
-        quote! {}
+        Some(v1::constant::Typed::Primitive(prim)) => {
+            match v1::PrimitiveType::try_from(*prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+                v1::PrimitiveType::Integer => {
+                    let value = numeric_tokens(&cd.value, false);
+                    quote! { #attrs #vis const #name: i64 = #value; }
+                }
+                v1::PrimitiveType::Float => {
+                    let value = numeric_tokens(&cd.value, true);
+                    quote! { #attrs #vis const #name: f64 = #value; }
+                }
+                v1::PrimitiveType::Boolean => {
+                    let value = bool_tokens(&cd.value);
+                    quote! { #attrs #vis const #name: bool = #value; }
+                }
+                v1::PrimitiveType::String => {
+                    let value = cd.value.as_str();
+                    quote! { #attrs #vis const #name: &str = #value; }
+                }
+                v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => quote! {},
+            }
+        }
+        // A type no package in the scope declares, and a constant that
+        // declares no type at all: the backing is unknown here, so the
+        // constant is skipped rather than mis-typed.
+        Some(v1::constant::Typed::Unresolved(_)) | None => quote! {},
     }
 }
 
 fn emit_struct(
-    decl: &v2::Decl,
-    sd: &v2::StructDef,
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    sd: &v1::Struct,
     derived: &TokenStream,
-    tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
-    let name = ident(&decl.name);
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
     let repr = if sd.fixed_layout {
@@ -1729,14 +1484,15 @@ fn emit_struct(
         quote! {}
     };
 
-    let fields = sd.members.iter().filter_map(|member| match &member.member {
-        Some(v2::struct_member::Member::Field(field)) => {
-            Some(emit_field(&decl.name, decl.visibility, field, tuples))
-        }
-        // A reserved tombstone occupies an ordinal but emits no field
-        // (typl §7.4).
-        Some(v2::struct_member::Member::Reserved(_)) | None => None,
-    });
+    let fields = sd
+        .slots
+        .iter()
+        .filter_map(|slot| match slot.occupant.as_ref() {
+            Some(v1::slot::Occupant::Field(field)) => Some(emit_field(ctx, field)),
+            // A reserved tombstone occupies an ordinal but emits no field
+            // (typl §7.4).
+            Some(v1::slot::Occupant::Retired(_)) | None => None,
+        });
 
     quote! {
         #attrs
@@ -1755,32 +1511,26 @@ fn emit_struct(
 /// projection reaches a namespace RIDL-149 does not check — two field names
 /// distinct under `snake_case` can induce one tuple type name — which is
 /// driftsys/ridl#453, recorded in ADR-0016's consequences.
-fn emit_field(
-    parent: &str,
-    visibility: i32,
-    field: &v2::Field,
-    tuples: &mut Vec<InducedTuple>,
-) -> TokenStream {
-    let field_name = ident(&snake_case(&field.name));
+fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
+    let field_name = ident(snake_of(field.name.as_ref()));
     let attrs = field_attrs(field);
-    let hint = format!("{}{}", camel_case(parent), camel_case(&field.name));
     let ty = field
         .r#type
         .as_ref()
-        .map(|ft| field_type_tokens(ft, &hint, visibility, tuples))
+        .map(|ft| model_type_tokens(ctx, ft))
         .unwrap_or_else(|| quote! { () });
     quote! { #attrs pub #field_name: #ty }
 }
 
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names keep their typl `SCREAMING_SNAKE` spelling.
-fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
+fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
-        let vname = ident(&value.name);
+        let vname = ident(declared(value.name.as_ref()));
         let disc = int_tokens(value.value);
         let vdoc = doc_attrs(&value.doc);
         quote! { #vdoc #vname = #disc }
@@ -1790,11 +1540,11 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenS
     // actually enters a program: a wire backend emits no constructor
     // (ADR-0013 decision 2), so this is the validating seam.
     let arms = ed.values.iter().map(|value| {
-        let vname = ident(&value.name);
+        let vname = ident(declared(value.name.as_ref()));
         let disc = int_tokens(value.value);
         quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
     });
-    let type_name = decl.name.as_str();
+    let type_name = declared(decl.name.as_ref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
     } else {
@@ -1844,13 +1594,13 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenS
 /// because it shares the block. Without the allow the consumer's build draws
 /// the `deprecated` lint on code the consumer did not write — which is what
 /// driftsys/ridl#420 settled for a named scalar's impl blocks.
-fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
+fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let bits = esd.bits.iter().map(|bit| {
-        let bname = ident(&bit.name);
+        let bname = ident(declared(bit.name.as_ref()));
         let shift = int_tokens(bit.value);
         quote! { #vis const #bname: #name = #name(1 << #shift); }
     });
@@ -1884,13 +1634,8 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -
     // build that produces usable output reaches either. The filter keeps the
     // compiler from panicking; it does not make such a package emit sound
     // code.
-    let mask = esd
-        .bits
-        .iter()
-        .filter(|bit| (0..=63).contains(&bit.value))
-        .fold(0i64, |acc, bit| acc | (1i64 << bit.value));
-    let mask_lit = int_tokens(mask);
-    let type_name = decl.name.as_str();
+    let mask_lit = int_tokens(esd.declared_mask);
+    let type_name = declared(decl.name.as_ref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
     } else {
@@ -1935,14 +1680,14 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> TokenStream {
-    let name = ident(&decl.name);
+fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> TokenStream {
+    let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ud.arms.iter().map(|arm| {
-        let vname = ident(&camel_case(&arm.name));
-        let ty = type_path(&arm.type_ref);
+        let vname = ident(camel_of(arm.name.as_ref()));
+        let ty = type_path(arm_reference(arm));
         let vdoc = doc_attrs(&arm.doc);
         quote! { #vdoc #vname(#ty) }
     });
@@ -1971,26 +1716,17 @@ fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> Toke
 /// tuple's type name rather than a field name. Neither namespace is checked:
 /// two tuple field names distinct in typl can spell one Rust field name, which
 /// rustc then rejects with E0124 — driftsys/ridl#449.
-fn emit_tuple_struct(
-    ctx: &Ctx,
-    induced: &InducedTuple,
-    tuples: &mut Vec<InducedTuple>,
-) -> TokenStream {
-    let InducedTuple {
-        name,
-        tuple,
-        visibility,
-    } = induced;
+fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
+    let name = tuple_name(induced);
     let name_id = ident(name);
-    let vis = vis_tokens(*visibility);
-    let derived = derives::tuple_derive_attr(ctx, tuple);
-    let fields = tuple.fields.iter().map(|field| {
-        let fname = ident(&snake_case(&field.name));
-        let hint = format!("{}{}", name, camel_case(&field.name));
+    let vis = vis_tokens(induced.visibility);
+    let derived = derives::tuple_derive_attr(ctx, induced);
+    let fields = induced.fields.iter().map(|field| {
+        let fname = ident(snake_of(field.name.as_ref()));
         let ty = field
             .r#type
             .as_ref()
-            .map(|ft| field_type_tokens(ft, &hint, *visibility, tuples))
+            .map(|ft| model_type_tokens(ctx, ft))
             .unwrap_or_else(|| quote! { () });
         quote! { pub #fname: #ty }
     });
@@ -2002,7 +1738,7 @@ fn emit_tuple_struct(
         }
     };
 
-    let default_impl = defaults::tuple_default_expr(ctx, name, tuple)
+    let default_impl = defaults::tuple_default_expr(ctx, induced)
         .map(|expr| quote! { impl Default for #name_id { fn default() -> Self { #expr } } })
         .unwrap_or_default();
 
@@ -2012,109 +1748,6 @@ fn emit_tuple_struct(
 // ---------------------------------------------------------------------------
 // Type mapping.
 // ---------------------------------------------------------------------------
-
-/// The Rust type of a field. Tuple field types generate a named nested struct
-/// (recorded in `tuples`); the struct name is `hint` (CamelCase of the path).
-///
-/// `visibility` is the visibility of the declaration this position belongs to.
-/// It is carried rather than derived because a tuple is anonymous in source and
-/// declares none of its own, and because it reaches [`emit_tuple_struct`]
-/// through a flat worklist that has forgotten where it came from
-/// ([`InducedTuple`]).
-pub(crate) fn field_type_tokens(
-    ft: &v2::FieldType,
-    hint: &str,
-    visibility: i32,
-    tuples: &mut Vec<InducedTuple>,
-) -> TokenStream {
-    let inner = match &ft.kind {
-        Some(v2::field_type::Kind::Named(name)) => type_path(name),
-        Some(v2::field_type::Kind::Primitive(prim)) => primitive_tokens(*prim),
-        Some(v2::field_type::Kind::InlineScalar(td)) => inline_scalar_tokens(td),
-        Some(v2::field_type::Kind::Tuple(tuple)) => {
-            let tuple_name = hint.to_string();
-            tuples.push(InducedTuple {
-                name: tuple_name.clone(),
-                tuple: tuple.clone(),
-                visibility,
-            });
-            let id = ident(&tuple_name);
-            quote! { #id }
-        }
-        Some(v2::field_type::Kind::Array(array)) => {
-            let element = array
-                .element
-                .as_ref()
-                .map(|el| field_type_tokens(el, &format!("{hint}Element"), visibility, tuples))
-                .unwrap_or_else(|| quote! { () });
-            if array.min == array.max {
-                let len = usize_tokens(array.min);
-                quote! { [#element; #len] }
-            } else {
-                quote! { Vec<#element> }
-            }
-        }
-        Some(v2::field_type::Kind::Map(map)) => {
-            let key = map
-                .key
-                .as_ref()
-                .map(|k| field_type_tokens(k, &format!("{hint}Key"), visibility, tuples))
-                .unwrap_or_else(|| quote! { () });
-            let value = map
-                .value
-                .as_ref()
-                .map(|v| field_type_tokens(v, &format!("{hint}Value"), visibility, tuples))
-                .unwrap_or_else(|| quote! { () });
-            quote! { Vec<(#key, #value)> }
-        }
-        // A stream is an interaction-position type (ridl §12.3); it never
-        // reaches a struct or tuple field in checked IR. Kept total.
-        Some(v2::field_type::Kind::Stream(_)) | None => quote! { () },
-    };
-
-    if ft.optional {
-        quote! { Option<#inner> }
-    } else {
-        inner
-    }
-}
-
-/// The Rust newtype inner type for a named scalar backing (Appendix D language
-/// layer): unit and float back to `f64`, integer to `i64`.
-///
-/// [`check_param_type`] matches on `backing_scalar` the same way, one entry
-/// per backing this function names, in its borrowed form; the two matches
-/// must stay in lockstep, and each names the other for that reason.
-fn newtype_inner(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
-        ScalarBacking::Float => quote! { f64 },
-        ScalarBacking::Integer => quote! { i64 },
-        ScalarBacking::Boolean => quote! { bool },
-        ScalarBacking::String => quote! { String },
-        ScalarBacking::Bytes => quote! { Vec<u8> },
-    }
-}
-
-fn inline_scalar_tokens(td: &v2::TypeDef) -> TokenStream {
-    match backing_scalar(td) {
-        ScalarBacking::Float => quote! { f64 },
-        ScalarBacking::Integer => quote! { i64 },
-        ScalarBacking::Boolean => quote! { bool },
-        ScalarBacking::String => quote! { String },
-        ScalarBacking::Bytes => quote! { Vec<u8> },
-    }
-}
-
-pub(crate) fn primitive_tokens(prim: i32) -> TokenStream {
-    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
-        v2::PrimitiveType::Boolean => quote! { bool },
-        v2::PrimitiveType::Integer => quote! { i64 },
-        v2::PrimitiveType::Float => quote! { f64 },
-        v2::PrimitiveType::String => quote! { String },
-        v2::PrimitiveType::Bytes => quote! { Vec<u8> },
-        v2::PrimitiveType::Unspecified => quote! { () },
-    }
-}
 
 /// A resolved type reference: a bare `Ident` for a same-package name, a
 /// `crate::`-anchored path for a cross-package `pkg.Name` reference (typl §3.2).
@@ -2147,15 +1780,6 @@ pub fn module_segment(segment: &str) -> String {
     ident(segment).to_string()
 }
 
-/// Strips a regex literal's surrounding `/…/` delimiters, leaving the pattern
-/// body. A value without both delimiters is returned unchanged.
-fn strip_regex_delimiters(regex: &str) -> &str {
-    regex
-        .strip_prefix('/')
-        .and_then(|rest| rest.strip_suffix('/'))
-        .unwrap_or(regex)
-}
-
 // ---------------------------------------------------------------------------
 // Scalar backing classification (shared by emission and default derivation).
 // ---------------------------------------------------------------------------
@@ -2169,55 +1793,6 @@ pub(crate) enum ScalarBacking {
     Bytes,
 }
 
-/// The Rust-layer scalar class of a type definition's backing. A unit backing
-/// implies float (typl §5.1).
-pub(crate) fn backing_scalar(td: &v2::TypeDef) -> ScalarBacking {
-    match td.backing.as_ref().and_then(|b| b.kind.as_ref()) {
-        Some(v2::backing::Kind::Unit(_)) => ScalarBacking::Float,
-        Some(v2::backing::Kind::Primitive(prim)) => {
-            match v2::PrimitiveType::try_from(*prim).unwrap_or(v2::PrimitiveType::Unspecified) {
-                v2::PrimitiveType::Boolean => ScalarBacking::Boolean,
-                v2::PrimitiveType::Integer => ScalarBacking::Integer,
-                v2::PrimitiveType::Float => ScalarBacking::Float,
-                v2::PrimitiveType::String => ScalarBacking::String,
-                v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => ScalarBacking::Bytes,
-            }
-        }
-        None => ScalarBacking::Float,
-    }
-}
-
-/// The backing class of a same-package named scalar type, or `None` when the
-/// reference does not name a scalar `TypeDef` in this package.
-pub(crate) fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
-    match &ctx.lookup(reference)?.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
-        _ => None,
-    }
-}
-
-/// [`scalar_ctor`] for a same-package named scalar, read through the same
-/// lookup as [`same_package_scalar_backing`]. A reference that resolves to
-/// anything but a named scalar has no constructor to name.
-fn same_package_scalar_ctor(ctx: &Ctx, reference: &str) -> Option<TokenStream> {
-    match &ctx.lookup(reference)?.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => Some(scalar_ctor(td)),
-        _ => None,
-    }
-}
-
-/// Maps a typl primitive keyword written as a type reference to its primitive.
-fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
-    match reference {
-        "boolean" => Some(v2::PrimitiveType::Boolean),
-        "integer" => Some(v2::PrimitiveType::Integer),
-        "float" => Some(v2::PrimitiveType::Float),
-        "string" => Some(v2::PrimitiveType::String),
-        "bytes" => Some(v2::PrimitiveType::Bytes),
-        _ => None,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
@@ -2227,13 +1802,13 @@ fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
 /// comment because that is where Rust is conventionally written; it sits above
 /// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
 /// looks for the trait list first.
-fn decl_attrs(decl: &v2::Decl, derived: &TokenStream) -> TokenStream {
+fn decl_attrs(decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
     let doc = doc_attrs(&decl.doc);
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     quote! { #doc #derived #deprecated }
 }
 
-fn field_attrs(field: &v2::Field) -> TokenStream {
+fn field_attrs(field: &v1::Field) -> TokenStream {
     let doc = doc_attrs(&field.doc);
     let deprecated = deprecated_attr(field.deprecated.as_deref());
     quote! { #doc #deprecated }
@@ -2296,8 +1871,8 @@ pub(crate) fn deprecated_attr(reason: Option<&str>) -> TokenStream {
 /// because the state that breaks it is not generated, not because it cannot be
 /// described.
 pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
-    match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
-        v2::Visibility::Internal => quote! { pub(crate) },
+    match v1::Visibility::try_from(visibility).unwrap_or(v1::Visibility::Unspecified) {
+        v1::Visibility::Internal => quote! { pub(crate) },
         _ => quote! { pub },
     }
 }

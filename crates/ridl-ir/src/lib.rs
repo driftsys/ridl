@@ -70,6 +70,13 @@ pub mod v2 {
         descriptor("ridl.ir.v2.System")
     }
 
+    /// The `ridl.codegen.v1.Model` message descriptor — the prototext entry
+    /// point of the lowered codegen model, from the same pool, because
+    /// `build.rs` compiles both schemas in one `protox` call.
+    pub(crate) fn codegen_model_descriptor() -> prost_reflect::MessageDescriptor {
+        descriptor("ridl.codegen.v1.Model")
+    }
+
     /// Rebuilds a message as a `DynamicMessage` over its descriptor — the
     /// step `prost-reflect` needs before rendering a text encoding.
     /// Transcoding goes through the wire encoding, whose decoder enforces
@@ -183,7 +190,7 @@ pub mod v2 {
     /// The one JSON writer behind [`to_json_pretty`] and
     /// [`system_to_json_pretty`]: the pbjson-generated `Serialize` impl of
     /// the message, pretty-printed.
-    fn render_json<M: serde::Serialize>(message: &M) -> Result<String, SerializeError> {
+    pub(crate) fn render_json<M: serde::Serialize>(message: &M) -> Result<String, SerializeError> {
         let mut buf = Vec::new();
         let mut serializer = serde_json::Serializer::pretty(&mut buf);
         serde::Serialize::serialize(message, &mut serializer).map_err(SerializeError::Json)?;
@@ -195,16 +202,20 @@ pub mod v2 {
     /// It cannot bind on IR this toolchain produces, and the bound is a
     /// measurement rather than a guess. The parser refuses type nesting past
     /// 128 levels (FORM-102, `MAX_TYPE_DEPTH` in `ridl-syntax`), and the
-    /// deepest package that limit admits emits JSON **262 brackets** deep —
-    /// so 1,000 leaves a factor of 3.8 over anything `ridlc` can write, and
-    /// the deepest nesting in the corpus is single digits.
+    /// deepest package that limit admits emits JSON **516 brackets** deep —
+    /// so 1,000 leaves a factor of 1.9 over anything `ridlc` can write, and
+    /// the deepest nesting in the corpus is single digits. The figure this
+    /// comment carried until 2026-09-22, 262 brackets and a factor of 3.8,
+    /// was the array shape; the tuple shape costs four brackets per source
+    /// level rather than two and is the one that binds (the IR
+    /// specification, "The nesting bound").
     ///
     /// It exists for input this toolchain did not write: a hand-edited
     /// baseline, or a snapshot from elsewhere. Past the stack ceiling the
     /// failure mode is a stack-overflow abort, which no caller can catch, so
     /// the cap turns an abort into a diagnostic (ADR-0014 decisions 12
     /// and 14).
-    const MAX_JSON_NESTING: usize = 1_000;
+    pub(crate) const MAX_JSON_NESTING: usize = 1_000;
 
     /// The stack `from_json` parses on, in bytes. An explicit size makes the
     /// depth that fits a constant of this crate rather than of the ambient
@@ -282,7 +293,7 @@ pub mod v2 {
 
     /// The one JSON reader behind [`from_json`] and [`system_from_json`]:
     /// the nesting cap, then the parse on its own stack.
-    fn read_json<M>(text: &str) -> Result<M, serde_json::Error>
+    pub(crate) fn read_json<M>(text: &str) -> Result<M, serde_json::Error>
     where
         M: serde::de::DeserializeOwned + Send,
     {
@@ -343,19 +354,19 @@ pub mod v2 {
     /// panicked on. JSON lost this failure mode when it moved off the
     /// transcode (decision 14); prototext keeps it.
     pub fn to_text_format(package: &Package) -> Result<String, SerializeError> {
-        render_text(package_descriptor(), package)
+        render_text_for(package_descriptor(), package)
     }
 
     /// Renders a lowered system in the protobuf text format — the
     /// `<pkg.Name>.system.txtpb` artifact, under the rules of
     /// [`to_text_format`].
     pub fn system_to_text_format(system: &System) -> Result<String, SerializeError> {
-        render_text(system_descriptor(), system)
+        render_text_for(system_descriptor(), system)
     }
 
     /// The one prototext writer behind [`to_text_format`] and
     /// [`system_to_text_format`].
-    fn render_text<M: prost::Message>(
+    pub(crate) fn render_text_for<M: prost::Message>(
         descriptor: prost_reflect::MessageDescriptor,
         message: &M,
     ) -> Result<String, SerializeError> {
@@ -451,10 +462,12 @@ pub mod v2 {
         dynamic.transcode_to().map_err(TextFormatError::Transcode)
     }
 
-    /// Encodes a package in the protobuf binary wire format — the canonical
-    /// interchange encoding (ADR-0014 decision 9). Binary needs no
-    /// descriptors: prost's generated encoding is schema-faithful by
-    /// construction.
+    /// Encodes a package in the protobuf binary wire format — a derived
+    /// encoding since ADR-0014 decision 9's 2026-09-22 amendment, whose
+    /// reader stops 100 message levels below the root where the canonical
+    /// encoding has no such bound (the IR specification, "The derived
+    /// encodings"). Binary needs no descriptors: prost's generated encoding
+    /// is schema-faithful by construction.
     pub fn to_binary(package: &Package) -> Vec<u8> {
         prost::Message::encode_to_vec(package)
     }
@@ -810,6 +823,7 @@ pub mod v2 {
     }
 }
 
+pub mod codegen;
 pub mod name;
 pub mod projection;
 
@@ -1853,6 +1867,154 @@ mod v2_round_trip {
             }],
             ..Default::default()
         }
+    }
+
+    /// One package whose nesting sits exactly `levels` message levels below
+    /// the `Package` root — the unit the derived binary encoding's bound is
+    /// stated in (the IR specification, "The derived encodings").
+    ///
+    /// The chain under a `FixedDef` costs three levels before any nesting
+    /// (`Decl`, `FixedDef`, the outermost `FieldType`) and two per array level
+    /// (`ArrayType`, `FieldType`), so an array-only chain reaches the odd
+    /// depths alone. One tuple level costs three (`FieldType`, `TupleType`,
+    /// `TupleField`, then the `FieldType` the next level counts), which is what
+    /// reaches the even depths. Both shapes are what the front end lowers, so
+    /// neither is a construction the schema would not otherwise see.
+    fn package_at_message_depth(levels: usize) -> v2::Package {
+        assert!(levels >= 3, "the chain costs three levels before nesting");
+        let (arrays, tuple) = if levels % 2 == 1 {
+            ((levels - 3) / 2, false)
+        } else {
+            assert!(levels >= 6, "one tuple level costs three");
+            ((levels - 6) / 2, true)
+        };
+
+        let mut payload = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Primitive(
+                v2::PrimitiveType::Integer as i32,
+            )),
+        };
+        for _ in 0..arrays {
+            payload = v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(payload)),
+                    min: 1,
+                    max: 1,
+                }))),
+            };
+        }
+        if tuple {
+            payload = v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                    fields: vec![v2::TupleField {
+                        name: "f0".to_string(),
+                        r#type: Some(payload),
+                    }],
+                })),
+            };
+        }
+        v2::Package {
+            name: "veh.deep".to_string(),
+            decls: vec![v2::Decl {
+                name: "deep".to_string(),
+                kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
+                    payload: Some(payload),
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// The nesting of JSON objects in a canonical artifact, which in the
+    /// protobuf JSON mapping is the nesting of messages: every message is an
+    /// object, a repeated field is an array of them, and the schema declares no
+    /// `map<>` field. The root `Package` object is included, so a caller
+    /// counting levels *below* the root subtracts one. Brackets inside a string
+    /// literal do not count.
+    fn message_nesting(json: &str) -> usize {
+        let (mut depth, mut max) = (0usize, 0usize);
+        let (mut in_string, mut escaped) = (false, false);
+        for byte in json.bytes() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                } else if byte == b'\\' {
+                    escaped = true;
+                } else if byte == b'"' {
+                    in_string = false;
+                }
+                continue;
+            }
+            match byte {
+                b'"' => in_string = true,
+                b'{' => {
+                    depth += 1;
+                    max = max.max(depth);
+                }
+                b'}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        max
+    }
+
+    /// [`package_at_message_depth`] builds what it claims, on both parities.
+    /// Without this the two bound tests below would pin a depth nobody
+    /// measured.
+    #[test]
+    fn package_at_message_depth_builds_the_depth_it_names() {
+        with_sized_stack(|| {
+            for levels in [3, 6, 7, 99, 100, 101] {
+                let json = v2::to_json_pretty(&package_at_message_depth(levels))
+                    .expect("the writer is unrestricted at these depths");
+                assert_eq!(
+                    message_nesting(&json) - 1,
+                    levels,
+                    "the chain must nest {levels} message levels below the root"
+                );
+            }
+        });
+    }
+
+    /// The derived binary encoding's bound, stated by the IR specification and
+    /// pinned here: 100 message levels below the root round-trip.
+    ///
+    /// `to_binary` writes any depth; it is `from_binary` that stops, at prost's
+    /// `RECURSION_LIMIT` of 100, decremented once per nested message on decode
+    /// and not consulted on encode. The test asserts the outcome, not prost's
+    /// constant: a prost release that moves the limit moves these two tests and
+    /// the specification's paragraph together.
+    #[test]
+    fn binary_round_trip_at_100_message_levels_succeeds() {
+        let package = package_at_message_depth(100);
+        let bytes = v2::to_binary(&package);
+        let decoded = v2::from_binary(&bytes).expect("100 message levels decode");
+        assert_eq!(package, decoded);
+    }
+
+    /// One level past that bound the binary reader refuses — an error, never a
+    /// panic — while the canonical encoding carries the same package. This is
+    /// the asymmetry the specification states as the reason binary is derived
+    /// rather than canonical (driftsys/ridl#231).
+    #[test]
+    fn binary_decode_at_101_message_levels_returns_an_error() {
+        let package = package_at_message_depth(101);
+        let bytes = v2::to_binary(&package);
+        let error = v2::from_binary(&bytes).expect_err("101 message levels must fail, not panic");
+        assert!(
+            error.to_string().contains("recursion limit reached"),
+            "the error must name the limit, got: {error}"
+        );
+
+        let json = v2::to_json_pretty(&package).expect("the canonical encoding has no such bound");
+        assert_eq!(
+            package,
+            v2::from_json(&json).expect("the canonical encoding round-trips the same package")
+        );
     }
 
     /// The write side after ADR-0014 decision 14: the pbjson-generated

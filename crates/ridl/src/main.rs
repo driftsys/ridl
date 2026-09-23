@@ -50,6 +50,7 @@ use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, 
 use ridl_core::interface_lock::LockKey;
 use ridl_fmt::{FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
+use ridlc::plugin::PluginSpec;
 use ridlc::{CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
@@ -106,6 +107,14 @@ enum Command {
         out_dir: PathBuf,
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         emit: Vec<Emit>,
+        /// A codegen plugin to run beside the emits, once per package:
+        /// `<LANGUAGE>` runs `ridlc-gen-<LANGUAGE>` from PATH,
+        /// `<LANGUAGE>=<PATH>` runs the executable at PATH. Repeatable.
+        #[arg(long, value_name = "LANGUAGE[=PATH]")]
+        plugin: Vec<PluginSpec>,
+        /// Seconds a plugin may run per package before it is killed.
+        #[arg(long, value_name = "SECONDS", default_value_t = ridlc::plugin::DEFAULT_TIMEOUT_SECONDS)]
+        plugin_timeout: u64,
         /// Verify remote imports against `ridl.lock` without fetching or
         /// regenerating it (CI mode, ADR-0002 §7).
         #[arg(long)]
@@ -235,8 +244,17 @@ fn main() -> ExitCode {
             path,
             out_dir,
             emit,
+            plugin,
+            plugin_timeout,
             frozen,
-        } => finish(ridlc::run_build(&path, &out_dir, &emit, frozen.into())),
+        } => finish(ridlc::run_build_with(
+            &path,
+            &out_dir,
+            &emit,
+            &plugin,
+            std::time::Duration::from_secs(plugin_timeout),
+            frozen.into(),
+        )),
         Command::Test {
             path,
             samples,

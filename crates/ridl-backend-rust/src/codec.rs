@@ -54,17 +54,18 @@
 //! order taken is declaration order, each field aligned to its own width,
 //! which is what makes the encoding deterministic (D-8).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote};
 use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::projection::flatbuffers as fb_projection;
-use ridl_ir::v2;
+
+use ridl_ir::codegen::v1;
 
 use crate::{
-    Ctx, GenerateError, InducedTuple, ScalarBacking, backing_scalar, check_flatbuffers_bound,
-    field_type_tokens, ident, type_path, unjudgeable_members, vis_tokens,
+    Ctx, GenerateError, ScalarBacking, check_flatbuffers_bound, class_backing, declared, ident,
+    model_type_tokens, tuple_name, type_path, vis_tokens,
 };
 
 /// The alignment every buffer this codec writes is finished at: eight, the
@@ -80,26 +81,12 @@ const BUFFER_ALIGN: usize = 8;
 /// `tuples` is the induced tuple set [`crate::generate`] discovered, in
 /// discovery order; a tuple's generated struct is a table like any other and
 /// needs its own three functions.
-pub(crate) fn package_items(
-    ctx: &Ctx,
-    package: &v2::Package,
-    tuples: &[InducedTuple],
-) -> Result<Vec<TokenStream>, GenerateError> {
-    Codec {
-        ctx,
-        package,
-        tuples: tuples
-            .iter()
-            .map(|induced| (induced.name.clone(), induced))
-            .collect(),
-    }
-    .items()
+pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
+    Codec { ctx }.items()
 }
 
 struct Codec<'a> {
     ctx: &'a Ctx<'a>,
-    package: &'a v2::Package,
-    tuples: HashMap<String, &'a InducedTuple>,
 }
 
 // ---------------------------------------------------------------------------
@@ -396,12 +383,9 @@ struct Slot {
     optional: bool,
     /// The typl name, used for the accessor and for the decoded field.
     name: String,
-    /// The IR type, which is what the accessor's return type is read from.
-    field_type: v2::FieldType,
-    /// The name an induced tuple struct at this position carries, which the
-    /// accessor's return type needs whenever the tuple sits inside a
-    /// collection.
-    hint: String,
+    /// The lowered type, which is what the accessor's return type is read
+    /// from.
+    field_type: v1::Type,
     access: Access,
 }
 
@@ -425,8 +409,7 @@ impl Slot {
 struct Entry {
     id: u16,
     name: String,
-    field_type: v2::FieldType,
-    hint: String,
+    field_type: v1::Type,
     wire: Wire,
 }
 
@@ -458,12 +441,6 @@ fn place(widths: &[usize]) -> (Vec<u16>, usize, usize) {
         align = align.max(width);
     }
     (offsets, cursor.max(4), align)
-}
-
-/// The name of the struct a tuple in `parent.field` induces — the same string
-/// [`crate::emit_field`] builds for it.
-fn field_hint(parent: &str, field: &str) -> String {
-    format!("{}{}", camel_case(parent), camel_case(field))
 }
 
 fn view_ident(owner: &str) -> Ident {
@@ -587,65 +564,80 @@ impl<'a> Codec<'a> {
     /// [`split_owner`] reads back to decide whether a path carries a module
     /// prefix. A same-package name shadows a foreign one, which is the
     /// resolution order the rest of the backend already uses.
-    fn resolve(&self, reference: &str) -> Option<(&'a v2::Decl, String)> {
-        if let Some(decl) = self.ctx.lookup(reference) {
-            return Some((decl, decl.name.clone()));
+    fn resolve(&self, reference: &v1::TypeRef) -> Option<(&'a v1::Declaration, String)> {
+        if reference.package.is_empty() {
+            return None;
         }
-        let (package_name, name) = reference.rsplit_once('.')?;
-        let package = self
-            .ctx
-            .others
-            .iter()
-            .find(|other| other.name == package_name)?;
-        let decl = package.decls.iter().find(|decl| decl.name == name)?;
-        Some((decl, reference.to_string()))
+        if reference.package == self.scope_package() {
+            let decl = self.ctx.declaration(reference.index)?;
+            return Some((decl, declared(decl.name.as_ref()).to_string()));
+        }
+        let foreign = self.ctx.model.foreign.get(reference.index as usize)?;
+        Some((foreign.declaration.as_ref()?, reference.reference.clone()))
     }
 
-    /// The projection's view of this build: this package, and the others the
-    /// caller handed in.
-    ///
-    /// `others` was `&[]` until E11.14 (driftsys/ridl#467): the codec read one
-    /// package and withheld every type that reached another, because a foreign
-    /// named scalar's FlatBuffers width is a fact of the package that declares
-    /// it. The pipeline now hands every package of the build, so a
-    /// cross-package reference is sized like a local one.
-    fn packages(&self) -> fb_projection::Packages<'_> {
-        fb_projection::Packages {
-            package: self.package,
-            others: self.ctx.others,
-        }
+    /// The name of the package this model was lowered for.
+    fn scope_package(&self) -> &str {
+        self.ctx
+            .model
+            .scope
+            .as_ref()
+            .map(|scope| scope.package.as_str())
+            .unwrap_or_default()
+    }
+
+    /// The projection the lowering carries for this package.
+    fn projection(&self) -> Option<&'a v1::FlatBuffersProjection> {
+        self.ctx.model.flatbuffers.as_ref()
+    }
+
+    /// The number of vtable entries the projection gives one of its tables,
+    /// found by what induced it.
+    fn vtable_slots_of(&self, want: &v1::fb_table::Source) -> Option<u32> {
+        self.projection()?
+            .tables
+            .iter()
+            .find(|table| table.source.as_ref() == Some(want))
+            .map(|table| table.vtable_slots)
     }
 
     fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
-        let mut roots: Vec<&v2::Decl> = Vec::new();
-        let mut withheld: Vec<&v2::Decl> = Vec::new();
-        for decl in &self.package.decls {
-            if fb_projection::root_table(decl).is_none() {
-                continue;
-            }
-            match fb_projection::max_size(self.packages(), decl) {
-                Some(_) => roots.push(decl),
+        let mut roots: Vec<&v1::FbRoot> = Vec::new();
+        let mut withheld: Vec<&v1::FbRoot> = Vec::new();
+        let empty = Vec::new();
+        let all = self
+            .projection()
+            .map(|projection| &projection.roots)
+            .unwrap_or(&empty);
+        // A declaration the projection gives no root has none to size; the
+        // `roots` list is exactly the declarations `root_table` names, in
+        // declaration order.
+        for root in all {
+            match root.bound.as_ref() {
+                Some(v1::fb_root::Bound::MaxSize(_)) => roots.push(root),
                 // D-7's refusal, wired in per type. An `Ok` here means the
                 // cause is one this backend cannot judge, so the type
                 // carries no codec and says so.
-                None => {
-                    check_flatbuffers_bound(self.ctx, self.package, decl)?;
-                    withheld.push(decl);
+                _ => {
+                    check_flatbuffers_bound(self.ctx, root.declaration)?;
+                    withheld.push(root);
                 }
             }
         }
 
         let mut items: Vec<TokenStream> = Vec::new();
-        for decl in &withheld {
-            items.push(self.withheld_note(decl));
+        for root in &withheld {
+            items.push(self.withheld_note(root)?);
         }
-        for decl in &roots {
-            items.extend(self.decl_items(decl)?);
+        for root in &roots {
+            items.extend(self.decl_items(root)?);
         }
-        for name in self.reachable_tuples(&roots) {
-            let induced = self.tuples[&name];
+        for index in self.reachable_tuples(&roots) {
+            let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
+                message: "the lowered model names a tuple it does not carry".to_string(),
+            })?;
             let table = self.tuple_table(induced)?;
-            items.extend(self.table_items(&induced.name, induced.visibility, &table)?);
+            items.extend(self.table_items(tuple_name(induced), induced.visibility, &table)?);
         }
         Ok(items)
     }
@@ -667,12 +659,14 @@ impl<'a> Codec<'a> {
     /// `prettyplease`'s output. The name cannot collide with a typl constant:
     /// typl §15.1 gives one a SCREAMING_SNAKE name, and no typl name begins
     /// with an underscore.
-    fn withheld_note(&self, decl: &v2::Decl) -> TokenStream {
-        let name = format_ident!(
-            "__RIDL_FB_NO_CODEC_{}",
-            snake_case(&decl.name).to_uppercase()
-        );
-        let members = unjudgeable_members(self.ctx, decl);
+    fn withheld_note(&self, root: &v1::FbRoot) -> Result<TokenStream, GenerateError> {
+        let decl = self.declaration_of(root)?;
+        let owner = declared(decl.name.as_ref());
+        let name = format_ident!("__RIDL_FB_NO_CODEC_{}", snake_case(owner).to_uppercase());
+        let members: &[String] = match root.bound.as_ref() {
+            Some(v1::fb_root::Bound::Unbounded(unbounded)) => &unbounded.unjudgeable_members,
+            _ => &[],
+        };
         // Which causes are possible depends on what this call was handed. A
         // caller that passed the other packages of the build resolves a
         // cross-package reference, so only a cycle and a stream are left; a
@@ -682,7 +676,7 @@ impl<'a> Codec<'a> {
         // other case has would make this note false for the reference that
         // produced it, which is how it read before driftsys/ridl#467 was
         // closed for the pipeline but not for `generate`.
-        let causes = if self.ctx.others.is_empty() {
+        let causes = if self.scope_others().is_empty() {
             "a reference into another package, which this call was handed no \
              package to resolve, a same-package cycle, or a stream"
         } else {
@@ -702,11 +696,8 @@ impl<'a> Codec<'a> {
                 if members.len() == 1 { "es" } else { "" },
             )
         };
-        let headline = format!(
-            " `{}` carries no `Payload<FlatBuffers>` implementation.",
-            decl.name
-        );
-        quote! {
+        let headline = format!(" `{owner}` carries no `Payload<FlatBuffers>` implementation.");
+        Ok(quote! {
             #[doc = #headline]
             ///
             #[doc = #cause]
@@ -722,7 +713,28 @@ impl<'a> Codec<'a> {
             /// ADR-0017 decision 4 rule out, and it is deliberate for now.
             #[allow(dead_code)]
             const #name: () = ();
-        }
+        })
+    }
+
+    /// The declaration one projection root belongs to.
+    fn declaration_of(&self, root: &v1::FbRoot) -> Result<&'a v1::Declaration, GenerateError> {
+        self.ctx
+            .declaration(root.declaration)
+            .ok_or_else(|| GenerateError {
+                message: "the FlatBuffers projection names a declaration the lowered model does \
+                          not carry"
+                    .to_string(),
+            })
+    }
+
+    /// The other packages of the build, as the lowering was handed them.
+    fn scope_others(&self) -> &'a [String] {
+        self.ctx
+            .model
+            .scope
+            .as_ref()
+            .map(|scope| scope.others.as_slice())
+            .unwrap_or_default()
     }
 
     /// The induced tuples reachable from `roots`, in discovery order.
@@ -730,18 +742,21 @@ impl<'a> Codec<'a> {
     /// Only a reached tuple gets functions. A tuple induced by a declaration
     /// whose codec was withheld has no caller, and emitting its functions
     /// would put dead code in a consumer's build.
-    fn reachable_tuples(&self, roots: &[&v2::Decl]) -> Vec<String> {
-        let mut found: Vec<String> = Vec::new();
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut queue: Vec<(String, v2::FieldType)> = Vec::new();
+    fn reachable_tuples(&self, roots: &[&v1::FbRoot]) -> Vec<u32> {
+        let mut found: Vec<u32> = Vec::new();
+        let mut seen: HashSet<u32> = HashSet::new();
+        let mut queue: Vec<&'a v1::Type> = Vec::new();
 
-        for decl in roots {
-            if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
-                for member in &def.members {
-                    if let Some(v2::struct_member::Member::Field(field)) = &member.member
-                        && let Some(ty) = field.r#type.clone()
+        for root in roots {
+            let Some(decl) = self.ctx.declaration(root.declaration) else {
+                continue;
+            };
+            if let Some(v1::declaration::Kind::Struct(def)) = decl.kind.as_ref() {
+                for slot in &def.slots {
+                    if let Some(v1::slot::Occupant::Field(field)) = slot.occupant.as_ref()
+                        && let Some(ty) = field.r#type.as_ref()
                     {
-                        queue.push((field_hint(&decl.name, &field.name), ty));
+                        queue.push(ty);
                     }
                 }
             }
@@ -749,30 +764,33 @@ impl<'a> Codec<'a> {
 
         let mut index = 0;
         while index < queue.len() {
-            let (hint, ty) = queue[index].clone();
+            let ty = queue[index];
             index += 1;
-            match ty.kind {
-                Some(v2::field_type::Kind::Tuple(tuple)) => {
-                    if self.tuples.contains_key(&hint) && seen.insert(hint.clone()) {
-                        found.push(hint.clone());
+            match ty.kind.as_ref() {
+                Some(v1::r#type::Kind::Tuple(reference)) => {
+                    let Some(tuple) = self.ctx.tuple(reference.index) else {
+                        continue;
+                    };
+                    if !tuple_name(tuple).is_empty() && seen.insert(reference.index) {
+                        found.push(reference.index);
                         for field in &tuple.fields {
-                            if let Some(inner) = field.r#type.clone() {
-                                queue.push((format!("{hint}{}", camel_case(&field.name)), inner));
+                            if let Some(inner) = field.r#type.as_ref() {
+                                queue.push(inner);
                             }
                         }
                     }
                 }
-                Some(v2::field_type::Kind::Array(array)) => {
-                    if let Some(element) = array.element {
-                        queue.push((format!("{hint}Element"), *element));
+                Some(v1::r#type::Kind::Array(array)) => {
+                    if let Some(element) = array.element.as_deref() {
+                        queue.push(element);
                     }
                 }
-                Some(v2::field_type::Kind::Map(map)) => {
-                    if let Some(key) = map.key {
-                        queue.push((format!("{hint}Key"), *key));
+                Some(v1::r#type::Kind::Map(map)) => {
+                    if let Some(key) = map.key.as_deref() {
+                        queue.push(key);
                     }
-                    if let Some(value) = map.value {
-                        queue.push((format!("{hint}Value"), *value));
+                    if let Some(value) = map.value.as_deref() {
+                        queue.push(value);
                     }
                 }
                 _ => {}
@@ -781,28 +799,30 @@ impl<'a> Codec<'a> {
         found
     }
 
-    fn decl_items(&self, decl: &v2::Decl) -> Result<Vec<TokenStream>, GenerateError> {
-        match &decl.kind {
-            Some(v2::decl::Kind::StructDef(def)) => {
-                let table = self.struct_table(&decl.name, def)?;
-                let mut items = self.table_items(&decl.name, decl.visibility, &table)?;
-                items.push(self.payload_impl(decl)?);
+    fn decl_items(&self, root: &v1::FbRoot) -> Result<Vec<TokenStream>, GenerateError> {
+        let decl = self.declaration_of(root)?;
+        let owner = declared(decl.name.as_ref());
+        match decl.kind.as_ref() {
+            Some(v1::declaration::Kind::Struct(def)) => {
+                let table = self.struct_table(root.declaration, owner, def)?;
+                let mut items = self.table_items(owner, decl.visibility, &table)?;
+                items.push(self.payload_impl(root, owner)?);
                 Ok(items)
             }
-            Some(v2::decl::Kind::UnionDef(def)) => {
+            Some(v1::declaration::Kind::Union(def)) => {
                 let mut items = self.union_items(decl, def)?;
-                items.push(self.payload_impl(decl)?);
+                items.push(self.payload_impl(root, owner)?);
                 Ok(items)
             }
             // A named scalar, an enum and an enum set are rooted in a box
             // table (ADR-0019 decision 8).
             Some(
-                v2::decl::Kind::TypeDef(_)
-                | v2::decl::Kind::EnumDef(_)
-                | v2::decl::Kind::EnumSetDef(_),
+                v1::declaration::Kind::Scalar(_)
+                | v1::declaration::Kind::Enum(_)
+                | v1::declaration::Kind::EnumSet(_),
             ) => {
-                let mut items = self.root_box_items(decl)?;
-                items.push(self.payload_impl(decl)?);
+                let mut items = self.root_box_items(decl, root.declaration)?;
+                items.push(self.payload_impl(root, owner)?);
                 Ok(items)
             }
             // `root_table` admits nothing else.
@@ -814,21 +834,22 @@ impl<'a> Codec<'a> {
     // Classification
     // -----------------------------------------------------------------
 
-    /// The wire shape of one type position. `hint` is the name an induced
-    /// tuple struct at this position carries.
-    fn wire(&self, ty: &v2::FieldType, hint: &str) -> Result<Wire, GenerateError> {
+    /// The wire shape of one type position, read from the lowered model:
+    /// every reference is already resolved and every induced tuple already
+    /// named, so this classifies rather than resolves.
+    fn wire(&self, ty: &v1::Type) -> Result<Wire, GenerateError> {
         match ty.kind.as_ref() {
-            Some(v2::field_type::Kind::Primitive(primitive)) => {
-                match v2::PrimitiveType::try_from(*primitive).ok() {
-                    Some(v2::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
+            Some(v1::r#type::Kind::Primitive(primitive)) => {
+                match v1::PrimitiveType::try_from(*primitive).ok() {
+                    Some(v1::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::Bool,
                         repr: Repr::Bool,
                     })),
-                    Some(v2::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
+                    Some(v1::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::I64,
                         repr: Repr::Int,
                     })),
-                    Some(v2::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
+                    Some(v1::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::F64,
                         repr: Repr::Float,
                     })),
@@ -842,78 +863,20 @@ impl<'a> Codec<'a> {
                     }),
                 }
             }
-            Some(v2::field_type::Kind::InlineScalar(td)) => self.scalar_wire(td, None),
-            Some(v2::field_type::Kind::Named(reference)) => {
-                let Some((decl, owner)) = self.resolve(reference) else {
-                    return Err(GenerateError {
-                        message: format!(
-                            "`{reference}` resolves in no package of this build, so no \
-                             FlatBuffers codec can be emitted for it"
-                        ),
-                    });
-                };
-                match &decl.kind {
-                    Some(v2::decl::Kind::TypeDef(td)) => self.scalar_wire(
-                        td,
-                        Some(NamedScalar {
-                            name: owner.clone(),
-                            ctor: if v2::constraint_is_vacuous(td.constraint.as_ref()) {
-                                "new"
-                            } else {
-                                "new_unchecked"
-                            },
-                        }),
-                    ),
-                    Some(v2::decl::Kind::EnumDef(def)) => {
-                        let Some(first) = def.values.first() else {
-                            return Err(GenerateError {
-                                message: format!(
-                                    "`{}` declares no value, so no FlatBuffers codec can decode \
-                                     one",
-                                    decl.name
-                                ),
-                            });
-                        };
-                        Ok(Wire::Scalar(Scalar {
-                            // Every typl enum is emitted at one underlying
-                            // width, `long`, which is what the projection
-                            // charges it.
-                            prim: Prim::I64,
-                            repr: Repr::Enum {
-                                name: owner.clone(),
-                                first: first.name.clone(),
-                            },
-                        }))
-                    }
-                    Some(v2::decl::Kind::EnumSetDef(def)) => Ok(Wire::Scalar(Scalar {
-                        prim: int_prim(def.width).ok_or_else(|| GenerateError {
-                            message: format!("`{}` carries no integer width", decl.name),
-                        })?,
-                        repr: Repr::EnumSet {
-                            name: owner.clone(),
-                        },
-                    })),
-                    Some(v2::decl::Kind::StructDef(_)) => Ok(Wire::Table(owner.clone())),
-                    Some(v2::decl::Kind::UnionDef(_)) => Ok(Wire::Union(owner.clone())),
-                    _ => Err(GenerateError {
-                        message: format!(
-                            "`{reference}` names a declaration a FlatBuffers codec cannot carry"
-                        ),
-                    }),
-                }
-            }
-            Some(v2::field_type::Kind::Array(array)) => {
+            Some(v1::r#type::Kind::Inline(sc)) => self.scalar_wire(sc, None),
+            Some(v1::r#type::Kind::Named(reference)) => self.named_wire(reference),
+            Some(v1::r#type::Kind::Array(array)) => {
                 let element = array.element.as_deref().ok_or_else(|| GenerateError {
                     message: "an array carries no element type".to_string(),
                 })?;
                 self.refuse_optional(element, "an array element")?;
                 Ok(Wire::Vector {
-                    element: Box::new(self.wire(element, &format!("{hint}Element"))?),
+                    element: Box::new(self.wire(element)?),
                     min: array.min,
                     max: array.max,
                 })
             }
-            Some(v2::field_type::Kind::Map(map)) => {
+            Some(v1::r#type::Kind::Map(map)) => {
                 let key = map.key.as_deref().ok_or_else(|| GenerateError {
                     message: "a map carries no key type".to_string(),
                 })?;
@@ -922,15 +885,11 @@ impl<'a> Codec<'a> {
                 })?;
                 self.refuse_optional(key, "a map key")?;
                 self.refuse_optional(value, "a map value")?;
-                let key_hint = format!("{hint}Key");
-                let value_hint = format!("{hint}Value");
                 let entry = self.map_entry_table(
-                    self.wire(key, &key_hint)?,
+                    self.wire(key)?,
                     key.clone(),
-                    key_hint,
-                    self.wire(value, &value_hint)?,
+                    self.wire(value)?,
                     value.clone(),
-                    value_hint,
                 );
                 Ok(Wire::Map {
                     entry: Box::new(entry),
@@ -939,10 +898,83 @@ impl<'a> Codec<'a> {
                 })
             }
             // A tuple generates a named struct, which is a table like any
-            // other (typl §11).
-            Some(v2::field_type::Kind::Tuple(_)) => Ok(Wire::Table(hint.to_string())),
+            // other (typl §11). The lowering named it.
+            Some(v1::r#type::Kind::Tuple(reference)) => Ok(Wire::Table(
+                self.ctx.tuple_name(reference.index).to_string(),
+            )),
             _ => Err(GenerateError {
                 message: "a FlatBuffers codec cannot carry this type position".to_string(),
+            }),
+        }
+    }
+
+    /// The wire shape of one resolved reference: the declaration it names
+    /// decides, and the owner string is the bare declared name for a type of
+    /// this package and the dotted reference for one of another package,
+    /// which is what [`split_owner`] reads back.
+    fn named_wire(&self, reference: &v1::TypeRef) -> Result<Wire, GenerateError> {
+        let Some((decl, owner)) = self.resolve(reference) else {
+            let text = &reference.reference;
+            return Err(GenerateError {
+                message: format!(
+                    "`{text}` resolves in no package of this build, so no FlatBuffers codec can \
+                     be emitted for it"
+                ),
+            });
+        };
+        self.declaration_wire(decl, owner, &reference.reference)
+    }
+
+    /// [`Codec::named_wire`] once the declaration is in hand — the form a
+    /// root box takes, where the declaration is the one being emitted rather
+    /// than one a field names.
+    fn declaration_wire(
+        &self,
+        decl: &v1::Declaration,
+        owner: String,
+        reference: &str,
+    ) -> Result<Wire, GenerateError> {
+        let name = declared(decl.name.as_ref());
+        match decl.kind.as_ref() {
+            Some(v1::declaration::Kind::Scalar(sc)) => self.scalar_wire(
+                sc,
+                Some(NamedScalar {
+                    name: owner.clone(),
+                    ctor: if sc.vacuous { "new" } else { "new_unchecked" },
+                }),
+            ),
+            Some(v1::declaration::Kind::Enum(def)) => {
+                let Some(first) = def.values.first() else {
+                    return Err(GenerateError {
+                        message: format!(
+                            "`{name}` declares no value, so no FlatBuffers codec can decode one"
+                        ),
+                    });
+                };
+                Ok(Wire::Scalar(Scalar {
+                    // Every typl enum is emitted at one underlying width,
+                    // `long`, which is what the projection charges it.
+                    prim: Prim::I64,
+                    repr: Repr::Enum {
+                        name: owner.clone(),
+                        first: declared(first.name.as_ref()).to_string(),
+                    },
+                }))
+            }
+            Some(v1::declaration::Kind::EnumSet(def)) => Ok(Wire::Scalar(Scalar {
+                prim: int_prim(def.width).ok_or_else(|| GenerateError {
+                    message: format!("`{name}` carries no integer width"),
+                })?,
+                repr: Repr::EnumSet {
+                    name: owner.clone(),
+                },
+            })),
+            Some(v1::declaration::Kind::Struct(_)) => Ok(Wire::Table(owner.clone())),
+            Some(v1::declaration::Kind::Union(_)) => Ok(Wire::Union(owner.clone())),
+            _ => Err(GenerateError {
+                message: format!(
+                    "`{reference}` names a declaration a FlatBuffers codec cannot carry"
+                ),
             }),
         }
     }
@@ -950,7 +982,7 @@ impl<'a> Codec<'a> {
     /// An `optional` marker is a table field's property. A FlatBuffers vector
     /// has no absent element and a map entry no absent half, so a `?` in one
     /// of those positions is refused rather than silently written as present.
-    fn refuse_optional(&self, ty: &v2::FieldType, what: &str) -> Result<(), GenerateError> {
+    fn refuse_optional(&self, ty: &v1::Type, what: &str) -> Result<(), GenerateError> {
         if ty.optional {
             return Err(GenerateError {
                 message: format!(
@@ -964,12 +996,12 @@ impl<'a> Codec<'a> {
 
     fn scalar_wire(
         &self,
-        td: &v2::TypeDef,
+        sc: &v1::Scalar,
         named: Option<NamedScalar>,
     ) -> Result<Wire, GenerateError> {
-        let backing = backing_scalar(td);
-        match &td.width {
-            Some(v2::type_def::Width::IntWidth(width)) => {
+        let backing = class_backing(sc.class);
+        match &sc.width {
+            Some(v1::scalar::Width::IntWidth(width)) => {
                 let prim = int_prim(*width).ok_or_else(|| GenerateError {
                     message: "a scalar carries no integer width".to_string(),
                 })?;
@@ -978,10 +1010,10 @@ impl<'a> Codec<'a> {
                     repr: scalar_repr(named, backing),
                 }))
             }
-            Some(v2::type_def::Width::FloatWidth(width)) => {
-                let prim = match v2::FloatWidth::try_from(*width).ok() {
-                    Some(v2::FloatWidth::F32) => Prim::F32,
-                    Some(v2::FloatWidth::F64) => Prim::F64,
+            Some(v1::scalar::Width::FloatWidth(width)) => {
+                let prim = match v1::FloatWidth::try_from(*width).ok() {
+                    Some(v1::FloatWidth::F32) => Prim::F32,
+                    Some(v1::FloatWidth::F64) => Prim::F64,
                     _ => {
                         return Err(GenerateError {
                             message: "a scalar carries no float width".to_string(),
@@ -1013,82 +1045,89 @@ impl<'a> Codec<'a> {
     // Tables
     // -----------------------------------------------------------------
 
-    fn struct_table(&self, owner: &str, def: &v2::StructDef) -> Result<Table, GenerateError> {
-        let layout = fb_projection::struct_table(owner, def).map_err(|err| GenerateError {
-            message: err.message,
-        })?;
+    fn struct_table(
+        &self,
+        index: u32,
+        owner: &str,
+        def: &v1::Struct,
+    ) -> Result<Table, GenerateError> {
+        let vtable_slots = self
+            .vtable_slots_of(&v1::fb_table::Source::StructDeclaration(index))
+            .ok_or_else(|| GenerateError {
+                message: format!("the FlatBuffers projection describes no table for `{owner}`"),
+            })?;
         let mut entries: Vec<Entry> = Vec::new();
-        for member in &def.members {
-            let Some(v2::struct_member::Member::Field(field)) = &member.member else {
+        for slot in &def.slots {
+            let Some(v1::slot::Occupant::Field(field)) = slot.occupant.as_ref() else {
                 // A reserved tombstone holds its id and emits no field
                 // (typl §7.4), so it takes no inline bytes here.
                 continue;
             };
+            let name = declared(field.name.as_ref());
             let Some(ty) = field.r#type.as_ref() else {
                 return Err(GenerateError {
-                    message: format!("`{owner}.{}` carries no type", field.name),
+                    message: format!("`{owner}.{name}` carries no type"),
                 });
             };
-            let id = u16::try_from(field.ordinal.saturating_sub(1)).map_err(|_| GenerateError {
+            let id = u16::try_from(slot.ordinal.saturating_sub(1)).map_err(|_| GenerateError {
                 message: format!(
-                    "`{owner}.{}` has ordinal {}, which a FlatBuffers vtable cannot carry",
-                    field.name, field.ordinal
+                    "`{owner}.{name}` has ordinal {}, which a FlatBuffers vtable cannot carry",
+                    slot.ordinal
                 ),
             })?;
-            let hint = field_hint(owner, &field.name);
-            let wire = self.wire(ty, &hint)?;
+            let wire = self.wire(ty)?;
             entries.push(Entry {
                 id,
-                name: field.name.clone(),
+                name: name.to_string(),
                 field_type: ty.clone(),
-                hint,
                 wire,
             });
         }
-        self.assemble(owner, layout.vtable_slots(), entries)
+        self.assemble(owner, u64::from(vtable_slots), entries)
     }
 
-    fn tuple_table(&self, induced: &InducedTuple) -> Result<Table, GenerateError> {
-        let layout = fb_projection::tuple_table(&induced.name, &induced.tuple).map_err(|err| {
-            GenerateError {
-                message: err.message,
-            }
+    fn tuple_table(&self, induced: &v1::InducedTuple) -> Result<Table, GenerateError> {
+        let owner = tuple_name(induced);
+        let table = induced.flatbuffers_table.ok_or_else(|| GenerateError {
+            message: format!("the FlatBuffers projection describes no table for `{owner}`"),
         })?;
+        let vtable_slots = self
+            .projection()
+            .and_then(|projection| projection.tables.get(table as usize))
+            .map(|table| table.vtable_slots)
+            .ok_or_else(|| GenerateError {
+                message: format!("the FlatBuffers projection describes no table for `{owner}`"),
+            })?;
         let mut entries: Vec<Entry> = Vec::new();
-        for (index, field) in induced.tuple.fields.iter().enumerate() {
+        for (index, field) in induced.fields.iter().enumerate() {
+            let name = declared(field.name.as_ref());
             let Some(ty) = field.r#type.as_ref() else {
                 return Err(GenerateError {
-                    message: format!("`{}.{}` carries no type", induced.name, field.name),
+                    message: format!("`{owner}.{name}` carries no type"),
                 });
             };
             let id = u16::try_from(index).map_err(|_| GenerateError {
                 message: format!(
-                    "`{}` has more tuple fields than a FlatBuffers vtable can carry",
-                    induced.name
+                    "`{owner}` has more tuple fields than a FlatBuffers vtable can carry"
                 ),
             })?;
-            let hint = format!("{}{}", induced.name, camel_case(&field.name));
-            let wire = self.wire(ty, &hint)?;
+            let wire = self.wire(ty)?;
             entries.push(Entry {
                 id,
-                name: field.name.clone(),
+                name: name.to_string(),
                 field_type: ty.clone(),
-                hint,
                 wire,
             });
         }
-        self.assemble(&induced.name, layout.vtable_slots(), entries)
+        self.assemble(owner, u64::from(vtable_slots), entries)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn map_entry_table(
         &self,
         key: Wire,
-        key_type: v2::FieldType,
-        key_hint: String,
+        key_type: v1::Type,
         value: Wire,
-        value_type: v2::FieldType,
-        value_hint: String,
+        value_type: v1::Type,
     ) -> Table {
         let widths = vec![key.inline_width(), value.inline_width()];
         let (offsets, size, align) = place(&widths);
@@ -1101,7 +1140,6 @@ impl<'a> Codec<'a> {
                     optional: false,
                     name: "key".to_string(),
                     field_type: key_type,
-                    hint: key_hint,
                     access: Access::Position(0),
                 },
                 Slot {
@@ -1111,7 +1149,6 @@ impl<'a> Codec<'a> {
                     optional: false,
                     name: "value".to_string(),
                     field_type: value_type,
-                    hint: value_hint,
                     access: Access::Position(1),
                 },
             ],
@@ -1153,7 +1190,6 @@ impl<'a> Codec<'a> {
                 access: Access::Field(entry.name.clone()),
                 name: entry.name,
                 field_type: entry.field_type,
-                hint: entry.hint,
                 wire: entry.wire,
             })
             .collect();
@@ -1235,7 +1271,7 @@ impl<'a> Codec<'a> {
         let id = Literal::u16_suffixed(slot.id);
         let width = Literal::usize_suffixed(slot.wire.inline_width());
         let inner = self.view_expr(&slot.wire, &quote! { __p })?;
-        let inner_ty = self.view_type(&slot.wire, &slot.field_type, &slot.hint, visibility);
+        let inner_ty = self.view_type(&slot.wire, &slot.field_type);
         // The doc names the projected field, not the typl spelling. The
         // written name reaches no generated site, which is what ADR-0016's
         // pinned transform means and what
@@ -1269,13 +1305,7 @@ impl<'a> Codec<'a> {
     /// What an accessor hands back: the domain value for a scalar and for a
     /// collection, a borrow for a string and for bytes, a nested view for a
     /// table and for a union.
-    fn view_type(
-        &self,
-        wire: &Wire,
-        ty: &v2::FieldType,
-        hint: &str,
-        visibility: i32,
-    ) -> TokenStream {
+    fn view_type(&self, wire: &Wire, ty: &v1::Type) -> TokenStream {
         match wire {
             Wire::Text(_) => quote! { &'a str },
             Wire::Bytes(_) => quote! { &'a [u8] },
@@ -1284,12 +1314,11 @@ impl<'a> Codec<'a> {
                 quote! { #view<'a> }
             }
             _ => {
-                let mut discard = Vec::new();
-                let bare = v2::FieldType {
+                let bare = v1::Type {
                     optional: false,
                     kind: ty.kind.clone(),
                 };
-                field_type_tokens(&bare, hint, visibility, &mut discard)
+                model_type_tokens(self.ctx, &bare)
             }
         }
     }
@@ -1871,10 +1900,10 @@ impl<'a> Codec<'a> {
 
     fn union_items(
         &self,
-        decl: &v2::Decl,
-        def: &v2::UnionDef,
+        decl: &v1::Declaration,
+        def: &v1::Union,
     ) -> Result<Vec<TokenStream>, GenerateError> {
-        let owner = decl.name.as_str();
+        let owner = declared(decl.name.as_ref());
         if def.arms.is_empty() {
             return Err(GenerateError {
                 message: format!("`{owner}` declares no arm, so it encodes no value"),
@@ -2139,23 +2168,21 @@ impl<'a> Codec<'a> {
     /// One arm's three bodies. A struct or a union arm is the referenced
     /// table itself; anything else is isolated in a box table with one value
     /// field (ADR-0019 decision 2).
-    fn union_arm(&self, owner: &str, arm: &v2::UnionArm) -> Result<UnionArm, GenerateError> {
+    fn union_arm(&self, owner: &str, arm: &v1::Arm) -> Result<UnionArm, GenerateError> {
+        let name = declared(arm.name.as_ref());
         let tag = u8::try_from(arm.ordinal).map_err(|_| GenerateError {
             message: format!(
-                "`{owner}.{}` has ordinal {}, and a FlatBuffers union discriminant is a ubyte",
-                arm.name, arm.ordinal
+                "`{owner}.{name}` has ordinal {}, and a FlatBuffers union discriminant is a ubyte",
+                arm.ordinal
             ),
         })?;
-        let wire = self.wire(
-            &v2::FieldType {
-                optional: false,
-                kind: Some(v2::field_type::Kind::Named(arm.type_ref.clone())),
-            },
-            "",
-        )?;
+        let reference = arm.r#type.as_ref().ok_or_else(|| GenerateError {
+            message: format!("`{owner}.{name}` names no type"),
+        })?;
+        let wire = self.named_wire(reference)?;
         match &wire {
             Wire::Table(_) | Wire::Union(_) => Ok(UnionArm {
-                name: arm.name.clone(),
+                name: name.to_string(),
                 tag,
                 encode: self.encode_pos(&wire, &Operand::borrowed(quote! { __a }))?,
                 verify: self.verify_at(owner, &wire, &quote! { __value })?,
@@ -2176,7 +2203,7 @@ impl<'a> Codec<'a> {
                 let verify = &bodies.verify;
                 let decode = &bodies.decode;
                 Ok(UnionArm {
-                    name: arm.name.clone(),
+                    name: name.to_string(),
                     tag,
                     encode: bodies.encode.clone(),
                     verify: quote! {
@@ -2218,15 +2245,14 @@ impl<'a> Codec<'a> {
     /// The view hands back the value rather than a borrow: a box holds exactly
     /// one value and decoding it costs a read, so there is nothing a nested
     /// view would save.
-    fn root_box_items(&self, decl: &v2::Decl) -> Result<Vec<TokenStream>, GenerateError> {
-        let owner = decl.name.as_str();
-        let wire = self.wire(
-            &v2::FieldType {
-                optional: false,
-                kind: Some(v2::field_type::Kind::Named(owner.to_string())),
-            },
-            "",
-        )?;
+    fn root_box_items(
+        &self,
+        decl: &v1::Declaration,
+        index: u32,
+    ) -> Result<Vec<TokenStream>, GenerateError> {
+        let owner = declared(decl.name.as_ref());
+        let _ = index;
+        let wire = self.declaration_wire(decl, owner.to_string(), owner)?;
         let vis = vis_tokens(decl.visibility);
         let ty = ident(owner);
         let view = view_ident(owner);
@@ -2339,12 +2365,15 @@ impl<'a> Codec<'a> {
     // The Payload implementation
     // -----------------------------------------------------------------
 
-    fn payload_impl(&self, decl: &v2::Decl) -> Result<TokenStream, GenerateError> {
-        let owner = decl.name.as_str();
-        let bound =
-            fb_projection::max_size(self.packages(), decl).ok_or_else(|| GenerateError {
-                message: format!("`{owner}` has no finite FlatBuffers bound"),
-            })?;
+    fn payload_impl(&self, root: &v1::FbRoot, owner: &str) -> Result<TokenStream, GenerateError> {
+        let bound = match root.bound.as_ref() {
+            Some(v1::fb_root::Bound::MaxSize(size)) => *size,
+            _ => {
+                return Err(GenerateError {
+                    message: format!("`{owner}` has no finite FlatBuffers bound"),
+                });
+            }
+        };
         let ty = ident(owner);
         let view = view_ident(owner);
         let encode = encode_ident(owner);
@@ -2495,15 +2524,15 @@ fn scalar_repr(named: Option<NamedScalar>, backing: ScalarBacking) -> Repr {
 /// The FlatBuffers scalar one typl integer width writes as
 /// (typl Appendix D).
 fn int_prim(width: i32) -> Option<Prim> {
-    match v2::IntWidth::try_from(width).ok()? {
-        v2::IntWidth::U8 => Some(Prim::U8),
-        v2::IntWidth::I8 => Some(Prim::I8),
-        v2::IntWidth::U16 => Some(Prim::U16),
-        v2::IntWidth::I16 => Some(Prim::I16),
-        v2::IntWidth::U32 => Some(Prim::U32),
-        v2::IntWidth::I32 => Some(Prim::I32),
-        v2::IntWidth::U64 => Some(Prim::U64),
-        v2::IntWidth::I64 => Some(Prim::I64),
-        v2::IntWidth::Unspecified => None,
+    match v1::IntWidth::try_from(width).ok()? {
+        v1::IntWidth::U8 => Some(Prim::U8),
+        v1::IntWidth::I8 => Some(Prim::I8),
+        v1::IntWidth::U16 => Some(Prim::U16),
+        v1::IntWidth::I16 => Some(Prim::I16),
+        v1::IntWidth::U32 => Some(Prim::U32),
+        v1::IntWidth::I32 => Some(Prim::I32),
+        v1::IntWidth::U64 => Some(Prim::U64),
+        v1::IntWidth::I64 => Some(Prim::I64),
+        v1::IntWidth::Unspecified => None,
     }
 }

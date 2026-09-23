@@ -1807,7 +1807,9 @@ name = "ridl-backend-ts"
 version = "0.2.0"
 dependencies = [
  "insta",
+ "ridl-core",
  "ridl-ir",
+ "ridlc",
  "tempfile",
 ]
 
@@ -1967,6 +1969,27 @@ dependencies = [
  "serde",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "ridlc-gen-model"
+version = "0.2.0"
+dependencies = [
+ "ridl-core",
+ "ridl-ir",
+ "ridlc",
+ "tempfile",
+]
+
+[[package]]
+name = "ridlc-gen-rust"
+version = "0.2.0"
+dependencies = [
+ "ridl-backend-rust",
+ "ridl-core",
+ "ridl-ir",
+ "ridlc",
+ "tempfile",
 ]
 
 [[package]]

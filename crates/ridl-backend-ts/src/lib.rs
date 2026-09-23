@@ -1150,5 +1150,9 @@ fn ts_string(text: &str) -> String {
     out
 }
 
+mod contract;
+
+pub use contract::Backend;
+
 #[cfg(test)]
 mod tests;

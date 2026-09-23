@@ -156,6 +156,28 @@ design note, from the archive.
   prior context, so it carries the working rules and the facts a driver prompt
   otherwise leaves to the conversation. Six stages; two design notes inside it
   stop for Sebastien's disposition. Coordination issue: #328.
+- **2026-09-22-ir-stability-design.md** — lane P stage P1a: the recommended
+  disposition of O-P1 (canonical protobuf JSON becomes the canonical encoding,
+  binary and prototext derived), with #231 reproduced as measured numbers, the
+  bound the canonical form nests to, what "canonical" fixes, the compatibility
+  rule and the versioning rule. A recommendation for Sebastien's disposition;
+  stage P1b implements it.
+- **2026-09-22-codegen-model-design.md** — lane P stage P2a: the lowered codegen
+  model, message by message — names already transformed per target namespace,
+  widths, inits, constraints, tombstones resolved into slots, the FlatBuffers
+  layouts and bounds, and the interface, interaction, timing, clause and catalog
+  facts an IPC binding needs (driver decision D-P4). It carries the recommended
+  disposition of O-P2, the model's home. A recommendation for Sebastien's
+  disposition; **implemented by P2b** as it stands — `ridl.codegen.v1` in
+  `crates/ridl-ir`, `ridl build --emit codegen-model`, and one fact-level drift
+  test per backend. §9 of the note is still open, and its items belong to the
+  stages it names. Stage P3 built the contract over it —
+  [`../design/codegen-plugins.md`](../design/codegen-plugins.md) — and its §10's
+  last item, ADR-0020 open item 5, was closed by P2b. Stage P4 ported the Rust
+  backend onto the model in the three layers §8.2 names, deleted that backend's
+  fact-level drift test — every fact it compared is a function of the model by
+  construction now — and closed §9 item 2 (the private `snake_case` of
+  driftsys/ridl#450) by construction. The other three backends keep theirs.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

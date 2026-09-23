@@ -1,4 +1,5 @@
-//! Generates the IR Rust types from the protobuf schemas at build time.
+//! Generates the IR and codegen-model Rust types from the protobuf schemas at
+//! build time.
 //!
 //! The v2 schema — `ir.proto`, the typl surface plus the ridl interaction
 //! layer (ADR-0008 decision 8), and `system.proto`, the rsdl system layer
@@ -12,13 +13,26 @@
 //! pool behind prototext (ADR-0014 decision 7, amended by decision 14). The
 //! v1 schema was removed when its last consumer moved to v2 (task 6 of the
 //! E2 plan), mirroring the E0 v0 retirement.
+//!
+//! `proto/ridl/codegen/v1/model.proto` — the lowered codegen model
+//! (`ridl.codegen.v1`, the codegen model design note §3) — and
+//! `proto/ridl/codegen/v1/plugin.proto` — the backend contract's request and
+//! response over it (ADR-0020 decision 9) — are compiled in the same `protox`
+//! call and registered with the same `pbjson-build` builder, so the model
+//! and the request are written in the exact dialect ADR-0014 decision 14
+//! fixes for the IR, and the schemas share one descriptor pool.
 
 use std::error::Error;
 
 use prost::Message;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let protos = ["proto/ridl/ir/v2/ir.proto", "proto/ridl/ir/v2/system.proto"];
+    let protos = [
+        "proto/ridl/ir/v2/ir.proto",
+        "proto/ridl/ir/v2/system.proto",
+        "proto/ridl/codegen/v1/model.proto",
+        "proto/ridl/codegen/v1/plugin.proto",
+    ];
     let include = "proto";
 
     for proto in protos {
@@ -43,6 +57,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         // boxed explicitly. pbjson-build needs no matching configuration:
         // serde's blanket `Box<T>` impls cover the boxed member.
         .boxed(".ridl.ir.v2.FieldType.kind.inline_scalar")
+        // The codegen model's two slot oneofs, for the same reason: a live
+        // field and a live interaction are each far larger than the tombstone
+        // beside them, and a slot list is one `Vec` of the larger of the two.
+        // prost boxes the recursive members on its own; these are not
+        // recursive, so they are boxed explicitly.
+        .boxed(".ridl.codegen.v1.Slot.occupant.field")
+        .boxed(".ridl.codegen.v1.InteractionSlot.occupant.interaction")
         .compile_fds(file_descriptors)?;
 
     // The canonical protobuf JSON serde impls (ADR-0014 decision 14), written
@@ -58,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     pbjson_build::Builder::new()
         .register_descriptors(&descriptor_bytes)?
         .emit_fields()
-        .build(&[".ridl.ir.v2"])?;
+        .build(&[".ridl.ir.v2", ".ridl.codegen.v1"])?;
 
     Ok(())
 }

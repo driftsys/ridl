@@ -1,0 +1,30 @@
+[package]
+name = "ridlc-gen-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The reference codegen plugin: the lowered model written back, for the process host's parity test."
+# Test-only: the plugin exists so that `ridlc`'s process host has a real
+# executable to run under `just test`, with no network and no installation
+# (the lane P driver, stage P3; `docs/design/codegen-plugins.md`). It is not
+# a backend a user would run — `--emit codegen-model` writes the same file
+# in process — so it is not published.
+publish = false
+
+[[bin]]
+name = "ridlc-gen-model"
+path = "src/main.rs"
+
+# The plugin reads the request and writes the response through the
+# contract's own encodings, and generates through the same `ModelBackend`
+# the in-process host calls. Nothing else: no filesystem, no front end.
+[dependencies]
+ridl-ir.workspace = true
+
+# The parity test drives the built binary through `ridlc`'s process host
+# over every corpus package, against the in-process path.
+[dev-dependencies]
+ridl-core.workspace = true
+ridlc.workspace = true
+tempfile = "3.15.0"

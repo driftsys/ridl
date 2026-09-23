@@ -207,6 +207,15 @@ count of every crate the workspace holds — see `AGENTS.md` for that.
   is its only dependency. The Rust backend's round-trip tests build their
   generated face over it. See [the design record](../design/ridl-loopback.md).
 
+- **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
+  unpublished: `--emit codegen-model` as a process, over the backend contract
+  `generate(CodegenRequest) → CodegenResponse` (ADR-0020 decisions 9 and 10,
+  roadmap story E4.5b). It reads one request from standard input and writes one
+  response to standard output, through the same `ridl_ir::codegen::ModelBackend`
+  the in-process host calls, and exists so that `ridlc`'s process host has a
+  real executable to run under `just test`. See
+  [the design record](../design/codegen-plugins.md).
+
 - **`crates/ridl-lsp`** — the language server; see the LSP section below.
 
 - **`crates/ridl-mcp`** — the MCP server behind `ridl mcp` (ADR-0005 Layer B):

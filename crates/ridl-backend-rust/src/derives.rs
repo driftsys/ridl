@@ -63,10 +63,10 @@
 //!
 //! [`defaults`]: crate::defaults
 
-use crate::{Ctx, ScalarBacking, backing_scalar};
+use crate::{Ctx, ScalarBacking, class_backing};
 use proc_macro2::TokenStream;
 use quote::quote;
-use ridl_ir::v2;
+use ridl_ir::codegen::v1;
 use std::collections::HashSet;
 
 /// What the transitive closure of one type permits. The two conditions are
@@ -107,7 +107,7 @@ impl Eligibility {
 }
 
 /// The `#[derive(...)]` attribute for one declaration.
-pub(crate) fn derive_attr(ctx: &Ctx, decl: &v2::Decl) -> TokenStream {
+pub(crate) fn derive_attr(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     let mut seen = HashSet::new();
     let eligibility = decl_eligibility(ctx, decl, &mut seen);
     attr(eligibility, numeric_named_scalar(decl))
@@ -120,7 +120,7 @@ pub(crate) fn derive_attr(ctx: &Ctx, decl: &v2::Decl) -> TokenStream {
 /// `PartialEq` unconditionally, and none of those three compiles unless the
 /// generated tuple struct carries them too. A tuple is anonymous, so it is
 /// never a named scalar and takes no ordering.
-pub(crate) fn tuple_derive_attr(ctx: &Ctx, tuple: &v2::TupleType) -> TokenStream {
+pub(crate) fn tuple_derive_attr(ctx: &Ctx, tuple: &v1::InducedTuple) -> TokenStream {
     let mut seen = HashSet::new();
     attr(tuple_eligibility(ctx, tuple, &mut seen), false)
 }
@@ -153,54 +153,62 @@ fn attr(eligibility: Eligibility, ordered: bool) -> TokenStream {
 /// True for a `type` declaration over an integer or float backing. A unit
 /// backing implies float (typl §5.1), so it qualifies. Nothing else does:
 /// ordering is a named-scalar property.
-fn numeric_named_scalar(decl: &v2::Decl) -> bool {
-    let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind else {
+fn numeric_named_scalar(decl: &v1::Declaration) -> bool {
+    let Some(v1::declaration::Kind::Scalar(sc)) = decl.kind.as_ref() else {
         return false;
     };
     matches!(
-        backing_scalar(td),
+        class_backing(sc.class),
         ScalarBacking::Float | ScalarBacking::Integer
     )
 }
 
-fn decl_eligibility(ctx: &Ctx, decl: &v2::Decl, seen: &mut HashSet<String>) -> Eligibility {
-    if !seen.insert(decl.name.clone()) {
+fn decl_eligibility(ctx: &Ctx, decl: &v1::Declaration, seen: &mut HashSet<String>) -> Eligibility {
+    let name = crate::declared(decl.name.as_ref()).to_string();
+    if !seen.insert(name.clone()) {
         // A cyclic IR is TYPL-206 upstream, but this pass must not trust that
         // gate: on a cycle it refuses the conditional derives rather than
         // recurse forever (the C1b guard `defaults.rs` applies to Default).
         return Eligibility::NONE;
     }
-    let result = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => scalar_eligibility(td),
+    let result = match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Scalar(sc)) => scalar_eligibility(sc),
         // A fieldless `#[repr(i64)]` enum and a `#[repr(transparent)]` newtype
         // over `i64` are both an integer at the leaf.
-        Some(v2::decl::Kind::EnumDef(_)) | Some(v2::decl::Kind::EnumSetDef(_)) => Eligibility::ALL,
-        Some(v2::decl::Kind::StructDef(sd)) => sd
-            .members
+        Some(v1::declaration::Kind::Enum(_)) | Some(v1::declaration::Kind::EnumSet(_)) => {
+            Eligibility::ALL
+        }
+        Some(v1::declaration::Kind::Struct(sd)) => sd
+            .slots
             .iter()
-            .filter_map(|member| match &member.member {
-                Some(v2::struct_member::Member::Field(field)) => Some(field),
+            .filter_map(|slot| match slot.occupant.as_ref() {
+                Some(v1::slot::Occupant::Field(field)) => Some(field.as_ref()),
                 // A reserved tombstone emits no field (typl §7.4), so it
                 // constrains nothing.
-                Some(v2::struct_member::Member::Reserved(_)) | None => None,
+                Some(v1::slot::Occupant::Retired(_)) | None => None,
             })
             .fold(Eligibility::ALL, |acc, field| {
                 acc.meet(field_eligibility(ctx, field, seen))
             }),
-        Some(v2::decl::Kind::UnionDef(ud)) => ud.arms.iter().fold(Eligibility::ALL, |acc, arm| {
-            acc.meet(type_ref_eligibility(ctx, &arm.type_ref, seen))
-        }),
-        // A constant emits no item to derive on, and the interaction kinds
-        // ride `Interface.interactions` rather than a package decl. Kept
+        Some(v1::declaration::Kind::Union(ud)) => {
+            ud.arms.iter().fold(Eligibility::ALL, |acc, arm| {
+                acc.meet(match arm.r#type.as_ref() {
+                    Some(reference) => type_ref_eligibility(ctx, reference, seen),
+                    None => Eligibility::NONE,
+                })
+            })
+        }
+        // A constant emits no item to derive on, and an interaction rides
+        // `Interface.interactions` rather than a package declaration. Kept
         // total.
-        Some(_) | None => Eligibility::NONE,
+        Some(v1::declaration::Kind::Constant(_)) | None => Eligibility::NONE,
     };
-    seen.remove(&decl.name);
+    seen.remove(&name);
     result
 }
 
-fn scalar_eligibility(td: &v2::TypeDef) -> Eligibility {
-    match backing_scalar(td) {
+fn scalar_eligibility(sc: &v1::Scalar) -> Eligibility {
+    match class_backing(sc.class) {
         // A unit backing implies float and lands here, as does an absent
         // backing: `backing_scalar` is total and maps both to `Float`.
         ScalarBacking::Float => Eligibility::COPY_ONLY,
@@ -212,7 +220,7 @@ fn scalar_eligibility(td: &v2::TypeDef) -> Eligibility {
 
 /// One struct field's contribution. The `Field` envelope carries nothing the
 /// eligibility depends on, so it unwraps to the `FieldType` twin.
-fn field_eligibility(ctx: &Ctx, field: &v2::Field, seen: &mut HashSet<String>) -> Eligibility {
+fn field_eligibility(ctx: &Ctx, field: &v1::Field, seen: &mut HashSet<String>) -> Eligibility {
     match field.r#type.as_ref() {
         Some(ft) => field_type_eligibility(ctx, ft, seen),
         None => Eligibility::NONE,
@@ -224,17 +232,16 @@ fn field_eligibility(ctx: &Ctx, field: &v2::Field, seen: &mut HashSet<String>) -
 /// `optional` is not read: the emitted Rust is `Option<T>`, and `Option` keeps
 /// both `Copy` and `Eq` from `T`, so the position contributes exactly what `T`
 /// does.
-fn field_type_eligibility(
-    ctx: &Ctx,
-    ft: &v2::FieldType,
-    seen: &mut HashSet<String>,
-) -> Eligibility {
-    match &ft.kind {
-        Some(v2::field_type::Kind::Named(reference)) => type_ref_eligibility(ctx, reference, seen),
-        Some(v2::field_type::Kind::Primitive(prim)) => primitive_eligibility(*prim),
-        Some(v2::field_type::Kind::InlineScalar(td)) => scalar_eligibility(td),
-        Some(v2::field_type::Kind::Tuple(tuple)) => tuple_eligibility(ctx, tuple, seen),
-        Some(v2::field_type::Kind::Array(array)) => {
+fn field_type_eligibility(ctx: &Ctx, ft: &v1::Type, seen: &mut HashSet<String>) -> Eligibility {
+    match ft.kind.as_ref() {
+        Some(v1::r#type::Kind::Named(reference)) => type_ref_eligibility(ctx, reference, seen),
+        Some(v1::r#type::Kind::Primitive(prim)) => primitive_eligibility(*prim),
+        Some(v1::r#type::Kind::Inline(sc)) => scalar_eligibility(sc),
+        Some(v1::r#type::Kind::Tuple(reference)) => match ctx.tuple(reference.index) {
+            Some(tuple) => tuple_eligibility(ctx, tuple, seen),
+            None => Eligibility::NONE,
+        },
+        Some(v1::r#type::Kind::Array(array)) => {
             // A bounded array emits `Vec<T>` and a fixed one `[T; N]`. Only
             // the second is `Copy` when `T` is, and the distinction is not
             // drawn here: the conservative answer is sound for both, and a
@@ -252,7 +259,7 @@ fn field_type_eligibility(
                 eq: inner.eq,
             }
         }
-        Some(v2::field_type::Kind::Map(map)) => {
+        Some(v1::r#type::Kind::Map(map)) => {
             // `Vec<(K, V)>`: not `Copy`, `Eq` when both halves are.
             let key = map
                 .key
@@ -272,11 +279,15 @@ fn field_type_eligibility(
         // A stream is an interaction-position type (ridl §12.3); it never
         // reaches a struct or tuple field in checked IR, and it emits `()`
         // when it does. Kept total and conservative.
-        Some(v2::field_type::Kind::Stream(_)) | None => Eligibility::NONE,
+        Some(v1::r#type::Kind::Stream(_)) | None => Eligibility::NONE,
     }
 }
 
-fn tuple_eligibility(ctx: &Ctx, tuple: &v2::TupleType, seen: &mut HashSet<String>) -> Eligibility {
+fn tuple_eligibility(
+    ctx: &Ctx,
+    tuple: &v1::InducedTuple,
+    seen: &mut HashSet<String>,
+) -> Eligibility {
     tuple.fields.iter().fold(Eligibility::ALL, |acc, field| {
         let inner = field
             .r#type
@@ -290,19 +301,23 @@ fn tuple_eligibility(ctx: &Ctx, tuple: &v2::TupleType, seen: &mut HashSet<String
 /// A named reference. A same-package name recurses into its declaration; a
 /// dotted or unknown one cannot be proven here and therefore disables every
 /// conditional derive.
-fn type_ref_eligibility(ctx: &Ctx, reference: &str, seen: &mut HashSet<String>) -> Eligibility {
-    match ctx.lookup(reference) {
+fn type_ref_eligibility(
+    ctx: &Ctx,
+    reference: &v1::TypeRef,
+    seen: &mut HashSet<String>,
+) -> Eligibility {
+    match ctx.local(reference) {
         Some(decl) => decl_eligibility(ctx, decl, seen),
         None => Eligibility::NONE,
     }
 }
 
 fn primitive_eligibility(prim: i32) -> Eligibility {
-    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
-        v2::PrimitiveType::Float => Eligibility::COPY_ONLY,
-        v2::PrimitiveType::Integer | v2::PrimitiveType::Boolean => Eligibility::ALL,
-        v2::PrimitiveType::String | v2::PrimitiveType::Bytes => Eligibility::EQ_ONLY,
+    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+        v1::PrimitiveType::Float => Eligibility::COPY_ONLY,
+        v1::PrimitiveType::Integer | v1::PrimitiveType::Boolean => Eligibility::ALL,
+        v1::PrimitiveType::String | v1::PrimitiveType::Bytes => Eligibility::EQ_ONLY,
         // `Unspecified` emits `()`. Kept total and conservative.
-        v2::PrimitiveType::Unspecified => Eligibility::NONE,
+        v1::PrimitiveType::Unspecified => Eligibility::NONE,
     }
 }

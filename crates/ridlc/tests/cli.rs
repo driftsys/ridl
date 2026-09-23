@@ -410,7 +410,8 @@ fn build_help_documents_every_emit_value() {
             "ir-binary",
             "typescript",
             "proto",
-            "flatbuffers"
+            "flatbuffers",
+            "codegen-model"
         ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
     );
@@ -555,7 +556,8 @@ fn every_emit_variant_is_classified() {
             ridlc::Emit::Rust
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
-            | ridlc::Emit::Flatbuffers => false,
+            | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::CodegenModel => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
         assert_eq!(
@@ -585,7 +587,8 @@ fn every_emit_variant_names_its_intended_suffix() {
             ridlc::Emit::Rust
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
-            | ridlc::Emit::Flatbuffers => None,
+            | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::CodegenModel => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
             ridlc::Emit::IrBinary => Some(".ir.binpb"),
@@ -664,7 +667,8 @@ fn every_emit_variant_names_its_intended_system_suffix() {
             ridlc::Emit::Rust
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
-            | ridlc::Emit::Flatbuffers => None,
+            | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::CodegenModel => None,
             ridlc::Emit::IrJson => Some(".system.json"),
             ridlc::Emit::IrText => Some(".system.txtpb"),
             ridlc::Emit::IrBinary => Some(".system.binpb"),
@@ -1250,4 +1254,106 @@ fn check_orphan_lock_entry_exits_one_with_ridl_409() {
         stderr.contains(&location),
         "the span is the entry's own line, {location}; stderr:\n{stderr}"
     );
+}
+
+/// `build --plugin <language>` with no `ridlc-gen-<language>` on `PATH` is an
+/// error diagnostic naming the plugin (ADR-0020 decision 9), and — like a
+/// compile error — a build that writes nothing: the misspelled plugin does
+/// not leave every other artifact behind.
+#[test]
+fn build_plugin_not_on_path_exits_one_naming_the_plugin_and_writes_nothing() {
+    let dir = TempDir::new("build-plugin-missing");
+    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
+    dir.write("pkg/speed.typl", SPEED_SOURCE);
+    let out = TempDir::new("build-plugin-missing-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().join("pkg").as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--plugin".as_ref(),
+        "no-such-language-ridl-p3".as_ref(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "a plugin that cannot be found is an error, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("plugin `ridlc-gen-no-such-language-ridl-p3` not found"),
+        "the error names the plugin, stderr:\n{stderr}"
+    );
+    assert!(
+        !out.path().join("veh.common.rs").exists(),
+        "no artifact is written when a plugin cannot be found"
+    );
+}
+
+/// A `--plugin` value that is not `<language>` or `<language>=<path>` is a
+/// usage error, exit 2, before anything is compiled.
+#[test]
+fn build_plugin_with_a_malformed_value_is_a_usage_error() {
+    let dir = TempDir::new("build-plugin-usage");
+    let file = dir.write("speed.typl", SPEED_SOURCE);
+    let out = TempDir::new("build-plugin-usage-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        file.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--plugin".as_ref(),
+        "=/nowhere".as_ref(),
+    ]);
+    assert_eq!(
+        code, 2,
+        "a malformed --plugin value is a usage error, stderr:\n{stderr}"
+    );
+    assert!(stderr.contains("<language>=<path>"), "stderr:\n{stderr}");
+}
+
+/// `build --plugin <language>=<path>` runs the executable at `<path>` and
+/// writes the files its response carries under `--out-dir`, beside the
+/// in-tree emits, from the same request — here a shell script standing in
+/// for a plugin, answering with one file whose content names the artifact
+/// base it was given. Unix only, for the script.
+#[cfg(unix)]
+#[test]
+fn build_plugin_by_path_writes_the_files_the_response_carries() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("build-plugin-path");
+    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
+    dir.write("pkg/speed.typl", SPEED_SOURCE);
+    // The script reads the request, keeps only its `artifactBase` line, and
+    // answers with a nested path so the host's directory creation is seen.
+    let script = dir.write(
+        "ridlc-gen-echo",
+        r#"#!/bin/sh
+base=$(grep '"artifactBase"' | sed 's/.*: "\(.*\)".*/\1/')
+printf '{"files": [{"path": "echo/%s.txt", "text": "base=%s\\n"}], "diagnostics": []}\n' "$base" "$base"
+"#,
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("build-plugin-path-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().join("pkg").as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--plugin".as_ref(),
+        format!("echo={}", script.display()).as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        out.path().join("veh.common.rs").exists(),
+        "the in-tree emit is written too"
+    );
+    let echoed = std::fs::read_to_string(out.path().join("echo").join("veh.common.txt"))
+        .expect("the plugin's file is written under --out-dir, directories created");
+    assert_eq!(echoed, "base=veh.common\n");
 }

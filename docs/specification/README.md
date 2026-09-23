@@ -23,3 +23,15 @@ documents in [`../archive/`](../archive/).
 - **expr-core-specification.md** — the cross-profile contract-term grammar: the
   guaranteed subset `require`/`ensure` uses today, the function layer rmdl
   extends it into, the typing rules, and the evaluation domains.
+- **ir-specification.md** — the intermediate representation's encodings and the
+  stability it promises: canonical protobuf JSON as the canonical encoding, what
+  byte-identical rests on, the nesting bound in message levels and in JSON
+  levels, which schema changes are additive and which are breaking, and how a
+  breaking change is versioned. Partial: the plugin protocol and the diff
+  categories are named but not yet owned here.
+- **frame-specification.md** — the logical frame of the runtime: what crosses
+  the boundary between a provider's runtime and a consumer's runtime per
+  interaction kind — ordinal, kind, envelope, provenance, correlation, payload —
+  in `ridl-rt`'s vocabulary; the invalid-payload behaviour; the rule that a
+  binding is written from it alone; the WebSocket (E11.9) and AIDL-over-Binder
+  (Kotlin) bindings by name. Specified, not built: no runtime here speaks it.
