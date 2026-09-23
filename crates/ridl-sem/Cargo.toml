@@ -29,7 +29,7 @@ regress.workspace = true
 # outright, so this one dependency is declared directly instead. The version
 # is the one literal in the workspace outside `[workspace.dependencies]` —
 # bump it alongside `[workspace.package].version` in the root `Cargo.toml`.
-ridl-core = { path = "../ridl-core", version = "0.2.0", default-features = false }
+ridl-core = { path = "../ridl-core", version = "0.2.1", default-features = false }
 ridl-ir.workspace = true
 ridl-syntax.workspace = true
 rowan.workspace = true
