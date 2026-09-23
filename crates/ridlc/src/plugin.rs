@@ -26,6 +26,7 @@ use std::io::{Read as _, Write as _};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use ridl_ir::codegen::v1;
@@ -303,7 +304,7 @@ pub fn run(
     // own rather than joined, because a plugin that started a child of its
     // own — a launcher script starting a JVM — leaves that child holding
     // both pipes, and a join would wait for it, not for the plugin.
-    let writer = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         // A plugin that exits, or stops reading, before the request is
         // fully written closes its end; the write then fails with a broken
         // pipe, and the exit status is the fact worth reporting, so the
@@ -311,9 +312,11 @@ pub fn run(
         let _ = stdin.write_all(request_json.as_bytes());
         drop(stdin);
     });
-    let reader = std::thread::spawn(move || {
+    let (output_sender, output_receiver) = mpsc::channel();
+    std::thread::spawn(move || {
         let mut output = Vec::new();
-        stdout.read_to_end(&mut output).map(|_| output)
+        let output = stdout.read_to_end(&mut output).map(|_| output);
+        let _ = output_sender.send(output);
     });
 
     let deadline = Instant::now() + timeout;
@@ -340,14 +343,25 @@ pub fn run(
         }
     };
 
-    // The plugin has exited. Its own ends of the pipes are closed, so both
-    // joins are bounded — unless a child of the plugin outlived it holding
-    // the pipe, in which case the read ends when that child does; a plugin
-    // that exits while a child of its own still writes its output is a
-    // plugin whose response is not yet complete, so waiting is right.
-    let _ = writer.join();
-    let output = reader.join().expect("the reader thread does not panic");
-
+    // A child of the plugin may outlive it while holding the pipe open. The
+    // response must still be collected, but never beyond the same deadline
+    // that bounds the plugin process itself.
+    let output =
+        match output_receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(output) => output,
+            Err(RecvTimeoutError::Timeout) => {
+                return Err(PluginError::Timeout {
+                    name,
+                    executable,
+                    timeout,
+                });
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                return Err(io_error(std::io::Error::other(
+                    "the plugin response reader stopped unexpectedly",
+                )));
+            }
+        };
     let output = output.map_err(io_error)?;
     if !status.success() {
         return Err(PluginError::Exit {
@@ -547,6 +561,25 @@ mod tests {
             let message = err.to_string();
             assert!(message.contains("`ridlc-gen-test`"), "{message}");
             assert!(message.contains("--plugin-timeout"), "{message}");
+        }
+
+        #[test]
+        fn a_plugin_that_exits_with_stdout_still_open_is_bounded() {
+            let _guard = serialized();
+            let dir = tempfile::tempdir().unwrap();
+            let plugin = script(
+                dir.path(),
+                "leaves-stdout-open",
+                "cat >/dev/null; sleep 30 & exit 0",
+            );
+            let started = Instant::now();
+            let err = run(&plugin, &request(), Duration::from_millis(300)).unwrap_err();
+            assert!(matches!(err, PluginError::Timeout { .. }), "{err}");
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "the host waited for a descendant holding stdout: {:?}",
+                started.elapsed()
+            );
         }
 
         #[test]
