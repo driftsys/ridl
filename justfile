@@ -1156,14 +1156,14 @@ install-check:
         exit 1
     fi
     cat "$scratch/tamper.err" >&2
-    # Names the step that rejected the download, rather than trusting that
-    # something did: sha256sum and shasum both write this line to stderr on
-    # a checksum mismatch, and nothing else in install.sh's output can match
-    # it, so its presence pins the failure to the checksum step specifically.
-    if ! grep -qi "did not match" "$scratch/tamper.err"; then
-        echo "install-check: installer rejected the download, but not visibly because of the checksum" >&2
-        exit 1
-    fi
+    # install.sh runs under `set -eu`, and the tampered tarball is still a
+    # well-formed archive (see above) so nothing before the checksum step can
+    # fail: the non-zero exit above and the no-binary check below together
+    # already pin the rejection to the checksum step, with no need to also
+    # match sha256sum's own message — which driftsys/ridl#501 found is
+    # localized by GNU coreutils (e.g. French's "ne correspond pas" instead
+    # of "did not match"), making that match fail outside the C locale CI
+    # runs in.
     if [ -e "$install2/ridl" ]; then
         echo "install-check: a corrupted download still installed a binary" >&2
         exit 1
