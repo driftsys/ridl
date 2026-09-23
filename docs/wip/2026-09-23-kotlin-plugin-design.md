@@ -3,7 +3,7 @@
 **Status:** design note, for Sebastien's disposition. Written 2026-09-23, after
 lane P merged (driftsys/ridl#496, commit 7fc417e). It is the design of the first
 external codegen plugin, which lives outside this repository at
-`gitlabee.dt.renault.com/sdv/domains/ccs/hasc/modules/external/ridlc-gen-kotlin`;
+[`driftsys/ridlc-gen-kotlin`](https://github.com/driftsys/ridlc-gen-kotlin);
 this copy is the record the roadmap's Kotlin section points at, and the plugin
 repository carries the same text as its own `docs/design.md`.
 
