@@ -168,9 +168,10 @@ design note, from the archive.
   ports with a correspondence table, the value objects and the payload codec
   with the encoding held open (O-K1, FlatBuffers with a verifier or proto3,
   decided by a spike), the face mirroring ADR-0023 with a coroutine adapter
-  beside it, the per-interface AIDL carrying the frame, the repository layout,
-  the tests, the stages K0 to K5 with their model routing, nine decisions and
-  five open items. A recommendation for Sebastien's disposition.
+  beside it, the per-interface AIDL carrying the frame, the JVM-only repository
+  layout with the Binder runtime in its own repository, the tests, the stages K0
+  to K5 with their model routing, nine decisions and five open items. A
+  recommendation for Sebastien's disposition.
 - **2026-09-22-codegen-model-design.md** — lane P stage P2a: the lowered codegen
   model, message by message — names already transformed per target namespace,
   widths, inits, constraints, tombstones resolved into slots, the FlatBuffers

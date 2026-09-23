@@ -125,12 +125,12 @@ release it was tested against (§7).
 
 **What it is.** The Kotlin spelling of `ridl-rt`: the vocabulary types, the port
 interfaces, the payload interface and the error types, and nothing that runs. It
-has no Android dependency and no transport. A second module implements the ports
-over AIDL and Binder on Android (§6, `ridl-rt-kt-binder`), a third implements
-them in process for tests (`ridl-rt-kt-loopback`, the mirror of
-`crates/ridl-loopback`), and a JNI implementation over a native runtime would be
-a fourth. The generated code depends on `ridl-rt-kt` alone, so it compiles and
-its round trips run on a workstation with no Android SDK.
+has no Android dependency and no transport. One module in this repository
+implements the ports in process for tests (`ridl-rt-kt-loopback`, the mirror of
+`crates/ridl-loopback`). The Binder runtime, which implements them over AIDL on
+Android, is its own repository (D-K8), and a JNI implementation over a native
+runtime would be another. The generated code depends on `ridl-rt-kt` alone, so
+it compiles and its round trips run on a workstation with no Android SDK.
 
 **The correspondence is by name.** Each Kotlin declaration names the `ridl-rt`
 item it spells, so ADR-0021's decisions and the frame specification apply to it
@@ -353,38 +353,41 @@ typed method per payload:
   oneway void onAck(long correlation, in Outcome outcome);
   ```
 
-- `Frame` and `Outcome` and `CatalogRef` are three `parcelable` declarations in
-  `ridl-rt-kt-binder`, not generated: the frame's header fields of §4 (interface
-  number, ordinal, kind, sequence, timestamp, provenance, correlation) and the
-  payload as `byte[]`.
+- `Frame`, `Outcome` and `CatalogRef` are three `parcelable` declarations the
+  plugin emits once per package under `aidl/ridl/rt/`, identical for every
+  package, so the generated AIDL is self-contained and passes the `aidl` tool on
+  its own: the frame's header fields of §4 (interface number, ordinal, kind,
+  sequence, timestamp, provenance, correlation) and the payload as `byte[]`.
 
 The per-interface AIDL exists so that Binder's own permission model, SELinux
 labels and service registration work per ridl interface, which a single generic
 `IRidl` would not give; the frame parcelable exists so that the payload and
-header cross exactly as §4 says. The `ridl-rt-kt-binder` module implements
-`Caller`, `Handler`, `SignalReader`, `EventSource`, `SignalWriter` and
-`EventSink` over the `Stub` and `Proxy` classes `aidl` generates from these
-files, with the Binder identity of the calling process as the caller identity of
-§7.
+header cross exactly as §4 says. The Binder runtime, in its own repository
+(D-K8), implements `Caller`, `Handler`, `SignalReader`, `EventSource`,
+`SignalWriter` and `EventSink` over the `Stub` and `Proxy` classes `aidl`
+generates from these files, with the Binder identity of the calling process as
+the caller identity of §7, and the range check of §11.2 at `attach`.
 
 ## 6. The repository
 
-Gradle, Kotlin DSL, one settings file, these modules:
+Gradle, Kotlin DSL, one settings file, every module under `modules/`, all JVM:
 
-| Module                  | Kind                      | Depends on                                                              | Holds                                                                                                                                       |
-| ----------------------- | ------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin`                | JVM application, `shadow` | `protobuf-kotlin`, `protobuf-java-util`, `kotlinpoet`                   | the reader (§2), the generators (§4, §5), the AIDL templates, the `main`                                                                    |
-| `ridl-rt-kt`            | JVM library               | nothing                                                                 | §3                                                                                                                                          |
-| `ridl-rt-kt-loopback`   | JVM library               | `ridl-rt-kt`                                                            | the in-process runtime: every port over a queue and a map, no IO; the mirror of `crates/ridl-loopback` and the runtime every test runs over |
-| `ridl-rt-kt-coroutines` | JVM library               | `ridl-rt-kt`, `kotlinx-coroutines-core`                                 | §5's adapter, O-K3                                                                                                                          |
-| `ridl-rt-kt-binder`     | Android library           | `ridl-rt-kt`                                                            | the three parcelables, the port implementations over AIDL, the range check at `attach`                                                      |
-| `conformance`           | JVM tests                 | `plugin`, `ridl-rt-kt`, `ridl-rt-kt-loopback`, `kotlin-compile-testing` | the pinned `ridl` release, the corpus fixtures, and every test of §7                                                                        |
-| `samples/cabin`         | Android application       | the above                                                               | the first demo: `examples/cabin`'s package, a Kotlin consumer and a Kotlin provider over Binder on one device                               |
+| Module                          | Kind                      | Depends on                                            | Holds                                                                                                                                           |
+| ------------------------------- | ------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modules/ridlc-gen-kotlin`      | JVM application, `shadow` | `protobuf-kotlin`, `protobuf-java-util`, `kotlinpoet` | the reader (§2), the generators (§4, §5), the AIDL templates, the `main`; builds the `ridlc-gen-kotlin` executable                              |
+| `modules/ridl-rt-kt`            | JVM library               | nothing                                               | §3                                                                                                                                              |
+| `modules/ridl-rt-kt-loopback`   | JVM library               | `ridl-rt-kt`                                          | the in-process runtime: every port over a queue and a map, no IO; the mirror of `crates/ridl-loopback` and the runtime every test runs over     |
+| `modules/ridl-rt-kt-coroutines` | JVM library               | `ridl-rt-kt`, `kotlinx-coroutines-core`               | §5's adapter, O-K3                                                                                                                              |
+| `modules/conformance`           | JVM tests                 | the four above, `kotlin-compile-testing`              | the pinned `ridl` release, the corpus fixtures, and every test of §7                                                                            |
+| `samples/cabin`                 | JVM application           | `ridl-rt-kt`, `ridl-rt-kt-loopback`                   | `examples/cabin`'s package generated by the plugin, with a Kotlin consumer and a Kotlin provider round-tripping over the loopback: the JVM demo |
 
-The Android modules are in the same repository and the same settings file, but
-behind a Gradle property, `-Pandroid=false` by default in CI, so that the Gradle
-`check` task on a workstation without the SDK builds and tests everything JVM. A
-second CI job with the SDK builds the rest.
+No Android module is in this repository. The Binder runtime and the on-device
+demo, a Kotlin consumer against a Kotlin provider over Binder, live in the
+Binder runtime's own repository, which depends on `ridl-rt-kt` and consumes the
+AIDL this plugin emits (D-K8). The one thing here that needs the Android SDK is
+the `aidl` tool check of §7, which runs in a CI job that installs the SDK's
+build-tools and nothing else; the Gradle `check` task on a workstation without
+the SDK builds and tests everything.
 
 The `ridl` toolchain enters the repository in one place: `conformance` pins a
 release tag of `driftsys/ridl` and downloads its `ridl` binary through
@@ -420,8 +423,9 @@ mutation pass is what keeps the snapshot tests honest.
   and read, over `ridl-rt-kt-loopback`, with the settlement table exercised by
   one failing `require`, one failing `ensure`, one corrupt argument buffer and
   one unknown ordinal.
-- **The AIDL is valid.** Every generated `.aidl` passes the SDK's `aidl` tool,
-  in the Android CI job.
+- **The AIDL is valid.** Every generated `.aidl`, the three parcelables
+  included, passes the SDK's `aidl` tool, in the CI job that carries the
+  build-tools.
 - **The plugin is the same plugin through the host.** `ridl build` with the
   plugin given by path over the corpus writes the same files as invoking the jar
   directly on the same request. This is the parity test of `codegen-plugins.md`
@@ -431,8 +435,8 @@ mutation pass is what keeps the snapshot tests honest.
   proves nothing, and the tests above are the ones that must fail under
   mutation.
 
-Every check runs on `./gradlew check`; the Android job adds the AIDL check and
-the sample's build.
+Every check runs on the Gradle `check` task; the build-tools job adds the `aidl`
+check.
 
 ## 8. Stages
 
@@ -443,7 +447,7 @@ half, Opus for the code, Sonnet for the mechanical rows.
 
 | Stage | Work                                                                                                                                                                                | Model                                                             | After                    |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------ |
-| K0    | The repository: Gradle settings, the modules empty, `conformance` pinning a `ridl` release and downloading it, CI with the JVM job and the Android job, `.gitlab-ci.yml`            | Sonnet                                                            | this note disposed       |
+| K0    | The repository: Gradle settings, the modules empty, `conformance` pinning a `ridl` release and downloading it, CI with the JVM job and the `aidl` job, `.gitlab-ci.yml`             | Sonnet                                                            | this note disposed       |
 | K1a   | `ridl-rt-kt`: the correspondence table of §3 as code, with a test per row that the Kotlin item exists and spells the Rust one                                                       | Opus, high                                                        | K0                       |
 | K1b   | The O-K1 spike: the FlatBuffers verifier for the cabin package's payloads, or the proto3 codec if it fails; the disposition recorded here and in the frame specification if it is C | Fable                                                             | K1a                      |
 | K1c   | `ridl-rt-kt-loopback`                                                                                                                                                               | Opus, high                                                        | K1a                      |
@@ -452,13 +456,13 @@ half, Opus for the code, Sonnet for the mechanical rows.
 | K2c   | `Codec.kt`: the codec of §4 for the encoding K1b chose, with the round-trip and malformed-buffer tests                                                                              | Opus, high                                                        | K2b, K1b                 |
 | K3a   | `Faces.kt`: the descriptors, the clients, the publishers, the providers and `dispatch`, with the loopback round trips                                                               | Fable for the clause translator and `dispatch`; Opus for the rest | K2c, K1c                 |
 | K3b   | The AIDL templates and their `aidl` check                                                                                                                                           | Opus, high                                                        | K3a                      |
-| K4a   | `ridl-rt-kt-binder`: the parcelables and the ports over AIDL                                                                                                                        | Fable                                                             | K3b                      |
-| K4b   | `samples/cabin`: the Kotlin consumer and the Kotlin provider over Binder on one device; the first demo                                                                              | Opus, high                                                        | K4a                      |
+| K4    | `samples/cabin`: the plugin's output for the cabin package, a Kotlin consumer and a Kotlin provider round-tripping over the loopback; the JVM demo                                  | Opus, high                                                        | K3b                      |
 | K5    | `ridl-rt-kt-coroutines` and the `*Await` extensions, O-K3                                                                                                                           | Opus                                                              | K3a; in parallel with K4 |
 
 K1 and K2a run in parallel: the runtime library and the plugin's reader touch no
-common file. The demo of K4b is Kotlin on both sides by the disposition of O-P3;
-a Rust provider over Binder is a later repository.
+common file. The on-device demo, Kotlin on both sides by the disposition of
+O-P3, is the Binder runtime repository's first stage, after K3b; a Rust provider
+over Binder is a later repository again.
 
 ## 9. Decisions
 
@@ -498,10 +502,16 @@ Each decision names the alternative it rejected.
   per ridl type, because that is a second projection of every declaration onto
   AIDL's type system, a rival protocol to the frame, and the thing a Rust peer
   could never speak.
-- **D-K8. The Android modules are in the repository behind a property, not a
-  second repository.** Rejected: a second repository for the binder module and
-  the sample, because the binder module is the only consumer of the AIDL
-  templates, and a change to one without the other cannot be tested.
+- **D-K8. The plugin repository is JVM only; the Binder runtime and the
+  on-device demo are a separate repository.** The plugin, the runtime contract,
+  the loopback and the conformance tests build and run on any workstation with a
+  JDK, and the Android toolchain enters only for the `aidl` check. Rejected: the
+  Binder runtime as an Android module here behind a Gradle property, because it
+  doubles the build configuration and the CI of a repository whose product is a
+  code generator, and because the Binder runtime has its own release cadence,
+  tied to the device, not to the plugin. The cost accepted: a change to the AIDL
+  templates is tested here by the `aidl` tool alone, and end to end only when
+  the Binder repository bumps its plugin pin.
 - **D-K9. `ridl` enters the plugin repository as a pinned release binary, never
   as source.** Rejected: a git submodule of `driftsys/ridl`, because the plugin
   must prove it works against what a user installs, and a submodule drifts to a
