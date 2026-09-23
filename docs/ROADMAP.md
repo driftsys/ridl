@@ -843,10 +843,9 @@ Until it lands, a language without a ridl backend reads payloads through the
 emitted schema and its own generator, restricted to inline or trusted reads,
 because such a reader has no verifier and no typl constraint checks (§3.13).
 
-**Open item O-P3.** Whether a Rust Binder runtime (`ridl-transport-binder`,
-Android only) is in scope for the first Kotlin demo is undecided; it is not
-needed before the Kotlin side starts. Proposed in the
-[lane P driver](wip/2026-09-22-lane-p-driver.md).
+**O-P3 is out of scope for this repository.** A Rust Binder runtime
+(`ridl-transport-binder`, Android only) belongs to a later repository and is not
+needed for the first Kotlin demo.
 
 ---
 
