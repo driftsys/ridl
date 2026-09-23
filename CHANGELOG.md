@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.2.1] (2026-09-23)
+
+### Bug Fixes
+
+- **repo:** stop matching sha256sum's localized message in install-check
+  ([#503]) ([e53ee4d])
+- **ridlc:** bound plugin response collection ([7886ea5])
+- **editors:** rename the extension to ridl-lang, its Marketplace name is taken
+  ([#499]) ([43e1cf1])
+
+### Documentation
+
+- **ridlc:** describe plugin response timeout ([591c32c])
+- **roadmap:** close the Kotlin Binder runtime scope item ([817e0bb])
+- **docs:** add the codegen model design note, lane P stage P2a ([fe3ce8e])
+- **adr:** make canonical protobuf JSON the canonical IR encoding ([243dc49])
+- **docs:** add the frame specification, story E11.1 ([975fae2])
+- **docs:** add the IR stability design note, lane P stage P1a ([6644f82])
+- **roadmap:** move the plugin protocol ahead of the remaining codecs and
+  TypeScript ([bbae0ed])
+- **editors:** lead the vscode README with features, not dev commands ([#500])
+  ([b7859fc])
+- **docs:** add the lane P driver, the codegen plugin system toward Kotlin
+  ([#494]) ([3f0a65d])
+
+### Features
+
+- **repo:** merge lane P codegen plugin system ([7fc417e])
+- **ridl-ir:** add the backend contract over the codegen model ([86f5fa6])
+- **ridl-ir:** add the lowered codegen model, its schema and its lowering
+  ([5eb7f8e])
+- **editors:** add RIDL extension icon ([#497]) ([c338f9c])
+- **ci:** release ridlc alongside ridl on the editor-v* train ([#495])
+  ([2632e1d])
+
+### Refactoring
+
+- **ridl-backend-rust:** read the domain types from the lowered model
+  ([8d015e5])
+
+[0.2.1]: https://github.com/driftsys/ridl/compare/v0.2.0...v0.2.1
+[e53ee4d]: https://github.com/driftsys/ridl/commit/e53ee4d
+[#503]: https://github.com/driftsys/ridl/issues/503
+[7886ea5]: https://github.com/driftsys/ridl/commit/7886ea5
+[43e1cf1]: https://github.com/driftsys/ridl/commit/43e1cf1
+[#499]: https://github.com/driftsys/ridl/issues/499
+[591c32c]: https://github.com/driftsys/ridl/commit/591c32c
+[817e0bb]: https://github.com/driftsys/ridl/commit/817e0bb
+[fe3ce8e]: https://github.com/driftsys/ridl/commit/fe3ce8e
+[243dc49]: https://github.com/driftsys/ridl/commit/243dc49
+[975fae2]: https://github.com/driftsys/ridl/commit/975fae2
+[6644f82]: https://github.com/driftsys/ridl/commit/6644f82
+[bbae0ed]: https://github.com/driftsys/ridl/commit/bbae0ed
+[b7859fc]: https://github.com/driftsys/ridl/commit/b7859fc
+[#500]: https://github.com/driftsys/ridl/issues/500
+[3f0a65d]: https://github.com/driftsys/ridl/commit/3f0a65d
+[#494]: https://github.com/driftsys/ridl/issues/494
+[7fc417e]: https://github.com/driftsys/ridl/commit/7fc417e
+[86f5fa6]: https://github.com/driftsys/ridl/commit/86f5fa6
+[5eb7f8e]: https://github.com/driftsys/ridl/commit/5eb7f8e
+[c338f9c]: https://github.com/driftsys/ridl/commit/c338f9c
+[#497]: https://github.com/driftsys/ridl/issues/497
+[2632e1d]: https://github.com/driftsys/ridl/commit/2632e1d
+[#495]: https://github.com/driftsys/ridl/issues/495
+[8d015e5]: https://github.com/driftsys/ridl/commit/8d015e5
+
 ## 0.2.0 (2026-09-22)
 
 ### Bug Fixes
