@@ -23,7 +23,10 @@ nothing the note did not decide: it names the files, the tests and the order.
 
 **Stages:** the driver's §3 table is unchanged by this plan — F3 is Tasks 1 and
 2, F4's second half is Task 3, F5a is Task 4, the release is between, F5b is
-Task 5. Each task is one pull request, reviewed per the driver's §0.
+Task 5. One thing in it changes: the poll face becomes `pub(crate)` in F5a, not
+F5b, because an async method and a poll method of one name cannot share a
+`Client`; the driver's §3 table is amended accordingly. Each task is one pull
+request, reviewed per the driver's §0.
 
 ## Currency
 
@@ -58,8 +61,9 @@ flight when it was written:
   assert whitespace-stripped substrings. A face change regenerates the fixture
   in the same commit and updates the substrings it breaks.
 - **`just demo` is in `just build`**, and it compiles `examples/cabin/consumer`
-  against the emitted crate with plain `rustc`. Task 4 keeps the poll face
-  public so that program keeps compiling; Task 5 rewrites the program.
+  against the emitted crate with plain `rustc`. Task 4 makes the poll face
+  `pub(crate)` and rewrites that program onto the async client in the same pull
+  request; Task 5 adds the blocking client to it.
 - **Conventional Commits**, scopes: `ridl-rt`, `ridl-loopback`,
   `ridl-backend-rust`, `ridlc`, `ridl` (the frame specification took `ridl` in
   ddd56fd), `docs`, `adr`, `roadmap`.
@@ -312,7 +316,7 @@ Task 1 must still turn the suite red (re-run it, and say so).
 
 ---
 
-### Task 4: E11.21, first half — the async `Client`, the named futures and `serve`; the poll face still public
+### Task 4: E11.21, first half — the async `Client`, the named futures and `serve`; the poll face `pub(crate)`
 
 **Model:** Opus, effort high. Starts after Tasks 1 and 2.
 
@@ -320,26 +324,27 @@ Task 1 must still turn the suite red (re-run it, and say so).
 
 - Modify: `crates/ridl-backend-rust/src/face.rs` — `client()` emits the new
   bounds and, per command and query, a named future type and the plain method
-  that sends and returns it; `next_event`'s async form; `serve` and its future;
-  `dispatch` returns `Result<usize, ReadError>` (still `pub`); the module
-  documentation restates RA-20 (note F-15).
+  that sends and returns it; `next_event` as a future; `serve` and its future;
+  the correlation newtypes, the send, acknowledgment, reply and event poll
+  methods become `pub(crate)` under the names `send_<call>`, `poll_<call>_ack`,
+  `poll_<call>_reply` and `poll_next_event`; `dispatch` becomes the `pub(crate)`
+  one-pass step returning `Result<usize, ReadError>`; the module documentation
+  restates RA-20 (note F-15).
 - Modify: `crates/ridl-backend-rust/tests/generated/interaction_face.rs`
   (regenerated), `tests/face_generation.rs`, `tests/dispatch_generation.rs` (the
   substrings), `tests/interaction_face.rs` (the new round trips and the F-14
   face tests), `tests/support/` (a recording port double implementing
   `Caller + Clock + Wakeable`).
-- Modify: `examples/cabin/consumer/src/main.rs` — the command and the query
-  round trips go through the async client, polled by hand with
-  `ridl_rt::task::noop_waker` (enable `ridl-rt/std` in the consumer's manifest);
-  the signal and event round trips are unchanged.
+- Modify: `examples/cabin/consumer/src/main.rs` — every round trip goes through
+  the async client, polled by hand with `ridl_rt::task::noop_waker` (enable
+  `ridl-rt/std` in the consumer's manifest); the provider side runs `serve`
+  polled once per step.
 - Modify: `docs/design/interaction-face.md` — a dated section "E11.21, first
   half" describing what is emitted, so the record never describes a face the
   fixture does not contain (the rewrite is Task 5's).
 
-**Interfaces:** exactly note F-10's, with the poll face beside them. One name
-collides while both faces are public: the poll `next_event` keeps its name in
-this task, and the async event receive is emitted as `wait_event`; Task 5
-renames it to `next_event` when the poll method goes `pub(crate)`.
+**Interfaces:** exactly note F-10's; the poll face is `pub(crate)` under the
+internal names above.
 
 - [ ] **Step 1: Write the failing face-generation assertions** for the bounds,
       the future types and `serve`'s signature (`face_generation.rs`,
@@ -362,11 +367,12 @@ renames it to `next_event` when the poll method goes `pub(crate)`.
       `just compat-check` does not compile the emitted cabin crate at 1.83 as
       edition 2021, add it there (note F-10, "The build matrix").
 - [ ] **Step 5: Commit and open the pull request.** Part of driftsys/ridl#515
-      (not closed until Task 5).
+      (not closed until Task 5). This is the breaking step for a consumer of
+      generated code.
 
-**Must not break:** `examples/cabin/consumer` (the poll face is still public);
-the two `crates/ridlc` tests ADR-0023 decision 2 names; every existing round
-trip; the descriptor snapshots.
+**Must not break:** `just demo` (the consumer is rewritten in this task); the
+two `crates/ridlc` tests ADR-0023 decision 2 names; every existing round trip,
+moved onto the async client; the descriptor snapshots.
 
 ---
 
@@ -380,17 +386,16 @@ the one it links.
 
 ---
 
-### Task 5: E11.21, second half — the `blocking` module, the private poll face, the records, gardening
+### Task 5: E11.21, second half — the `blocking` module, the records, gardening
 
 **Model:** Opus, effort high.
 
 **Files:**
 
 - Modify: `crates/ridl-backend-rust/src/face.rs` — the `blocking` module under
-  `#[cfg(feature = "std")]` (note F-10 and F-11); the correlation newtypes, the
-  send methods, `*_ack`, `*_reply`, the poll `next_event` and `dispatch` become
-  `pub(crate)`; `wait_event` is renamed `next_event`. The emitted `Cargo.toml`
-  (`crates/ridlc`'s crate emission) declares `std = ["ridl-rt/std"]`.
+  `#[cfg(feature = "std")]` (note F-10 and F-11). The emitted `Cargo.toml`
+  (`crates/ridlc/src/lib.rs`, the template) already declares `std = []`, on by
+  default; it becomes `std = ["ridl-rt/std"]`.
 - Modify: the fixture and the three substring test files; `interaction_face.rs`
   — the blocking client's round trips and the by-phase timeout test (F-14).
 - Modify: `examples/cabin/consumer/src/main.rs` — the four round trips through
@@ -409,9 +414,9 @@ the one it links.
       test.**
 - [ ] **Step 2: Emit the `blocking` module**; `block_on` over the pinned future,
       `sent()` asked when it gives up (F-11).
-- [ ] **Step 3: Make the poll face `pub(crate)`** and rename `wait_event`;
-      regenerate; fix every consumer in the tree (`examples/cabin/consumer`, the
-      tests).
+- [ ] **Step 3: Regenerate the fixture** and move `examples/cabin/consumer`'s
+      command and query round trips onto the blocking client, keeping the async
+      ones beside them.
 - [ ] **Step 4: The records and the book**; `just book-check`,
       `just
       link-check`, `just doc-path-check`.

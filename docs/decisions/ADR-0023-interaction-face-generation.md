@@ -53,10 +53,10 @@ internal methods, which become `pub(crate)`. Sebastien disposed of the note's
 fifteen decisions on its pull request on 2026-09-2x; this amendment records F-1
 to F-4, F-7 and F-10 to F-12 of that disposition, and closes driftsys/ridl#485.
 Both land in two changes to `crates/ridl-backend-rust/src/face.rs`: story
-E11.21's first half emits the clients beside the public poll face, and its
-second half, after the `ridl-rt` release, makes the poll face `pub(crate)`.
-Until the first lands this record describes a face the fixture does not yet
-emit.
+E11.21's first half emits the async client and `serve` and makes the poll face
+`pub(crate)`, and its second half, after the `ridl-rt` release, adds the
+blocking client. Until the first lands this record describes a face the fixture
+does not yet emit.
 
 ## Context
 
@@ -211,7 +211,8 @@ argument for it in the command case.
    and returns `Result<T, ridl_rt::error::ClientError>`. The send methods this
    decision describes remain, return `Result<<Name>Correlation, SendError>` as
    before, and become `pub(crate)` with the correlation newtypes, `*_ack`,
-   `*_reply`, the poll `next_event` and `dispatch` in E11.21's second half. The
+   `*_reply`, the poll `next_event` and `dispatch` in E11.21's first half, under
+   names of their own so they do not collide with the async methods. The
    reasoning above is unchanged and is carried one level up: `ClientError::Send`
    holds the `SendError` untouched, so a client-side `require` failure is
    `ClientError::Send(SendError::Contract(Contract::PreconditionFailed))`, and
@@ -278,12 +279,14 @@ argument for it in the command case.
    - **The future.** It holds `&'a mut P`, the argument value until the send
      succeeds, its phase and its deadline; it is `Unpin`, `Send` when `P` and
      the argument type are, and needs no `Sync`. Each `poll` registers its
-     interest with `Wakeable::wake_on`, then reads the port, then returns.
-     Dropping it while a call is in flight calls `Caller::forget`; a command
-     already sent is not taken back, and a query already sent is still served
-     and settled. One call is in flight per `Client` for the length of the
-     borrow; a second concurrent call is a second `Client` over a second caller
-     handle. Notes F-4 and F-10.
+     interest with `Wakeable::wake_on`, then reads the port, then returns. After
+     taking its outcome it calls `Caller::forget` at once, and dropping it while
+     a call is in flight calls `Caller::forget` too, so `forget` is the one
+     operation that reclaims a slot and `ack` and `reply` stay non-consuming; a
+     command already sent is not taken back, and a query already sent is still
+     served and settled. One call is in flight per `Client` for the length of
+     the borrow; a second concurrent call is a second `Client` over a second
+     caller handle. Notes F-4 and F-10.
    - **The bound.** With `Member::call_deadline()` `Some(max)`, the deadline is
      `now + max` read from the port's `Clock` when the method is called, and the
      future checks it on every poll; with `None` the future waits without a
@@ -318,12 +321,14 @@ argument for it in the command case.
      returns `Ok(())` at the timeout and the error otherwise. `dispatch` becomes
      the `pub(crate)` one-pass step `serve` calls and returns the `ReadError` it
      met. Note F-7.
-   - **Two changes, and what each breaks.** E11.21's first half emits all of the
-     above beside the public poll face, so nothing in the tree breaks; its
-     second half, after the `ridl-rt` 0.x minor carrying E11.16 to E11.19, makes
-     the poll face `pub(crate)`, which is the one breaking step for a consumer
-     of generated code, and rewrites `examples/cabin/consumer` and the records
-     with it.
+   - **Two changes, and what each breaks.** E11.21's first half emits the async
+     `Client`, its futures and `serve`, and makes the poll face `pub(crate)` in
+     the same change, because an async `set_level` and a poll `set_level` cannot
+     both be methods of one `Client`; it moves `examples/cabin/consumer` and the
+     round-trip tests onto the async client, and is the one breaking step for a
+     consumer of generated code. Its second half, after the `ridl-rt` 0.x minor
+     carrying E11.16 to E11.19, adds the `blocking` module and rewrites the
+     records.
 
    **driftsys/ridl#485 is closed by this decision.** Its item 1, the three-deep
    reply shape, is closed by the poll face becoming `pub(crate)`: no public
@@ -352,7 +357,7 @@ argument for it in the command case.
 | A stateless face, every generated method taking the port as an argument                 | Removes the borrow, but adds a parameter to every generated method and leaves nowhere for the once-at-construction catalog check of ADR-0021 decision 3. See decision 5.                                                                                                                                |
 | Keep `Client<'a, P>`, and ask every runtime to hand out short-lived ports               | Moves the cost into every runtime rather than removing it, and still admits no owned handle and no wrapper. See decision 5.                                                                                                                                                                             |
 | `Correlation<K>` in `ridl-rt`, typed by a marker `K`                                    | Types the port, which contradicts the rule that a port carries identity and bytes and never a payload type, and makes every runtime carry a type parameter it never reads. See decision 4's amendment.                                                                                                  |
-| Keep the poll face public beside the two clients (2026-09-2x)                           | Two public ways to make one call, and every application still able to write the wait loop the clients exist to remove. See decision 6.                                                                                                                                                                  |
+| Keep the poll face public beside the async client (2026-09-2x)                          | Two public ways to make one call, and every application still able to write the wait loop the clients exist to remove. See decision 6.                                                                                                                                                                  |
 | `async fn` for a client call (2026-09-2x)                                               | Sends on the first poll, not when called; is opaque, so a `no_std` frame loop cannot store it without allocation; and makes the future's size a compiler artifact. See decision 6 and note F-4.                                                                                                         |
 | `impl Future` in return position (2026-09-2x)                                           | Cannot be named, so cannot be stored in a frame loop's state, and the blocking client cannot ask it whether the call was sent after `block_on` gives up. See decision 6 and note F-10.                                                                                                                  |
 | A `deadline` parameter on every blocking call (2026-09-2x)                              | Makes the two clients' signatures differ in more than the future; an absolute instant is computed from a duration by every caller anyway. See decision 6 and note F-11.                                                                                                                                 |

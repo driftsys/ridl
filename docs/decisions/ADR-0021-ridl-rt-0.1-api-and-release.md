@@ -514,11 +514,14 @@ trusted with no `unsafe` and no second verification pass.
 14. **Amendment (2026-09-2x) — `Transport::Busy` crosses the frame (story
     E11.16).** `Transport` gains `Busy`: the providing runtime refused the call
     at admission — no slot, no budget, or a call faster than the member's `min`
-    — and the caller may retry later. It crosses as a `response` outcome, which
-    the frame specification §9.6 states as the second of exactly two `Transport`
-    variants that cross, and §8's cell on refusing a faster call says the answer
-    is `Busy`. `Transport` is `#[non_exhaustive]` (decision 9), so the variant
-    is additive. `SendError::Busy`, the local case, is unchanged. Note F-13.
+    — and the caller may retry later. It crosses as a `response` outcome: `busy`
+    joins `corrupt` as a bare value of the frame's `outcome` field (frame
+    specification §5.3, §5.4 and §5.6), the caller's runtime maps it to
+    `Err(CallError::Transport(Busy))` (§5.3), §9.6 states it as the second of
+    exactly two `Transport` variants that cross, and §8's cell on refusing a
+    faster call says the answer is `busy`. `Transport` is `#[non_exhaustive]`
+    (decision 9), so the variant is additive. `SendError::Busy`, the local case,
+    is unchanged. Note F-13.
 
 15. **Amendment (2026-09-2x) — the `correlate` module: `Table<const N: usize>`
     and `Waiters` (story E11.18).** A seventh unconditional module,
@@ -529,19 +532,20 @@ trusted with no `unsafe` and no second verification pass.
     `(generation << 16) | slot`, so `N ≤ 65536` and 48 bits of generation
     remain; an optional byte budget debited at insert from `Member::reservation`
     and credited when the slot is reclaimed; `&mut self` throughout, so each
-    runtime puts it behind its own lock. A slot is reclaimed when its outcome is
-    taken or when it is forgotten; a `forget` of a call in flight marks the slot
-    and the settlement reclaims it. The table stores no reply bytes: a runtime
-    keeps them in storage of its own indexed by slot, sized from `table_budget`
-    where it has a descriptor. Every operation that would wake returns the waker
-    instead, and the runtime wakes it after releasing its lock, so no waker runs
-    under a runtime's mutex. `Waiters` is the bounded registry a handle keeps
-    behind `Wakeable`: one `Option<Waker>` per kind of key, `register` returning
-    the displaced waker, `take` clearing. Both allocate nothing and hold no
-    lock. The exact method signatures are the plan's and the design record's.
-    `ridl-loopback` moves its caller side onto both in the same story, with
-    sixteen slots and no byte budget until E16.2 gives it a descriptor. Notes
-    F-5, F-8 and F-9.
+    runtime puts it behind its own lock. A slot is reclaimed by `forget` alone:
+    at once for a settled call, and at the settlement for a call in flight,
+    whose slot `forget` marks; `Caller::ack` and `Caller::reply` do not consume.
+    On a reclaim every registered `Slot` waiter is woken. The table stores no
+    reply bytes: a runtime keeps them in storage of its own indexed by slot,
+    sized from `table_budget` where it has a descriptor. Every operation that
+    would wake returns the waker instead, and the runtime wakes it after
+    releasing its lock, so no waker runs under a runtime's mutex. `Waiters` is
+    the bounded registry a handle keeps behind `Wakeable`: one `Option<Waker>`
+    per kind of key, `register` returning the displaced waker, `take` clearing.
+    Both allocate nothing and hold no lock. The exact method signatures are the
+    plan's and the design record's. `ridl-loopback` moves its caller side onto
+    both in the same story, with sixteen slots and no byte budget until E16.2
+    gives it a descriptor. Notes F-5, F-8 and F-9.
 
 16. **Amendment (2026-09-2x) — `ClientError` and `ProviderError`.** `error`
     gains `ClientError { Send(SendError), Call(CallError), Read(ReadError) }`,
