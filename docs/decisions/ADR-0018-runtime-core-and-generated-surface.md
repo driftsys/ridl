@@ -573,6 +573,17 @@ be generated, and in what order", which is what this record answers.
    return. What remains open is whether a generated Rust `async fn` returning
    `()` states that distinction clearly enough, or whether the signature should
    carry a runtime delivery result instead.
+
+   **Answered for the generated face, 2026-09-26** (lane F's design note, F-15;
+   [ADR-0023](ADR-0023-interaction-face-generation.md) decision 6). A
+   `command`'s future resolves on the delivery acknowledgment, which is the
+   runtime's finding and not the application's, and its output is
+   `Result<(), ridl_rt::error::ClientError>`: exactly the runtime delivery
+   result the second reading above asks for, and never an acceptance value. The
+   two rejections in the alternatives table are about layers 1 and 2 of this
+   record, the engine's, and bind neither the ports library nor generated code,
+   as the 2026-09-12 correction says; they stand. What stays open is the
+   engine's own question, if rmdl reopens it.
 6. **The interface-granularity rule is unstated in ridl §14.** Splitting an
    interface splits the computation that produces it; nothing says so.
 7. **Scoping.** Which deployment tiers are targets, and whether Android

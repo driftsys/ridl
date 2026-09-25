@@ -88,7 +88,11 @@ as-built map.
   API decisions and the 0.x breaking-change rule; binds every consumer of
   `ridl-rt` — the Rust codegen, the runtimes, and story E14.2; its 2026-09-20
   amendment adds decisions 11 and 12, the port-trait forwarding impls and the
-  handle model a runtime presents; the crate's as-built design record is
+  handle model a runtime presents, and its 2026-09-26 amendment adds decisions
+  13 to 18 — the `Wakeable` port extension and its `Interest` keys,
+  `Transport::Busy` crossing the frame, the `correlate` module, `ClientError`
+  and `ProviderError`, the E11.19 helpers ratified in place, and the one 0.x
+  minor that carries E11.16 to E11.19; the crate's as-built design record is
   `docs/design/ridl-rt.md`), ADR-0022 (the rsdl system in the IR — where the
   lowered system lives, that it is its own artifact
   `<pkg.Name>.system.{json,txtpb,binpb}` written by the three IR dump emits,
@@ -107,8 +111,12 @@ as-built map.
   half the call's own correlation newtype and adds decision 5, a face that holds
   its port by value with no lifetime parameter — neither emitted yet, both
   landing with the `ridl-backend-rust` face change that follows the record; the
-  amendment's own reasoning is on driftsys/ridl#429. The as-built design record
-  is `docs/design/interaction-face.md`).
+  amendment's own reasoning is on driftsys/ridl#429. Its 2026-09-26 amendment
+  supersedes decision 4 for the public surface and adds decision 6: an async
+  `Client` and a blocking `Client` per interface returning `ClientError`,
+  `serve` in both forms, and the poll face `pub(crate)` — read it before
+  changing what the face emits for a call. The as-built design record is
+  `docs/design/interaction-face.md`).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

@@ -49,6 +49,11 @@ pub trait SignalReader: Attached {
     /// its provenance, its freshness and its envelope. The runtime resolves
     /// both the provenance and the freshness.
     ///
+    /// A sample whose provenance is `Init` or `Invalid(Declared)` may carry
+    /// zero bytes, because the runtime has no value to copy; `len` is then 0,
+    /// and a generated face returns the channel's init value under that
+    /// provenance (ADR-0021 decision 17).
+    ///
     /// Returns `ReadError::Short` when `out` is shorter than the value.
     fn read(
         &self,
@@ -502,8 +507,9 @@ pub enum SettleError {
 // such a bound with or without them, because each implements the port traits
 // itself.
 //
-// `impl<P: T + ?Sized> T for Box<P>` is deferred: it needs `alloc`, which no
-// feature combination of this crate brings in.
+// `impl<P: T + ?Sized> T for Box<P>` is deferred: it needs `alloc`, which only
+// the `std` feature brings in, and nothing needs a boxed port (ADR-0021 open
+// question 5).
 
 impl<P: Attached + ?Sized> Attached for &P {
     fn catalog(&self) -> &CatalogRef {

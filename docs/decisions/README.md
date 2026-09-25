@@ -130,9 +130,9 @@
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
   payload encoding, and the encoding matrix settles the codec-in-wasm boundary
   as FlatBuffers; `ridl-rt` is one `no_std` crate with one cargo feature per
-  encoding (a fourth, non-encoding feature `std` is ADR-0021 decision 8's note
-  of 2026-09-25), with the runtimes and the transports outside it in both Rust
-  and TypeScript; and a backend becomes an executable over
+  encoding (a fourth, non-encoding feature `std` is ADR-0021 decision 8's
+  2026-09-26 amendment), with the runtimes and the transports outside it in both
+  Rust and TypeScript; and a backend becomes an executable over
   `generate(CodegenRequest) -> CodegenResponse`, fed by a lowering step that
   derives the shared semantics once in the compiler. Not epic-scoped: it binds
   every backend this workspace or the ecosystem grows, and the runtime material
@@ -168,23 +168,27 @@
   `ridl build` contract, and `ridl diff`.
 
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
-  and call signatures.** Five decisions: four taken while implementing story
-  E11.13, the in-process MVP of the face ADR-0018 decision 15 restores, and one
-  added by the 2026-09-20 amendment. The Rust backend's contract-clause
+  and call signatures.** Six decisions: four taken while implementing story
+  E11.13, the in-process MVP of the face ADR-0018 decision 15 restores, one
+  added by the 2026-09-20 amendment, and one by the 2026-09-26 amendment — an
+  async `Client` and a blocking `Client` per interface returning `ClientError`,
+  `serve` in both forms, and the poll face `pub(crate)`, which supersedes
+  decision 4 for the public surface. The Rust backend's contract-clause
   translator accepts one expression form and refuses every other with a
   `GenerateError`, never dropping a clause silently; the face is emitted from a
   companion entry point, `generate_face`, while `generate` stays exactly what it
   emitted before this story, following the precedent ADR-0017 decision 1 set; a
   `Provider` method takes its argument by reference, superseding the M1 design's
-  by-value example, which cannot compile; and a consumer-side call returns a
-  correlation on success and `SendError` on failure, closing a gap that design
-  left open. The 2026-09-20 amendment makes that success half the call's own
-  `Copy` correlation newtype, one per command and per query, so a query's
-  correlation cannot be passed to an `ack`; and its decision 5 has a face hold
-  its port by value, with no lifetime parameter. Binds every later story that
-  extends the Rust backend's interaction face, until superseded: E5.1, Epic 10,
-  and any later language backend that follows this precedent. The as-built face
-  this record's decisions produced is
+  by-value example, which cannot compile; and a consumer-side send returns a
+  correlation on success and `SendError` on failure — the face's internal method
+  since the 2026-09-26 amendment, whose decision 6 gives the public call —
+  closing a gap that design left open. The 2026-09-20 amendment makes that
+  success half the call's own `Copy` correlation newtype, one per command and
+  per query, so a query's correlation cannot be passed to an `ack`; and its
+  decision 5 has a face hold its port by value, with no lifetime parameter.
+  Binds every later story that extends the Rust backend's interaction face,
+  until superseded: E5.1, Epic 10, and any later language backend that follows
+  this precedent. The as-built face this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
