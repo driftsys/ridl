@@ -12,8 +12,9 @@ const SHIFT_DONE: Ordinal = Ordinal(2);
 const DOOR_OPENED: Ordinal = Ordinal(3);
 
 /// Frame §6.2: only occurrences raised after the subscription is answered are
-/// delivered, so the first occurrence a consumer sees may carry any `seq`. ridl
-/// §3.1 and frame §7 define a loss only between two accepted occurrences.
+/// delivered, so the first occurrence a consumer sees may carry any `seq`.
+/// Frame §5.2 and §7 define a loss only between two accepted occurrences of one
+/// channel, and attribute that rule to ridl §3.1.
 #[test]
 fn the_first_occurrence_of_a_channel_reports_no_loss() {
     let mut tracker = EventSeqTracker::<2>::new();
@@ -88,8 +89,8 @@ fn one_ordinal_in_two_interfaces_is_two_channels() {
     );
 }
 
-/// ridl §3.1 and frame §7: a loss is a gap between two accepted occurrences. A
-/// `seq` not greater than the last one is a duplicate or a reordered
+/// Frame §5.2 and §7 (which attribute the rule to ridl §3.1): a loss is a gap
+/// between two accepted occurrences of one channel. A `seq` not greater than the last one is a duplicate or a reordered
 /// occurrence, not a gap: the tracker reports it and keeps the last `seq`.
 #[test]
 fn a_seq_not_newer_than_the_last_is_reported_and_leaves_the_last_unchanged() {
@@ -140,8 +141,9 @@ fn a_default_tracker_holds_no_channel() {
     assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 3), Ok(Continuity::First));
 }
 
-/// ridl §3.1: the sequence number is a `u64`; the largest value follows its
-/// predecessor with no overflow.
+/// `Envelope::seq` is a `u64`, the width frame §2 and §4 give the envelope's
+/// sequence number; the largest value follows its predecessor with no
+/// overflow.
 #[test]
 fn the_largest_seq_follows_its_predecessor() {
     let mut tracker = EventSeqTracker::<1>::new();
@@ -179,4 +181,22 @@ fn forgetting_one_channel_leaves_the_others_counting() {
     tracker.forget(IFACE, SHIFT_DONE);
     assert_eq!(tracker.observe(IFACE, DOOR_OPENED, 5), Ok(Continuity::Next));
     assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 8), Ok(Continuity::First));
+}
+
+/// Frame §3 and §6.2: a channel is one `(interface, ordinal)`, so forgetting a
+/// channel of one interface leaves the channel of the same ordinal in another
+/// interface in place.
+#[test]
+fn forgetting_a_channel_leaves_the_same_ordinal_in_another_interface() {
+    let mut tracker = EventSeqTracker::<2>::new();
+    assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 1), Ok(Continuity::First));
+    assert_eq!(
+        tracker.observe(OTHER_IFACE, SHIFT_DONE, 1),
+        Ok(Continuity::First)
+    );
+    tracker.forget(IFACE, SHIFT_DONE);
+    assert_eq!(
+        tracker.observe(OTHER_IFACE, SHIFT_DONE, 2),
+        Ok(Continuity::Next)
+    );
 }

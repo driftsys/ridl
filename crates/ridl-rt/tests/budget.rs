@@ -63,7 +63,30 @@ const HISTORY: Member = Member {
     ],
 };
 
-/// `interface Climate`, every payload sized in every encoding.
+const FAN_STARTED: Member = Member {
+    ordinal: Ordinal(4),
+    kind: Kind::Event,
+    name: "fanStarted",
+    timing: None,
+    payloads: &[PayloadInfo {
+        type_name: "FanSpeed",
+        max_size: sizes(3, 12, 2),
+    }],
+};
+
+const ZONE_COUNT: Member = Member {
+    ordinal: Ordinal(5),
+    kind: Kind::Fixed,
+    name: "zoneCount",
+    timing: None,
+    payloads: &[PayloadInfo {
+        type_name: "Count",
+        max_size: sizes(2, 10, 1),
+    }],
+};
+
+/// `interface Climate`, one member of each kind, every payload sized in every
+/// encoding.
 struct Climate;
 
 impl Interface for Climate {
@@ -71,7 +94,7 @@ impl Interface for Climate {
     const NUMBER: InterfaceNo = InterfaceNo(1);
     const PROVISIONAL: bool = false;
     const NAME: &'static str = "Climate";
-    const MEMBERS: &'static [Member] = &[TEMPERATURE, SET_TARGET, HISTORY];
+    const MEMBERS: &'static [Member] = &[TEMPERATURE, SET_TARGET, HISTORY, FAN_STARTED, ZONE_COUNT];
 }
 
 /// A query whose reply has no FlatBuffers size.
@@ -96,7 +119,34 @@ const UNSIZED_REPLY: Member = Member {
     ],
 };
 
-/// `interface Diagnostics`, one of whose payloads has no FlatBuffers size.
+/// A query neither of whose payloads has a FlatBuffers size.
+const UNSIZED_BOTH: Member = Member {
+    ordinal: Ordinal(5),
+    kind: Kind::Query,
+    name: "selfTest",
+    timing: None,
+    payloads: &[
+        PayloadInfo {
+            type_name: "SelfTestRequest",
+            max_size: EncodedSizes {
+                proto3: Some(6),
+                flatbuffers: None,
+                repr_c: Some(4),
+            },
+        },
+        PayloadInfo {
+            type_name: "SelfTestReply",
+            max_size: EncodedSizes {
+                proto3: Some(9),
+                flatbuffers: None,
+                repr_c: None,
+            },
+        },
+    ],
+};
+
+/// `interface Diagnostics`, in ordinal order, two of whose members have a
+/// payload with no FlatBuffers size.
 struct Diagnostics;
 
 impl Interface for Diagnostics {
@@ -104,7 +154,7 @@ impl Interface for Diagnostics {
     const NUMBER: InterfaceNo = InterfaceNo(2);
     const PROVISIONAL: bool = false;
     const NAME: &'static str = "Diagnostics";
-    const MEMBERS: &'static [Member] = &[TEMPERATURE, UNSIZED_REPLY, SET_TARGET];
+    const MEMBERS: &'static [Member] = &[TEMPERATURE, SET_TARGET, UNSIZED_REPLY, UNSIZED_BOTH];
 }
 
 /// `Member::payloads` (one entry for every kind but a query) and
@@ -143,6 +193,18 @@ fn an_unsized_payload_is_reported_with_its_member() {
     assert_eq!(UNSIZED_REPLY.reservation::<Proto3>(), Ok(2 + 40));
 }
 
+/// `Member::payloads` (the request, then the reply) and `EncodedSizes`: when
+/// both payloads have no size, the first in order, the request, is reported.
+#[test]
+fn the_first_unsized_payload_of_a_member_is_reported() {
+    let err = UNSIZED_BOTH.reservation::<FlatBuffers>().unwrap_err();
+    assert_eq!(err.ordinal, Ordinal(5));
+    assert_eq!(err.member, "selfTest");
+    assert_eq!(err.type_name, "SelfTestRequest");
+    let err = UNSIZED_BOTH.reservation::<ReprC>().unwrap_err();
+    assert_eq!(err.type_name, "SelfTestReply");
+}
+
 /// `Member::payloads` holds `PayloadInfo`s in order, and a member with no
 /// payload row reserves nothing.
 #[test]
@@ -155,21 +217,22 @@ fn a_member_with_no_payload_reserves_nothing() {
 }
 
 /// `Interface::MEMBERS`: a table budget is the sum of every member's
-/// reservation.
+/// reservation, whatever its kind — signal, command, query, event and fixed.
 #[test]
 fn a_table_budget_sums_every_member() {
     assert_eq!(
         table_budget::<FlatBuffers>(Climate::MEMBERS),
-        Ok(16 + 24 + 32 + 520)
+        Ok(16 + 24 + (32 + 520) + 12 + 10)
     );
     assert_eq!(
         table_budget::<Proto3>(Climate::MEMBERS),
-        Ok(5 + 7 + 11 + 300)
+        Ok(5 + 7 + (11 + 300) + 3 + 2)
     );
 }
 
 /// `Interface::MEMBERS` and `EncodedSizes`: a table with an unsized member
-/// has no budget; the first unsized member in ordinal order is reported.
+/// has no budget; of two unsized members, the first in the order given is
+/// reported.
 #[test]
 fn a_table_budget_reports_the_first_unsized_member() {
     let err = table_budget::<FlatBuffers>(Diagnostics::MEMBERS).unwrap_err();
@@ -178,7 +241,7 @@ fn a_table_budget_reports_the_first_unsized_member() {
     assert_eq!(err.type_name, "DiagnoseReply");
     assert_eq!(
         table_budget::<Proto3>(Diagnostics::MEMBERS),
-        Ok(5 + (2 + 40) + 7)
+        Ok(5 + 7 + (2 + 40) + (6 + 9))
     );
 }
 

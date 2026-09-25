@@ -8,7 +8,7 @@
 //! ([`Member::call_deadline`]) and the in-flight byte budget
 //! ([`Member::reservation`], [`table_budget`]).
 
-use crate::encoding::{Encoding, FlatBuffers, Proto3, ReprC};
+use crate::encoding::Encoding;
 use crate::sample::Duration;
 
 /// A member's ordinal: its position in the interface body, counted from 1
@@ -190,7 +190,7 @@ impl Member {
     pub fn reservation<E: Encoding>(&self) -> Result<u64, Unsized> {
         let mut total: u64 = 0;
         for payload in self.payloads {
-            let size = size_in::<E>(&payload.max_size).ok_or(Unsized {
+            let size = E::max_size(&payload.max_size).ok_or(Unsized {
                 ordinal: self.ordinal,
                 member: self.name,
                 type_name: payload.type_name,
@@ -233,21 +233,6 @@ pub struct Unsized {
     pub member: &'static str,
     /// The name of the payload type that has no size.
     pub type_name: &'static str,
-}
-
-/// The field of `sizes` that holds the size in encoding `E`.
-fn size_in<E: Encoding>(sizes: &EncodedSizes) -> Option<u32> {
-    if E::NAME == FlatBuffers::NAME {
-        sizes.flatbuffers
-    } else if E::NAME == Proto3::NAME {
-        sizes.proto3
-    } else if E::NAME == ReprC::NAME {
-        sizes.repr_c
-    } else {
-        // `Encoding` is sealed, so no other name exists. Reporting no size is
-        // the answer that never invents one.
-        None
-    }
 }
 
 /// The form of a timing annotation (ridl §9).

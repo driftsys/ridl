@@ -4,7 +4,7 @@
 #![forbid(unsafe_code)]
 
 use ridl_rt::contract::{Timing, TimingMode};
-use ridl_rt::sample::{Duration, Freshness, Timestamp};
+use ridl_rt::sample::{Duration, Envelope, Freshness, Timestamp};
 
 /// `@[20ms..500ms]`, in microseconds.
 const RANGE: Timing = Timing {
@@ -13,10 +13,19 @@ const RANGE: Timing = Timing {
     max: Some(Duration(500_000)),
 };
 
+/// An envelope stamped at `us` microseconds. Its `seq` plays no part in
+/// freshness.
+fn stamped(us: i64) -> Envelope {
+    Envelope {
+        stamp: Timestamp(us),
+        seq: 1,
+    }
+}
+
 /// ridl §9 and frame §8: `Fresh` while `now − stamp ≤ max`.
 #[test]
 fn a_value_younger_than_max_is_fresh() {
-    let freshness = Freshness::of(Timestamp(1_000_000), Timestamp(1_200_000), Some(RANGE));
+    let freshness = Freshness::of(&stamped(1_000_000), Timestamp(1_200_000), Some(RANGE));
     assert_eq!(freshness, Freshness::Fresh);
 }
 
@@ -24,16 +33,16 @@ fn a_value_younger_than_max_is_fresh() {
 /// still `Fresh`.
 #[test]
 fn a_value_exactly_max_old_is_fresh() {
-    let freshness = Freshness::of(Timestamp(1_000_000), Timestamp(1_500_000), Some(RANGE));
+    let freshness = Freshness::of(&stamped(1_000_000), Timestamp(1_500_000), Some(RANGE));
     assert_eq!(freshness, Freshness::Fresh);
 }
 
 /// ridl §9 and frame §8: past the bound, `Stale { by: now − stamp − max }`.
 #[test]
 fn a_value_older_than_max_is_stale_by_the_excess() {
-    let freshness = Freshness::of(Timestamp(1_000_000), Timestamp(1_500_001), Some(RANGE));
+    let freshness = Freshness::of(&stamped(1_000_000), Timestamp(1_500_001), Some(RANGE));
     assert_eq!(freshness, Freshness::Stale { by: Duration(1) });
-    let freshness = Freshness::of(Timestamp(1_000_000), Timestamp(2_750_000), Some(RANGE));
+    let freshness = Freshness::of(&stamped(1_000_000), Timestamp(2_750_000), Some(RANGE));
     assert_eq!(
         freshness,
         Freshness::Stale {
@@ -49,11 +58,11 @@ fn min_does_not_affect_freshness() {
     let no_min = Timing { min: None, ..RANGE };
     for timing in [RANGE, no_min] {
         assert_eq!(
-            Freshness::of(Timestamp(0), Timestamp(500_000), Some(timing)),
+            Freshness::of(&stamped(0), Timestamp(500_000), Some(timing)),
             Freshness::Fresh
         );
         assert_eq!(
-            Freshness::of(Timestamp(0), Timestamp(600_000), Some(timing)),
+            Freshness::of(&stamped(0), Timestamp(600_000), Some(timing)),
             Freshness::Stale {
                 by: Duration(100_000)
             }
@@ -71,11 +80,11 @@ fn a_strict_period_is_the_staleness_bound() {
         max: Some(Duration(10_000)),
     };
     assert_eq!(
-        Freshness::of(Timestamp(0), Timestamp(10_000), Some(period)),
+        Freshness::of(&stamped(0), Timestamp(10_000), Some(period)),
         Freshness::Fresh
     );
     assert_eq!(
-        Freshness::of(Timestamp(0), Timestamp(10_500), Some(period)),
+        Freshness::of(&stamped(0), Timestamp(10_500), Some(period)),
         Freshness::Stale { by: Duration(500) }
     );
 }
@@ -86,7 +95,7 @@ fn a_strict_period_is_the_staleness_bound() {
 fn a_timing_with_no_max_is_unbounded() {
     let lower_only = Timing { max: None, ..RANGE };
     assert_eq!(
-        Freshness::of(Timestamp(0), Timestamp(i64::MAX), Some(lower_only)),
+        Freshness::of(&stamped(0), Timestamp(i64::MAX), Some(lower_only)),
         Freshness::Unbounded
     );
 }
@@ -96,17 +105,18 @@ fn a_timing_with_no_max_is_unbounded() {
 #[test]
 fn a_member_with_no_timing_is_unbounded() {
     assert_eq!(
-        Freshness::of(Timestamp(0), Timestamp(1_000_000_000), None),
+        Freshness::of(&stamped(0), Timestamp(1_000_000_000), None),
         Freshness::Unbounded
     );
 }
 
-/// ridl §3.1 and frame §8: `now − stamp` is computed as written, so a stamp
-/// later than `now` gives a negative age, which is within any `max`.
+/// Neither specification discusses a stamp later than `now`. The result
+/// follows from the frame §8 formula: `now − stamp` is then negative, which is
+/// at most any non-negative `max`, so the value is `Fresh`.
 #[test]
 fn a_stamp_later_than_now_is_fresh() {
     assert_eq!(
-        Freshness::of(Timestamp(2_000_000), Timestamp(1_000_000), Some(RANGE)),
+        Freshness::of(&stamped(2_000_000), Timestamp(1_000_000), Some(RANGE)),
         Freshness::Fresh
     );
 }
@@ -116,13 +126,13 @@ fn a_stamp_later_than_now_is_fresh() {
 #[test]
 fn extreme_timestamps_do_not_overflow() {
     assert_eq!(
-        Freshness::of(Timestamp(i64::MIN), Timestamp(i64::MAX), Some(RANGE)),
+        Freshness::of(&stamped(i64::MIN), Timestamp(i64::MAX), Some(RANGE)),
         Freshness::Stale {
             by: Duration(i64::MAX - 500_000)
         }
     );
     assert_eq!(
-        Freshness::of(Timestamp(i64::MAX), Timestamp(i64::MIN), Some(RANGE)),
+        Freshness::of(&stamped(i64::MAX), Timestamp(i64::MIN), Some(RANGE)),
         Freshness::Fresh
     );
 }

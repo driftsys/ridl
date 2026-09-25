@@ -80,23 +80,25 @@ pub enum Freshness {
 }
 
 impl Freshness {
-    /// The freshness of a value stamped at `stamp`, read at `now`, against the
-    /// `max` of its member's `timing` (ridl §4, §9; frame specification §8).
+    /// The freshness of a value whose envelope is `envelope`, read at `now`,
+    /// against the `max` of its member's `timing` (ridl §4, §9; frame
+    /// specification §8).
     ///
-    /// `Fresh` while `now − stamp ≤ max`, `Stale { by: now − stamp − max }`
-    /// past it, and `Unbounded` when `timing` is `None` or carries no `max`.
-    /// `min` plays no part. Under a strict period `@Xms`, `max` holds the
-    /// period, so the period is the bound. A `stamp` later than `now` gives a
-    /// negative age, which is `Fresh`. The subtractions saturate at the ends
-    /// of the `i64` range instead of overflowing.
+    /// With `stamp` the envelope's timestamp: `Fresh` while
+    /// `now − stamp ≤ max`, `Stale { by: now − stamp − max }` past it, and
+    /// `Unbounded` when `timing` is `None` or carries no `max`. `min` plays no
+    /// part. Under a strict period `@Xms`, `max` holds the period, so the
+    /// period is the bound. A `stamp` later than `now` gives a negative age,
+    /// which the formula makes `Fresh`. The age subtraction `now − stamp`
+    /// saturates at the ends of the `i64` range instead of overflowing.
     ///
     /// Pass the member's `timing` as the descriptor holds it:
-    /// `Freshness::of(envelope.stamp, now, member.timing)`.
-    pub fn of(stamp: Timestamp, now: Timestamp, timing: Option<Timing>) -> Freshness {
+    /// `Freshness::of(&envelope, now, member.timing)`.
+    pub fn of(envelope: &Envelope, now: Timestamp, timing: Option<Timing>) -> Freshness {
         let Some(max) = timing.and_then(|timing| timing.max) else {
             return Freshness::Unbounded;
         };
-        let age = now.0.saturating_sub(stamp.0);
+        let age = now.0.saturating_sub(envelope.stamp.0);
         if age <= max.0 {
             Freshness::Fresh
         } else {
@@ -189,7 +191,8 @@ pub struct TrackerFull;
 /// the consumer unsubscribes (frame specification §6.2).
 ///
 /// Feed the tracker every occurrence the channel accepts, in the order
-/// received. A loss is a gap between two accepted occurrences (ridl §3.1).
+/// received. A loss is a gap between two accepted occurrences of one channel
+/// (frame specification §5.2, §7, which attribute it to ridl §3.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EventSeqTracker<const N: usize> {
     slots: [Option<Channel>; N],
