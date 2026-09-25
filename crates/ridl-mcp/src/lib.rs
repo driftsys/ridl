@@ -23,8 +23,10 @@ use serde::{Deserialize, Serialize};
 // would be checked as typl rather than refused.
 /// Which language a source text is parsed as. These are the three profiles the
 /// compiler has; the `.rxdl` form does not exist yet (epic E3.5). An rsdl text
-/// is parsed and its names are resolved, but the rsdl system checks read the
-/// whole workspace and do not run on one text.
+/// is checked as a workspace of one file, so the rsdl system checks run over
+/// it as `ridl check` runs them over the same text in a file. The checks of
+/// files beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`
+/// snapshot) do not run: a source text has no such files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[schemars(crate = "rmcp::schemars")]
@@ -112,7 +114,7 @@ impl RidlMcp {
 
     #[tool(
         name = "ridl_check",
-        description = "Type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. An rsdl text is parsed and its names are resolved; the rsdl system checks read the whole workspace, so `ridl check` runs them and this tool does not."
+        description = "Type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. The text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. The checks of files beside a file on disk, an `interfaces.lock` and a `.ridl/baseline/` snapshot, do not run."
     )]
     async fn ridl_check(
         &self,

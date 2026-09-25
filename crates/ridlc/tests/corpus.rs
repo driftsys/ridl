@@ -71,10 +71,11 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message,
     remap_diagnostics, render,
 };
-use ridl_core::package::{Package, service_catalog};
+use ridl_core::package::Package;
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
 use ridl_sem::{
-    check_package, check_system, lower_system, resolve_package, unclaimed_backend_keys,
+    CheckedWorkspace, check_package, check_workspace, lower_system, resolve_package,
+    unclaimed_backend_keys,
 };
 
 mod support;
@@ -175,19 +176,21 @@ fn compile_entry(entry: &Path) -> Compiled {
         checked_irs.push((name, checked.ir));
     }
 
-    // The workspace-wide service catalog (E2 task 8), driven exactly as
-    // `ridlc::compile_workspace` drives it: its RIDL-140 duplicate-name
-    // diagnostics span the whole workspace, so their FileIds index every file
-    // in package-then-file order. That order is rebuilt here and remapped onto
-    // the render source map. Without this the runner would compile a workspace
-    // the real pipeline rejects and snapshot it as clean.
+    // The workspace-wide passes — the service catalog (E2 task 8) and the rsdl
+    // system query — driven through `ridl_sem::check_workspace`, as
+    // `ridlc::compile_workspace` drives them: their diagnostics span the whole
+    // workspace, so their FileIds index every source file in package-then-file
+    // order. That order is rebuilt here and remapped onto the render source
+    // map. Without this the runner would compile a workspace the real pipeline
+    // rejects and snapshot it as clean.
     //
-    // The rsdl system query shares that order, and its RSDL-804 warnings come
-    // from `ridl_sem::unclaimed_backend_keys` with no namespace claimed, exactly
-    // as the command drivers call it.
-    let catalog = service_catalog(&db, workspace, std);
-    let mut system = check_system(&db, workspace, std);
-    if !catalog.diagnostics.is_empty() || !system.diagnostics.is_empty() {
+    // The RSDL-804 warnings come from `ridl_sem::unclaimed_backend_keys` with
+    // no namespace claimed, exactly as the command drivers call it.
+    let CheckedWorkspace {
+        diagnostics: workspace_diagnostics,
+        system,
+    } = check_workspace(&db, workspace, std);
+    if !workspace_diagnostics.is_empty() {
         let mut workspace_render_ids = Vec::new();
         for pkg in &packages {
             for file in pkg.files(&db) {
@@ -195,11 +198,7 @@ fn compile_entry(entry: &Path) -> Compiled {
             }
         }
         diagnostics.extend(remap_diagnostics(
-            catalog.diagnostics,
-            &workspace_render_ids,
-        ));
-        diagnostics.extend(remap_diagnostics(
-            std::mem::take(&mut system.diagnostics),
+            workspace_diagnostics,
             &workspace_render_ids,
         ));
     }

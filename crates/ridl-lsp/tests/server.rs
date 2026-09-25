@@ -3007,3 +3007,116 @@ fn a_lock_diagnostic_is_published_under_the_lock_files_uri() {
     shut_down(&client, 10);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+// --- the service catalog (issue #386) --------------------------------------
+
+/// The first member of the catalog fixture: it declares the service `x.s`.
+const CATALOG_A: &str = "package a\ninterface I {}\nservice x.s : I\n";
+
+/// The second member of the catalog fixture: it declares `x.s` again, which
+/// the flat global service namespace refuses (RIDL-140).
+const CATALOG_B: &str = "package b\ninterface J {}\nservice x.s : J\n";
+
+/// The `interfaces.lock` that `ridl lock` writes for [`CATALOG_A`].
+const CATALOG_LOCK: &str =
+    "# interfaces.lock — written by ridl lock; do not edit by hand.\nnext 2\nI 1\n";
+
+/// Writes the catalog fixture as a two-member workspace, with an
+/// `interfaces.lock` beside the first member when `lock` is set, and returns
+/// the `(a, b, lock)` file URIs.
+fn write_catalog_workspace(dir: &TempDir, lock: bool) -> (lt::Uri, lt::Uri, lt::Uri) {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    for member in ["a", "b"] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{member}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let a = dir.write("a/a.ridl", CATALOG_A);
+    let b = dir.write("b/b.ridl", CATALOG_B);
+    let lock_path = dir.path().join("a/interfaces.lock");
+    if lock {
+        dir.write("a/interfaces.lock", CATALOG_LOCK);
+    }
+    (uri_of(&a), uri_of(&b), uri_of(&lock_path))
+}
+
+/// Sends a hover request as a marker and returns the last
+/// `textDocument/publishDiagnostics` list the server sent for each URI before
+/// answering it, keyed by the URI's text.
+fn publishes_before_answer(
+    client: &Connection,
+    id: i32,
+) -> std::collections::HashMap<String, Vec<lt::Diagnostic>> {
+    let marker = path_to_uri("/ridl-lsp-nowhere/marker.typl").expect("an absolute path");
+    request::<lt::request::HoverRequest>(
+        client,
+        id,
+        lt::HoverParams {
+            text_document_position_params: text_position(marker, pos(0, 0)),
+            work_done_progress_params: Default::default(),
+        },
+    );
+    let mut published = std::collections::HashMap::new();
+    loop {
+        match recv(client) {
+            Message::Response(_) => return published,
+            Message::Notification(notification)
+                if notification.method == lt::notification::PublishDiagnostics::METHOD =>
+            {
+                let params: lt::PublishDiagnosticsParams =
+                    serde_json::from_value(notification.params).expect("valid publish params");
+                published.insert(params.uri.as_str().to_string(), params.diagnostics);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Asserts that the catalog fixture publishes RIDL-140 on the second
+/// declaration of `x.s`, labelled at the first, and nothing on any other file.
+fn assert_ridl_140_on_b(lock: bool) {
+    let dir = TempDir::new("catalog");
+    let (a, b, _lock) = write_catalog_workspace(&dir, lock);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = publishes_before_answer(&client, 2);
+    let on_b = published
+        .get(b.as_str())
+        .unwrap_or_else(|| panic!("nothing published on b.ridl: {published:?}"));
+    assert_eq!(codes(on_b), vec!["RIDL-140"]);
+    assert_eq!(on_b[0].range, range_of(CATALOG_B, "x.s", 0));
+    assert_eq!(on_b[0].severity, Some(lt::DiagnosticSeverity::ERROR));
+    let related = on_b[0]
+        .related_information
+        .as_ref()
+        .expect("the first declaration is labelled");
+    assert_eq!(related.len(), 1);
+    assert_eq!(related[0].location.uri.as_str(), a.as_str());
+    assert_eq!(related[0].location.range, range_of(CATALOG_A, "x.s", 0));
+    for (uri, diagnostics) in &published {
+        if uri != b.as_str() {
+            assert_eq!(diagnostics, &Vec::new(), "{uri} publishes nothing");
+        }
+    }
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A service name declared in two workspace members publishes RIDL-140, as
+/// `ridl check` reports it: the service catalog is a workspace-wide pass the
+/// server runs beside the rsdl system query.
+#[test]
+fn a_duplicate_service_name_publishes_ridl_140() {
+    assert_ridl_140_on_b(false);
+}
+
+/// A lock file is not one of the files the workspace-wide passes index, so a
+/// package with an `interfaces.lock` does not shift where RIDL-140 lands in a
+/// later package.
+#[test]
+fn a_lock_in_an_earlier_package_does_not_move_ridl_140() {
+    assert_ridl_140_on_b(true);
+}

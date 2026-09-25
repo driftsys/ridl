@@ -59,3 +59,39 @@ fn check_source_and_compile_agree_on_diagnostics() {
         to_json(&compiled.diagnostics, &compiled.sources)
     );
 }
+
+/// The codes of `run`'s diagnostics, in order.
+fn codes(run: &ridlc::CliRun) -> Vec<&'static str> {
+    run.diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.0)
+        .collect()
+}
+
+#[test]
+fn a_duplicate_service_name_is_ridl_140() {
+    // The service catalog is a workspace-wide pass (E2.13): a single file is a
+    // one-package workspace, and the catalog still runs over it (issue #345).
+    let source = "package p\ninterface I {}\nservice p.s : I\nservice p.s : I\n";
+    let run = ridlc::check_source("dup.ridl", source);
+    assert_eq!(codes(&run), ["RIDL-140"], "{:?}", run.diagnostics);
+
+    let json = to_json(&run.diagnostics, &run.sources);
+    assert_eq!(json[0].span.path, "dup.ridl");
+    assert_eq!(json[0].span.start.line, 4);
+    assert_eq!(json[0].labels.len(), 1, "the first declaration is labelled");
+    assert_eq!(json[0].labels[0].span.path, "dup.ridl");
+    assert_eq!(json[0].labels[0].span.start.line, 3);
+}
+
+#[test]
+fn an_rsdl_system_member_naming_nothing_is_rsdl_602() {
+    // The rsdl system query is the other workspace-wide pass; a standalone
+    // `.rsdl` file is checked by it as `ridl check` checks it.
+    let source = "package p\nsystem S { Missing }\n";
+    let run = ridlc::check_source("sys.rsdl", source);
+    assert_eq!(codes(&run), ["RSDL-602"], "{:?}", run.diagnostics);
+    let json = to_json(&run.diagnostics, &run.sources);
+    assert_eq!(json[0].span.path, "sys.rsdl");
+    assert_eq!(json[0].span.start.line, 2);
+}
