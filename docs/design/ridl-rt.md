@@ -280,8 +280,8 @@ decision 10 a field added to it is a breaking change. `Unsized` is
 `#[non_exhaustive]`, because only this crate builds it, so a field can be added
 to it without a breaking change.
 
-These public items, and `Encoding::max_size`, are not yet recorded in ADR-0021;
-lane F's amendment, tracked on driftsys/ridl#509, will record them.
+These public items, and `Encoding::max_size`, are recorded in ADR-0021 decision
+17, its 2026-09-26 amendment.
 
 ## The payload encodings and the proof type
 

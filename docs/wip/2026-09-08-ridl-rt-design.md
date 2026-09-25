@@ -846,8 +846,10 @@ an async `Client` and a blocking `Client` in the generated face, over the
 `Wakeable` extension and the `correlate` table of
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 13
 and 15; the ports themselves still return at once, which is what RA-14 and RA-20
-protect. RA-19 is unchanged: `Clock` and `Wakeable` join a `Client`'s bounds
-only when its interface declares a call or an event.
+protect. RA-19's client clause is unchanged — `Clock` and `Wakeable` join a
+`Client`'s bounds when its interface declares a call, and `Wakeable` alone when
+it declares an event — and its provider clause, "a `dispatch` over `Handler`",
+becomes "a `serve` over `Handler`".
 
 ## 9. Kotlin, and an amendment to decision 6
 

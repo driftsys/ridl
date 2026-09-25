@@ -21,23 +21,24 @@ nothing the note did not decide: it names the files, the tests and the order.
 `crates/ridl-backend-rust/tests/generated/interaction_face.rs` regenerated with
 `RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test interaction_face`.
 
-**Stages:** the driver's §3 table is unchanged by this plan — F3 is Tasks 1 and
-2, F4's second half is Task 3, F5a is Task 4, the release is between, F5b is
-Task 5. One thing in it changes: the poll face becomes `pub(crate)` in F5a, not
-F5b, because an async method and a poll method of one name cannot share a
-`Client`; the driver's §3 table is amended accordingly. Each task is one pull
-request, reviewed per the driver's §0.
+**Stages:** F3 is Tasks 1 and 2, F4's second half is Task 3, F5a is Task 4, the
+release is between, F5b is Task 5, as the driver's §3 table has them, with one
+change this plan's pull request writes into the driver: the poll face becomes
+`pub(crate)` in F5a, not F5b, because an async method and a poll method of one
+name cannot share a `Client`. Each task is one pull request, reviewed per the
+driver's §0.
 
 ## Currency
 
-Written 2026-09-25 against `origin/main` at 87de8c6 plus the note. Two things in
-flight when it was written:
+Written 2026-09-25, refreshed 2026-09-26 against `origin/main` at e4507db. Two
+things to know:
 
-- **E11.20's first half** (stage F4) is being built beside this plan, in branch
-  `feat/e11.20-ridl-rt-conformance`, over the port contract as it stands. Task 3
-  extends whatever factory shape that pull request lands; the hook names below
-  are the loopback's (`advance`, `fail_next_settle`) and are to be read as "the
-  factory's hook for this".
+- **E11.20's first half** (stage F4) merged as 83214a1 (driftsys/ridl#531):
+  `crates/ridl-rt-conformance` holds the port contract suite as functions
+  generic over a factory, and `crates/ridl-loopback/tests/ports.rs` keeps the
+  eleven tests only the loopback can express. Task 3 extends that crate's
+  factory; the hook names below are the loopback's (`advance`,
+  `fail_next_settle`) and are to be read as "the factory's hook for this".
 - **E16.2** (driftsys/ridl#378) is not started. Nothing here waits on it; the
   loopback's byte budget and timed settlement wait on it (note F-9, §3).
 
@@ -60,10 +61,10 @@ flight when it was written:
   `face_generation.rs`, `dispatch_generation.rs` and `descriptor_generation.rs`
   assert whitespace-stripped substrings. A face change regenerates the fixture
   in the same commit and updates the substrings it breaks.
-- **`just demo` is in `just build`**, and it compiles `examples/cabin/consumer`
-  against the emitted crate with plain `rustc`. Task 4 makes the poll face
-  `pub(crate)` and rewrites that program onto the async client in the same pull
-  request; Task 5 adds the blocking client to it.
+- **`just demo` is in `just build`**, and it builds and runs
+  `examples/cabin/consumer` against the emitted crate with cargo. Task 4 makes
+  the poll face `pub(crate)` and rewrites that program onto the async client in
+  the same pull request; Task 5 adds the blocking client to it.
 - **Conventional Commits**, scopes: `ridl-rt`, `ridl-loopback`,
   `ridl-backend-rust`, `ridlc`, `ridl` (the frame specification took `ridl` in
   ddd56fd), `docs`, `adr`, `roadmap`.
@@ -89,8 +90,9 @@ flight when it was written:
   handle implements `Wakeable`; `CallerHandle` implements `Clock`; the store
   keeps one `Option<Waker>` per key kind per handle and wakes after releasing
   its lock.
-- Modify: `docs/specification/frame-specification.md` §8 (the `min` row's
-  command/query cell) and §9.6 (`Busy` crosses) — note F-13, verbatim.
+- Modify: `docs/specification/frame-specification.md` §5.3, §5.4 and §5.6
+  (`busy` as an outcome value, and the caller's mapping), §8 (the `min` row's
+  command/query cell) and §9.6 (`busy` crosses) — note F-13, verbatim.
 - Modify: `docs/design/ridl-rt.md` ("The ports", the `error` module section) and
   `docs/design/ridl-loopback.md` (the handles table gains the two roles; a
   "Waking" section).
@@ -146,8 +148,9 @@ loopback: per-handle waiter storage in the store, keyed by the handle's id;
 wake into a local `Vec` inside the critical section and wake them after the lock
 is dropped; `CallerHandle` gains `Clock` by reading `Store::now`.
 
-Run: `cargo test -p ridl-loopback --locked` — expected: PASS, and the 48
-existing tests still pass.
+Run: `cargo test -p ridl-loopback --locked` — expected: PASS, and the eleven
+tests that stayed in `ports.rs` and the conformance suite over the loopback
+still pass.
 
 - [ ] **Step 4: Name the mutation**
 
@@ -158,8 +161,8 @@ request body, as note F-14 asks.
 
 - [ ] **Step 5: The frame specification and the records**
 
-§8 and §9.6 as F-13 writes them; the design records as the Files list says.
-`just fmt`, `just check`, `just link-check`.
+The frame-specification sentences as F-13 writes them; the design records as the
+Files list says. `just fmt`, `just check`, `just link-check`.
 
 - [ ] **Step 6: Commit and open the pull request**
 
@@ -176,8 +179,9 @@ The pull request closes driftsys/ridl#510. **Done when** the six loopback tests
 and the forwarding tests pass, the mutation is named, and `just verify` is
 green.
 
-**Must not break:** the 48 loopback port tests; `just wasm-check`;
-`just compat-check`; the generated face (untouched here).
+**Must not break:** the conformance suite over the loopback and the eleven
+loopback-only tests; `just wasm-check`; `just compat-check`; the generated face
+(untouched here).
 
 ---
 
@@ -213,12 +217,11 @@ green.
       pub fn insert(&mut self, reservation: u64) -> Option<Correlation>;   // None: no slot or budget
       pub fn settle(&mut self, c: Correlation, outcome: Result<(), CallError>) -> Settled; // the waker to wake, and whether the slot was reclaimed
       pub fn outcome(&self, c: Correlation) -> Option<Result<(), CallError>>;
-      pub fn take(&mut self, c: Correlation) -> Option<Result<(), CallError>>;    // reclaims the slot
-      pub fn forget(&mut self, c: Correlation) -> Forgotten;      // reclaims, or marks a call in flight
+      pub fn forget(&mut self, c: Correlation) -> Forgotten; // the one reclaim: at once, or at the settlement of a call in flight
       pub fn wake_on(&mut self, c: Correlation, waker: &Waker) -> Option<Waker>;  // the displaced waker
       pub fn slot(c: Correlation) -> usize;                       // for the runtime's byte storage
   }
-  pub struct Waiters { /* one Option<(key, Waker)> per kind */ }
+  pub struct Waiters { /* Slot, Event and Claim: one Option<Waker> per kind, with its key */ }
   impl Waiters {
       pub const fn new() -> Self;
       pub fn register(&mut self, what: Interest, waker: &Waker) -> Option<Waker>; // the displaced waker
@@ -237,13 +240,13 @@ green.
 - [ ] **Step 1: Write the failing table tests**
 
 `crates/ridl-rt/tests/correlate.rs`, each named for the sentence it pins: slot
-reuse after `take`; a generation mismatch answers `None` to the old correlation;
-`insert` is `None` at `N` calls in flight and `Some` after one is taken; the
-byte budget refuses a reservation that does not fit and accepts it after a
-reclaim; `forget` of a settled call reclaims, of a call in flight marks, and the
-settlement then reclaims; `wake_on` returns the displaced waker; `settle`
-returns the stored waker once. `Waiters`: one per kind, displaced returned,
-`take` clears.
+reuse after `forget`; a generation mismatch answers `None` to the old
+correlation; `insert` is `None` at `N` calls in flight and `Some` after one is
+forgotten; `outcome` does not reclaim; the byte budget refuses a reservation
+that does not fit and accepts it after a reclaim; `forget` of a settled call
+reclaims, of a call in flight marks, and the settlement then reclaims; `wake_on`
+returns the displaced waker; `settle` returns the stored waker once. `Waiters`:
+one per kind, displaced returned, `take` clears.
 
 - [ ] **Step 2: Implement `correlate` and the error types**
 
@@ -251,8 +254,8 @@ returns the stored waker once. `Waiters`: one per kind, displaced returned,
 `Slot { generation: u64, state, waker:
 Option<Waker> }`; the correlation is
 `(generation << 16) | slot`; the compile-time bound on `N` is a `const`
-assertion. `Waiters` over four `Option`s. `#![forbid(unsafe_code)]` holds;
-nothing allocates.
+assertion. `Waiters` over three `Option`s — `Outcome` wakers live in the table's
+slot. `#![forbid(unsafe_code)]` holds; nothing allocates.
 
 Run: `cargo test -p ridl-rt --locked --all-features`; `just wasm-check`;
 `just compat-check`.
@@ -271,7 +274,7 @@ tests of Task 1 unchanged.
 
 `docs/design/ridl-rt.md`: `correlate` joins the module table as the seventh
 unconditional module; the errors section gains the two enums. The loopback
-record: F-9's three sentence changes.
+record: F-9's bound and reclaim sentences; the `forget` sentence is Task 4's.
 
 - [ ] **Step 5: Commit and open the pull request**
 
@@ -291,8 +294,8 @@ and must see the same outcomes); `just demo`.
 
 ### Task 3: E11.20, second half — the conformance suite covers `Wakeable` and the table
 
-**Model:** Opus, effort high. Starts after Task 2 and after E11.20's first half
-has merged.
+**Model:** Opus, effort high. Starts after Task 2; E11.20's first half is
+merged.
 
 **Files:**
 
@@ -300,7 +303,7 @@ has merged.
   functions generic over the factory; the factory trait gains what they need (a
   way to obtain a second caller handle, if the first half's factory has none).
 - Modify: `crates/ridl-loopback/tests/` — the loopback runs the new functions.
-- Modify: `docs/design/ridl-loopback.md`, the conformance crate's README.
+- Modify: `docs/design/ridl-loopback.md`, the conformance crate's rustdoc.
 
 - [ ] **Step 1: Write the seven F-14 contract tests** as generic functions, each
       failing against a runtime that does not wake (prove it with a runtime
@@ -341,7 +344,9 @@ Task 1 must still turn the suite red (re-run it, and say so).
   polled once per step.
 - Modify: `docs/design/interaction-face.md` — a dated section "E11.21, first
   half" describing what is emitted, so the record never describes a face the
-  fixture does not contain (the rewrite is Task 5's).
+  fixture does not contain (the rewrite is Task 5's);
+  `docs/design/ridl-loopback.md` — the sentence that nothing the Rust backend
+  emits calls `forget`, and the call-table growth sentence, are retired.
 
 **Interfaces:** exactly note F-10's; the poll face is `pub(crate)` under the
 internal names above.
@@ -351,12 +356,14 @@ internal names above.
       whitespace-stripped substrings).
 - [ ] **Step 2: Write the failing round trips and F-14 face tests** in
       `interaction_face.rs`: a command and a query through the async client over
-      the loopback, polled with `noop_waker`; the dropped future forgets
-      (recording double); the slot wait over a loopback with 16 calls in flight,
-      woken by a reclaim, and `Send(Busy)` when `advance` passes `max` first; a
-      sent call whose clock passes `max` resolves to `Undelivered` or `Timeout`
-      and forgets; `serve` over a handler double whose `next_claim` fails
-      resolves to `ProviderError::Claim` after settling the claims before it.
+      the loopback, polled with `noop_waker`; the dropped future forgets once
+      (recording double), and a future that took its outcome called `forget`
+      once at that moment and nothing on drop; the slot wait over a loopback
+      with 16 calls in flight, woken by a reclaim, and `Send(Busy)` when
+      `advance` passes `max` first; a sent call whose clock passes `max`
+      resolves to `Undelivered` or `Timeout` and forgets; `serve` over a handler
+      double whose `next_claim` fails resolves to `ProviderError::Claim` after
+      settling the claims before it.
 - [ ] **Step 3: Emit the futures and `serve`.** The state machine per note F-4:
       phases `Unsent(args)`, `Waiting(c)`, `Done`; `poll` registers, then reads,
       then returns; `Drop` forgets in `Waiting`. `Serve` registers
@@ -380,9 +387,9 @@ moved onto the async client; the descriptor snapshots.
 
 Not a task. Sebastien tags the workspace version that carries E11.16 to E11.19,
 under ADR-0021 decision 10 and ADR-0007 decision 14; the face of Task 4 has
-exercised every item by then. Task 5 waits for it, because Task 5 is the
-breaking step for a consumer of generated code and the released crate must be
-the one it links.
+exercised every item by then. Task 5 waits for it, so the crate the blocking
+client links is the released one; the breaking step for a consumer of generated
+code is Task 4, before the release.
 
 ---
 

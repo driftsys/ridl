@@ -574,9 +574,9 @@ design note and the two amendments come next, then E11.16 and E11.18 in that
 order; E11.20 starts as soon as the stories are filed, over the port contract as
 it stands, and is finished only after E11.16 and E11.18, because its `Done when`
 covers `Wakeable`. E11.21 follows E11.16, E11.17 and E11.18, not E11.20, in two
-pull requests: the async client with the poll face still public, the `ridl-rt`
-release, then the `blocking` module and the private poll face — the one breaking
-step for a consumer of generated code.
+pull requests: the async client and the private poll face — the one breaking
+step for a consumer of generated code — then the `ridl-rt` release, then the
+`blocking` module (amended 2026-09-26 by the design note's disposition).
 
 **The Binder statement is not a story.** Lane F also records, in
 [the frame specification](specification/frame-specification.md) §11.2, in the

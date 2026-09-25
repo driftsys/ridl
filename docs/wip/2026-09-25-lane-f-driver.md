@@ -173,20 +173,20 @@ under "Filed 2026-09-25" and in a comment on driftsys/ridl#328.
 
 ## 3. Stages
 
-| Stage | Content                                                                                                          | Model  | Effort | Starts when                                       |
-| ----- | ---------------------------------------------------------------------------------------------------------------- | ------ | ------ | ------------------------------------------------- |
-| F0    | This document, the roadmap rows, the issues                                                                      | —      | —      | done in the pull request that added this file     |
-| F1a   | The face returns the init value under `Init` before the first publication                                        | Sonnet | —      | now; independent of every other F1 item           |
-| F1b   | The FlatBuffers codec emitter compiles for a `[bool]` field                                                      | Sonnet | —      | now; independent                                  |
-| F1c   | The Binder statement: §11.2, the two roadmap paragraphs, the Appendix B cell, the D-P5 note                      | Opus   | high   | now; independent                                  |
-| F1d   | E11.17, the `std` feature, with its ADR-0021 decision 8 note                                                     | Opus   | high   | now; independent                                  |
-| F1e   | E11.19, the helpers                                                                                              | Opus   | high   | now; independent                                  |
-| F2    | The design note, the disposition, then the two ADR amendments and the plan for F3 to F5                          | Fable  | —      | F0 merged; F1 need not be finished                |
-| F3    | E11.16, then E11.18; `ridl-loopback` adopts both                                                                 | Opus   | high   | F2's amendments merged                            |
-| F4    | E11.20, the conformance crate, over the current contract first                                                   | Opus   | high   | F0 merged; extended to E11.16 and E11.18 after F3 |
-| F5a   | E11.21, first half: the async `Client` and `serve`, the poll face still public                                   | Opus   | high   | F3 and F1d merged                                 |
-| —     | The `ridl-rt` 0.x minor release carrying E11.16 to E11.19 — a maintainer act, not a stage                        | —      | —      | F5a merged, so the face has exercised the API     |
-| F5b   | E11.21, second half: the `blocking` module, the poll face `pub(crate)`, the records, `examples/cabin`, gardening | Opus   | high   | the release published                             |
+| Stage | Content                                                                                                   | Model  | Effort | Starts when                                       |
+| ----- | --------------------------------------------------------------------------------------------------------- | ------ | ------ | ------------------------------------------------- |
+| F0    | This document, the roadmap rows, the issues                                                               | —      | —      | done in the pull request that added this file     |
+| F1a   | The face returns the init value under `Init` before the first publication                                 | Sonnet | —      | now; independent of every other F1 item           |
+| F1b   | The FlatBuffers codec emitter compiles for a `[bool]` field                                               | Sonnet | —      | now; independent                                  |
+| F1c   | The Binder statement: §11.2, the two roadmap paragraphs, the Appendix B cell, the D-P5 note               | Opus   | high   | now; independent                                  |
+| F1d   | E11.17, the `std` feature, with its ADR-0021 decision 8 note                                              | Opus   | high   | now; independent                                  |
+| F1e   | E11.19, the helpers                                                                                       | Opus   | high   | now; independent                                  |
+| F2    | The design note, the disposition, then the two ADR amendments and the plan for F3 to F5                   | Fable  | —      | F0 merged; F1 need not be finished                |
+| F3    | E11.16, then E11.18; `ridl-loopback` adopts both                                                          | Opus   | high   | F2's amendments merged                            |
+| F4    | E11.20, the conformance crate, over the current contract first                                            | Opus   | high   | F0 merged; extended to E11.16 and E11.18 after F3 |
+| F5a   | E11.21, first half: the async `Client` and `serve`, the poll face `pub(crate)` (amended 2026-09-26)       | Opus   | high   | F3 and F1d merged                                 |
+| —     | The `ridl-rt` 0.x minor release carrying E11.16 to E11.19 — a maintainer act, not a stage                 | —      | —      | F5a merged, so the face has exercised the API     |
+| F5b   | E11.21, second half: the `blocking` module, the records, `examples/cabin` through both clients, gardening | Opus   | high   | the release published                             |
 
 **Sequential and parallel.** The chain is F0, F2, F3, F5a, the release, F5b:
 each merged before the next branches, and F2's note stopped for its disposition
@@ -310,6 +310,16 @@ open the second pull request: the amendments and the plan.
 Open `docs/design/interaction-face.md` and `docs/design/ridl-rt.md` while
 writing the note; the decisions must be stated so that F5b can rewrite those
 records from them.
+
+**Amended 2026-09-26, by the plan's pull request, after the note's disposition
+(driftsys/ridl#530).** The disposed note, `2026-09-25-async-face-design.md`,
+supersedes the F3 and F5 texts below on three points: the key enum is
+`Interest`, not `Wake` (F-6); every `Slot` waiter is woken on a reclaim, with no
+FIFO (F-5); and the poll face becomes `pub(crate)` in F5a, not F5b, because an
+async method and a poll method of one name cannot share a `Client` (F-10), so
+F5a rewrites `examples/cabin/consumer` and the round-trip tests, and F5b is the
+`blocking` module, the records and the gardening. The plan,
+`2026-09-25-async-face-plan.md`, carries the tasks.
 
 ### F3 — E11.16, then E11.18
 
@@ -545,8 +555,9 @@ Verified on `main` at 36241a3, 2026-09-25.
   P driver, and `frame-specification.md` §11.2 is written from it. F1c reverses
   a taken decision and must say so in every text it touches.
 - **`just demo` is in `just build`.** Any change to the face's public surface
-  that breaks `examples/cabin/consumer` fails the gate, which is why F5 is split
-  and F5a keeps the poll face public.
+  that breaks `examples/cabin/consumer` fails the gate, which is why F5a
+  rewrites `examples/cabin/consumer` in its own pull request (amended
+  2026-09-26; the split stays, for the release between the halves).
 
 ## 8. Order against other lanes
 

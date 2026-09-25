@@ -207,7 +207,8 @@ as its public contract.
 
    **Cross-reference (2026-09-25).** A fourth cargo feature, `std`, which is not
    an encoding, and the eighth module it gates, `task`, are recorded in ADR-0021
-   decision 8's note of that date. This decision is not amended.
+   decision 8's note of that date, folded into that decision on 2026-09-26. This
+   cross-reference did not amend this decision; the amendment below does.
 
    **Amendment (2026-09-26) — a seventh unconditional module, `correlate`.**
    Lane F's story E11.18 adds `correlate`, holding the correlation table and the

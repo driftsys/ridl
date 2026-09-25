@@ -314,13 +314,13 @@ argument for it in the command case.
      registers the interface's command and query ordinals with `Handler::serve`,
      and a refusal is a future ready with `Err(ProviderError::Serve(_))`. Each
      poll registers `Interest::Claim`, then drains `Handler::next_claim`,
-     routing and settling every claim as the settlement table of decision 1's
-     era does, unchanged; `Ok(None)` is `Pending`, and a `ReadError` resolves
-     the future to `Err(ProviderError::Claim(_))` with every claim settled
-     before it staying settled. `blocking::serve(h, &mut provider, timeout)`
-     returns `Ok(())` at the timeout and the error otherwise. `dispatch` becomes
-     the `pub(crate)` one-pass step `serve` calls and returns the `ReadError` it
-     met. Note F-7.
+     routing and settling every claim as the settlement table of the
+     interaction-face design record states, unchanged; `Ok(None)` is `Pending`,
+     and a `ReadError` resolves the future to `Err(ProviderError::Claim(_))`
+     with every claim settled before it staying settled.
+     `blocking::serve(h, &mut provider, timeout)` returns `Ok(())` at the
+     timeout and the error otherwise. `dispatch` becomes the `pub(crate)`
+     one-pass step `serve` calls and returns the `ReadError` it met. Note F-7.
    - **Two changes, and what each breaks.** E11.21's first half emits the async
      `Client`, its futures and `serve`, and makes the poll face `pub(crate)` in
      the same change, because an async `set_level` and a poll `set_level` cannot
@@ -413,12 +413,12 @@ argument for it in the command case.
   diverge from the async one; a frame loop keeps the non-blocking behaviour of
   the poll face by polling a stored future once per frame with a no-op waker;
   and a handler failure ends `serve` with its cause (decision 6).
-- Negative — added 2026-09-26: the second half of E11.21 breaks every consumer
-  of the public poll face, which is `examples/cabin/consumer` and this backend's
-  own tests; the generated crate gains a `std` feature and its `Client` over an
-  interface with a call requires `Clock` and `Wakeable` of its port, so a role
-  handle for `Caller` alone no longer builds one — `ridl-loopback`'s
-  `CallerHandle` gains both roles in stage F3.
+- Negative — added 2026-09-26: the first half of E11.21 breaks every consumer of
+  the public poll face, which is `examples/cabin/consumer` and this backend's
+  own tests; the generated crate's `std` feature forwards to `ridl-rt/std` and
+  its `Client` over an interface with a call requires `Clock` and `Wakeable` of
+  its port, so a role handle for `Caller` alone no longer builds one —
+  `ridl-loopback`'s `CallerHandle` gains both roles in stage F3.
 
 ## References
 
