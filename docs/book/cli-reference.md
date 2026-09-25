@@ -222,7 +222,10 @@ exit 2, with a message naming an artifact it found: a baseline stays
 baseline in a refused encoding, not the silently skipped "no baseline
 published yet" state. An *empty* directory is still that silent state when
 auto-discovered; named explicitly with `--baseline`, it is a different
-refusal (below).
+refusal (below). A snapshot-named entry inside the directory that cannot be
+stat'ed — a symlink to a file that is gone — is exit 2 under either, naming
+the entry, because skipping it would read the directory as one snapshot
+short.
 
 So is a directory whose `.ir.json` snapshots sit one level *below* it rather
 than inside it — `--baseline .ridl` where `.ridl/baseline` was meant. The
@@ -383,8 +386,10 @@ error: unknown type name `Nope`
 ```
 
 2 when the workspace itself cannot be found, the same as `ridl check`, when
-the output directory cannot be read or written, or when a published
-`.ir.json` snapshot fails to parse:
+the output directory cannot be read or written, when a published `.ir.json`
+snapshot fails to parse, when two published snapshots declare one package, or
+when an entry of the output directory named like a snapshot cannot be
+stat'ed:
 
 ```sh
 ridl baseline /nonexistent/ridl/workspace
@@ -414,6 +419,41 @@ The same parse error on a `ridl diff` input, or on a file or directory named
 with `ridl check --baseline`, is reported without that remedy: only the
 published baseline that `ridl baseline` is about to replace is the record the
 remedy protects.
+
+Two published snapshots that declare one package are two records of the same
+ordinals, and the gate has no rule for choosing between them, so it refuses
+rather than compare against either. Both files are left as they are; the
+message names the package and both files. Here `zz-copy.ir.json` is a copy of
+the published snapshot left beside it:
+
+```sh
+ridl baseline
+```
+
+```text
+error: two published snapshots declare the package `veh.cluster`: `./.ridl/baseline/veh.cluster.ir.json` and `./.ridl/baseline/zz-copy.ir.json`; both files are left as they are, because the gate cannot tell which one is the published record. Remove the copy that is not the published record (restore the directory from version control if unsure), then run `ridl baseline` again
+```
+
+This refusal is `ridl baseline`'s alone: `ridl check --baseline` and
+`ridl diff` read such a directory as a snapshot set, matching packages by
+name.
+
+An entry of the output directory named like a snapshot whose metadata cannot
+be read — a symlink to a file that is gone — is also exit 2, naming the entry.
+Skipping it would read the directory as one snapshot short, which is a first
+publication to the gate, and the publication would then replace the entry
+with a snapshot that had dropped the ordinal record. The entry is left as it
+is. `ridl check` reports the same entry the same way when it finds it under
+`.ridl/baseline/` by auto-discovery, and so does `ridl diff` over a directory
+side:
+
+```sh
+ridl baseline
+```
+
+```text
+error: cannot read the snapshot ./.ridl/baseline/veh.cluster.ir.json: No such file or directory (os error 2)
+```
 
 ### `ridl build`
 
@@ -947,7 +987,12 @@ that holds IR artifacts but no `.ir.json` snapshot and no source — no
 `ridl.toml` and no `.typl`/`.ridl` file — which is a snapshot directory in a
 refused encoding, not a source tree; and a directory with no source whose
 `.ir.json` snapshots sit one level below it, which is a path aimed one level
-too high. Every other input reaches the source compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
+too high. A directory is also exit 2, naming the entry, when an entry inside
+it named like a snapshot cannot be stat'ed — a symlink to a file that is gone
+— because skipping the entry would compare against a set one snapshot short;
+this is checked before the directory is read as a source tree, so a source
+directory holding such an entry is refused too. Every other input reaches
+the source compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
 category's classification rule without comparing anything.
 
 **It writes nothing.** The report goes to stdout; a compile error's
@@ -1603,9 +1648,9 @@ compiler directly and want its stable, default-free flags.
 
 | Command | 0 | 1 | 2 |
 | --- | --- | --- | --- |
-| `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
+| `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, a snapshot-named entry inside it that cannot be stat'ed, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
+| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, or a snapshot-named entry in the output directory cannot be stat'ed |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |

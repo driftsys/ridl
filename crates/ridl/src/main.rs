@@ -431,8 +431,11 @@ struct DiffSide {
 /// `.ir.json` snapshot nor source — no `ridl.toml` and no `.typl`/`.ridl`
 /// file directly inside it; and a directory with no source whose `.ir.json`
 /// snapshots sit one level below it rather than inside it, which is a path
-/// aimed one level too high (issue #230). Everything else is source.
-/// Recognising *source*
+/// aimed one level too high (issue #230). A fourth is refused before any of
+/// those three is considered: a directory — source tree or not — holding an
+/// entry named like a snapshot whose metadata cannot be read, which
+/// [`snapshot_files`] reports rather than skips (driftsys/ridl#339 case 3).
+/// Everything else is source. Recognising *source*
 /// by extension was tried and reverted — it refused inputs the compiler
 /// accepts, such as a `ridl.toml` path designating its workspace, an
 /// extensionless source file, or a symlink — so a renamed artifact whose
@@ -544,12 +547,24 @@ const IR_JSON_SUFFIX: &str = match Emit::IrJson.ir_dump_suffix() {
 
 /// Whether `path` is an `.ir.json` snapshot (a file whose name ends
 /// [`IR_JSON_SUFFIX`]) rather than a source input.
+///
+/// `Path::is_file` is `false` on any metadata error as well as on a
+/// directory, so an entry named like a snapshot that cannot be read — a
+/// symlink whose target is gone — is not a snapshot to this test. That is
+/// acceptable for a single named input, which then falls through to the
+/// compiler and is reported there, but not for a directory listing, where a
+/// skipped entry would read as an absent snapshot: [`snapshot_files`] tells
+/// the two apart and reports the entry it cannot read (driftsys/ridl#339).
 fn is_ir_json(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(IR_JSON_SUFFIX))
+    path.is_file() && has_ir_json_name(path)
+}
+
+/// Whether `path`'s file name ends [`IR_JSON_SUFFIX`], whatever the entry
+/// behind it is.
+fn has_ir_json_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(IR_JSON_SUFFIX))
 }
 
 /// Whether `path` is an IR artifact in an encoding the snapshot surface must
@@ -743,8 +758,19 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 /// an interface's identity is its number in `interfaces.lock`, not a slot in
 /// a service's list, so a removed or renumbered interface is refused by the
 /// lock's own publication rules, not here. `ReservedNameRedeclared` is an
-/// interaction-level category, refused when the published IR holds a
-/// tombstone for the name.
+/// interaction-level category, and it is always refused: the walk emitted
+/// the change from a tombstone it read on the published side, so the gate
+/// refuses it without a second lookup. An earlier rule refused only when its
+/// own lookup of the published container found the tombstone again, and
+/// published whenever that lookup did not resolve — a declared interface and
+/// an inline service sharing a name (driftsys/ridl#339 case 2), or an
+/// interface renamed since publication (found in the review of the fix,
+/// driftsys/ridl#528). The published IR is still read
+/// for the message's ordinal and wording ([`untombstoned_removal_message`]),
+/// never for the verdict.
+///
+/// The published side is read through [`load_published`], which refuses two
+/// snapshots declaring one package (driftsys/ridl#339 case 1).
 fn untombstoned_removals(
     entry: &Path,
     out_dir: &Path,
@@ -754,7 +780,7 @@ fn untombstoned_removals(
     if !out_dir.is_dir() {
         return Ok(false);
     }
-    let published = load_snapshots(&snapshot_files(out_dir)?, Some(PUBLISHED_PARSE_REMEDY))?;
+    let published = load_published(out_dir)?;
     if published.is_empty() {
         return Ok(false);
     }
@@ -767,13 +793,10 @@ fn untombstoned_removals(
     let mut index: Option<DeclIndex> = None;
     let mut refusals = Vec::new();
     for change in &report.changes {
-        let refused = match change.category {
-            ridl_diff::Category::InteractionRemoved => true,
-            ridl_diff::Category::ReservedNameRedeclared => {
-                published_reserves(&published, &change.path)
-            }
-            _ => false,
-        };
+        let refused = matches!(
+            change.category,
+            ridl_diff::Category::InteractionRemoved | ridl_diff::Category::ReservedNameRedeclared
+        );
         if !refused {
             continue;
         }
@@ -865,6 +888,15 @@ fn untombstoned_removal_message(
 /// alike — the two containers `ridl_diff`'s interaction walk is ever called
 /// on. A named-form service is not a shape, so a service-level diff path
 /// finds nothing here.
+///
+/// Every shape carrying the container's name is searched, and the first
+/// interaction that matches is the answer. A declared `interface doors`
+/// beside an inline-form `service doors` are two shapes under one identity
+/// name — the walk keys them apart by form, but a diff path does not — and
+/// reading only the first shape of that name answered from the interface
+/// when the service was the one that declared the name (driftsys/ridl#339
+/// case 2). Two shapes both declaring the name cannot be told apart from
+/// the path; the walk's own key order puts the declared interface first.
 fn published_interaction<'a>(
     published: &'a [ridl_ir::v2::Package],
     path: &str,
@@ -875,17 +907,21 @@ fn published_interaction<'a>(
         return None;
     };
     let package = published.iter().find(|package| package.name == pkg)?;
-    let shape = package.shapes().find(|shape| shape.name == container)?;
-    shape
-        .interface
-        .interactions
-        .iter()
-        .find(|decl| match &decl.kind {
-            Some(ridl_ir::v2::decl::Kind::ReservedSlot(reserved)) => {
-                reserved.name.as_deref() == Some(name)
-            }
-            Some(_) => decl.name == name,
-            None => false,
+    package
+        .shapes()
+        .filter(|shape| shape.name == container)
+        .find_map(|shape| {
+            shape
+                .interface
+                .interactions
+                .iter()
+                .find(|decl| match &decl.kind {
+                    Some(ridl_ir::v2::decl::Kind::ReservedSlot(reserved)) => {
+                        reserved.name.as_deref() == Some(name)
+                    }
+                    Some(_) => decl.name == name,
+                    None => false,
+                })
         })
 }
 
@@ -921,8 +957,9 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// practice RIDL-412 is a lock line deleted by hand: a live entry with no
 /// declaration fails the build with RIDL-409 before publication.
 ///
-/// The published snapshots are read flat from `out_dir`, as
-/// [`untombstoned_removals`] reads them and for the same reason.
+/// The published snapshots are read flat from `out_dir` through
+/// [`load_published`], as [`untombstoned_removals`] reads them and for the
+/// same reason.
 fn interface_refusals(
     entry: &Path,
     out_dir: &Path,
@@ -950,7 +987,7 @@ fn interface_refusals(
     }
 
     if out_dir.is_dir() {
-        let published = load_snapshots(&snapshot_files(out_dir)?, Some(PUBLISHED_PARSE_REMEDY))?;
+        let published = load_published(out_dir)?;
         if !published.is_empty() {
             let report = ridl_diff::diff_sets(&published, &fresh);
             for change in &report.changes {
@@ -1424,8 +1461,11 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 /// check that ran against nothing: one holding IR artifacts but no `.ir.json`
 /// (issue #218 item 4), one whose `.ir.json` snapshots sit a level below it
 /// (issue #230), and, when `explicit` is true, any other directory that
-/// yields no snapshot at all (driftsys/ridl#235). A directory that fits none
-/// of the three and was found by auto-discovery (`explicit` false) keeps
+/// yields no snapshot at all (driftsys/ridl#235). A fourth is refused
+/// whether `explicit` or not, by [`snapshot_files`] before the three above
+/// are considered: a directory holding an entry named like a snapshot whose
+/// metadata cannot be read (driftsys/ridl#339 case 3). A directory that fits
+/// none of the four and was found by auto-discovery (`explicit` false) keeps
 /// yielding an empty baseline — that is the ordinary "no baseline published
 /// yet" state, and [`desk_check`] skips it silently.
 fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
@@ -1609,20 +1649,47 @@ fn refuse_artifact_directory(dir: &Path, witness: &Path, expectation: &str) -> E
     ExitCode::from(2)
 }
 
-/// [`ir_json_files`] with an unreadable directory turned into exit 2 — a
-/// comparison against a directory that cannot be listed must not quietly become
-/// a comparison against nothing.
+/// The `.ir.json` snapshots directly inside `dir`, in file-name order, with
+/// two failures turned into exit 2 — a comparison against a directory that
+/// cannot be listed must not quietly become a comparison against nothing:
+///
+/// - the directory itself cannot be listed;
+/// - an entry named like a snapshot whose metadata cannot be read — a
+///   symlink whose target is gone. [`is_ir_json`] is `false` on such an
+///   entry, so [`ir_json_files`] would skip it and the directory would read
+///   as one snapshot short, which is an absent baseline to every caller:
+///   `ridl baseline` would publish over it as a first publication, and
+///   `ridl check` under auto-discovery would skip the desk check
+///   (driftsys/ridl#339 case 3). The message names the entry, not the
+///   directory, because the directory was listed.
+///
+/// A snapshot-named entry whose metadata reads fine but which is not a file
+/// — a directory — is skipped, as [`ir_json_files`] skips it. Entries are
+/// stat'ed in file-name order, so the entry a run reports is the same each
+/// time. The metadata read follows symlinks, so a link to a readable file
+/// is the file it names.
 fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
-    ir_json_files(dir).map_err(|err| {
+    let named = files_matching(dir, has_ir_json_name).map_err(|err| {
         eprintln!(
             "error: cannot read the snapshot directory {}: {err}",
             dir.display()
         );
         ExitCode::from(2)
-    })
+    })?;
+    let mut files = Vec::new();
+    for path in named {
+        let metadata = std::fs::metadata(&path).map_err(|err| {
+            eprintln!("error: cannot read the snapshot {}: {err}", path.display());
+            ExitCode::from(2)
+        })?;
+        if metadata.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(files)
 }
 
-/// The remedy [`untombstoned_removals`] appends when the snapshot it cannot
+/// The remedy [`load_published`] appends when the snapshot it cannot
 /// parse is the published baseline `ridl baseline` is about to replace.
 ///
 /// The file stays fail-closed rather than being overwritten: a baseline that
@@ -1640,13 +1707,48 @@ const PUBLISHED_PARSE_REMEDY: &str = "the file is left as it is, because a recor
      wrote it, check the source against it with that toolchain (`ridl check --baseline`), then \
      remove the file and run `ridl baseline` with this one";
 
-/// Deserializes every snapshot in `files`. One that cannot be read or parsed is
-/// exit 2 — a comparison against half a baseline would be a lie about what is
-/// published. This is shared by `ridl check --baseline` (through
-/// [`load_baseline`], where the file may be the single `.ir.json` the flag
-/// names), `ridl diff` (through [`load_diff_side`], for either side) and
-/// `ridl baseline` (through [`untombstoned_removals`], for the published and
-/// the freshly built side alike).
+/// Loads the published snapshots `ridl baseline` is about to replace, flat
+/// from `out_dir`, with [`PUBLISHED_PARSE_REMEDY`] on a parse failure, and
+/// refuses — exit 2 — when two of them declare one package.
+///
+/// Two files declaring one package are two records of the same ordinals, and
+/// the gate has no rule for choosing between them: `ridl_diff::diff_sets`
+/// keeps the one that sorts last, while a lookup by package name reads the
+/// first, so a copy that already lacked an interaction let a bare removal
+/// publish, and the publication then deleted the copy (driftsys/ridl#339
+/// case 1). Neither file is chosen here, and neither is touched: the
+/// message names the package and both files and leaves the choice to the
+/// author, who can tell a stray copy from the published record. The
+/// refusal is this gate's alone — `ridl check --baseline` and `ridl diff`
+/// still read such a directory as `diff_sets` reads it.
+fn load_published(out_dir: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+    let files = snapshot_files(out_dir)?;
+    let packages = load_snapshots(&files, Some(PUBLISHED_PARSE_REMEDY))?;
+    let mut first_file_of: BTreeMap<&str, &Path> = BTreeMap::new();
+    for (file, package) in files.iter().zip(&packages) {
+        if let Some(first) = first_file_of.insert(&package.name, file) {
+            eprintln!(
+                "error: two published snapshots declare the package `{}`: `{}` and `{}`; both \
+                 files are left as they are, because the gate cannot tell which one is the \
+                 published record. Remove the copy that is not the published record (restore \
+                 the directory from version control if unsure), then run `ridl baseline` again",
+                package.name,
+                first.display(),
+                file.display(),
+            );
+            return Err(ExitCode::from(2));
+        }
+    }
+    Ok(packages)
+}
+
+/// Deserializes every snapshot in `files`, in the order given. One that
+/// cannot be read or parsed is exit 2 — a comparison against half a baseline
+/// would be a lie about what is published. This is shared by `ridl check
+/// --baseline` (through [`load_baseline`], where the file may be the single
+/// `.ir.json` the flag names), `ridl diff` (through [`load_diff_side`], for
+/// either side) and `ridl baseline` (through [`load_published`] for the
+/// published side, and directly for the freshly built side).
 ///
 /// `parse_remedy`, when given, finishes the parse-error message. Only the
 /// caller knows which file it handed over, so only the caller can say what to
