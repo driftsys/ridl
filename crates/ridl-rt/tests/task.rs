@@ -9,8 +9,9 @@
 //! in the same way: a parked wait polls once before the wait and once per wake
 //! or timeout, so a ceiling of eight catches a wait that spins or parks for a
 //! fixed short time, and tolerates the few extra wakes a platform may deliver.
-//! No test asserts how many spurious wakes arrived, because the thread that
-//! sends them may not be scheduled.
+//! The spurious-wake test asserts that at least one such wake polled the
+//! future, not how many did, because the thread that sends them is not
+//! scheduled at a fixed cadence.
 #![cfg(feature = "std")]
 
 use std::future::{poll_fn, ready, Future};
@@ -132,7 +133,7 @@ fn block_on_returns_none_when_the_deadline_passes() {
         "returned after {elapsed:?}, before the deadline"
     );
     assert!(
-        elapsed < Duration::from_secs(2),
+        elapsed < bound + Duration::from_millis(500),
         "a park is bounded by the time left, not by a fixed duration: {elapsed:?}"
     );
     let polls = gate.polls.load(Ordering::SeqCst);
@@ -183,7 +184,10 @@ fn a_spurious_unpark_does_not_end_the_wait_early() {
         elapsed >= bound,
         "a spurious unpark ended the wait at {elapsed:?}"
     );
-    assert!(gate.polls.load(Ordering::SeqCst) >= 2);
+    assert!(
+        gate.polls.load(Ordering::SeqCst) >= 3,
+        "a spurious unpark polls the future once, and the wait continues"
+    );
 }
 
 #[test]
