@@ -89,10 +89,11 @@ against the reference §16 classification.
 
 ## Codes NOT exercised here, and why
 
-- **RIDL-407** (interaction ordinal changed against a published baseline). The
-  desk check reads a workspace-local baseline directory, which is outside
-  `ridlc`'s source-to-IR function (ADR-0008 decisions 9 and 13), so it is never
-  a compile diagnostic. Its living example is the committed corpus member
+- **RIDL-407** (interaction ordinal changed, or struct field or union arm
+  reordered, against a published baseline). The desk check reads a
+  workspace-local baseline directory, which is outside `ridlc`'s
+  source-to-IR function (ADR-0008 decisions 9 and 13), so it is never a
+  compile diagnostic. Its living example is the committed corpus member
   `crates/ridl/tests/baseline-corpus/` — a package plus a committed
   `.ridl/baseline/corpus.baseline.ir.json` — driven by
   `check_reports_ordinal_drift_against_the_committed_baseline`.

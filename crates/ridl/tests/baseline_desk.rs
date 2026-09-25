@@ -360,8 +360,8 @@ fn check_flags_a_removal_against_the_baseline() {
 
 /// A service's list is a set (ADR-0015 decision 19 as amended on
 /// 2026-09-15): its order is not an identity, so a reorder, an insertion and
-/// a removal in the list move nothing on the wire and draw no RIDL-407. The
-/// desk check reports interaction ordinals only.
+/// a removal in the list move nothing on the wire and draw no RIDL-407 — a
+/// service's list carries no ordinal for the desk check to report at all.
 #[test]
 fn check_is_silent_for_a_service_set_change() {
     for (label, source) in [
@@ -494,8 +494,11 @@ enumset Warnings {
 ";
 
 /// Asserts the RIDL-407 block about `member` of `container`: it names both,
-/// states the two ordinals in the typl §7.4 word, cites that rule, and points
-/// its span at `declaration`.
+/// states the two ordinals in the typl §7.4 word, cites that rule, names the
+/// remedy, and points its span at `location` — `declaration`'s text alone
+/// does not pin the span, because `Report` and `Reading` in `COMPOSITES`
+/// declare the same two members with the same text, so a span on the wrong
+/// container's copy would still pass a text-only check.
 fn assert_member_moved(
     stderr: &str,
     member: &str,
@@ -503,6 +506,7 @@ fn assert_member_moved(
     was: u32,
     now: u32,
     declaration: &str,
+    location: &str,
 ) {
     let block = ridl_407_block(stderr, member);
     assert!(
@@ -527,8 +531,17 @@ fn assert_member_moved(
         "the message cites the rule that makes the order a wire identity:\n{stderr}",
     );
     assert!(
+        block.contains("add new ones at the end"),
+        "the message names the remedy that keeps the baseline intact:\n{stderr}",
+    );
+    assert!(
         block.contains(declaration),
         "the span underlines the member's declaration:\n{stderr}",
+    );
+    assert!(
+        block.contains(location),
+        "the span is on {container}'s own copy of the declaration, not the other \
+         composite's identical member text:\n{stderr}",
     );
 }
 
@@ -550,8 +563,24 @@ fn check_flags_a_struct_field_reorder_against_the_baseline() {
         2,
         "one warning per moved field:\n{stderr}",
     );
-    assert_member_moved(&stderr, "door", "Report", 1, 2, "door: DoorState");
-    assert_member_moved(&stderr, "latch", "Report", 2, 1, "latch: LatchState");
+    assert_member_moved(
+        &stderr,
+        "door",
+        "Report",
+        1,
+        2,
+        "door: DoorState",
+        "cluster.ridl:6:3",
+    );
+    assert_member_moved(
+        &stderr,
+        "latch",
+        "Report",
+        2,
+        1,
+        "latch: LatchState",
+        "cluster.ridl:5:3",
+    );
     assert_eq!(
         code, 0,
         "a warning never moves the exit code of an otherwise clean check:\n{stderr}",
@@ -575,8 +604,24 @@ fn check_flags_a_union_arm_reorder_against_the_baseline() {
         2,
         "one warning per moved arm:\n{stderr}",
     );
-    assert_member_moved(&stderr, "door", "Reading", 1, 2, "door: DoorState");
-    assert_member_moved(&stderr, "latch", "Reading", 2, 1, "latch: LatchState");
+    assert_member_moved(
+        &stderr,
+        "door",
+        "Reading",
+        1,
+        2,
+        "door: DoorState",
+        "cluster.ridl:10:3",
+    );
+    assert_member_moved(
+        &stderr,
+        "latch",
+        "Reading",
+        2,
+        1,
+        "latch: LatchState",
+        "cluster.ridl:9:3",
+    );
     assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
 }
 
