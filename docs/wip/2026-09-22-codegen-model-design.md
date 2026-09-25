@@ -1352,3 +1352,7 @@ Each item is a fact this note had to work around; none is fixed here.
 | `docs/design/flatbuffers-codec.md`             | unchanged; §3.7 keeps the inline layout in the codec as that record states                                                                                      |
 | `docs/design/interaction-face.md`              | unchanged; §9 item 5 names the `None` it records                                                                                                                |
 | The frame specification §11.2                  | unchanged; its list of what the Kotlin backend needs is §3.6's table                                                                                            |
+
+**Note, 2026-09-25.** The last row no longer holds: driftsys/ridl#516 replaced
+frame specification §11.2 with the Binder statement and removed its list of what
+the Kotlin backend needs, because the lane P driver's decision D-P5 is reversed.

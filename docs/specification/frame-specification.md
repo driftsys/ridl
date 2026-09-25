@@ -28,7 +28,7 @@ Version: 0.1.0 — Draft
 > the provider-side enforcement of a contract clause describes the
 > specification, not behaviour a shipped runtime performs. The first binding is
 > story E11.9; the second is a runtime's own binder contract on Android, outside
-> this repository (§11).
+> this repository (§11.2, which reverses the lane P driver's decision D-P5).
 
 ---
 
@@ -777,7 +777,9 @@ payload rules of §9, or the control-plane operations and their answers.
 ## 11. The Bindings
 
 Two bindings are named: one by the story that writes it, and one by the platform
-whose runtimes write their own. Neither is written in this repository.
+whose runtimes write their own. E11.9's WebSocket transport is planned in this
+repository and is not built yet; a binder contract is not written in this
+repository.
 
 ### 11.1 WebSocket, story E11.9
 
