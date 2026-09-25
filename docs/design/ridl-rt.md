@@ -210,11 +210,15 @@ Four computations every runtime needs are defined once here, so that two
 runtimes compute them the same way (story E11.19). Each is `no_std`, allocates
 nothing and sits behind no cargo feature. They live beside the types they read —
 the envelope helpers in `sample`, the descriptor helpers in `contract` — rather
-than in a new module, so the crate keeps its six modules.
+than in a new module, so the crate keeps its six modules. `sample` now imports
+`InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already imported
+`Duration` from `sample`, so the two modules depend on each other; Rust accepts
+a dependency cycle between modules of one crate. `encoding` likewise imports
+`EncodedSizes` from `contract`, which imports `Encoding`.
 
 ```rust
 impl Freshness {
-    pub fn of(stamp: Timestamp, now: Timestamp, timing: Option<Timing>) -> Freshness;
+    pub fn of(envelope: &Envelope, now: Timestamp, timing: Option<Timing>) -> Freshness;
 }
 
 pub struct EventSeqTracker<const N: usize> { /* private fields */ }
@@ -238,10 +242,13 @@ pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_na
 ```
 
 - **Freshness** (ridl §4, §9;
-  [frame specification](../specification/frame-specification.md) §8): `Fresh`
-  while `now − stamp ≤ max`, `Stale { by: now − stamp − max }` past it,
-  `Unbounded` when the member has no timing or its timing has no `max`. A stamp
-  later than `now` is `Fresh`; the subtractions saturate.
+  [frame specification](../specification/frame-specification.md) §8): with
+  `stamp` the envelope's timestamp, `Fresh` while `now − stamp ≤ max`,
+  `Stale { by: now − stamp − max }` past it, `Unbounded` when the member has no
+  timing or its timing has no `max`. The function takes the envelope rather than
+  its timestamp, so a call site cannot transpose the stamp and `now`. A stamp
+  later than `now` is `Fresh`, which follows from the formula; the age
+  subtraction `now − stamp` saturates.
 - **Event loss** (ridl §3.1; frame specification §5.2, §7): the tracker holds
   the last accepted `seq` per channel, keyed on `(InterfaceNo, Ordinal)`,
   because the counter is per channel and per provider instance — a per-interface
@@ -261,15 +268,29 @@ pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_na
   the reservations of the members it is given, normally `Interface::MEMBERS`. A
   size that is `None` for that encoding is reported as `Unsized`, naming the
   member and the payload type, and never estimated. The sum is a `u64`, because
-  the sizes are `u32`.
+  the sizes are `u32`. The field of `EncodedSizes` an encoding reads is
+  `Encoding::max_size`, a required item of the sealed trait, so an encoding
+  added without naming its field does not compile.
 
-ADR-0021 does not yet record these public items.
+`Continuity` is exhaustive, like `Freshness`: it is not an error enum, so
+ADR-0021 decision 9 does not cover it, and a caller is meant to handle every
+case it names. `TrackerFull` is a unit struct with no `#[non_exhaustive]`, like
+the encoding markers, because a caller compares it as a value; under ADR-0021
+decision 10 a field added to it is a breaking change. `Unsized` is
+`#[non_exhaustive]`, because only this crate builds it, so a field can be added
+to it without a breaking change.
+
+These public items, and `Encoding::max_size`, are recorded in ADR-0021 by lane
+F's amendment, tracked on driftsys/ridl#509.
 
 ## The payload encodings and the proof type
 
 ```rust
 mod sealed { pub trait Sealed {} }
-pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
+pub trait Encoding: sealed::Sealed + 'static {
+    const NAME: &'static str;
+    fn max_size(sizes: &EncodedSizes) -> Option<u32>; // this encoding's field of `sizes` (E11.19)
+}
 pub struct FlatBuffers; // NAME = "flatbuffers"
 pub struct Proto3;      // NAME = "proto3"
 pub struct ReprC;        // NAME = "repr-c"
