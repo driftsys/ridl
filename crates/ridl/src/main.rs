@@ -78,9 +78,9 @@ enum Command {
         frozen: bool,
         /// Compare the checked workspace against a published baseline — a
         /// directory of `.ir.json` snapshots or one snapshot file — and warn
-        /// (RIDL-407) on every interaction whose ordinal moved. Without the
-        /// flag, `.ridl/baseline/` at the workspace root is used when it
-        /// exists.
+        /// (RIDL-407) on every interaction, struct field, or union arm whose
+        /// ordinal moved. Without the flag, `.ridl/baseline/` at the
+        /// workspace root is used when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -610,7 +610,8 @@ fn is_source_dir(dir: &Path) -> bool {
 // ==========================================================================
 
 /// The change categories the desk check reports: the four that move a live
-/// interaction's ordinal, and no others.
+/// interaction's ordinal, plus a struct field's or union arm's ordinal
+/// reorder (typl §7.4) — and no others.
 ///
 /// General form §6.3 asks for one thing at the desk — a reorder or an insertion
 /// caught before CI, because declaration order is wire identity and a reorder
@@ -621,13 +622,25 @@ fn is_source_dir(dir: &Path) -> bool {
 /// 2026-09-15): its order is not an identity, so no service-level category
 /// belongs here.
 ///
-/// All four classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
-/// direction, so the category alone selects them.
-const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
+/// [`MemberReordered`](ridl_diff::Category::MemberReordered) also covers an
+/// enum value's or enum-set bit's textual reorder, which typl §8 and §9 make
+/// *not* a change: the value or bit takes its identity from its explicit
+/// number, not from declaration order. `ridl-diff` still reports that case,
+/// conservatively (driftsys/ridl#397), so `desk_check` reads the change's own
+/// detail to tell the two apart and stays silent for the enum/enum-set case
+/// rather than warning about a wire identity that never moved
+/// (driftsys/ridl#335).
+///
+/// Every category listed here classifies
+/// [`Breaking`](ridl_diff::Verdict::Breaking) in every direction, so the
+/// category — plus, for `MemberReordered`, the detail check `desk_check`
+/// applies — selects them.
+const ORDINAL_CATEGORIES: [ridl_diff::Category; 5] = [
     ridl_diff::Category::InteractionInserted,
     ridl_diff::Category::InteractionReordered,
     ridl_diff::Category::InteractionRemoved,
     ridl_diff::Category::ReservedNameRedeclared,
+    ridl_diff::Category::MemberReordered,
 ];
 
 /// Runs `check` and, when a baseline is available and the compile produced no
@@ -1228,6 +1241,9 @@ fn desk_check(
         if !ORDINAL_CATEGORIES.contains(&change.category) {
             continue;
         }
+        if change.category == ridl_diff::Category::MemberReordered && !is_ordinal_reorder(change) {
+            continue;
+        }
         warnings.push(Diagnostic {
             code: DiagCode::RIDL_407,
             severity: Severity::Warning,
@@ -1357,6 +1373,19 @@ fn directory_of(path: &str) -> String {
     }
 }
 
+/// Whether a `MemberReordered` change names a struct field's or union arm's
+/// ordinal rather than an enum value's or enum-set bit's position.
+/// `diff_composite` renders the former's slot as `"ordinal N"` and the
+/// latter's as `"position N"` (typl §7.4 vs typl §8, §9) — the word is the
+/// only place the two are told apart once they reach `desk_check`, which
+/// warns on the first and stays silent on the second (driftsys/ridl#335).
+fn is_ordinal_reorder(change: &ridl_diff::Change) -> bool {
+    change
+        .before
+        .as_deref()
+        .is_some_and(|detail| detail.starts_with("ordinal "))
+}
+
 /// The RIDL-407 message for one ordinal-affecting change.
 ///
 /// Written for the reader of a `.ridl` file, not for a reader of the diff
@@ -1379,7 +1408,15 @@ fn drift_message(change: &ridl_diff::Change) -> String {
              the wire identity of an interaction (ridl §11), so a consumer built against the \
              baseline would now bind this slot to a different interaction — put the declarations \
              back in the baseline's order and add new ones at the end",
-            baseline_position(change),
+            baseline_position(change, "position"),
+        ),
+        ridl_diff::Category::MemberReordered => format!(
+            "`{name}` has moved{in_shape} since the published baseline{}. Declaration order is \
+             the wire identity of a struct field or union arm (typl §7.4), so a consumer built \
+             against the baseline would read this slot as a different member — put the members \
+             back in the baseline's order, add new ones at the end, and retire a removed one \
+             with `reserved`",
+            baseline_position(change, "ordinal"),
         ),
         ridl_diff::Category::InteractionInserted => format!(
             "`{name}` is declared{in_shape} ahead of interactions the published baseline already \
@@ -1422,21 +1459,25 @@ fn shape_and_name(path: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// ` (position 2 there, position 4 here)` for a reorder whose two sides carry
-/// two *different* positions, and the empty string otherwise.
+/// ` ({word} 2 there, {word} 4 here)` for a reorder whose two sides carry two
+/// *different* slots, and the empty string otherwise.
 ///
-/// The walk renders a live reorder's sides as bare ordinals (`"2"`) and a
-/// tombstone's as `"reserved at ordinal 2"`, so the trailing integer is what
-/// the two spellings share.
+/// `word` is the unit the caller's category renders the slot in: an
+/// interaction reorder's detail carries no word of its own (the walk renders
+/// a live reorder's sides as bare ordinals, `"2"`, and a tombstone's as
+/// `"reserved at ordinal 2"`), so the caller names it "position"; a struct
+/// field's or union arm's `MemberReordered` detail already reads `"ordinal
+/// 2"`, so the caller names it "ordinal" to match. Either way the trailing
+/// integer is what every spelling shares.
 ///
 /// The equal case is dropped rather than printed. A reorder is detected on
-/// *relative* order among the survivors, so an interaction can change rank
-/// while its absolute ordinal stays put — an insertion above it shifts the
-/// others past it — and "`doorClosed` has moved (position 3 there, position 3
+/// *relative* order among the survivors, so a member can change rank while
+/// its absolute slot stays put — an insertion above it shifts the others
+/// past it — and "`doorClosed` has moved (position 3 there, position 3
 /// here)" contradicts itself in the same breath. The sentence about relative
 /// order stands on its own; the numbers are a convenience that only helps when
 /// they differ.
-fn baseline_position(change: &ridl_diff::Change) -> String {
+fn baseline_position(change: &ridl_diff::Change, word: &str) -> String {
     let position = |side: &Option<String>| -> Option<u32> {
         side.as_ref()?
             .rsplit(' ')
@@ -1447,7 +1488,7 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
     };
     match (position(&change.before), position(&change.after)) {
         (Some(was), Some(now)) if was != now => {
-            format!(" (position {was} there, position {now} here)")
+            format!(" ({word} {was} there, {word} {now} here)")
         }
         _ => String::new(),
     }
@@ -1890,6 +1931,72 @@ impl DeclIndex {
                 }
             }
 
+            // Struct and union bodies (typl §7.4): declaration order is wire
+            // identity for a live field or arm, and `diff_composite`
+            // addresses each one under `<package>/<name>/<member>` — the
+            // same three-part path `span_of` already reads for an
+            // interaction. `SourceFile::shapes` does not reach these bodies;
+            // it walks interface bodies only, so they are indexed here, from
+            // `SourceFile::definitions`. A `reserved` tombstone carries no
+            // ordinal a `MemberReordered` diff addresses, so only the live
+            // fields and arms are indexed.
+            for definition in source.definitions() {
+                match definition {
+                    ridl_syntax::ast::Definition::Struct(def) => {
+                        let Some(name_node) = def.name() else {
+                            continue;
+                        };
+                        let Some(name) = name_text(&name_node) else {
+                            continue;
+                        };
+                        index.shapes.insert(
+                            (package.clone(), name.clone()),
+                            (path.clone(), name_node.syntax().text_range()),
+                        );
+                        for member in def.members() {
+                            let ridl_syntax::ast::StructMember::Field(field) = member else {
+                                continue;
+                            };
+                            let Some(field_name) = field.name().and_then(|n| name_text(&n)) else {
+                                continue;
+                            };
+                            index.members.insert(
+                                (package.clone(), name.clone(), field_name),
+                                (
+                                    path.clone(),
+                                    declaration_range(field.syntax().text_range(), &text),
+                                ),
+                            );
+                        }
+                    }
+                    ridl_syntax::ast::Definition::Union(def) => {
+                        let Some(name_node) = def.name() else {
+                            continue;
+                        };
+                        let Some(name) = name_text(&name_node) else {
+                            continue;
+                        };
+                        index.shapes.insert(
+                            (package.clone(), name.clone()),
+                            (path.clone(), name_node.syntax().text_range()),
+                        );
+                        for arm in def.arms() {
+                            let Some(arm_name) = arm.name().and_then(|n| name_text(&n)) else {
+                                continue;
+                            };
+                            index.members.insert(
+                                (package.clone(), name.clone(), arm_name),
+                                (
+                                    path.clone(),
+                                    declaration_range(arm.syntax().text_range(), &text),
+                                ),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
             index.texts.insert(path, text);
         }
         index
@@ -1911,7 +2018,10 @@ impl DeclIndex {
             };
             self.members.insert(
                 (package.to_string(), shape.to_string(), member_name),
-                (path.to_string(), declaration_range(&member, text)),
+                (
+                    path.to_string(),
+                    declaration_range(member.syntax().text_range(), text),
+                ),
             );
         }
     }
@@ -1975,11 +2085,12 @@ fn detached_span() -> Span {
     }
 }
 
-/// The declaration's own range, with trailing whitespace trimmed off: a node's
+/// A declaration's own range, with trailing whitespace trimmed off: a node's
 /// range can run to the start of the next line, and an underline that reaches
-/// past the declaration reads as if the next one were implicated too.
-fn declaration_range(member: &InterfaceMember, text: &str) -> TextRange {
-    let range = member.syntax().text_range();
+/// past the declaration reads as if the next one were implicated too. Shared
+/// by every member kind the index spans — an interaction, a struct field, and
+/// a union arm alike.
+fn declaration_range(range: TextRange, text: &str) -> TextRange {
     let start = usize::from(range.start());
     let end = usize::from(range.end()).min(text.len());
     let trimmed = text

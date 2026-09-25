@@ -104,7 +104,7 @@ Arguments:
 
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
-      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
+      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction, struct field, or union arm whose ordinal moved. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
       --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema [default: text] [possible values: text, json]
   -h, --help                 Print help
 ```
@@ -246,9 +246,9 @@ paragraphs above do not touch.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
-the workspace against it and warns (RIDL-407) on every interaction whose
-declaration order moved, without moving the exit code. Reordering two events
-in a published interface:
+the workspace against it and warns (RIDL-407) on every interaction, struct
+field, or union arm whose declaration order moved, without moving the exit
+code. Reordering two events in a published interface:
 
 ```sh
 ridl check

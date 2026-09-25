@@ -402,6 +402,223 @@ fn check_is_silent_for_an_append() {
     assert_eq!(code, 0, "a compatible change stays clean:\n{stderr}");
 }
 
+/// The published composites: a struct and a union whose members take their
+/// wire identity from their ordinal (typl §7.4), and an enum and an enum set
+/// whose members carry an explicit number instead (typl §8, §9).
+const COMPOSITES: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  door: DoorState
+  latch: LatchState
+}
+union Reading {
+  door: DoorState
+  latch: LatchState
+}
+enum Gear {
+  PARK = 0
+  DRIVE = 1
+}
+enumset Warnings {
+  LOW_FUEL = 0
+  DOOR_OPEN = 1
+}
+";
+
+/// `COMPOSITES` with the two fields of `Report` swapped.
+const STRUCT_FIELDS_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  latch: LatchState
+  door: DoorState
+}
+union Reading {
+  door: DoorState
+  latch: LatchState
+}
+enum Gear {
+  PARK = 0
+  DRIVE = 1
+}
+enumset Warnings {
+  LOW_FUEL = 0
+  DOOR_OPEN = 1
+}
+";
+
+/// `COMPOSITES` with the two arms of `Reading` swapped.
+const UNION_ARMS_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  door: DoorState
+  latch: LatchState
+}
+union Reading {
+  latch: LatchState
+  door: DoorState
+}
+enum Gear {
+  PARK = 0
+  DRIVE = 1
+}
+enumset Warnings {
+  LOW_FUEL = 0
+  DOOR_OPEN = 1
+}
+";
+
+/// `COMPOSITES` with the values of `Gear` and the bits of `Warnings` swapped,
+/// each keeping its explicit number.
+const ENUM_MEMBERS_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  door: DoorState
+  latch: LatchState
+}
+union Reading {
+  door: DoorState
+  latch: LatchState
+}
+enum Gear {
+  DRIVE = 1
+  PARK = 0
+}
+enumset Warnings {
+  DOOR_OPEN = 1
+  LOW_FUEL = 0
+}
+";
+
+/// Asserts the RIDL-407 block about `member` of `container`: it names both,
+/// states the two ordinals in the typl §7.4 word, cites that rule, and points
+/// its span at `declaration`.
+fn assert_member_moved(
+    stderr: &str,
+    member: &str,
+    container: &str,
+    was: u32,
+    now: u32,
+    declaration: &str,
+) {
+    let block = ridl_407_block(stderr, member);
+    assert!(
+        block.contains(&format!("`{member}` has moved in `{container}`")),
+        "the message names the member and the body it is declared in:\n{stderr}",
+    );
+    assert!(
+        block.contains(&format!("(ordinal {was} there, ordinal {now} here)")),
+        "a struct field or union arm is placed by its ordinal, the word typl §7.4 \
+         uses for it:\n{stderr}",
+    );
+    assert!(
+        !block.contains("position"),
+        "an ordinal is not worded as a position:\n{stderr}",
+    );
+    assert!(
+        !block.contains("interaction"),
+        "a composite member is not an interaction:\n{stderr}",
+    );
+    assert!(
+        block.contains("typl §7.4"),
+        "the message cites the rule that makes the order a wire identity:\n{stderr}",
+    );
+    assert!(
+        block.contains(declaration),
+        "the span underlines the member's declaration:\n{stderr}",
+    );
+}
+
+/// A struct field swap moves two ordinals, which are wire identity (typl
+/// §7.4). `ridl diff` reports both as `member_reordered`, and the desk check
+/// warns once for each, without moving the exit code (driftsys/ridl#335).
+#[test]
+fn check_flags_a_struct_field_reorder_against_the_baseline() {
+    let dir = TempDir::new("struct-reorder");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", STRUCT_FIELDS_SWAPPED);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        stderr.matches("warning[RIDL-407]").count(),
+        2,
+        "one warning per moved field:\n{stderr}",
+    );
+    assert_member_moved(&stderr, "door", "Report", 1, 2, "door: DoorState");
+    assert_member_moved(&stderr, "latch", "Report", 2, 1, "latch: LatchState");
+    assert_eq!(
+        code, 0,
+        "a warning never moves the exit code of an otherwise clean check:\n{stderr}",
+    );
+}
+
+/// A union arm swap is the same wire break as a struct field swap (typl §7.4)
+/// and draws the same warning, once per moved arm.
+#[test]
+fn check_flags_a_union_arm_reorder_against_the_baseline() {
+    let dir = TempDir::new("union-reorder");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", UNION_ARMS_SWAPPED);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        stderr.matches("warning[RIDL-407]").count(),
+        2,
+        "one warning per moved arm:\n{stderr}",
+    );
+    assert_member_moved(&stderr, "door", "Reading", 1, 2, "door: DoorState");
+    assert_member_moved(&stderr, "latch", "Reading", 2, 1, "latch: LatchState");
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// An enum value or enum-set bit takes its identity from its explicit number,
+/// so reordering the body is not a change (typl §8, §9). `ridl diff` still
+/// reports it conservatively; the desk check stays silent, because its
+/// warning says declaration order is the wire identity, which is false here
+/// (the decision recorded on driftsys/ridl#335).
+#[test]
+fn check_is_silent_for_an_enum_and_enum_set_reorder() {
+    let dir = TempDir::new("enum-reorder");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", ENUM_MEMBERS_SWAPPED);
+    let (code, diff, _) = ridl(&[
+        "diff".as_ref(),
+        root.join(".ridl/baseline").as_os_str(),
+        root.as_os_str(),
+    ]);
+    assert_eq!(code, 1, "`ridl diff` gates on the reorder:\n{diff}");
+    for member in [
+        "Gear/PARK",
+        "Gear/DRIVE",
+        "Warnings/LOW_FUEL",
+        "Warnings/DOOR_OPEN",
+    ] {
+        assert!(
+            diff.contains(&format!("member_reordered veh.cluster/{member}: position")),
+            "the fixture is a reorder `ridl diff` reports for `{member}`:\n{diff}",
+        );
+    }
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "an enum or enum-set reorder moves no wire identity:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the reorder leaves a clean check clean:\n{stderr}");
+}
+
 /// With no baseline anywhere, `ridl check` behaves exactly as before: no extra
 /// output, same exit code.
 #[test]

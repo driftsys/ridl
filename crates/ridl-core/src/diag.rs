@@ -738,13 +738,16 @@ diag_codes! {
         RIDL_406 = "RIDL-406", Info,
             "payload struct re-declares envelope metadata";
 
-        /// An interaction ordinal changed against a published baseline snapshot
-        /// (ridl §11, general form §6.3). Warning. Emitted by the `ridl check` desk
-        /// check (E2 task 18), never by the compiler: the comparison reads a
-        /// workspace-local baseline, which is outside `ridlc`'s source→IR function
-        /// (ADR-0008 decisions 9 and 13).
+        /// An interaction's ordinal, or a struct field's or union arm's ordinal
+        /// (typl §7.4), changed against a published baseline snapshot (ridl §11,
+        /// general form §6.3). Warning. Emitted by the `ridl check` desk check (E2
+        /// task 18), never by the compiler: the comparison reads a workspace-local
+        /// baseline, which is outside `ridlc`'s source→IR function (ADR-0008
+        /// decisions 9 and 13). An enum value's or enum-set bit's reorder is not a
+        /// change (typl §8, §9) and does not draw this warning (driftsys/ridl#335).
         RIDL_407 = "RIDL-407", Warning,
-            "interaction ordinal changed against the published baseline";
+            "interaction, struct field, or union arm ordinal changed against the published \
+             baseline";
 
         /// An interaction of an interface body the baseline being replaced
         /// declares is not carried forward as the tombstone rule requires
