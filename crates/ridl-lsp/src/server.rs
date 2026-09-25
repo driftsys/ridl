@@ -44,7 +44,9 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
 use ridl_core::package::{Package, PackageOrigin, Workspace};
-use ridl_core::{LoadedWorkspace, load_workspace, profile_of_path, std_package};
+use ridl_core::{
+    LoadedWorkspace, find_manifest_root, load_workspace, profile_of_path, std_package,
+};
 use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
 use ridl_syntax::Profile;
 use ridl_syntax::ast::{AstNode as _, SourceFile};
@@ -219,8 +221,9 @@ struct ServerState {
     /// Whether [`ServerState::load`] has succeeded. Once it has, the
     /// workspace is not loaded again; a file outside it is an overlay.
     loaded: bool,
-    /// The reason of the last load error a `didOpen` showed, so the same
-    /// error is not shown again on every later `didOpen`.
+    /// The manifest directory and reason of the last load error a `didOpen`
+    /// showed, so the same error is not shown again on every later
+    /// `didOpen`.
     shown_load_error: Option<String>,
     /// Every loaded workspace file, keyed by its load-time path string —
     /// the inputs `didOpen`/`didChange` overlay via `set_text`.
@@ -276,7 +279,8 @@ impl ServerState {
 
     /// Loads the workspace whose `ridl.toml` is at or above `dir` — the only
     /// cold, from-disk load in the server's lifetime; every later recompute
-    /// reuses these inputs. On an error the state is left unchanged.
+    /// reuses these inputs. On an error no field of the state changes; the
+    /// salsa inputs the failed load created stay in the database, unused.
     ///
     /// An open overlay whose path the loaded workspace contains (a file
     /// opened before its `ridl.toml` existed) moves its buffer onto the
@@ -322,9 +326,10 @@ impl ServerState {
     /// Before a `didOpen` with no workspace loaded yet: loads the workspace
     /// of the nearest `ridl.toml` at or above the opened file (issue #384).
     /// No manifest there is not an error — the file becomes a standalone
-    /// overlay, and the next `didOpen` tries again. A load that finds a
-    /// manifest and fails is shown to the user, once per distinct error: a
-    /// manifest that stays unreadable fails again on each `didOpen`.
+    /// overlay, and the next `didOpen` tries again. A load from a manifest
+    /// that fails is shown to the user. A manifest that stays unreadable
+    /// fails again on each `didOpen`; its error is shown only when it differs
+    /// from the last one shown, by manifest directory or by reason.
     fn load_for_opened_file(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
         if self.loaded {
             return Ok(());
@@ -332,21 +337,18 @@ impl ServerState {
         let Some(dir) = Path::new(path).parent() else {
             return Ok(());
         };
-        if !dir
-            .ancestors()
-            .any(|candidate| candidate.join("ridl.toml").is_file())
-        {
-            return Ok(());
-        }
-        let Err(err) = self.load(dir) else {
+        let Some(root) = find_manifest_root(dir) else {
             return Ok(());
         };
-        let reason = err.to_string();
-        if self.shown_load_error.as_ref() == Some(&reason) {
+        let Err(err) = self.load(&root) else {
+            return Ok(());
+        };
+        let shown = format!("{}: {err}", root.display());
+        if self.shown_load_error.as_ref() == Some(&shown) {
             return Ok(());
         }
-        let message = format!("ridl-lsp could not load the workspace of `{path}`: {reason}");
-        self.shown_load_error = Some(reason);
+        let message = format!("ridl-lsp could not load the workspace of `{path}`: {err}");
+        self.shown_load_error = Some(shown);
         show_message(connection, lt::MessageType::ERROR, message)
     }
 
