@@ -34,8 +34,8 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 /// `FORM-101`, "expected a backing type", line 2 column 8, no fix-its.
 const BROKEN_TYPL: &str = "package p\ntype X:";
 
-/// One typl source yielding three diagnostics of three kinds, used by the
-/// CLI/MCP agreement test only.
+/// One typl source yielding three diagnostics of three kinds, used by one of
+/// the CLI/MCP agreement tests only.
 ///
 /// Measured against the built binary: `FORM-101` (error, line 4, the
 /// missing backing type — again with no trailing newline, for the reason
@@ -135,68 +135,120 @@ async fn ridl_check_returns_the_diagnostic_contract() {
 /// the tool under the synthetic `input.typl`, the CLI under the real file it
 /// read — so the path is the one field the agreement test must set aside
 /// (`crates/ridl-mcp/README.md`, "What this tool shares with `ridl check
-/// --format json <file>`, and where it differs"). No compiler pass emits a
-/// fix-it today, so the
-/// inner loop is a no-op on current inputs; it is here because a `fixes` entry
-/// carries a span of its own and would otherwise reintroduce the difference.
+/// --format json <file>`, and where it differs"). A label and a fix-it each
+/// carry a span of their own, so each would otherwise reintroduce the
+/// difference.
 fn blank_span_paths(diagnostics: &mut serde_json::Value) {
     let blank = || serde_json::Value::String(String::new());
     for diagnostic in diagnostics.as_array_mut().into_iter().flatten() {
         diagnostic["span"]["path"] = blank();
+        for label in diagnostic["labels"].as_array_mut().into_iter().flatten() {
+            label["span"]["path"] = blank();
+        }
         for fix in diagnostic["fixes"].as_array_mut().into_iter().flatten() {
             fix["span"]["path"] = blank();
         }
     }
 }
 
-/// The MCP tool and `ridl check --format json` report the same diagnostics.
+/// Asserts that the MCP tool and `ridl check --format json` report the same
+/// diagnostics for `source`, written to `file_name` for the CLI and sent with
+/// `profile` to the tool, and that the CLI reports exactly `codes`, in order.
 ///
 /// The equality holds for this input class only: one standalone file, no
-/// `ridl.toml` and no imports. The two faces run different front ends — the
-/// CLI calls `ridlc::run_check`, which resolves a workspace, and the tool
-/// calls `ridlc::check_source`, which does not — and a workspace member is
-/// exactly where the two may legitimately diverge.
+/// `ridl.toml` and no imports. The two faces load the source differently — the
+/// CLI calls `ridlc::run_check`, which reads a workspace from disk, and the
+/// tool calls `ridlc::check_source`, which builds a one-file workspace from the
+/// text — and a workspace member is exactly where the two may legitimately
+/// diverge.
+async fn assert_faces_agree(file_name: &str, source: &str, profile: &str, codes: &[&str]) {
+    // The CLI side.
+    let dir = TempDir::new("agree");
+    let path = dir.write(file_name, source);
+    let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(["check", "--format", "json"])
+        .arg(&path)
+        .output()
+        .expect("run ridl check");
+    // Checked first: on every exit-2 path `--format json` returns before it
+    // prints anything, so stdout is empty and the parse below would report a
+    // JSON error instead of the real failure.
+    assert_eq!(cli.status.code(), Some(1), "{cli:?}");
+    let mut cli: serde_json::Value =
+        serde_json::from_slice(&cli.stdout).expect("the CLI prints JSON to stdout");
+
+    // The MCP side.
+    let client = connect().await;
+    let mut mcp = call_ridl_check(&client, source, profile).await;
+    client.cancel().await.expect("shutdown");
+    // The tool wraps its array in an object; the CLI prints the bare array.
+    let mut mcp = mcp["diagnostics"].take();
+
+    // The CLI's codes are pinned, or the equality below would pass over a
+    // fixture that stopped drawing the diagnostic it is here for.
+    let cli_codes: Vec<&str> = cli
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|diagnostic| diagnostic["code"].as_str())
+        .collect();
+    assert_eq!(cli_codes, codes, "{cli}");
+    blank_span_paths(&mut cli);
+    blank_span_paths(&mut mcp);
+    assert_eq!(cli, mcp);
+}
+
+/// The two faces agree on three diagnostics of two severities, not in line
+/// order, so a tool that truncated or reordered its diagnostics would no
+/// longer agree with the CLI.
 #[tokio::test]
 async fn ridl_check_and_check_format_json_agree() {
-    tokio::time::timeout(TIMEOUT, async {
-        // The CLI side.
-        let dir = TempDir::new("agree");
-        let path = dir.write("agree.typl", THREE_KINDS_TYPL);
-        let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
-            .args(["check", "--format", "json"])
-            .arg(&path)
-            .output()
-            .expect("run ridl check");
-        // Checked first: on every exit-2 path `--format json` returns before it
-        // prints anything, so stdout is empty and the parse below would report a
-        // JSON error instead of the real failure.
-        assert_eq!(cli.status.code(), Some(1), "{cli:?}");
-        let mut cli: serde_json::Value =
-            serde_json::from_slice(&cli.stdout).expect("the CLI prints JSON to stdout");
-
-        // The MCP side.
-        let client = connect().await;
-        let mut mcp = call_ridl_check(&client, THREE_KINDS_TYPL, "typl").await;
-        client.cancel().await.expect("shutdown");
-        // The tool wraps its array in an object; the CLI prints the bare array.
-        let mut mcp = mcp["diagnostics"].take();
-
-        // At least two on each side, or the equality below would pass over
-        // a tool that truncated its diagnostics to the first one.
-        assert!(
-            cli.as_array().is_some_and(|array| array.len() >= 2),
-            "the fixture must produce at least two diagnostics, or this proves nothing: {cli}"
-        );
-        assert!(
-            mcp.as_array().is_some_and(|array| array.len() >= 2),
-            "the tool must report at least two diagnostics, or this proves nothing: {mcp}"
-        );
-        blank_span_paths(&mut cli);
-        blank_span_paths(&mut mcp);
-        assert_eq!(cli, mcp);
-    })
+    tokio::time::timeout(
+        TIMEOUT,
+        assert_faces_agree(
+            "agree.typl",
+            THREE_KINDS_TYPL,
+            "typl",
+            &["FORM-101", "TYPL-103", "TYPL-104"],
+        ),
+    )
     .await
     .expect("ridl_check_and_check_format_json_agree did not finish within the timeout");
+}
+
+/// The two faces agree on a diagnostic of the service catalog, a
+/// workspace-wide pass: RIDL-140, whose label points at the first declaration
+/// (issue #345).
+#[tokio::test]
+async fn ridl_check_and_check_format_json_agree_on_the_service_catalog() {
+    tokio::time::timeout(
+        TIMEOUT,
+        assert_faces_agree(
+            "dup.ridl",
+            "package p\ninterface I {}\nservice p.s : I\nservice p.s : I\n",
+            "ridl",
+            &["RIDL-140"],
+        ),
+    )
+    .await
+    .expect("the service catalog agreement test did not finish within the timeout");
+}
+
+/// The two faces agree on a diagnostic of the rsdl system query, the other
+/// workspace-wide pass: RSDL-602, a system member line that names nothing.
+#[tokio::test]
+async fn ridl_check_and_check_format_json_agree_on_the_rsdl_system() {
+    tokio::time::timeout(
+        TIMEOUT,
+        assert_faces_agree(
+            "sys.rsdl",
+            "package p\nsystem S { Missing }\n",
+            "rsdl",
+            &["RSDL-602"],
+        ),
+    )
+    .await
+    .expect("the rsdl system agreement test did not finish within the timeout");
 }
 
 /// Spawns `ridl mcp` with all three standard streams piped, bypassing the

@@ -4,8 +4,9 @@
 //! [`compile`] runs the pipeline end to end over a single source file: it wraps
 //! the source in a single-file synthetic package, resolves it
 //! ([`resolve_package`]), checks and lowers it to IR v2 ([`check_package`]),
-//! and generates Rust source. The function is total: it never panics. Every
-//! parser, resolver, and checker diagnostic is a coded [`Diagnostic`]
+//! runs the workspace-wide passes over it ([`check_workspace`]), and generates
+//! Rust source. The function is total: it never panics. Every parser,
+//! resolver, and checker diagnostic is a coded [`Diagnostic`]
 //! collected into [`CompileOutput::diagnostics`]; if the Rust backend fails,
 //! its error joins that list and [`CompileOutput::rust_source`] is left
 //! empty. The caller (the CLI or a test) renders the diagnostics against
@@ -13,12 +14,12 @@
 //! means.
 //!
 //! [`check_source`] is [`compile`]'s check-only sibling over the same
-//! single-file front end — parse, resolve, check, no Rust generation —
-//! returned as a [`CliRun`] rather than a [`CompileOutput`]. It is the
-//! single-file oracle behind `ridl mcp`'s `ridl_check` tool. `ridl check
-//! --format json` does not call it: it goes through [`run_check`], which
-//! resolves a workspace. What the two faces share is `ridl_core::diag::to_json`,
-//! not this function.
+//! single-file front end — every check, no Rust generation — returned as a
+//! [`CliRun`] rather than a [`CompileOutput`]. It is the single-file oracle
+//! behind `ridl mcp`'s `ridl_check` tool. `ridl check --format json` does not
+//! call it: it goes through [`run_check`], which loads a workspace from disk.
+//! Once the workspace is loaded, the two faces run the same passes, and they
+//! render the result with the same `ridl_core::diag::to_json`.
 //!
 //! [`compile_workspace`] is the same pipeline over the loaded package model —
 //! a `.typl` file, a package directory, or a workspace root ([`load_workspace`])
@@ -45,15 +46,15 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::package::{Package, PackageOrigin, Workspace, service_catalog};
+use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, load_workspace,
     materialize_imports, parse_file, parse_manifest, read_lockfile, std_package, write_lockfile,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
-    CheckedPackage, CheckedSystem, Resolution, check_package, check_system, lower_system,
-    resolve_package, unclaimed_backend_keys,
+    CheckedPackage, CheckedSystem, CheckedWorkspace, Resolution, check_package, check_workspace,
+    lower_system, resolve_package, unclaimed_backend_keys,
 };
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
@@ -83,34 +84,20 @@ struct FrontEnd {
 /// Parses, resolves, and checks `text` (registered under `path`) as a
 /// single-file synthetic package named from its `package` declaration, falling
 /// back to the path's file stem — the loader's single-file rule (E1.3). The
-/// profile follows `path`'s extension. Diagnostics are concatenated parser →
-/// resolver → checker, with the package-scoped spans remapped onto this
-/// function's own [`SourceMap`].
+/// profile follows `path`'s extension. The package is the one member of a
+/// synthetic workspace, and [`check_loaded`] runs over it every pass
+/// `ridl check` runs: parser → resolver → checker, then the workspace-wide
+/// passes, with the spans remapped onto this function's own [`SourceMap`].
 fn front_end(path: &str, text: &str) -> FrontEnd {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
     let input = InputFile::new(&db, path.to_string(), text.to_string());
-    let parse = parse_file(&db, input);
 
     let mut sources = SourceMap::new();
     let file = sources.file_id(path, text);
 
-    // Parser diagnostics carry the raw message; `house_style_message` polishes
-    // the `expect`-path Debug forms into the backticked house style (issue #102).
-    let mut diagnostics: Vec<Diagnostic> = parse
-        .errors()
-        .iter()
-        .map(|error| {
-            error_diagnostic(
-                error.code,
-                ridl_core::diag::house_style_message(&error.message),
-                file,
-                error.range,
-            )
-        })
-        .collect();
-
-    let ast = SourceFile::cast(parse.syntax()).expect("parser roots every tree in a SourceFile");
+    let ast = SourceFile::cast(parse_file(&db, input).syntax())
+        .expect("parser roots every tree in a SourceFile");
     let package_name = declared_package_name(&ast).unwrap_or_else(|| module_name_from_path(path));
     let pkg = Package::new(
         &db,
@@ -121,28 +108,35 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
         None,
         None,
     );
-    let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+    let workspace = Workspace::new(&db, vec![pkg], BTreeMap::new());
 
-    let resolution = resolve_package(&db, ws, pkg, std);
-    let checked = check_package(&db, ws, pkg, std);
-
-    // The single package file is the file interned above.
-    let render_ids = vec![file];
-    diagnostics.extend(remap_diagnostics(resolution.diagnostics, &render_ids));
-    diagnostics.extend(remap_diagnostics(checked.diagnostics, &render_ids));
-
+    let compiled = check_loaded(
+        &db,
+        std,
+        LoadedWorkspace {
+            workspace,
+            diagnostics: Vec::new(),
+            sources,
+        },
+    );
+    let ir = compiled
+        .checked
+        .into_iter()
+        .next()
+        .expect("the synthetic workspace has one package")
+        .ir;
     FrontEnd {
-        diagnostics,
-        sources,
+        diagnostics: compiled.diagnostics,
+        sources: compiled.sources,
         file,
-        ir: checked.ir,
+        ir,
     }
 }
 
 /// Checks `text` (registered under `path`) without running any backend: the
 /// single-file oracle behind `ridl mcp`'s `ridl_check` tool. `ridl check
-/// --format json` calls [`run_check`] instead, which resolves a workspace;
-/// the two share `ridl_core::diag::to_json`, not this function.
+/// --format json` calls [`run_check`] instead, which loads a workspace from
+/// disk; the two then run the same passes, through one private driver.
 pub fn check_source(path: &str, text: &str) -> CliRun {
     let front = front_end(path, text);
     CliRun {
@@ -154,11 +148,12 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
 /// Compiles `text` (registered under `path`) end to end.
 ///
 /// The pipeline is `parse_file` (through the salsa database) →
-/// `resolve_package` → `check_package` → `generate`. Diagnostics are
-/// concatenated in that order: parser errors first, then resolver, then
-/// checker, then any Rust backend error. The source becomes a single-file
-/// synthetic package named from its `package` declaration, falling back to
-/// the path's file stem — the loader's single-file rule (E1.3).
+/// `resolve_package` → `check_package` → `check_workspace` → `generate`.
+/// Diagnostics are concatenated in that order: parser errors first, then
+/// resolver, then checker, then the workspace-wide passes and RSDL-804, then
+/// any Rust backend error. The source becomes a single-file synthetic package
+/// named from its `package` declaration, falling back to the path's file stem
+/// — the loader's single-file rule (E1.3).
 ///
 /// The package-scoped passes stamp their spans with a [`FileId`] indexing the
 /// package's files in order; [`remap_diagnostics`] rewrites them onto the
@@ -1093,14 +1088,21 @@ struct Compiled {
 /// package, merging all diagnostics onto one [`SourceMap`].
 fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compiled> {
     let std = std_package(db);
+    let loaded = load_workspace(db, entry)?;
+    Ok(check_loaded(db, std, loaded))
+}
+
+/// Runs parse, resolve, and check over every package of `loaded`, then the
+/// workspace-wide passes, merging all diagnostics after the loader's onto the
+/// loader's [`SourceMap`]. [`load_and_check`] calls it on a workspace read from
+/// disk, and [`front_end`] on a one-file workspace built from a source text, so
+/// `ridl check` and the `ridl_check` MCP tool run the same passes.
+fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Compiled {
     let LoadedWorkspace {
         workspace,
         mut diagnostics,
         mut sources,
-    } = load_workspace(db, entry)?;
-
-    // The load and the queries are done; only shared database access remains.
-    let db: &RidlDatabase = db;
+    } = loaded;
 
     let packages = workspace.packages(db).clone();
     let mut checked = Vec::with_capacity(packages.len());
@@ -1148,15 +1150,14 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
         checked.push(checked_pkg);
     }
 
-    // The two workspace-wide passes: the service catalog (E2.13), whose RIDL-140
-    // duplicate-name diagnostics span the whole workspace, and the rsdl system
-    // query (rsdl reference v0.2), which checks every `.rsdl` file at once
-    // because the closure is workspace-wide. Both carry FileIds indexing every
-    // file in package-then-file order. Rebuild that order onto the render
-    // source map and remap, mirroring the per-package remap above.
-    let catalog = service_catalog(db, workspace, std);
-    let mut system = check_system(db, workspace, std);
-    if !catalog.diagnostics.is_empty() || !system.diagnostics.is_empty() {
+    // The workspace-wide passes carry FileIds indexing every source file in
+    // package-then-file order. Rebuild that order onto the render source map
+    // and remap, mirroring the per-package remap above.
+    let CheckedWorkspace {
+        diagnostics: workspace_diagnostics,
+        system,
+    } = check_workspace(db, workspace, std);
+    if !workspace_diagnostics.is_empty() {
         let mut workspace_render_ids = Vec::new();
         for pkg in &packages {
             for file in pkg.files(db) {
@@ -1164,11 +1165,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
             }
         }
         diagnostics.extend(remap_diagnostics(
-            catalog.diagnostics,
-            &workspace_render_ids,
-        ));
-        diagnostics.extend(remap_diagnostics(
-            std::mem::take(&mut system.diagnostics),
+            workspace_diagnostics,
             &workspace_render_ids,
         ));
     }
@@ -1183,7 +1180,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
         &mut sources,
     ));
 
-    Ok(Compiled {
+    Compiled {
         workspace,
         std,
         checked,
@@ -1191,7 +1188,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
         system,
         diagnostics,
         sources,
-    })
+    }
 }
 
 /// Materializes every remote import of the workspace and round-trips

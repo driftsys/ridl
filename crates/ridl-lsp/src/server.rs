@@ -12,13 +12,13 @@
 //! The state model is the incremental overlay design described in the crate
 //! docs: one workspace load, then `set_text` on the existing salsa
 //! [`InputFile`]s per edit, with every recompute going through the memoized
-//! `parse_file` / `resolve_package` / `check_package` / `check_system`
-//! queries. The load runs at initialize from the client's root. When that
-//! load fails, the server shows the error with `window/showMessage`; when it
-//! fails or the client sent no root, the server loads instead from the first
-//! opened file that has a `ridl.toml` at or above it (issue #384). The
-//! nearest `ridl.toml` wins, so a file inside a member of a `[workspace]`
-//! loads that member's package only.
+//! `parse_file` / `resolve_package` / `check_package` / `service_catalog` /
+//! `check_system` queries. The load runs at initialize from the client's
+//! root. When that load fails, the server shows the error with
+//! `window/showMessage`; when it fails or the client sent no root, the server
+//! loads instead from the first opened file that has a `ridl.toml` at or above
+//! it (issue #384). The nearest `ridl.toml` wins, so a file inside a member of
+//! a `[workspace]` loads that member's package only.
 //!
 //! Two scope limits of this task, both by design:
 //!
@@ -47,7 +47,9 @@ use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     LoadedWorkspace, find_manifest_root, load_workspace, profile_of_path, std_package,
 };
-use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
+use ridl_sem::{
+    CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
+};
 use ridl_syntax::Profile;
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
@@ -586,8 +588,9 @@ impl ServerState {
     /// in the same file order) and rewrites the spans onto those ids with
     /// [`remap_diagnostics`] before conversion.
     ///
-    /// The rsdl system query runs once over the workspace afterwards (rsdl
-    /// reference v0.2), as in `ridlc`.
+    /// The workspace-wide passes — the service catalog and the rsdl system
+    /// query (rsdl reference v0.2) — run once over the workspace afterwards,
+    /// through the `check_workspace` that `ridlc` calls too.
     fn analyze(&self) -> Batch {
         let db = &self.db;
         let mut sources = SourceMap::new();
@@ -599,8 +602,9 @@ impl ServerState {
             .values()
             .map(|(_, package)| *package)
             .collect();
-        // The render ids of the workspace's files in package-then-file order,
-        // the order the workspace-wide rsdl diagnostics index them in.
+        // The render ids of the workspace's source files in package-then-file
+        // order, the order the workspace-wide diagnostics index them in. A
+        // package's lock is not one of those files.
         let mut workspace_render_ids: Vec<FileId> = Vec::new();
         let workspace_packages = self.workspace.packages(db).len();
         let packages = self.workspace.packages(db).iter().copied();
@@ -616,6 +620,9 @@ impl ServerState {
                     .or_insert_with(|| (path.clone(), text.clone()));
                 render_ids.push(id);
             }
+            if index < workspace_packages {
+                workspace_render_ids.extend(&render_ids);
+            }
             // The checker stamps a lock diagnostic (RIDL-409) with the index
             // after the package's files, so the lock's own id goes last (plan
             // decision PD-12), and its text joins the table so the diagnostic
@@ -626,10 +633,6 @@ impl ServerState {
                     .entry(id)
                     .or_insert_with(|| (lock.path.clone(), lock.text.clone()));
                 render_ids.push(id);
-            }
-
-            if index < workspace_packages {
-                workspace_render_ids.extend(&render_ids);
             }
 
             for (file, id) in files.iter().zip(&render_ids) {
@@ -653,15 +656,18 @@ impl ServerState {
             let checked = check_package(db, self.workspace, package, self.std);
             all.extend(remap_diagnostics(checked.diagnostics.clone(), &render_ids));
         }
-        // The rsdl system query checks every `.rsdl` file of the workspace at
-        // once, because the closure is workspace-wide; a standalone overlay is
-        // outside it. RSDL-804 is raised by the driver, not the query: the
-        // server configures no backend, as the command line does not, so no
-        // namespace is claimed and every backend key draws the warning
-        // `ridl check` shows.
-        let mut system = check_system(db, self.workspace, self.std);
+        // The workspace-wide passes — the service catalog and the rsdl system
+        // query — run once over the workspace, as in `ridlc`; a standalone
+        // overlay is outside it. RSDL-804 is raised by the driver, not the
+        // query: the server configures no backend, as the command line does
+        // not, so no namespace is claimed and every backend key draws the
+        // warning `ridl check` shows.
+        let CheckedWorkspace {
+            diagnostics: workspace_diagnostics,
+            system,
+        } = check_workspace(db, self.workspace, self.std);
         all.extend(remap_diagnostics(
-            std::mem::take(&mut system.diagnostics),
+            workspace_diagnostics,
             &workspace_render_ids,
         ));
         all.extend(unclaimed_backend_keys(

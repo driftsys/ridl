@@ -24,7 +24,9 @@ pub mod timing;
 #[cfg(feature = "testgen")]
 pub mod testgen;
 pub mod ucum;
+pub mod workspace;
 
 pub use check::{CheckedPackage, ConstValue, check_package, const_value};
 pub use resolve::{Resolution, Symbol, SymbolKind, resolve_package};
 pub use rsdl::{CheckedSystem, check_system, lower_system, unclaimed_backend_keys};
+pub use workspace::{CheckedWorkspace, check_workspace};

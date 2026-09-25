@@ -14,6 +14,10 @@ followed, with its task sequence, is
 `.rsdl` is a third profile of the one family grammar: the parser gains the five
 declarations, and the checks are a single salsa query,
 `ridl_sem::check_system(db, ws, std)`, over every `.rsdl` file of the workspace.
+Every driver that reports diagnostics — `ridlc`, which `ridl check` and the
+`ridl_check` MCP tool share, the language server, and the corpus runner — calls
+it through `ridl_sem::check_workspace`, which runs the service catalog and this
+query together, so a workspace-wide diagnostic reaches every face.
 
 It is workspace-level because the closure is (rsdl §3.1): a component declared
 in one package offers a service declared in another and is placed by a
