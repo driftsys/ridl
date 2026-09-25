@@ -3200,4 +3200,144 @@ interface I {{
             "expected a name or an integer value",
         );
     }
+
+    // --- operator chains (driftsys/ridl#346) --------------------------------
+
+    /// A contract expression in a minimal ridl file.
+    fn contract_file(expr: &str) -> String {
+        format!(
+            "package app\ntype N : integer [0..10]\ninterface I {{\n  command c(a: N) [ require {expr} ] @[..50ms]\n}}\n"
+        )
+    }
+
+    /// A flat chain of `terms` operands under `op`, closed into a boolean
+    /// where the operator is not one already.
+    fn flat_chain(op: &str, terms: usize) -> String {
+        match op {
+            "||" | "&&" => vec!["a == 1"; terms].join(&format!(" {op} ")),
+            "." => format!("a{} == 1", ".b".repeat(terms - 1)),
+            _ => format!("{} == 1", vec!["a"; terms].join(&format!(" {op} "))),
+        }
+    }
+
+    /// The deepest node below `root`, counted without recursion, so that
+    /// measuring a tree cannot itself exhaust the stack.
+    fn tree_depth(root: &SyntaxNode) -> usize {
+        let (mut depth, mut deepest) = (0usize, 0usize);
+        for event in root.preorder() {
+            match event {
+                rowan::WalkEvent::Enter(_) => {
+                    depth += 1;
+                    deepest = deepest.max(depth);
+                }
+                rowan::WalkEvent::Leave(_) => depth -= 1,
+            }
+        }
+        deepest
+    }
+
+    /// Runs `body` on a thread with a 64 MiB stack. Without the fix a chain
+    /// builds a tree thousands of levels deep, and dropping it recurses; the
+    /// large stack keeps that from aborting the whole test binary, so the
+    /// test fails on its assertions instead.
+    fn on_a_large_stack(body: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(body)
+            .expect("spawn the test thread")
+            .join()
+            .expect("the test thread must not panic");
+    }
+
+    /// The bound every expression tree must stay within, measured from the
+    /// file root. A checker pass that recurses over the tree is sized against
+    /// it; a flat chain once built a tree as deep as its term count.
+    const TREE_DEPTH_BOUND: usize = 2 * MAX_TYPE_DEPTH;
+
+    #[test]
+    fn a_flat_operator_chain_past_the_depth_limit_draws_one_form_102() {
+        on_a_large_stack(|| {
+            for op in ["||", "&&", "+", "-", "*", "/", "%", "."] {
+                let input = contract_file(&flat_chain(op, 1000));
+                let parsed = parse(&input, Profile::Ridl);
+                let form_102 = parsed
+                    .errors()
+                    .iter()
+                    .filter(|error| error.code == "FORM-102")
+                    .count();
+                assert_eq!(
+                    form_102,
+                    1,
+                    "a 1000-term `{op}` chain draws exactly one FORM-102: {:?}",
+                    parsed.errors(),
+                );
+                assert_eq!(
+                    parsed.syntax().text().to_string(),
+                    input,
+                    "the refused `{op}` chain must stay lossless",
+                );
+                let depth = tree_depth(&parsed.syntax());
+                assert!(
+                    depth <= TREE_DEPTH_BOUND,
+                    "a 1000-term `{op}` chain builds a tree {depth} levels deep",
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn a_long_chain_under_the_depth_limit_parses_clean() {
+        for op in ["||", "&&", "+", "-", "*", "/", "%", "."] {
+            let input = contract_file(&flat_chain(op, 100));
+            let parsed = parse(&input, Profile::Ridl);
+            assert!(
+                parsed.errors().is_empty(),
+                "a 100-term `{op}` chain is accepted: {:?}",
+                parsed.errors(),
+            );
+        }
+    }
+
+    #[test]
+    fn chains_stacked_through_parentheses_and_precedence_stay_bounded() {
+        on_a_large_stack(|| {
+            // Each parenthesis level closes a chain of its own, so a bound
+            // that is charged while a chain is parsed and released when it
+            // returns lets the chains stack on the left spine.
+            let mut nested = "a".to_string();
+            for _ in 0..120 {
+                nested = format!("({nested}{})", " + a".repeat(119));
+            }
+            // One chain per precedence level, each the first operand of the
+            // next: member, multiplicative, additive, comparison, `&&`, `||`.
+            let ladder = format!(
+                "a{}{}{} == a{}{}",
+                ".b".repeat(119),
+                " * a".repeat(119),
+                " + a".repeat(119),
+                " && a == a".repeat(119),
+                " || a == a".repeat(119),
+            );
+            for (shape, expr) in [("nested", format!("{nested} == 1")), ("ladder", ladder)] {
+                let input = contract_file(&expr);
+                let parsed = parse(&input, Profile::Ridl);
+                assert!(
+                    parsed.errors().iter().any(|error| error.code == "FORM-102"),
+                    "the {shape} shape draws FORM-102: {:?}",
+                    parsed.errors(),
+                );
+                assert!(
+                    parsed.errors().len() <= 4,
+                    "the {shape} shape floods {} diagnostics",
+                    parsed.errors().len(),
+                );
+                assert_eq!(parsed.syntax().text().to_string(), input);
+                let depth = tree_depth(&parsed.syntax());
+                assert!(
+                    depth <= TREE_DEPTH_BOUND,
+                    "the {shape} shape builds a tree {depth} levels deep",
+                );
+            }
+        });
+    }
 }
