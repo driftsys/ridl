@@ -16,12 +16,14 @@
 //! it mints fresh `InputFile` and `Workspace` salsa inputs and re-reads every
 //! file on each call. Driving it on every keystroke would miss unsaved editor
 //! buffers and defeat salsa incrementality (new inputs mean a full
-//! recompute). The server therefore loads the workspace **once** at
-//! `initialize` (`load_workspace`), holds the `Workspace` handle plus a map
-//! of file path → `InputFile`, and on `didOpen`/`didChange` drives `set_text`
-//! on the existing input — the editor buffer overlays the disk state. A file
-//! opened from outside the loaded workspace becomes its own overlay input
-//! wrapped in a synthetic single-file package. Every recompute then goes
+//! recompute). The server therefore loads the workspace **once**
+//! (`load_workspace`), holds the `Workspace` handle plus a map of file path →
+//! `InputFile`, and on `didOpen`/`didChange` drives `set_text` on the
+//! existing input — the editor buffer overlays the disk state. The load runs
+//! at `initialize` from the client's root folder; when no `ridl.toml` is at
+//! or above that folder, it runs at the first `didOpen` of a file that has
+//! one at or above it. A file opened from outside the loaded workspace
+//! becomes its own overlay input wrapped in a synthetic single-file package. Every recompute then goes
 //! through the memoized queries, so editing one file re-checks only the
 //! package that file belongs to.
 

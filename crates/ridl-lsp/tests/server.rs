@@ -244,22 +244,31 @@ struct Cabin { primary: Speed }\n";
 
 /// Writes the two-member workspace to `dir` and returns the two file URIs.
 fn write_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    write_workspace_in(dir, "")
+}
+
+/// Writes the two-member workspace under `prefix` inside `dir` (`""` for the
+/// directory itself, or a relative path ending in `/`) and returns the two
+/// file URIs.
+fn write_workspace_in(dir: &TempDir, prefix: &str) -> (lt::Uri, lt::Uri) {
+    std::fs::create_dir_all(dir.path().join(prefix)).expect("create the workspace root");
     dir.write(
-        "ridl.toml",
+        &format!("{prefix}ridl.toml"),
         "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
     );
-    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
-    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    std::fs::create_dir_all(dir.path().join(format!("{prefix}veh-common")))
+        .expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join(format!("{prefix}app"))).expect("create app");
     dir.write(
-        "veh-common/ridl.toml",
+        &format!("{prefix}veh-common/ridl.toml"),
         "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
     );
-    let veh = dir.write("veh-common/lib.typl", VEH_COMMON);
+    let veh = dir.write(&format!("{prefix}veh-common/lib.typl"), VEH_COMMON);
     dir.write(
-        "app/ridl.toml",
+        &format!("{prefix}app/ridl.toml"),
         "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
     );
-    let app = dir.write("app/lib.typl", APP);
+    let app = dir.write(&format!("{prefix}app/lib.typl"), APP);
     (uri_of(&veh), uri_of(&app))
 }
 
@@ -744,6 +753,147 @@ fn a_standalone_overlay_file_is_analyzed_from_its_buffer() {
         .join()
         .expect("the server thread joins")
         .expect("the server loop exits cleanly");
+}
+
+// ==========================================================================
+// Issue #384 — a root with no `ridl.toml` at or above it
+// ==========================================================================
+
+/// Receives until the next `window/showMessage` and returns its params.
+fn next_show_message(client: &Connection) -> lt::ShowMessageParams {
+    loop {
+        if let Message::Notification(notification) = recv(client)
+            && notification.method == lt::notification::ShowMessage::METHOD
+        {
+            return serde_json::from_value(notification.params).expect("valid showMessage params");
+        }
+    }
+}
+
+/// An editor opened one directory above the `ridl.toml` root (issue #384):
+/// the failed load is shown to the user, with the root that was searched and
+/// the loader's own reason, instead of being dropped.
+#[test]
+fn a_root_with_no_manifest_shows_the_load_error() {
+    let dir = TempDir::new("no-manifest");
+    write_workspace_in(&dir, "project/");
+    let root_text = dir.path().display().to_string();
+    let (client, server) = start(uri_of(dir.path()));
+
+    let shown = next_show_message(&client);
+    assert_eq!(shown.typ, lt::MessageType::WARNING);
+    assert!(
+        shown
+            .message
+            .contains(&format!("no `ridl.toml` found at or above `{root_text}`")),
+        "the message carries the loader's reason and the searched root: {}",
+        shown.message,
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// With no workspace loaded at initialize, the first opened file under a
+/// `ridl.toml` loads that workspace (issue #384): a reference to a type
+/// declared in another file of the same package resolves, and
+/// goto-definition follows it. A file opened earlier with no manifest above
+/// it stays a standalone overlay and does not stop the later load.
+#[test]
+fn the_first_opened_file_under_a_manifest_loads_its_workspace() {
+    let dir = TempDir::new("lazy-root");
+    std::fs::create_dir_all(dir.path().join("project")).expect("create project");
+    dir.write(
+        "project/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let types = uri_of(&dir.write(
+        "project/types.typl",
+        "package demo\ntype Speed: km/h [0.0..250.0]\n",
+    ));
+    let cabin_text = "package demo\nstruct Cabin { primary: Speed }\n";
+    let cabin = uri_of(&dir.write("project/cabin.typl", cabin_text));
+    let scratch = uri_of(&dir.write("scratch.typl", BROKEN));
+    let (client, server) = start(uri_of(dir.path()));
+
+    did_open(&client, &scratch, BROKEN);
+    let opened = next_publish(&client, &scratch);
+    assert_eq!(codes(&opened.diagnostics), vec!["FORM-101", "TYPL-302"]);
+
+    // A clean file gets no publish, so the goto-definition answer is what
+    // shows the load happened: as a standalone overlay, `Speed` in this file
+    // resolves to nothing.
+    did_open(&client, &cabin, cabin_text);
+    let response =
+        definition_at(&client, 10, cabin, pos(1, 26)).expect("Speed resolves to a definition");
+    let lt::GotoDefinitionResponse::Scalar(location) = response else {
+        panic!("expected a single location, got {response:?}");
+    };
+    assert_eq!(location.uri.as_str(), types.as_str());
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A `didOpen` that finds a `ridl.toml` it cannot load (here, a manifest that
+/// is not UTF-8) shows the loader's error with the opened file's path,
+/// instead of dropping it.
+#[test]
+fn an_unloadable_manifest_above_an_opened_file_shows_the_error() {
+    let dir = TempDir::new("lazy-bad-manifest");
+    std::fs::create_dir_all(dir.path().join("project")).expect("create project");
+    std::fs::write(dir.path().join("project/ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
+    let file = dir.write("project/lib.typl", BROKEN);
+    let (client, server) = start(uri_of(dir.path()));
+    assert_eq!(next_show_message(&client).typ, lt::MessageType::WARNING);
+
+    did_open(&client, &uri_of(&file), BROKEN);
+    let shown = next_show_message(&client);
+    assert_eq!(shown.typ, lt::MessageType::ERROR);
+    assert!(
+        shown.message.starts_with(&format!(
+            "ridl-lsp could not load the workspace of `{}`: ",
+            file.display()
+        )),
+        "the message names the opened file: {}",
+        shown.message,
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A file opened before its `ridl.toml` existed is a standalone overlay. When
+/// a later `didOpen` loads the workspace that now contains it, its buffer
+/// moves onto the loaded input: it is analyzed once, as a member of its
+/// package, not a second time as an overlay.
+#[test]
+fn an_overlay_inside_a_lazily_loaded_workspace_joins_it() {
+    let dir = TempDir::new("lazy-migrate");
+    std::fs::create_dir_all(dir.path().join("pkg")).expect("create pkg");
+    let early = uri_of(&dir.write("pkg/early.typl", BROKEN));
+    let (client, server) = start(uri_of(dir.path()));
+
+    did_open(&client, &early, BROKEN);
+    let opened = next_publish(&client, &early);
+    assert_eq!(codes(&opened.diagnostics), vec!["FORM-101", "TYPL-302"]);
+
+    dir.write(
+        "pkg/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let later_text = "package demo\ntype Later: integer [0..10]\n";
+    let later = uri_of(&dir.write("pkg/later.typl", later_text));
+    did_open(&client, &later, later_text);
+    let published = next_publish(&client, &early);
+    assert_eq!(
+        codes(&published.diagnostics),
+        vec!["FORM-101", "TYPL-302"],
+        "the overlay's buffer is analyzed once, as a file of package `demo`",
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
 }
 
 // ==========================================================================
