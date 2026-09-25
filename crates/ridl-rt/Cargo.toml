@@ -18,8 +18,9 @@ categories = ["no-std", "encoding"]
 # pin.
 rust-version = "1.83"
 
-# One feature per payload encoding (ADR-0020 decision 5). In this version each
-# feature enables nothing, and the crate has no dependency in any combination.
+# One feature per payload encoding (ADR-0020 decision 5). In this version
+# `flatbuffers` enables the module of the same name, `proto3` and `repr-c`
+# enable nothing, and the crate has no dependency in any combination.
 # `std` is not an encoding: it links the standard library and enables the
 # `task` module (ADR-0021 decision 8, note of 2026-09-25; story E11.17).
 [features]

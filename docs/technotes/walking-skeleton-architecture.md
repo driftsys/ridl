@@ -188,7 +188,8 @@ count of every crate the workspace holds — see `AGENTS.md` for that.
   returned untouched), and idempotent, implementing the tight `name: Type` style
   of general form §5. E2 extended it to `.ridl` files.
 
-- **`crates/ridl-rt`** — the `no_std` runtime library that defines what a
+- **`crates/ridl-rt`** — the `no_std` runtime library (a `std` feature, off by
+  default, adds `task::block_on` over the standard library) that defines what a
   generated ridl package will link and a runtime will implement: identity, time
   and the envelope, samples, the payload traits, the interaction descriptors,
   the ports, and the contract and transport errors (epic E11 story E11.0,

@@ -11,9 +11,12 @@ a payload (`payload`), the ports a runtime implements and generated code calls
 contains no runtime: a runtime is a separate crate that implements the `port`
 module's traits.
 
-The crate is `no_std`, allocates nothing, contains no `unsafe` code, and has no
-dependency. It declares one cargo feature per payload encoding — `flatbuffers`,
-`proto3`, `repr-c` — and in this version each feature enables nothing.
+With its default features the crate is `no_std` and allocates nothing; it
+contains no `unsafe` code and has no dependency in any feature combination. It
+declares one cargo feature per payload encoding — `flatbuffers`, which enables
+the FlatBuffers reading and writing helpers, and `proto3` and `repr-c`, which
+enable nothing in this version — and a `std` feature, off by default, that links
+the standard library and enables `task::block_on` and `task::noop_waker`.
 
 ## Versioning
 

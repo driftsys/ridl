@@ -7,8 +7,9 @@
 //! implements the traits of the `port` module (ADR-0020 decision 6), and
 //! generated code calls those traits without naming the runtime.
 //!
-//! The crate is `no_std`, allocates nothing, contains no `unsafe` code, and has
-//! no dependency in any feature combination. The cargo features `flatbuffers`,
+//! With the `std` feature off — the default — the crate is `no_std` and
+//! allocates nothing; it contains no `unsafe` code and has no dependency in any
+//! feature combination. The cargo features `flatbuffers`,
 //! `proto3` and `repr-c` name the payload encodings. `flatbuffers` enables the
 //! [`flatbuffers`] module, the reading and writing a generated
 //! `Payload<FlatBuffers>` implementation shares; `proto3` and `repr-c` enable
@@ -16,8 +17,9 @@
 //! encoding: it links the standard library and enables the [`task`] module —
 //! `block_on`, which waits on a future by parking the thread until a deadline,
 //! and `noop_waker` — for a blocking client built over an async one and for a
-//! frame loop that polls a future once per frame. Every other module stays
-//! `no_std` with the feature on.
+//! frame loop that polls a future once per frame. `task` is the one module
+//! that links the standard library and allocates — one `Arc` per call of either
+//! function. Every other module stays `no_std` with the feature on.
 //!
 //! Every public item lives in one of six modules, or in one of the two that
 //! the `flatbuffers` and `std` features add. Generated code names each

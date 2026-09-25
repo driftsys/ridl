@@ -12,9 +12,10 @@ amendment). A runtime is a separate crate that implements the traits of the
 workspace; generated code calls those traits without naming the runtime.
 
 The crate carries `#![no_std]` and `#![forbid(unsafe_code)]`, has no dependency
-in any feature combination, and allocates nothing. This is the architecture as
-built; the decisions behind the choices that had more than one reasonable answer
-are [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md). Read this
+in any feature combination, and, with the `std` feature off, allocates nothing.
+This is the architecture as built; the decisions behind the choices that had
+more than one reasonable answer are
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md). Read this
 record together with the
 [ridl language reference](../specification/ridl-language-reference.md), which
 every section below cites for the contract it implements.
