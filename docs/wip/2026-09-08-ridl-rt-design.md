@@ -837,6 +837,18 @@ decision 6 says.
     RA-20  MUST   Generated code contains no thread, future, socket or
                   timer. Faces are the runtime's.
 
+**Amended 2026-09-2x (lane F, design note F-15).** RA-20 now reads: "generated
+code contains no thread, socket or timer, and no port waits; a face may return a
+future, and that future never blocks." The paragraph above it, which places a
+blocking or async face in a runtime crate, is superseded on the same date:
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6 puts
+an async `Client` and a blocking `Client` in the generated face, over the
+`Wakeable` extension and the `correlate` table of
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 13
+and 15; the ports themselves still return at once, which is what RA-14 and RA-20
+protect. RA-19 is unchanged: `Clock` and `Wakeable` join a `Client`'s bounds
+only when its interface declares a call or an event.
+
 ## 9. Kotlin, and an amendment to decision 6
 
 ADR-0018 decision 6 says TypeScript and Kotlin get generated types and
