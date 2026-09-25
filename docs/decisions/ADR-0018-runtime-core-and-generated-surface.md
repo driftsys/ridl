@@ -574,7 +574,7 @@ be generated, and in what order", which is what this record answers.
    `()` states that distinction clearly enough, or whether the signature should
    carry a runtime delivery result instead.
 
-   **Answered for the generated face, 2026-09-2x** (lane F's design note, F-15;
+   **Answered for the generated face, 2026-09-26** (lane F's design note, F-15;
    [ADR-0023](ADR-0023-interaction-face-generation.md) decision 6). A
    `command`'s future resolves on the delivery acknowledgment, which is the
    runtime's finding and not the application's, and its output is

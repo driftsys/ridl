@@ -19,7 +19,7 @@ which built `crates/ridl-rt`. The reasoning trail, including the "Alternatives
 considered" table below, is
 [`docs/archive/2026-09-13-ridl-rt-v0.1-design.md`](../archive/2026-09-13-ridl-rt-v0.1-design.md)
 (sections R-1 to R-12); the crate's architecture — its six unconditional modules
-(seven once story E11.18 lands `correlate`, the 2026-09-2x amendment's decision
+(seven once story E11.18 lands `correlate`, the 2026-09-26 amendment's decision
 15), the seventh that the `flatbuffers` feature adds since 2026-09-20, the
 eighth that the `std` feature adds since 2026-09-25, and their full type and
 trait surface, as built — is
@@ -56,14 +56,14 @@ record, which also gives the crate-level rustdoc its matching paragraph. Until
 that change merges, this record describes impls `crates/ridl-rt/src/port.rs`
 does not yet contain.
 
-**Amendment (2026-09-2x) — decisions 13 to 18, decision 8 folded, decision 11
+**Amendment (2026-09-26) — decisions 13 to 18, decision 8 folded, decision 11
 corrected, open questions 5 and 6.** Lane F's design note,
 [`2026-09-25-async-face-design.md`](../wip/2026-09-25-async-face-design.md),
 designed the substrate the generated async client of
 [ADR-0023](ADR-0023-interaction-face-generation.md) decision 6 polls: a keyed
 wake source on a port, a correlation table, and the errors a call and a `serve`
 return. Sebastien disposed of its fifteen decisions on its pull request on
-2026-09-2x; decisions 13 to 18 record F-1, F-5, F-6, F-8, F-9 and F-13 of that
+2026-09-26; decisions 13 to 18 record F-1, F-5, F-6, F-8, F-9 and F-13 of that
 disposition, and the items the reviews of driftsys/ridl#519, #522 and #523 left
 for this amendment on driftsys/ridl#509. Decisions 13, 15 and 16 land in stories
 E11.16 and E11.18; until they merge this record describes items
@@ -283,7 +283,7 @@ trusted with no `unsafe` and no second verification pass.
    table and a non-table arm's box are both ordinary tables (ADR-0019 decisions
    1 and 2), which `Builder::push_table` already writes.
 
-   **Amended (2026-09-2x, lane F) — a fourth cargo feature, `std`, is part of
+   **Amended (2026-09-26, lane F) — a fourth cargo feature, `std`, is part of
    this decision.** It is off by default, it links the standard library, and it
    enables the `task` module and its two public functions,
    `task::block_on(fut, deadline: Option<Instant>) -> Option<F::Output>` and
@@ -418,7 +418,7 @@ trusted with no `unsafe` and no second verification pass.
     `alloc` with it. Whether the `Box<P>` forwarding impls are added under that
     feature is left to lane F's amendment of this record.
 
-    **Amended (2026-09-2x, lane F).** The `Box<P>` impls are not added under
+    **Amended (2026-09-26, lane F).** The `Box<P>` impls are not added under
     `std`. The reason is corrected rather than the deferral: `alloc` is now
     reachable under that feature, so "no feature combination brings it in" is
     false, but nothing needs a boxed port — a face holds its port by value or by
@@ -473,7 +473,7 @@ trusted with no `unsafe` and no second verification pass.
     paragraph points at moved to E11.15's row unchanged. E11.9 keeps
     `ridl-transport-ws`, which builds no runtime.
 
-13. **Amendment (2026-09-2x) — the `Wakeable` port extension and its key set
+13. **Amendment (2026-09-26) — the `Wakeable` port extension and its key set
     (story E11.16).** `port` gains
 
     ```rust,ignore
@@ -511,7 +511,7 @@ trusted with no `unsafe` and no second verification pass.
     offer. The name is `Interest`, not `Wake`, because `task` already imports
     `std::task::Wake`. This closes open question 6. Notes F-5 and F-6.
 
-14. **Amendment (2026-09-2x) — `Transport::Busy` crosses the frame (story
+14. **Amendment (2026-09-26) — `Transport::Busy` crosses the frame (story
     E11.16).** `Transport` gains `Busy`: the providing runtime refused the call
     at admission — no slot, no budget, or a call faster than the member's `min`
     — and the caller may retry later. It crosses as a `response` outcome: `busy`
@@ -523,7 +523,7 @@ trusted with no `unsafe` and no second verification pass.
     (decision 9), so the variant is additive. `SendError::Busy`, the local case,
     is unchanged. Note F-13.
 
-15. **Amendment (2026-09-2x) — the `correlate` module: `Table<const N: usize>`
+15. **Amendment (2026-09-26) — the `correlate` module: `Table<const N: usize>`
     and `Waiters` (story E11.18).** A seventh unconditional module,
     [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
     decision 5 amended in place. `Table<N>` is the caller-side table every
@@ -547,7 +547,7 @@ trusted with no `unsafe` and no second verification pass.
     both in the same story, with sixteen slots and no byte budget until E16.2
     gives it a descriptor. Notes F-5, F-8 and F-9.
 
-16. **Amendment (2026-09-2x) — `ClientError` and `ProviderError`.** `error`
+16. **Amendment (2026-09-26) — `ClientError` and `ProviderError`.** `error`
     gains `ClientError { Send(SendError), Call(CallError), Read(ReadError) }`,
     the error of a generated client call, and
     `ProviderError { Serve(ServeError), Claim(ReadError) }`, the error a
@@ -562,7 +562,7 @@ trusted with no `unsafe` and no second verification pass.
     every generated crate would emit identically belongs where a helper crate
     can name it. Note F-1.
 
-17. **Amendment (2026-09-2x) — the helpers of story E11.19 and
+17. **Amendment (2026-09-26) — the helpers of story E11.19 and
     `Encoding::max_size`, where they live, and what that means against ADR-0020
     decision 6.** E11.19 (driftsys/ridl#513, merged in #523) added, behind no
     feature:
@@ -599,7 +599,7 @@ trusted with no `unsafe` and no second verification pass.
     generated face then returns the channel's init value under that provenance.
     The doc comment says so since this amendment.
 
-18. **Amendment (2026-09-2x) — E11.16 to E11.19 ship as one 0.x minor.** The
+18. **Amendment (2026-09-26) — E11.16 to E11.19 ship as one 0.x minor.** The
     four stories are one release under decision 10, tagged by a maintainer after
     E11.21's first half has merged, so that a generated face has exercised every
     item before it is published; nothing in lane F pushes a tag. The release
@@ -677,7 +677,7 @@ trusted with no `unsafe` and no second verification pass.
 5. **`Box<P>` forwarding** (decision 11), deferred until a cargo feature brings
    `alloc` into this crate and something needs a boxed port.
 
-   **Reworded 2026-09-2x (lane F, decision 11's amendment).** `alloc` is
+   **Reworded 2026-09-26 (lane F, decision 11's amendment).** `alloc` is
    reachable under `std` since 2026-09-25, so the condition is now only the
    second half: something that needs a boxed port.
 6. **A wake hook** — whether a port gains a way to register interest in the
@@ -688,7 +688,7 @@ trusted with no `unsafe` and no second verification pass.
    Tracked as driftsys/ridl#350 item 17; items 15 and 16 of that issue are the
    two the 2026-09-20 amendment settles.
 
-   **Closed 2026-09-2x by decision 13**, the `Wakeable` port extension: a port
+   **Closed 2026-09-26 by decision 13**, the `Wakeable` port extension: a port
    gains `wake_on(what: Interest, waker)`, every port method still returns at
    once, and the waiting is a future's, in generated code (ADR-0023 decision 6)
    or in `task::block_on`.
@@ -704,9 +704,9 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                             | two paragraphs record the forwarding impls of decision 11 and the handle model of decision 12                                                                                                                                                                                                                                    |
 | [the `ridl-rt` design record](../design/ridl-rt.md), the API table and the feature paragraph | `Builder::push_offset_vector` joins the `flatbuffers` row, and the paragraph's claim that a field's inline offset and a table's size are the projection's facts is corrected: they are the codec emitter's, because no other emitter can observe them (2026-09-21, story E11.7, stage K5)                                        |
 | [the roadmap](../ROADMAP.md), story E11.9, then E11.15                                       | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over. E11.9 was split on 2026-09-20 (driftsys/ridl#445) and that clause moved to story E11.15's row unchanged                         |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5         | a 2026-09-2x amendment records `correlate` as the seventh unconditional module (decision 15)                                                                                                                                                                                                                                     |
-| [ADR-0023](ADR-0023-interaction-face-generation.md)                                          | its 2026-09-2x amendment, decision 6, is the face built over decisions 13 to 16; the two records were amended together                                                                                                                                                                                                           |
-| [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) open question 5                   | a 2026-09-2x note answers it for the generated face (note F-15)                                                                                                                                                                                                                                                                  |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5         | a 2026-09-26 amendment records `correlate` as the seventh unconditional module (decision 15)                                                                                                                                                                                                                                     |
+| [ADR-0023](ADR-0023-interaction-face-generation.md)                                          | its 2026-09-26 amendment, decision 6, is the face built over decisions 13 to 16; the two records were amended together                                                                                                                                                                                                           |
+| [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) open question 5                   | a 2026-09-26 note answers it for the generated face (note F-15)                                                                                                                                                                                                                                                                  |
 | [the frame specification](../specification/frame-specification.md) §8 and §9.6               | `Busy` crosses as a `response` outcome (decision 14), written in story E11.16's pull request                                                                                                                                                                                                                                     |
 | [the `ridl-rt` design record](../design/ridl-rt.md)                                          | the module table, the ports, the errors and the helpers sections follow decisions 13 to 17 as each story lands; its "seven unconditional modules" sentence lands with E11.18                                                                                                                                                     |
 | [the roadmap](../ROADMAP.md), stories E11.16 and E11.18                                      | `Wake` is `Interest`, and "FIFO slot waiters" is "every `Slot` waiter woken on a reclaim" (decisions 13 and 15)                                                                                                                                                                                                                  |

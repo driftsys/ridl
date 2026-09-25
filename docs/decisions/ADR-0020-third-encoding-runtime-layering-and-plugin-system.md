@@ -209,7 +209,7 @@ as its public contract.
    an encoding, and the eighth module it gates, `task`, are recorded in ADR-0021
    decision 8's note of that date. This decision is not amended.
 
-   **Amendment (2026-09-2x) — a seventh unconditional module, `correlate`.**
+   **Amendment (2026-09-26) — a seventh unconditional module, `correlate`.**
    Lane F's story E11.18 adds `correlate`, holding the correlation table and the
    waiter registry every runtime with asynchronous replies needs, behind no
    feature: [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 15

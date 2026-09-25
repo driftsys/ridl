@@ -837,7 +837,7 @@ decision 6 says.
     RA-20  MUST   Generated code contains no thread, future, socket or
                   timer. Faces are the runtime's.
 
-**Amended 2026-09-2x (lane F, design note F-15).** RA-20 now reads: "generated
+**Amended 2026-09-26 (lane F, design note F-15).** RA-20 now reads: "generated
 code contains no thread, socket or timer, and no port waits; a face may return a
 future, and that future never blocks." The paragraph above it, which places a
 blocking or async face in a runtime crate, is superseded on the same date:
