@@ -191,6 +191,35 @@ fn round_trip_signal_reads_as_init_when_invalidated_before_any_publication() {
     );
 }
 
+/// A channel invalidated after a real publication is a third case, distinct
+/// from both signals above: `ridl-loopback` keeps the last good value's bytes
+/// under `Invalid(Declared)` (ridl §4.5), so the accessor's provenance-and-
+/// length guard does not apply — there are real bytes to verify and decode —
+/// and the value stays the last published one, not the init value. This is
+/// the case a mutant that routed every non-`Live` read to the init value would
+/// pass undetected if it were the only invalidate test.
+#[test]
+fn round_trip_signal_keeps_the_last_good_value_when_declared_invalid_after_publication() {
+    let mut port = loopback();
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut port);
+        publisher
+            .temperature(generated::Temperature::new_unchecked(21))
+            .expect("set");
+        publisher.commit();
+        publisher.invalidate_temperature().expect("invalidate");
+        publisher.commit();
+    }
+
+    let client = generated::cabin::Client::new(&mut port);
+    let sample = client.temperature().expect("read");
+    assert_eq!(sample.value.get(), 21);
+    assert_eq!(
+        sample.provenance,
+        Provenance::Invalid(ridl_rt::sample::Cause::Declared)
+    );
+}
+
 /// A live publication whose bytes the accessor cannot decode is a separate
 /// case from a never-published or never-set-then-invalidated channel: there is
 /// a payload, and it fails its check, so the accessor reports the detected
@@ -841,6 +870,75 @@ fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
         sample.provenance,
         Provenance::Init,
         "a never-published signal reads as Init, not a detected invalid state",
+    );
+}
+
+/// A port whose `Init` sample carries a distinctive freshness and envelope,
+/// unlike every other port in this file, which reports `Freshness::Unbounded`
+/// and a zero envelope under `Init`. Its purpose is narrow: proving that the
+/// accessor's `Init`/`Invalid(Declared)` branch passes the port's own
+/// freshness and envelope through to the `Sample` unchanged, rather than
+/// fabricating `Freshness::Fresh` or a zero envelope — values indistinguishable
+/// from the common case in every other test.
+struct DistinctiveInitPort {
+    catalog: ridl_rt::contract::CatalogRef,
+}
+
+impl DistinctiveInitPort {
+    fn new(package_name: &'static str) -> Self {
+        DistinctiveInitPort {
+            catalog: ridl_rt::contract::CatalogRef {
+                name: package_name,
+                hash: ridl_rt::contract::CatalogHash([0u8; 32]),
+            },
+        }
+    }
+}
+
+impl ridl_rt::port::Attached for DistinctiveInitPort {
+    fn catalog(&self) -> &ridl_rt::contract::CatalogRef {
+        &self.catalog
+    }
+}
+
+impl ridl_rt::port::SignalReader for DistinctiveInitPort {
+    fn read(
+        &self,
+        _iface: InterfaceNo,
+        _ord: Ordinal,
+        _out: &mut [u8],
+    ) -> Result<ridl_rt::port::RawSample, ridl_rt::port::ReadError> {
+        Ok(ridl_rt::port::RawSample {
+            provenance: Provenance::Init,
+            freshness: ridl_rt::sample::Freshness::Stale {
+                by: ridl_rt::sample::Duration(5),
+            },
+            envelope: ridl_rt::sample::Envelope {
+                stamp: ridl_rt::sample::Timestamp(7),
+                seq: 3,
+            },
+            len: 0,
+        })
+    }
+}
+
+#[test]
+fn the_init_branch_passes_the_ports_freshness_and_envelope_through_unchanged() {
+    let mut port = DistinctiveInitPort::new("face.demo");
+    let client = generated::horn::Client::new(&mut port);
+    let sample = client.active().expect("read");
+    assert_eq!(
+        sample.freshness,
+        ridl_rt::sample::Freshness::Stale {
+            by: ridl_rt::sample::Duration(5)
+        }
+    );
+    assert_eq!(
+        sample.envelope,
+        ridl_rt::sample::Envelope {
+            stamp: ridl_rt::sample::Timestamp(7),
+            seq: 3
+        }
     );
 }
 
