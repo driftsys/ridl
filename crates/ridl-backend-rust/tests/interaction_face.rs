@@ -158,8 +158,76 @@ fn round_trip_signal_reads_as_init_before_any_publication() {
     let mut port = loopback();
     let client = generated::cabin::Client::new(&mut port);
     let sample = client.temperature().expect("read");
-    assert_eq!(sample.value.get(), generated::Temperature::default().get());
+    assert_eq!(
+        sample.value,
+        <generated::CabinTemperature as ridl_rt::contract::Signal>::init()
+    );
     assert_eq!(sample.provenance, Provenance::Init);
+}
+
+/// A channel invalidated with no prior publication has no last good value to
+/// keep (ridl §4.5: "the last good value, or the init value when there is
+/// none"), so it reads as the init value under `Invalid(Declared)`, not as a
+/// detected invalid state — the same distinction as the never-published case,
+/// driftsys/ridl#517.
+#[test]
+fn round_trip_signal_reads_as_init_when_invalidated_before_any_publication() {
+    let mut port = loopback();
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut port);
+        publisher.invalidate_temperature().expect("invalidate");
+        publisher.commit();
+    }
+
+    let client = generated::cabin::Client::new(&mut port);
+    let sample = client.temperature().expect("read");
+    assert_eq!(
+        sample.value,
+        <generated::CabinTemperature as ridl_rt::contract::Signal>::init()
+    );
+    assert_eq!(
+        sample.provenance,
+        Provenance::Invalid(ridl_rt::sample::Cause::Declared)
+    );
+}
+
+/// A live publication whose bytes the accessor cannot decode is a separate
+/// case from a never-published or never-set-then-invalidated channel: there is
+/// a payload, and it fails its check, so the accessor reports the detected
+/// cause and substitutes the init value, over real (malformed) bytes rather
+/// than an empty buffer. Written directly through the raw `SignalWriter` port,
+/// bypassing the generated `Publisher`'s encoder, which would refuse to send
+/// bytes this short.
+#[test]
+fn round_trip_signal_with_malformed_bytes_settles_detected_corrupt() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::port::SignalWriter;
+
+    let mut port = loopback();
+    let ordinal = <generated::CabinTemperature as Interaction>::MEMBER.ordinal;
+    port.set(
+        <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
+        ordinal,
+        // `Temperature`'s FlatBuffers encoding is a box table behind a root
+        // offset (ADR-0019 decision 8); 3 bytes are too short even for that
+        // offset, so `verify` refuses the buffer's structure.
+        &[1, 2, 3],
+    )
+    .expect("set");
+    port.commit();
+
+    let client = generated::cabin::Client::new(&mut port);
+    let sample = client.temperature().expect("read");
+    assert_eq!(
+        sample.value,
+        <generated::CabinTemperature as ridl_rt::contract::Signal>::init()
+    );
+    assert_eq!(
+        sample.provenance,
+        Provenance::Invalid(ridl_rt::sample::Cause::Detected(
+            ridl_rt::sample::Detection::Corrupt
+        ))
+    );
 }
 
 #[test]

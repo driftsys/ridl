@@ -251,10 +251,13 @@ fn client(
         let doc = format!(
             "Reads signal `{}` and returns its value with the provenance, the \
              freshness and the envelope the runtime resolved. Before the \
-             first publication, the value is the channel's init value under \
-             `Provenance::Init` (ridl §4.4). A payload that fails its check \
-             is reported as `Provenance::Invalid` with the detection, and \
-             the value is the channel's init value.",
+             first publication, and when the channel is invalidated with no \
+             prior publication, there is no payload to check and the value \
+             is the channel's init value, under `Provenance::Init` or \
+             `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, \
+             §4.5). A payload that fails its check is reported as \
+             `Provenance::Invalid` with the detection, and the value is the \
+             channel's init value.",
             member.declared
         );
         methods.push(quote! {
@@ -267,37 +270,36 @@ fn client(
             > {
                 let mut buf = #buffer;
                 let raw = self.port.read(#number, #ordinal, &mut buf)?;
-                if raw.provenance == ::ridl_rt::sample::Provenance::Init {
-                    return Ok(::ridl_rt::sample::Sample {
-                        value: <#descriptor as ::ridl_rt::contract::Signal>::init(),
-                        provenance: ::ridl_rt::sample::Provenance::Init,
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    });
-                }
-                match ::ridl_rt::payload::Ref::<#path, super::Wire>::verify(
-                    &buf[..raw.len],
-                ) {
-                    Ok(checked) => Ok(::ridl_rt::sample::Sample {
-                        value: checked.decode(),
-                        provenance: raw.provenance,
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    }),
-                    Err(error) => Ok(::ridl_rt::sample::Sample {
-                        value: <#descriptor as ::ridl_rt::contract::Signal>::init(),
-                        provenance: ::ridl_rt::sample::Provenance::Invalid(
-                            ::ridl_rt::sample::Cause::Detected(match error {
-                                ::ridl_rt::payload::VerifyError::Contract(violation) => {
-                                    ::ridl_rt::sample::Detection::InvalidValue(violation)
-                                }
-                                _ => ::ridl_rt::sample::Detection::Corrupt,
-                            }),
+                let (value, provenance) = match raw.provenance {
+                    ::ridl_rt::sample::Provenance::Init
+                    | ::ridl_rt::sample::Provenance::Invalid(
+                        ::ridl_rt::sample::Cause::Declared,
+                    ) if raw.len == 0 => {
+                        (<#descriptor as ::ridl_rt::contract::Signal>::init(), raw.provenance)
+                    }
+                    _ => match ::ridl_rt::payload::Ref::<#path, super::Wire>::verify(
+                        &buf[..raw.len],
+                    ) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => (
+                            <#descriptor as ::ridl_rt::contract::Signal>::init(),
+                            ::ridl_rt::sample::Provenance::Invalid(
+                                ::ridl_rt::sample::Cause::Detected(match error {
+                                    ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                        ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                    }
+                                    _ => ::ridl_rt::sample::Detection::Corrupt,
+                                }),
+                            ),
                         ),
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    }),
-                }
+                    },
+                };
+                Ok(::ridl_rt::sample::Sample {
+                    value,
+                    provenance,
+                    freshness: raw.freshness,
+                    envelope: raw.envelope,
+                })
             }
         });
     }

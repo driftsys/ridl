@@ -1508,7 +1508,7 @@ pub mod cabin {
         pub fn new(port: P) -> Self {
             Client { port }
         }
-        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, the value is the channel's init value under `Provenance::Init` (ridl §4.4). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn temperature(
             &self,
         ) -> ::core::result::Result<
@@ -1525,44 +1525,46 @@ pub mod cabin {
                     ::ridl_rt::contract::Ordinal(1u32),
                     &mut buf,
                 )?;
-            if raw.provenance == ::ridl_rt::sample::Provenance::Init {
-                return Ok(::ridl_rt::sample::Sample {
-                    value: <super::CabinTemperature as ::ridl_rt::contract::Signal>::init(),
-                    provenance: ::ridl_rt::sample::Provenance::Init,
-                    freshness: raw.freshness,
-                    envelope: raw.envelope,
-                });
-            }
-            match ::ridl_rt::payload::Ref::<
-                super::Temperature,
-                super::Wire,
-            >::verify(&buf[..raw.len]) {
-                Ok(checked) => {
-                    Ok(::ridl_rt::sample::Sample {
-                        value: checked.decode(),
-                        provenance: raw.provenance,
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    })
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::CabinTemperature as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
                 }
-                Err(error) => {
-                    Ok(::ridl_rt::sample::Sample {
-                        value: <super::CabinTemperature as ::ridl_rt::contract::Signal>::init(),
-                        provenance: ::ridl_rt::sample::Provenance::Invalid(
-                            ::ridl_rt::sample::Cause::Detected(
-                                match error {
-                                    ::ridl_rt::payload::VerifyError::Contract(violation) => {
-                                        ::ridl_rt::sample::Detection::InvalidValue(violation)
-                                    }
-                                    _ => ::ridl_rt::sample::Detection::Corrupt,
-                                },
-                            ),
-                        ),
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    })
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::Temperature,
+                        super::Wire,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::CabinTemperature as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
                 }
-            }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
         }
         ///Starts delivery of event `warning`.
         pub fn subscribe_warning(
@@ -2053,7 +2055,7 @@ pub mod horn {
         pub fn new(port: P) -> Self {
             Client { port }
         }
-        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, the value is the channel's init value under `Provenance::Init` (ridl §4.4). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn active(
             &self,
         ) -> ::core::result::Result<
@@ -2070,44 +2072,46 @@ pub mod horn {
                     ::ridl_rt::contract::Ordinal(1u32),
                     &mut buf,
                 )?;
-            if raw.provenance == ::ridl_rt::sample::Provenance::Init {
-                return Ok(::ridl_rt::sample::Sample {
-                    value: <super::HornActive as ::ridl_rt::contract::Signal>::init(),
-                    provenance: ::ridl_rt::sample::Provenance::Init,
-                    freshness: raw.freshness,
-                    envelope: raw.envelope,
-                });
-            }
-            match ::ridl_rt::payload::Ref::<
-                super::Health,
-                super::Wire,
-            >::verify(&buf[..raw.len]) {
-                Ok(checked) => {
-                    Ok(::ridl_rt::sample::Sample {
-                        value: checked.decode(),
-                        provenance: raw.provenance,
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    })
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::HornActive as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
                 }
-                Err(error) => {
-                    Ok(::ridl_rt::sample::Sample {
-                        value: <super::HornActive as ::ridl_rt::contract::Signal>::init(),
-                        provenance: ::ridl_rt::sample::Provenance::Invalid(
-                            ::ridl_rt::sample::Cause::Detected(
-                                match error {
-                                    ::ridl_rt::payload::VerifyError::Contract(violation) => {
-                                        ::ridl_rt::sample::Detection::InvalidValue(violation)
-                                    }
-                                    _ => ::ridl_rt::sample::Detection::Corrupt,
-                                },
-                            ),
-                        ),
-                        freshness: raw.freshness,
-                        envelope: raw.envelope,
-                    })
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::Health,
+                        super::Wire,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::HornActive as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
                 }
-            }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
         }
     }
     ///The provider face of interface `Horn`'s signals and events.
