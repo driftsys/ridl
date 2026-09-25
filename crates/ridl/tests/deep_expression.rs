@@ -128,9 +128,13 @@ fn ridl_check_reports_form_102_for_every_long_chain_shape() {
             .iter()
             .filter_map(|diagnostic| diagnostic["code"].as_str())
             .collect();
-        assert!(
-            codes.contains(&"FORM-102"),
-            "the {shape} draws FORM-102: {codes:?}"
+        // Exactly the parse refusal: the checker does not type-check the
+        // truncated prefix, which would draw a false RIDL-306 on a sum whose
+        // `== 1` the parser cut off.
+        assert_eq!(
+            codes,
+            vec!["FORM-102"],
+            "the {shape} draws FORM-102 and nothing else"
         );
     }
 }
