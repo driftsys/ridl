@@ -157,6 +157,14 @@ identifier reuses a parked row — the highest used before them were E9.12, E11.
 and E14.3. E11.0's issue, driftsys/ridl#316, closed as completed when the story
 landed.
 
+**Filed 2026-09-25, with lane F.** Six Epic 11 stories, E11.16 to E11.21, are
+driftsys/ridl#510 to driftsys/ridl#515, under the E11 milestone. Four items
+beside them are issues and not stories: the ADR-0023 and ADR-0021 amendments
+(driftsys/ridl#509, which closes driftsys/ridl#485), the Binder statement
+(driftsys/ridl#516), and two defects the Kotlin port found (driftsys/ridl#517,
+driftsys/ridl#518). The Kotlin mirror is driftsys/ridlc-gen-kotlin#4 to
+driftsys/ridlc-gen-kotlin#8.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
