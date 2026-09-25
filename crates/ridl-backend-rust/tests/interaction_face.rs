@@ -148,6 +148,20 @@ fn round_trip_signal_publish_and_read() {
     assert_eq!(sample.provenance, Provenance::Live);
 }
 
+/// Before any publication, a signal reads its init value under
+/// `Provenance::Init` (ridl §4.4), not as a detected invalid state. The port
+/// already reports this correctly (`ridl-loopback`'s
+/// `a_signal_with_no_publication_reads_as_init_and_copies_nothing`); this test
+/// pins it through the generated face, over `ridl-loopback`, driftsys/ridl#517.
+#[test]
+fn round_trip_signal_reads_as_init_before_any_publication() {
+    let mut port = loopback();
+    let client = generated::cabin::Client::new(&mut port);
+    let sample = client.temperature().expect("read");
+    assert_eq!(sample.value.get(), generated::Temperature::default().get());
+    assert_eq!(sample.provenance, Provenance::Init);
+}
+
 #[test]
 fn round_trip_event_raise_and_receive() {
     let mut port = loopback();
@@ -744,14 +758,12 @@ impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
 /// for why this port, and not the full `Loopback`, is what proves the bound
 /// is exact.
 ///
-/// The zero-length `RawSample` `MinimalSignalOnlyPort::read` returns is too
-/// short for any FlatBuffers buffer — a root offset alone is four bytes — so
-/// `active()`'s own structure check
-/// reports it as corrupt — the same client-side path
-/// `the_client_reads_a_signal_through_the_signal_reader_port` in
-/// `face_generation.rs` pins as `Detection::Corrupt`. The assertion below
-/// confirms the call completed through that path, not that the port served
-/// real data, which is outside this test's purpose.
+/// `MinimalSignalOnlyPort::read` reports `Provenance::Init` with a
+/// zero-length sample, the shape of a channel with no publication (ridl
+/// §4.4). `active()` reports this as `Provenance::Init` directly, without
+/// attempting to decode the empty buffer (driftsys/ridl#517): the assertion
+/// below confirms the call completed through that path, not that the port
+/// served real data, which is outside this test's purpose.
 #[test]
 fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
     let mut port = MinimalSignalOnlyPort::new("face.demo");
@@ -759,10 +771,8 @@ fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
     let sample = client.active().expect("read");
     assert_eq!(
         sample.provenance,
-        Provenance::Invalid(ridl_rt::sample::Cause::Detected(
-            ridl_rt::sample::Detection::Corrupt
-        )),
-        "a zero-length sample is too short for any FlatBuffers buffer",
+        Provenance::Init,
+        "a never-published signal reads as Init, not a detected invalid state",
     );
 }
 

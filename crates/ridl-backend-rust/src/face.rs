@@ -250,9 +250,11 @@ fn client(
         let buffer = payload_buffer(payload);
         let doc = format!(
             "Reads signal `{}` and returns its value with the provenance, the \
-             freshness and the envelope the runtime resolved. A payload that \
-             fails its check is reported as `Provenance::Invalid` with the \
-             detection, and the value is the channel's init value.",
+             freshness and the envelope the runtime resolved. Before the \
+             first publication, the value is the channel's init value under \
+             `Provenance::Init` (ridl §4.4). A payload that fails its check \
+             is reported as `Provenance::Invalid` with the detection, and \
+             the value is the channel's init value.",
             member.declared
         );
         methods.push(quote! {
@@ -265,6 +267,14 @@ fn client(
             > {
                 let mut buf = #buffer;
                 let raw = self.port.read(#number, #ordinal, &mut buf)?;
+                if raw.provenance == ::ridl_rt::sample::Provenance::Init {
+                    return Ok(::ridl_rt::sample::Sample {
+                        value: <#descriptor as ::ridl_rt::contract::Signal>::init(),
+                        provenance: ::ridl_rt::sample::Provenance::Init,
+                        freshness: raw.freshness,
+                        envelope: raw.envelope,
+                    });
+                }
                 match ::ridl_rt::payload::Ref::<#path, super::Wire>::verify(
                     &buf[..raw.len],
                 ) {

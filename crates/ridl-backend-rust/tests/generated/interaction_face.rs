@@ -1508,7 +1508,7 @@ pub mod cabin {
         pub fn new(port: P) -> Self {
             Client { port }
         }
-        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, the value is the channel's init value under `Provenance::Init` (ridl §4.4). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn temperature(
             &self,
         ) -> ::core::result::Result<
@@ -1525,6 +1525,14 @@ pub mod cabin {
                     ::ridl_rt::contract::Ordinal(1u32),
                     &mut buf,
                 )?;
+            if raw.provenance == ::ridl_rt::sample::Provenance::Init {
+                return Ok(::ridl_rt::sample::Sample {
+                    value: <super::CabinTemperature as ::ridl_rt::contract::Signal>::init(),
+                    provenance: ::ridl_rt::sample::Provenance::Init,
+                    freshness: raw.freshness,
+                    envelope: raw.envelope,
+                });
+            }
             match ::ridl_rt::payload::Ref::<
                 super::Temperature,
                 super::Wire,
@@ -2045,7 +2053,7 @@ pub mod horn {
         pub fn new(port: P) -> Self {
             Client { port }
         }
-        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, the value is the channel's init value under `Provenance::Init` (ridl §4.4). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn active(
             &self,
         ) -> ::core::result::Result<
@@ -2062,6 +2070,14 @@ pub mod horn {
                     ::ridl_rt::contract::Ordinal(1u32),
                     &mut buf,
                 )?;
+            if raw.provenance == ::ridl_rt::sample::Provenance::Init {
+                return Ok(::ridl_rt::sample::Sample {
+                    value: <super::HornActive as ::ridl_rt::contract::Signal>::init(),
+                    provenance: ::ridl_rt::sample::Provenance::Init,
+                    freshness: raw.freshness,
+                    envelope: raw.envelope,
+                });
+            }
             match ::ridl_rt::payload::Ref::<
                 super::Health,
                 super::Wire,
