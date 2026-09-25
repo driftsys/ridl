@@ -11,7 +11,7 @@
 mod read_sample;
 
 use read_sample::{read_speed, walk, Drivetrain, Memory, Speed, SpeedSignal};
-use ridl_rt::contract::{Interaction, Interface, InterfaceNo, Ordinal};
+use ridl_rt::contract::{Interaction, Interface, InterfaceNo, Ordinal, Signal};
 use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::port::{SignalWriter, WriteError};
@@ -115,6 +115,17 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
         }
     );
     assert!(!corrupt.usable());
+}
+
+/// The `Init`-with-no-bytes arm the example's own doc comment says `walk`
+/// never reaches: a `Memory` seeded with an empty init buffer reports `Init`
+/// at length zero, exercising the arm this file's other tests do not.
+#[test]
+fn a_signal_seeded_with_no_init_bytes_reads_as_init_with_no_payload() {
+    let runtime = Memory::new(Timestamp(0), &[]);
+    let sample = read_speed(&runtime).expect("speed is in the catalog");
+    assert_eq!(sample.value, SpeedSignal::init());
+    assert_eq!(sample.provenance, Provenance::Init);
 }
 
 #[test]

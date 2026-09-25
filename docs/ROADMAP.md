@@ -567,7 +567,7 @@ owes the Kotlin runtime, which mirrors every item one wave behind.
 | E11.21 | Rust backend: `<iface>::Client` (async) and `<iface>::blocking::Client` (feature `std`), `serve` and `blocking::serve`, the poll face `pub(crate)`; a call is sent when called, a dropped future calls `forget`, the member's `max` bounds the whole call                                                       | the cabin round trip passes through both clients on `ridl-loopback`; a dropped future calls `forget`; a call waits for a free slot within its bound; the poll methods and `dispatch` are `pub(crate)`; `examples/cabin/consumer` and the design records show the new surface                                                       | L    |
 
 **Sequence.** E11.17 and E11.19 need no decision and run first, beside two
-defects the Kotlin port found (the face reports a never-published signal as
+defects the Kotlin port found (the face reported a never-published signal as
 `Invalid(Detected(Corrupt))` instead of `Init`; the FlatBuffers codec emitter
 does not compile for a `[bool]` field) and the Binder statement below. The
 design note and the two amendments come next, then E11.16 and E11.18 in that

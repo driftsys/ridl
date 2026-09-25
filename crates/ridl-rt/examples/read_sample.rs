@@ -126,22 +126,33 @@ impl Signal for SpeedSignal {
 }
 
 /// The accessor a generated client writes for `speed`: read the bytes, check
-/// them, decode them. When the check fails, the accessor reports the detection
-/// as the provenance and substitutes the init value. A generated accessor
-/// would substitute its own last good value when it has one.
+/// them, decode them. The `Init`-or-`Invalid(Declared)`-with-no-bytes arm
+/// below handles a port whose init or invalidated sample carries no bytes;
+/// `walk` never produces that shape, because it seeds `Memory` with a real
+/// 2-byte init encoding and `invalidate` keeps those bytes rather than
+/// clearing them (`tests/read_sample.rs` exercises the arm directly, with a
+/// `Memory` seeded from an empty init buffer). Otherwise the check runs;
+/// when it fails, the accessor reports the detection as the provenance and
+/// substitutes the init value. A generated accessor would substitute its own
+/// last good value when it has one.
 pub fn read_speed(port: &dyn SignalReader) -> Result<Sample<Speed>, ReadError> {
     let mut buf = [0u8; <Speed as Payload<ReprC>>::MAX_SIZE];
     let raw = port.read(Drivetrain::NUMBER, SpeedSignal::MEMBER.ordinal, &mut buf)?;
-    let (value, provenance) = match Ref::<Speed, ReprC>::verify(&buf[..raw.len]) {
-        Ok(proof) => (proof.decode(), raw.provenance),
-        Err(VerifyError::Contract(violation)) => (
-            SpeedSignal::init(),
-            Provenance::Invalid(Cause::Detected(Detection::InvalidValue(violation))),
-        ),
-        Err(_) => (
-            SpeedSignal::init(),
-            Provenance::Invalid(Cause::Detected(Detection::Corrupt)),
-        ),
+    let (value, provenance) = match raw.provenance {
+        Provenance::Init | Provenance::Invalid(Cause::Declared) if raw.len == 0 => {
+            (SpeedSignal::init(), raw.provenance)
+        }
+        _ => match Ref::<Speed, ReprC>::verify(&buf[..raw.len]) {
+            Ok(proof) => (proof.decode(), raw.provenance),
+            Err(VerifyError::Contract(violation)) => (
+                SpeedSignal::init(),
+                Provenance::Invalid(Cause::Detected(Detection::InvalidValue(violation))),
+            ),
+            Err(_) => (
+                SpeedSignal::init(),
+                Provenance::Invalid(Cause::Detected(Detection::Corrupt)),
+            ),
+        },
     };
     Ok(Sample {
         value,

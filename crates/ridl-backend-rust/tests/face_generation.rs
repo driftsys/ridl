@@ -161,8 +161,28 @@ fn the_client_reads_a_signal_through_the_signal_reader_port() {
         d.contains("::ridl_rt::sample::Detection::Corrupt"),
         "malformed bytes become Detection::Corrupt",
     );
+    // Before the first publication, or when the channel is invalidated with
+    // no prior publication, there is no payload to check: the accessor
+    // returns the init value under the port's own provenance directly,
+    // without running `verify` (driftsys/ridl#517).
     assert!(
-        d.contains("<super::CabinTemperatureas::ridl_rt::contract::Signal>::init()"),
+        d.contains(
+            "matchraw.provenance{::ridl_rt::sample::Provenance::Init\
+             |::ridl_rt::sample::Provenance::Invalid(::ridl_rt::sample::Cause::Declared,)\
+             ifraw.len==0=>{(<super::CabinTemperatureas::ridl_rt::contract::Signal>::init(),"
+        ),
+        "Init and a zero-length Invalid(Declared) both return the init value \
+         without verifying",
+    );
+    // `init()` appears twice: once for the never-published/never-set case
+    // above, and once here, where a payload that fails its check substitutes
+    // it. This assertion is anchored to the `Err` arm's own occurrence, not
+    // to `init()` generally.
+    assert!(
+        d.contains(
+            "Err(error)=>{(<super::CabinTemperatureas::ridl_rt::contract::Signal>::init(),\
+             ::ridl_rt::sample::Provenance::Invalid("
+        ),
         "the init value stands in for a payload that failed its check",
     );
 }
