@@ -29,8 +29,10 @@ listed in §4 are not taken yet, and F2 takes them.
   `cargo install --git https://github.com/driftsys/git-std git-std --locked`.
 - `just verify` before every pull request. It runs the commit lint and the full
   gate, including `just demo`, which builds the compiler and runs
-  `examples/cabin` through the generated face over `ridl-loopback` — the one
-  check in the gate that exercises what F5 changes.
+  `examples/cabin` through the generated face over `ridl-loopback`. That demo,
+  `crates/ridlc/tests/cabin_example.rs` and
+  `crates/ridl-backend-rust/tests/interaction_face.rs` are the three checks in
+  the gate that exercise what F5 changes.
 - Review before merge, per the lanes plan §7
   ([`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md)): open the
   pull request, run `/review <PR>` (the docs-only lane when no executable line
@@ -61,9 +63,10 @@ underneath them the substrate every runtime with asynchronous replies needs:
 - **The `ridl-rt` substrate.** A keyed `Wakeable` port extension (the wake
   source no port may wait for), `Transport::Busy`, a `std` feature with
   `block_on` and a no-op waker, a correlation table with a keyed waker registry,
-  and the helpers the language reference defines but every runtime computes on
-  its own today: freshness, event loss, the in-flight byte budget, the call
-  deadline. One `ridl-rt` 0.x minor release carries all of it.
+  and four helpers every runtime computes on its own today: freshness, event
+  loss and the call deadline, which the language reference defines, and the
+  in-flight byte budget, which is derived from the descriptors and which no
+  specification defines. One `ridl-rt` 0.x minor release carries all of it.
 - **A conformance crate.** `crates/ridl-loopback/tests/ports.rs` states what a
   runtime must do behind each port and only `ridl-loopback` runs it. The suite
   becomes `ridl-rt-conformance`, generic over a runtime factory, and the
@@ -96,8 +99,23 @@ names before that stage:
   `ridl-rt` is an ADR-0021 decision, not an implementation detail.
 - [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) — the face.
   Decision 4 and its 2026-09-20 amendment (a send returns
-  `Result<Correlation, SendError>`, the correlation newtype per call) and
-  decision 5 (the face holds its port by value) are what F2 amends or reverses.
+  `Result<Correlation, SendError>`, the correlation newtype per call) is what F2
+  reverses for the public surface; decision 5 (the face holds its port by value)
+  is unchanged and is what the async client is built over.
+- [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) — its
+  alternatives table rejects `async fn` at the platform layer and blocking calls
+  at the platform layer, and its open question 5 asks whether `async fn` on a
+  `command` is a conformance defect. The async client is generated code over
+  synchronous ports, not the platform layer, and F-15 must say so against those
+  three entries.
+- ADR-0021 open question 6, the wake hook (driftsys/ridl#350 item 17): whether a
+  port gains a way to register interest in the arrival of a reply, an occurrence
+  or a claim. E11.16 answers it, and the ADR-0021 amendment closes the question.
+- RA-19 and RA-20 of [the `ridl-rt` design note](2026-09-08-ridl-rt-design.md),
+  repeated in `docs/design/interaction-face.md` and in the module documentation
+  of `crates/ridl-backend-rust/src/face.rs`: "generated code contains no thread,
+  future, socket or timer". An async client returns a future, so the amendment
+  restates the rule rather than leaving it contradicted (F-15).
 - [The frame specification](../specification/frame-specification.md) — §5 (what
   crosses per kind), §6 (the control plane), §8 (timing; its table says how a
   faster call is refused "is not fixed here"), §9.6 (which failures cross),
@@ -117,7 +135,7 @@ takes), `crates/ridl-rt/src/error.rs` (`Transport`, `CallError`),
 `crates/ridl-rt/src/contract.rs` (`Timing`, `PayloadInfo`, `EncodedSizes`),
 `crates/ridl-loopback/src/` and `crates/ridl-loopback/tests/ports.rs`,
 `crates/ridl-backend-rust/src/face.rs` (the face emitter; `ridlc::run_build`
-reaches it through `generate_pipeline`), `crates/ridl-backend-rust/src/lib.rs`
+reaches it through `generate_pipeline`), `crates/ridl-backend-rust/src/codec.rs`
 (the FlatBuffers codec emitter), and `examples/cabin/` (the consumer the demo
 runs).
 
@@ -205,19 +223,22 @@ reviewed pull request and not a side effect of a planning one.
   binds the ports over its own binder contract, which may be one generic,
   versioned AIDL serving every catalog, and that ridl specifies no Binder layout
   and no transaction code; keep the ridl reference's Appendix B AIDL column,
-  because an ordinal stays stable whether it travels as a code or as a field.
-  Reword the two roadmap paragraphs that say the opposite: the E11.1 paragraph
-  in Epic 11 ("the Kotlin backend's AIDL over Binder") and "The Kotlin backend
-  owns its IPC binding" under "After step 2". Leave the platform ladder row and
-  Appendix B's target list alone: they name the platform, not a layout. Add a
-  dated note under D-P5 in [the lane P driver](2026-09-22-lane-p-driver.md),
-  naming the issue and this driver, because D-P5 was taken by Sebastien on
-  2026-09-22 and a reader of that driver must see it was reversed and where.
-  State the reasons in the pull request: a generated binding per interface ties
-  the AIDL version to every interface change, reads signals over IPC, gives a
-  command no path to report "busy", and its fixed codes collide with the control
-  methods (K3b's finding). D-P4, the lowered model's content, is unchanged. O-P3
-  is unchanged.
+  because an ordinal stays stable whether it travels as a code or as a field,
+  but reword its "transaction code = ordinal" cell, which fixes what this change
+  removes. `frame-specification.md` §4 names an AIDL transaction code as its
+  example of a native field narrower than 32 bits; the example stays true of
+  AIDL, so leave it or replace it, but read it. Reword the two roadmap
+  paragraphs that say the opposite: the E11.1 paragraph in Epic 11 ("the Kotlin
+  backend's AIDL over Binder") and "The Kotlin backend owns its IPC binding"
+  under "After step 2". Leave the platform ladder row and Appendix B's target
+  list alone: they name the platform, not a layout. Add a dated note under D-P5
+  in [the lane P driver](2026-09-22-lane-p-driver.md), naming the issue and this
+  driver, because D-P5 was taken by Sebastien on 2026-09-22 and a reader of that
+  driver must see it was reversed and where. State the reasons in the pull
+  request: a generated binding per interface ties the AIDL version to every
+  interface change, reads signals over IPC, gives a command no path to report
+  "busy", and its fixed codes collide with the control methods (K3b's finding).
+  D-P4, the lowered model's content, is unchanged. O-P3 is unchanged.
 - **F1d — E11.17.** A `std` cargo feature, off by default, adding
   `block_on(fut, deadline: Option<Instant>) -> Option<F::Output>` — a waker that
   unparks the current thread through `std::task::Wake` on an `Arc`,
@@ -227,30 +248,37 @@ reviewed pull request and not a side effect of a planning one.
   crate is at 1.83; a raw waker needs `unsafe`, which the crate forbids
   (`#![forbid(unsafe_code)]`). No dependency and no `unsafe`. Tests park and
   wake across threads and time out at the deadline. The three checks that bind
-  the crate: `just wasm-check` (`--no-default-features`, unchanged),
+  the crate: `just wasm-check` (two lines: `--no-default-features`, unchanged,
+  and `cargo check --target wasm32-unknown-unknown -p ridl-rt --all-features`,
+  so the `std` feature must build for `wasm32-unknown-unknown` too),
   `just compat-check` (edition 2021 at 1.83 with `--all-features`, so the
   feature must build there), and `just test`. The feature is a fourth cargo
   feature where ADR-0021 decision 8 declares three: the pull request adds a
   dated note under decision 8 saying so, that it enables `block_on` and
   `noop_waker` and no dependency, and that F2's amendment records the rest.
-- **F1e — E11.19.** Four helpers, each with tests citing the section it
-  implements: `Freshness::of(stamp, now, timing)` returning `Fresh`,
-  `Stale { by }` or `Unbounded` from the envelope and the member's `max` (ridl
-  §4, §9); an event `seq` tracker holding the last `seq` per interface and
-  reporting a gap as a loss (ridl §5, frame §7); the in-flight budget from the
-  descriptors — a member's reservation is its `args` plus its `reply`
-  `PayloadInfo::max_size` for the package's encoding, and a table budget sums
-  `Interface::MEMBERS`; a size that is `None` is reported, never guessed; and a
-  member's call deadline from its `Timing`, which is `None` when `max` is. The
-  last helper takes no position on what a caller does with `None`; that is F-2.
+- **F1e — E11.19.** Four helpers, each with tests citing the section of the
+  language reference, or the descriptor field, it implements:
+  `Freshness::of(stamp, now, timing)` returning `Fresh`, `Stale { by }` or
+  `Unbounded` from the envelope and the member's `max` (ridl §4, §9); an event
+  `seq` tracker holding the last `seq` **per channel** — the counter is per
+  channel, per provider instance (ridl §3.1, frame §7), so a per-interface
+  tracker would report a loss whenever two channels interleave — and reporting a
+  gap as a loss; the in-flight budget from the descriptors — no specification
+  defines it; a member's reservation is the sum of `PayloadInfo::max_size` over
+  its `payloads` (two entries for a query, the request then the reply) for the
+  package's encoding, and a table budget sums `Interface::MEMBERS`; a size that
+  is `None` is reported, never guessed; and a member's call deadline from its
+  `timing`, which is `Option<Timing>` on `Member`, so the deadline is `None`
+  when the timing is absent or its `max` is. The last helper takes no position
+  on what a caller does with `None`; that is F-2.
 
 ### F2 — the design note, the disposition, the amendments, the plan
 
 Write `docs/wip/2026-09-2x-async-face-design.md`: the design note taking the
-fourteen decisions of §4. Open it as a pull request. **The gate is Sebastien's
+fifteen decisions of §4. Open it as a pull request. **The gate is Sebastien's
 disposition comment on that pull request**, the way lane K's K-1 to K-12 were
 disposed. Write each decision so it can be disposed of by reading: the decision,
-the reason, the alternative it rejects and why. Number them F-1 to F-14 so a
+the reason, the alternative it rejects and why. Number them F-1 to F-15 so a
 comment can name one.
 
 Then, once the disposition is in hand and in the same session if context allows,
@@ -305,10 +333,12 @@ a test only the loopback can express stays in `crates/ridl-loopback/tests/` and
 the pull request lists each one with the reason. `ridl-loopback` runs the suite
 as a dev-dependency and passes, and a mutation in the loopback turns it red —
 name the mutation in the pull request. The new crate adds a workspace member, a
-`.git-std.toml` scope, a row in ADR-0020 decision 6's crate table, and moves
-"eighteen crates" to nineteen in `AGENTS.md`. After F3, the suite covers
-`Wakeable` (exactly one waiter woken per key) and the table's observable
-behaviour through the ports.
+`.git-std.toml` scope, a row in ADR-0020 decision 6's crate table, its name in
+`AGENTS.md`'s crate enumeration with "eighteen crates" moved to nineteen, and
+`publish = false` in its manifest unless the pull request argues for publishing
+it — a `v<version>` tag publishes every crate without that line, and the two
+test-only plugins carry it. After F3, the suite covers `Wakeable` (exactly one
+waiter woken per key) and the table's observable behaviour through the ports.
 
 ### F5 — E11.21, in two pull requests
 
@@ -331,12 +361,14 @@ behaviour through the ports.
   call waits for a free slot within its bound. The records move with it:
   `docs/design/interaction-face.md`, `docs/design/ridl-loopback.md`,
   `docs/book/introduction.md` and `docs/book/cli-reference.md` where they show
-  the poll face, and `examples/cabin/consumer`. This is the one breaking step of
-  the lane for a consumer of generated code. F5b also runs `sdd-gardening`: the
-  note and the plan archive to `docs/archive/`, this driver with them, and the
-  decisions live in the two ADRs and the design records.
+  the poll face, the module documentation of
+  `crates/ridl-backend-rust/src/face.rs` (which states RA-20), and
+  `examples/cabin/consumer`. This is the one breaking step of the lane for a
+  consumer of generated code. F5b also runs `sdd-gardening`: the note and the
+  plan archive to `docs/archive/`, this driver with them, and the decisions live
+  in the two ADRs and the design records.
 
-## 4. The fourteen decisions F2 must take
+## 4. The fifteen decisions F2 must take
 
 The proposals below are the lane's starting position, validated as a direction
 on 2026-09-25 and not as decisions. F2 may reject one; the note then says why.
@@ -423,6 +455,21 @@ whether `Busy` is a frame-level outcome, and if so which section of
 registration is not lost), the mutation that must turn `ridl-loopback` red, and
 the face test for a dropped future calling `forget`.
 
+**F-15. How the async client stands against RA-20 and ADR-0018.** RA-20 reads
+"generated code contains no thread, future, socket or timer; faces are the
+runtime's", and `crates/ridl-backend-rust/src/face.rs` states it in its module
+documentation; ADR-0018's alternatives table rejects `async fn` at the platform
+layer and blocking calls at the platform layer, and its open question 5 asks
+whether `async fn` on a `command` is a conformance defect. The direction keeps
+the rule below the public API — no port waits, and the ports stay synchronous —
+while the generated face returns a future that polls those ports. Proposal: the
+amendment restates RA-20 as "generated code contains no thread, socket or timer,
+and no port waits; a face may return a future, and that future never blocks",
+records that the platform layer (the ports) is unchanged so ADR-0018's two
+rejections stand, and answers open question 5 for the face: a `command`'s future
+resolves on the acknowledgment, which is the runtime's, not the application's.
+Say where each of the three texts is amended and in which stage.
+
 ## 5. What lane F does not decide
 
 - **The engine.** Outside this repository (the 2026-09-12 re-scope §3.7).
@@ -503,9 +550,9 @@ worktree.
 ## 9. After each stage
 
 Post one comment on driftsys/ridl#328: the stage, the pull request, and what
-another lane must know. After F2: the fourteen dispositions in one line each,
-and which of them bind E11.9. After each Rust stage that a Kotlin issue waits
-on, the §6 comment on that issue.
+another lane must know. After F2: the fifteen dispositions in one line each, and
+which of them bind E11.9. After each Rust stage that a Kotlin issue waits on,
+the §6 comment on that issue.
 
 ## 10. When to stop
 
