@@ -2493,8 +2493,9 @@ fn appendix_b_rust_snapshot() {
 /// with a source that has no other way to fail.
 ///
 /// One `rustc` call over its `lib.rs` is the whole build: `ridl-rt` is
-/// `no_std` and has no dependency in any feature combination (ADR-0021
-/// decision 8). It is built with the same `rustc` the proof itself spawns; an
+/// `no_std` with the encoding features and has no dependency in any feature
+/// combination (ADR-0021 decision 8). It is built with the same `rustc` the
+/// proof itself spawns; an
 /// rlib built by another toolchain is rejected with E0514, which is what
 /// happens if this is hoisted to a shared location outside the repository.
 ///

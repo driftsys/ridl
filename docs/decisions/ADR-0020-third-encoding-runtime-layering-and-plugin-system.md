@@ -205,6 +205,10 @@ as its public contract.
    unspent: the module takes no dependency, so the FlatBuffers runtime remains
    permitted and unused.
 
+   **Cross-reference (2026-09-25).** A fourth cargo feature, `std`, which is not
+   an encoding, and the eighth module it gates, `task`, are recorded in ADR-0021
+   decision 8's note of that date. This decision is not amended.
+
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.

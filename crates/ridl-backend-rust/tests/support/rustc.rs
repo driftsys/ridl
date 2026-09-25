@@ -11,8 +11,9 @@
 //! E11.8 and E11.12 inherit a working proof without editing a helper again.
 //!
 //! One `rustc` call over `lib.rs` is the whole build: `ridl-rt` is `no_std`
-//! and has no dependency in any feature combination (ADR-0021 decision 8). It
-//! is built with the same `rustc` the proof itself spawns; an rlib built by
+//! with the encoding features and has no dependency in any feature combination
+//! (ADR-0021 decision 8). It is built with the same `rustc` the proof itself
+//! spawns; an rlib built by
 //! another toolchain is rejected with E0514.
 
 // Two integration test targets pull this module in with `#[path]`, and each

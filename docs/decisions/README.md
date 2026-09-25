@@ -130,8 +130,9 @@
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
   payload encoding, and the encoding matrix settles the codec-in-wasm boundary
   as FlatBuffers; `ridl-rt` is one `no_std` crate with one cargo feature per
-  encoding, with the runtimes and the transports outside it in both Rust and
-  TypeScript; and a backend becomes an executable over
+  encoding (a fourth, non-encoding feature `std` is ADR-0021 decision 8's note
+  of 2026-09-25), with the runtimes and the transports outside it in both Rust
+  and TypeScript; and a backend becomes an executable over
   `generate(CodegenRequest) -> CodegenResponse`, fed by a lowering step that
   derives the shared semantics once in the compiler. Not epic-scoped: it binds
   every backend this workspace or the ecosystem grows, and the runtime material

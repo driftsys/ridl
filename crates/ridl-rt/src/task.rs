@@ -19,6 +19,11 @@
 //! the wait is `std::thread::park_timeout`, whose unpark token cannot be lost
 //! between a poll and the park that follows it.
 //!
+//! The feature compiles for `wasm32-unknown-unknown`, because `just wasm-check`
+//! requires every feature to, and [`block_on`] is not usable on that target:
+//! `Instant::now()` panics there, and a park does not block the thread. A
+//! frame loop on wasm polls with [`noop_waker`] and never calls [`block_on`].
+//!
 //! Nothing here names a port, an interface or a generated type; the module
 //! knows only `core::future::Future`.
 
@@ -69,8 +74,9 @@ impl Wake for Noop {
 /// # The deadline
 ///
 /// - `None`: wait until the future is ready, however long that takes.
-/// - `Some(deadline)`: return `Some(output)` if a poll returns `Ready` before
-///   or at the deadline, and `None` once a poll returns `Pending` when
+/// - `Some(deadline)`: return `Some(output)` from the first poll that returns
+///   `Ready`, whenever that poll runs — also after a park that ended late —
+///   and `None` once a poll returns `Pending` when
 ///   `Instant::now() >= deadline`. The future is polled at least once even
 ///   when the deadline has already passed at entry, so a future that is
 ///   already ready returns `Some` whatever the deadline. On `None`, the future

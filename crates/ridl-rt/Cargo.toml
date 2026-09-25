@@ -28,3 +28,8 @@ flatbuffers = []
 proto3 = []
 repr-c = []
 std = []
+
+# docs.rs builds with every feature on, so the crate docs' links to the
+# `flatbuffers` and `task` modules resolve.
+[package.metadata.docs.rs]
+all-features = true

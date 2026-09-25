@@ -291,7 +291,10 @@ one, and for a frame loop that polls a future once per frame. It exists because
 waker needs `unsafe`, which the crate forbids. It takes no dependency and
 contains no `unsafe`; every other module stays `no_std` with the feature on; and
 the feature compiles for `wasm32-unknown-unknown`, which `just wasm-check`'s
-`--all-features` line covers. ADR-0021 decision 8 carries the dated note.
+`--all-features` line requires, but `block_on` is not usable on that target:
+`Instant::now()` panics there and a park does not block the thread, so a frame
+loop on wasm polls with `noop_waker` and never calls `block_on`. ADR-0021
+decision 8 carries the dated note.
 
 **Stage K5 added one helper and corrected one sentence.**
 `Builder::push_offset_vector` writes a vector of `uoffset_t`s naming objects
@@ -443,7 +446,9 @@ handle, a `Clone` handle and a wrapper that adds tracing or a test double are
 accepted by the face's trait bounds with or without them, because such a type
 implements the port traits itself rather than borrowing through them. The impls
 are additive and need no `alloc`; `Box<P>` is not forwarded, because that would
-need `alloc`, which no feature combination of this crate brings in.
+need `alloc`, which no feature combination of this crate brought in until the
+`std` feature arrived on 2026-09-25 — whether the impl is added under `std` is
+left to lane F's amendment of ADR-0021 (the note under its decision 11).
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 records them and the reasoning.
 
