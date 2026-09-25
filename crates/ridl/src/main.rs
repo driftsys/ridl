@@ -763,8 +763,9 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 /// refuses it without a second lookup. An earlier rule refused only when its
 /// own lookup of the published container found the tombstone again, and
 /// published whenever that lookup did not resolve — a declared interface and
-/// an inline service sharing a name, or an interface renamed since
-/// publication (driftsys/ridl#339 case 2). The published IR is still read
+/// an inline service sharing a name (driftsys/ridl#339 case 2), or an
+/// interface renamed since publication (found in the review of the fix,
+/// driftsys/ridl#528). The published IR is still read
 /// for the message's ordinal and wording ([`untombstoned_removal_message`]),
 /// never for the verdict.
 ///

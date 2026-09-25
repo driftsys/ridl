@@ -759,15 +759,27 @@ fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
 /// read — a symlink to a file that is gone — is exit 2 naming the entry,
 /// not a snapshot set one short (driftsys/ridl#339 case 3): the listing is
 /// the one `ridl baseline` and `ridl check` read, and it fails closed for
-/// every caller.
+/// every caller. A valid snapshot sits beside the entry, so a listing that
+/// skipped the entry would compare against that snapshot and exit 0 — the
+/// exit 2 here comes from the entry, not from an empty directory falling
+/// through to the compiler.
 #[cfg(unix)]
 #[test]
 fn a_directory_side_with_a_snapshot_it_cannot_stat_is_refused() {
     let dir = TempDir::new("dangling-side");
-    let source = dir.write("new.ridl", BASE);
+    dir.write("ws/ridl.toml", MANIFEST);
+    let source = dir.write("ws/base.ridl", BASE);
+    let root = dir.path().join("ws");
+    lock(&root);
     let snapshots = dir.path().join("snapshots");
-    std::fs::create_dir_all(&snapshots).expect("create the snapshot directory");
-    let entry = snapshots.join("veh.cluster.ir.json");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        snapshots.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "the snapshot is published: {stderr}");
+    let entry = snapshots.join("zz-dangling.ir.json");
     std::os::unix::fs::symlink("missing.ir.json", &entry).expect("create a dangling symlink");
 
     let (code, _, stderr) = ridl(&["diff".as_ref(), snapshots.as_os_str(), source.as_os_str()]);
@@ -781,10 +793,40 @@ fn a_directory_side_with_a_snapshot_it_cannot_stat_is_refused() {
         "the message names the entry it could not read:\n{stderr}"
     );
     assert!(
+        !stderr.contains("ridl.toml"),
+        "the directory is refused for the entry, not compiled as source:\n{stderr}"
+    );
+    assert!(
         std::fs::symlink_metadata(&entry)
             .expect("the entry is still there")
             .file_type()
             .is_symlink(),
         "the entry is left as it is",
+    );
+}
+
+/// The stat check runs before a directory is read as a source tree, so a
+/// source workspace holding a dangling snapshot-named entry is refused too,
+/// naming the entry — it is not compiled as the source it also is. This pins
+/// the `load_diff_side` rustdoc and the CLI reference's `ridl diff` section.
+#[cfg(unix)]
+#[test]
+fn a_source_workspace_holding_a_snapshot_it_cannot_stat_is_refused() {
+    let dir = TempDir::new("dangling-in-source");
+    dir.write("ws/ridl.toml", MANIFEST);
+    let source = dir.write("ws/base.ridl", BASE);
+    let root = dir.path().join("ws");
+    let entry = root.join("zz-dangling.ir.json");
+    std::os::unix::fs::symlink("missing.ir.json", &entry).expect("create a dangling symlink");
+
+    let (code, _, stderr) = ridl(&["diff".as_ref(), root.as_os_str(), source.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "the entry is refused before the workspace is compiled as source:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&entry.display().to_string()),
+        "the message names the entry it could not read:\n{stderr}"
     );
 }

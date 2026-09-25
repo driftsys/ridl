@@ -1399,9 +1399,10 @@ fn two_published_snapshots_for_one_package_are_refused_and_left_as_they_are() {
 
 /// An interface and an inline-form service sharing a name are two shapes
 /// under one identity name. Redeclaring a name the service retires is
-/// `ReservedNameRedeclared` on the service's path, and the gate must refuse
-/// it by reading the shape that holds the tombstone — not the interface that
-/// happens to sort first under the same name (driftsys/ridl#339 case 2).
+/// `ReservedNameRedeclared` on the service's path, refused unconditionally;
+/// the message's ordinal comes from a lookup of the published IR, which must
+/// read the shape that holds the tombstone — not the interface that happens
+/// to sort first under the same name (driftsys/ridl#339 case 2).
 #[test]
 fn a_tombstone_in_a_service_sharing_its_interface_name_still_refuses_the_redeclaration() {
     let dir = TempDir::new("gate-shared-shape-name");
@@ -1490,12 +1491,13 @@ fn a_published_snapshot_that_cannot_be_stated_refuses_the_publication() {
 }
 
 /// A `ReservedNameRedeclared` change whose container the published IR cannot
-/// resolve is refused, not published: the walk emitted it from a tombstone
-/// it read on the published side, so a lookup that finds nothing is the
-/// lookup's failure (driftsys/ridl#339 case 2, the fail-closed rule). A
-/// renamed interface is such a container — the change's path carries the new
-/// name — and the old rule, which refused only when the lookup found the
-/// tombstone, published the redeclaration.
+/// resolve is refused, not published: the refusal is unconditional, because
+/// the walk emitted the change from a tombstone it read on the published
+/// side. A renamed interface is such a container — the change's path carries
+/// the new name — and the earlier rule, which refused only when its own
+/// lookup found the tombstone again, published the redeclaration. The lookup
+/// now serves the message alone: with no ordinal found, the remedy names
+/// "that ordinal" rather than a number.
 #[test]
 fn a_redeclaration_in_a_renamed_interface_is_refused_although_the_lookup_finds_nothing() {
     let dir = TempDir::new("gate-renamed-container");

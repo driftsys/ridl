@@ -1291,9 +1291,12 @@ fn check_reports_an_auto_discovered_snapshot_it_cannot_stat() {
     );
 }
 
-/// The same entry named with an explicit `--baseline`: exit 2 naming the
-/// entry, as under auto-discovery — an explicit directory is listed by the
-/// same `snapshot_files`.
+/// A dangling entry beside the published snapshot, named with an explicit
+/// `--baseline`: exit 2 naming the entry, as under auto-discovery — an
+/// explicit directory is listed by the same `snapshot_files`. The valid
+/// snapshot is kept, so a listing that skipped the entry would run the desk
+/// check over it and exit 0 with RIDL-407 — the exit 2 here comes from the
+/// entry, not from the empty-directory refusal.
 #[cfg(unix)]
 #[test]
 fn check_reports_an_explicit_baseline_snapshot_it_cannot_stat() {
@@ -1308,10 +1311,9 @@ fn check_reports_an_explicit_baseline_snapshot_it_cannot_stat() {
     ]);
     assert_eq!(code, 0, "the baseline is published: {stderr}");
 
-    let path = published.join("veh.cluster.ir.json");
-    std::fs::remove_file(&path).expect("remove the published snapshot");
+    let path = published.join("zz-dangling.ir.json");
     std::os::unix::fs::symlink("missing.ir.json", &path)
-        .expect("replace it with a dangling symlink");
+        .expect("create a dangling symlink beside the published snapshot");
     dir.write("cluster.ridl", REORDERED);
 
     let (code, _, stderr) = ridl(&[
@@ -1332,6 +1334,11 @@ fn check_reports_an_explicit_baseline_snapshot_it_cannot_stat() {
     assert!(
         !stderr.contains("RIDL-407"),
         "no desk check runs over a baseline that could not be read:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("holds no `.ir.json` snapshot"),
+        "the refusal is the entry's, not the empty-directory one a listing that gave up \
+         would draw over the snapshot still beside the entry:\n{stderr}",
     );
     assert!(
         std::fs::symlink_metadata(&path)
