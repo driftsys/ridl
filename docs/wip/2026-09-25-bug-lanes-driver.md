@@ -43,9 +43,10 @@ Left out of both lanes, on purpose:
 
 - F1, F4, Q1 and Q2 edit `crates/ridl/src/main.rs`.
 - F1, Q1 and Q2 edit `docs/book/cli-reference.md`: F1 the publication-gate
-  section, Q1 the two sentences that say RIDL-407 warns on every interaction
-  whose ordinal moved, Q2 the "publish a first baseline there" wording #340
-  names.
+  section, Q1 the `--baseline` help text at :107 ("whose ordinal moved") and the
+  sentence at :246-247 ("whose declaration order moved"), Q2 the sentence at
+  :239 ("for publishing a first baseline there"). #340 cites :195-196 for that
+  sentence, which is where it sat when the issue was written.
 - F2 and F3 edit `crates/ridl-lsp/src/server.rs`; run F2 before F3.
 
 Rebase on `origin/main` before starting any of these stages, and again before
@@ -108,7 +109,7 @@ number no longer matches, find the item by its function name.
   `ORDINAL_CATEGORIES` (`crates/ridl/src/main.rs:611-616`) and give
   `drift_message` an arm that names the member, its containing body, and where
   it moved from and to, in the word the change's own detail uses: an ordinal for
-  a struct field, a position for an enum value or an enum-set bit
+  a struct field or a union arm, a position for an enum value or an enum-set bit
   (`crates/ridl-diff/src/lib.rs:143-153`). The issue leaves open whether the
   desk check warns on an enum or enum-set reorder at all; decide that on the
   issue first. Reproduced: `ridl diff` reports two breaking `member_reordered`
@@ -160,8 +161,8 @@ Run `git branch --show-current` before every commit and every push.
 For the stage:
 1. Read the issue body and its comments:
    `gh issue view <N> --json title,body,comments`. Do not use
-   `--comments`, which prints the comments only when the output is not a
-   terminal.
+   `--comments`: when the output is not a terminal, it prints the comments
+   and leaves out the body.
 2. Write the test that reproduces the defect and watch it fail, before any
    fix (superpowers:test-driven-development).
 3. Fix, with the model the routing names for the stage.
@@ -193,8 +194,8 @@ Run `git branch --show-current` before every commit and every push.
 For the stage:
 1. Read the issue body and its comments:
    `gh issue view <N> --json title,body,comments`. Do not use
-   `--comments`, which prints the comments only when the output is not a
-   terminal.
+   `--comments`: when the output is not a terminal, it prints the comments
+   and leaves out the body.
 2. Write the test that reproduces the defect and watch it fail, before any
    fix (superpowers:test-driven-development).
 3. Fix, with a Sonnet implementer.
