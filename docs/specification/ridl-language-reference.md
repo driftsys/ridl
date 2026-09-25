@@ -2102,17 +2102,22 @@ compose.
 | RPC call throttle, `min` (§9.3)  | admission-side rate limit at the provider                                                                          | server-side admission rate limit                               | admission check in the runtime shim                 | requester-side rate limit                             | inbound publish rate limit    |
 | `fixed`                          | field with getter only                                                                                             | unary getter RPC (cacheable)                                   | constant/property                                   | —                                                     | retained provisioning channel |
 | result-union error arm (§10.1)   | method return code table                                                                                           | `google.rpc.Status` + typed detail                             | `ServiceSpecificException` code                     | reply union arm                                       | error payload schema          |
-| ordinals (§11)                   | method ID = ordinal; event ID = ordinal + event flag; eventgroup = interface, keyed on (package, interface number) | RPC name (identity is nominal)                                 | transaction code = ordinal                          | topic name suffix                                     | channel path segment          |
+| ordinals (§11)                   | method ID = ordinal; event ID = ordinal + event flag; eventgroup = interface, keyed on (package, interface number) | RPC name (identity is nominal)                                 | in the runtime's binder contract, as code or field  | topic name suffix                                     | channel path segment          |
 | Stratum 2 (§10.2)                | `E_MALFORMED_MESSAGE` / `E_NOT_OK` / `E_UNKNOWN_METHOD`                                                            | `INVALID_ARGUMENT` / `FAILED_PRECONDITION` / `UNIMPLEMENTED`   | `IllegalArgumentException` mapping                  | reply status                                          | error topic convention        |
 
 **Notes.** The command **delivery acknowledgment** (§6.1) is realised with each
 transport's cheapest confirmed primitive, as shown in the command row — where a
 transport's fire-and-forget primitive has no confirmation (SOME/IP fire&forget,
 AIDL `oneway`), the binding uses the confirmed variant or adds a runtime shim;
-the ack never surfaces in generated application APIs as a return value. The §4.4
-last-value guarantee is what makes the SOME/IP _getter_ derivable — a ridl
-signal generates the full SOME/IP field triple minus setter (setters are
-explicit `command`s, by design). DBC/CAN binds signals only
+the ack never surfaces in generated application APIs as a return value. The AIDL
+column names what a runtime's binder contract can use: ridl specifies no Binder
+layout and no transaction code, so the ordinal stays stable whether that
+contract carries it as a transaction code or as a field
+([frame specification](frame-specification.md) §11.2, which records that
+driftsys/ridl#516 reversed a per-interface binding with the ordinal as the
+transaction code). The §4.4 last-value guarantee is what makes the SOME/IP
+_getter_ derivable — a ridl signal generates the full SOME/IP field triple minus
+setter (setters are explicit `command`s, by design). DBC/CAN binds signals only
 (`event`/`command`/`query` do not exist on classic CAN — profile error), and a
 coherent set survives only within one frame (§14.5); a set that must stay
 simultaneous on every target is one struct payload (§17.3). The WASM component
