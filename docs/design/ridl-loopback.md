@@ -195,10 +195,13 @@ declared state change silently. The generated client reports it as the init
 value under `Provenance::Invalid(Cause::Declared)`, the provider's own
 provenance, the same way it reports an unpublished read as the init value under
 `Provenance::Init`: the accessor checks the port's reported provenance and
-length before running `Payload::verify`, and runs it only when there are bytes
-to decode (driftsys/ridl#517). The generated `Publisher` does emit
-`invalidate_<name>`, so a provider that invalidates before its first `set`
-reaches this path.
+length before running `Payload::verify`, and skips it only when the provenance
+is `Init` or `Invalid(Declared)` and the length is zero (driftsys/ridl#517).
+Under every other provenance, `verify` still runs, including over zero bytes: a
+zero-length `Live` sample, for instance, runs `verify` and is reported as
+`Invalid(Detected(Corrupt))`, not as the init value. The generated `Publisher`
+does emit `invalidate_<name>`, so a provider that invalidates before its first
+`set` reaches this path.
 
 ## A claim is not a correlation
 

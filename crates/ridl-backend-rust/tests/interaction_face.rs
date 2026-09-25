@@ -166,9 +166,10 @@ fn round_trip_signal_reads_as_init_before_any_publication() {
 }
 
 /// A channel invalidated with no prior publication has no last good value to
-/// keep (ridl §4.5: "the last good value, or the init value when there is
-/// none"), so it reads as the init value under `Invalid(Declared)`, not as a
-/// detected invalid state — the same distinction as the never-published case,
+/// keep (`docs/specification/frame-specification.md` §5.1 receive rule 5:
+/// "the last good value, or the init value when there is none"), so it reads
+/// as the init value under `Invalid(Declared)`, not as a detected invalid
+/// state — the same distinction as the never-published case,
 /// driftsys/ridl#517.
 #[test]
 fn round_trip_signal_reads_as_init_when_invalidated_before_any_publication() {
@@ -225,8 +226,8 @@ fn round_trip_signal_keeps_the_last_good_value_when_declared_invalid_after_publi
 /// a payload, and it fails its check, so the accessor reports the detected
 /// cause and substitutes the init value, over real (malformed) bytes rather
 /// than an empty buffer. Written directly through the raw `SignalWriter` port,
-/// bypassing the generated `Publisher`'s encoder, which would refuse to send
-/// bytes this short.
+/// bypassing the generated `Publisher`'s encoder, which takes a typed
+/// `Temperature` and always encodes it, so it cannot produce malformed bytes.
 #[test]
 fn round_trip_signal_with_malformed_bytes_settles_detected_corrupt() {
     use ridl_rt::contract::Interaction;
@@ -257,6 +258,106 @@ fn round_trip_signal_with_malformed_bytes_settles_detected_corrupt() {
             ridl_rt::sample::Detection::Corrupt
         ))
     );
+}
+
+/// A live publication of zero bytes is a fourth, narrower case than the
+/// malformed-bytes one above: `SignalWriter::set` accepts an empty payload,
+/// and `ridl-loopback`'s `commit` publishes it as `Provenance::Live`, not
+/// `Provenance::Init` or `Invalid(Declared)` — a channel with no publication
+/// at all is a different state, reported as `Provenance::Init` directly
+/// (`round_trip_signal_reads_as_init_before_any_publication` above). The
+/// accessor's `Init`-or-`Invalid(Declared)`-and-`len == 0` guard therefore
+/// does not match here on provenance, so `verify` runs over the empty buffer
+/// and reports it corrupt, the same as any other malformed payload. This
+/// pins the guard's provenance condition: a guard that matched on length
+/// alone, regardless of provenance, would route this zero-length `Live`
+/// sample to the init value under `Provenance::Live` instead, and this test
+/// would fail on the provenance assertion below (driftsys/ridl#519).
+#[test]
+fn round_trip_signal_with_zero_length_live_bytes_settles_detected_corrupt() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::port::SignalWriter;
+
+    let mut port = loopback();
+    let ordinal = <generated::CabinTemperature as Interaction>::MEMBER.ordinal;
+    port.set(
+        <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
+        ordinal,
+        &[],
+    )
+    .expect("set");
+    port.commit();
+
+    let client = generated::cabin::Client::new(&mut port);
+    let sample = client.temperature().expect("read");
+    assert_eq!(
+        sample.value,
+        <generated::CabinTemperature as ridl_rt::contract::Signal>::init()
+    );
+    assert_eq!(
+        sample.provenance,
+        Provenance::Invalid(ridl_rt::sample::Cause::Detected(
+            ridl_rt::sample::Detection::Corrupt
+        ))
+    );
+}
+
+/// A port that reports `Provenance::Init` over a channel that carries a real,
+/// well-formed encoding — a shape `ridl-loopback` itself never produces (its
+/// `Init` sample is always zero-length, `unpublished` in `store.rs`), but one
+/// the accessor's `Init`-and-`len == 0` guard makes no promise about once the
+/// length is nonzero. It wraps a real `Loopback`, whose bytes come from a
+/// genuine FlatBuffers encoding written through the generated `Publisher`,
+/// and reports every read as `Provenance::Init` regardless of what the inner
+/// runtime recorded.
+struct ReportsInitOverRealBytes {
+    inner: Loopback,
+}
+
+impl ridl_rt::port::Attached for ReportsInitOverRealBytes {
+    fn catalog(&self) -> &ridl_rt::contract::CatalogRef {
+        self.inner.catalog()
+    }
+}
+
+impl ridl_rt::port::SignalReader for ReportsInitOverRealBytes {
+    fn read(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<ridl_rt::port::RawSample, ridl_rt::port::ReadError> {
+        let raw = self.inner.read(iface, ord, out)?;
+        Ok(ridl_rt::port::RawSample {
+            provenance: Provenance::Init,
+            ..raw
+        })
+    }
+}
+
+/// At a nonzero length, the `Init` arm's guard does not match, so the
+/// accessor verifies and decodes the port's bytes instead of substituting the
+/// descriptor's init value — the case the guard's `if raw.len == 0` condition
+/// exists to exclude. Runs over the signal-only `horn` interface, so the
+/// wrapper needs to implement only `SignalReader`, the same minimal shape as
+/// `DistinctiveInitPort` above. `Health::default()` (the descriptor's init
+/// value) is `Health::OK`, so publishing `Health::WARN` gives a decoded value
+/// the init value cannot be confused with. A guard that took the `Init` arm
+/// at any length would substitute `Health::OK` here instead of decoding, and
+/// the `sample.value` assertion below would fail (driftsys/ridl#519).
+#[test]
+fn round_trip_signal_reported_as_init_with_real_bytes_decodes_them() {
+    let mut port = ReportsInitOverRealBytes { inner: loopback() };
+    {
+        let mut publisher = generated::horn::Publisher::new(&mut port.inner);
+        publisher.active(generated::Health::WARN).expect("set");
+        publisher.commit();
+    }
+
+    let client = generated::horn::Client::new(&mut port);
+    let sample = client.active().expect("read");
+    assert_eq!(sample.value, generated::Health::WARN);
+    assert_eq!(sample.provenance, Provenance::Init);
 }
 
 #[test]
