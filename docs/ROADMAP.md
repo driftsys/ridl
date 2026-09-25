@@ -157,6 +157,14 @@ identifier reuses a parked row — the highest used before them were E9.12, E11.
 and E14.3. E11.0's issue, driftsys/ridl#316, closed as completed when the story
 landed.
 
+**Filed 2026-09-25, with lane F.** Six Epic 11 stories, E11.16 to E11.21, are
+driftsys/ridl#510 to driftsys/ridl#515, under the E11 milestone. Four items
+beside them are issues and not stories: the ADR-0023 and ADR-0021 amendments
+(driftsys/ridl#509, which closes driftsys/ridl#485), the Binder statement
+(driftsys/ridl#516), and two defects the Kotlin port found (driftsys/ridl#517,
+driftsys/ridl#518). The Kotlin mirror is driftsys/ridlc-gen-kotlin#4 to
+driftsys/ridlc-gen-kotlin#8.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -518,6 +526,64 @@ moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
 declaration has a root table, and a named scalar, an enum and an enum set are
 rooted in a box — and D-11 landed over it in stage K9b. E11.14's `Done when` is
 written over a payload that has a codec.
+
+**Six stories added 2026-09-25: the async face and the runtime substrate.** The
+generated face of E11.13 and E11.14 exposes one poll-based surface — a send
+returns a per-call correlation, and the application polls `*_ack`, `*_reply` and
+`next_event` in a loop of its own, and runs `dispatch` repeatedly on the
+provider side. Every application that waits for a reply writes the same loop.
+The stories below replace that public surface with two clients per interface, an
+async one that works under `no_std` and a blocking one behind a `std` cargo
+feature implemented over the async one, with `serve` in both forms in place of
+the public `dispatch`; the poll methods and the correlation newtypes become
+`pub(crate)`. Underneath, `ridl-rt` gains what every runtime with asynchronous
+replies otherwise writes on its own: a keyed `Wakeable` port extension (no port
+waits, so a runtime must be able to say "what you wait for may have arrived"),
+`Transport::Busy`, a `std` feature with `block_on` and a no-op waker, a
+correlation table with a keyed waker registry, and four helpers every runtime
+computes on its own — freshness, event loss and the call deadline, which the
+language reference defines, and the in-flight byte budget, which is derived from
+the descriptors and which no specification defines. The port contract tests of
+`crates/ridl-loopback/tests/ports.rs` become a crate any runtime runs. The
+ADR-0023 decision that a `Client` call returns `Result<Correlation, SendError>`
+(decision 4 and its 2026-09-20 amendment) is reversed for the public surface by
+an amendment that also closes driftsys/ridl#485; the `ridl-rt` additions are an
+ADR-0021 amendment, and E11.16 to E11.19 ship as one 0.x minor of the crate
+under that record's decision 10. The lane is driven by
+[the lane F driver](wip/2026-09-25-lane-f-driver.md), which carries the
+sequencing, the fifteen decisions its design note takes, and what each stage
+owes the Kotlin runtime, which mirrors every item one wave behind.
+
+| ID     | Story                                                                                                                                                                                                                                                                                                           | Done when                                                                                                                                                                                                                                                                                                                          | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.16 | `ridl-rt`: a keyed `Wakeable` port extension — `wake_on(what: Wake, waker: &core::task::Waker)`, one waiter woken per key — and `Transport::Busy`, the remote "busy, try later" relayed as a call's outcome                                                                                                     | `ridl-loopback` implements `Wakeable` and its tests wake exactly one waiter per key; `Transport::Busy` is added without a breaking change                                                                                                                                                                                          | S    |
+| E11.17 | `ridl-rt`: a `std` cargo feature, off by default, with `block_on(fut, deadline)` over `std::task::Wake` and thread parking, and `noop_waker()`; no dependency, no `unsafe`                                                                                                                                      | tests park and wake across threads and time out at the deadline; the `no_std` build, `just wasm-check` and `just compat-check` are unchanged                                                                                                                                                                                       | S    |
+| E11.18 | `ridl-rt`: `correlate::Table<const N: usize>` — slots with a generation counter, a stored outcome and one waker, the correlation `(generation << 16) \| slot`, a byte budget per member reservation, FIFO slot waiters — and the keyed waker registry behind `Wakeable`; caller-supplied storage, no allocation | unit tests cover slot reuse, a generation mismatch, FIFO slot waiters, the byte budget, and `forget` freeing a slot                                                                                                                                                                                                                | M    |
+| E11.19 | `ridl-rt`: `Freshness::of` from the envelope and the member's `max`, an event `seq` tracker reporting a gap as a loss, the in-flight budget from the descriptors with an unsizable payload reported rather than guessed, and a member's call deadline from its `Timing`                                         | each helper has tests citing the section of the language reference, or the descriptor field, it implements                                                                                                                                                                                                                         | S    |
+| E11.20 | `ridl-rt-conformance`: the port contract tests as functions generic over a runtime factory with a clock hook and a fault hook, so any runtime runs them from its own test suite                                                                                                                                 | `ridl-loopback` runs the suite from the crate and passes, a named mutation in the loopback turns it red, and every test that stayed in the loopback is listed with its reason; once E11.16 and E11.18 land, the suite covers `Wakeable` (exactly one waiter woken per key) and the table's behaviour as observed through the ports | M    |
+| E11.21 | Rust backend: `<iface>::Client` (async) and `<iface>::blocking::Client` (feature `std`), `serve` and `blocking::serve`, the poll face `pub(crate)`; a call is sent when called, a dropped future calls `forget`, the member's `max` bounds the whole call                                                       | the cabin round trip passes through both clients on `ridl-loopback`; a dropped future calls `forget`; a call waits for a free slot within its bound; the poll methods and `dispatch` are `pub(crate)`; `examples/cabin/consumer` and the design records show the new surface                                                       | L    |
+
+**Sequence.** E11.17 and E11.19 need no decision and run first, beside two
+defects the Kotlin port found (the face reports a never-published signal as
+`Invalid(Detected(Corrupt))` instead of `Init`; the FlatBuffers codec emitter
+does not compile for a `[bool]` field) and the Binder statement below. The
+design note and the two amendments come next, then E11.16 and E11.18 in that
+order; E11.20 starts as soon as the stories are filed, over the port contract as
+it stands, and is finished only after E11.16 and E11.18, because its `Done when`
+covers `Wakeable`. E11.21 follows E11.16, E11.17 and E11.18, not E11.20, in two
+pull requests: the async client with the poll face still public, the `ridl-rt`
+release, then the `blocking` module and the private poll face — the one breaking
+step for a consumer of generated code.
+
+**The Binder statement is not a story.** Lane F also records, in
+[the frame specification](specification/frame-specification.md) §11.2, in the
+E11.1 paragraph above and in the Kotlin section of this page, that ridl
+specifies no Binder layout: on Android a runtime binds the ports over its own
+binder contract, which may be one generic, versioned AIDL serving every catalog.
+Until that change lands, the three texts — §11.2, the E11.1 paragraph above, and
+the Kotlin section — still name the Kotlin backend's AIDL over Binder as the
+binding, the lane P driver's decision D-P5; the reversal is a reviewed pull
+request of its own.
 
 ## Epic 14 — typl and ridl finalization
 
