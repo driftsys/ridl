@@ -3471,7 +3471,7 @@ interface I {{
     #[test]
     fn the_expression_height_bound_holds_for_every_shape() {
         type Shape = (&'static str, fn(usize) -> String, fn(usize) -> usize);
-        let shapes: [Shape; 13] = [
+        let shapes: [Shape; 15] = [
             ("left chain", |n| vec!["a"; n].join(" + "), |n| n),
             (
                 "`||` chain of comparisons",
@@ -3487,6 +3487,16 @@ interface I {{
                 "groups around a leaf",
                 |n| format!("{}a{}", "(".repeat(n - 1), ")".repeat(n - 1)),
                 |n| n,
+            ),
+            (
+                "groups around a negated leaf",
+                |n| format!("{}-a{}", "(".repeat(n - 1), ")".repeat(n - 1)),
+                |n| n + 1,
+            ),
+            (
+                "groups around a `!` leaf",
+                |n| format!("{}!a{}", "(".repeat(n - 1), ")".repeat(n - 1)),
+                |n| n + 1,
             ),
             (
                 "right-nested chain",
@@ -3681,11 +3691,12 @@ interface I {{
     }
 
     /// A refused expression ends where the expression would have ended: the
-    /// next attribute in the block — after a comma, a `require` on its own
-    /// line, a key on its own line, or an `ensure` on the same line with no
-    /// comma — and the later declarations are parsed as usual, including a
-    /// syntax error in one of them. Each overlong expression draws its own
-    /// FORM-102.
+    /// next attribute in the block — after a comma, a key on its own line, or
+    /// an `ensure` on the same line with no comma — and the later
+    /// declarations are parsed as usual, including a syntax error in one of
+    /// them. Each overlong expression draws its own FORM-102. The stop at a
+    /// `require`, a reserved word and a key after each kind of operand is
+    /// pinned by the test after this one.
     #[test]
     fn a_refused_expression_does_not_swallow_what_follows_it() {
         use crate::ast::AstNode;
@@ -3749,6 +3760,58 @@ interface I {{
                 .starts_with("key")),
             "the key after the refused chain is its own attribute",
         );
+    }
+
+    /// Each way the skipped run of a refused chain can end before the next
+    /// attribute, with no comma: a `require` directly after the chain, a
+    /// reserved word in key position (which still draws its own FORM-105),
+    /// and a key after a chain that ends in a number, a name or a group.
+    #[test]
+    fn a_refused_chain_stops_at_every_kind_of_next_attribute() {
+        use crate::ast::AstNode;
+        let numbers = flat_chain("+", 200);
+        let names = vec!["a"; 200].join(" + ");
+        let groups = vec!["(a)"; 200].join(" + ");
+        let cases = [
+            ("a `require`", format!("{numbers}\n    require a == 1")),
+            ("a reserved word", format!("{numbers}\n    view = 1")),
+            ("a key after a number", format!("{numbers}\n    key = 1")),
+            ("a key after a name", format!("{names}\n    key = 1")),
+            ("a key after a group", format!("{groups}\n    key = 1")),
+        ];
+        for (case, body) in cases {
+            let input = format!(
+                "package app\ntype N : integer [0..10]\ninterface I {{\n  \
+                 command c(a: N) [ require {body} ] @[..50ms]\n}}\n"
+            );
+            let parsed = parse(&input, Profile::Ridl);
+            assert_eq!(parsed.syntax().text().to_string(), input, "{case}");
+            let codes: Vec<&str> = parsed.errors().iter().map(|error| error.code).collect();
+            let expected: &[&str] = if case == "a reserved word" {
+                &["FORM-102", "FORM-105"]
+            } else {
+                &["FORM-102"]
+            };
+            assert_eq!(codes, expected, "{case}");
+            let attributes: Vec<String> = parsed
+                .syntax()
+                .descendants()
+                .filter_map(crate::ast::Attribute::cast)
+                .map(|attribute| attribute.syntax().text().to_string())
+                .collect();
+            assert_eq!(
+                attributes.len(),
+                2,
+                "{case}: the next attribute is its own node: {attributes:?}",
+            );
+            let next = attributes[1].trim();
+            let starts = match case {
+                "a `require`" => "require a == 1",
+                "a reserved word" => "view = 1",
+                _ => "key = 1",
+            };
+            assert_eq!(next, starts, "{case}");
+        }
     }
 
     #[test]

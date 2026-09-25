@@ -111,7 +111,7 @@ impl std::fmt::Display for EvalError {
 /// built as high as the chain was long (driftsys/ridl#346) — and refuses the
 /// rest with FORM-102. Evaluation starts at depth 0 and adds one per level, so
 /// the deepest node of a tree the parser built is at depth 127 and never
-/// reaches this guard. The guard is kept as a second line of defence for an
+/// reaches this guard. The guard is kept as an independent check for an
 /// `ast::Expr` built some other way than by the parser, and so that
 /// [`eval_expr`] is total on its own terms rather than by the parser's
 /// promise. Lowering the parser's limit without lowering this one would be
@@ -965,7 +965,7 @@ mod tests {
         assert_eq!(eval_expr(&expr, &env(&[])), Ok(Value::Bool(true)));
     }
 
-    /// The guard is a second line of defence: an `ast::Expr` is a cast over
+    /// The guard is an independent check: an `ast::Expr` is a cast over
     /// a syntax node, and `ridl_syntax` exports the node types, so a tree can
     /// be built by hand with a `GreenNodeBuilder` (the `ast` tests do). No
     /// tree the parser builds reaches it — the deepest node of one is at

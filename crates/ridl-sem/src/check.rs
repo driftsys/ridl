@@ -4136,7 +4136,10 @@ impl Checker<'_> {
     /// (already reported) and the `CommandDef` proto admits `require` only;
     /// the misplaced clause lowers nothing and is not type-checked. Flag and
     /// assignment attributes carry no predicate and are skipped (their
-    /// diagnostics come from [`Checker::check_member_attrs`]).
+    /// diagnostics come from [`Checker::check_member_attrs`]). A clause the
+    /// parser truncated at its expression height bound — FORM-102, with an
+    /// `ErrorNode` inside the attribute — is skipped too: it is not checked,
+    /// not lowered, and takes no observer id index.
     ///
     /// Every lowered clause is also an **observer stub** (E2.5): the reads it
     /// resolves ([`expr::collect_refs`]) — signals as canonical
@@ -5455,22 +5458,31 @@ mod tests {
     #[test]
     fn a_contract_the_parser_truncated_draws_no_false_ridl_306() {
         let chain = vec!["a"; 300].join(" + ");
-        let source = format!(
-            "package app\ntype N : integer [0..10]\ninterface I {{\n  command c(a: N) [ require {chain} == 1 ] @[..50ms]\n}}\n"
-        );
-        let parse = ridl_syntax::parse(&source, Profile::Ridl);
-        assert_eq!(
-            parse
-                .errors()
-                .iter()
-                .map(|error| error.code)
-                .collect::<Vec<_>>(),
-            vec!["FORM-102"],
-        );
-        // The checker's own diagnostics exclude the parse errors, which are
-        // reported by the front end; here it must add nothing.
-        let checked = check_ridl("app", &source);
-        assert_eq!(codes(&checked), Vec::<&str>::new());
+        // A `require` whose ErrorNode is a direct child of the attribute, one
+        // whose ErrorNode sits inside a group, and an `ensure` on a query.
+        let clauses = [
+            format!("command c(a: N) [ require {chain} == 1 ] @[..50ms]"),
+            format!("command c(a: N) [ require ({chain} == 1) ] @[..50ms]"),
+            format!("query q(a: N): N [ ensure {chain} == result ] @[..50ms]"),
+        ];
+        for clause in clauses {
+            let source =
+                format!("package app\ntype N : integer [0..10]\ninterface I {{\n  {clause}\n}}\n");
+            let parse = ridl_syntax::parse(&source, Profile::Ridl);
+            assert_eq!(
+                parse
+                    .errors()
+                    .iter()
+                    .map(|error| error.code)
+                    .collect::<Vec<_>>(),
+                vec!["FORM-102"],
+                "{clause}",
+            );
+            // The checker's own diagnostics exclude the parse errors, which
+            // are reported by the front end; here it must add nothing.
+            let checked = check_ridl("app", &source);
+            assert_eq!(codes(&checked), Vec::<&str>::new(), "{clause}");
+        }
     }
 
     /// The checker diagnostic codes, in order.
