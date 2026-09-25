@@ -31,8 +31,10 @@ listed in §4 are not taken yet, and F2 takes them.
   gate, including `just demo`, which builds the compiler and runs
   `examples/cabin` through the generated face over `ridl-loopback`. That demo,
   `crates/ridlc/tests/cabin_example.rs` and
-  `crates/ridl-backend-rust/tests/interaction_face.rs` are the three checks in
-  the gate that exercise what F5 changes.
+  `crates/ridl-backend-rust/tests/interaction_face.rs` exercise what F5 changes,
+  and `crates/ridl-backend-rust/tests/face_generation.rs` and
+  `tests/dispatch_generation.rs` pin the public face by exact text; all of them
+  run in the gate.
 - Review before merge, per the lanes plan §7
   ([`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md)): open the
   pull request, run `/review <PR>` (the docs-only lane when no executable line
@@ -105,9 +107,12 @@ names before that stage:
 - [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) — its
   alternatives table rejects `async fn` at the platform layer and blocking calls
   at the platform layer, and its open question 5 asks whether `async fn` on a
-  `command` is a conformance defect. The async client is generated code over
-  synchronous ports, not the platform layer, and F-15 must say so against those
-  three entries.
+  `command` is a conformance defect. Read its record-wide correction first: in
+  that record `ridl-rt` names the engine, its layers 1 and 2 are `ridl-engine`'s
+  (the platform traits and the sans-IO core, outside this repository), and
+  nothing in decisions 1 and 2 binds the ports library of ADR-0020 decision 5.
+  F-15 must place the async client against those entries without mapping the
+  ports onto a layer of that record.
 - ADR-0021 open question 6, the wake hook (driftsys/ridl#350 item 17): whether a
   port gains a way to register interest in the arrival of a reply, an occurrence
   or a claim. E11.16 answers it, and the ADR-0021 amendment closes the question.
@@ -173,7 +178,7 @@ under "Filed 2026-09-25" and in a comment on driftsys/ridl#328.
 | F0    | This document, the roadmap rows, the issues                                                                      | —      | —      | done in the pull request that added this file     |
 | F1a   | The face returns the init value under `Init` before the first publication                                        | Sonnet | —      | now; independent of every other F1 item           |
 | F1b   | The FlatBuffers codec emitter compiles for a `[bool]` field                                                      | Sonnet | —      | now; independent                                  |
-| F1c   | The Binder statement: §11.2, the two roadmap paragraphs, the D-P5 note                                           | Opus   | high   | now; independent                                  |
+| F1c   | The Binder statement: §11.2, the two roadmap paragraphs, the Appendix B cell, the D-P5 note                      | Opus   | high   | now; independent                                  |
 | F1d   | E11.17, the `std` feature, with its ADR-0021 decision 8 note                                                     | Opus   | high   | now; independent                                  |
 | F1e   | E11.19, the helpers                                                                                              | Opus   | high   | now; independent                                  |
 | F2    | The design note, the disposition, then the two ADR amendments and the plan for F3 to F5                          | Fable  | —      | F0 merged; F1 need not be finished                |
@@ -218,16 +223,16 @@ reviewed pull request and not a side effect of a planning one.
   snapshot. The other two codec findings of driftsys/ridlc-gen-kotlin#3 are
   already tracked, `step` in driftsys/ridl#469 and NaN in a range check in
   driftsys/ridl#421; do not fold them in.
-- **F1c — the Binder statement.** Three texts and one note. Replace
-  `frame-specification.md` §11.2 with the statement that on Android a runtime
-  binds the ports over its own binder contract, which may be one generic,
-  versioned AIDL serving every catalog, and that ridl specifies no Binder layout
-  and no transaction code; keep the ridl reference's Appendix B AIDL column,
-  because an ordinal stays stable whether it travels as a code or as a field,
-  but reword its "transaction code = ordinal" cell, which fixes what this change
-  removes. `frame-specification.md` §4 names an AIDL transaction code as its
-  example of a native field narrower than 32 bits; the example stays true of
-  AIDL, so leave it or replace it, but read it. Reword the two roadmap
+- **F1c — the Binder statement.** Three texts, one Appendix B cell and one note.
+  Replace `frame-specification.md` §11.2 with the statement that on Android a
+  runtime binds the ports over its own binder contract, which may be one
+  generic, versioned AIDL serving every catalog, and that ridl specifies no
+  Binder layout and no transaction code; keep the ridl reference's Appendix B
+  AIDL column, because an ordinal stays stable whether it travels as a code or
+  as a field, but reword its "transaction code = ordinal" cell, which fixes what
+  this change removes. `frame-specification.md` §4 names an AIDL transaction
+  code as its example of a native field narrower than 32 bits; the example stays
+  true of AIDL, so leave it or replace it, but read it. Reword the two roadmap
   paragraphs that say the opposite: the E11.1 paragraph in Epic 11 ("the Kotlin
   backend's AIDL over Binder") and "The Kotlin backend owns its IPC binding"
   under "After step 2". Leave the platform ladder row and Appendix B's target
@@ -362,11 +367,12 @@ waiter woken per key) and the table's observable behaviour through the ports.
   `docs/design/interaction-face.md`, `docs/design/ridl-loopback.md`,
   `docs/book/introduction.md` and `docs/book/cli-reference.md` where they show
   the poll face, the module documentation of
-  `crates/ridl-backend-rust/src/face.rs` (which states RA-20), and
-  `examples/cabin/consumer`. This is the one breaking step of the lane for a
-  consumer of generated code. F5b also runs `sdd-gardening`: the note and the
-  plan archive to `docs/archive/`, this driver with them, and the decisions live
-  in the two ADRs and the design records.
+  `crates/ridl-backend-rust/src/face.rs` (which states RA-20), the exact-text
+  assertions of `crates/ridl-backend-rust/tests/face_generation.rs` and
+  `tests/dispatch_generation.rs`, and `examples/cabin/consumer`. This is the one
+  breaking step of the lane for a consumer of generated code. F5b also runs
+  `sdd-gardening`: the note and the plan archive to `docs/archive/`, this driver
+  with them, and the decisions live in the two ADRs and the design records.
 
 ## 4. The fifteen decisions F2 must take
 
@@ -465,10 +471,14 @@ the rule below the public API — no port waits, and the ports stay synchronous 
 while the generated face returns a future that polls those ports. Proposal: the
 amendment restates RA-20 as "generated code contains no thread, socket or timer,
 and no port waits; a face may return a future, and that future never blocks",
-records that the platform layer (the ports) is unchanged so ADR-0018's two
-rejections stand, and answers open question 5 for the face: a `command`'s future
-resolves on the acknowledgment, which is the runtime's, not the application's.
-Say where each of the three texts is amended and in which stage.
+records that ADR-0018's two rejections are about `ridl-engine`'s layers 1 and 2
+(that record's own correction says so) and bind neither the ports library nor
+generated code, so they stand untouched, and answers open question 5 for the
+face: a `command`'s future resolves on the acknowledgment, which is the
+runtime's, not the application's. Say where each of the four places — the
+`ridl-rt` design note's RA-20, the `face.rs` module documentation, the
+`interaction-face.md` record and ADR-0018's open question 5 — is amended, and in
+which stage.
 
 ## 5. What lane F does not decide
 

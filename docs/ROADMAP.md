@@ -562,18 +562,20 @@ does not compile for a `[bool]` field) and the Binder statement below. The
 design note and the two amendments come next, then E11.16 and E11.18 in that
 order; E11.20 starts as soon as the stories are filed, over the port contract as
 it stands, and is finished only after E11.16 and E11.18, because its `Done when`
-covers `Wakeable`; then E11.21 in two pull requests: the async client with the
-poll face still public, the `ridl-rt` release, then the `blocking` module and
-the private poll face — the one breaking step for a consumer of generated code.
+covers `Wakeable`. E11.21 follows E11.16, E11.17 and E11.18, not E11.20, in two
+pull requests: the async client with the poll face still public, the `ridl-rt`
+release, then the `blocking` module and the private poll face — the one breaking
+step for a consumer of generated code.
 
 **The Binder statement is not a story.** Lane F also records, in
-[the frame specification](specification/frame-specification.md) §11.2 and in the
-Kotlin section of this page, that ridl specifies no Binder layout: on Android a
-runtime binds the ports over its own binder contract, which may be one generic,
-versioned AIDL serving every catalog. Until that change lands, the three texts —
-§11.2, the E11.1 paragraph above, and the Kotlin section — still say the Kotlin
-backend generates an AIDL binding per interface, the lane P driver's decision
-D-P5; the reversal is a reviewed pull request of its own.
+[the frame specification](specification/frame-specification.md) §11.2, in the
+E11.1 paragraph above and in the Kotlin section of this page, that ridl
+specifies no Binder layout: on Android a runtime binds the ports over its own
+binder contract, which may be one generic, versioned AIDL serving every catalog.
+Until that change lands, the three texts — §11.2, the E11.1 paragraph above, and
+the Kotlin section — still name the Kotlin backend's AIDL over Binder as the
+binding, the lane P driver's decision D-P5; the reversal is a reviewed pull
+request of its own.
 
 ## Epic 14 — typl and ridl finalization
 
