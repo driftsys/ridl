@@ -1,18 +1,21 @@
 # The async face and the runtime substrate — design note
 
-**Status: proposed, 2026-09-25, awaiting disposition.** This note takes the
-fifteen decisions that [the lane F driver](2026-09-25-lane-f-driver.md) §4
-lists, F-1 to F-15. The gate is Sebastien's disposition comment on this note's
-pull request, the way D-1 to D-12 of the FlatBuffers codec note were disposed.
-Each decision states what is decided, the reason, and the alternative it rejects
-with the reason that alternative was rejected, so that a comment can take, amend
-or reject one by its number. After the disposition, a second pull request
-carries the two ADR amendments and the plan for stages F3 to F5; §5 lists every
-record the disposition moves, and §6 the stage each one moves in. Where this
-note differs from the semantics list of driftsys/ridl#509 — its item 3 (F-11
-bounds the blocking client per client, not per call), its item 5 (F-1 adds a
-third variant) — the note, once disposed, is what that issue's "Done when" means
-by "the semantics above".
+**Status: disposed of, 2026-09-26.** Sebastien disposed of the fifteen decisions
+on this note's pull request (driftsys/ridl#530), decision by decision, and took
+**F-1 to F-15 as written**, together with the one stage change the review
+forced: the poll face becomes `pub(crate)` in F5a, not F5b (§6). The
+alternatives he declined are listed in the disposition comment. This note takes
+the fifteen decisions that [the lane F driver](2026-09-25-lane-f-driver.md) §4
+lists, F-1 to F-15, the way D-1 to D-12 of the FlatBuffers codec note were
+disposed. Each decision states what is decided, the reason, and the alternative
+it rejects with the reason that alternative was rejected, so that a comment can
+take, amend or reject one by its number. After the disposition, a second pull
+request carries the two ADR amendments and the plan for stages F3 to F5; §5
+lists every record the disposition moves, and §6 the stage each one moves in.
+Where this note differs from the semantics list of driftsys/ridl#509 — its item
+3 (F-11 bounds the blocking client per client, not per call), its item 5 (F-1
+adds a third variant) — the note, once disposed, is what that issue's "Done
+when" means by "the semantics above".
 
 **Stories:** E11.16 (`Wakeable` and `Transport::Busy`, driftsys/ridl#510),
 E11.18 (the correlation table, #512), the second half of E11.20 (the conformance
