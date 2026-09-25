@@ -1,11 +1,16 @@
-# Bug lanes F and Q — driver
+# Bug lanes D and Q — driver
 
 Transient working memory for the two bug lanes coordinated on driftsys/ridl#507.
 Start a fresh session in the lane's worktree and paste the lane's block below as
 the first message, once per stage. Each stage is one session, one branch and one
-pull request, and the session ends when that pull request has merged. Lane F and
+pull request, and the session ends when that pull request has merged. Lane D and
 lane Q may run at the same time as two sessions. Archive this file when both
 lanes have closed.
+
+On 2026-09-25, this lane was named F when it merged in #508 and was renamed to
+lane D because the async-face lane driver
+(`docs/wip/2026-09-25-lane-f-driver.md`) merged the same day under the name F
+(driftsys/ridl#505).
 
 Where this document and an ADR disagree, the ADR wins. This document summarizes;
 it does not decide.
@@ -18,7 +23,7 @@ survived: each was reproduced end to end or confirmed by reading the code path.
 No defect was rated critical after that check. #346 was downgraded to major
 because it needs an unusual, generated input and the process it aborts is local.
 
-Lane F takes the major defects. Lane Q takes the defects that are small,
+Lane D takes the major defects. Lane Q takes the defects that are small,
 localized and safe to fix in under an hour each.
 
 Left out of both lanes, on purpose:
@@ -33,31 +38,31 @@ Left out of both lanes, on purpose:
 ## Model routing
 
 - Driver: Opus.
-- F1 (#339) and F4 (#346): Fable. The first changes a publishing gate, the
+- D1 (#339) and D4 (#346): Fable. The first changes a publishing gate, the
   second the parser's recursion.
-- F2, F3: Opus. F5: Sonnet.
+- D2, D3: Opus. D5: Sonnet.
 - Every Q stage: Sonnet. Move an implementer up one tier after one failed fix
   loop.
 
 ## Shared files
 
-- F1, F4, Q1 and Q2 edit `crates/ridl/src/main.rs`.
-- F1, Q1 and Q2 edit `docs/book/cli-reference.md`: F1 the publication-gate
+- D1, D4, Q1 and Q2 edit `crates/ridl/src/main.rs`.
+- D1, Q1 and Q2 edit `docs/book/cli-reference.md`: D1 the publication-gate
   section, Q1 the `--baseline` help text at :107 ("whose ordinal moved") and the
   sentence at :246-247 ("whose declaration order moved"), Q2 the sentence at
   :239 ("for publishing a first baseline there"). #340 cites :195-196 for that
   sentence, which is where it sat when the issue was written.
-- F2 and F3 edit `crates/ridl-lsp/src/server.rs`; run F2 before F3.
+- D2 and D3 edit `crates/ridl-lsp/src/server.rs`; run D2 before D3.
 
 Rebase on `origin/main` before starting any of these stages, and again before
 merging.
 
-## Lane F — the major defects
+## Lane D — the major defects
 
 Each line gives where the refutation found the defect at 36241a3. If a line
 number no longer matches, find the item by its function name.
 
-- **F1 — #339.** `published_interaction` (`crates/ridl/src/main.rs:868-890`)
+- **D1 — #339.** `published_interaction` (`crates/ridl/src/main.rs:868-890`)
   resolves the package and container with a first-match `find`, and the
   `ReservedNameRedeclared` refusal is an `is_some_and(...)`, so a lookup that
   does not resolve lets the baseline publish. Reproduced: with a duplicate
@@ -73,20 +78,20 @@ number no longer matches, find the item by its function name.
   `ridl_diff::diff_sets`, which keeps the last snapshot and so keeps the gate
   open in the first case. Carrying the old ordinal and a tombstone flag on
   `ridl_diff::Change` is the issue's later step, not this stage's.
-- **F2 — #384.** `crates/ridl-lsp/src/server.rs:231` discards the
+- **D2 — #384.** `crates/ridl-lsp/src/server.rs:231` discards the
   `load_workspace` error with `.ok()`, and `ridl-lsp` sends no `showMessage` or
   `logMessage` anywhere. The minimum fix sends `window/showMessage` with the
   error before entering the main loop. Whether to resolve the root per `didOpen`
   instead of once at `initialize` is the stage's decision; record it on the
   issue.
-- **F3 — #345 and #386, one pull request.** `ridlc::check_source`
+- **D3 — #345 and #386, one pull request.** `ridlc::check_source`
   (`crates/ridlc/src/lib.rs:146`) calls `front_end` only, and the language
   server's `analyze` (`crates/ridl-lsp/src/server.rs:507`) never calls
   `service_catalog`, while `load_and_check` (`crates/ridlc/src/lib.rs:1094`,
   catalog at `:1157`) does. Reproduced: the `ridl_check` MCP tool returns no
   diagnostics for a file that `ridl check` reports RIDL-140 on. Prefer one path
   that both faces call over a second copy of the pass.
-- **F4 — #346.** The `while` loops of `or_expr`, `and_expr`, `add_expr` and
+- **D4 — #346.** The `while` loops of `or_expr`, `and_expr`, `add_expr` and
   `mul_expr` (`crates/ridl-syntax/src/parser.rs:1758-1840`) do not increment
   `depth`, `infer` and `walk_refs` in the checker have no guard, and `run_mcp`
   (`crates/ridl/src/main.rs:326-330`) sets no `thread_stack_size`. Reproduced in
@@ -95,7 +100,7 @@ number no longer matches, find the item by its function name.
   terms, and `ridl check` at 20000. The fix reports a diagnostic for a chain
   over the limit instead of aborting, in `ridl check`, `ridl mcp` and
   `ridl lsp`.
-- **F5 — #344.** `editors/vscode/src/extension.ts:89` sets `clientStarted`
+- **D5 — #344.** `editors/vscode/src/extension.ts:89` sets `clientStarted`
   before `await client.start()`, and `restartClient` (`:125-131`) calls
   `client.stop()` without checking the client state. In vscode-languageclient
   10.1.0 (`lib/common/client.js`, `shutdown`), that call throws for the
@@ -141,19 +146,19 @@ number no longer matches, find the item by its function name.
   ADR-0016 amendment) on the issue. Only A fits this lane; if B is chosen, the
   stage leaves this lane and gets its own design note.
 
-## The prompt — lane F
+## The prompt — lane D
 
 ```text
-You drive lane F of docs/wip/2026-09-25-bug-lanes-driver.md: the major
+You drive lane D of docs/wip/2026-09-25-bug-lanes-driver.md: the major
 defects #339, #384, #345 with #386, #346 and #344. Read AGENTS.md, then that
 document in full. Its routing and shared-file rules bind this session.
 
-Find the current stage. Read the comments on #507. The stages are F1 to F5,
+Find the current stage. Read the comments on #507. The stages are D1 to D5,
 in that order. Do only one stage in this session, then end it.
 
-Worktree: .claude/worktrees/lane-f-bugs. If it does not exist:
+Worktree: .claude/worktrees/lane-d-bugs. If it does not exist:
   git fetch origin
-  git worktree add .claude/worktrees/lane-f-bugs -b fix/<stage-branch> origin/main
+  git worktree add .claude/worktrees/lane-d-bugs -b fix/<stage-branch> origin/main
 and run ./bootstrap in it. At a later stage, create that stage's branch from
 origin/main inside the same worktree. Never enter another session's worktree.
 Run `git branch --show-current` before every commit and every push.
@@ -201,6 +206,6 @@ For the stage:
 3. Fix, with a Sonnet implementer.
 4. `fix(<scope>): ...`, one pull request whose body says "Closes #<N>".
    Run /review <PR>, fix, pass 2, `just verify`, merge.
-5. Post the stage, the pull request and anything lane F must know as a
+5. Post the stage, the pull request and anything lane D must know as a
    comment on #507. Never edit #507's body.
 ```
