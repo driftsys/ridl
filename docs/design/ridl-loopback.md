@@ -358,13 +358,17 @@ face, not here. On the provider side a round trip over this crate pins it:
 argument bytes that fail the structure check settle
 `CallError::Transport(Transport::Corrupt)`
 (`round_trip_malformed_argument_bytes_settle_transport_corrupt`). On the
-consumer side the face reports
-`Provenance::Invalid(Cause::Detected(Detection::Corrupt))`, which is pinned over
-a hand-written port and as an assertion on the emitted text
-(`ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` and
-`crates/ridl-backend-rust/tests/face_generation.rs`), not by a round trip over
-this crate. Nothing here would change if E14.2 chose differently, because this
-crate never looks.
+consumer side, a signal payload that fails its check reports
+`Provenance::Invalid(Cause::Detected(Detection::Corrupt))`, which is pinned only
+as an assertion on the emitted text
+(`crates/ridl-backend-rust/tests/face_generation.rs`), not by a round trip over
+this crate or a hand-written port. A never-published signal is a separate case:
+the port reports `Provenance::Init` with zero bytes, and the face checks that
+before running `Payload::verify`, returning the init value under
+`Provenance::Init` directly (driftsys/ridl#517).
+`ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` pins that
+case over a hand-written port. Nothing here would change if E14.2 chose
+differently, because this crate never looks.
 
 The alternative rejected is a runtime that verifies. It cannot: a port carries
 interface numbers, ordinals and bytes and names no payload type, so the runtime
@@ -472,19 +476,6 @@ that.
 
 ## Observations for other stories
 
-- **The generated face reports an unpublished signal as corrupt, not as
-  `Init`.** `SignalReader::read` answers a channel with no publication with
-  `Provenance::Init` and copies nothing, because the port cannot produce the
-  init value — the init value has a payload type and a port names none. The
-  generated client then runs `Payload::verify` over the zero bytes, which fails,
-  and reports `Provenance::Invalid(Cause::Detected(Detection::Corrupt))`. The
-  face reaches that state by ignoring the `Init` the port reported.
-  `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` pins the
-  current behaviour over a hand-written port; no test pins it over this crate,
-  although this crate produces the same `Init` with no bytes (`Store::read` on a
-  channel with no publication). This is a face question (E11.13's), recorded
-  here because the runtime now makes it reachable from a round trip rather than
-  only from a stub written for the purpose.
 - **The settlement ordering is now observable.** The interaction-face record
   lists the command-settled-before, query-settled-after ordering as pinned only
   by an exact-text assertion, because neither settle nor a provider call in the

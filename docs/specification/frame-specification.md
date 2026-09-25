@@ -281,11 +281,7 @@ plus the last good value. On receiving a `publish` for a subscribed signal it:
    and the provenance becomes `Invalid(Detected(_))` (§9.1);
 4. under `Init`, sets the value to the **init value**, which the generated
    binding supplies from the catalog — the init value is a fact both sides hold,
-   so it never crosses. The Rust face as built does not do this yet: it runs
-   `Payload::verify` over the zero bytes the port hands it and reports
-   `Invalid(Detected(Corrupt))`, a face gap
-   [the `ridl-loopback` record](../design/ridl-loopback.md) names under
-   "Observations for other stories";
+   so it never crosses;
 5. under `Invalid(Declared)`, keeps the last good value — or the init value,
    when there is none — and sets the provenance to `Invalid(Declared)`.
 
