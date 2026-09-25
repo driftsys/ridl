@@ -269,7 +269,9 @@ the one runtime `ridl mcp` blocks on, and `wasm-check` does not build the `ridl`
 crate at all, so `tokio` never reaches the wasm32 target either.
 
 `ridlc::compile_workspace` is a cold, from-disk compile, so the server does not
-drive it per keystroke. Instead it loads the workspace once at `initialize`,
+drive it per keystroke. Instead it loads the workspace once — at `initialize`
+from the client's root folder, or, when the client sent no root or that load
+failed, at the first `didOpen` of a file with a `ridl.toml` at or above it —
 holds the `Workspace` handle plus a map of file path → `InputFile`, and on
 `didOpen`/`didChange` calls `set_text` on the existing salsa input — the editor
 buffer overlays the disk state. A file opened from outside the loaded workspace

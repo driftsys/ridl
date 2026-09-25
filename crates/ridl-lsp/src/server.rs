@@ -10,10 +10,15 @@
 //! salsa's own cancellation applies once queries run off-thread.
 //!
 //! The state model is the incremental overlay design described in the crate
-//! docs: one workspace load at initialize, then `set_text` on the existing
-//! salsa [`InputFile`]s per edit, with every recompute going through the
-//! memoized `parse_file` / `resolve_package` / `check_package` /
-//! `check_system` queries.
+//! docs: one workspace load, then `set_text` on the existing salsa
+//! [`InputFile`]s per edit, with every recompute going through the memoized
+//! `parse_file` / `resolve_package` / `check_package` / `check_system`
+//! queries. The load runs at initialize from the client's root. When that
+//! load fails, the server shows the error with `window/showMessage`; when it
+//! fails or the client sent no root, the server loads instead from the first
+//! opened file that has a `ridl.toml` at or above it (issue #384). The
+//! nearest `ridl.toml` wins, so a file inside a member of a `[workspace]`
+//! loads that member's package only.
 //!
 //! Two scope limits of this task, both by design:
 //!
@@ -26,6 +31,7 @@
 //!   `ridl check` still renders it.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -38,7 +44,9 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
 use ridl_core::package::{Package, PackageOrigin, Workspace};
-use ridl_core::{LoadedWorkspace, load_workspace, profile_of_path, std_package};
+use ridl_core::{
+    LoadedWorkspace, find_manifest_root, load_workspace, profile_of_path, std_package,
+};
 use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
 use ridl_syntax::Profile;
 use ridl_syntax::ast::{AstNode as _, SourceFile};
@@ -51,8 +59,9 @@ use crate::{complete, hover, inlay, nav, rename, rsdl};
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
 /// Runs the server over `connection` until the client shuts it down: the
-/// initialize handshake (including the `initialized` notification), one
-/// workspace load, the initial diagnostics publish, then the message loop.
+/// initialize handshake (including the `initialized` notification), the
+/// workspace load from the client's root, the initial diagnostics publish,
+/// then the message loop.
 pub fn run(connection: Connection) -> Result<(), Error> {
     run_with_version(connection, None)
 }
@@ -81,7 +90,21 @@ pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result
         "serverInfo": server_info,
     });
     connection.initialize_finish(id, result)?;
-    let mut state = ServerState::new(workspace_root(&params));
+    let mut state = ServerState::new();
+    if let Some(root) = workspace_root(&params)
+        && let Err(err) = state.load(&root)
+    {
+        show_message(
+            &connection,
+            lt::MessageType::WARNING,
+            format!(
+                "ridl-lsp loaded no workspace from `{}`: {err}. It loads the workspace of \
+                 the first opened file that has a `ridl.toml` at or above it; until then, \
+                 each open file is checked on its own.",
+                root.display()
+            ),
+        )?;
+    }
     state.publish_all(&connection)?;
     main_loop(connection, state)
 }
@@ -190,9 +213,18 @@ struct ServerState {
     db: RidlDatabase,
     /// The embedded `ridl.std` package, threaded into every resolve/check.
     std: Package,
-    /// The one `Workspace` input, loaded at initialize; empty when the
-    /// client opened no folder or the folder has no `ridl.toml`.
+    /// The one `Workspace` input: loaded at initialize from the client's
+    /// root, or, when the client sent no root or that load failed, at the
+    /// first `didOpen` of a file that has a `ridl.toml` at or above it. Empty
+    /// until then.
     workspace: Workspace,
+    /// Whether [`ServerState::load`] has succeeded. Once it has, the
+    /// workspace is not loaded again; a file outside it is an overlay.
+    loaded: bool,
+    /// The manifest directory and reason of the last load error a `didOpen`
+    /// showed, so the same error is not shown again on every later
+    /// `didOpen`.
+    shown_load_error: Option<String>,
     /// Every loaded workspace file, keyed by its load-time path string —
     /// the inputs `didOpen`/`didChange` overlay via `set_text`.
     files: HashMap<String, InputFile>,
@@ -221,52 +253,103 @@ struct ServerState {
 }
 
 impl ServerState {
-    /// Loads the workspace at `root` once — the only cold, from-disk load in
-    /// the server's lifetime. Every later recompute reuses these inputs.
-    fn new(root: Option<PathBuf>) -> ServerState {
+    /// A state with no workspace loaded yet: the embedded `ridl.std` package
+    /// and an empty `Workspace` input, which [`ServerState::load`] replaces.
+    fn new() -> ServerState {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
-        let loaded = root
-            .as_deref()
-            .and_then(|root| load_workspace(&mut db, root).ok());
-        let (workspace, load_diagnostics, sources) = match loaded {
-            Some(LoadedWorkspace {
-                workspace,
-                diagnostics,
-                sources,
-            }) => (workspace, diagnostics, sources),
-            None => (
-                Workspace::new(&db, Vec::new(), BTreeMap::new()),
-                Vec::new(),
-                SourceMap::new(),
-            ),
-        };
-
-        let mut files = HashMap::new();
-        let mut file_package = HashMap::new();
-        for package in workspace.packages(&db) {
-            for file in package.files(&db) {
-                files.insert(file.path(&db).clone(), *file);
-                file_package.insert(file.path(&db).clone(), *package);
-            }
-        }
-        let loader_diagnostics =
-            convert_loader_diagnostics(&db, &files, load_diagnostics, &sources);
-
+        let workspace = Workspace::new(&db, Vec::new(), BTreeMap::new());
         ServerState {
             db,
             std,
             workspace,
-            files,
-            file_package,
+            loaded: false,
+            shown_load_error: None,
+            files: HashMap::new(),
+            file_package: HashMap::new(),
             overlays: HashMap::new(),
             line_indexes: HashMap::new(),
-            loader_diagnostics,
+            loader_diagnostics: BTreeMap::new(),
             edited: HashSet::new(),
             published: HashSet::new(),
             fixes: HashMap::new(),
             cancelled: HashSet::new(),
         }
+    }
+
+    /// Loads the workspace whose `ridl.toml` is at or above `dir` — the only
+    /// cold, from-disk load in the server's lifetime; every later recompute
+    /// reuses these inputs. On an error no field of the state changes; the
+    /// salsa inputs the failed load created stay in the database, unused.
+    ///
+    /// An open overlay whose path the loaded workspace contains (a file
+    /// opened before its `ridl.toml` existed) moves its buffer onto the
+    /// loaded input and stops being an overlay, so the file is analyzed once,
+    /// as a member of its package.
+    fn load(&mut self, dir: &Path) -> io::Result<()> {
+        let LoadedWorkspace {
+            workspace,
+            diagnostics,
+            sources,
+        } = load_workspace(&mut self.db, dir)?;
+        for package in workspace.packages(&self.db) {
+            for file in package.files(&self.db) {
+                self.files.insert(file.path(&self.db).clone(), *file);
+                self.file_package
+                    .insert(file.path(&self.db).clone(), *package);
+            }
+        }
+        self.loader_diagnostics =
+            convert_loader_diagnostics(&self.db, &self.files, diagnostics, &sources);
+        self.workspace = workspace;
+        self.loaded = true;
+
+        let joined: Vec<String> = self
+            .overlays
+            .keys()
+            .filter(|path| self.files.contains_key(*path))
+            .cloned()
+            .collect();
+        for path in joined {
+            let Some((overlay, _)) = self.overlays.remove(&path) else {
+                continue;
+            };
+            let text = overlay.text(&self.db).clone();
+            let input = self.files[&path];
+            // The cached line table was built for the overlay input.
+            self.line_indexes.remove(&path);
+            self.set_text(path, input, text);
+        }
+        Ok(())
+    }
+
+    /// Before a `didOpen` with no workspace loaded yet: loads the workspace
+    /// of the nearest `ridl.toml` at or above the opened file (issue #384).
+    /// No manifest there is not an error — the file becomes a standalone
+    /// overlay, and the next `didOpen` tries again. A load from a manifest
+    /// that fails is shown to the user. A manifest that stays unreadable
+    /// fails again on each `didOpen`; its error is shown only when it differs
+    /// from the last one shown, by manifest directory or by reason.
+    fn load_for_opened_file(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
+        if self.loaded {
+            return Ok(());
+        }
+        let Some(dir) = Path::new(path).parent() else {
+            return Ok(());
+        };
+        let Some(root) = find_manifest_root(dir) else {
+            return Ok(());
+        };
+        let Err(err) = self.load(&root) else {
+            return Ok(());
+        };
+        let shown = format!("{}: {err}", root.display());
+        if self.shown_load_error.as_ref() == Some(&shown) {
+            return Ok(());
+        }
+        let message = format!("ridl-lsp could not load the workspace of `{path}`: {err}");
+        self.shown_load_error = Some(shown);
+        show_message(connection, lt::MessageType::ERROR, message)
     }
 
     /// Handles one request; shutdown and cancellation were already handled
@@ -382,6 +465,7 @@ impl ServerState {
                 let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
                     return Ok(());
                 };
+                self.load_for_opened_file(&path, connection)?;
                 self.open(path, params.text_document.text);
                 self.publish_all(connection)
             }
@@ -874,6 +958,21 @@ impl ServerState {
             range: index.range(range),
         })
     }
+}
+
+/// Sends a `window/showMessage` notification: the client shows `message` to
+/// the user.
+fn show_message(
+    connection: &Connection,
+    typ: lt::MessageType,
+    message: String,
+) -> Result<(), Error> {
+    let notification = Notification::new(
+        lt::notification::ShowMessage::METHOD.to_string(),
+        lt::ShowMessageParams { typ, message },
+    );
+    connection.sender.send(notification.into())?;
+    Ok(())
 }
 
 /// Sends one `textDocument/publishDiagnostics` notification for `path`.

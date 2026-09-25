@@ -43,4 +43,4 @@ pub use package::{
 };
 pub use std_lib::std_package;
 #[cfg(feature = "fs")]
-pub use workspace::{LoadedWorkspace, load_workspace};
+pub use workspace::{LoadedWorkspace, find_manifest_root, load_workspace};

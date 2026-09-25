@@ -99,8 +99,10 @@ pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedW
     })
 }
 
-/// The nearest directory at or above `dir` that contains a `ridl.toml`.
-fn find_manifest_root(dir: &Path) -> Option<PathBuf> {
+/// The nearest directory at or above `dir` that contains a `ridl.toml` — the
+/// root [`load_workspace`] loads from. The language server calls it to tell a
+/// directory with no manifest above it from a load that failed.
+pub fn find_manifest_root(dir: &Path) -> Option<PathBuf> {
     dir.ancestors()
         .find(|candidate| candidate.join("ridl.toml").is_file())
         .map(Path::to_path_buf)
