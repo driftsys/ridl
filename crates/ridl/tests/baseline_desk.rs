@@ -963,6 +963,13 @@ fn check_refuses_an_empty_baseline_directory() {
             && stderr.contains(&format!("`ridl baseline --out {}`", empty.display())),
         "the remedy names both ways out, the aimed-too-high one first:\n{stderr}",
     );
+    // The publish suggestion names the directory it writes to. "there" would
+    // read as `.ridl/baseline/`, the nearest directory the sentence names
+    // before it (driftsys/ridl#340).
+    assert!(
+        stderr.contains(&format!("into `{}`", empty.display())) && !stderr.contains(" there "),
+        "the publish suggestion names the directory it writes to:\n{stderr}",
+    );
 }
 
 /// `--baseline` refuses a prototext or binary IR artifact by name: a
@@ -1516,6 +1523,14 @@ fn an_explicit_baseline_holding_no_snapshot_is_an_input_error() {
     assert!(
         stderr.contains("point `--baseline` at the directory that holds the snapshots"),
         "the remedy says to aim the flag at the snapshots:\n{stderr}",
+    );
+    // `root` is a source tree, so the refusal offers no publish into it:
+    // following that advice would write `veh.cluster.ir.json` next to the
+    // sources, and a later `ridl baseline --out <root>` would delete every
+    // other `.ir.json` file there (driftsys/ridl#340).
+    assert!(
+        !stderr.contains("ridl baseline --out"),
+        "the refusal does not suggest publishing into the source tree:\n{stderr}",
     );
 }
 
