@@ -17,9 +17,10 @@
 //! single-file front end — every check, no Rust generation — returned as a
 //! [`CliRun`] rather than a [`CompileOutput`]. It is the single-file oracle
 //! behind `ridl mcp`'s `ridl_check` tool. `ridl check --format json` does not
-//! call it: it goes through [`run_check`], which loads a workspace from disk.
-//! Once the workspace is loaded, the two faces run the same passes, and they
-//! render the result with the same `ridl_core::diag::to_json`.
+//! call it: it goes through [`run_check`], which loads a workspace from disk,
+//! with its `interfaces.lock` and `ridl.lock` files. Once the workspace is
+//! loaded, the two faces run the same passes, and they render the result with
+//! the same `ridl_core::diag::to_json`.
 //!
 //! [`compile_workspace`] is the same pipeline over the loaded package model —
 //! a `.typl` file, a package directory, or a workspace root ([`load_workspace`])
@@ -85,9 +86,12 @@ struct FrontEnd {
 /// single-file synthetic package named from its `package` declaration, falling
 /// back to the path's file stem — the loader's single-file rule (E1.3). The
 /// profile follows `path`'s extension. The package is the one member of a
-/// synthetic workspace, and [`check_loaded`] runs over it every pass
-/// `ridl check` runs: parser → resolver → checker, then the workspace-wide
-/// passes, with the spans remapped onto this function's own [`SourceMap`].
+/// synthetic workspace, and [`check_loaded`] runs over it the passes
+/// `ridl check` runs after its load: parser → resolver → checker, then the
+/// workspace-wide passes, with the spans remapped onto this function's own
+/// [`SourceMap`]. What `ridl check` reads from disk is not here: the package
+/// has no `interfaces.lock`, so RIDL-409 and RIDL-410 do not arise, and no
+/// import is materialized against `ridl.lock`.
 fn front_end(path: &str, text: &str) -> FrontEnd {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
@@ -136,7 +140,9 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
 /// Checks `text` (registered under `path`) without running any backend: the
 /// single-file oracle behind `ridl mcp`'s `ridl_check` tool. `ridl check
 /// --format json` calls [`run_check`] instead, which loads a workspace from
-/// disk; the two then run the same passes, through one private driver.
+/// disk; once it is loaded, the two run the same passes, through one private
+/// driver. The source has no `interfaces.lock` and no `ridl.lock`, so the
+/// checks of those two files do not run here.
 pub fn check_source(path: &str, text: &str) -> CliRun {
     let front = front_end(path, text);
     CliRun {
@@ -1096,7 +1102,8 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
 /// workspace-wide passes, merging all diagnostics after the loader's onto the
 /// loader's [`SourceMap`]. [`load_and_check`] calls it on a workspace read from
 /// disk, and [`front_end`] on a one-file workspace built from a source text, so
-/// `ridl check` and the `ridl_check` MCP tool run the same passes.
+/// once the workspace is loaded, `ridl check` and the `ridl_check` MCP tool run
+/// the same passes.
 fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Compiled {
     let LoadedWorkspace {
         workspace,
