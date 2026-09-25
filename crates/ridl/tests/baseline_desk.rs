@@ -1248,3 +1248,45 @@ fn auto_discovery_of_an_empty_baseline_directory_stays_silent() {
         "no baseline means no drift report at all:\nstdout: {stdout}\nstderr: {stderr}",
     );
 }
+
+/// A snapshot-named entry under the auto-discovered `.ridl/baseline/` whose
+/// metadata cannot be read — a symlink to a file that is gone — is exit 2,
+/// not the silent "no baseline published yet" skip (driftsys/ridl#339 case
+/// 3). Skipping it read the directory as empty, and the desk check ran
+/// against nothing.
+#[cfg(unix)]
+#[test]
+fn check_reports_an_auto_discovered_snapshot_it_cannot_stat() {
+    let dir = TempDir::new("dangling-auto");
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+
+    let path = root.join(".ridl/baseline/veh.cluster.ir.json");
+    std::fs::remove_file(&path).expect("remove the published snapshot");
+    let target = PathBuf::from("missing.ir.json");
+    std::os::unix::fs::symlink(&target, &path).expect("replace it with a dangling symlink");
+    dir.write("cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "a snapshot entry that cannot be read is not an absent baseline:\n{stderr}",
+    );
+    assert!(
+        stderr.contains(&path.display().to_string()),
+        "the message names the entry it could not read:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "no desk check runs over a baseline that could not be read:\n{stderr}",
+    );
+    assert!(
+        std::fs::symlink_metadata(&path)
+            .expect("the entry is still there")
+            .file_type()
+            .is_symlink(),
+        "the symlink is left as it is",
+    );
+}

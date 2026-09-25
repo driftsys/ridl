@@ -1237,3 +1237,242 @@ fn a_whole_interface_removed_is_refused_by_the_lock_not_the_tombstone_gate() {
     let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
     assert_eq!(before, after, "a failed compile rewrites nothing");
 }
+
+// --- The published side the gate cannot resolve (driftsys/ridl#339) --------
+
+/// A declared `interface doors` beside an inline-form `service doors`: the
+/// service name is not dotted, so the two shapes carry the same identity
+/// name. The service retires `doorClosed` at ordinal 2; the interface holds
+/// no tombstone at all.
+const INTERFACE_AND_SERVICE_SHARING_A_NAME: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event locked: DoorState @[100ms..1s]
+}
+service doors {
+  event doorOpened: DoorState @[100ms..1s]
+  reserved doorClosed
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// `INTERFACE_AND_SERVICE_SHARING_A_NAME` with `doorClosed` declared live
+/// again in the service, at the end.
+const INTERFACE_AND_SERVICE_SHARING_A_NAME_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event locked: DoorState @[100ms..1s]
+}
+service doors {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+
+/// `TOMBSTONED_REMOVAL`'s interface renamed to `Status`, with `doorClosed`
+/// declared live again at the end. The lock keeps the number under the new
+/// key (`ridl lock --rename`), so `ridl_diff` matches the two shapes and
+/// emits `ReservedNameRedeclared` on a path carrying the new name — one the
+/// published IR does not hold.
+const RENAMED_INTERFACE_TOMBSTONE_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface Status {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+
+/// Two published snapshots declaring one package are refused, exit 2, and
+/// both are left as they are (driftsys/ridl#339 case 1). `ridl_diff`
+/// compares against the one that sorts last while the gate's own lookup read
+/// the one that sorts first, so a copy that already lacked `doorClosed` let a
+/// bare removal publish — and the publication deleted the copy.
+#[test]
+fn two_published_snapshots_for_one_package_are_refused_and_left_as_they_are() {
+    let dir = TempDir::new("gate-duplicate-package");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+
+    // A same-package snapshot that already lacks `doorClosed`, published to
+    // a separate directory as a first publication and copied in beside the
+    // real record under a name that sorts after it.
+    dir.write("cluster.ridl", BARE_REMOVAL);
+    let elsewhere = dir.path().join("elsewhere");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        elsewhere.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "the copy is a first publication: {stderr}");
+    let copy = snapshot(&root).with_file_name("zz-copy.ir.json");
+    std::fs::copy(elsewhere.join("veh.cluster.ir.json"), &copy).expect("copy the snapshot in");
+
+    let published = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+    let copied = std::fs::read(&copy).expect("the copy is readable");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "a published side that names one package twice cannot be compared against:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("veh.cluster")
+            && stderr.contains("veh.cluster.ir.json")
+            && stderr.contains("zz-copy.ir.json"),
+        "the message names the package and both files:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "the run stops before the gate, which has nothing sound to compare:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(published, after, "the published record is not rewritten");
+    let after = std::fs::read(&copy).expect("the copy survives");
+    assert_eq!(copied, after, "the copy is neither rewritten nor deleted");
+    let staging = root.join(".ridl").join(".baseline.staging");
+    assert!(
+        !staging.exists(),
+        "an exit-2 refusal removes the staging directory: {}",
+        staging.display(),
+    );
+}
+
+/// An interface and an inline-form service sharing a name are two shapes
+/// under one identity name. Redeclaring a name the service retires is
+/// `ReservedNameRedeclared` on the service's path, and the gate must refuse
+/// it by reading the shape that holds the tombstone — not the interface that
+/// happens to sort first under the same name (driftsys/ridl#339 case 2).
+#[test]
+fn a_tombstone_in_a_service_sharing_its_interface_name_still_refuses_the_redeclaration() {
+    let dir = TempDir::new("gate-shared-shape-name");
+    let root = package_workspace(&dir, INTERFACE_AND_SERVICE_SHARING_A_NAME);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "an interface and a service may share a name: {stderr}"
+    );
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write(
+        "cluster.ridl",
+        INTERFACE_AND_SERVICE_SHARING_A_NAME_REDECLARED,
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "redeclaring a name the service retires is a refusal:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one redeclared name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is declared again in `doors`")
+            && stderr.contains("keep `reserved doorClosed` at ordinal 2"),
+        "the ordinal comes from the service's shape, the one that holds the tombstone:\n\
+         {stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// A snapshot-named entry whose metadata cannot be read — a symlink to a
+/// file that is gone — is exit 2, not an absent snapshot (driftsys/ridl#339
+/// case 3). Skipping it read the published side as empty, and a bare removal
+/// then published as a first publication, replacing the link with a snapshot
+/// that had dropped the ordinal record.
+#[cfg(unix)]
+#[test]
+fn a_published_snapshot_that_cannot_be_stated_refuses_the_publication() {
+    let dir = TempDir::new("gate-dangling-symlink");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+
+    let path = snapshot(&root);
+    std::fs::remove_file(&path).expect("remove the published snapshot");
+    let target = PathBuf::from("missing.ir.json");
+    std::os::unix::fs::symlink(&target, &path).expect("replace it with a dangling symlink");
+
+    dir.write("cluster.ridl", BARE_REMOVAL);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "a snapshot entry that cannot be read is not an absent one:\n{stderr}",
+    );
+    assert!(
+        stderr.contains(&path.display().to_string()),
+        "the message names the entry it could not read:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("cannot read the snapshot directory"),
+        "the directory itself was listed; the entry is what failed:\n{stderr}",
+    );
+    let link = std::fs::symlink_metadata(&path).expect("the entry is still there");
+    assert!(
+        link.file_type().is_symlink(),
+        "the symlink is neither replaced nor removed",
+    );
+    assert_eq!(
+        std::fs::read_link(&path).expect("the symlink is readable"),
+        target,
+        "the symlink still points where it did",
+    );
+    let staging = root.join(".ridl").join(".baseline.staging");
+    assert!(
+        !staging.exists(),
+        "an exit-2 refusal removes the staging directory: {}",
+        staging.display(),
+    );
+}
+
+/// A `ReservedNameRedeclared` change whose container the published IR cannot
+/// resolve is refused, not published: the walk emitted it from a tombstone
+/// it read on the published side, so a lookup that finds nothing is the
+/// lookup's failure (driftsys/ridl#339 case 2, the fail-closed rule). A
+/// renamed interface is such a container — the change's path carries the new
+/// name — and the old rule, which refused only when the lookup found the
+/// tombstone, published the redeclaration.
+#[test]
+fn a_redeclaration_in_a_renamed_interface_is_refused_although_the_lookup_finds_nothing() {
+    let dir = TempDir::new("gate-renamed-container");
+    let root = package_workspace(&dir, TOMBSTONED_REMOVAL);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write("cluster.ridl", RENAMED_INTERFACE_TOMBSTONE_REDECLARED);
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--rename".as_ref(),
+        "VehicleStatus=Status".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the rename keeps the number: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "a redeclared retired name is refused whether or not the lookup resolves its \
+         container:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one redeclared name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is declared again in `Status`")
+            && stderr.contains("keep `reserved doorClosed` at that ordinal"),
+        "the message names the new container; the ordinal is unknown to a lookup by the new \
+         name, so the remedy names no number:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
