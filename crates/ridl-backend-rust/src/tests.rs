@@ -1956,6 +1956,34 @@ fn fixed_and_bounded_arrays() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// A vector of the inline `boolean` primitive (driftsys/ridl#518). The
+/// codec's vector-of-scalar encode path widens every element to bytes with
+/// `to_le_bytes`, a method `bool` does not have, so a struct with a `[bool]`
+/// field did not compile. This pins the fix: each element is widened to
+/// `u8` first, one byte, matching `boolean`'s own FlatBuffers width.
+#[test]
+fn bool_vector_field() {
+    let struct_def = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "flags",
+            1,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::Boolean as i32,
+                    )),
+                })),
+                min: 0,
+                max: 4,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let decls = vec![public_decl("Flags", v2::decl::Kind::StructDef(struct_def))];
+    insta::assert_snapshot!(rust_for(decls));
+}
+
 #[test]
 fn bounded_map() {
     let map_field = v2::Field {

@@ -1,0 +1,18 @@
+// Corpus fixture for a `[bool]` field in the FlatBuffers codec
+// (driftsys/ridl#518).
+//
+// `flatbuffers_roundtrip.ridl`'s only boolean field, `Engaged`, is an inline
+// scalar, not a vector, so the codec's inline-scalar encode path
+// (`Field::Bool(value)`) is the only one it exercises. A vector element goes
+// through a different path, one that writes every scalar element's raw bytes
+// with `.to_le_bytes()` — a method `bool` does not have. This file isolates
+// that path: `values` is a bounded vector of the inline `boolean` primitive.
+//
+// Kept self-contained, in the shape of `flatbuffers_roundtrip.ridl`: no
+// cross-package import, one declaration carrying the shape under test.
+
+package fb.boolvec
+
+struct Flags {
+  values : [boolean; 0..4]
+}
