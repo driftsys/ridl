@@ -1290,3 +1290,54 @@ fn check_reports_an_auto_discovered_snapshot_it_cannot_stat() {
         "the symlink is left as it is",
     );
 }
+
+/// The same entry named with an explicit `--baseline`: exit 2 naming the
+/// entry, as under auto-discovery — an explicit directory is listed by the
+/// same `snapshot_files`.
+#[cfg(unix)]
+#[test]
+fn check_reports_an_explicit_baseline_snapshot_it_cannot_stat() {
+    let dir = TempDir::new("dangling-explicit");
+    let root = package_workspace(&dir, BASE);
+    let published = dir.path().join("published");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        published.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+
+    let path = published.join("veh.cluster.ir.json");
+    std::fs::remove_file(&path).expect("remove the published snapshot");
+    std::os::unix::fs::symlink("missing.ir.json", &path)
+        .expect("replace it with a dangling symlink");
+    dir.write("cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        published.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "a snapshot entry that cannot be read is not an absent baseline:\n{stderr}",
+    );
+    assert!(
+        stderr.contains(&path.display().to_string()),
+        "the message names the entry it could not read:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "no desk check runs over a baseline that could not be read:\n{stderr}",
+    );
+    assert!(
+        std::fs::symlink_metadata(&path)
+            .expect("the entry is still there")
+            .file_type()
+            .is_symlink(),
+        "the symlink is left as it is",
+    );
+}

@@ -1284,6 +1284,62 @@ interface Status {
 }
 ";
 
+/// The mirror of `INTERFACE_AND_SERVICE_SHARING_A_NAME`: the declared
+/// `interface doors` holds the tombstone, at ordinal 2, and the inline-form
+/// `service doors` beside it holds no tombstone at all.
+const INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event doorOpened: DoorState @[100ms..1s]
+  reserved doorClosed
+  event doorLocked: DoorState @[100ms..1s]
+}
+service doors {
+  event locked: DoorState @[100ms..1s]
+}
+";
+
+/// `INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME` with `doorClosed`
+/// declared live again in the interface, at the end.
+const INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+service doors {
+  event locked: DoorState @[100ms..1s]
+}
+";
+
+/// `TOMBSTONED_REMOVAL` behind a named-form service: the service carries no
+/// body of its own, only a reference to `VehicleStatus`.
+const TOMBSTONED_REMOVAL_BEHIND_A_NAMED_SERVICE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  reserved doorClosed
+  event doorLocked: DoorState @[100ms..1s]
+}
+service status : VehicleStatus
+";
+
+/// `TOMBSTONED_REMOVAL_BEHIND_A_NAMED_SERVICE` with the interface renamed to
+/// `status` — the named-form service's own name — and `doorClosed` declared
+/// live again at the end. After `ridl lock --rename`, the change's path names
+/// a container that is, in the published IR, a named-form service and no
+/// shape at all.
+const RENAMED_TO_ITS_SERVICE_NAME_TOMBSTONE_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface status {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+service status : status
+";
+
 /// Two published snapshots declaring one package are refused, exit 2, and
 /// both are left as they are (driftsys/ridl#339 case 1). `ridl_diff`
 /// compares against the one that sorts last while the gate's own lookup read
@@ -1320,7 +1376,7 @@ fn two_published_snapshots_for_one_package_are_refused_and_left_as_they_are() {
         "a published side that names one package twice cannot be compared against:\n{stderr}",
     );
     assert!(
-        stderr.contains("veh.cluster")
+        stderr.contains("package `veh.cluster`")
             && stderr.contains("veh.cluster.ir.json")
             && stderr.contains("zz-copy.ir.json"),
         "the message names the package and both files:\n{stderr}",
@@ -1474,5 +1530,127 @@ fn a_redeclaration_in_a_renamed_interface_is_refused_although_the_lookup_finds_n
          name, so the remedy names no number:\n{stderr}",
     );
     let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// The other direction of the shared-name case: the declared interface holds
+/// the tombstone and the same-named inline service does not. The lookup must
+/// answer from the shape that declares the name whichever of the two it is,
+/// so the message carries the tombstone's ordinal here as well.
+#[test]
+fn a_tombstone_in_an_interface_sharing_its_service_name_still_names_its_ordinal() {
+    let dir = TempDir::new("gate-shared-shape-name-interface");
+    let root = package_workspace(&dir, INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write(
+        "cluster.ridl",
+        INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME_REDECLARED,
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "redeclaring a name the interface retires is a refusal:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one redeclared name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is declared again in `doors`")
+            && stderr.contains("keep `reserved doorClosed` at ordinal 2"),
+        "the ordinal comes from the interface's shape, the one that holds the tombstone:\n\
+         {stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// A redeclared retired name is refused whatever the published IR says the
+/// container is. The walk emitted the change from a tombstone it read on the
+/// published side, so no second lookup can sanction it — and a rule that
+/// admitted a container resolving to a named-form service published this
+/// case: the interface renamed to its service's own name, so the change's
+/// path names a service that is no shape in the published IR.
+#[test]
+fn a_redeclaration_in_an_interface_renamed_to_its_service_name_is_refused() {
+    let dir = TempDir::new("gate-renamed-to-service-name");
+    let root = package_workspace(&dir, TOMBSTONED_REMOVAL_BEHIND_A_NAMED_SERVICE);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write(
+        "cluster.ridl",
+        RENAMED_TO_ITS_SERVICE_NAME_TOMBSTONE_REDECLARED,
+    );
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--rename".as_ref(),
+        "VehicleStatus=status".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the rename keeps the number: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "a redeclared retired name is refused whatever the container resolves to:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one redeclared name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is declared again in `status`"),
+        "the message names the new container:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// A symlink to a readable snapshot is that snapshot: the metadata read
+/// follows the link, so the gate compares against the file it names and
+/// refuses an untombstoned removal through it, exactly as through the file
+/// itself.
+#[cfg(unix)]
+#[test]
+fn a_symlink_to_a_readable_snapshot_is_read_as_that_snapshot() {
+    let dir = TempDir::new("gate-readable-symlink");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+
+    let path = snapshot(&root);
+    let elsewhere = root.join(".ridl").join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).expect("create the directory the link points into");
+    let real = elsewhere.join("veh.cluster.ir.json");
+    std::fs::rename(&path, &real).expect("move the published snapshot out of the directory");
+    let target = PathBuf::from("../elsewhere/veh.cluster.ir.json");
+    std::os::unix::fs::symlink(&target, &path).expect("link to it from the published directory");
+    let before = std::fs::read(&real).expect("the snapshot behind the link is readable");
+
+    dir.write("cluster.ridl", BARE_REMOVAL);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "the removal is refused against the snapshot the link names:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("RIDL-408") && stderr.contains("`doorClosed` is gone from the source"),
+        "the gate read the snapshot through the link:\n{stderr}",
+    );
+    assert!(
+        std::fs::symlink_metadata(&path)
+            .expect("the entry is still there")
+            .file_type()
+            .is_symlink()
+            && std::fs::read_link(&path).expect("the symlink is readable") == target,
+        "the link is left as it is",
+    );
+    let after = std::fs::read(&real).expect("the snapshot behind the link survives");
     assert_eq!(before, after, "a refused publication rewrites nothing");
 }

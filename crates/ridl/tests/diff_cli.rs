@@ -754,3 +754,37 @@ fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
         "compatible\ncompatible on the wire, visible in source:\n  [compatible] interface_renamed veh.cluster/Jay: J -> Jay\n  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)\n"
     );
 }
+
+/// A directory side holding a snapshot-named entry whose metadata cannot be
+/// read — a symlink to a file that is gone — is exit 2 naming the entry,
+/// not a snapshot set one short (driftsys/ridl#339 case 3): the listing is
+/// the one `ridl baseline` and `ridl check` read, and it fails closed for
+/// every caller.
+#[cfg(unix)]
+#[test]
+fn a_directory_side_with_a_snapshot_it_cannot_stat_is_refused() {
+    let dir = TempDir::new("dangling-side");
+    let source = dir.write("new.ridl", BASE);
+    let snapshots = dir.path().join("snapshots");
+    std::fs::create_dir_all(&snapshots).expect("create the snapshot directory");
+    let entry = snapshots.join("veh.cluster.ir.json");
+    std::os::unix::fs::symlink("missing.ir.json", &entry).expect("create a dangling symlink");
+
+    let (code, _, stderr) = ridl(&["diff".as_ref(), snapshots.as_os_str(), source.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "a snapshot entry that cannot be read is an input error:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&entry.display().to_string()),
+        "the message names the entry it could not read:\n{stderr}"
+    );
+    assert!(
+        std::fs::symlink_metadata(&entry)
+            .expect("the entry is still there")
+            .file_type()
+            .is_symlink(),
+        "the entry is left as it is",
+    );
+}

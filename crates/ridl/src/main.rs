@@ -431,8 +431,11 @@ struct DiffSide {
 /// `.ir.json` snapshot nor source — no `ridl.toml` and no `.typl`/`.ridl`
 /// file directly inside it; and a directory with no source whose `.ir.json`
 /// snapshots sit one level below it rather than inside it, which is a path
-/// aimed one level too high (issue #230). Everything else is source.
-/// Recognising *source*
+/// aimed one level too high (issue #230). A fourth is refused before any of
+/// those three is considered: a directory — source tree or not — holding an
+/// entry named like a snapshot whose metadata cannot be read, which
+/// [`snapshot_files`] reports rather than skips (driftsys/ridl#339 case 3).
+/// Everything else is source. Recognising *source*
 /// by extension was tried and reverted — it refused inputs the compiler
 /// accepts, such as a `ridl.toml` path designating its workspace, an
 /// extensionless source file, or a symlink — so a renamed artifact whose
@@ -755,13 +758,15 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 /// an interface's identity is its number in `interfaces.lock`, not a slot in
 /// a service's list, so a removed or renumbered interface is refused by the
 /// lock's own publication rules, not here. `ReservedNameRedeclared` is an
-/// interaction-level category, and it fails closed: the change is refused
-/// unless the published container resolves to a named-form service
-/// ([`published_named_form_service`]), whose interactions are the lock's
-/// concern. A container the published IR cannot resolve is refused too — the
-/// walk emitted the change from a tombstone it read there, so a lookup that
-/// finds nothing is the lookup's failure, not evidence that the tombstone is
-/// absent (driftsys/ridl#339 case 2).
+/// interaction-level category, and it is always refused: the walk emitted
+/// the change from a tombstone it read on the published side, so the gate
+/// refuses it without a second lookup. An earlier rule refused only when its
+/// own lookup of the published container found the tombstone again, and
+/// published whenever that lookup did not resolve — a declared interface and
+/// an inline service sharing a name, or an interface renamed since
+/// publication (driftsys/ridl#339 case 2). The published IR is still read
+/// for the message's ordinal and wording ([`untombstoned_removal_message`]),
+/// never for the verdict.
 ///
 /// The published side is read through [`load_published`], which refuses two
 /// snapshots declaring one package (driftsys/ridl#339 case 1).
@@ -787,13 +792,10 @@ fn untombstoned_removals(
     let mut index: Option<DeclIndex> = None;
     let mut refusals = Vec::new();
     for change in &report.changes {
-        let refused = match change.category {
-            ridl_diff::Category::InteractionRemoved => true,
-            ridl_diff::Category::ReservedNameRedeclared => {
-                !published_named_form_service(&published, &change.path)
-            }
-            _ => false,
-        };
+        let refused = matches!(
+            change.category,
+            ridl_diff::Category::InteractionRemoved | ridl_diff::Category::ReservedNameRedeclared
+        );
         if !refused {
             continue;
         }
@@ -920,38 +922,6 @@ fn published_interaction<'a>(
                     None => false,
                 })
         })
-}
-
-/// Whether the container a `<package>/<container>/<name>` diff path names
-/// is, in the published IR, a named-form service and nothing else: the
-/// package is found, a service of that name exists, that service carries no
-/// inline shape, and no shape — declared interface or inline body — carries
-/// the name. This is the one case the `ReservedNameRedeclared` refusal in
-/// [`untombstoned_removals`] admits, because a named-form service holds no
-/// interactions of its own. Anything that does not resolve is `false`, which
-/// the caller reads as a refusal.
-///
-/// `ridl_diff` emits `ReservedNameRedeclared` from `diff_interface` alone,
-/// which the shape walk calls on declared interfaces and inline bodies
-/// only, so a change reaching this test with a named-form service as its
-/// container is not one the walk produces today. The exception is kept so
-/// the rule reads as the issue states it.
-fn published_named_form_service(published: &[ridl_ir::v2::Package], path: &str) -> bool {
-    let mut parts = path.split('/');
-    let (Some(pkg), Some(container), Some(_)) = (parts.next(), parts.next(), parts.next()) else {
-        return false;
-    };
-    let Some(package) = published.iter().find(|package| package.name == pkg) else {
-        return false;
-    };
-    let named_form = package.services.iter().any(|service| {
-        service.name == container
-            && !service
-                .shapes
-                .iter()
-                .any(|slot| matches!(slot.kind, Some(ridl_ir::v2::service_shape::Kind::Inline(_))))
-    });
-    named_form && !package.shapes().any(|shape| shape.name == container)
 }
 
 /// Whether the published IR already retires the interaction a diff path names
@@ -1490,8 +1460,11 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 /// check that ran against nothing: one holding IR artifacts but no `.ir.json`
 /// (issue #218 item 4), one whose `.ir.json` snapshots sit a level below it
 /// (issue #230), and, when `explicit` is true, any other directory that
-/// yields no snapshot at all (driftsys/ridl#235). A directory that fits none
-/// of the three and was found by auto-discovery (`explicit` false) keeps
+/// yields no snapshot at all (driftsys/ridl#235). A fourth is refused
+/// whether `explicit` or not, by [`snapshot_files`] before the three above
+/// are considered: a directory holding an entry named like a snapshot whose
+/// metadata cannot be read (driftsys/ridl#339 case 3). A directory that fits
+/// none of the four and was found by auto-discovery (`explicit` false) keeps
 /// yielding an empty baseline — that is the ordinary "no baseline published
 /// yet" state, and [`desk_check`] skips it silently.
 fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
