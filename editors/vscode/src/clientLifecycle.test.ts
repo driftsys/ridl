@@ -1,22 +1,28 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { ClientLifecycle, LifecycleClient } from "./clientLifecycle";
+import { ClientLifecycle, ClientPhase, LifecycleClient } from "./clientLifecycle";
 
 // A fake language client that follows the state machine of
 // vscode-languageclient 10.1.0 (lib/common/client.js): `start` moves the
 // client to Starting, then to Running or StartFailed, and a second `start`
-// returns the first start's promise. `stop` returns without an error in the
-// Initial and Stopped states and throws "Client is not running and can't be
-// stopped" in every state other than Running.
-type State = "initial" | "starting" | "running" | "startFailed" | "stopped";
+// returns the first start's promise while one is in flight. `stop` returns
+// without an error in the Initial and Stopped states, returns the pending
+// stop promise in Stopping, and throws "Client is not running and can't be
+// stopped" in Starting and StartFailed — the only two states where it
+// throws.
+type State = "initial" | "starting" | "running" | "startFailed" | "stopping" | "stopped";
 
 class FakeClient implements LifecycleClient {
   state: State = "initial";
   starts = 0;
   stops = 0;
   private onStart: Promise<void> | undefined;
+  private onStop: Promise<void> | undefined;
 
-  constructor(private readonly outcome: Promise<void>) {}
+  constructor(
+    private readonly outcome: Promise<void>,
+    private readonly stopOutcome: Promise<void> = Promise.resolve(),
+  ) {}
 
   start(): Promise<void> {
     if (this.onStart !== undefined) return this.onStart;
@@ -36,16 +42,88 @@ class FakeClient implements LifecycleClient {
 
   async stop(): Promise<void> {
     if (this.state === "initial" || this.state === "stopped") return;
+    if (this.state === "stopping") {
+      if (this.onStop === undefined) throw new Error("stopping but no stop promise available");
+      return this.onStop;
+    }
     if (this.state !== "running") {
       throw new Error(`Client is not running and can't be stopped. It's current state is: ${this.state}`);
     }
     this.stops += 1;
-    this.state = "stopped";
+    this.state = "stopping";
+    this.onStop = this.stopOutcome.then(
+      () => {
+        this.state = "stopped";
+      },
+      (error: unknown) => {
+        this.state = "stopped";
+        throw error;
+      },
+    );
+    return this.onStop;
+  }
+
+  phase(): ClientPhase {
+    switch (this.state) {
+      case "starting":
+        return "starting";
+      case "running":
+        return "running";
+      case "startFailed":
+        return "startFailed";
+      default:
+        return "stopped";
+    }
   }
 
   isRunning(): boolean {
     return this.state === "running";
   }
+
+  /** The server exits and the library's error handler gives up: the client ends Stopped and will not restart itself. */
+  serverExitedAndLibraryGaveUp(): void {
+    this.state = "stopped";
+    this.onStart = undefined;
+  }
+
+  /**
+   * The server exits and the library's default error handler restarts the
+   * SAME client itself: state goes to Starting synchronously, and `start()`
+   * from here on returns a new in-flight promise settling per `outcome`.
+   */
+  serverExitedAndLibraryRestarts(outcome: Promise<void>): void {
+    this.state = "starting";
+    this.starts += 1;
+    this.onStart = outcome.then(
+      () => {
+        this.state = "running";
+      },
+      (error: unknown) => {
+        this.state = "startFailed";
+        throw error;
+      },
+    );
+  }
+}
+
+/** The rejection vscode-languageclient's `stop()` gives when the server does not shut down within 2000 ms. */
+function stopTimedOut(): Promise<void> {
+  const promise = Promise.reject(new Error("Stopping the server timed out"));
+  // The fake attaches its own handlers when `stop()` runs; this one only
+  // keeps the rejection from being reported as unhandled before then.
+  promise.catch(() => undefined);
+  return promise;
+}
+
+/**
+ * Waits until every pending promise job has run, so a queued lifecycle
+ * operation has observed the client's current phase before the test changes
+ * it. Without this, a test that settles the library's restart right after
+ * the call cannot tell a lifecycle that waits for the restart from one that
+ * does not.
+ */
+function queuedWorkHasRun(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 interface Deferred {
@@ -93,7 +171,7 @@ function lifecycleWith(...outcomes: Outcome[]): { lifecycle: ClientLifecycle<Fak
 
 test("a failed first start is retried when the next document opens", async () => {
   const { lifecycle, created } = lifecycleWith("fail", "ok");
-  await lifecycle.startIfNeeded().catch(() => false);
+  await lifecycle.startIfNeeded();
   await lifecycle.startIfNeeded();
   assert.equal(created.length, 2);
   assert.equal(lifecycle.client, created[1]);
@@ -105,9 +183,15 @@ test("a failed start does not reject, so activate and the dropped open-document 
   await assert.doesNotReject(lifecycle.startIfNeeded());
 });
 
+test("lifecycle.client is undefined right after a failed startIfNeeded", async () => {
+  const { lifecycle } = lifecycleWith("fail");
+  await lifecycle.startIfNeeded();
+  assert.equal(lifecycle.client, undefined);
+});
+
 test("startIfNeeded resolves true only for the call that brought the client up", async () => {
   const { lifecycle } = lifecycleWith("fail", "ok");
-  const first = await lifecycle.startIfNeeded().catch(() => "rejected");
+  const first = await lifecycle.startIfNeeded();
   const second = await lifecycle.startIfNeeded();
   const third = await lifecycle.startIfNeeded();
   assert.deepEqual([first, second, third], [false, true, false]);
@@ -125,10 +209,18 @@ test("concurrent document opens start one client", async () => {
 
 test("correcting ridl.serverPath after a failed first start starts a new client", async () => {
   const { lifecycle, created } = lifecycleWith("fail", "ok");
-  await lifecycle.startIfNeeded().catch(() => false);
-  await assert.doesNotReject(lifecycle.restart());
+  await lifecycle.startIfNeeded();
+  const restarted = await lifecycle.restart();
   assert.equal(created.length, 2);
   assert.equal(created[1].isRunning(), true);
+  assert.equal(restarted, true);
+});
+
+test("restart resolves false before any start was requested, and true when it brings up the first running client after a failed first start", async () => {
+  const { lifecycle } = lifecycleWith("fail", "ok");
+  assert.equal(await lifecycle.restart(), false);
+  await lifecycle.startIfNeeded();
+  assert.equal(await lifecycle.restart(), true);
 });
 
 test("a restart while the first start is in flight waits for it, then replaces the client", async () => {
@@ -149,7 +241,7 @@ test("a restart while the first start is in flight waits for it, then replaces t
 test("a restart while a failing first start is in flight does not throw and starts a new client", async () => {
   const pending = deferred();
   const { lifecycle, created } = lifecycleWith(pending, "ok");
-  const starting = lifecycle.startIfNeeded().catch(() => false);
+  const starting = lifecycle.startIfNeeded();
   const restarting = lifecycle.restart();
   pending.reject(new Error("spawn ridl-lsp ENOENT"));
   await assert.doesNotReject(restarting);
@@ -178,15 +270,24 @@ test("a restart before any typl, ridl or rsdl document opened creates no client"
 test("a failed restart does not reject, and the next document open retries", async () => {
   const { lifecycle, created } = lifecycleWith("ok", "fail", "ok");
   await lifecycle.startIfNeeded();
-  await assert.doesNotReject(lifecycle.restart());
+  const restarted = await lifecycle.restart();
+  assert.equal(restarted, false);
   await lifecycle.startIfNeeded();
   assert.equal(created.length, 3);
   assert.equal(created[2].isRunning(), true);
 });
 
+test("lifecycle.client is undefined right after a failed restart, and restart resolved false", async () => {
+  const { lifecycle } = lifecycleWith("ok", "fail");
+  await lifecycle.startIfNeeded();
+  const restarted = await lifecycle.restart();
+  assert.equal(restarted, false);
+  assert.equal(lifecycle.client, undefined);
+});
+
 test("stop after a failed start does not throw", async () => {
   const { lifecycle } = lifecycleWith("fail");
-  await lifecycle.startIfNeeded().catch(() => false);
+  await lifecycle.startIfNeeded();
   await assert.doesNotReject(lifecycle.stop());
   assert.equal(lifecycle.client, undefined);
 });
@@ -201,4 +302,104 @@ test("stop while the start is in flight waits for it, then stops the client", as
   await starting;
   assert.equal(created[0].stops, 1);
   assert.equal(created[0].isRunning(), false);
+});
+
+test("after a successful start then stop, lifecycle.client is undefined and the client was stopped once", async () => {
+  const { lifecycle, created } = lifecycleWith("ok");
+  await lifecycle.startIfNeeded();
+  await lifecycle.stop();
+  assert.equal(lifecycle.client, undefined);
+  assert.equal(created[0].stops, 1);
+});
+
+test("after the library gives up restarting a crashed server, the next document open creates a second client", async () => {
+  const { lifecycle, created } = lifecycleWith("ok", "ok");
+  await lifecycle.startIfNeeded();
+  created[0].serverExitedAndLibraryGaveUp();
+  const started = await lifecycle.startIfNeeded();
+  assert.equal(started, true);
+  assert.equal(created.length, 2);
+  assert.equal(lifecycle.client, created[1]);
+});
+
+test("while the library restarts the server itself, startIfNeeded creates no second client and waits for it", async () => {
+  const { lifecycle, created } = lifecycleWith("ok", "ok");
+  await lifecycle.startIfNeeded();
+  const restarting = deferred();
+  created[0].serverExitedAndLibraryRestarts(restarting.promise);
+  const started = lifecycle.startIfNeeded();
+  await queuedWorkHasRun();
+  restarting.resolve();
+  assert.equal(await started, false);
+  assert.equal(created.length, 1);
+  assert.equal(created[0].isRunning(), true);
+});
+
+test("while the library restarts the server itself, restart waits for it, stops that client once, and starts a new one", async () => {
+  const { lifecycle, created } = lifecycleWith("ok", "ok");
+  await lifecycle.startIfNeeded();
+  const restarting = deferred();
+  created[0].serverExitedAndLibraryRestarts(restarting.promise);
+  const doingRestart = lifecycle.restart();
+  await queuedWorkHasRun();
+  restarting.resolve();
+  assert.equal(await doingRestart, true);
+  assert.equal(created.length, 2);
+  assert.equal(created[0].stops, 1);
+  assert.equal(created[1].isRunning(), true);
+});
+
+test("while the library restarts the server itself, stop waits for it, stops that client once, and leaves client undefined", async () => {
+  const { lifecycle, created } = lifecycleWith("ok");
+  await lifecycle.startIfNeeded();
+  const restarting = deferred();
+  created[0].serverExitedAndLibraryRestarts(restarting.promise);
+  const stopping = lifecycle.stop();
+  await queuedWorkHasRun();
+  restarting.resolve();
+  await stopping;
+  assert.equal(created[0].stops, 1);
+  assert.equal(lifecycle.client, undefined);
+});
+
+test("a restart whose stop() rejects still starts the new client and resolves true; the old client ends stopped", async () => {
+  const created: FakeClient[] = [];
+  const lifecycle = new ClientLifecycle(() => {
+    const client = new FakeClient(Promise.resolve(), stopTimedOut());
+    created.push(client);
+    return client;
+  });
+  await lifecycle.startIfNeeded();
+  const restarted = await lifecycle.restart();
+  assert.equal(restarted, true);
+  assert.equal(created.length, 2);
+  assert.equal(created[0].stops, 1);
+  assert.equal(created[0].isRunning(), false);
+  assert.equal(created[1].isRunning(), true);
+});
+
+test("a stop whose client's stop() rejects does not reject and leaves client undefined", async () => {
+  const created: FakeClient[] = [];
+  const lifecycle = new ClientLifecycle(() => {
+    const client = new FakeClient(Promise.resolve(), stopTimedOut());
+    created.push(client);
+    return client;
+  });
+  await lifecycle.startIfNeeded();
+  await assert.doesNotReject(lifecycle.stop());
+  assert.equal(lifecycle.client, undefined);
+});
+
+test("the queue keeps running after an operation rejects", async () => {
+  let calls = 0;
+  const lifecycle = new ClientLifecycle<FakeClient>(() => {
+    calls += 1;
+    if (calls === 1) throw new Error("constructor error");
+    const client = new FakeClient(Promise.resolve());
+    return client;
+  });
+  await assert.rejects(lifecycle.startIfNeeded());
+  const started = await lifecycle.startIfNeeded();
+  assert.equal(started, true);
+  assert.ok(lifecycle.client);
 });

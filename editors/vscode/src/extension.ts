@@ -23,6 +23,7 @@ import {
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
+  State,
   TransportKind,
 } from "vscode-languageclient/node";
 import {
@@ -32,19 +33,39 @@ import {
   resolveMcpDefinition,
   shouldStartClientForLanguage,
 } from "./binaryResolution";
-import { ClientLifecycle } from "./clientLifecycle";
+import { ClientLifecycle, ClientPhase } from "./clientLifecycle";
 import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
 
 const MCP_PROVIDER_ID = "ridl";
 
 const execFileAsync = promisify(execFile);
 
-let lifecycle: ClientLifecycle<LanguageClient> | undefined;
+/** A `LanguageClient` that reports its own state in the vocabulary `ClientLifecycle` reads. */
+class RidlLanguageClient extends LanguageClient {
+  phase(): ClientPhase {
+    switch (this.state) {
+      case State.Starting:
+        return "starting";
+      case State.Running:
+        return "running";
+      case State.StartFailed:
+        return "startFailed";
+      case State.Stopped:
+        return "stopped";
+      default: {
+        const exhaustive: never = this.state;
+        throw new Error(`unhandled vscode-languageclient state: ${String(exhaustive)}`);
+      }
+    }
+  }
+}
 
-// Whether the stale-copy offer has run this activation. It runs at most
-// once: when a failed restart dropped the client, or the server stopped, the
-// next document open starts a new client, and that start must not offer
-// again.
+let lifecycle: ClientLifecycle<RidlLanguageClient> | undefined;
+
+// Whether the stale-copy offer has run this activation. It runs at most once
+// per activation, after the first start that brings a client up, whether
+// from a document open or a restart (for example, one reached through a
+// corrected `ridl.serverPath` after an earlier start failure).
 let offeredStaleCopyCheck = false;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -73,7 +94,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // is undefined, and correcting the setting must still restart. The
       // gate on "a document was opened" lives inside `lifecycle.restart`.
       if (event.affectsConfiguration("ridl.serverPath")) {
-        await lifecycle?.restart();
+        if (await lifecycle?.restart()) {
+          offerStaleCopyOnce(context);
+        }
       }
     }),
   );
@@ -101,11 +124,15 @@ export async function deactivate(): Promise<void> {
  */
 async function startClientIfNeeded(context: vscode.ExtensionContext): Promise<void> {
   if (await lifecycle!.startIfNeeded()) {
-    if (!offeredStaleCopyCheck) {
-      offeredStaleCopyCheck = true;
-      void offerRefreshOfStaleCopy(context);
-    }
+    offerStaleCopyOnce(context);
   }
+}
+
+/** Runs the stale-copy offer at most once per activation, on the first start that brings a client up. */
+function offerStaleCopyOnce(context: vscode.ExtensionContext): void {
+  if (offeredStaleCopyCheck) return;
+  offeredStaleCopyCheck = true;
+  void offerRefreshOfStaleCopy(context);
 }
 
 /** The `ridl.serverPath` setting, trimmed, or undefined when blank. */
@@ -115,7 +142,7 @@ function configuredServerPath(): string | undefined {
 }
 
 /** Builds the language client: stdio transport to `ridl lsp`, scoped to `.typl`, `.ridl` and `.rsdl` files. */
-function createClient(context: vscode.ExtensionContext, outputChannel: vscode.LogOutputChannel): LanguageClient {
+function createClient(context: vscode.ExtensionContext, outputChannel: vscode.LogOutputChannel): RidlLanguageClient {
   const { command, args } = resolveLspCommand({
     configuredPath: configuredServerPath(),
     extensionPath: context.extensionPath,
@@ -135,7 +162,7 @@ function createClient(context: vscode.ExtensionContext, outputChannel: vscode.Lo
 
   // The client id "ridl" ties this client to the `ridl.trace.server` setting:
   // vscode-languageclient reads the trace level from `<id>.trace.server`.
-  return new LanguageClient("ridl", "RIDL Language Server", serverOptions, clientOptions);
+  return new RidlLanguageClient("ridl", "RIDL Language Server", serverOptions, clientOptions);
 }
 
 /**
