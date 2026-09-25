@@ -318,8 +318,10 @@ fn is_typl_definition_start(kind: SyntaxKind) -> bool {
 }
 
 /// The deepest field-type, expression, or attribute-value nesting the parser
-/// follows before it stops recursing — far beyond any real schema, small
-/// enough that a pathological input cannot overflow the stack.
+/// follows before it stops recursing, and the greatest height of the tree it
+/// builds for one expression — far beyond any real schema, small enough that
+/// a pathological input can overflow neither the parser's stack nor the stack
+/// of a pass that later recurses over the tree.
 const MAX_TYPE_DEPTH: usize = 128;
 
 /// The recursive-descent state: the token stream, a cursor, the tree builder,
@@ -330,8 +332,14 @@ struct Parser<'a> {
     /// of input; `offsets[i]` is the offset of `tokens[i]`.
     offsets: Vec<usize>,
     pos: usize,
-    /// Current field-type nesting depth, bounded by [`MAX_TYPE_DEPTH`].
+    /// Current field-type or attribute-value nesting depth, and inside an
+    /// expression the number of expression nodes open above the cursor;
+    /// bounded by [`MAX_TYPE_DEPTH`].
     depth: usize,
+    /// Whether the expression being parsed has already drawn FORM-102. A
+    /// later part of the same expression that does not fit either goes flat
+    /// without a second diagnostic.
+    expr_refused: bool,
     /// The profile the file parses under — where the profile-boundary
     /// diagnostics (TYPL-302, TYPL-304, RIDL-403) are drawn.
     profile: Profile,
@@ -353,6 +361,7 @@ impl<'a> Parser<'a> {
             offsets,
             pos: 0,
             depth: 0,
+            expr_refused: false,
             profile,
             builder: GreenNodeBuilder::new(),
             errors: Vec::new(),
@@ -1733,62 +1742,138 @@ impl<'a> Parser<'a> {
     // Inside an expression `<` is always the comparison operator — the
     // stream-type reading of `<` exists only in param-type and return-type
     // position, and the two positions never overlap.
+    //
+    // The height bound (driftsys/ridl#346). A left-associative chain builds
+    // a tree as high as its term count, and a pass that recurses over the
+    // tree needs stack in proportion to that height, so the parser bounds
+    // the height of every expression tree at MAX_TYPE_DEPTH nodes. Every
+    // function below returns the height of the subtree it built (1 for a
+    // node whose children are all tokens, 0 when no node was built), and
+    // `depth` counts the expression nodes open above the cursor. A node is
+    // built only when `depth + height <= MAX_TYPE_DEPTH` (`expr_fits`): a
+    // chain checks the wrap before consuming its operator, from the height
+    // of the run so far plus one, and parses the right operand one level
+    // deeper, so the operand's own checks account for the wrap above it; a
+    // group or a prefix is opened only when it and one leaf below it fit.
+    // The invariant holds by induction over the build order: each node's
+    // check covers the node itself, and a child built earlier sits one level
+    // deeper under a parent whose height is at least the child's plus one. A
+    // budget charged per parse call and released on return would not bound
+    // the tree, because chains closed inside groups, and chains that are the
+    // first operand of a looser chain, stack on the left spine.
+    //
+    // Past the limit the expression draws one FORM-102 and the rest of the
+    // current group goes flat, as tokens under one ErrorNode: the tree stays
+    // lossless and a later part of the same expression that does not fit
+    // either is consumed the same way without a second diagnostic.
 
     /// `expr = or_expr` — the entry point, called from a predicate
-    /// attribute and from a parenthesised group. The depth guard bounds
-    /// paren nesting ([`Parser::primary`] recurses through here), sharing
-    /// the [`MAX_TYPE_DEPTH`] budget.
+    /// attribute; a parenthesised group recurses through [`Parser::primary`].
+    /// An attribute block is never inside a type or a value, so the
+    /// expression starts at depth 0 and a leaf always fits below it.
     fn expr(&mut self) {
-        if self.depth >= MAX_TYPE_DEPTH {
+        self.expr_refused = false;
+        self.or_expr();
+    }
+
+    /// Whether an expression node `height` levels high fits at the current
+    /// depth. Past the limit, reports FORM-102 at the current token unless
+    /// the expression has already drawn one, so that one overlong expression
+    /// draws one diagnostic whatever its shape. The message says how the
+    /// levels are counted, because the nesting of a flat operator chain is
+    /// not visible in the source.
+    fn expr_fits(&mut self, height: usize) -> bool {
+        if self.depth + height <= MAX_TYPE_DEPTH {
+            return true;
+        }
+        if !self.expr_refused {
+            self.expr_refused = true;
             self.error_at_current(
                 "FORM-102",
-                format!("expression nesting deeper than {MAX_TYPE_DEPTH} levels"),
+                format!(
+                    "expression nesting deeper than {MAX_TYPE_DEPTH} levels \
+                     (each operator, parenthesised group and prefix nests one level)"
+                ),
             );
-            self.start(SyntaxKind::ErrorNode);
-            self.bump();
-            self.builder.finish_node();
-            return;
         }
-        self.depth += 1;
-        self.or_expr();
-        self.depth -= 1;
+        false
+    }
+
+    /// Consumes the rest of the current expression level as flat children
+    /// of one [`ErrorNode`](SyntaxKind::ErrorNode): every token up to the
+    /// `)` that closes the enclosing group, the `]` or `,` that ends the
+    /// attribute, a brace, the end of input, or a token that starts another
+    /// construct. A group opened inside is consumed through its own `)`.
+    fn skip_expr_rest(&mut self) {
+        self.start(SyntaxKind::ErrorNode);
+        self.skip_expr_tokens();
+        self.builder.finish_node();
+    }
+
+    /// The token loop of [`Parser::skip_expr_rest`], without the node.
+    fn skip_expr_tokens(&mut self) {
+        let mut open = 0usize;
+        loop {
+            match self.current() {
+                None
+                | Some(
+                    SyntaxKind::RBracket
+                    | SyntaxKind::Comma
+                    | SyntaxKind::LBrace
+                    | SyntaxKind::RBrace,
+                ) => break,
+                Some(SyntaxKind::RParen) if open == 0 => break,
+                Some(SyntaxKind::RParen) => open -= 1,
+                Some(SyntaxKind::LParen) => open += 1,
+                Some(kind) if is_interaction_start(kind) || is_top_level_start(kind) => break,
+                Some(_) => {}
+            }
+            self.bump();
+        }
+    }
+
+    /// The shared loop of the four chaining binary levels: `operand { op
+    /// operand }`, each `op` a token `is_op` accepts, each iteration wrapping
+    /// the run so far in a [`BinaryExpr`](SyntaxKind::BinaryExpr) from the
+    /// same checkpoint. Returns the height of the tree built.
+    fn chain(&mut self, is_op: fn(SyntaxKind) -> bool, operand: fn(&mut Self) -> usize) -> usize {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        let mut height = operand(self);
+        while self.current().is_some_and(is_op) {
+            if !self.expr_fits(height + 1) {
+                self.skip_expr_rest();
+                break;
+            }
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
+            self.bump();
+            self.depth += 1;
+            let rhs = operand(self);
+            self.depth -= 1;
+            self.builder.finish_node();
+            height = 1 + height.max(rhs);
+        }
+        height
     }
 
     /// `or_expr = and_expr { '||' and_expr }`
-    fn or_expr(&mut self) {
-        self.eat_trivia();
-        let checkpoint = self.builder.checkpoint();
-        self.and_expr();
-        while self.at(SyntaxKind::PipePipe) {
-            self.builder
-                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
-            self.bump();
-            self.and_expr();
-            self.builder.finish_node();
-        }
+    fn or_expr(&mut self) -> usize {
+        self.chain(|kind| kind == SyntaxKind::PipePipe, Self::and_expr)
     }
 
     /// `and_expr = cmp_expr { '&&' cmp_expr }`
-    fn and_expr(&mut self) {
-        self.eat_trivia();
-        let checkpoint = self.builder.checkpoint();
-        self.cmp_expr();
-        while self.at(SyntaxKind::AmpAmp) {
-            self.builder
-                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
-            self.bump();
-            self.cmp_expr();
-            self.builder.finish_node();
-        }
+    fn and_expr(&mut self) -> usize {
+        self.chain(|kind| kind == SyntaxKind::AmpAmp, Self::cmp_expr)
     }
 
     /// `cmp_expr = add_expr [ cmp_op add_expr ]` — at most one comparison:
     /// `a < b < c` is a parse error (write `a < b && b < c`), reported by
     /// whatever context the leftover operator lands in.
-    fn cmp_expr(&mut self) {
+    fn cmp_expr(&mut self) -> usize {
         self.eat_trivia();
         let checkpoint = self.builder.checkpoint();
-        self.add_expr();
+        let mut height = self.add_expr();
         if matches!(
             self.current(),
             Some(
@@ -1800,65 +1885,74 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::Ge
             )
         ) {
+            if !self.expr_fits(height + 1) {
+                self.skip_expr_rest();
+                return height;
+            }
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
             self.bump();
-            self.add_expr();
+            self.depth += 1;
+            let rhs = self.add_expr();
+            self.depth -= 1;
             self.builder.finish_node();
+            height = 1 + height.max(rhs);
         }
+        height
     }
 
     /// `add_expr = mul_expr { ('+' | '-') mul_expr }`
-    fn add_expr(&mut self) {
-        self.eat_trivia();
-        let checkpoint = self.builder.checkpoint();
-        self.mul_expr();
-        while matches!(self.current(), Some(SyntaxKind::Plus | SyntaxKind::Minus)) {
-            self.builder
-                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
-            self.bump();
-            self.mul_expr();
-            self.builder.finish_node();
-        }
+    fn add_expr(&mut self) -> usize {
+        self.chain(
+            |kind| matches!(kind, SyntaxKind::Plus | SyntaxKind::Minus),
+            Self::mul_expr,
+        )
     }
 
     /// `mul_expr = unary_expr { ('*' | '/' | '%') unary_expr }`
-    fn mul_expr(&mut self) {
-        self.eat_trivia();
-        let checkpoint = self.builder.checkpoint();
-        self.unary_expr();
-        while matches!(
-            self.current(),
-            Some(SyntaxKind::Star | SyntaxKind::Slash | SyntaxKind::Percent)
-        ) {
-            self.builder
-                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
-            self.bump();
-            self.unary_expr();
-            self.builder.finish_node();
-        }
+    fn mul_expr(&mut self) -> usize {
+        self.chain(
+            |kind| {
+                matches!(
+                    kind,
+                    SyntaxKind::Star | SyntaxKind::Slash | SyntaxKind::Percent
+                )
+            },
+            Self::unary_expr,
+        )
     }
 
     /// `unary_expr = [ '!' | '-' ] postfix_expr` — at most one prefix.
-    fn unary_expr(&mut self) {
+    fn unary_expr(&mut self) -> usize {
         if matches!(self.current(), Some(SyntaxKind::Bang | SyntaxKind::Minus)) {
+            if !self.expr_fits(2) {
+                self.skip_expr_rest();
+                return 1;
+            }
             self.start(SyntaxKind::PrefixExpr);
             self.bump();
-            self.postfix_expr();
+            self.depth += 1;
+            let operand = self.postfix_expr();
+            self.depth -= 1;
             self.builder.finish_node();
+            1 + operand
         } else {
-            self.postfix_expr();
+            self.postfix_expr()
         }
     }
 
     /// `postfix_expr = primary { '.' member }` — each `.member` step wraps
     /// the run so far in a [`MemberExpr`](SyntaxKind::MemberExpr), so
     /// `filter.severity` and `GearPosition.PARK` nest left-associatively.
-    fn postfix_expr(&mut self) {
+    fn postfix_expr(&mut self) -> usize {
         self.eat_trivia();
         let checkpoint = self.builder.checkpoint();
-        self.primary();
+        let mut height = self.primary();
         while self.at(SyntaxKind::Dot) {
+            if !self.expr_fits(height + 1) {
+                self.skip_expr_rest();
+                break;
+            }
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::MemberExpr.into());
             self.bump(); // '.'
@@ -1868,7 +1962,9 @@ impl<'a> Parser<'a> {
                 self.error_at_current("FORM-101", "expected a member name".to_string());
             }
             self.builder.finish_node();
+            height += 1;
         }
+        height
     }
 
     /// `primary = literal | duration_lit | path_head | '(' expr ')'` — a
@@ -1876,8 +1972,11 @@ impl<'a> Parser<'a> {
     /// zero durations are legal in expression position, expr-core spec
     /// §3.1), a [`PathExpr`](SyntaxKind::PathExpr), or a parenthesised
     /// group. No node is built when no primary starts here, so a missing
-    /// operand reports FORM-101 without consuming the boundary token.
-    fn primary(&mut self) {
+    /// operand reports FORM-101 without consuming the boundary token. The
+    /// group is where the grammar recurses, so the height bound is also what
+    /// keeps a run of `(` from overflowing the parser's own stack: a group
+    /// that does not fit is consumed flat through its `)`.
+    fn primary(&mut self) -> usize {
         match self.current() {
             Some(
                 SyntaxKind::IntNumber
@@ -1893,21 +1992,37 @@ impl<'a> Parser<'a> {
                 }
                 self.bump();
                 self.builder.finish_node();
+                1
             }
             Some(SyntaxKind::Ident) => {
                 self.start(SyntaxKind::PathExpr);
                 self.bump();
                 self.builder.finish_node();
+                1
             }
             Some(SyntaxKind::LParen) => {
+                if !self.expr_fits(2) {
+                    self.start(SyntaxKind::ErrorNode);
+                    self.bump(); // '('
+                    self.skip_expr_tokens();
+                    if self.at(SyntaxKind::RParen) {
+                        self.bump();
+                    }
+                    self.builder.finish_node();
+                    return 1;
+                }
                 self.start(SyntaxKind::ParenExpr);
                 self.bump();
-                self.expr();
+                self.depth += 1;
+                let inner = self.or_expr();
+                self.depth -= 1;
                 self.expect(SyntaxKind::RParen);
                 self.builder.finish_node();
+                1 + inner
             }
             _ => {
                 self.error_at_current("FORM-101", "expected an expression".to_string());
+                0
             }
         }
     }
@@ -3283,6 +3398,27 @@ interface I {{
                 );
             }
         });
+    }
+
+    /// The limit as an author meets it: an expression tree is at most
+    /// `MAX_TYPE_DEPTH` nodes high. A `||` chain of comparisons is two nodes
+    /// high at one term and one higher per further term; a group around a
+    /// comparison adds one node per group.
+    #[test]
+    fn the_expression_height_limit_is_exact() {
+        let form_102 = |expr: &str| {
+            let parsed = parse(&contract_file(expr), Profile::Ridl);
+            parsed
+                .errors()
+                .iter()
+                .filter(|error| error.code == "FORM-102")
+                .count()
+        };
+        assert_eq!(form_102(&flat_chain("||", MAX_TYPE_DEPTH - 1)), 0);
+        assert_eq!(form_102(&flat_chain("||", MAX_TYPE_DEPTH)), 1);
+        let grouped = |groups: usize| format!("{}a == 1{}", "(".repeat(groups), ")".repeat(groups));
+        assert_eq!(form_102(&grouped(MAX_TYPE_DEPTH - 2)), 0);
+        assert_eq!(form_102(&grouped(MAX_TYPE_DEPTH - 1)), 1);
     }
 
     #[test]

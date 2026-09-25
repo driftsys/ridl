@@ -922,38 +922,36 @@ mod tests {
 
     // --- totality ----------------------------------------------------------
 
-    /// Note for anyone who sees this test die: with the depth guard removed or
-    /// raised, it does **not** fail with a clean assertion — it aborts the whole
-    /// test binary with `fatal runtime error: stack overflow` and SIGABRT, which
-    /// is the failure it exists to prevent. That is the correct signal, not a
-    /// broken test. Do not "fix" it by shrinking the chain below the guard.
+    /// A left-nested binary chain (`1 + 1 + 1 + …` nests one level per
+    /// operator) far past every limit is evaluated without exhausting the
+    /// stack. The refusal now happens in the parser: it bounds the height of
+    /// every expression tree at its `MAX_TYPE_DEPTH` (128,
+    /// `crates/ridl-syntax/src/parser.rs`), draws FORM-102 there, and consumes
+    /// the terms past the limit flat (driftsys/ridl#346). `parse_contract_expr`
+    /// drops the diagnostic and hands over the bounded tree, so the evaluator
+    /// sees a chain of the first 128 terms with the `== 1` after them gone,
+    /// and sums it.
+    ///
+    /// The evaluator's own guard (`MAX_DEPTH`, also 128) is therefore not
+    /// reachable through a parse: the only way to build an `ast::Expr` is to
+    /// cast a syntax node, and every syntax node comes from the parser. The
+    /// guard stays as a second line of defence for a tree built some other
+    /// way, and this test no longer exercises it.
     #[test]
     fn deep_nesting_is_refused_rather_than_exhausting_the_stack() {
-        // A LEFT-NESTED BINARY CHAIN, not parenthesis nesting: the parser caps
-        // type/paren depth at 128, below this guard's 256, so a paren tower can
-        // never reach the guard and a test built on one would pass whatever
-        // MAX_DEPTH said. `1 + 1 + 1 + …` nests one level per operator and does
-        // reach it.
-        // The ceiling is rowan's, not this module's: dropping a syntax tree
-        // thousands of levels deep recurses inside the library and overflows
-        // before anything here runs. These sizes are all far past MAX_DEPTH,
-        // which is what the test is about.
         for terms in [300, 1000, 2000] {
             let chain = vec!["1"; terms].join(" + ");
             let text = format!("{chain} == 1");
             let Some(expr) = parse_contract_expr(&text) else {
                 panic!("a {terms}-term chain must parse");
             };
-            match eval_expr(&expr, &env(&[])) {
-                Err(EvalError::TypeMismatch(message)) => assert!(
-                    message.contains(&format!("nests deeper than {MAX_DEPTH}")),
-                    "the depth guard is what refused it, not something else: {message}"
-                ),
-                other => panic!("a {terms}-term chain must hit the depth guard, got {other:?}"),
-            }
+            assert_eq!(
+                eval_expr(&expr, &env(&[])),
+                Ok(int(&MAX_DEPTH.to_string())),
+                "a {terms}-term chain evaluates as the bounded prefix the parser kept"
+            );
         }
-        // And just under the guard the same shape still evaluates, so the guard
-        // is not simply refusing everything.
+        // And well under the limit the same shape evaluates whole.
         let shallow = ["1"; 8].join(" + ");
         let expr = parse(&format!("{shallow} == 8"));
         assert_eq!(eval_expr(&expr, &env(&[])), Ok(Value::Bool(true)));

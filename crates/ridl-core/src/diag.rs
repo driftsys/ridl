@@ -195,7 +195,10 @@ diag_codes! {
         FORM_101 = "FORM-101", Error,
             "expected a specific token, or a construct the grammar admits here";
 
-        /// Unexpected token.
+        /// Unexpected token — also the code for nesting past the depth the
+        /// parser follows (`MAX_TYPE_DEPTH` in `ridl-syntax`): a type, an
+        /// attribute value, a parenthesised group, or an expression tree,
+        /// whose height an operator chain raises by one level per operator.
         FORM_102 = "FORM-102", Error,
             "unexpected token";
 
