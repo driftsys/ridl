@@ -4366,7 +4366,8 @@ impl Checker<'_> {
     /// lowers nothing — a query returning `()` has no representable return.
     /// A bare return or a fallible arm that names a primitive keyword instead
     /// of a `type_ref` (ridl Appendix C) draws FORM-102 and lowers the
-    /// keyword as its own named value, with no resolved symbol.
+    /// written keyword in its place (a named value for a bare return, the
+    /// arm's string in a `T | E`), with no resolved symbol.
     fn lower_query_return(&mut self, return_type: &ast::ReturnType) -> Option<v2::ReturnType> {
         let kind = if let Some(tuple) = return_type.tuple_type() {
             if tuple.fields().next().is_none() {
@@ -4392,22 +4393,18 @@ impl Checker<'_> {
             // stored (ADR-0008 decision 4).
             let ok_path = fallible.ok();
             let err_path = fallible.err();
+            let arm_message = |keyword: &str| {
+                format!(
+                    "`{keyword}` is a primitive, and each arm of an inline `T | E` is a \
+                     named type — declare a `type` for it (ridl §10.1)"
+                )
+            };
             let (ok, ok_symbol) = match &ok_path {
-                Some(path) => self.resolve_return_type_ref(path, |keyword| {
-                    format!(
-                        "`{keyword}` is a primitive, and each arm of an inline `T | E` is a \
-                         named type — declare a `type` for it (ridl §10.1)"
-                    )
-                }),
+                Some(path) => self.resolve_return_type_ref(path, arm_message),
                 None => (String::new(), None),
             };
             let (err, err_symbol) = match &err_path {
-                Some(path) => self.resolve_return_type_ref(path, |keyword| {
-                    format!(
-                        "`{keyword}` is a primitive, and each arm of an inline `T | E` is a \
-                         named type — declare a `type` for it (ridl §10.1)"
-                    )
-                }),
+                Some(path) => self.resolve_return_type_ref(path, arm_message),
                 None => (String::new(), None),
             };
             if let (Some(path), Some(symbol)) = (&ok_path, &ok_symbol)
@@ -9936,6 +9933,43 @@ interface VehicleStatus {
         );
     }
 
+    #[test]
+    fn mani_009_on_a_negative_default_timing_bound() {
+        // driftsys/ridl#356: a configured `[defaults].timing` with a negative
+        // bound is rejected by `parse_default_timing` the same as any other
+        // malformed string — MANI-009, with the built-in default
+        // `[100ms..1000ms]` as the fallback. The untimed event resolves to
+        // that fallback, not to the written negative bound.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_with_default(
+            &db,
+            "app",
+            &format!("{PRELUDE}interface I {{\n  event e : Speed\n}}\n"),
+            "[-100ms..1000ms]",
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert_eq!(codes(&checked), vec!["MANI-009", "RIDL-100"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Error);
+        assert!(
+            checked.diagnostics[0].message.contains("[defaults].timing"),
+            "MANI-009 must name the manifest key, got {:?}",
+            checked.diagnostics[0].message,
+        );
+        // The untimed event lowers with the built-in fallback bounds — no
+        // negative bound reaches the IR.
+        assert_eq!(
+            event_def(&checked, "e").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("100000".to_string()),
+                max_us: Some("1000000".to_string()),
+                default_applied: true,
+            }),
+        );
+    }
+
     /// Declared RPC bounds lower into the IR on both kinds, and an undeclared
     /// bound stays absent (ADR-0015 decisions 4 and 7): the bare command draws
     /// RIDL-112 and its `timing` field is `None` — the §9.1 defaulting path
@@ -10154,19 +10188,25 @@ interface VehicleStatus {
         // an uncoded "unknown type name". It still lowers the written keyword
         // as a named value (honest lowering).
         for keyword in ["boolean", "integer", "float", "string", "bytes"] {
-            let checked = check_ridl(
-                "app",
-                &format!(
-                    "{FALLIBLE_VOCAB}interface I {{\n  query read(axle: Axle): {keyword} @[..50ms]\n}}\n"
-                ),
+            let source = format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query read(axle: Axle): {keyword} @[..50ms]\n}}\n"
             );
+            let checked = check_ridl("app", &source);
             assert_eq!(codes(&checked), vec!["FORM-102"], "{keyword}");
+            let message = &checked.diagnostics[0].message;
             assert!(
-                checked.diagnostics[0]
-                    .message
-                    .contains(&format!("`{keyword}`")),
-                "{keyword}: got {}",
-                checked.diagnostics[0].message,
+                message.contains(&format!("`{keyword}`")),
+                "{keyword}: got {message}",
+            );
+            assert!(
+                message.contains("a query return is a named type") && message.contains("ridl §7.1"),
+                "{keyword}: must cite the bare-return rule, got {message}",
+            );
+            let range = checked.diagnostics[0].primary.range;
+            assert_eq!(
+                &source[usize::from(range.start())..usize::from(range.end())],
+                keyword,
+                "{keyword}: the span must cover exactly the keyword",
             );
             let query = query_def(&checked, "read");
             let Some(v2::return_type::Kind::Value(value)) =
@@ -10185,25 +10225,55 @@ interface VehicleStatus {
     fn primitive_fallible_arm_draws_form_102() {
         // driftsys/ridl#356: both arms of `T | E` are `type_ref`s (ridl
         // Appendix C), so a primitive keyword in either arm draws FORM-102
-        // naming it, and only that — no RIDL-303 on top of it.
-        for (arms, keyword) in [
-            ("string | CalError", "string"),
-            ("CalReport | integer", "integer"),
+        // naming it, and only that — no RIDL-303 on top of it. Each row is
+        // (the written arms, the keywords expected to draw FORM-102 in
+        // diagnostic order, the lowered `ok` arm, the lowered `err` arm).
+        for (arms, keywords, ok, err) in [
+            ("string | CalError", vec!["string"], "string", "CalError"),
+            (
+                "CalReport | integer",
+                vec!["integer"],
+                "CalReport",
+                "integer",
+            ),
+            (
+                "boolean | float",
+                vec!["boolean", "float"],
+                "boolean",
+                "float",
+            ),
         ] {
-            let checked = check_ridl(
-                "app",
-                &format!(
-                    "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): {arms} @[..50ms]\n}}\n"
-                ),
+            let source = format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): {arms} @[..50ms]\n}}\n"
             );
-            assert_eq!(codes(&checked), vec!["FORM-102"], "{arms}");
-            assert!(
-                checked.diagnostics[0]
-                    .message
-                    .contains(&format!("`{keyword}`")),
-                "{arms}: got {}",
-                checked.diagnostics[0].message,
-            );
+            let checked = check_ridl("app", &source);
+            assert_eq!(codes(&checked), vec!["FORM-102"; keywords.len()], "{arms}");
+            for (index, keyword) in keywords.iter().enumerate() {
+                let message = &checked.diagnostics[index].message;
+                assert!(
+                    message.contains(&format!("`{keyword}`")),
+                    "{arms}: got {message}",
+                );
+                assert!(
+                    message.contains("each arm of an inline `T | E`")
+                        && message.contains("ridl §10.1"),
+                    "{arms}: must cite the arm rule, got {message}",
+                );
+                let range = checked.diagnostics[index].primary.range;
+                assert_eq!(
+                    &source[usize::from(range.start())..usize::from(range.end())],
+                    *keyword,
+                    "{arms}: diagnostic {index} span must cover exactly the keyword",
+                );
+            }
+            let query = query_def(&checked, "calibrate");
+            let Some(v2::return_type::Kind::Fallible(fallible)) =
+                &query.return_type.as_ref().unwrap().kind
+            else {
+                panic!("{arms}: calibrate did not lower as fallible");
+            };
+            assert_eq!(fallible.ok, ok, "{arms}");
+            assert_eq!(fallible.err, err, "{arms}");
         }
     }
 
