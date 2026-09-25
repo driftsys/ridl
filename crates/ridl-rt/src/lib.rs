@@ -12,10 +12,15 @@
 //! `proto3` and `repr-c` name the payload encodings. `flatbuffers` enables the
 //! [`flatbuffers`] module, the reading and writing a generated
 //! `Payload<FlatBuffers>` implementation shares; `proto3` and `repr-c` enable
-//! nothing in this version.
+//! nothing in this version. A fourth feature, `std`, off by default, is not an
+//! encoding: it links the standard library and enables the [`task`] module —
+//! `block_on`, which waits on a future by parking the thread until a deadline,
+//! and `noop_waker` — for a blocking client built over an async one and for a
+//! frame loop that polls a future once per frame. Every other module stays
+//! `no_std` with the feature on.
 //!
-//! Every public item lives in one of six modules, or in the seventh that the
-//! `flatbuffers` feature adds. Generated code names each
+//! Every public item lives in one of six modules, or in one of the two that
+//! the `flatbuffers` and `std` features add. Generated code names each
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
 //! none, because several names here — `Duration`, `Handler`, `Kind` — are also
 //! names in `core` or in application code.
@@ -82,6 +87,8 @@ pub mod flatbuffers;
 pub mod payload;
 pub mod port;
 pub mod sample;
+#[cfg(feature = "std")]
+pub mod task;
 
 /// Pins which enums stay `#[non_exhaustive]` under R-11: `Transport`,
 /// `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`,
