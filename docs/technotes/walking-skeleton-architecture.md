@@ -31,10 +31,11 @@ member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
-`ridl-mcp`, most recently. `ridl-rt` and `ridl-loopback` landed after those
-three waves, from epic E11 rather than from E1 or E2, and are listed with the
-others because a newcomer will look for them here. This list is not a standing
-count of every crate the workspace holds — see `AGENTS.md` for that.
+`ridl-mcp`, most recently. `ridl-rt`, `ridl-loopback` and `ridl-rt-conformance`
+landed after those three waves, from epic E11 rather than from E1 or E2, and are
+listed with the others because a newcomer will look for them here. This list is
+not a standing count of every crate the workspace holds — see `AGENTS.md` for
+that.
 
 - **`crates/ridl-syntax`** — the surface layer, and the one grammar. A `logos`
   lexer over the full family token set; a hand-written recursive-descent parser
@@ -206,7 +207,15 @@ count of every crate the workspace holds — see `AGENTS.md` for that.
   consumer in one program, over one store behind one lock, with a clock a test
   advances by hand; it has no frame, no socket and no wire format, and `ridl-rt`
   is its only dependency. The Rust backend's round-trip tests build their
-  generated face over it. See [the design record](../design/ridl-loopback.md).
+  generated face over it, and it runs the suite of `ridl-rt-conformance`. See
+  [the design record](../design/ridl-loopback.md).
+
+- **`crates/ridl-rt-conformance`** — the port contract tests, test-only and
+  unpublished (epic E11 story E11.20): each test is a function generic over a
+  factory trait, which builds a runtime, makes a second event source, caller and
+  handler on it, and supplies a hand-driven clock and a settlement fault
+  injected once. A runtime runs the whole suite from its own tests with the
+  crate's `suite!` macro; `ridl-loopback` is the one runtime that does.
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract

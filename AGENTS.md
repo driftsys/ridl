@@ -7,11 +7,12 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: eighteen crates
+(ADRs), the implementation roadmap, and the compiler workspace: nineteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
-`ridl-rt`, `ridl-loopback`, and `ridlc-gen-model` and `ridlc-gen-rust` (the
+`ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` (the port contract tests any
+runtime runs, test-only), and `ridlc-gen-model` and `ridlc-gen-rust` (the
 reference codegen plugins, test-only) — plus `xtask` at the root, the
 `editors/vscode` extension, and `examples/`, whose worked examples are compiled
 and run by the test suite rather than being prose. The typl v0.1 toolchain (epic

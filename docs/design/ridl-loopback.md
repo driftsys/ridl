@@ -286,8 +286,9 @@ Neither turned out to be large, so neither is deferred.
 It never reads wall-clock time, so a round trip over this runtime produces the
 same timestamps on every run and on every machine, and a test can place a
 publication at an exact time. Two runtimes constructed at different real times
-start at the same logical time, which `the_clock_is_hand_driven_not_wall_clock`
-pins.
+start at the same logical time, which
+`two_runtimes_start_at_the_same_logical_time` in
+`crates/ridl-loopback/tests/ports.rs` pins.
 
 `advance` panics on a negative duration and saturates rather than overflowing: a
 clock that ran backwards would put an envelope before one already stamped, and
@@ -461,6 +462,26 @@ absences:
   claim that does not exist answers `UnknownClaim` and leaves the injection
   armed for the next real settlement.
 
+## It runs the port contract suite
+
+`crates/ridl-loopback/tests/conformance.rs` runs every test of
+`ridl-rt-conformance` over this runtime, the tests of both signal extensions
+included (story E11.20, driftsys/ridl#514). The factory it writes for the suite
+is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
+`Loopback::source`, `Loopback::caller` and `Loopback::handler` hand out, and
+`Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
+and fault hook.
+
+The suite states only what the port contract states, so three of this runtime's
+own choices are not in it: where the clock starts, the error the injected fault
+reports, and what a handler that has served nothing is presented. The suite's
+handlers call `serve` before they take a claim.
+`crates/ridl-loopback/tests/ports.rs` keeps the tests that only this runtime can
+express — those three choices, the threading model, `fixed`,
+`HandlerHandle::served`, `Loopback::split`, and the behaviour that follows from
+holding no catalog descriptor — and its module documentation lists each test
+with its reason.
+
 ## What it replaced
 
 `crates/ridl-backend-rust/tests/support/loopback.rs` was a disposable double
@@ -476,7 +497,8 @@ is deleted. In its place:
   `support_*` tests.
 - Those `support_*` tests moved to `crates/ridl-loopback/tests/ports.rs`, where
   they are tests of the runtime rather than of the Rust backend, alongside the
-  tests of what the double did not implement.
+  tests of what the double did not implement. Story E11.20 later moved the ones
+  any runtime can run into `ridl-rt-conformance`.
 
 `MinimalSignalOnlyPort`, in the same test file, is not replaced. It is not a
 double of a runtime: it is a port implementing `SignalReader` and `Attached` and
@@ -515,4 +537,6 @@ that.
   crate takes a reading; driftsys/ridl#378 (E16.2), which gives it a catalog
   descriptor and with it every report in "What it cannot report"
 - `crates/ridl-loopback/src/lib.rs`, `src/handle.rs`, `src/store.rs` — the crate
-  as built; `crates/ridl-loopback/tests/ports.rs` — its tests
+  as built; `crates/ridl-loopback/tests/conformance.rs` — the port contract
+  suite of `ridl-rt-conformance` run over it; `tests/ports.rs` — the tests only
+  it can express
