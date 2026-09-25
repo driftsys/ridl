@@ -359,7 +359,7 @@ step `serve` calls, and returns the `ReadError` instead of swallowing it; both
 in stage F5a.
 
 **The two dispositions of driftsys/ridl#485.** Item 1, the three-deep reply
-shape, is closed by the poll face becoming `pub(crate)` in F5b: no public method
+shape, is closed by the poll face becoming `pub(crate)` in F5a: no public method
 returns it, and F5 may reshape the internal methods freely. Item 2, `dispatch`
 hiding a handler failure, is this decision: the failure is the value `serve`
 resolves to.
@@ -449,11 +449,12 @@ is read by the future for its deadline (F-2); the table holds no time.
 **What changes in the loopback's record.** "Nothing is bounded, so `Busy` and
 `TooLarge` never appear outside the one injected failure" becomes "the caller
 side holds 16 slots, and a send with all of them in flight is `Busy`"; "a
-settled outcome is kept until the caller releases it" stays true, and the
-sentence after it, that nothing the Rust backend emits calls `forget`, is
-retired by F5a; and the `CallerHandle` gains `Clock` and `Wakeable`, because a
-`Client` over an interface with a call is bound on both (F-10) and a role handle
-that cannot build one is not a handle for that role.
+settled outcome is kept until the caller releases it" stays true, and the two
+sentences after it — that nothing the Rust backend emits calls `forget`, and
+that a program's call table grows with its unforgotten calls — are retired by
+F5a and by the 16-slot bound; and the `CallerHandle` gains `Clock` and
+`Wakeable`, because a `Client` over an interface with a call is bound on both
+(F-10) and a role handle that cannot build one is not a handle for that role.
 
 **Reason.** The table is untested by a runtime until one uses it, and the
 reference runtime is the one whose tests are the contract. E11.21's "a call
@@ -526,13 +527,15 @@ the internal one-pass step. F5b adds the `blocking` module.
 `Context`, `Waker`, `Pin`, `Infallible` — is in `core` and stable before 1.83,
 and no `impl Trait` in return position and no `async` block is emitted, so the
 emitted source compiles as edition 2021 at 1.83 when copied into a crate of that
-edition, which is the matrix ADR-0021 decision 10 sets for the codegen. The
-manifest `ridl build` emits (`crates/ridlc/src/lib.rs`, the `Cargo.toml`
-template) is edition 2024 and already declares a `std` feature, on by default
-and empty; F5b makes that feature forward to `ridl-rt/std` and gates the
-`blocking` module on it, so a build with default features off has no `blocking`
-module and builds for `wasm32-unknown-unknown`. F5a adds the emitted crate to
-`just compat-check` if nothing compiles its source as edition 2021 at 1.83 yet.
+edition, which is the first of the three cells ADR-0021 decision 10 sets for the
+codegen — edition 2021 at 1.83, edition 2021 at the pin, edition 2024 at the pin
+— and the other two follow from it. The manifest `ridl build` emits
+(`crates/ridlc/src/lib.rs`, the `Cargo.toml` template) is edition 2024 and
+already declares a `std` feature, on by default and empty; F5b makes that
+feature forward to `ridl-rt/std` and gates the `blocking` module on it, so a
+build with default features off has no `blocking` module and builds for
+`wasm32-unknown-unknown`. F5a adds the emitted crate to `just compat-check` if
+nothing compiles its source as edition 2021 at 1.83 yet.
 
 **Reason.** A named future type is what a `no_std` frame loop needs: a value it
 can store in its own state struct between frames, which `impl Future` cannot be
@@ -540,9 +543,10 @@ without allocation. The blocking client needs it too (F-11): after `block_on`
 gives up it asks the future whether the call was sent. `Pin::new` on an `Unpin`
 future is what makes by-hand polling one line. A sketch with these bounds, the
 `Drop` impl, the by-hand poll and an `Unpin` assertion compiled at Rust 1.83 as
-edition 2021 and for `wasm32-unknown-unknown` while this note was written; the
-struct declares the full bound set and every impl repeats it, because a `Drop`
-impl's bounds must equal the struct's (rustc E0367).
+edition 2021, and for `wasm32-unknown-unknown` at the pinned toolchain, while
+this note was written (the sketch is not kept in the tree); the struct declares
+the full bound set and every impl repeats it, because a `Drop` impl's bounds
+must equal the struct's (rustc E0367).
 
 **Rejected.** `impl Future` in return position: cannot be named, so cannot be
 stored, and cannot be asked anything. One generic future type in `ridl-rt`,
@@ -611,17 +615,19 @@ would again accept the wrong kind of correlation.
 
 **Decision.** A providing runtime that cannot admit a call — no slot, no budget,
 or a call faster than the member's `min` — answers with a `response` whose
-outcome is `transport(Busy)`, and the caller's runtime presents it as
-`Transport::Busy` from `Caller::ack` or `Caller::reply`. The frame specification
-changes in five places: `busy` joins `corrupt` as a bare value of the `outcome`
-field in §5.3's and §5.4's rows and in §5.6's field table; §5.3's "What the
-caller does with the response" maps `busy` to `Err(CallError::Transport(Busy))`;
-§9.6's "exactly one crosses" becomes "exactly two cross: `Corrupt`, because the
-provider detected it, and `Busy`, because the provider refused"; and §8's cell
-"the providing runtime may refuse a faster call at admission; how it answers one
-is not fixed here" becomes "... and answers with `busy`". All of it lands in
-stage F3, in E11.16's pull request, with the variant. `Busy` is `Copy` and
-carries nothing.
+outcome is `busy`, and the caller's runtime presents it as `Transport::Busy`
+from `Caller::ack` or `Caller::reply`. The frame specification changes wherever
+it names the outcome values or counts the crossing variants: `busy` joins
+`corrupt` as a bare value of the `outcome` field in §5.3's and §5.4's rows and
+in §5.6's field table; §5.3's "What the caller does with the response" maps
+`busy` to `Err(CallError::Transport(Busy))`; §9.6's "exactly one crosses"
+becomes "exactly two cross: `Corrupt`, because the provider detected it, and
+`Busy`, because the provider refused"; and §8's cell "the providing runtime may
+refuse a faster call at admission; how it answers one is not fixed here" becomes
+"... and answers with `busy`"; and every sentence of §5.3, §5.4 and §9.6 that
+counts the outcome values or the `Transport` variants — §9.6 opens with "Of the
+four `Transport` variants" — counts one more. All of it lands in stage F3, in
+E11.16's pull request, with the variant. `Busy` is `Copy` and carries nothing.
 
 **Reason.** A provider that knows at admission that it will not serve a call
 should say so; silence makes the caller wait the whole bound for a refusal that
@@ -669,7 +675,8 @@ once" assertion. The F3 pull request names it and shows the failure.
 a recording port double and over `ridl-loopback`:
 
 - a future dropped while waiting calls `forget` once with its correlation; one
-  dropped after its outcome was taken calls nothing;
+  that took its outcome called `forget` once at that moment and calls nothing on
+  drop;
 - a call over a runtime with every slot taken is `Pending`, is woken by a
   reclaimed slot, and resolves; with the clock advanced past `max` first, it
   resolves to `Send(Busy)`;
@@ -694,11 +701,13 @@ calls at the platform layer — are about `ridl-engine`'s layers 1 and 2, as tha
 record's 2026-09-12 correction says, and bind neither the ports library nor
 generated code, so they stand untouched. RA-19's provider clause, "a `dispatch`
 over `Handler`", becomes "a `serve` over `Handler`"; its client clause is
-unchanged. ADR-0018's open question 5 is answered for the face: a `command`'s
-future resolves on the delivery acknowledgment, which is the runtime's finding
-and not the application's, and its output `Result<(), ClientError>` carries
-exactly the runtime delivery result the question asked for, never an acceptance
-value — which is the second of the two readings the question left open, taken.
+unchanged, and RA-14's sentence that generated code never contains a blocking or
+async face is superseded with RA-20's. ADR-0018's open question 5 is answered
+for the face: a `command`'s future resolves on the delivery acknowledgment,
+which is the runtime's finding and not the application's, and its output
+`Result<(), ClientError>` carries exactly the runtime delivery result the
+question asked for, never an acceptance value — which is the second of the two
+readings the question left open, taken.
 
 **Where each of the four places is amended, and when.**
 
@@ -731,7 +740,7 @@ correction denies.
   unchanged.
 - **A timed settlement in `ridl-loopback`.** It needs the descriptor E16.2
   brings; until then a call the provider never serves is bounded only by the
-  future's deadline (F-3).
+  future's deadline (F-3) or the blocking client's timeout (F-11).
 - **The plugin protocol.** Lane P landed it; this lane changes what the face
   emitter writes, not how it is invoked.
 
@@ -749,20 +758,20 @@ correction denies.
 
 None of these moves in this note's own pull request.
 
-| Record                                                       | What changes                                                                                                                                                                                                                                                      | Decision                    |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| ADR-0023, a dated amendment                                  | decision 4 superseded for the public surface and kept inside; the semantics of F-2, F-3, F-4, F-7, F-11; decision 5 unchanged                                                                                                                                     | F-1 to F-4, F-7, F-11, F-12 |
-| ADR-0021, a dated amendment                                  | `Wakeable`, `Interest`, `Transport::Busy`, `correlate`, `ClientError`, `ProviderError`, the `std` feature folded in, the helpers, the reconciling sentence, one 0.x minor; open question 6 closed, open question 5 reworded; the items noted on driftsys/ridl#509 | F-1, F-5, F-6, F-8, F-13    |
-| ADR-0020 decision 5                                          | a dated note: `correlate` is the seventh unconditional module                                                                                                                                                                                                     | F-8                         |
-| ADR-0018 open question 5                                     | a dated note closing it for the face                                                                                                                                                                                                                              | F-15                        |
-| `docs/wip/2026-09-08-ridl-rt-design.md` §8                   | a dated note restating RA-20 and RA-19's provider clause                                                                                                                                                                                                          | F-15                        |
-| `docs/specification/frame-specification.md` §8 and §9.6      | `Busy` crosses                                                                                                                                                                                                                                                    | F-13                        |
-| `docs/design/ridl-rt.md`                                     | the module table, the ports, the errors, the helpers section, `Box<P>`                                                                                                                                                                                            | F-8                         |
-| `docs/design/ridl-loopback.md`                               | the table, the bound, the reclaim rule, `CallerHandle`'s two new roles, the served-set deviation                                                                                                                                                                  | F-7, F-9                    |
-| `docs/design/interaction-face.md`                            | rewritten from this note in F5b                                                                                                                                                                                                                                   | all                         |
-| `crates/ridl-backend-rust/src/face.rs`, module documentation | RA-20 restated                                                                                                                                                                                                                                                    | F-15                        |
-| `docs/ROADMAP.md`, E11.16 and E11.18 rows                    | `Wake` is `Interest`; "FIFO slot waiters" becomes "every `Slot` waiter is woken"                                                                                                                                                                                  | F-5, F-6                    |
-| `docs/wip/2026-09-25-lane-f-driver.md`, §3                   | amended by the plan's pull request if the split changes                                                                                                                                                                                                           | —                           |
+| Record                                                                    | What changes                                                                                                                                                                                                                                                      | Decision                    |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| ADR-0023, a dated amendment                                               | decision 4 superseded for the public surface and kept inside; the semantics of F-2, F-3, F-4, F-7, F-11; decision 5 unchanged                                                                                                                                     | F-1 to F-4, F-7, F-11, F-12 |
+| ADR-0021, a dated amendment                                               | `Wakeable`, `Interest`, `Transport::Busy`, `correlate`, `ClientError`, `ProviderError`, the `std` feature folded in, the helpers, the reconciling sentence, one 0.x minor; open question 6 closed, open question 5 reworded; the items noted on driftsys/ridl#509 | F-1, F-5, F-6, F-8, F-13    |
+| ADR-0020 decision 5                                                       | a dated note: `correlate` is the seventh unconditional module                                                                                                                                                                                                     | F-8                         |
+| ADR-0018 open question 5                                                  | a dated note closing it for the face                                                                                                                                                                                                                              | F-15                        |
+| `docs/wip/2026-09-08-ridl-rt-design.md` §8                                | a dated note restating RA-20 and RA-19's provider clause                                                                                                                                                                                                          | F-15                        |
+| `docs/specification/frame-specification.md` §5.3, §5.4, §5.6, §8 and §9.6 | `busy` crosses                                                                                                                                                                                                                                                    | F-13                        |
+| `docs/design/ridl-rt.md`                                                  | the module table, the ports, the errors, the helpers section, `Box<P>`                                                                                                                                                                                            | F-8                         |
+| `docs/design/ridl-loopback.md`                                            | the table, the bound, the reclaim rule, the call-table growth sentence, the wake limit of F-3, `CallerHandle`'s two new roles, the served-set deviation                                                                                                           | F-7, F-9                    |
+| `docs/design/interaction-face.md`                                         | rewritten from this note in F5b                                                                                                                                                                                                                                   | all                         |
+| `crates/ridl-backend-rust/src/face.rs`, module documentation              | RA-20 restated                                                                                                                                                                                                                                                    | F-15                        |
+| `docs/ROADMAP.md`, E11.16 and E11.18 rows                                 | `Wake` is `Interest`; "FIFO slot waiters" becomes "every `Slot` waiter is woken"                                                                                                                                                                                  | F-5, F-6                    |
+| `docs/wip/2026-09-25-lane-f-driver.md`, §3                                | amended by the plan's pull request: the `pub(crate)` step and the texts that describe it move from F5b to F5a                                                                                                                                                     | —                           |
 
 ## 6. Execution
 
@@ -770,9 +779,9 @@ The stages are the driver's; the plan that follows the disposition writes one
 task per landable change, with the files, the test and what it must not break.
 
 1. **F3, first pull request — E11.16.** `Wakeable`, `Interest`,
-   `Transport::Busy`, the two frame-specification sentences of F-13; the
-   loopback implements `Wakeable` on every handle and `Clock` on `CallerHandle`;
-   the mutation of F-14 named.
+   `Transport::Busy`, the frame-specification changes of F-13, the wake limit of
+   F-3 recorded in the loopback record; the loopback implements `Wakeable` on
+   every handle and `Clock` on `CallerHandle`; the mutation of F-14 named.
 2. **F3, second pull request — E11.18.** `correlate::Table` and
    `correlate::Waiters`; the loopback moves onto both (F-9); `ClientError` and
    `ProviderError` (F-1), so the release carries every public item the face
@@ -782,7 +791,8 @@ task per landable change, with the files, the test and what it must not break.
 4. **F5a — E11.21, first half.** The async `Client`, the named futures, `serve`;
    the poll face `pub(crate)` under internal names, `dispatch` the internal
    step; `face.rs`'s module documentation restated (F-15); the cabin round trip
-   and the round-trip tests through the async client.
+   and the round-trip tests through the async client; the interaction-face
+   record gains a dated section for what F5a emits, and its rewrite stays F5b's.
 5. **The release.** The 0.x minor carrying E11.16 to E11.19, a maintainer act.
 6. **F5b — E11.21, second half.** The `blocking` module, and the emitted
    manifest's `std` feature forwarding to `ridl-rt/std`; the records,
