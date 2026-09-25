@@ -41,7 +41,11 @@ Left out of both lanes, on purpose:
 
 ## Shared files
 
-- F1, Q1 and Q2 edit `crates/ridl/src/main.rs`.
+- F1, F4, Q1 and Q2 edit `crates/ridl/src/main.rs`.
+- F1, Q1 and Q2 edit `docs/book/cli-reference.md`: F1 the publication-gate
+  section, Q1 the two sentences that say RIDL-407 warns on every interaction
+  whose ordinal moved, Q2 the "publish a first baseline there" wording #340
+  names.
 - F2 and F3 edit `crates/ridl-lsp/src/server.rs`; run F2 before F3.
 
 Rebase on `origin/main` before starting any of these stages, and again before
@@ -60,10 +64,14 @@ number no longer matches, find the item by its function name.
   interaction `doorClosed` and deletes the stray snapshot. The other two cases
   of the issue (an interface and a service sharing a name, a snapshot that
   cannot be stat'ed through `is_ir_json` at `:547`) were confirmed by reading
-  only; the stage reproduces them first. The fix resolves with the same
-  tie-break rule as `ridl_diff::diff_sets`, or carries the resolved container on
-  `Change` as the issue proposes, and makes a failed stat an error instead of a
-  silent exclusion.
+  only; the stage reproduces them first. The fix is the issue's **Expected**
+  list, with a test for each case: exit 2 when two published snapshots declare
+  one package; exit 2 when a snapshot-named entry cannot be stat'ed; and the
+  `ReservedNameRedeclared` refusal fails closed, refusing unless the published
+  container is a named-form service. Do not copy the tie-break of
+  `ridl_diff::diff_sets`, which keeps the last snapshot and so keeps the gate
+  open in the first case. Carrying the old ordinal and a tombstone flag on
+  `ridl_diff::Change` is the issue's later step, not this stage's.
 - **F2 — #384.** `crates/ridl-lsp/src/server.rs:231` discards the
   `load_workspace` error with `.ok()`, and `ridl-lsp` sends no `showMessage` or
   `logMessage` anywhere. The minimum fix sends `window/showMessage` with the
@@ -80,24 +88,32 @@ number no longer matches, find the item by its function name.
 - **F4 — #346.** The `while` loops of `or_expr`, `and_expr`, `add_expr` and
   `mul_expr` (`crates/ridl-syntax/src/parser.rs:1758-1840`) do not increment
   `depth`, `infer` and `walk_refs` in the checker have no guard, and `run_mcp`
-  (`crates/ridl/src/main.rs:327-330`) sets no `thread_stack_size`. Reproduced:
-  `ridl mcp` aborts at a 1000-term chain; the CLI survives to about 3000. The
-  fix reports a diagnostic for a chain over the limit, in the CLI and in
-  `ridl mcp`, instead of aborting.
+  (`crates/ridl/src/main.rs:326-330`) sets no `thread_stack_size`. Reproduced in
+  a debug build: `ridl mcp` aborts at a 1000-term chain, and the CLI survives to
+  about 3000. The issue gives release-build figures: `ridl mcp` aborts at 4000
+  terms, and `ridl check` at 20000. The fix reports a diagnostic for a chain
+  over the limit instead of aborting, in `ridl check`, `ridl mcp` and
+  `ridl lsp`.
 - **F5 — #344.** `editors/vscode/src/extension.ts:89` sets `clientStarted`
   before `await client.start()`, and `restartClient` (`:125-131`) calls
-  `client.stop()` without checking the client state, which throws in
-  vscode-languageclient 10.1.0 for any state other than running. Validate with
+  `client.stop()` without checking the client state. In vscode-languageclient
+  10.1.0 (`lib/common/client.js`, `shutdown`), that call throws for the
+  `Starting` and `StartFailed` states, which are the states a failed first start
+  leaves. It returns without an error for `Stopped` and `Initial`. Validate with
   `just vscode-verify`.
 
-## Lane Q — quick-win debt
+## Lane Q — small debt fixes
 
 - **Q1 — #335.** Add `ridl_diff::Category::MemberReordered` to
   `ORDINAL_CATEGORIES` (`crates/ridl/src/main.rs:611-616`) and give
-  `drift_message` an arm that names the member, its containing body, and the
-  ordinal it left and took. Reproduced: `ridl diff` reports two breaking
-  `member_reordered` changes on a struct field swap, and `ridl check --baseline`
-  exits 0 with no output.
+  `drift_message` an arm that names the member, its containing body, and where
+  it moved from and to, in the word the change's own detail uses: an ordinal for
+  a struct field, a position for an enum value or an enum-set bit
+  (`crates/ridl-diff/src/lib.rs:143-153`). The issue leaves open whether the
+  desk check warns on an enum or enum-set reorder at all; decide that on the
+  issue first. Reproduced: `ridl diff` reports two breaking `member_reordered`
+  changes on a struct field swap, and `ridl check --baseline` exits 0 with no
+  output.
 - **Q2 — #340.** `refuse_empty_baseline` (`crates/ridl/src/main.rs:1479-1489`)
   suggests `--out <location>` without consulting `is_source_dir`. Reproduced:
   following the suggestion writes the IR file next to `ridl.toml`. Omit the
@@ -106,11 +122,14 @@ number no longer matches, find the item by its function name.
 - **Q3 — #356, both defects in one pull request.** (a) `parse_default_timing`
   (`crates/ridl-sem/src/timing.rs`, beside the `is_zero` check) accepts a
   negative bound; reproduced with a `[defaults].timing` of `-100ms`. Correct the
-  doc comment that says otherwise. (b) `lower_query_return`
+  comment inside `duration_us` (`crates/ridl-sem/src/timing.rs:475-476`) that
+  says a sign is rejected. (b) `lower_query_return`
   (`crates/ridl-sem/src/check.rs:4367`) does not call `primitive_path_keyword`
   as the parameter and stream-element paths do; reproduced:
-  `query name(): string` draws a diagnostic with an empty code. Mint the code
-  through the catalogue, not by hand.
+  `query name(): string` draws a diagnostic with an empty code. The issue leaves
+  the choice of code to the fixer, against the ridl language reference. The two
+  sibling positions reuse existing codes, FORM-102 for a query parameter and
+  RIDL-202 for a stream element; prefer reusing one over adding a new code.
 - **Q4 — #201.** The `book-check` recipe in the `justfile` does not notice that
   mdBook created a chapter file SUMMARY.md names but the tree does not have.
   Reproduced: `just book-check` exits 0. Fail when the scratch copy's `docs/`
@@ -118,7 +137,7 @@ number no longer matches, find the item by its function name.
   check fail, in the shape `just doc-path-check` uses.
 - **Q5 — #506.** Waits for the maintainer to choose A (emit
   `#[allow(non_camel_case_types)]`) or B (a pinned PascalCase transform with an
-  ADR-0016 amendment) on the issue. Only A is a quick win; if B is chosen, the
+  ADR-0016 amendment) on the issue. Only A fits this lane; if B is chosen, the
   stage leaves this lane and gets its own design note.
 
 ## The prompt — lane F
@@ -139,7 +158,10 @@ origin/main inside the same worktree. Never enter another session's worktree.
 Run `git branch --show-current` before every commit and every push.
 
 For the stage:
-1. Read the issue and its comments (`gh issue view <N> --comments`).
+1. Read the issue body and its comments:
+   `gh issue view <N> --json title,body,comments`. Do not use
+   `--comments`, which prints the comments only when the output is not a
+   terminal.
 2. Write the test that reproduces the defect and watch it fail, before any
    fix (superpowers:test-driven-development).
 3. Fix, with the model the routing names for the stage.
@@ -152,9 +174,9 @@ For the stage:
 ## The prompt — lane Q
 
 ```text
-You drive lane Q of docs/wip/2026-09-25-bug-lanes-driver.md: the quick-win
-debt #335, #340, #356, #201 and #506. Read AGENTS.md, then that document in
-full. Its routing and shared-file rules bind this session.
+You drive lane Q of docs/wip/2026-09-25-bug-lanes-driver.md: the small
+debt fixes #335, #340, #356, #201 and #506. Read AGENTS.md, then that
+document in full. Its routing and shared-file rules bind this session.
 
 Find the current stage. Read the comments on #507. The stages are Q1 to Q5
 and are independent; take the lowest one not yet posted on #507. Q5 runs only
@@ -169,12 +191,15 @@ origin/main inside the same worktree. Never enter another session's worktree.
 Run `git branch --show-current` before every commit and every push.
 
 For the stage:
-1. Read the issue and its comments (`gh issue view <N> --comments`).
+1. Read the issue body and its comments:
+   `gh issue view <N> --json title,body,comments`. Do not use
+   `--comments`, which prints the comments only when the output is not a
+   terminal.
 2. Write the test that reproduces the defect and watch it fail, before any
    fix (superpowers:test-driven-development).
 3. Fix, with a Sonnet implementer.
 4. `fix(<scope>): ...`, one pull request whose body says "Closes #<N>".
-   Run /review <PR> (the quick pass), fix, `just verify`, merge.
+   Run /review <PR>, fix, pass 2, `just verify`, merge.
 5. Post the stage, the pull request and anything lane F must know as a
    comment on #507. Never edit #507's body.
 ```
