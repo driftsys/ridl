@@ -191,14 +191,14 @@ whose every staged change is such a touch changes nothing at all.
 publishes a zero-length value too. The two differ in what they assert: a touch
 asserts nothing a consumer did not already have, while an invalidate is the ridl
 §4.5 transition to the invalid state, and dropping it would lose a provider's
-declared state change silently. What a consumer sees for it today is the face's:
-the generated client runs `Payload::verify` over the bytes whatever provenance
-the port reported, so zero bytes come back as
-`Provenance::Invalid(Cause::Detected(Detection::Corrupt))` and the provider's
-`Declared` cause is replaced. That is the same face gap the observation at the
-end of this record describes for an unpublished read, reached through a second
-door, and the generated `Publisher` does emit `invalidate_<name>`, so a provider
-that invalidates before its first `set` reaches it.
+declared state change silently. The generated client reports it as the init
+value under `Provenance::Invalid(Cause::Declared)`, the provider's own
+provenance, the same way it reports an unpublished read as the init value under
+`Provenance::Init`: the accessor checks the port's reported provenance and
+length before running `Payload::verify`, and runs it only when there are bytes
+to decode (driftsys/ridl#517). The generated `Publisher` does emit
+`invalidate_<name>`, so a provider that invalidates before its first `set`
+reaches this path.
 
 ## A claim is not a correlation
 
@@ -359,16 +359,23 @@ argument bytes that fail the structure check settle
 `CallError::Transport(Transport::Corrupt)`
 (`round_trip_malformed_argument_bytes_settle_transport_corrupt`). On the
 consumer side, a signal payload that fails its check reports
-`Provenance::Invalid(Cause::Detected(Detection::Corrupt))`, which is pinned only
-as an assertion on the emitted text
-(`crates/ridl-backend-rust/tests/face_generation.rs`), not by a round trip over
-this crate or a hand-written port. A never-published signal is a separate case:
-the port reports `Provenance::Init` with zero bytes, and the face checks that
-before running `Payload::verify`, returning the init value under
-`Provenance::Init` directly (driftsys/ridl#517).
-`ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` pins that
-case over a hand-written port. Nothing here would change if E14.2 chose
-differently, because this crate never looks.
+`Provenance::Invalid(Cause::Detected(Detection::Corrupt))`, which is pinned as
+an assertion on the emitted text
+(`crates/ridl-backend-rust/tests/face_generation.rs`) and by a round trip over
+this crate (`round_trip_signal_with_malformed_bytes_settles_detected_corrupt`,
+which writes the malformed bytes directly through `SignalWriter`, bypassing the
+generated `Publisher`'s encoder). Two cases have no payload to check at all, and
+the face returns the init value under the port's own provenance without running
+`Payload::verify`, rather than treating the empty bytes as corrupt
+(driftsys/ridl#517): a never-published signal, where the port reports
+`Provenance::Init` with zero bytes, pinned by
+`round_trip_signal_reads_as_init_before_any_publication` over this crate and by
+`ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` over a
+hand-written port; and a signal invalidated with no prior publication, where the
+port reports `Provenance::Invalid(Cause::Declared)` with zero bytes, pinned by
+`round_trip_signal_reads_as_init_when_invalidated_before_any_publication` over
+this crate. Nothing here would change if E14.2 chose differently, because this
+crate never looks.
 
 The alternative rejected is a runtime that verifies. It cannot: a port carries
 interface numbers, ordinals and bytes and names no payload type, so the runtime
