@@ -56,7 +56,7 @@ fn the_max_of_a_signal_is_returned_as_it_is() {
         Kind::Signal,
         Some(Timing {
             mode: TimingMode::StrictPeriodic,
-            min: Some(Duration(10_000)),
+            min: Some(Duration(5_000)),
             max: Some(Duration(10_000)),
         }),
     );

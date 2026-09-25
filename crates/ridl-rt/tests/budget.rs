@@ -145,8 +145,10 @@ const UNSIZED_BOTH: Member = Member {
     ],
 };
 
-/// `interface Diagnostics`, in ordinal order, two of whose members have a
-/// payload with no FlatBuffers size.
+/// `interface Diagnostics`, not in ordinal order: the first unsized member in
+/// this order (`UNSIZED_BOTH`, ordinal 5) is not the lowest-ordinal unsized
+/// member (`UNSIZED_REPLY`, ordinal 4), so a test over this interface can
+/// tell "first in the order given" from "lowest ordinal".
 struct Diagnostics;
 
 impl Interface for Diagnostics {
@@ -154,7 +156,7 @@ impl Interface for Diagnostics {
     const NUMBER: InterfaceNo = InterfaceNo(2);
     const PROVISIONAL: bool = false;
     const NAME: &'static str = "Diagnostics";
-    const MEMBERS: &'static [Member] = &[TEMPERATURE, SET_TARGET, UNSIZED_REPLY, UNSIZED_BOTH];
+    const MEMBERS: &'static [Member] = &[TEMPERATURE, SET_TARGET, UNSIZED_BOTH, UNSIZED_REPLY];
 }
 
 /// `Member::payloads` (one entry for every kind but a query) and
@@ -232,16 +234,18 @@ fn a_table_budget_sums_every_member() {
 
 /// `Interface::MEMBERS` and `EncodedSizes`: a table with an unsized member
 /// has no budget; of two unsized members, the first in the order given is
-/// reported.
+/// reported — `UNSIZED_BOTH` (ordinal 5), not the lower-ordinal
+/// `UNSIZED_REPLY` (ordinal 4), because `Diagnostics::MEMBERS` lists it
+/// first.
 #[test]
 fn a_table_budget_reports_the_first_unsized_member() {
     let err = table_budget::<FlatBuffers>(Diagnostics::MEMBERS).unwrap_err();
-    assert_eq!(err.ordinal, Ordinal(4));
-    assert_eq!(err.member, "diagnose");
-    assert_eq!(err.type_name, "DiagnoseReply");
+    assert_eq!(err.ordinal, Ordinal(5));
+    assert_eq!(err.member, "selfTest");
+    assert_eq!(err.type_name, "SelfTestRequest");
     assert_eq!(
         table_budget::<Proto3>(Diagnostics::MEMBERS),
-        Ok(5 + 7 + (2 + 40) + (6 + 9))
+        Ok(5 + 7 + (6 + 9) + (2 + 40))
     );
 }
 

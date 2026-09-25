@@ -90,8 +90,9 @@ fn one_ordinal_in_two_interfaces_is_two_channels() {
 }
 
 /// Frame §5.2 and §7 (which attribute the rule to ridl §3.1): a loss is a gap
-/// between two accepted occurrences of one channel. A `seq` not greater than the last one is a duplicate or a reordered
-/// occurrence, not a gap: the tracker reports it and keeps the last `seq`.
+/// between two accepted occurrences of one channel. A `seq` not greater than
+/// the last one is a duplicate or a reordered occurrence, not a gap: the
+/// tracker reports it and keeps the last `seq`.
 #[test]
 fn a_seq_not_newer_than_the_last_is_reported_and_leaves_the_last_unchanged() {
     let mut tracker = EventSeqTracker::<2>::new();
@@ -189,14 +190,21 @@ fn forgetting_one_channel_leaves_the_others_counting() {
 #[test]
 fn forgetting_a_channel_leaves_the_same_ordinal_in_another_interface() {
     let mut tracker = EventSeqTracker::<2>::new();
-    assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 1), Ok(Continuity::First));
+    // OTHER_IFACE's channel is observed first, so it holds the tracker's
+    // first slot.
     assert_eq!(
         tracker.observe(OTHER_IFACE, SHIFT_DONE, 1),
         Ok(Continuity::First)
     );
+    // IFACE's channel, of the same ordinal, is observed second.
+    assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 1), Ok(Continuity::First));
     tracker.forget(IFACE, SHIFT_DONE);
+    // The surviving channel, OTHER_IFACE's, keeps counting from its last
+    // seq: Next, not First.
     assert_eq!(
         tracker.observe(OTHER_IFACE, SHIFT_DONE, 2),
         Ok(Continuity::Next)
     );
+    // The forgotten channel, IFACE's, restarts at First.
+    assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 9), Ok(Continuity::First));
 }
