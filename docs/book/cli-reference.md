@@ -239,10 +239,13 @@ or one whose snapshots sit two or more levels down rather than one — is the
 same exit 2: the message names the directory, says to point `--baseline` at
 the directory that holds the snapshots (`ridl baseline` publishes them to
 `.ridl/baseline/` at the workspace root), and only then offers
-`ridl baseline --out` for publishing a first baseline there. Auto-discovery
-asserts nothing about a baseline being present, so a `.ridl/baseline/`
-directory found this way, empty or absent, keeps the silent skip the two
-paragraphs above do not touch.
+`ridl baseline --out <directory>` for publishing a first baseline into that
+directory. The offer is left out when the directory is a source tree — it
+holds a `ridl.toml`, or a `.typl`, `.ridl` or `.rsdl` file, directly inside
+it — since publishing a baseline there would write snapshots next to the
+sources. Auto-discovery asserts nothing about a baseline being present, so a
+`.ridl/baseline/` directory found this way, empty or absent, keeps the
+silent skip the two paragraphs above do not touch.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares

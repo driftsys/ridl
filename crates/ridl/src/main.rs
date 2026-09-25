@@ -1560,15 +1560,24 @@ fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Pac
 /// The remedy names the likely mistake first — the path is aimed above the
 /// snapshots, which is #235's own case (`--baseline ws` where
 /// `ws/.ridl/baseline/` holds them) — and publishing into the named directory
-/// second. Offered alone, the second would have `ridl baseline --out ws` write
-/// snapshots into the workspace root.
+/// second. The second is omitted when `location` is a source tree, as
+/// [`is_source_dir`] judges it: following that advice there would write
+/// `.ir.json` snapshots into the source tree itself, which is not what
+/// `ridl baseline --out` is for (driftsys/ridl#340).
 fn refuse_empty_baseline(location: &Path) -> ExitCode {
+    let publish_clause = if is_source_dir(location) {
+        String::new()
+    } else {
+        format!(
+            ", or publish a first baseline into `{}` with `ridl baseline --out {}`",
+            location.display(),
+            location.display(),
+        )
+    };
     eprintln!(
         "error: the baseline `{}` holds no `.ir.json` snapshot directly inside it; point \
          `--baseline` at the directory that holds the snapshots (`ridl baseline` publishes \
-         them to `.ridl/baseline/` at the workspace root), or publish a first one there with \
-         `ridl baseline --out {}`",
-        location.display(),
+         them to `.ridl/baseline/` at the workspace root){publish_clause}",
         location.display(),
     );
     ExitCode::from(2)
