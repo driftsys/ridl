@@ -178,7 +178,8 @@ on one channel does before the commit:
   is itself a publication, so a touch adds nothing to it. Letting it replace one
   would discard a value this writer staged, which is not what `touch` means.
   `a_touch_does_not_discard_a_value_staged_before_it` and
-  `a_touch_does_not_discard_an_invalidation_staged_before_it` are the two cases.
+  `a_touch_does_not_discard_an_invalidation_staged_before_it`, in the
+  `ridl-rt-conformance` suite this runtime runs, are the two cases.
 
 One staged operation is dropped rather than applied: a `touch` of a channel with
 no publication. A channel that has never published has nothing to re-affirm, so
@@ -226,11 +227,11 @@ facts make `SettleError::UnknownClaim` mean what `ridl_rt::port` says it means �
 
 `a_claim_that_was_never_presented_cannot_be_settled`,
 `a_handler_cannot_settle_another_handlers_claim` and
-`a_claim_is_presented_once_and_settled_once` are the three cases. The
-alternative rejected is one identity for both ends, which is what the deleted
-double had and what this crate had before its review: with it,
-`settle(ClaimId(correlation.0))` before any presentation recorded an outcome the
-caller could read as an acknowledgment.
+`a_claim_is_presented_once_and_settled_once`, in the `ridl-rt-conformance` suite
+this runtime runs, are the three cases. The alternative rejected is one identity
+for both ends, which is what the deleted double had and what this crate had
+before its review: with it, `settle(ClaimId(correlation.0))` before any
+presentation recorded an outcome the caller could read as an acknowledgment.
 
 `Loopback::fail_next_settle` is not scoped this way: it is the runtime's, so it
 fails whichever handler settles next.
@@ -286,8 +287,9 @@ Neither turned out to be large, so neither is deferred.
 It never reads wall-clock time, so a round trip over this runtime produces the
 same timestamps on every run and on every machine, and a test can place a
 publication at an exact time. Two runtimes constructed at different real times
-start at the same logical time, which `the_clock_is_hand_driven_not_wall_clock`
-pins.
+start at the same logical time, which
+`two_runtimes_start_at_the_same_logical_time` in
+`crates/ridl-loopback/tests/ports.rs` pins.
 
 `advance` panics on a negative duration and saturates rather than overflowing: a
 clock that ran backwards would put an envelope before one already stamped, and
@@ -320,12 +322,13 @@ decision 5).
 Two callers each sending their first call both carry `seq` 1 — that is what a
 per-caller counter means — and a provider deduplicating on the sequence number
 alone would treat the second as a retransmission of the first.
-`two_callers_on_one_provider_are_two_claims_under_one_seq` runs exactly that
-case and shows two claims under one `seq`, which is the rule ADR-0021 decision 5
-fixes: two callers are never merged even under the same `seq`. What tells them
-apart here is the claim, not the number. A runtime over a real transport keys
-duplicate suppression on the caller's transport identity plus `seq`, below the
-port, for the same reason.
+`two_callers_on_one_provider_are_two_claims_under_one_seq`, in the
+`ridl-rt-conformance` suite this runtime runs, runs exactly that case and shows
+two claims under one `seq`, which is the rule ADR-0021 decision 5 fixes: two
+callers are never merged even under the same `seq`. What tells them apart here
+is the claim, not the number. A runtime over a real transport keys duplicate
+suppression on the caller's transport identity plus `seq`, below the port, for
+the same reason.
 
 **The loopback deduplicates nothing.** It presents each call once because it
 delivers each call once, not because it recognises a retransmission — nothing
@@ -335,7 +338,8 @@ A sink's counters are per channel for a reason a single counter per handle would
 break: a consumer subscribed to some of a sink's events would see the numbers of
 the events it did not subscribe to as gaps, and `EventSource::next` states that
 a gap in `seq` is a loss.
-`a_sink_sequence_number_counts_one_channel_publications` is that case.
+`a_sink_sequence_number_counts_one_channel_publications`, in the
+`ridl-rt-conformance` suite this runtime runs, is that case.
 
 The visible consequence of a counter living on the handle is that a writer or a
 sink dropped and replaced restarts its channels' counters. A runtime with a
@@ -447,11 +451,13 @@ absences:
   would take a second component's calls and settle them `UnknownInteraction` —
   two components providing different interfaces in one process is the plainest
   use of an in-process runtime.
-  `two_handlers_each_receive_only_what_they_served` is that case, and
-  `a_handler_that_served_nothing_is_presented_every_call` is the other side of
-  the rule. The alternative rejected is recording the set without acting on it,
-  which loses a call whenever more than one handler exists.
-  `HandlerHandle::served` reads the set back.
+  `two_handlers_each_receive_only_what_they_served`, in the
+  `ridl-rt-conformance` suite this runtime runs, is that case, and
+  `a_handler_that_served_nothing_is_presented_every_call`, in
+  `crates/ridl-loopback/tests/ports.rs`, is the other side of the rule. The
+  alternative rejected is recording the set without acting on it, which loses a
+  call whenever more than one handler exists. `HandlerHandle::served` reads the
+  set back.
 - **`Loopback::fail_next_settle` is the one fault this runtime injects.** The
   generated `dispatch` counts a claim only once the handler has accepted its
   settlement, and in an in-process runtime nothing else can make that path fail,
@@ -460,6 +466,24 @@ absences:
   before the injected failure is consumed, so arming it and then settling a
   claim that does not exist answers `UnknownClaim` and leaves the injection
   armed for the next real settlement.
+
+## It runs the port contract suite
+
+`crates/ridl-loopback/tests/conformance.rs` runs every test of
+`ridl-rt-conformance` over this runtime, the tests of both signal extensions
+included (story E11.20, driftsys/ridl#514). The factory it writes for the suite
+is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
+`Loopback::source`, `Loopback::caller` and `Loopback::handler` hand out, and
+`Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
+and fault hook.
+
+The suite states only what the port contract states. Its handlers call `serve`
+before they take a claim, so the deviation from `Handler::serve` recorded under
+"What it cannot report" is not exercised by it. What the suite leaves out, and
+why, is listed once, in the crate documentation of
+`crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
+keeps the tests of this runtime that fall under that list, and its module
+documentation names each test with its reason.
 
 ## What it replaced
 
@@ -476,7 +500,8 @@ is deleted. In its place:
   `support_*` tests.
 - Those `support_*` tests moved to `crates/ridl-loopback/tests/ports.rs`, where
   they are tests of the runtime rather than of the Rust backend, alongside the
-  tests of what the double did not implement.
+  tests of what the double did not implement. Story E11.20 later moved the ones
+  any runtime can run into `ridl-rt-conformance`.
 
 `MinimalSignalOnlyPort`, in the same test file, is not replaced. It is not a
 double of a runtime: it is a port implementing `SignalReader` and `Attached` and
@@ -515,4 +540,6 @@ that.
   crate takes a reading; driftsys/ridl#378 (E16.2), which gives it a catalog
   descriptor and with it every report in "What it cannot report"
 - `crates/ridl-loopback/src/lib.rs`, `src/handle.rs`, `src/store.rs` — the crate
-  as built; `crates/ridl-loopback/tests/ports.rs` — its tests
+  as built; `crates/ridl-loopback/tests/conformance.rs` — the port contract
+  suite of `ridl-rt-conformance` run over it; `tests/ports.rs` — the tests only
+  it can express

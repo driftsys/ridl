@@ -1,0 +1,18 @@
+[package]
+name = "ridl-rt-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The port contract tests of ridl-rt, generic over a runtime factory, so a runtime runs them from its own test suite."
+# Not published: the suite is consumed as a dev-dependency by the runtimes in
+# this workspace, and its public surface — the factory trait and the `suite!`
+# macro — follows the port contract as that contract changes (story E11.20).
+# A `v<version>` tag publishes every crate without this line (ADR-0007
+# decision 14's 2026-09-21 amendment).
+publish = false
+
+# `ridl-rt` is its only dependency: the suite drives a runtime through the
+# port traits and through the hooks of its own `Factory` trait.
+[dependencies]
+ridl-rt.workspace = true

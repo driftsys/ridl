@@ -54,6 +54,9 @@ scopes = [
   # the in-process reference runtime (docs/ROADMAP.md, E11.15;
   # ADR-0020 decision 6)
   "ridl-loopback",
+  # the port contract tests any runtime runs, test-only (docs/ROADMAP.md,
+  # E11.20; ADR-0020 decision 6)
+  "ridl-rt-conformance",
   # the reference codegen plugins, test-only (docs/ROADMAP.md, E4.5b;
   # ADR-0020 decisions 10 and 11)
   "ridlc-gen-model",
