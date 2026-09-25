@@ -13,10 +13,12 @@
 //! docs: one workspace load, then `set_text` on the existing salsa
 //! [`InputFile`]s per edit, with every recompute going through the memoized
 //! `parse_file` / `resolve_package` / `check_package` / `check_system`
-//! queries. The load runs at initialize from the client's root; when no
-//! `ridl.toml` is at or above that root, the server shows the load error with
-//! `window/showMessage` and loads instead from the first opened file that has
-//! a `ridl.toml` at or above it (issue #384).
+//! queries. The load runs at initialize from the client's root. When that
+//! load fails, the server shows the error with `window/showMessage`; when it
+//! fails or the client sent no root, the server loads instead from the first
+//! opened file that has a `ridl.toml` at or above it (issue #384). The
+//! nearest `ridl.toml` wins, so a file inside a member of a `[workspace]`
+//! loads that member's package only.
 //!
 //! Two scope limits of this task, both by design:
 //!
@@ -210,12 +212,16 @@ struct ServerState {
     /// The embedded `ridl.std` package, threaded into every resolve/check.
     std: Package,
     /// The one `Workspace` input: loaded at initialize from the client's
-    /// root, or, when that finds no `ridl.toml`, at the first `didOpen` of a
-    /// file that has one at or above it. Empty until then.
+    /// root, or, when the client sent no root or that load failed, at the
+    /// first `didOpen` of a file that has a `ridl.toml` at or above it. Empty
+    /// until then.
     workspace: Workspace,
     /// Whether [`ServerState::load`] has succeeded. Once it has, the
     /// workspace is not loaded again; a file outside it is an overlay.
     loaded: bool,
+    /// The reason of the last load error a `didOpen` showed, so the same
+    /// error is not shown again on every later `didOpen`.
+    shown_load_error: Option<String>,
     /// Every loaded workspace file, keyed by its load-time path string —
     /// the inputs `didOpen`/`didChange` overlay via `set_text`.
     files: HashMap<String, InputFile>,
@@ -255,6 +261,7 @@ impl ServerState {
             std,
             workspace,
             loaded: false,
+            shown_load_error: None,
             files: HashMap::new(),
             file_package: HashMap::new(),
             overlays: HashMap::new(),
@@ -313,10 +320,11 @@ impl ServerState {
     }
 
     /// Before a `didOpen` with no workspace loaded yet: loads the workspace
-    /// of the `ridl.toml` at or above the opened file (issue #384). No
-    /// manifest there is not an error — the file becomes a standalone
-    /// overlay, and the next `didOpen` tries again. Any other load error is
-    /// shown to the user.
+    /// of the nearest `ridl.toml` at or above the opened file (issue #384).
+    /// No manifest there is not an error — the file becomes a standalone
+    /// overlay, and the next `didOpen` tries again. A load that finds a
+    /// manifest and fails is shown to the user, once per distinct error: a
+    /// manifest that stays unreadable fails again on each `didOpen`.
     fn load_for_opened_file(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
         if self.loaded {
             return Ok(());
@@ -324,14 +332,22 @@ impl ServerState {
         let Some(dir) = Path::new(path).parent() else {
             return Ok(());
         };
-        match self.load(dir) {
-            Err(err) if err.kind() != io::ErrorKind::NotFound => show_message(
-                connection,
-                lt::MessageType::ERROR,
-                format!("ridl-lsp could not load the workspace of `{path}`: {err}"),
-            ),
-            _ => Ok(()),
+        if !dir
+            .ancestors()
+            .any(|candidate| candidate.join("ridl.toml").is_file())
+        {
+            return Ok(());
         }
+        let Err(err) = self.load(dir) else {
+            return Ok(());
+        };
+        let reason = err.to_string();
+        if self.shown_load_error.as_ref() == Some(&reason) {
+            return Ok(());
+        }
+        let message = format!("ridl-lsp could not load the workspace of `{path}`: {reason}");
+        self.shown_load_error = Some(reason);
+        show_message(connection, lt::MessageType::ERROR, message)
     }
 
     /// Handles one request; shutdown and cancellation were already handled

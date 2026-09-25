@@ -770,6 +770,48 @@ fn next_show_message(client: &Connection) -> lt::ShowMessageParams {
     }
 }
 
+/// Sends a hover request as a marker and returns every `window/showMessage`
+/// the server sent before answering it. The loop handles messages in order,
+/// so these are all the messages the earlier notifications caused.
+fn show_messages_before_answer(client: &Connection, id: i32) -> Vec<lt::ShowMessageParams> {
+    let marker = path_to_uri("/ridl-lsp-nowhere/marker.typl").expect("an absolute path");
+    request::<lt::request::HoverRequest>(
+        client,
+        id,
+        lt::HoverParams {
+            text_document_position_params: text_position(marker, pos(0, 0)),
+            work_done_progress_params: Default::default(),
+        },
+    );
+    let mut shown = Vec::new();
+    loop {
+        match recv(client) {
+            Message::Response(_) => return shown,
+            Message::Notification(notification)
+                if notification.method == lt::notification::ShowMessage::METHOD =>
+            {
+                shown.push(
+                    serde_json::from_value(notification.params).expect("valid showMessage params"),
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A root with a `ridl.toml` loads at initialize and shows no message.
+#[test]
+fn a_root_with_a_manifest_shows_no_message() {
+    let dir = TempDir::new("manifest-root");
+    write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    assert_eq!(show_messages_before_answer(&client, 2), Vec::new());
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// An editor opened one directory above the `ridl.toml` root (issue #384):
 /// the failed load is shown to the user, with the root that was searched and
 /// the loader's own reason, instead of being dropped.
@@ -798,7 +840,8 @@ fn a_root_with_no_manifest_shows_the_load_error() {
 /// `ridl.toml` loads that workspace (issue #384): a reference to a type
 /// declared in another file of the same package resolves, and
 /// goto-definition follows it. A file opened earlier with no manifest above
-/// it stays a standalone overlay and does not stop the later load.
+/// it shows no message, stays a standalone overlay, and does not stop the
+/// later load.
 #[test]
 fn the_first_opened_file_under_a_manifest_loads_its_workspace() {
     let dir = TempDir::new("lazy-root");
@@ -815,15 +858,25 @@ fn the_first_opened_file_under_a_manifest_loads_its_workspace() {
     let cabin = uri_of(&dir.write("project/cabin.typl", cabin_text));
     let scratch = uri_of(&dir.write("scratch.typl", BROKEN));
     let (client, server) = start(uri_of(dir.path()));
+    assert_eq!(next_show_message(&client).typ, lt::MessageType::WARNING);
 
     did_open(&client, &scratch, BROKEN);
-    let opened = next_publish(&client, &scratch);
-    assert_eq!(codes(&opened.diagnostics), vec!["FORM-101", "TYPL-302"]);
+    assert_eq!(
+        show_messages_before_answer(&client, 2),
+        Vec::new(),
+        "a file with no `ridl.toml` above it is not a load error",
+    );
 
     // A clean file gets no publish, so the goto-definition answer is what
     // shows the load happened: as a standalone overlay, `Speed` in this file
     // resolves to nothing.
     did_open(&client, &cabin, cabin_text);
+    let reopened = next_publish(&client, &scratch);
+    assert_eq!(
+        codes(&reopened.diagnostics),
+        vec!["FORM-101", "TYPL-302"],
+        "the earlier file is still analyzed as a standalone overlay",
+    );
     let response =
         definition_at(&client, 10, cabin, pos(1, 26)).expect("Speed resolves to a definition");
     let lt::GotoDefinitionResponse::Scalar(location) = response else {
@@ -837,62 +890,82 @@ fn the_first_opened_file_under_a_manifest_loads_its_workspace() {
 
 /// A `didOpen` that finds a `ridl.toml` it cannot load (here, a manifest that
 /// is not UTF-8) shows the loader's error with the opened file's path,
-/// instead of dropping it.
+/// instead of dropping it. A second `didOpen` that fails the same way does
+/// not show it again.
 #[test]
-fn an_unloadable_manifest_above_an_opened_file_shows_the_error() {
+fn an_unloadable_manifest_above_an_opened_file_shows_the_error_once() {
     let dir = TempDir::new("lazy-bad-manifest");
     std::fs::create_dir_all(dir.path().join("project")).expect("create project");
     std::fs::write(dir.path().join("project/ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
-    let file = dir.write("project/lib.typl", BROKEN);
+    let first = dir.write("project/first.typl", BROKEN);
+    let second = dir.write("project/second.typl", BROKEN);
     let (client, server) = start(uri_of(dir.path()));
     assert_eq!(next_show_message(&client).typ, lt::MessageType::WARNING);
 
-    did_open(&client, &uri_of(&file), BROKEN);
-    let shown = next_show_message(&client);
-    assert_eq!(shown.typ, lt::MessageType::ERROR);
+    did_open(&client, &uri_of(&first), BROKEN);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    assert_eq!(shown[0].typ, lt::MessageType::ERROR);
     assert!(
-        shown.message.starts_with(&format!(
+        shown[0].message.starts_with(&format!(
             "ridl-lsp could not load the workspace of `{}`: ",
-            file.display()
+            first.display()
         )),
         "the message names the opened file: {}",
-        shown.message,
+        shown[0].message,
     );
 
-    shut_down(&client, 2);
+    did_open(&client, &uri_of(&second), BROKEN);
+    assert_eq!(show_messages_before_answer(&client, 3), Vec::new());
+
+    shut_down(&client, 4);
     server.join().expect("thread joins").expect("clean exit");
 }
 
 /// A file opened before its `ridl.toml` existed is a standalone overlay. When
-/// a later `didOpen` loads the workspace that now contains it, its buffer
-/// moves onto the loaded input: it is analyzed once, as a member of its
-/// package, not a second time as an overlay.
+/// a later `didOpen` loads the workspace that now contains it, its unsaved
+/// buffer moves onto the loaded input: the file becomes a member of its
+/// package, and the package sees the buffer, not the text on disk.
 #[test]
 fn an_overlay_inside_a_lazily_loaded_workspace_joins_it() {
     let dir = TempDir::new("lazy-migrate");
     std::fs::create_dir_all(dir.path().join("pkg")).expect("create pkg");
-    let early = uri_of(&dir.write("pkg/early.typl", BROKEN));
+    let early = uri_of(&dir.write("pkg/early.typl", "package demo\n"));
     let (client, server) = start(uri_of(dir.path()));
+    assert_eq!(next_show_message(&client).typ, lt::MessageType::WARNING);
 
-    did_open(&client, &early, BROKEN);
-    let opened = next_publish(&client, &early);
-    assert_eq!(codes(&opened.diagnostics), vec!["FORM-101", "TYPL-302"]);
-
+    // The buffer declares `Early`; the text on disk does not.
+    did_open(
+        &client,
+        &early,
+        "package demo\ntype Early: integer [0..10]\n",
+    );
+    // Wait until the server has handled that `didOpen`, so the manifest
+    // written next did not exist when it ran.
+    assert_eq!(show_messages_before_answer(&client, 4), Vec::new());
     dir.write(
         "pkg/ridl.toml",
         "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
     );
-    let later_text = "package demo\ntype Later: integer [0..10]\n";
+    let later_text = "package demo\nstruct Holder { value: Early }\n";
     let later = uri_of(&dir.write("pkg/later.typl", later_text));
     did_open(&client, &later, later_text);
-    let published = next_publish(&client, &early);
+
+    // `Early` resolves from `later.typl` only if `early.typl` is a member of
+    // package `demo` and that member carries the buffer text.
+    let response = definition_at(&client, 2, later, pos(1, 24))
+        .expect("Early resolves to the declaration in the buffer");
+    let lt::GotoDefinitionResponse::Scalar(location) = response else {
+        panic!("expected a single location, got {response:?}");
+    };
+    assert_eq!(location.uri.as_str(), early.as_str());
     assert_eq!(
-        codes(&published.diagnostics),
-        vec!["FORM-101", "TYPL-302"],
-        "the overlay's buffer is analyzed once, as a file of package `demo`",
+        location.range,
+        range((1, 5), (1, 10)),
+        "the `Early` name span"
     );
 
-    shut_down(&client, 2);
+    shut_down(&client, 3);
     server.join().expect("thread joins").expect("clean exit");
 }
 

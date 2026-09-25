@@ -18,9 +18,12 @@ Learn the languages:
 - **Syntax highlighting** for `.typl`, `.ridl` and `.rsdl` files.
 - **Language server** (`ridl lsp`): diagnostics, quick fixes, hovers, ordinal
   inlay hints, navigation, completion, and rename, across all three languages.
-  It loads the workspace of the nearest `ridl.toml` at or above the folder you
-  open. When there is none, it shows a warning and loads the workspace of the
-  first file you open that has a `ridl.toml` at or above it.
+  It loads the workspace of the nearest `ridl.toml` at or above the window's
+  first folder, and shows a warning when that load fails. When the load fails or
+  no folder is open, it loads the workspace of the first file you open that has
+  a `ridl.toml` at or above it. The nearest `ridl.toml` wins: a file inside a
+  member of a `[workspace]` loads that member only, so imports from the other
+  members do not resolve — open the window at the workspace root instead.
 - **On a `.ridl` file**: the ridl §11 ordinal renders beside every interaction
   and `reserved` tombstone, hovering an interaction expands its resolved timing
   into the per-kind reading of family general form §6.2, and completion offers
