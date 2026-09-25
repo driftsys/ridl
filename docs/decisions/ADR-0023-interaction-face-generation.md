@@ -415,10 +415,11 @@ argument for it in the command case.
   and a handler failure ends `serve` with its cause (decision 6).
 - Negative — added 2026-09-26: the first half of E11.21 breaks every consumer of
   the public poll face, which is `examples/cabin/consumer` and this backend's
-  own tests; the generated crate's `std` feature forwards to `ridl-rt/std` and
-  its `Client` over an interface with a call requires `Clock` and `Wakeable` of
-  its port, so a role handle for `Caller` alone no longer builds one —
-  `ridl-loopback`'s `CallerHandle` gains both roles in stage F3.
+  own tests; the second half makes the generated crate's `std` feature forward
+  to `ridl-rt/std`; and a `Client` over an interface with a call requires
+  `Clock` and `Wakeable` of its port, so a role handle for `Caller` alone no
+  longer builds one — `ridl-loopback`'s `CallerHandle` gains both roles in stage
+  F3.
 
 ## References
 

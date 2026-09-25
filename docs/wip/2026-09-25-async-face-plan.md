@@ -202,7 +202,8 @@ loopback-only tests; `just wasm-check`; `just compat-check`; the generated face
   reason.
 - Modify: `docs/design/ridl-rt.md` (the module table, a "The correlation table"
   section, the errors), `docs/design/ridl-loopback.md` ("A claim is not a
-  correlation", "What it cannot report" — note F-9's three changes).
+  correlation", "What it cannot report" — note F-9's changes, but for the
+  `forget` sentence).
 - Test: `crates/ridl-rt/tests/correlate.rs`;
   `crates/ridl-loopback/tests/ports.rs`.
 
@@ -274,7 +275,9 @@ tests of Task 1 unchanged.
 
 `docs/design/ridl-rt.md`: `correlate` joins the module table as the seventh
 unconditional module; the errors section gains the two enums. The loopback
-record: F-9's bound and reclaim sentences; the `forget` sentence is Task 4's.
+record: F-9's bound and reclaim sentences, and the call-table growth sentence,
+which the 16-slot bound landed here makes false; the `forget` sentence is Task
+4's.
 
 - [ ] **Step 5: Commit and open the pull request**
 
@@ -346,7 +349,7 @@ Task 1 must still turn the suite red (re-run it, and say so).
   half" describing what is emitted, so the record never describes a face the
   fixture does not contain (the rewrite is Task 5's);
   `docs/design/ridl-loopback.md` — the sentence that nothing the Rust backend
-  emits calls `forget`, and the call-table growth sentence, are retired.
+  emits calls `forget` is retired.
 
 **Interfaces:** exactly note F-10's; the poll face is `pub(crate)` under the
 internal names above.

@@ -514,8 +514,9 @@ merges, one comment each, with the Rust names and signatures verbatim:
 
 - **F1c → K1.** The Binder statement, so K3b's AIDL emission is removed and its
   disposition item 5 (transaction code placement) needs no decision.
-- **F3 and F1d → K2.** `Wake`'s variants, `Wakeable::wake_on`'s signature,
-  `Transport::Busy`, and `block_on`'s deadline semantics.
+- **F3 and F1d → K2.** `Interest`'s variants (amended 2026-09-26),
+  `Wakeable::wake_on`'s signature, `Transport::Busy`, and `block_on`'s deadline
+  semantics.
 - **F3 and F1e → K3.** `correlate::Table`'s test cases and their expected
   results, and the four helpers' signatures and section citations.
 - **F4 → K5.** The factory's two hooks and the list of tests that stayed in the
