@@ -210,11 +210,11 @@ Four computations every runtime needs are defined once here, so that two
 runtimes compute them the same way (story E11.19). Each is `no_std`, allocates
 nothing and sits behind no cargo feature. They live beside the types they read —
 the envelope helpers in `sample`, the descriptor helpers in `contract` — rather
-than in a new module, so the crate keeps its six modules. `sample` now imports
-`InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already imported
-`Duration` from `sample`, so the two modules depend on each other; Rust accepts
-a dependency cycle between modules of one crate. `encoding` likewise imports
-`EncodedSizes` from `contract`, which imports `Encoding`.
+than in a new module, so the crate keeps its six unconditional modules. `sample`
+now imports `InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already
+imported `Duration` from `sample`, so the two modules depend on each other; Rust
+accepts a dependency cycle between modules of one crate. `encoding` likewise
+imports `EncodedSizes` from `contract`, which imports `Encoding`.
 
 ```rust
 impl Freshness {
