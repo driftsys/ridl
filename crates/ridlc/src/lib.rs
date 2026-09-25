@@ -90,8 +90,9 @@ struct FrontEnd {
 /// `ridl check` runs after its load: parser → resolver → checker, then the
 /// workspace-wide passes, with the spans remapped onto this function's own
 /// [`SourceMap`]. What `ridl check` reads from disk is not here: the package
-/// has no `interfaces.lock`, so RIDL-409 and RIDL-410 do not arise, and no
-/// import is materialized against `ridl.lock`.
+/// has no `interfaces.lock`, so RIDL-409 and RIDL-410 do not arise, no import
+/// is materialized against `ridl.lock`, and no `.ridl/baseline/` snapshot is
+/// compared.
 fn front_end(path: &str, text: &str) -> FrontEnd {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
