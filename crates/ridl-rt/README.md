@@ -29,9 +29,9 @@ because code outside the crate can build it as a struct literal: `CatalogRef`,
 `Sample`, `Occurrence`. The public tuple structs — `Ordinal`, `InterfaceNo`,
 `CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration` — follow the
 same rule. So do the unit structs `FlatBuffers`, `Proto3` and `ReprC`
-(`src/encoding.rs`): each is a marker type with no field that code outside the
-crate uses as a value or a pattern, so a field added to any of them breaks that
-code.
+(`src/encoding.rs`) and `TrackerFull` (`src/sample.rs`): each is a unit struct
+with no field that code outside the crate uses as a value or a pattern, so a
+field added to any of them breaks that code.
 
 The open API questions are tracked at
 <https://github.com/driftsys/ridl/issues/350>.

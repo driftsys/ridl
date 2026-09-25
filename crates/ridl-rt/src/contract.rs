@@ -3,7 +3,12 @@
 //! A descriptor is a zero-sized marker type with constants. The descriptors
 //! are the per-member form of the ordinal table of ADR-0013 decision 3,
 //! extended with the interface number and the catalog hash.
+//!
+//! Two computations read the descriptors: a member's call deadline
+//! ([`Member::call_deadline`]) and the in-flight byte budget
+//! ([`Member::reservation`], [`table_budget`]).
 
+use crate::encoding::Encoding;
 use crate::sample::Duration;
 
 /// A member's ordinal: its position in the interface body, counted from 1
@@ -149,6 +154,85 @@ pub struct Member {
     /// One entry per payload: two for a `query` (the request, then the
     /// reply), one for every other kind.
     pub payloads: &'static [PayloadInfo],
+}
+
+impl Member {
+    /// The call deadline: the `max` of the member's `timing`, which on a
+    /// `command` or a `query` is the response bound (ridl §9.3).
+    ///
+    /// `None` when `timing` is `None` — a `command` or a `query` with no
+    /// timing annotation, which is never given a default (ridl §9.1) — or
+    /// when the timing has no `max`, as under `@[20ms..]`. This function
+    /// takes no position on what a caller does with `None`.
+    ///
+    /// The function reads `max` whatever the member's `kind`. On a `signal`
+    /// `max` is the staleness bound and on an `event` the time to live
+    /// (ridl §9), neither of which is a call deadline, so call it on a
+    /// `command` or a `query`.
+    pub fn call_deadline(&self) -> Option<Duration> {
+        self.timing.and_then(|timing| timing.max)
+    }
+
+    /// The bytes one in-flight instance of this member reserves in encoding
+    /// `E`: the sum of `PayloadInfo::max_size` for `E` over its `payloads` —
+    /// one payload for most kinds, two for a `query`, the request and then the
+    /// reply.
+    ///
+    /// No specification defines this budget. It is derived from the
+    /// descriptors alone, so that every runtime sizing a table of calls in
+    /// flight computes the same number.
+    ///
+    /// # Errors
+    ///
+    /// [`Unsized`], naming this member and the first payload whose size for
+    /// `E` is `None`. A missing size is reported, never replaced by an
+    /// estimate.
+    pub fn reservation<E: Encoding>(&self) -> Result<u64, Unsized> {
+        let mut total: u64 = 0;
+        for payload in self.payloads {
+            let size = E::max_size(&payload.max_size).ok_or(Unsized {
+                ordinal: self.ordinal,
+                member: self.name,
+                type_name: payload.type_name,
+            })?;
+            total = total.saturating_add(u64::from(size));
+        }
+        Ok(total)
+    }
+}
+
+/// The in-flight byte budget of a table of members in encoding `E`: the sum of
+/// [`Member::reservation`] over `members`. Pass an interface's
+/// `Interface::MEMBERS`; a table serving several interfaces adds the budget of
+/// each.
+///
+/// No specification defines this budget. It is derived from the descriptors
+/// alone, and it counts every member it is given, whatever its kind.
+///
+/// # Errors
+///
+/// [`Unsized`] for the first member, in the order given, whose reservation has
+/// a payload with no size for `E`.
+pub fn table_budget<E: Encoding>(members: &[Member]) -> Result<u64, Unsized> {
+    let mut total: u64 = 0;
+    for member in members {
+        total = total.saturating_add(member.reservation::<E>()?);
+    }
+    Ok(total)
+}
+
+/// A payload with no size in the encoding a budget was asked for: its
+/// `EncodedSizes` field for that encoding is `None`. The budget is not
+/// computed, because a missing size is not estimated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Unsized {
+    /// The member's ordinal.
+    pub ordinal: Ordinal,
+    /// The member's name.
+    pub member: &'static str,
+    /// The name of the payload type that has no size.
+    pub type_name: &'static str,
 }
 
 /// The form of a timing annotation (ridl §9).

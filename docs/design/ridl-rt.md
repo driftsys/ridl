@@ -30,8 +30,8 @@ Six modules, each public item living in exactly one (ADR-0020 decision 5;
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                |
 | `payload`     | `Payload<E>`, `Ref`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                                       |
-| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`                                                                                                                                                         |
-| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`                                                           |
+| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                         |
+| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`                                |
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
 | `error`       | `Contract`, `Transport`, `CallError`                                                                                                                                                                                                                                 |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
@@ -204,11 +204,93 @@ check, so `payload` is `Err(Detection)` when the check fails rather than the
 occurrence being silently dropped. The driftsys/ridl#309 disposition behind this
 is ADR-0021 decision 6.
 
+## The helpers over the envelope and the descriptors
+
+Four computations every runtime needs are defined once here, so that two
+runtimes compute them the same way (story E11.19). Each is `no_std`, allocates
+nothing and sits behind no cargo feature. They live beside the types they read —
+the envelope helpers in `sample`, the descriptor helpers in `contract` — rather
+than in a new module, so the crate keeps its six unconditional modules. `sample`
+now imports `InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already
+imported `Duration` from `sample`, so the two modules depend on each other; Rust
+accepts a dependency cycle between modules of one crate. `encoding` likewise
+imports `EncodedSizes` from `contract`, which imports `Encoding`.
+
+```rust
+impl Freshness {
+    pub fn of(envelope: &Envelope, now: Timestamp, timing: Option<Timing>) -> Freshness;
+}
+
+pub struct EventSeqTracker<const N: usize> { /* private fields */ }
+impl<const N: usize> EventSeqTracker<N> {
+    pub const fn new() -> Self;
+    pub fn observe(&mut self, interface: InterfaceNo, ordinal: Ordinal, seq: u64)
+        -> Result<Continuity, TrackerFull>;
+    pub fn forget(&mut self, interface: InterfaceNo, ordinal: Ordinal);
+}
+impl<const N: usize> Default for EventSeqTracker<N>;
+pub enum Continuity { First, Next, Lost { count: u64 }, NotNewer { last: u64 } }
+pub struct TrackerFull;
+
+impl Member {
+    pub fn call_deadline(&self) -> Option<Duration>;
+    pub fn reservation<E: Encoding>(&self) -> Result<u64, Unsized>;
+}
+pub fn table_budget<E: Encoding>(members: &[Member]) -> Result<u64, Unsized>;
+#[non_exhaustive]
+pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_name: &'static str }
+```
+
+- **Freshness** (ridl §4, §9;
+  [frame specification](../specification/frame-specification.md) §8): with
+  `stamp` the envelope's timestamp, `Fresh` while `now − stamp ≤ max`,
+  `Stale { by: now − stamp − max }` past it, `Unbounded` when the member has no
+  timing or its timing has no `max`. The function takes the envelope rather than
+  its timestamp, so a call site cannot transpose the stamp and `now`. A stamp
+  later than `now` is `Fresh`, which follows from the formula; the age
+  subtraction `now − stamp` saturates.
+- **Event loss** (ridl §3.1; frame specification §5.2, §7): the tracker holds
+  the last accepted `seq` per channel, keyed on `(InterfaceNo, Ordinal)`,
+  because the counter is per channel and per provider instance — a per-interface
+  tracker would report a loss whenever two channels interleave. One tracker
+  serves one session. The first occurrence of a channel reports no loss, because
+  a consumer receives only occurrences raised after its subscription (frame
+  specification §6.2); a gap reports `Lost` with its width; a `seq` not greater
+  than the last reports `NotNewer` and leaves the last in place. The caller
+  supplies `N` slots; a channel with no free slot is refused with `TrackerFull`,
+  and `forget` frees one.
+- **The call deadline** (ridl §9.3): the `max` of the member's timing, `None`
+  when the timing or its `max` is absent. It takes no position on what a caller
+  does with `None`.
+- **The in-flight budget**: no specification defines it. A member's reservation
+  is the sum of `PayloadInfo::max_size` over its `payloads` for one encoding —
+  two entries for a query, the request then the reply — and `table_budget` sums
+  the reservations of the members it is given, normally `Interface::MEMBERS`. A
+  size that is `None` for that encoding is reported as `Unsized`, naming the
+  member and the payload type, and never estimated. The sum is a `u64`, because
+  the sizes are `u32`. The field of `EncodedSizes` an encoding reads is
+  `Encoding::max_size`, a required item of the sealed trait, so an encoding
+  added without naming its field does not compile.
+
+`Continuity` is exhaustive, like `Freshness`: it is not an error enum, so
+ADR-0021 decision 9 does not cover it, and a caller is meant to handle every
+case it names. `TrackerFull` is a unit struct with no `#[non_exhaustive]`, like
+the encoding markers, because a caller compares it as a value; under ADR-0021
+decision 10 a field added to it is a breaking change. `Unsized` is
+`#[non_exhaustive]`, because only this crate builds it, so a field can be added
+to it without a breaking change.
+
+These public items, and `Encoding::max_size`, are not yet recorded in ADR-0021;
+lane F's amendment, tracked on driftsys/ridl#509, will record them.
+
 ## The payload encodings and the proof type
 
 ```rust
 mod sealed { pub trait Sealed {} }
-pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
+pub trait Encoding: sealed::Sealed + 'static {
+    const NAME: &'static str;
+    fn max_size(sizes: &EncodedSizes) -> Option<u32>; // this encoding's field of `sizes` (E11.19)
+}
 pub struct FlatBuffers; // NAME = "flatbuffers"
 pub struct Proto3;      // NAME = "proto3"
 pub struct ReprC;        // NAME = "repr-c"
