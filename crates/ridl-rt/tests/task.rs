@@ -182,6 +182,62 @@ fn a_wake_during_a_poll_is_not_lost() {
 }
 
 #[test]
+fn a_wake_between_a_poll_and_the_park_is_not_lost_without_a_deadline() {
+    // With no deadline, `block_on` waits with `thread::park`, not
+    // `park_timeout`, so a lost wake parks this thread forever. The future,
+    // on its first poll, hands a clone of its waker to another thread, which
+    // wakes it by value; the poll joins that thread before it returns
+    // `Pending`, so the wake lands after the poll and before the park that
+    // follows it. The unpark token has to survive that gap. The future is
+    // ready on its second poll.
+    let polls = Arc::new(AtomicUsize::new(0));
+    let fut = {
+        let polls = Arc::clone(&polls);
+        poll_fn(move |cx| {
+            let n = polls.fetch_add(1, Ordering::SeqCst) + 1;
+            if n == 1 {
+                let waker = cx.waker().clone();
+                thread::spawn(move || waker.wake()).join().unwrap();
+                Poll::Pending
+            } else {
+                Poll::Ready(n)
+            }
+        })
+    };
+
+    // The rescue thread turns a lost wake into a failure: after `limit` it
+    // unparks this thread directly, without the waker, so the assertion on
+    // the elapsed time fails instead of the test never ending.
+    let limit = Duration::from_secs(5);
+    let stop = Arc::new(AtomicBool::new(false));
+    let start = Instant::now();
+    let rescue = {
+        let stop = Arc::clone(&stop);
+        let waiter = thread::current();
+        thread::spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                if start.elapsed() > limit {
+                    waiter.unpark();
+                    return;
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+        })
+    };
+
+    let out = block_on(fut, None);
+    let elapsed = start.elapsed();
+    stop.store(true, Ordering::SeqCst);
+    rescue.join().unwrap();
+
+    assert_eq!(out, Some(2));
+    assert!(
+        elapsed < limit,
+        "the wake was lost: the rescue thread ended the wait at {elapsed:?}"
+    );
+}
+
+#[test]
 fn block_on_returns_none_when_the_deadline_passes() {
     let gate = Gate::new();
     let bound = Duration::from_millis(50);
@@ -218,6 +274,48 @@ fn block_on_polls_once_even_when_the_deadline_has_already_passed() {
     let gate = Gate::new();
     assert_eq!(block_on(gate.future(), Some(past)), None);
     assert_eq!(gate.polls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn block_on_returns_the_output_of_a_ready_poll_after_the_deadline() {
+    // The future is pending while the deadline is ahead and ready once it has
+    // passed, and it never wakes its waker. So the first poll is `Pending`,
+    // the park runs to the deadline, and the poll after that park, which runs
+    // when `Instant::now() >= deadline`, is `Ready`. Its output is returned
+    // as `Some`: the deadline turns a `Pending` poll into `None`, not a
+    // `Ready` one.
+    let bound = Duration::from_millis(100);
+    let start = Instant::now();
+    let deadline = start + bound;
+    let polls = Arc::new(AtomicUsize::new(0));
+    let fut = {
+        let polls = Arc::clone(&polls);
+        poll_fn(move |_cx| {
+            polls.fetch_add(1, Ordering::SeqCst);
+            if Instant::now() >= deadline {
+                Poll::Ready(42)
+            } else {
+                Poll::Pending
+            }
+        })
+    };
+
+    let out = block_on(fut, Some(deadline));
+    let elapsed = start.elapsed();
+
+    assert_eq!(
+        out,
+        Some(42),
+        "a poll that is ready after the deadline returns its output"
+    );
+    assert!(
+        elapsed >= bound,
+        "returned after {elapsed:?}, before the deadline"
+    );
+    assert!(
+        polls.load(Ordering::SeqCst) >= 2,
+        "the ready poll is the one after the park, not the first"
+    );
 }
 
 #[test]
