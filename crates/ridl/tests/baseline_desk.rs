@@ -974,7 +974,8 @@ fn check_refuses_an_empty_baseline_directory() {
 
 /// `is_source_dir` treats a directory as a source tree when it holds a
 /// `ridl.toml` *or* at least one `.typl`/`.ridl`/`.rsdl` file directly inside
-/// it — either half is enough on its own. The fixture above satisfies both
+/// it — either half is enough on its own. The source-tree case in
+/// `an_explicit_baseline_holding_no_snapshot_is_an_input_error` satisfies both
 /// halves at once (`package_workspace` writes `ridl.toml` and `cluster.ridl`
 /// into the same directory), so it cannot tell the two halves apart. This
 /// test isolates the manifest half: an explicit `--baseline` naming a
