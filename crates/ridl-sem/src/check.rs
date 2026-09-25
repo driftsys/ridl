@@ -4364,6 +4364,9 @@ impl Checker<'_> {
     /// stream lower as `ReturnType.value`; the inline fallible `T | E`
     /// lowers as `ReturnType.fallible`. An empty tuple is RIDL-105 and
     /// lowers nothing — a query returning `()` has no representable return.
+    /// A bare return or a fallible arm that names a primitive keyword instead
+    /// of a `type_ref` (ridl Appendix C) draws FORM-102 and lowers the
+    /// keyword as its own named value, with no resolved symbol.
     fn lower_query_return(&mut self, return_type: &ast::ReturnType) -> Option<v2::ReturnType> {
         let kind = if let Some(tuple) = return_type.tuple_type() {
             if tuple.fields().next().is_none() {
@@ -4390,11 +4393,21 @@ impl Checker<'_> {
             let ok_path = fallible.ok();
             let err_path = fallible.err();
             let (ok, ok_symbol) = match &ok_path {
-                Some(path) => self.resolve_arm(path),
+                Some(path) => self.resolve_return_type_ref(path, |keyword| {
+                    format!(
+                        "`{keyword}` is a primitive, and each arm of an inline `T | E` is a \
+                         named type — declare a `type` for it (ridl §10.1)"
+                    )
+                }),
                 None => (String::new(), None),
             };
             let (err, err_symbol) = match &err_path {
-                Some(path) => self.resolve_arm(path),
+                Some(path) => self.resolve_return_type_ref(path, |keyword| {
+                    format!(
+                        "`{keyword}` is a primitive, and each arm of an inline `T | E` is a \
+                         named type — declare a `type` for it (ridl §10.1)"
+                    )
+                }),
                 None => (String::new(), None),
             };
             if let (Some(path), Some(symbol)) = (&ok_path, &ok_symbol)
@@ -4428,7 +4441,13 @@ impl Checker<'_> {
             // named `error union` alike. A named *result* union is not an
             // error type (it is `is_result`), so it lowers here legally; its
             // canonical-form lint (RIDL-308) is task 19, not an error.
-            let (named, symbol) = self.resolve_arm(&path);
+            let (named, symbol) = self.resolve_return_type_ref(&path, |keyword| {
+                format!(
+                    "`{keyword}` is a primitive, and a query return is a named type, a \
+                     named-field tuple, an inline `T | E` or a stream — declare a `type` for \
+                     it (ridl §7.1)"
+                )
+            });
             if let Some(symbol) = &symbol
                 && symbol.is_error
             {
@@ -4467,6 +4486,31 @@ impl Checker<'_> {
         match self.resolve_type_path(path) {
             PathTarget::Symbol(symbol) => (self.canonical_ref(&symbol), Some(symbol)),
             PathTarget::Unresolved(written) => (written, None),
+        }
+    }
+
+    /// Resolves a query-return `type_ref` (a bare return or one arm of an
+    /// inline `T | E`), reporting FORM-102 when the path is a primitive
+    /// keyword rather than a `type_ref` (ridl Appendix C: `return_type` and
+    /// `fallible_type` both admit only `type_ref`). A primitive keyword lowers
+    /// as its own text with no resolved symbol (honest lowering), so it never
+    /// draws RIDL-303 as well. `message` builds the FORM-102 text from the
+    /// keyword found.
+    fn resolve_return_type_ref(
+        &mut self,
+        path: &ast::PathType,
+        message: impl FnOnce(&str) -> String,
+    ) -> (String, Option<Symbol>) {
+        match primitive_path_keyword(path) {
+            Some(keyword) => {
+                self.error(
+                    DiagCode::FORM_102,
+                    path.syntax().text_range(),
+                    message(&keyword),
+                );
+                (keyword, None)
+            }
+            None => self.resolve_arm(path),
         }
     }
 
@@ -10100,6 +10144,67 @@ interface VehicleStatus {
             "got: {}",
             checked.diagnostics[0].message,
         );
+    }
+
+    #[test]
+    fn primitive_query_return_draws_form_102() {
+        // driftsys/ridl#356: `return_type` admits a `type_ref`, and a primitive
+        // keyword is not one (ridl Appendix C). The return position draws the
+        // code its parameter sibling draws, FORM-102, naming the keyword — not
+        // an uncoded "unknown type name". It still lowers the written keyword
+        // as a named value (honest lowering).
+        for keyword in ["boolean", "integer", "float", "string", "bytes"] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{FALLIBLE_VOCAB}interface I {{\n  query read(axle: Axle): {keyword} @[..50ms]\n}}\n"
+                ),
+            );
+            assert_eq!(codes(&checked), vec!["FORM-102"], "{keyword}");
+            assert!(
+                checked.diagnostics[0]
+                    .message
+                    .contains(&format!("`{keyword}`")),
+                "{keyword}: got {}",
+                checked.diagnostics[0].message,
+            );
+            let query = query_def(&checked, "read");
+            let Some(v2::return_type::Kind::Value(value)) =
+                &query.return_type.as_ref().unwrap().kind
+            else {
+                panic!("{keyword}: the return must lower as a value");
+            };
+            assert_eq!(
+                value.kind,
+                Some(v2::field_type::Kind::Named(keyword.to_string())),
+            );
+        }
+    }
+
+    #[test]
+    fn primitive_fallible_arm_draws_form_102() {
+        // driftsys/ridl#356: both arms of `T | E` are `type_ref`s (ridl
+        // Appendix C), so a primitive keyword in either arm draws FORM-102
+        // naming it, and only that — no RIDL-303 on top of it.
+        for (arms, keyword) in [
+            ("string | CalError", "string"),
+            ("CalReport | integer", "integer"),
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): {arms} @[..50ms]\n}}\n"
+                ),
+            );
+            assert_eq!(codes(&checked), vec!["FORM-102"], "{arms}");
+            assert!(
+                checked.diagnostics[0]
+                    .message
+                    .contains(&format!("`{keyword}`")),
+                "{arms}: got {}",
+                checked.diagnostics[0].message,
+            );
+        }
     }
 
     #[test]

@@ -84,8 +84,8 @@ pub fn builtin_default_timing() -> TimingSpec {
 /// Parses a `[defaults].timing` string such as `"[100ms..1000ms]"` into a
 /// resolved range default (ridl §9.1). The default is always an explicit range
 /// with both bounds set, so the applied default always carries concrete,
-/// ordered, non-zero bounds — a half-open, zero, or reversed default is
-/// rejected. On any malformed input the returned string is the reason the
+/// ordered, positive bounds — a half-open, zero, negative, or reversed default
+/// is rejected. On any malformed input the returned string is the reason the
 /// checker renders under MANI-009.
 pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
     let trimmed = text.trim();
@@ -110,7 +110,7 @@ pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
     // value has no source span to report a per-bound FORM-102 against.
     let min = whole_bound(min_text)?;
     let max = whole_bound(max_text)?;
-    if is_zero(&min) || is_zero(&max) {
+    if !is_positive(&min) || !is_positive(&max) {
         return Err(format!(
             "a timing bound must be greater than zero, found `{text}`"
         ));
@@ -472,8 +472,12 @@ fn duration_us(text: &str) -> Option<Duration> {
         let digits = text.strip_suffix('h')?;
         (digits, 3_600_000_000)
     };
-    // `ExactValue::parse` accepts an integer or a decimal literal and rejects
-    // anything else (a sign, scientific notation, a bare `.`).
+    // `ExactValue::parse` accepts an integer or a decimal literal with an
+    // optional leading `-` and rejects anything else (scientific notation, a
+    // bare `.`). A source duration token never carries a sign, because the
+    // lexer produces none; the caller that reads text with no lexer in front
+    // of it — the configured default in `parse_default_timing` — rejects a
+    // negative value itself.
     let value = ExactValue::parse(digits)?;
     let whole = !digits.contains('.');
     let micros = value.0 * BigRational::from_integer(BigInt::from(factor));
@@ -540,6 +544,13 @@ fn bound_us(
 /// Whether an exact microsecond value is zero (RIDL-102).
 fn is_zero(value: &ExactValue) -> bool {
     *value.0.numer() == BigInt::from(0)
+}
+
+/// Whether an exact microsecond value is strictly greater than zero. A
+/// `BigRational`'s denominator is always positive, so the sign of the value is
+/// the sign of its numerator.
+fn is_positive(value: &ExactValue) -> bool {
+    *value.0.numer() > BigInt::from(0)
 }
 
 /// Whether a range annotation parsed to its end: the `..` separator was
@@ -1200,6 +1211,21 @@ mod tests {
             parse_default_timing("[0.0ms..100ms]").is_err(),
             "fractional zero lower bound",
         );
+    }
+
+    #[test]
+    fn parse_default_timing_rejects_a_negative_bound() {
+        // driftsys/ridl#356: `ExactValue::parse` accepts a leading `-`, so a
+        // negative bound reads as a whole duration. A timing bound must be
+        // greater than zero (ridl §2.1, RIDL-102), so the configured default
+        // draws MANI-009 rather than reaching the IR.
+        for text in ["[-100ms..1000ms]", "[-2s..-1s]", "[-0ms..1s]"] {
+            let reason = parse_default_timing(text).expect_err(text);
+            assert!(
+                reason.contains("greater than zero"),
+                "{text}: got `{reason}`",
+            );
+        }
     }
 
     // --- the T9 review regression: a written bound is never silently unset ---
