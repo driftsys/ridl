@@ -109,7 +109,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js"
+    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "10.1.0"
