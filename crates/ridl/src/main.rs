@@ -20,8 +20,8 @@
 //! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
 //! engine (E2.9, general form §6.3): `baseline` publishes one `.ir.json`
 //! snapshot per package, and `check` compares the workspace against those
-//! snapshots and warns (RIDL-407) when an interaction's ordinal moved, or a
-//! struct field or union arm is reordered. Both live here rather than in
+//! snapshots and warns (RIDL-407) when the ordinal of an interaction, a struct
+//! field or a union arm moved. Both live here rather than in
 //! `ridlc` because reading a workspace-local baseline is not part of the
 //! source→IR function the tool qualification argument covers (ADR-0008
 //! decision 9).
@@ -80,7 +80,7 @@ enum Command {
         /// Compare the checked workspace against a published baseline — a
         /// directory of `.ir.json` snapshots or one snapshot file — and warn
         /// (RIDL-407) on every interaction whose ordinal moved and every
-        /// struct field or union arm that was reordered. Without the flag,
+        /// struct field or union arm whose ordinal moved while no field or arm was added or removed. Without the flag,
         /// `.ridl/baseline/` at the workspace root is used when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,

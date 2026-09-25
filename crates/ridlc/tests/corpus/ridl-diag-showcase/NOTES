@@ -89,8 +89,8 @@ against the reference §16 classification.
 
 ## Codes NOT exercised here, and why
 
-- **RIDL-407** (interaction ordinal changed, or struct field or union arm
-  reordered, against a published baseline). The desk check reads a
+- **RIDL-407** (interaction, struct field, or union arm ordinal changed
+  against the published baseline). The desk check reads a
   workspace-local baseline directory, which is outside `ridlc`'s
   source-to-IR function (ADR-0008 decisions 9 and 13), so it is never a
   compile diagnostic. Its living example is the committed corpus member

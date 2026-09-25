@@ -535,6 +535,11 @@ fn assert_member_moved(
         "the message names the remedy that keeps the baseline intact:\n{stderr}",
     );
     assert!(
+        !block.contains("reserved"),
+        "a reorder never comes with a removal, so the message offers no \
+         tombstone:\n{stderr}",
+    );
+    assert!(
         block.contains(declaration),
         "the span underlines the member's declaration:\n{stderr}",
     );
@@ -623,6 +628,43 @@ fn check_flags_a_union_arm_reorder_against_the_baseline() {
         "cluster.ridl:9:3",
     );
     assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// A field added above the existing ones shifts their ordinals, but the diff
+/// reports the addition and no `member_reordered`, so the desk check stays
+/// silent and `ridl diff` gates it in CI. RIDL-407's catalogue entry states
+/// this limit; the test pins it.
+#[test]
+fn check_is_silent_for_a_struct_field_insertion() {
+    let dir = TempDir::new("struct-insert");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write(
+        "cluster.ridl",
+        &COMPOSITES.replace("struct Report {\n", "struct Report {\n  hinge: DoorState\n"),
+    );
+    let (code, diff, _) = ridl(&[
+        "diff".as_ref(),
+        root.join(".ridl/baseline").as_os_str(),
+        root.as_os_str(),
+    ]);
+    assert_eq!(code, 1, "`ridl diff` gates on the insertion:\n{diff}");
+    assert!(
+        diff.contains("veh.cluster/Report/hinge") && !diff.contains("member_reordered"),
+        "the diff reports the added field and no reorder:\n{diff}",
+    );
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "an inserted field draws no desk warning:\n{stderr}",
+    );
+    assert_eq!(
+        code, 0,
+        "the insertion leaves a clean check clean:\n{stderr}"
+    );
 }
 
 /// An enum value or enum-set bit takes its identity from its explicit number,
