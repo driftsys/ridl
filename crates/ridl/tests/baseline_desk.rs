@@ -972,6 +972,90 @@ fn check_refuses_an_empty_baseline_directory() {
     );
 }
 
+/// `is_source_dir` treats a directory as a source tree when it holds a
+/// `ridl.toml` *or* at least one `.typl`/`.ridl`/`.rsdl` file directly inside
+/// it — either half is enough on its own. The fixture above satisfies both
+/// halves at once (`package_workspace` writes `ridl.toml` and `cluster.ridl`
+/// into the same directory), so it cannot tell the two halves apart. This
+/// test isolates the manifest half: an explicit `--baseline` naming a
+/// directory that holds `ridl.toml` and no source file must still omit the
+/// publish suggestion (driftsys/ridl#340).
+#[test]
+fn check_refuses_an_empty_baseline_directory_holding_only_a_manifest() {
+    let dir = TempDir::new("emptydir-manifest");
+    let root = package_workspace(&dir, BASE);
+    let manifest_only = dir.path().join("manifest-only");
+    std::fs::create_dir_all(&manifest_only).expect("create the manifest-only directory");
+    std::fs::write(manifest_only.join("ridl.toml"), MANIFEST).expect("write the manifest");
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        manifest_only.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "an explicit baseline holding no snapshot is an input error:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "the baseline `{}` holds no `.ir.json` snapshot directly inside it",
+            manifest_only.display()
+        )),
+        "the cause names the directory:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("ridl baseline --out"),
+        "a `ridl.toml` alone makes this a source tree, so the refusal does not \
+         suggest publishing into it:\n{stderr}",
+    );
+}
+
+/// The source-file half of the same case: an explicit `--baseline` naming a
+/// directory that holds a `.ridl` file and no `ridl.toml` must also omit the
+/// publish suggestion (driftsys/ridl#340). See
+/// `check_refuses_an_empty_baseline_directory_holding_only_a_manifest` for why
+/// the two halves need separate fixtures.
+#[test]
+fn check_refuses_an_empty_baseline_directory_holding_only_a_source_file() {
+    let workspace = TempDir::new("emptydir-source-ws");
+    let root = package_workspace(&workspace, BASE);
+    // A separate `TempDir`, not a subdirectory of `root`: a `.ridl` file
+    // nested under `root` would itself be compiled as part of the workspace
+    // package (its package name would have to mirror the nested path), which
+    // is not what this fixture is testing.
+    let baseline_dir = TempDir::new("emptydir-source-baseline");
+    let source_only = baseline_dir.path().join("source-only");
+    std::fs::create_dir_all(&source_only).expect("create the source-only directory");
+    std::fs::write(source_only.join("cluster.ridl"), BASE).expect("write the source file");
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        source_only.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "an explicit baseline holding no snapshot is an input error:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "the baseline `{}` holds no `.ir.json` snapshot directly inside it",
+            source_only.display()
+        )),
+        "the cause names the directory:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("ridl baseline --out"),
+        "a `.ridl` file alone makes this a source tree, so the refusal does \
+         not suggest publishing into it:\n{stderr}",
+    );
+}
+
 /// `--baseline` refuses a prototext or binary IR artifact by name: a
 /// baseline stays `.ir.json` (ADR-0014 decision 5). Before the refusal the
 /// snapshot loader read the file as JSON and reported a parse error, which
@@ -1517,9 +1601,10 @@ fn an_explicit_baseline_holding_no_snapshot_is_an_input_error() {
         "the cause names the directory the flag aimed at:\n{stderr}",
     );
     // This is #235's own case: the snapshots are at `<root>/.ridl/baseline/`,
-    // so `ridl baseline --out <root>` would publish into the workspace root.
-    // The remedy has to name the aimed-too-high mistake before it names
-    // publishing.
+    // two levels below `root`. The remedy names the aimed-too-high mistake —
+    // point `--baseline` at the snapshot directory instead. `root` is a
+    // source tree, so the refusal leaves out the publish suggestion entirely,
+    // which the assertion after this one checks.
     assert!(
         stderr.contains("point `--baseline` at the directory that holds the snapshots"),
         "the remedy says to aim the flag at the snapshots:\n{stderr}",
