@@ -427,15 +427,19 @@ lint:
 # one) and on a missing SUMMARY.md. It exits 0 on a chapter file that does not
 # exist, on a broken `{{#include}}` (an ERROR line, then exit 0), on a
 # SUMMARY.md holding no list items, on one that is not a summary at all, and on
-# bad nesting. So this recipe is a SUMMARY.md parse check, not a proof that the
-# rendered book is whole.
+# bad nesting. This recipe adds checks for the first two of those, described
+# below. So it is a SUMMARY.md parse check plus those two checks, not a proof
+# that the rendered book is whole.
 #
 # It builds a copy, because `mdbook build` writes into its own source: a
 # SUMMARY.md naming a chapter file that does not exist makes mdBook **create
 # that file** in `docs/book/` and exit 0. A check that mutates the tree it is
 # checking is not a check. Copying into a temporary directory keeps the
 # repository read-only for the duration. `just book` still writes ./book, which
-# is gitignored.
+# is gitignored. The recipe detects the created file by comparing, after the
+# build, the file list under the copy's `docs/` against the file list under
+# the tree's `docs/`: a file present in the copy and absent from the tree is
+# one mdBook created.
 #
 # The whole of `docs/` is copied, not `docs/book` alone. The six "Language
 # reference" chapters are thin wrappers that `{{#include}}` a normative document
@@ -447,8 +451,8 @@ lint:
 # **mdBook exits 0 on a broken `{{#include}}`.** It logs `ERROR Error updating
 # ...`, leaves the directive in the page as literal text, renders the rest, and
 # reports success. `mdbook build` alone therefore cannot see the failure this
-# recipe exists to catch, so two checks run after it, and either one fails the
-# recipe:
+# recipe exists to catch, so three checks run after it, and any one of them
+# fails the recipe:
 #
 # 1. mdBook's stderr carries no `ERROR`. This catches every preprocessor
 #    failure, not only a missing include, and it is not anchored to the start of
@@ -459,9 +463,15 @@ lint:
 #    needs to show this syntax literally will trip it; that is a deliberate
 #    change, and the author can escape the directive as `\{{#...}}` and adjust
 #    this check with it.
+# 3. Every file under the copy's `docs/` is present under the tree's `docs/`.
+#    This catches the chapter file mdBook creates when SUMMARY.md names one
+#    that does not exist, described above. It compares every file, not only
+#    `.md` files, so it also catches anything else a future mdBook version
+#    creates.
 #
-# Both were verified by breaking an include on purpose and confirming each fails
-# on its own.
+# The first two were verified by breaking an include on purpose and confirming
+# each fails on its own; the fixture below verifies the third, by appending a
+# chapter SUMMARY.md names but that has no file.
 #
 # The mdBook guard is deliberate. Making this a `build` dependency makes mdBook
 # a hard requirement for every local build, and a missing binary would otherwise
@@ -469,7 +479,12 @@ lint:
 # `command -v rustup` guard on `wasm-check`). The build is a small fraction of a
 # second on this book, and `./bootstrap` names mdBook among the tools the gate
 # requires.
-book-check:
+#
+# Given no argument, the recipe runs its fixture first, then the gate over
+# this repository. Given a directory, it runs the gate alone, over the book
+# at that path. That second form is what the fixture invokes as a child
+# process, and it is what stops the fixture from running itself again.
+book-check root="":
     #!/usr/bin/env bash
     set -euo pipefail
     if ! command -v mdbook >/dev/null 2>&1; then
@@ -478,25 +493,85 @@ book-check:
         echo "book-check: or from https://github.com/rust-lang/mdBook/releases." >&2
         exit 1
     fi
-    scratch="$(mktemp -d)"
-    trap 'rm -rf "$scratch"' EXIT
-    cp book.toml "$scratch/"
-    cp -R docs "$scratch/docs"
-    if ! mdbook build "$scratch" 2>"$scratch/mdbook.err"; then
+    # The gate over the book whose book.toml and docs/ sit in $1. A subshell,
+    # so its trap removes its own scratch tree when it returns.
+    run_gate() (
+        scratch="$(mktemp -d)"
+        trap 'rm -rf "$scratch"' EXIT
+        cp "$1/book.toml" "$scratch/"
+        cp -R "$1/docs" "$scratch/docs"
+        if ! mdbook build "$scratch" 2>"$scratch/mdbook.err"; then
+            cat "$scratch/mdbook.err" >&2
+            exit 1
+        fi
         cat "$scratch/mdbook.err" >&2
-        exit 1
+        if grep -q 'ERROR' "$scratch/mdbook.err"; then
+            echo "book-check: mdBook reported the error above and still exited 0." >&2
+            exit 1
+        fi
+        if grep -rq '{{{{#' "$scratch/book"; then
+            echo "book-check: an mdBook directive survived into the rendered output," >&2
+            echo "book-check: which means it was not resolved:" >&2
+            grep -rho '{{{{#[^}]*}}' "$scratch/book" | sort -u >&2
+            exit 1
+        fi
+        scratch_docs="$scratch/scratch-docs.txt"
+        root_docs="$scratch/root-docs.txt"
+        (cd "$scratch/docs" && find . -type f | LC_ALL=C sort) >"$scratch_docs"
+        (cd "$1/docs" && find . -type f | LC_ALL=C sort) >"$root_docs"
+        created="$scratch/created-docs.txt"
+        comm -13 "$root_docs" "$scratch_docs" >"$created"
+        if [ -s "$created" ]; then
+            echo "book-check: mdBook created a file SUMMARY.md names but the tree does not have:" >&2
+            sed 's#^\./#docs/#' "$created" >&2
+            exit 1
+        fi
+    )
+    # The fixture. It builds a book of its own and runs this recipe over it as
+    # a child process, given a root, which is the form that runs the gate and
+    # nothing else: first a whole book, which has to pass, then the same book
+    # with a SUMMARY.md naming a chapter file that does not exist, which has to
+    # fail and name the file. It runs no git command, so the git environment a
+    # hook exports does not reach it.
+    fixtures() (
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        book="$work/fixture"
+        mkdir -p "$book/docs/book"
+        printf '%s\n' '[book]' 'title = "fixture"' 'src = "docs/book"' > "$book/book.toml"
+        printf '%s\n' '# Summary' '' '- [Present](present.md)' > "$book/docs/book/SUMMARY.md"
+        printf '%s\n' '# Present' > "$book/docs/book/present.md"
+        run="$work/run"
+        if ! "{{just_executable()}}" book-check "$book" >"$run" 2>&1; then
+            echo "book-check: the gate did not pass over a fixture book whose chapters all exist:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        printf '%s\n' '- [Ghost](ghost.md)' >> "$book/docs/book/SUMMARY.md"
+        if "{{just_executable()}}" book-check "$book" >"$run" 2>&1; then
+            echo "book-check: the gate returned 0 over a fixture whose SUMMARY.md names a chapter file that does not exist:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q 'book/ghost\.md' "$run"; then
+            echo "book-check: the gate did not name the chapter file its fixture is missing:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if [ -e "$book/docs/book/ghost.md" ]; then
+            echo "book-check: the gate wrote into the tree it was checking:" >&2
+            echo "book-check: $book/docs/book/ghost.md" >&2
+            exit 1
+        fi
+    )
+    # One call site, so the fixture above and the real run take the same line.
+    root=.
+    if [ -n "{{root}}" ]; then
+        root="{{root}}"
+    else
+        fixtures
     fi
-    cat "$scratch/mdbook.err" >&2
-    if grep -q 'ERROR' "$scratch/mdbook.err"; then
-        echo "book-check: mdBook reported the error above and still exited 0." >&2
-        exit 1
-    fi
-    if grep -rq '{{{{#' "$scratch/book"; then
-        echo "book-check: an mdBook directive survived into the rendered output," >&2
-        echo "book-check: which means it was not resolved:" >&2
-        grep -rho '{{{{#[^}]*}}' "$scratch/book" | sort -u >&2
-        exit 1
-    fi
+    run_gate "$root"
 
 # Check that every relative Markdown link resolves.
 #
