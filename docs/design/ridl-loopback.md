@@ -178,7 +178,8 @@ on one channel does before the commit:
   is itself a publication, so a touch adds nothing to it. Letting it replace one
   would discard a value this writer staged, which is not what `touch` means.
   `a_touch_does_not_discard_a_value_staged_before_it` and
-  `a_touch_does_not_discard_an_invalidation_staged_before_it` are the two cases.
+  `a_touch_does_not_discard_an_invalidation_staged_before_it`, in the
+  `ridl-rt-conformance` suite this runtime runs, are the two cases.
 
 One staged operation is dropped rather than applied: a `touch` of a channel with
 no publication. A channel that has never published has nothing to re-affirm, so
@@ -226,11 +227,11 @@ facts make `SettleError::UnknownClaim` mean what `ridl_rt::port` says it means �
 
 `a_claim_that_was_never_presented_cannot_be_settled`,
 `a_handler_cannot_settle_another_handlers_claim` and
-`a_claim_is_presented_once_and_settled_once` are the three cases. The
-alternative rejected is one identity for both ends, which is what the deleted
-double had and what this crate had before its review: with it,
-`settle(ClaimId(correlation.0))` before any presentation recorded an outcome the
-caller could read as an acknowledgment.
+`a_claim_is_presented_once_and_settled_once`, in the `ridl-rt-conformance` suite
+this runtime runs, are the three cases. The alternative rejected is one identity
+for both ends, which is what the deleted double had and what this crate had
+before its review: with it, `settle(ClaimId(correlation.0))` before any
+presentation recorded an outcome the caller could read as an acknowledgment.
 
 `Loopback::fail_next_settle` is not scoped this way: it is the runtime's, so it
 fails whichever handler settles next.
@@ -321,12 +322,13 @@ decision 5).
 Two callers each sending their first call both carry `seq` 1 — that is what a
 per-caller counter means — and a provider deduplicating on the sequence number
 alone would treat the second as a retransmission of the first.
-`two_callers_on_one_provider_are_two_claims_under_one_seq` runs exactly that
-case and shows two claims under one `seq`, which is the rule ADR-0021 decision 5
-fixes: two callers are never merged even under the same `seq`. What tells them
-apart here is the claim, not the number. A runtime over a real transport keys
-duplicate suppression on the caller's transport identity plus `seq`, below the
-port, for the same reason.
+`two_callers_on_one_provider_are_two_claims_under_one_seq`, in the
+`ridl-rt-conformance` suite this runtime runs, runs exactly that case and shows
+two claims under one `seq`, which is the rule ADR-0021 decision 5 fixes: two
+callers are never merged even under the same `seq`. What tells them apart here
+is the claim, not the number. A runtime over a real transport keys duplicate
+suppression on the caller's transport identity plus `seq`, below the port, for
+the same reason.
 
 **The loopback deduplicates nothing.** It presents each call once because it
 delivers each call once, not because it recognises a retransmission — nothing
@@ -336,7 +338,8 @@ A sink's counters are per channel for a reason a single counter per handle would
 break: a consumer subscribed to some of a sink's events would see the numbers of
 the events it did not subscribe to as gaps, and `EventSource::next` states that
 a gap in `seq` is a loss.
-`a_sink_sequence_number_counts_one_channel_publications` is that case.
+`a_sink_sequence_number_counts_one_channel_publications`, in the
+`ridl-rt-conformance` suite this runtime runs, is that case.
 
 The visible consequence of a counter living on the handle is that a writer or a
 sink dropped and replaced restarts its channels' counters. A runtime with a
@@ -448,11 +451,13 @@ absences:
   would take a second component's calls and settle them `UnknownInteraction` —
   two components providing different interfaces in one process is the plainest
   use of an in-process runtime.
-  `two_handlers_each_receive_only_what_they_served` is that case, and
-  `a_handler_that_served_nothing_is_presented_every_call` is the other side of
-  the rule. The alternative rejected is recording the set without acting on it,
-  which loses a call whenever more than one handler exists.
-  `HandlerHandle::served` reads the set back.
+  `two_handlers_each_receive_only_what_they_served`, in the
+  `ridl-rt-conformance` suite this runtime runs, is that case, and
+  `a_handler_that_served_nothing_is_presented_every_call`, in
+  `crates/ridl-loopback/tests/ports.rs`, is the other side of the rule. The
+  alternative rejected is recording the set without acting on it, which loses a
+  call whenever more than one handler exists. `HandlerHandle::served` reads the
+  set back.
 - **`Loopback::fail_next_settle` is the one fault this runtime injects.** The
   generated `dispatch` counts a claim only once the handler has accepted its
   settlement, and in an in-process runtime nothing else can make that path fail,
@@ -472,15 +477,13 @@ is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
 `Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
 and fault hook.
 
-The suite states only what the port contract states, so three of this runtime's
-own choices are not in it: where the clock starts, the error the injected fault
-reports, and what a handler that has served nothing is presented. The suite's
-handlers call `serve` before they take a claim.
-`crates/ridl-loopback/tests/ports.rs` keeps the tests that only this runtime can
-express — those three choices, the threading model, `fixed`,
-`HandlerHandle::served`, `Loopback::split`, and the behaviour that follows from
-holding no catalog descriptor — and its module documentation lists each test
-with its reason.
+The suite states only what the port contract states. Its handlers call `serve`
+before they take a claim, so the deviation from `Handler::serve` recorded under
+"What it cannot report" is not exercised by it. What the suite leaves out, and
+why, is listed once, in the crate documentation of
+`crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
+keeps the tests of this runtime that fall under that list, and its module
+documentation names each test with its reason.
 
 ## What it replaced
 

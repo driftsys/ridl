@@ -26,18 +26,39 @@
 //! the tests only the loopback can express, each listed with its reason in
 //! that file's module documentation.
 //!
-//! # What the suite does not cover
+//! # What the suite leaves out
 //!
+//! This is the one list of what the suite does not test. A runtime that
+//! wants one of these pinned keeps its own test of it;
+//! `crates/ridl-loopback/tests/ports.rs` names the loopback's tests and the
+//! item of this list each one falls under.
+//!
+//! - **What the port contract leaves to a runtime.** Where the clock starts,
+//!   what [`Factory::advance`] does with a negative duration, and which error
+//!   the fault of [`Factory::fail_next_settle`] reports beyond not being
+//!   `UnknownClaim`.
+//! - **A handler that has served nothing.** [`Handler::serve`] starts
+//!   presentation at the members listed, and every handler in the suite calls
+//!   it before it takes a claim. `ridl-loopback` deviates from that on
+//!   purpose and presents every call to such a handler, because the generated
+//!   `dispatch` never calls `serve`, so the suite has no test of the case.
+//! - **Two event sinks on one event channel.** An event channel has one
+//!   provider (ridl §5). A runtime may refuse the second sink or, as
+//!   `ridl-loopback` does, not police the misuse.
 //! - **`FixedReader`.** How a `fixed` is provisioned into a runtime is the
 //!   runtime's own API, not a port, and what an unprovisioned `fixed` reads
 //!   as is not fixed by the port contract.
+//! - **Anything a runtime reports from a catalog descriptor**: an unknown
+//!   ordinal, an unowned member, a freshness of `Fresh` or `Stale` measured
+//!   against a staleness bound. The suite attaches to a catalog with no
+//!   descriptor, and a runtime with none reports `Freshness::Unbounded`.
 //! - **The threading model.** ADR-0021 decision 12 holds a runtime whose
 //!   handles are used from more than one thread to `Send` and `Sync` bounds,
 //!   and a single-threaded runtime to neither, so no test here moves a handle
 //!   to another thread.
-//! - **Anything a runtime reports from a catalog descriptor**: an unknown
-//!   ordinal, an unowned member, a freshness measured against a staleness
-//!   bound. The suite attaches to a catalog with no descriptor.
+//! - **A runtime's own API beyond the factory**, such as how it hands out all
+//!   of its role handles at once (`Loopback::split`) or reports a handler's
+//!   served set (`HandlerHandle::served`).
 
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::port::{
@@ -252,8 +273,18 @@ fn blank_change() -> Changed {
 
 #[cfg(test)]
 mod tests {
-    /// Every public function of a test module, paired with its module name.
-    fn test_functions() -> Vec<String> {
+    /// The arm of `suite!` a test belongs in: the base arm, or the arm of the
+    /// one signal extension its signature asks `F::Runtime` for.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Arm {
+        Base,
+        Scannable,
+        Coherent,
+    }
+
+    /// Every public function of a test module: its path under the crate, and
+    /// the arm its signature places it in.
+    fn test_functions() -> Vec<(String, Arm)> {
         let modules = [
             ("attached", include_str!("attached.rs")),
             ("calls", include_str!("calls.rs")),
@@ -265,31 +296,66 @@ mod tests {
         ];
         let mut found = Vec::new();
         for (module, source) in modules {
-            for line in source.lines() {
-                if let Some(rest) = line.strip_prefix("pub fn ") {
-                    let name = rest.split('<').next().expect("a function name");
-                    found.push(format!("{module}::{name}"));
-                }
+            for (start, _) in source.match_indices("\npub fn ") {
+                let rest = &source[start + "\npub fn ".len()..];
+                let name = rest.split('<').next().expect("a function name");
+                // The signature runs to the body's opening brace, and holds
+                // the where clause that asks for an extension.
+                let signature = rest.split('{').next().expect("a function body");
+                let scannable = signature.contains("ScannableSignals");
+                let coherent = signature.contains("CoherentSignals");
+                let arm = match (scannable, coherent) {
+                    (false, false) => Arm::Base,
+                    (true, false) => Arm::Scannable,
+                    (false, true) => Arm::Coherent,
+                    (true, true) => panic!("`{module}::{name}` asks for both extensions"),
+                };
+                found.push((format!("{module}::{name}"), arm));
             }
         }
         found
     }
 
-    #[test]
-    fn the_suite_macro_names_every_test_function() {
-        // A test function the macro does not name is never run by any
-        // runtime, and nothing else would report it.
+    /// The text of each arm of `suite!` that lists tests.
+    fn macro_arms() -> [(Arm, &'static str); 3] {
         let lib = include_str!("lib.rs");
-        let (macro_body, _) = lib
-            .split_once("// What every test shares.")
-            .expect("the macro precedes the shared items");
+        let between = |from: &str, to: &str| {
+            let start = lib.find(from).expect("the arm's opening") + from.len();
+            let end = start + lib[start..].find(to).expect("the arm's end");
+            &lib[start..end]
+        };
+        [
+            (Arm::Base, between("($factory:ty) => {", "($factory:ty; $(")),
+            (
+                Arm::Scannable,
+                between("(@scannable $factory:ty) => {", "(@coherent"),
+            ),
+            (
+                Arm::Coherent,
+                between("(@coherent $factory:ty) => {", "(@tests $factory:ty"),
+            ),
+        ]
+    }
+
+    #[test]
+    fn the_suite_macro_names_every_test_function_in_its_own_arm() {
+        // A test function the macro does not name is never run by any
+        // runtime, and nothing else would report it. A test that asks for an
+        // extension but sits in the base arm stops `suite!(F)` compiling for
+        // every runtime that omits that extension, and nothing in this
+        // workspace expands `suite!` over such a runtime.
         let functions = test_functions();
         assert!(functions.len() > 40, "the scan found the test functions");
-        for function in functions {
-            assert!(
-                macro_body.contains(&format!("{function},")),
-                "`suite!` does not name `{function}`"
-            );
+        for (function, arm) in functions {
+            let entry = format!("{function},");
+            for (listed, text) in macro_arms() {
+                assert_eq!(
+                    text.contains(&entry),
+                    listed == arm,
+                    "`{function}` belongs in the {arm:?} arm of `suite!`, and \
+                     only there; the {listed:?} arm is wrong about it"
+                );
+            }
         }
     }
 }

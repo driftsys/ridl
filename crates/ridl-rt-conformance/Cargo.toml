@@ -13,6 +13,6 @@ description = "The port contract tests of ridl-rt, generic over a runtime factor
 publish = false
 
 # `ridl-rt` is its only dependency: the suite drives a runtime through the
-# port traits and nothing else.
+# port traits and through the hooks of its own `Factory` trait.
 [dependencies]
 ridl-rt.workspace = true

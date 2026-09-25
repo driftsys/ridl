@@ -2,8 +2,9 @@
 //! which handler a claim belongs to (`Caller` and `Handler`).
 //!
 //! Every handler here calls `serve` for the members it takes claims on before
-//! it takes one, because `Handler::serve` is what starts presentation. What a
-//! runtime presents to a handler that has served nothing is left to it.
+//! it takes one, because `Handler::serve` is what starts presentation. The
+//! suite has no test of a handler that has served nothing; the crate
+//! documentation, "What the suite leaves out", says why.
 
 use ridl_rt::contract::InterfaceNo;
 use ridl_rt::error::{CallError, Contract};
@@ -79,9 +80,11 @@ pub fn settle_can_be_made_to_fail_once_then_succeed<F: Factory>() {
         .expect("a claim is waiting");
 
     F::fail_next_settle(&mut rt);
+    let failed = rt.settle(claim.id, Ok(&[]));
     assert!(
-        rt.settle(claim.id, Ok(&[])).is_err(),
-        "the injected failure surfaces from settle"
+        matches!(failed, Err(error) if error != SettleError::UnknownClaim),
+        "the injected failure surfaces from settle as an error other than \
+         `UnknownClaim`, got {failed:?}"
     );
     assert_eq!(
         rt.ack(correlation),

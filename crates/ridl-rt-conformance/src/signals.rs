@@ -77,12 +77,17 @@ pub fn one_commit_publishes_every_staged_signal_under_one_timestamp<F: Factory>(
 }
 
 /// A signal's sequence number counts the publications of that channel, not
-/// the commits of the writer.
+/// the commits of the writer or the publications of its interface.
 pub fn a_channel_sequence_number_counts_that_channel_publications<F: Factory>() {
     let mut rt = runtime::<F>();
+    // Three commits publish `ORD`, and only the last also publishes `OTHER`,
+    // so a counter kept per writer, per commit or per interface numbers
+    // `OTHER` 3 or 4 rather than 1.
     for value in 1..=3u8 {
         rt.set(IFACE, ORD, &[value]).expect("set");
-        rt.set(IFACE, OTHER, &[value]).expect("set");
+        if value == 3 {
+            rt.set(IFACE, OTHER, &[value]).expect("set");
+        }
         rt.commit();
     }
 
@@ -92,7 +97,8 @@ pub fn a_channel_sequence_number_counts_that_channel_publications<F: Factory>() 
     assert_eq!(rt.read(IFACE, ORD, &mut out).expect("read").envelope.seq, 3);
     assert_eq!(
         rt.read(IFACE, OTHER, &mut out).expect("read").envelope.seq,
-        3
+        1,
+        "the other channel has had one publication"
     );
 }
 

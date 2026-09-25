@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "The in-process reference runtime: an implementation of ridl-rt's port traits over one in-memory store."
+# `tests/conformance.rs` needs `ridl-rt-conformance`, which is not published,
+# and `cargo package` drops that path-only dev-dependency from the packaged
+# manifest. Shipping the test would give the packaged crate a test target
+# that cannot compile, so the package leaves it out; it runs here, in the
+# workspace.
+exclude = ["tests/conformance.rs"]
 
 # The in-process reference runtime (ADR-0020 decision 6). `ridl-rt` is its only
 # dependency, and it declares no feature: the crate implements the port traits
@@ -13,7 +19,8 @@ description = "The in-process reference runtime: an implementation of ridl-rt's 
 ridl-rt.workspace = true
 
 # The port contract suite (story E11.20), which `tests/conformance.rs` runs
-# over this runtime. A plain path with no version: the suite is not
-# published, and `cargo package` strips a path-only dev-dependency.
+# over this runtime. A plain path with no version, because the suite is not
+# published: `cargo package` drops a dev-dependency that has no version, and
+# the `exclude` above leaves out the one test that uses it.
 [dev-dependencies]
 ridl-rt-conformance = { path = "../ridl-rt-conformance" }

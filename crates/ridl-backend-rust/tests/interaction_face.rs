@@ -150,8 +150,9 @@ fn round_trip_signal_publish_and_read() {
 
 /// Before any publication, a signal reads its init value under
 /// `Provenance::Init` (ridl §4.4), not as a detected invalid state. The port
-/// already reports this correctly (`ridl-loopback`'s
-/// `a_signal_with_no_publication_reads_as_init_and_copies_nothing`); this test
+/// already reports this correctly (`ridl-rt-conformance`'s
+/// `a_signal_with_no_publication_reads_as_init_and_copies_nothing`, which
+/// `ridl-loopback` runs); this test
 /// pins it through the generated face, over `ridl-loopback`, driftsys/ridl#517.
 #[test]
 fn round_trip_signal_reads_as_init_before_any_publication() {

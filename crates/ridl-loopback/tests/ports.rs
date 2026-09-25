@@ -3,37 +3,41 @@
 //! The port contract tests that any runtime can run live in
 //! `crates/ridl-rt-conformance`, and `tests/conformance.rs` runs them over
 //! this runtime (story E11.20, driftsys/ridl#514). They came from this file.
-//! What stays here, and why each test is not in the suite:
+//! What stays here, and why each test is not in the suite. Each reason is an
+//! item of the list "What the suite leaves out" in that crate's
+//! documentation:
 //!
 //! - `two_runtimes_start_at_the_same_logical_time` — where a clock starts is
-//!   a runtime's choice. The suite asks only that the clock move through the
+//!   left to a runtime. The suite asks only that the clock move through the
 //!   factory's `advance` hook and through nothing else; this runtime's clock
 //!   starts at `Timestamp` 0.
-//! - `the_clock_refuses_to_run_backwards` — the panic is
-//!   `Loopback::advance`'s own precondition, not a port's behaviour.
+//! - `the_clock_refuses_to_run_backwards` — what `advance` does with a
+//!   negative duration is left to a runtime. This panic is
+//!   `Loopback::advance`'s own precondition.
 //! - `every_value_is_unbounded_because_the_runtime_has_no_member_table` —
-//!   `Freshness::Unbounded` follows from this runtime holding no catalog
-//!   descriptor. A runtime that reads a staleness bound reports `Fresh` or
-//!   `Stale`.
+//!   a report from a catalog descriptor. `Freshness::Unbounded` follows from
+//!   this runtime holding none; a runtime that reads a staleness bound
+//!   reports `Fresh` or `Stale`.
 //! - `a_sink_counts_its_own_channel_and_not_another_sinks` — two sinks on one
-//!   event channel is a misuse this runtime does not police. An event channel
-//!   has one provider (ridl §5), so another runtime may refuse the second
-//!   sink.
-//! - `serve_records_what_it_was_asked_to_present` — `HandlerHandle::served`
-//!   is this runtime's own API.
-//! - `a_handler_that_served_nothing_is_presented_every_call` — what a handler
-//!   that has served nothing is presented is left to a runtime by
-//!   `Handler::serve`. This runtime presents every call, because the
-//!   generated `dispatch` never calls `serve`.
+//!   event channel. An event channel has one provider (ridl §5), so another
+//!   runtime may refuse the second sink; this runtime does not police the
+//!   misuse.
+//! - `serve_records_what_it_was_asked_to_present` — a runtime's own API
+//!   beyond the factory: `HandlerHandle::served`.
+//! - `a_handler_that_served_nothing_is_presented_every_call` — a handler that
+//!   has served nothing. This runtime deviates on purpose from
+//!   `Handler::serve`, which starts presentation at the members listed, and
+//!   presents every call, because the generated `dispatch` never calls
+//!   `serve`.
 //! - `a_provisioned_fixed_reads_back_and_an_unprovisioned_one_reports_it` —
-//!   provisioning a `fixed` is `Loopback::provision_fixed`, a runtime's own
-//!   API with no port, and `Contract::UnknownInteraction` for an
+//!   `FixedReader`. Provisioning a `fixed` is `Loopback::provision_fixed`, a
+//!   runtime's own API with no port, and `Contract::UnknownInteraction` for an
 //!   unprovisioned one is this runtime's answer with no member table.
-//! - `every_split_handle_carries_the_catalog` — `Loopback::split` is this
-//!   runtime's own API. The suite checks the catalog on the aggregate and on
+//! - `every_split_handle_carries_the_catalog` — a runtime's own API beyond
+//!   the factory: `Loopback::split`. The suite checks the catalog on the aggregate and on
 //!   the handles its factory makes.
 //! - `the_injected_settle_failure_is_too_large_with_no_capacity` — which
-//!   error the injected fault reports is this runtime's choice. The suite asks
+//!   error the injected fault reports is left to a runtime. The suite asks
 //!   only for an error other than `UnknownClaim`.
 //! - `a_writer_handle_publishes_on_one_thread_while_a_reader_reads_on_another`
 //!   and `a_reader_handle_is_shared_between_threads` — the threading model of
