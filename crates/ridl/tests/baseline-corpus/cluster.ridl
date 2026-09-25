@@ -11,9 +11,9 @@
 //     5  reserved legacyWheelPhase
 //
 // This source drifts from it in five ways, each of which looks like tidying in
-// a review diff and each of which moves a wire identity. The five are one per
-// change category the desk check reports, so no category's message is left
-// without a living example:
+// a review diff and each of which moves a wire identity. Between them they
+// cover every interaction category the desk check reports; a struct field's or union
+// arm's reorder is covered instead by the member tests in baseline_desk.rs:
 //
 //   - the two events are alphabetised (a reorder — two of them);
 //   - `tyrePressure` is declared above them (an insertion);

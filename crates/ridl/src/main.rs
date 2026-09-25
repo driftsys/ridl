@@ -20,10 +20,11 @@
 //! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
 //! engine (E2.9, general form §6.3): `baseline` publishes one `.ir.json`
 //! snapshot per package, and `check` compares the workspace against those
-//! snapshots and warns (RIDL-407) when an interaction's ordinal moved. Both live
-//! here rather than in `ridlc` because reading a workspace-local baseline is not
-//! part of the source→IR function the tool qualification argument covers
-//! (ADR-0008 decision 9).
+//! snapshots and warns (RIDL-407) when the ordinal of an interaction, a struct
+//! field or a union arm moved. Both live here rather than in
+//! `ridlc` because reading a workspace-local baseline is not part of the
+//! source→IR function the tool qualification argument covers (ADR-0008
+//! decision 9).
 //!
 //! `ridl lsp` and `ridl mcp` are the two stdio servers this one binary hosts:
 //! the language server an editor drives (`ridl-lsp`) and the Model Context
@@ -78,9 +79,9 @@ enum Command {
         frozen: bool,
         /// Compare the checked workspace against a published baseline — a
         /// directory of `.ir.json` snapshots or one snapshot file — and warn
-        /// (RIDL-407) on every interaction whose ordinal moved. Without the
-        /// flag, `.ridl/baseline/` at the workspace root is used when it
-        /// exists.
+        /// (RIDL-407) on every interaction whose ordinal moved and every
+        /// struct field or union arm whose ordinal moved while no field or arm was added or removed. Without the flag,
+        /// `.ridl/baseline/` at the workspace root is used when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -610,7 +611,8 @@ fn is_source_dir(dir: &Path) -> bool {
 // ==========================================================================
 
 /// The change categories the desk check reports: the four that move a live
-/// interaction's ordinal, and no others.
+/// interaction's ordinal, plus a struct field's or union arm's ordinal
+/// reorder (typl §7.4) — and no others.
 ///
 /// General form §6.3 asks for one thing at the desk — a reorder or an insertion
 /// caught before CI, because declaration order is wire identity and a reorder
@@ -621,13 +623,25 @@ fn is_source_dir(dir: &Path) -> bool {
 /// 2026-09-15): its order is not an identity, so no service-level category
 /// belongs here.
 ///
-/// All four classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
-/// direction, so the category alone selects them.
-const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
+/// [`MemberReordered`](ridl_diff::Category::MemberReordered) also covers an
+/// enum value's or enum-set bit's textual reorder, which typl §8 and §9 make
+/// *not* a change: the value or bit takes its identity from its explicit
+/// number, not from declaration order. `ridl-diff` still reports that case,
+/// conservatively (driftsys/ridl#397), so `desk_check` reads the change's own
+/// detail to tell the two apart and stays silent for the enum/enum-set case
+/// rather than warning about a wire identity that never moved
+/// (driftsys/ridl#335).
+///
+/// Every category listed here classifies
+/// [`Breaking`](ridl_diff::Verdict::Breaking) in every direction, so the
+/// category — plus, for `MemberReordered`, the detail check `desk_check`
+/// applies — selects them.
+const ORDINAL_CATEGORIES: [ridl_diff::Category; 5] = [
     ridl_diff::Category::InteractionInserted,
     ridl_diff::Category::InteractionReordered,
     ridl_diff::Category::InteractionRemoved,
     ridl_diff::Category::ReservedNameRedeclared,
+    ridl_diff::Category::MemberReordered,
 ];
 
 /// Runs `check` and, when a baseline is available and the compile produced no
@@ -1228,6 +1242,9 @@ fn desk_check(
         if !ORDINAL_CATEGORIES.contains(&change.category) {
             continue;
         }
+        if change.category == ridl_diff::Category::MemberReordered && !is_ordinal_reorder(change) {
+            continue;
+        }
         warnings.push(Diagnostic {
             code: DiagCode::RIDL_407,
             severity: Severity::Warning,
@@ -1357,14 +1374,28 @@ fn directory_of(path: &str) -> String {
     }
 }
 
+/// Whether a `MemberReordered` change names a struct field's or union arm's
+/// ordinal rather than an enum value's or enum-set bit's position.
+/// `diff_composite` renders the former's slot as `"ordinal N"` and the
+/// latter's as `"position N"` (typl §7.4 vs typl §8, §9) — the word is the
+/// only place the two are told apart once they reach `desk_check`, which
+/// warns on the first and stays silent on the second (driftsys/ridl#335).
+fn is_ordinal_reorder(change: &ridl_diff::Change) -> bool {
+    change
+        .before
+        .as_deref()
+        .is_some_and(|detail| detail.starts_with("ordinal "))
+}
+
 /// The RIDL-407 message for one ordinal-affecting change.
 ///
 /// Written for the reader of a `.ridl` file, not for a reader of the diff
-/// report. It names the interaction and the shape it is declared in — the words
+/// report. It names the member and the shape it is declared in — the words
 /// in the source — rather than the slash-separated diff path, states the one
 /// consequence that makes the warning worth reading (declaration order is the
-/// wire identity, ridl §11), and names the edit that keeps the baseline intact.
-/// It used to read `interaction ordinal changed against the baseline:
+/// wire identity, ridl §11 for an interaction, typl §7.4 for a struct field or
+/// union arm), and names the edit that keeps the baseline intact. It used to
+/// read `interaction ordinal changed against the baseline:
 /// fx.audit/Motion/reset (interaction_reordered)`: "ordinal" is an IR word, the
 /// path is a diff-report word, `interaction_reordered` is the enum variant's
 /// own spelling, and between them they stated neither consequence nor remedy.
@@ -1379,7 +1410,14 @@ fn drift_message(change: &ridl_diff::Change) -> String {
              the wire identity of an interaction (ridl §11), so a consumer built against the \
              baseline would now bind this slot to a different interaction — put the declarations \
              back in the baseline's order and add new ones at the end",
-            baseline_position(change),
+            baseline_position(change, "position"),
+        ),
+        ridl_diff::Category::MemberReordered => format!(
+            "`{name}` has moved{in_shape} since the published baseline{}. Declaration order is \
+             the wire identity of a struct field or union arm (typl §7.4), so a consumer built \
+             against the baseline would read this slot as a different member — put the members \
+             back in the baseline's order and add new ones at the end",
+            baseline_position(change, "ordinal"),
         ),
         ridl_diff::Category::InteractionInserted => format!(
             "`{name}` is declared{in_shape} ahead of interactions the published baseline already \
@@ -1410,10 +1448,10 @@ fn drift_message(change: &ridl_diff::Change) -> String {
     }
 }
 
-/// The shape and interaction name of a `<package>/<shape>/<interaction>` diff
-/// path. A path of any other arity yields no shape and its last segment as the
-/// name, so the message degrades to naming what it can rather than printing the
-/// raw path.
+/// The shape and member name of a `<package>/<shape>/<interaction>` or
+/// `<package>/<struct or union>/<member>` diff path. A path of any other
+/// arity yields no shape and its last segment as the name, so the message
+/// degrades to naming what it can rather than printing the raw path.
 fn shape_and_name(path: &str) -> (Option<&str>, &str) {
     let parts: Vec<&str> = path.split('/').collect();
     match parts.as_slice() {
@@ -1422,21 +1460,29 @@ fn shape_and_name(path: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// ` (position 2 there, position 4 here)` for a reorder whose two sides carry
-/// two *different* positions, and the empty string otherwise.
+/// ` ({word} 2 there, {word} 4 here)` for a reorder whose two sides carry two
+/// *different* slots, and the empty string otherwise.
 ///
-/// The walk renders a live reorder's sides as bare ordinals (`"2"`) and a
-/// tombstone's as `"reserved at ordinal 2"`, so the trailing integer is what
-/// the two spellings share.
+/// `word` is the unit the caller's category renders the slot in: an
+/// interaction reorder's detail carries no word of its own (the walk renders
+/// a live reorder's sides as bare ordinals, `"2"`, and a tombstone's as
+/// `"reserved at ordinal 2"`), so the caller names it "position"; a struct
+/// field's or union arm's `MemberReordered` detail already reads `"ordinal
+/// 2"`, so the caller names it "ordinal" to match. Either way the trailing
+/// integer is what every spelling shares.
 ///
-/// The equal case is dropped rather than printed. A reorder is detected on
-/// *relative* order among the survivors, so an interaction can change rank
-/// while its absolute ordinal stays put — an insertion above it shifts the
-/// others past it — and "`doorClosed` has moved (position 3 there, position 3
-/// here)" contradicts itself in the same breath. The sentence about relative
-/// order stands on its own; the numbers are a convenience that only helps when
+/// The equal case is dropped rather than printed. For an interaction, a
+/// reorder is detected on *relative* order among the survivors, so an
+/// interaction can change rank while its absolute slot stays put — an
+/// insertion above it shifts the others past it — and "`doorClosed` has
+/// moved (position 3 there, position 3 here)" would contradict itself in the
+/// same breath. A struct field's or union arm's `MemberReordered` never
+/// reaches this branch with equal sides: `diff_composite` emits that
+/// category only when the member's own slot changed, so its `before` and
+/// `after` always differ. Either way, the sentence about relative order
+/// stands on its own; the numbers are a convenience that only helps when
 /// they differ.
-fn baseline_position(change: &ridl_diff::Change) -> String {
+fn baseline_position(change: &ridl_diff::Change, word: &str) -> String {
     let position = |side: &Option<String>| -> Option<u32> {
         side.as_ref()?
             .rsplit(' ')
@@ -1447,7 +1493,7 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
     };
     match (position(&change.before), position(&change.after)) {
         (Some(was), Some(now)) if was != now => {
-            format!(" (position {was} there, position {now} here)")
+            format!(" ({word} {was} there, {word} {now} here)")
         }
         _ => String::new(),
     }
@@ -1777,27 +1823,30 @@ fn load_snapshots(
     Ok(packages)
 }
 
-/// Where every interaction and every interface shape of the current source tree
-/// is declared, so a diff path can be pointed back at the code on the desk.
+/// Where every interaction, every struct field or union arm (typl §7.4), and
+/// every interface shape of the current source tree is declared, so a diff
+/// path can be pointed back at the code on the desk.
 ///
 /// The diff engine reads only the IR, which carries no source locations, so the
 /// span comes from a separate parse of the same tree. Matching is by name —
-/// package, shape, interaction — which is exactly the identity the diff path
+/// package, container, member — which is exactly the identity the diff path
 /// carries. "Shape" is an `interface` declaration or a service's inline body
 /// (ridl §14.0, §14.5); the two are indexed together through
 /// `SourceFile::shapes`, because a diff path names either one the same way. A
 /// named-form service is indexed as well: its shape-list elements under the
 /// interface names its diff paths carry, and the service's dotted name as the
-/// fallback for an element that is gone.
+/// fallback for an element that is gone. A struct or union body is indexed
+/// separately, from `SourceFile::definitions` (see [`Self::build`]).
 #[derive(Default)]
 struct DeclIndex {
     /// The text of each indexed file, by path: the renderer needs the text as
     /// well as the path to draw a snippet.
     texts: BTreeMap<String, String>,
     /// `(package, container, member)` to the member's declaration: an
-    /// interaction inside an interface body, or one element of a named-form
-    /// service's shape list, keyed by the interface name the diff path
-    /// carries.
+    /// interaction inside an interface body, one element of a named-form
+    /// service's shape list (keyed by the interface name the diff path
+    /// carries), or a struct field or union arm inside a struct or union
+    /// body (typl §7.4).
     members: BTreeMap<(String, String, String), (String, TextRange)>,
     /// `(package, container)` to the container's declared name. This is the
     /// fallback for a removed member, whose own declaration no longer exists
@@ -1890,6 +1939,49 @@ impl DeclIndex {
                 }
             }
 
+            // Struct and union bodies (typl §7.4): declaration order is wire
+            // identity for a live field or arm, and `diff_composite`
+            // addresses each one under `<package>/<name>/<member>` — the
+            // same three-part path `span_of` already reads for an
+            // interaction. `SourceFile::shapes` does not reach these bodies;
+            // it walks interface bodies only, so they are indexed here, from
+            // `SourceFile::definitions`. A `reserved` tombstone carries no
+            // ordinal a `MemberReordered` diff addresses, so only the live
+            // fields and arms are indexed — and, unlike an interface shape,
+            // the struct's or union's own name is not recorded into `shapes`:
+            // a `MemberReordered` diff path always names a member that still
+            // exists in the current source, so `span_of` never falls back to
+            // the container for this category, and an entry here would go
+            // unread.
+            for definition in source.definitions() {
+                match definition {
+                    ridl_syntax::ast::Definition::Struct(def) => {
+                        let Some(name) = def.name().and_then(|n| name_text(&n)) else {
+                            continue;
+                        };
+                        let fields = def.members().filter_map(|member| {
+                            let ridl_syntax::ast::StructMember::Field(field) = member else {
+                                return None;
+                            };
+                            let field_name = field.name().and_then(|n| name_text(&n))?;
+                            Some((field_name, field.syntax().text_range()))
+                        });
+                        index.record_composite_members(&package, &name, &path, &text, fields);
+                    }
+                    ridl_syntax::ast::Definition::Union(def) => {
+                        let Some(name) = def.name().and_then(|n| name_text(&n)) else {
+                            continue;
+                        };
+                        let arms = def.arms().filter_map(|arm| {
+                            let arm_name = arm.name().and_then(|n| name_text(&n))?;
+                            Some((arm_name, arm.syntax().text_range()))
+                        });
+                        index.record_composite_members(&package, &name, &path, &text, arms);
+                    }
+                    _ => {}
+                }
+            }
+
             index.texts.insert(path, text);
         }
         index
@@ -1911,15 +2003,41 @@ impl DeclIndex {
             };
             self.members.insert(
                 (package.to_string(), shape.to_string(), member_name),
-                (path.to_string(), declaration_range(&member, text)),
+                (
+                    path.to_string(),
+                    declaration_range(member.syntax().text_range(), text),
+                ),
             );
         }
     }
 
-    /// The span a `<package>/<shape>/<interaction>` diff path points at: the
-    /// interaction's declaration, the shape's name when the interaction itself
-    /// is gone (a removal), and a detached span when neither is in the source —
-    /// a detached diagnostic renders as the coded message alone.
+    /// Records one struct's fields or one union's arms under `container`
+    /// (typl §7.4) — the shared body of the two [`Self::build`] branches, so
+    /// a struct and a union are indexed through one path instead of two
+    /// near-identical ones.
+    fn record_composite_members(
+        &mut self,
+        package: &str,
+        container: &str,
+        path: &str,
+        text: &str,
+        members: impl Iterator<Item = (String, TextRange)>,
+    ) {
+        for (name, range) in members {
+            self.members.insert(
+                (package.to_string(), container.to_string(), name),
+                (path.to_string(), declaration_range(range, text)),
+            );
+        }
+    }
+
+    /// The span a `<package>/<shape>/<interaction>` or
+    /// `<package>/<struct or union>/<member>` diff path points at: the
+    /// member's declaration, the shape's name when the member itself is gone
+    /// (a removal — reachable for an interaction only, since a struct field's
+    /// or union arm's `MemberReordered` never accompanies one), and a
+    /// detached span when neither is in the source — a detached diagnostic
+    /// renders as the coded message alone.
     fn span_of(&self, diff_path: &str, sources: &mut SourceMap) -> Span {
         let mut parts = diff_path.split('/');
         let (Some(package), Some(shape), Some(member)) = (parts.next(), parts.next(), parts.next())
@@ -1975,11 +2093,12 @@ fn detached_span() -> Span {
     }
 }
 
-/// The declaration's own range, with trailing whitespace trimmed off: a node's
+/// A declaration's own range, with trailing whitespace trimmed off: a node's
 /// range can run to the start of the next line, and an underline that reaches
-/// past the declaration reads as if the next one were implicated too.
-fn declaration_range(member: &InterfaceMember, text: &str) -> TextRange {
-    let range = member.syntax().text_range();
+/// past the declaration reads as if the next one were implicated too. Shared
+/// by every member kind the index spans — an interaction, a struct field, and
+/// a union arm alike.
+fn declaration_range(range: TextRange, text: &str) -> TextRange {
     let start = usize::from(range.start());
     let end = usize::from(range.end()).min(text.len());
     let trimmed = text
