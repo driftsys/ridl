@@ -1956,31 +1956,61 @@ fn fixed_and_bounded_arrays() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
-/// A vector of the inline `boolean` primitive (driftsys/ridl#518). The
-/// codec's vector-of-scalar encode path widens every element to bytes with
-/// `to_le_bytes`, a method `bool` does not have, so a struct with a `[bool]`
-/// field did not compile. This pins the fix: each element is widened to
-/// `u8` first, one byte, matching `boolean`'s own FlatBuffers width.
+/// A vector of the bare `boolean` primitive, and a vector of `Engaged`, a
+/// named scalar over the same backing (driftsys/ridl#518). The codec's
+/// vector-of-scalar encode path widens every element to bytes with
+/// `to_le_bytes`, a method `bool` does not have, so a struct with either
+/// shape of a `[bool]` field did not compile. This pins the fix for both:
+/// each element is widened to `u8` first, one byte, matching `boolean`'s own
+/// FlatBuffers width. The fix tests `Scalar::prim`, which is `Prim::Bool`
+/// for both shapes, rather than `Scalar::repr`, which is `Repr::Bool` for
+/// `values` and `Repr::Named` for `engaged` — a fix keyed on `repr` instead
+/// would compile `values` and still miss `engaged`, so both shapes are
+/// pinned here rather than one.
+///
+/// Built from hand-written IR, like every other snapshot in this file,
+/// rather than from `tests/fixtures/flatbuffers_bool_vector.ridl`: no other
+/// snapshot test here compiles a fixture through `ridlc::compile`, so this
+/// one keeps that convention; the fixture's own compile-and-round-trip proof
+/// lives in `tests/flatbuffers_bool_vector.rs`, which this snapshot mirrors
+/// in shape (the same two fields, the same names) rather than duplicates in
+/// mechanism.
 #[test]
 fn bool_vector_field() {
     let struct_def = v2::StructDef {
-        members: vec![field_member(shaped_field(
-            "flags",
-            1,
-            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
-                element: Some(Box::new(v2::FieldType {
-                    optional: false,
-                    kind: Some(v2::field_type::Kind::Primitive(
-                        v2::PrimitiveType::Boolean as i32,
-                    )),
+        members: vec![
+            field_member(shaped_field(
+                "values",
+                1,
+                v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::Boolean as i32,
+                        )),
+                    })),
+                    min: 0,
+                    max: 4,
                 })),
-                min: 0,
-                max: 4,
-            })),
-        ))],
+            )),
+            field_member(v2::Field {
+                ordinal: 2,
+                ..array_field("engaged", "Engaged", 0, 4)
+            }),
+        ],
         fixed_layout: false,
     };
-    let decls = vec![public_decl("Flags", v2::decl::Kind::StructDef(struct_def))];
+    let decls = vec![
+        public_decl(
+            "Engaged",
+            primitive_type(
+                v2::PrimitiveType::Boolean,
+                init_value(true, Some("false")),
+                None,
+            ),
+        ),
+        public_decl("Flags", v2::decl::Kind::StructDef(struct_def)),
+    ];
     insta::assert_snapshot!(rust_for(decls));
 }
 

@@ -1,18 +1,29 @@
-// Corpus fixture for a `[bool]` field in the FlatBuffers codec
-// (driftsys/ridl#518).
+// Fixture for a `[bool]` field in the FlatBuffers codec (driftsys/ridl#518),
+// read by flatbuffers_bool_vector.rs.
 //
-// `flatbuffers_roundtrip.ridl`'s only boolean field, `Engaged`, is an inline
-// scalar, not a vector, so the codec's inline-scalar encode path
-// (`Field::Bool(value)`) is the only one it exercises. A vector element goes
-// through a different path, one that writes every scalar element's raw bytes
-// with `.to_le_bytes()` — a method `bool` does not have. This file isolates
-// that path: `values` is a bounded vector of the inline `boolean` primitive.
+// `flatbuffers_roundtrip.ridl`'s only boolean field, `engaged` (of the named
+// type `Engaged`), is an inline scalar, not a vector, so the codec's
+// inline-scalar encode path (`Field::Bool(value)`) is the only one it
+// exercises. A vector element is encoded on a different path, one that
+// writes every scalar element's raw bytes with `.to_le_bytes()` — a method
+// `bool` does not have. This file isolates that path for both shapes a
+// boolean vector element can take: `values` is a vector of the bare
+// `boolean` primitive, and `engaged` is a vector of `Engaged`, a named
+// scalar over the same backing (typl's vacuous-constraint case, Epic 10 Task
+// 4). The two differ in the codec's `Scalar::repr` but share its
+// `Scalar::prim`, which is what the fix keys on.
 //
 // Kept self-contained, in the shape of `flatbuffers_roundtrip.ridl`: no
-// cross-package import, one declaration carrying the shape under test.
+// cross-package import, one declaration carrying both shapes under test.
 
 package fb.boolvec
 
+/// A boolean scalar: its constraint checks nothing, so its constructor is
+/// the infallible `new` (Epic 10 Task 4), the same as
+/// `flatbuffers_roundtrip.ridl`'s `Engaged`.
+type Engaged : boolean
+
 struct Flags {
-  values : [boolean; 0..4]
+  values  : [boolean; 0..4]
+  engaged : [Engaged; 0..4]
 }
