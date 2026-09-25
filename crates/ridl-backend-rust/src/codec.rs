@@ -1494,6 +1494,17 @@ impl<'a> Codec<'a> {
                 match element.as_ref() {
                     Wire::Scalar(scalar) => {
                         let raw = scalar.raw(quote! { __s });
+                        // `scalar.raw` hands back a `bool` unchanged for a
+                        // `boolean` backing, because the inline-scalar write
+                        // site (`Field::Bool`) takes a `bool` directly. A
+                        // vector element is written as bytes instead, and
+                        // `bool` has no `to_le_bytes`, so this site widens it
+                        // to `u8` first — one byte, matching `Prim::Bool`'s
+                        // own width (driftsys/ridl#518).
+                        let raw = match scalar.prim {
+                            Prim::Bool => quote! { #raw as u8 },
+                            _ => raw,
+                        };
                         quote! {
                             {
                                 let __c = #reference;
