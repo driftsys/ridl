@@ -263,7 +263,7 @@ reviewed pull request and not a side effect of a planning one.
   `noop_waker` and no dependency, and that F2's amendment records the rest.
 - **F1e — E11.19.** Four helpers, each with tests citing the section of the
   language reference, or the descriptor field, it implements:
-  `Freshness::of(stamp, now, timing)` returning `Fresh`, `Stale { by }` or
+  `Freshness::of(&envelope, now, timing)` returning `Fresh`, `Stale { by }` or
   `Unbounded` from the envelope and the member's `max` (ridl §4, §9); an event
   `seq` tracker holding the last `seq` **per channel** — the counter is per
   channel, per provider instance (ridl §3.1, frame §7), so a per-interface
