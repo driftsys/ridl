@@ -138,6 +138,20 @@ with the alternative rejected):
   Kotlin backend from the same lowered model as its types and faces. The
   WebSocket transport (E11.9) is not on Kotlin's path. P0 writes this into the
   roadmap; no earlier record states it.
+
+  **Reversed 2026-09-25** by driftsys/ridl#516 and
+  [the lane F driver](2026-09-25-lane-f-driver.md) (stage F1c). On Android, a
+  runtime binds the ports over its own binder contract, which may be one
+  generic, versioned AIDL serving every catalog; ridl specifies no Binder layout
+  and no transaction code, and the Kotlin backend generates no binding. The
+  reasons: a binding generated per interface ties the AIDL version to every
+  interface change; it reads signals over IPC; it gives a command no path to
+  report "busy"; and its fixed transaction codes collide with the control
+  methods (finding K3b of driftsys/ridlc-gen-kotlin#3). The frame specification
+  §11.2, the ridl reference's Appendix B ordinals cell, and the roadmap's E11.1
+  paragraph and Kotlin section now say so. D-P4 and O-P3 are unchanged, and
+  E11.9 is still not on Kotlin's path. §2, the P0 and P5 stages and §5 of this
+  driver repeat D-P5 as it stood on 2026-09-22.
 - D-P4. The lowered model must be sufficient to generate an IPC binding: per
   package, the interface numbers and ordinals, each interaction's kind, payload
   type and FlatBuffers `MAX_SIZE` (from the projection's bound), the timing
