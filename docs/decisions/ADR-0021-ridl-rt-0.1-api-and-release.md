@@ -267,6 +267,20 @@ trusted with no `unsafe` and no second verification pass.
    table and a non-table arm's box are both ordinary tables (ADR-0019 decisions
    1 and 2), which `Builder::push_table` already writes.
 
+   **Note (2026-09-25, story E11.17, driftsys/ridl#511): a fourth cargo feature,
+   `std`, exists.** It is off by default, it links the standard library, and it
+   enables the `task` module and its two public functions,
+   `task::block_on(fut, deadline: Option<Instant>) -> Option<F::Output>` and
+   `task::noop_waker() -> Waker`, both written over `std::task::Wake` on an
+   `Arc` with no `unsafe`. It adds no dependency, so the sentence "the crate has
+   no dependency in any feature combination" still holds; the `no_std` build
+   with the feature off is unchanged, and `just wasm-check` and
+   `just compat-check` cover the feature through their `--all-features`
+   invocations. The feature is not an encoding, so "one feature per encoding"
+   describes the other three and not this one. What the feature is for, and how
+   the generated blocking client uses `block_on`, is recorded by lane F's
+   amendment to this record, not here.
+
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
    categories and `CallError` composes `Contract` with `Transport`, so a new
