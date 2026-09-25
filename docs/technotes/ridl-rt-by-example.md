@@ -214,8 +214,9 @@ pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError> {
 Four points worth pausing on.
 
 The buffer is a stack array sized from a constant, so a read allocates nothing.
-`ridl-rt` itself is `no_std`, allocates nothing and contains no `unsafe` code,
-and the generated face names only `core` paths and fixed-size arrays.
+`ridl-rt` itself, with its default features, is `no_std` and allocates nothing,
+it contains no `unsafe` code in any feature combination, and the generated face
+names only `core` paths and fixed-size arrays.
 
 The ordinal and the interface number are written into the call site as
 constants. There is no lookup at run time.

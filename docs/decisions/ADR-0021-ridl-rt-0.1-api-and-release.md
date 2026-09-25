@@ -19,8 +19,9 @@ which built `crates/ridl-rt`. The reasoning trail, including the "Alternatives
 considered" table below, is
 [`docs/archive/2026-09-13-ridl-rt-v0.1-design.md`](../archive/2026-09-13-ridl-rt-v0.1-design.md)
 (sections R-1 to R-12); the crate's architecture — its six unconditional
-modules, the seventh that the `flatbuffers` feature adds since 2026-09-20, and
-their full type and trait surface, as built — is
+modules, the seventh that the `flatbuffers` feature adds since 2026-09-20, the
+eighth that the `std` feature adds since 2026-09-25, and their full type and
+trait surface, as built — is
 [the `ridl-rt` design record](../design/ridl-rt.md).
 
 Sebastien approved the spec these decisions come from before it merged
@@ -267,6 +268,22 @@ trusted with no `unsafe` and no second verification pass.
    table and a non-table arm's box are both ordinary tables (ADR-0019 decisions
    1 and 2), which `Builder::push_table` already writes.
 
+   **Note (2026-09-25, story E11.17, driftsys/ridl#511): a fourth cargo feature,
+   `std`, exists.** It is off by default, it links the standard library, and it
+   enables the `task` module and its two public functions,
+   `task::block_on(fut, deadline: Option<Instant>) -> Option<F::Output>` and
+   `task::noop_waker() -> Waker`, both written over `std::task::Wake` on an
+   `Arc` with no `unsafe`. It adds no dependency, so the sentence "the crate has
+   no dependency in any feature combination" still holds; the `no_std` build
+   with the feature off is unchanged, and `just wasm-check` and
+   `just compat-check` cover the feature through their `--all-features`
+   invocations. The feature is not an encoding, so "one feature per encoding"
+   describes the other three and not this one. Under decision 10 the change is
+   additive — no signature changes, nothing is removed, and both items are
+   reachable only under a feature that is off by default — so it is a 0.x minor,
+   not a break. What the feature is for, and how the generated blocking client
+   uses `block_on`, is recorded by lane F's amendment to this record, not here.
+
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
    categories and `CallError` composes `Contract` with `Transport`, so a new
@@ -375,6 +392,12 @@ trusted with no `unsafe` and no second verification pass.
     8, and [the design record's](../design/ridl-rt.md) "Features, `no_std`,
     `alloc` and `wasm32`"); it is deferred until a cargo feature brings in
     `alloc` and something needs a boxed port.
+
+    **Note (2026-09-25, story E11.17, driftsys/ridl#511).** The sentence above
+    no longer holds under the `std` feature, which decision 8's note of the same
+    date records: `task.rs` declares `extern crate std`, and `std` brings
+    `alloc` with it. Whether the `Box<P>` forwarding impls are added under that
+    feature is left to lane F's amendment of this record.
 
 12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or

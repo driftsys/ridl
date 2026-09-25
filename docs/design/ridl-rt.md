@@ -12,9 +12,10 @@ amendment). A runtime is a separate crate that implements the traits of the
 workspace; generated code calls those traits without naming the runtime.
 
 The crate carries `#![no_std]` and `#![forbid(unsafe_code)]`, has no dependency
-in any feature combination, and allocates nothing. This is the architecture as
-built; the decisions behind the choices that had more than one reasonable answer
-are [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md). Read this
+in any feature combination, and, with the `std` feature off, allocates nothing.
+This is the architecture as built; the decisions behind the choices that had
+more than one reasonable answer are
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md). Read this
 record together with the
 [ridl language reference](../specification/ridl-language-reference.md), which
 every section below cites for the contract it implements.
@@ -23,7 +24,7 @@ every section below cites for the contract it implements.
 
 Six modules, each public item living in exactly one (ADR-0020 decision 5;
 `error` renamed from that decision's original `strata`, amended in place
-2026-09-13):
+2026-09-13), plus two that a cargo feature adds:
 
 | Module        | Contents                                                                                                                                                                                                                                                             |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -34,6 +35,7 @@ Six modules, each public item living in exactly one (ADR-0020 decision 5;
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
 | `error`       | `Contract`, `Transport`, `CallError`                                                                                                                                                                                                                                 |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
+| `task`        | under the `std` feature, since 2026-09-25 (story E11.17): `block_on`, `noop_waker`                                                                                                                                                                                   |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -274,6 +276,26 @@ and writes the bytes they describe. It still takes no dependency: the
 FlatBuffers runtime crate ADR-0020 decision 5 permits under this feature is not
 used. `proto3` and `repr-c` remain empty.
 
+**Since 2026-09-25 (story E11.17) a fourth feature, `std`, exists, off by
+default.** It is not an encoding: it links the standard library and gates the
+`task` module, whose two functions are
+`block_on(fut, deadline: Option<Instant>)
+-> Option<F::Output>` — a waker that
+unparks the current thread through `std::task::Wake` on an `Arc`,
+`thread::park_timeout` until the deadline, one poll per wake, a spurious wake
+harmless, `None` once the deadline has passed — and `noop_waker() -> Waker`,
+built as `Waker::from(Arc<Noop>)` and meant to be created once per loop and
+cloned. The module is for a blocking client written as `block_on` over an async
+one, and for a frame loop that polls a future once per frame. It exists because
+`Waker::noop()` needs Rust 1.85, above the crate's minimum of 1.83, and a raw
+waker needs `unsafe`, which the crate forbids. It takes no dependency and
+contains no `unsafe`; every other module stays `no_std` with the feature on; and
+the feature compiles for `wasm32-unknown-unknown`, which `just wasm-check`'s
+`--all-features` line requires, but `block_on` is not usable on that target:
+`Instant::now()` panics there and a park does not block the thread, so a frame
+loop on wasm polls with `noop_waker` and never calls `block_on`. ADR-0021
+decision 8 carries the dated note.
+
 **Stage K5 added one helper and corrected one sentence.**
 `Builder::push_offset_vector` writes a vector of `uoffset_t`s naming objects
 already written, which is what a vector of strings or of tables needs and what
@@ -424,7 +446,9 @@ handle, a `Clone` handle and a wrapper that adds tracing or a test double are
 accepted by the face's trait bounds with or without them, because such a type
 implements the port traits itself rather than borrowing through them. The impls
 are additive and need no `alloc`; `Box<P>` is not forwarded, because that would
-need `alloc`, which no feature combination of this crate brings in.
+need `alloc`, which no feature combination of this crate brought in until the
+`std` feature arrived on 2026-09-25 — whether the impl is added under `std` is
+left to lane F's amendment of ADR-0021 (the note under its decision 11).
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 records them and the reasoning.
 

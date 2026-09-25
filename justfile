@@ -110,7 +110,9 @@ test:
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds
         # them, but only at rust-version 1.83 and only against the packaged
-        # crate, so without this line a break in them reaches CI green.
+        # crate, so without this line a break in them reaches CI green. The
+        # same line is what builds the `task` module under the `std` feature
+        # and runs crates/ridl-rt/tests/task.rs.
         cargo test -p ridl-rt --all-features --locked
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
@@ -167,7 +169,8 @@ wasm-check:
         # makes the generated Rust compiled to wasm32 the codec a TypeScript
         # consumer loads, so the helpers that codec calls must build for
         # wasm32 too — which the line above, with the features off, does not
-        # show.
+        # show. The `std` feature is on here as well, so the `task` module
+        # must build for wasm32 too, although `block_on` cannot run there.
         cargo check --target wasm32-unknown-unknown -p ridl-rt --all-features
     else
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
@@ -196,8 +199,8 @@ wasm-check:
 # toolchain, so it must reuse no cache: a fixed build directory kept across
 # runs let cargo's fingerprints for that path outlive the source they once
 # described, so a passing tree could read as failing or the reverse (issue
-# #442). ridl-rt is no_std with no dependency of its own in any feature
-# combination (ADR-0021 decision 8), so the rebuild this costs is small.
+# #442). ridl-rt has no dependency of its own in any feature combination
+# (ADR-0021 decision 8), so the rebuild this costs is small.
 #
 # `toolchain-check` is a dependency, and has already proven the running
 # toolchain matches the rust-toolchain.toml pin, so this recipe reads the pin
