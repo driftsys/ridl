@@ -5,7 +5,12 @@
 //!
 //! Every timing assertion here is a lower bound — "the wait lasted at least
 //! the delay" — or a bound so wide that a loaded machine cannot cross it, so
-//! the tests do not depend on scheduling latency.
+//! the tests do not depend on scheduling latency. A poll-count ceiling is wide
+//! in the same way: a parked wait polls once before the wait and once per wake
+//! or timeout, so a ceiling of eight catches a wait that spins or parks for a
+//! fixed short time, and tolerates the few extra wakes a platform may deliver.
+//! No test asserts how many spurious wakes arrived, because the thread that
+//! sends them may not be scheduled.
 #![cfg(feature = "std")]
 
 use std::future::{poll_fn, ready, Future};
@@ -78,9 +83,14 @@ fn block_on_returns_the_output_when_another_thread_wakes_the_future() {
         elapsed >= delay,
         "returned after {elapsed:?}, before the opener ran"
     );
+    let polls = gate.polls.load(Ordering::SeqCst);
     assert!(
-        gate.polls.load(Ordering::SeqCst) >= 2,
+        polls >= 2,
         "the future is polled once before the wait and once after the wake"
+    );
+    assert!(
+        polls <= 8,
+        "a parked wait polls on a wake only, not in a loop: {polls} polls"
     );
 }
 
@@ -121,7 +131,19 @@ fn block_on_returns_none_when_the_deadline_passes() {
         elapsed >= bound,
         "returned after {elapsed:?}, before the deadline"
     );
-    assert!(gate.polls.load(Ordering::SeqCst) >= 1);
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "a park is bounded by the time left, not by a fixed duration: {elapsed:?}"
+    );
+    let polls = gate.polls.load(Ordering::SeqCst);
+    assert!(
+        polls >= 2,
+        "the future is polled once before the wait and once at the deadline"
+    );
+    assert!(
+        polls <= 8,
+        "a parked wait polls on a wake or the deadline only: {polls} polls"
+    );
 }
 
 #[test]
@@ -161,10 +183,7 @@ fn a_spurious_unpark_does_not_end_the_wait_early() {
         elapsed >= bound,
         "a spurious unpark ended the wait at {elapsed:?}"
     );
-    assert!(
-        gate.polls.load(Ordering::SeqCst) >= 3,
-        "every wake, spurious or not, polls the future once"
-    );
+    assert!(gate.polls.load(Ordering::SeqCst) >= 2);
 }
 
 #[test]
