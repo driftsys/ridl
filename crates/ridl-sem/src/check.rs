@@ -9946,7 +9946,7 @@ interface VehicleStatus {
             &db,
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : Speed\n}}\n"),
-            "[-100ms..1000ms]",
+            "[-100ms..2000ms]",
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
@@ -9955,6 +9955,11 @@ interface VehicleStatus {
         assert!(
             checked.diagnostics[0].message.contains("[defaults].timing"),
             "MANI-009 must name the manifest key, got {:?}",
+            checked.diagnostics[0].message,
+        );
+        assert!(
+            checked.diagnostics[0].message.contains("greater than zero"),
+            "MANI-009 must give the reason, got {:?}",
             checked.diagnostics[0].message,
         );
         // The untimed event lowers with the built-in fallback bounds — no

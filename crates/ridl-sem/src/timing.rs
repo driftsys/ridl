@@ -1220,10 +1220,10 @@ mod tests {
         // greater than zero (ridl §2.1, RIDL-102), so the configured default
         // draws MANI-009 rather than reaching the IR. `[100ms..-1ms]` has only
         // its max bound negative (its min also exceeds its max, but the
-        // positivity check runs first), so a mutation that stops checking the
-        // max bound for positivity would let it slip past this test if the
-        // test only checked for a rejection — asserting the "greater than
-        // zero" reason specifically is what catches that mutation.
+        // positivity check runs first). A mutation that stops checking the
+        // max bound for positivity would still reject it, through the order
+        // check, so the test asserts the "greater than zero" reason: a check
+        // for a rejection alone would not detect that mutation.
         for text in ["[-100ms..1000ms]", "[-2s..-1s]", "[100ms..-1ms]"] {
             let reason = parse_default_timing(text).expect_err(text);
             assert!(
