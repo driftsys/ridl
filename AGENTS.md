@@ -22,107 +22,50 @@ sequenced in the roadmap, and `rmdl` stays a Proposed draft with no
 implementation. See `docs/technotes/walking-skeleton-architecture.md` for the
 as-built map.
 
-**Read these before doing anything else in this repo:**
+**Start from the map for your task, then read what the task touches.**
 
-- `docs/specification/ridl-family-overview.md` — the entry point: the map, the
-  shared doctrines (indexed once), the decision ledger, and the open-question
-  index. Start here.
-- `docs/wip/ridl-family-concept.md` — the concept note: motivation, cores,
-  profiles, the platform/IR model, the naming ledger (pre-ADR).
-- `docs/wip/family-general-form.md` — the surface rules shared by every profile:
-  the three declaration shapes, the nine surface invariants, the attribute model
-  (pre-ADR working spec).
-- `docs/specification/{typl,ridl,rmdl,rsdl}-language-reference.md` — the four
-  language references, plus `rxdl-language-reference.md` for the unrestricted
-  profile and the domain spellings (a spelling layer, not a language — it adds
-  no semantics). The retired `uxdl` reference is at
-  `docs/archive/uxdl-language-reference-v0.1.md`; read it as prior work, never
-  as the current design.
-- `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
-  ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution),
-  ADR-0008 (E2 execution — read its `## Status` before editing it), ADR-0009
-  (toolchain pin and gate parity — binds every contributor, not one epic),
-  ADR-0010 (CLI conventions — binds every subcommand), ADR-0011 (the
-  provisioned-constant keyword is `fixed` — supersedes ADR-0008 decision 5),
-  ADR-0012 (the interaction boundary model — retires uxdl, gives ridl five
-  interaction families and their correspondence obligations; binds the language
-  surface), ADR-0013 (codegen backend scope — _proposed_, classifies a backend
-  by what its target can represent), ADR-0014 (the IR's own encodings —
-  canonical protobuf JSON, prototext, binary; binds the artifact every future
-  backend consumes), ADR-0015 (QoS absorption, the RPC response bound, the
-  coherence rule, and composition of interfaces into a service; binds the
-  language surface), ADR-0016 (schema projection and the pinned name transform;
-  binds every backend that projects identity onto a target namespace), ADR-0017
-  (the proto3 projection — how a foreign reference projects, where constraint
-  information goes, and totality over names as well as numbers; read its
-  decision 1 before writing another wire backend, because `generate_with` is the
-  API every later wire backend inherits), ADR-0018 (the runtime core, two
-  encodings, and what the backends emit — _proposed_; retracts the interaction
-  layer the language backends shipped and restores it as a later phase, retires
-  the extern-C face, fixes proto3 and FlatBuffers as the two core encodings —
-  the 2026-09-12 re-scope adds `repr(C)` as a third and ADR-0020 amends decision
-  3 in place — moves the store and dispatcher into Epic 11, and resolves the
-  service-block conflict between ADR-0013 decision 2 and ADR-0016 decision 10;
-  binds every backend and the runtime, and carries a 2026-09-12 amendment on
-  decisions 3, 6, 15, 16 and 17 plus a record-wide note that `ridl-rt` names the
-  engine here and the library everywhere else — read it before writing anything
-  about what a backend emits), ADR-0019 (the FlatBuffers projection — a union
-  isolated in a wrapper table, a non-table union arm boxed, every struct a
-  `table`, a map with no `(key)`, the target's own name scopes, and `= null` on
-  a field whose enum declares no zero member; binds the FlatBuffers backend
-  only, and carries a 2026-09-21 amendment adding decision 8, the root rule:
-  every declaration has a root table, and a named scalar, an enum and an enum
-  set are rooted in `table <Name>Box { value: … (id: 0); }` — read it before
-  changing what the FlatBuffers backend emits for a declaration that is not a
-  struct or a union), ADR-0020 (the third payload encoding, the runtime layering
-  and the codegen plugin system — _proposed_; `repr(C)` joins proto3 and
-  FlatBuffers and the encoding matrix settles the codec-in-wasm boundary as
-  FlatBuffers, `ridl-rt` is one crate with one cargo feature per encoding and
-  the runtimes live outside it, and a backend becomes an executable over
-  `generate(CodegenRequest) -> CodegenResponse` fed by a lowering step in the
-  compiler — read it before writing a backend or a runtime library, and read its
-  **Documents amended** table: ADR-0018's decisions 3, 6 and 15 rest on this
-  record, its decisions 16 and 17 on the re-scope's other decisions, and
-  ADR-0013's target list and ADR-0007 decision 13 change with them — the last is
-  the only one of these that changes shipped code), ADR-0021 (the `ridl-rt` 0.1
-  API decisions and the 0.x breaking-change rule; binds every consumer of
-  `ridl-rt` — the Rust codegen, the runtimes, and story E14.2; its 2026-09-20
-  amendment adds decisions 11 and 12, the port-trait forwarding impls and the
-  handle model a runtime presents, and its 2026-09-26 amendment adds decisions
-  13 to 18 — the `Wakeable` port extension and its `Interest` keys,
-  `Transport::Busy` crossing the frame, the `correlate` module, `ClientError`
-  and `ProviderError`, the E11.19 helpers ratified in place, and the one 0.x
-  minor that carries E11.16 to E11.19; the crate's as-built design record is
-  `docs/design/ridl-rt.md`), ADR-0022 (the rsdl system in the IR — where the
-  lowered system lives, that it is its own artifact
-  `<pkg.Name>.system.{json,txtpb,binpb}` written by the three IR dump emits,
-  which facts of rsdl §13 the IR states and which it does not, that a build
-  whose only errors are RSDL-7xx writes every artifact and still exits 1, and
-  that `ridl diff`'s system headings carry no verdict; binds the IR every later
-  consumer reads, the `ridl build` contract and `ridl diff`. The as-built
-  implementation record is `docs/technotes/rsdl-implementation.md`), ADR-0023
-  (the generated interaction face's entry point, clause translator, and call
-  signatures — the Rust backend's `generate_face` companion entry point over the
-  unchanged pipeline `generate`, a narrow contract-clause translator that
-  refuses every clause form it does not accept, a `Provider` method taking its
-  argument by reference, and a consumer-side call returning a correlation on
-  success and `SendError` on failure; binds every later story that extends the
-  Rust backend's interaction face. Its 2026-09-20 amendment makes that success
-  half the call's own correlation newtype and adds decision 5, a face that holds
-  its port by value with no lifetime parameter — neither emitted yet, both
-  landing with the `ridl-backend-rust` face change that follows the record; the
-  amendment's own reasoning is on driftsys/ridl#429. Its 2026-09-26 amendment
-  supersedes decision 4 for the public surface and adds decision 6: an async
-  `Client` and a blocking `Client` per interface returning `ClientError`,
-  `serve` in both forms, and the poll face `pub(crate)` — read it before
-  changing what the face emits for a call. The as-built design record is
-  `docs/design/interaction-face.md`).
+- `docs/technotes/walking-skeleton-architecture.md` — the as-built map of the
+  workspace: which crate owns what. Read it before a code change in `crates/`.
+- `docs/specification/ridl-family-overview.md` — the map of the specifications:
+  the doctrines, the decision ledger, the open questions. Read it before editing
+  a specification or an ADR; its footer lists what to update with it.
+- `docs/wip/family-general-form.md` — the three declaration shapes, the nine
+  surface invariants, the attribute model. Read it before changing the grammar,
+  the parser, an attribute, or `ridl-fmt`.
+- `docs/specification/{typl,ridl,rsdl}-language-reference.md` — read one before
+  changing that language's parser, checks, or lowering; read
+  `docs/specification/expr-core-specification.md` before changing expression
+  evaluation. rmdl and rxdl have references but no implementation.
+- `docs/decisions/` — the ADRs. `docs/decisions/README.md` summarises each one;
+  the record's own `## Status` is authoritative for its status and amendments.
+  Read the record itself before the matching work:
+  - ADR-0008 — read its `## Status` before editing it.
+  - ADR-0009 (toolchain pin and gate parity) and ADR-0010 (CLI conventions) —
+    bind every contributor and every subcommand.
+  - ADR-0012 and ADR-0015 — before changing the language surface.
+  - ADR-0014 (the IR's encodings) and ADR-0016 (the pinned name transform) —
+    bind every backend.
+  - ADR-0017 decision 1 — before writing another wire backend; `generate_with`
+    is the API every later wire backend inherits.
+  - ADR-0018, with ADR-0020's **Documents amended** table — before writing
+    anything about what a backend emits, a backend, or a runtime library. In
+    ADR-0018 `ridl-rt` names the engine; everywhere else it names the library.
+  - ADR-0019 decision 8 — before changing what the FlatBuffers backend emits for
+    a declaration that is not a struct or a union.
+  - ADR-0021 and `docs/design/ridl-rt.md` — before changing `ridl-rt` or
+    anything that consumes it.
+  - ADR-0022 and `docs/technotes/rsdl-implementation.md` — before changing the
+    system artifact, `ridl build`'s exit contract, or `ridl diff`.
+  - ADR-0023 and `docs/design/interaction-face.md` — before extending the Rust
+    backend's interaction face; its decision 6 before changing what the face
+    emits for a call.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the
   parked blocks with the observation that reopens each, and the milestone
   summary. What has already shipped is in
-  `docs/archive/roadmap-landed-record.md`.
+  `docs/archive/roadmap-landed-record.md`. Read it before planning or picking up
+  a story.
 
 These are living records. A decision that changes one is recorded there directly
 — don't silently diverge from it.
