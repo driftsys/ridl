@@ -27,7 +27,7 @@
 //! `N` is checked at compile time: a table of more than 65536 slots does not
 //! build.
 //!
-//! ```compile_fail
+//! ```compile_fail,E0080
 //! const TOO_MANY: ridl_rt::correlate::Table<65537> = ridl_rt::correlate::Table::new(None);
 //! ```
 //!
@@ -328,8 +328,9 @@ impl Waiters {
 
     /// Takes every stored waker, which clears every kind, for a runtime with
     /// one unkeyed "something changed" source. The wakers are taken when this
-    /// is called, whether or not the iterator is consumed.
-    pub fn take_all(&mut self) -> impl Iterator<Item = Waker> + '_ {
+    /// is called, whether or not the iterator is consumed, and the iterator
+    /// does not borrow the registry.
+    pub fn take_all(&mut self) -> impl Iterator<Item = Waker> + use<> {
         [self.slot.take(), self.event.take(), self.claim.take()]
             .into_iter()
             .flatten()

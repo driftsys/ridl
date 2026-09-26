@@ -100,8 +100,9 @@ pub mod task;
 
 /// Pins which enums stay `#[non_exhaustive]` under R-11: `Transport`,
 /// `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`,
-/// `ServeError`, `SettleError`, `ClientError` and `ProviderError`. Each `compile_fail` block below matches
-/// every variant of one such enum, with no `_` arm. Matching a
+/// `ServeError`, `SettleError`, `ClientError` and `ProviderError`. Each
+/// `compile_fail` block below matches every variant of one such enum, with
+/// no `_` arm. Matching a
 /// `#[non_exhaustive]` enum from outside its crate with no `_` arm does not
 /// compile, so a block fails until `#[non_exhaustive]` is removed from the
 /// enum it names.

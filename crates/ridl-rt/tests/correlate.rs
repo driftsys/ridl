@@ -71,6 +71,24 @@ fn a_forgotten_slot_is_reused_under_a_new_generation() {
 }
 
 #[test]
+fn a_slot_reclaimed_twice_does_not_accept_a_correlation_from_two_reclaims_ago() {
+    let mut table = Table::<1>::new(None);
+    let mut issued = Vec::new();
+    for _ in 0..3 {
+        let c = table.insert(0).expect("the one slot is free");
+        issued.push(c);
+        let _ = table.settle(c, Ok(()));
+        if issued.len() < 3 {
+            let _ = table.forget(c);
+        }
+    }
+    assert_ne!(issued[2], issued[0], "three generations of one slot");
+    assert_eq!(table.outcome(issued[0]), None);
+    assert_eq!(table.outcome(issued[1]), None);
+    assert_eq!(table.outcome(issued[2]), Some(Ok(())));
+}
+
+#[test]
 fn a_generation_mismatch_answers_none_to_the_old_correlation() {
     let mut table = Table::<1>::new(None);
     let old = table.insert(0).expect("a slot is free");
@@ -171,6 +189,29 @@ fn the_budget_refuses_a_reservation_that_does_not_fit_and_accepts_it_after_a_rec
 }
 
 #[test]
+fn a_reservation_the_budget_refuses_leaves_its_slot_free() {
+    let mut table = Table::<1>::new(Some(10));
+    assert_eq!(table.insert(20), None, "more than the whole budget");
+    assert!(
+        table.insert(10).is_some(),
+        "the one slot was not taken by the refused insert"
+    );
+}
+
+#[test]
+fn an_insert_refused_for_want_of_a_slot_debits_no_budget() {
+    let mut table = Table::<1>::new(Some(10));
+    let c = table.insert(4).expect("the slot and 4 of 10");
+    assert_eq!(table.insert(4), None, "no slot is free");
+    let _ = table.settle(c, Ok(()));
+    let _ = table.forget(c);
+    assert!(
+        table.insert(10).is_some(),
+        "the whole budget is free again: the refused insert debited nothing"
+    );
+}
+
+#[test]
 fn no_budget_admits_any_reservation() {
     let mut table = Table::<2>::new(None);
     assert!(table.insert(u64::MAX).is_some());
@@ -224,12 +265,18 @@ fn settle_returns_the_stored_waker_once() {
     let c = table.insert(0).expect("a slot is free");
     let (count, waker) = counter();
     assert!(table.wake_on(c, &waker).is_none(), "nothing to displace");
+    assert_eq!(Arc::strong_count(&count), 3, "the slot holds a clone");
 
     match table.settle(c, Ok(())) {
         Settled::Recorded(Some(stored)) => wake([stored]),
         other => panic!("expected the stored waker, found {other:?}"),
     }
     assert_eq!(wakes(&count), 1);
+    assert_eq!(
+        Arc::strong_count(&count),
+        2,
+        "the settlement took the waker out of the slot"
+    );
     assert!(
         matches!(table.settle(c, Ok(())), Settled::Unknown),
         "the waker was handed back once and is no longer stored"
@@ -308,11 +355,17 @@ fn forget_of_a_call_in_flight_hands_back_its_waker() {
     let c = table.insert(0).expect("a slot is free");
     let (count, waker) = counter();
     let _ = table.wake_on(c, &waker);
+    assert_eq!(Arc::strong_count(&count), 3, "the slot holds a clone");
     match table.forget(c) {
         Forgotten::Marked(Some(stored)) => wake([stored]),
         other => panic!("expected the stored waker, found {other:?}"),
     }
     assert_eq!(wakes(&count), 1, "no outcome will ever be readable for it");
+    assert_eq!(
+        Arc::strong_count(&count),
+        2,
+        "the forget took the waker out of the slot"
+    );
     assert!(matches!(table.settle(c, Ok(())), Settled::Reclaimed));
     assert_eq!(wakes(&count), 1, "the reclaim hands back nothing more");
 }
@@ -439,6 +492,19 @@ fn take_all_takes_every_kind_for_an_unkeyed_runtime() {
     wake(waiters.take_all());
     assert_eq!((wakes(&count), wakes(&other)), (2, 1));
     assert_eq!(waiters.take_all().count(), 0, "every kind is cleared");
+}
+
+#[test]
+fn take_all_does_not_keep_the_registry_borrowed() {
+    let mut waiters = Waiters::new();
+    let (count, waker) = counter();
+    let _ = waiters.register(Interest::Slot, &waker);
+    let taken = waiters.take_all();
+    // The wakers are already out of the registry, so a registration while
+    // the iterator is alive compiles and finds nothing to displace.
+    assert!(waiters.register(Interest::Event(IFACE), &waker).is_none());
+    wake(taken);
+    assert_eq!(wakes(&count), 1);
 }
 
 #[test]

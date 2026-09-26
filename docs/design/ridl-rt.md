@@ -645,7 +645,7 @@ impl Waiters {
     pub const fn new() -> Self;                           // and Default
     pub fn register(&mut self, what: Interest, waker: &Waker) -> Option<Waker>;
     pub fn take(&mut self, what: Interest) -> Option<Waker>;
-    pub fn take_all(&mut self) -> impl Iterator<Item = Waker> + '_;
+    pub fn take_all(&mut self) -> impl Iterator<Item = Waker> + use<>;
 }
 ```
 
@@ -707,10 +707,12 @@ task, nothing on a refresh, and, for `Interest::Outcome`, which a `Table` holds,
 key's change has already happened is the runtime's to know, so a runtime
 registers and then `take`s the waker back when the change is already visible.
 `take_all` is for a runtime with one unkeyed "something changed" source; it
-clears every kind when it is called, whether or not the iterator is consumed.
-`Waiters` implements `Default` beside `new`, as `EventSeqTracker` does, because
-Clippy's `new_without_default` lint fails the gate on a public `new` with no
-argument and no `Default`.
+clears every kind when it is called, whether or not the iterator is consumed,
+and the iterator does not borrow the registry (`+ use<>`, precise capturing,
+stable since Rust 1.82 and so within the crate's 1.83 floor), so a runtime can
+register again while it still holds the iterator. `Waiters` implements `Default`
+beside `new`, as `EventSeqTracker` does, because Clippy's `new_without_default`
+lint fails the gate on a public `new` with no argument and no `Default`.
 
 **What a `Slot` waiter is woken by is the runtime's**: on a reclaim it wakes
 every `Slot` waiter it holds, one per handle, and the first to send again takes

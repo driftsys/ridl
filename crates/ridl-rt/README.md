@@ -5,11 +5,13 @@ links, and a runtime implements.
 
 `ridl-rt` defines, once, the vocabulary that generated code and a runtime agree
 on: identity and the interaction descriptors (`contract`), the payload encodings
-(`encoding`), the contract and transport errors (`error`), encoding and decoding
-a payload (`payload`), the ports a runtime implements and generated code calls
+(`encoding`), the contract and transport errors and the two errors a generated
+client call and a generated `serve` return (`error`), encoding and decoding a
+payload (`payload`), the ports a runtime implements and generated code calls
 (`port`), and time, the envelope, and the values a read returns (`sample`). It
 contains no runtime: a runtime is a separate crate that implements the `port`
-module's traits.
+module's traits. It also carries the caller-side call table and the waker
+registry every runtime would otherwise write alone (`correlate`).
 
 With its default features the crate is `no_std` and allocates nothing; it
 contains no `unsafe` code and has no dependency in any feature combination. It
