@@ -66,12 +66,6 @@ fn loopback() -> Loopback {
               is outside Lane M stage M3's scope: it is baseline domain-type emission every \
               backend consumer shares, not face- or descriptor-specific."
 )]
-#[allow(
-    clippy::upper_case_acronyms,
-    reason = "an enum variant keeps its typl SCREAMING_SNAKE spelling by design \
-              (crate::emit_enum's own doc comment), predating M3; this file is the first place \
-              that spelling is compiled in-tree"
-)]
 mod generated {
     include!("generated/interaction_face.rs");
 }

@@ -1984,8 +1984,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
 
     // The proof. `private-interfaces` and `private-bounds` are denied by name
     // rather than with a blanket `-D warnings`, matching `rustc_accepts` in
-    // `crates/ridlc/tests/corpus.rs`: the generated code carries by-design
-    // naming and dead-code lints that say nothing about visibility.
+    // `crates/ridlc/tests/corpus.rs`: the generated code carries dead-code
+    // lints that say nothing about visibility.
     //
     // `non_snake_case` is denied beside them so that a field name reaching
     // generated Rust verbatim fails this run rather than warning in it. It is
@@ -1993,8 +1993,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     // proof that guards issue #243 is `appendix_a_compiles_with_rustc`, whose
     // IR carries `sensorId` and `isOpen`. The deny here is what makes this
     // proof stay a proof if a multi-word field name is ever added to the
-    // fixture. An enum variant keeps its typl `SCREAMING_SNAKE` spelling and
-    // draws `non_camel_case_types`, a different lint, which stays undenied.
+    // fixture. `non_camel_case_types` is denied too, for driftsys/ridl#506; it
+    // is inert on this fixture, which declares no enum.
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
@@ -2013,6 +2013,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
             "private-bounds",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
@@ -2965,9 +2967,10 @@ pub mod ridl {
     // Appendix B, whose every field name is a single word; the proof that
     // guards issue #243 is `appendix_a_compiles_with_rustc`. The deny here is
     // what makes this proof stay a proof if a multi-word field name is ever
-    // added to the fixture. An enum variant keeps its typl `SCREAMING_SNAKE`
-    // spelling and draws `non_camel_case_types`, a different lint, which
-    // stays undenied.
+    // added to the fixture. An enum variant is the `pascal_case` of its typl
+    // name (driftsys/ridl#506), and `non_camel_case_types` is denied too.
+    // Appendix B holds multi-word enum values, so this deny is the proof that
+    // guards #506 on this fixture.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2978,6 +2981,8 @@ pub mod ridl {
             "metadata",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -3143,6 +3148,8 @@ fn constructible_collections_compile() {
             "metadata",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -3583,8 +3590,10 @@ pub mod veh {
     // issue #243: the Appendix A IR carries the field names `sensorId` and
     // `isOpen`, so a field name reaching generated Rust verbatim fails this
     // run. The assertion is otherwise on the exit status, which a warning
-    // does not change. `non_camel_case_types`, which a screaming-case enum
-    // variant draws by design, stays undenied.
+    // does not change. `non_camel_case_types` is denied too, for
+    // driftsys/ridl#506. Appendix A's `DiagError` holds multi-word values
+    // (`FILTER_INVALID`, `STORAGE_BUSY`, `ACCESS_DENIED`), so the deny bites
+    // on this fixture.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3595,6 +3604,8 @@ pub mod veh {
             "metadata",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)

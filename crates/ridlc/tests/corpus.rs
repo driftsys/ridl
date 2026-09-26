@@ -1089,9 +1089,8 @@ fn showcase_pins_every_severity() {
 /// (`ridl::std::…`).
 ///
 /// The assertion is on the rustc **exit status**, not on empty stderr: the
-/// generated code is valid but carries non-fatal lints (for example
-/// `non_camel_case_types` on a screaming-case enum variant), which are warnings,
-/// not errors.
+/// generated code is valid but carries non-fatal lints (for example dead code
+/// on an unused internal type), which are warnings, not errors.
 #[test]
 fn veh_common_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-common"));
@@ -1120,6 +1119,11 @@ fn veh_common_generated_rust_compiles_with_rustc() {
             "lib",
             "--emit",
             "metadata",
+            // driftsys/ridl#506: an enum variant is the `pascal_case` of its
+            // typl name, and this deny keeps it there. `veh-common` holds
+            // multi-word enum values, so it bites on this fixture.
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -1239,6 +1243,13 @@ fn workspace_two_members_composed_compiles_with_rustc() {
             "lib",
             "--emit",
             "metadata",
+            // driftsys/ridl#506: an enum variant is the `pascal_case` of its
+            // typl name, and this deny keeps it there. It is inert on this
+            // fixture, which declares no enum
+            // (`crates/ridlc/tests/corpus/workspace-two-members/`); it keeps
+            // this a proof if one is added.
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -1258,11 +1269,11 @@ fn workspace_two_members_composed_compiles_with_rustc() {
 
 /// Runs `rustc` over `source` as a library, returning whether it exited zero.
 /// The assertion is on the **exit status**, not on empty stderr: the generated
-/// code is valid but carries non-fatal lints (`non_camel_case_types` on a
-/// screaming-case enum variant, dead code on an unused internal type), which
-/// are warnings, not errors. Three lints are denied by name, so that they do
-/// fail the run: `private-interfaces` and `private-bounds` (issue #161) and
-/// `non_snake_case` (issue #243).
+/// code is valid but carries non-fatal lints (dead code on an unused internal
+/// type), which are warnings, not errors. Four lints are denied by name, so
+/// that they do fail the run: `private-interfaces` and `private-bounds`
+/// (issue #161) and `non_snake_case` (issue #243) and `non_camel_case_types`
+/// (issue #506).
 fn rustc_accepts(label: &str, source: &str) -> bool {
     let dir = std::env::temp_dir().join(format!(
         "ridlc_corpus_{label}_{}_{}",
@@ -1286,16 +1297,15 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "lib",
             "--emit",
             "metadata",
-            // The first of the three lints denied by name (issue #161). A
+            // The first of the four lints denied by name (issue #161). A
             // generated `pub` item
             // over a `pub(crate)` type is warn-by-default on current rustc, so
             // a plain exit-status check accepts it — which is why the corpus's
             // own compile proof did not notice a public interface carrying an
             // `internal` payload. A blanket `-D warnings` is not usable here:
             // the generated code carries unrelated non-fatal lints by design
-            // (`non_camel_case_types` on a screaming-case enum variant, dead
-            // code in a crate with no consumers), so denying everything would
-            // fail for reasons that say nothing about visibility.
+            // (dead code in a crate with no consumers), so denying everything
+            // would fail for reasons that say nothing about visibility.
             "-D",
             "private-interfaces",
             "-D",
@@ -1305,10 +1315,15 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             // drew `non_snake_case` at every consumer, and a plain
             // exit-status check accepts a warning. The field name now goes
             // through `ridl_ir::name::snake_case`, and denying the lint by
-            // name is what keeps it there. `non_camel_case_types`, which a
-            // screaming-case enum variant draws by design, stays undenied.
+            // name is what keeps it there. The same holds for an enum
+            // variant and `non_camel_case_types` (driftsys/ridl#506): the
+            // variant goes through `ridl_ir::name::pascal_case`.
+            // `veh-cluster` holds multi-word enum values, so the deny bites
+            // on it.
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
