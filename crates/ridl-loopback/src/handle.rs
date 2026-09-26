@@ -34,8 +34,9 @@
 //! never woken, because no change of it is visible through that handle; the
 //! aggregate routes each key to the handle that carries it. The reader, the
 //! writer and the sink have no key to wait on. `CallerHandle` carries `Clock`
-//! too, so a generated client over an interface with calls only, which is
-//! bound on `Caller + Clock + Wakeable`, can be built over it alone.
+//! too, because the async client ADR-0023 decision 6 specifies for an
+//! interface with calls only is bound on `Caller + Clock + Wakeable`; the Rust
+//! backend does not emit that client yet (story E11.21).
 //!
 //! Every method on the reader handle takes `&self`, so several threads may
 //! read one store at once; every other handle carries a trait with a

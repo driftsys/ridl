@@ -741,15 +741,18 @@ impl Store {
 /// Stores `waker` under `key` in a one-waiter slot, and returns the waker it
 /// displaced.
 ///
-/// A waker that `will_wake` the stored one is the same task registering again,
-/// which it does on every poll: the stored waker is kept, under the new key,
-/// and nothing is displaced. Returning it would wake the task for its own
-/// registration and schedule another poll every time.
-fn register<K>(slot: &mut Option<(K, Waker)>, key: K, waker: &Waker) -> Option<Waker> {
+/// A waker that `will_wake` the stored one, under the same key, is the same
+/// task registering again, which it does on every poll: the stored waker is
+/// kept and nothing is displaced. Returning it would wake the task for its own
+/// registration and schedule another poll every time. Under another key the
+/// stored registration is displaced and woken even when the task is the same,
+/// because the slot holds one key and the first key would otherwise never
+/// wake it.
+fn register<K: PartialEq>(slot: &mut Option<(K, Waker)>, key: K, waker: &Waker) -> Option<Waker> {
     if let Some((stored_key, stored)) = slot
+        && *stored_key == key
         && stored.will_wake(waker)
     {
-        *stored_key = key;
         return None;
     }
     slot.replace((key, waker.clone()))

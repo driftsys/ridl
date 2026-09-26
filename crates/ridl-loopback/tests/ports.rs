@@ -376,6 +376,50 @@ fn a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement() {
         .expect("waiting");
     handler.settle(second.id, Ok(&[])).expect("settle");
     assert_eq!(wakes(&count), 1, "a woken waker is not woken again");
+
+    // Had the settlement left its waker stored, a later registration under
+    // the same key would displace it and wake it a second time.
+    let (later, later_waker) = counter();
+    caller.wake_on(Interest::Outcome(c), &later_waker);
+    assert_eq!(wakes(&later), 1, "the outcome is known, so at once");
+    assert_eq!(wakes(&count), 1, "the settlement cleared the stored waker");
+}
+
+#[test]
+fn each_settlement_wakes_only_its_own_calls_waiter() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+
+    let first_call = caller.command(IFACE, ORD, &[1]).expect("send");
+    let second_call = caller.command(IFACE, ORD, &[2]).expect("send");
+    let (first, first_waker) = counter();
+    let (second, second_waker) = counter();
+    caller.wake_on(Interest::Outcome(first_call), &first_waker);
+    caller.wake_on(Interest::Outcome(second_call), &second_waker);
+    assert_eq!(
+        (wakes(&first), wakes(&second)),
+        (0, 0),
+        "two keys, no displacement"
+    );
+
+    let claim_one = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    let claim_two = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim_two.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        (wakes(&first), wakes(&second)),
+        (0, 1),
+        "only the second call is settled"
+    );
+    handler.settle(claim_one.id, Ok(&[])).expect("settle");
+    assert_eq!((wakes(&first), wakes(&second)), (1, 1));
 }
 
 #[test]
@@ -459,7 +503,19 @@ fn a_forgotten_calls_waiter_is_not_woken_by_its_settlement() {
     let c = caller.command(IFACE, ORD, &[1]).expect("send");
     let (count, waker) = counter();
     caller.wake_on(Interest::Outcome(c), &waker);
+    assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
     caller.forget(c);
+    assert_eq!(
+        Arc::strong_count(&count),
+        2,
+        "forgetting a call in flight drops its waiter"
+    );
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_eq!(
+        Arc::strong_count(&count),
+        2,
+        "a forgotten call in flight takes no new waiter"
+    );
 
     let claim = handler
         .next_claim(&mut buf)
@@ -491,6 +547,8 @@ fn a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one() {
     rt.raise(IFACE, ORD, &[1]).expect("raise");
     assert_eq!(wakes(&woken), 1, "the subscribed source is woken");
     assert_eq!(wakes(&idle), 0, "nothing was queued for the other one");
+    rt.raise(IFACE, ORD, &[2]).expect("raise");
+    assert_eq!(wakes(&woken), 1, "the woken waker was cleared");
 
     let mut out = [0u8; 8];
     assert!(
@@ -506,9 +564,10 @@ fn an_occurrence_already_queued_wakes_its_registration_at_once() {
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
     rt.raise(IFACE, ORD, &[1]).expect("raise");
 
+    let (other, other_waker) = counter();
+    source.wake_on(Interest::Event(InterfaceNo(2)), &other_waker);
+    assert_eq!(wakes(&other), 0, "nothing is queued for interface 2");
     let (count, waker) = counter();
-    source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
-    assert_eq!(wakes(&count), 0, "nothing is queued for interface 2");
     source.wake_on(Interest::Event(IFACE), &waker);
     assert_eq!(wakes(&count), 1, "an occurrence of interface 1 is waiting");
 }
@@ -554,6 +613,109 @@ fn a_call_already_waiting_wakes_the_handlers_registration_at_once() {
     assert_eq!(wakes(&count), 1);
     handler.wake_on(Interest::Claim(IFACE), &waker);
     assert_eq!(wakes(&count), 2, "a call this handler serves is waiting");
+
+    // A handler that has served nothing is presented every call, so any call
+    // on the interface it registers for wakes it at once, and a call on
+    // another interface does not.
+    let unfiltered = rt.handler();
+    let (other, other_waker) = counter();
+    unfiltered.wake_on(Interest::Claim(InterfaceNo(2)), &other_waker);
+    assert_eq!(wakes(&other), 0, "no call on interface 2 is waiting");
+    let (open, open_waker) = counter();
+    unfiltered.wake_on(Interest::Claim(IFACE), &open_waker);
+    assert_eq!(wakes(&open), 1, "calls on interface 1 are waiting");
+}
+
+#[test]
+fn a_raise_or_a_send_on_another_interface_leaves_the_waiter_asleep() {
+    let mut rt = runtime();
+    let mut source = rt.source();
+    let mut caller = rt.caller();
+    let handler = rt.handler();
+    let two = InterfaceNo(2);
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    source.subscribe(two, &[ORD]).expect("subscribe");
+
+    let (event, event_waker) = counter();
+    let (claim, claim_waker) = counter();
+    source.wake_on(Interest::Event(two), &event_waker);
+    handler.wake_on(Interest::Claim(two), &claim_waker);
+
+    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(
+        (wakes(&event), wakes(&claim)),
+        (0, 0),
+        "interface 1 changed"
+    );
+
+    rt.raise(two, ORD, &[1]).expect("raise");
+    caller.command(two, ORD, &[1]).expect("send");
+    assert_eq!(
+        (wakes(&event), wakes(&claim)),
+        (1, 1),
+        "interface 2 changed"
+    );
+}
+
+#[test]
+fn a_second_registration_under_an_event_or_claim_key_wakes_the_displaced_waker() {
+    let mut rt = runtime();
+    let mut source = rt.source();
+    let mut caller = rt.caller();
+    let handler = rt.handler();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    let (first_event, first_event_waker) = counter();
+    let (second_event, second_event_waker) = counter();
+    source.wake_on(Interest::Event(IFACE), &first_event_waker);
+    source.wake_on(Interest::Event(IFACE), &second_event_waker);
+    assert_eq!(
+        wakes(&first_event),
+        1,
+        "the displaced `Event` waker is woken"
+    );
+    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!((wakes(&first_event), wakes(&second_event)), (1, 1));
+
+    let (first_claim, first_claim_waker) = counter();
+    let (second_claim, second_claim_waker) = counter();
+    handler.wake_on(Interest::Claim(IFACE), &first_claim_waker);
+    handler.wake_on(Interest::Claim(IFACE), &second_claim_waker);
+    assert_eq!(
+        wakes(&first_claim),
+        1,
+        "the displaced `Claim` waker is woken"
+    );
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!((wakes(&first_claim), wakes(&second_claim)), (1, 1));
+}
+
+#[test]
+fn the_same_task_under_another_interface_is_woken_for_the_first() {
+    // The slot holds one key. A task that moves its registration from
+    // interface 1 to interface 2 is woken, so it cannot miss a change of
+    // interface 1 it registered for first.
+    let rt = runtime();
+    let source = rt.source();
+    let (count, waker) = counter();
+    source.wake_on(Interest::Event(IFACE), &waker);
+    source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
+    assert_eq!(wakes(&count), 1);
+}
+
+#[test]
+fn a_dropped_handler_leaves_no_waiter_behind() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let handler = rt.handler();
+    let (count, waker) = counter();
+    handler.wake_on(Interest::Claim(IFACE), &waker);
+    assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
+    drop(handler);
+    assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&count), 0);
 }
 
 #[test]

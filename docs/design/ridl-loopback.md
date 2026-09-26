@@ -119,13 +119,16 @@ Every handle implements `Attached`, which every port trait but `Clock` and
 | `CallerHandle`  | `Caller`, `Clock`, `Wakeable`                                                 | `Send`        |
 | `HandlerHandle` | `Handler`, `Wakeable`                                                         | `Send`        |
 
-`CallerHandle` carries `Clock` and `Wakeable` because a generated `Client` over
-an interface with a command or a query is bound on both — `Clock` for the
-deadline and `Wakeable` for the wait — and a role handle that cannot build the
-client of an interface with calls only is not a handle for that role. The
-reader, the writer and the sink carry no `Wakeable`: no key of `Interest` is a
-change a task can wait for through them, and a face that reads signals, writes
-signals or raises events never waits.
+`CallerHandle` carries `Clock` and `Wakeable` because the async `Client`
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6
+specifies for an interface with a command or a query is bound on both — `Clock`
+for the deadline and `Wakeable` for the wait — and a role handle that cannot
+build the client of an interface with calls only is not a handle for that role.
+The Rust backend does not emit that client yet (story E11.21); the two roles are
+here first so that it can be built over this handle when it is. The reader, the
+writer and the sink carry no `Wakeable`: no key of `Interest` is a change a task
+can wait for through them, and a face that reads signals, writes signals or
+raises events never waits.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
 on the reader handle takes `&self`, so several threads may read one store at
@@ -428,13 +431,14 @@ and therefore:
 Three more, for reasons other than the descriptor: nothing detaches, because
 every handle holds the store alive, so `Detached` never appears; nothing is
 bounded, so `Busy` and `TooLarge` never appear outside the one injected failure
-below, and `Transport::Busy`, a provider's refusal at admission, never appears
-at all; and `Attached::catalog` returns the `CatalogRef` the runtime was built
-with, unexamined. ADR-0021 decision 3 places the check of it against an
-interface's own `CATALOG` in the generated face's constructor, once, when the
-face is built; the constructor the Rust backend emits today performs no such
-check, which driftsys/ridl#448 is open on. Either way the check is the face's
-and not the runtime's.
+below; `Transport::Busy`, a provider's refusal at admission, is never originated
+here, and reaches a caller only when a provider settles a call with it; and
+`Attached::catalog` returns the `CatalogRef` the runtime was built with,
+unexamined. ADR-0021 decision 3 places the check of it against an interface's
+own `CATALOG` in the generated face's constructor, once, when the face is built;
+the constructor the Rust backend emits today performs no such check, which
+driftsys/ridl#448 is open on. Either way the check is the face's and not the
+runtime's.
 
 Three more that are the runtime's own shape rather than the descriptor's:
 
@@ -513,10 +517,13 @@ The rules the table does not show:
   strand one that registers and returns.
 - **`Slot` is woken at once, and nothing stores it.** Nothing here is bounded,
   so a slot is always free, and a send never answers `SendError::Busy`.
-- **A registration from the same task displaces nothing.** A waker that
-  `will_wake` the stored one keeps the stored waker and wakes neither. A task
-  registers on every poll; if its own earlier registration counted as displaced
-  and was woken, every poll would schedule another poll.
+- **A registration from the same task, under the same key, displaces nothing.**
+  A waker that `will_wake` the stored one keeps the stored waker and wakes
+  neither. A task registers on every poll; if its own earlier registration
+  counted as displaced and was woken, every poll would schedule another poll.
+  Under another key of the same kind — `Event(2)` after `Event(1)` — the stored
+  registration is displaced and woken even for the same task, because the slot
+  holds one key and the first would otherwise never wake it.
 - **A send wakes every handler waiting on the interface**, not only the handlers
   whose served set holds the member. The served set is on the handle, and a
   handler woken for a member it does not serve finds nothing on its next
@@ -537,11 +544,12 @@ The rules the table does not show:
 **The limit, stated.** This runtime measures no bound: its clock moves only
 under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
 `Timeout` when its `max` passes. So nothing wakes a task when a call's deadline
-passes. A generated async call over this runtime is polled again only when a key
+passes. Once the Rust backend emits the async client of ADR-0023 decision 6
+(story E11.21), a call over this runtime will be polled again only when a key
 wakes it — its settlement — or when the executor polls it for its own reasons: a
 blocking client's park timeout, or a frame loop's cadence. Under a general
-executor with no timeout, a call whose provider never settles it waits for as
-long as that is true. That is this runtime's limit, not a defect of the face,
+executor with no timeout, a call whose provider never settles it will wait for
+as long as that is true. That is this runtime's limit, not a defect of the face,
 whose future has no timer
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6,
 "The bound"); whether this runtime ever measures a bound is not decided.
@@ -562,7 +570,9 @@ before they take a claim, so the deviation from `Handler::serve` recorded under
 why, is listed once, in the crate documentation of
 `crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
 keeps the tests of this runtime that fall under that list, and its module
-documentation names each test with its reason.
+documentation names each test with its reason. It also keeps the tests under
+"Waking", which arrived with `Wakeable` before the suite covers it; the suite
+gains the `Wakeable` contract tests in the second half of story E11.20.
 
 ## What it replaced
 

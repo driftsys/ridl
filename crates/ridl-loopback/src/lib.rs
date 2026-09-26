@@ -68,8 +68,9 @@
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either; and
 //! nothing is bounded, so `Busy` and `TooLarge` do not appear outside
-//! [`Loopback::fail_next_settle`], and `Transport::Busy` never appears at
-//! all.
+//! [`Loopback::fail_next_settle`]. Nor does this runtime originate
+//! `Transport::Busy`, a provider's refusal at admission: it reports one only
+//! when a provider settles a call with it.
 //!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
