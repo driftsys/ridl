@@ -136,12 +136,12 @@ is driftsys/ridl#554.
 
 The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
 has the defect, and a wire schema's value names are read by peers in other
-languages. When the check lands, ADR-0017 decision 5's enum-value half is done
-within one enum, with the two proto collisions above left to decision 4. The
-codegen model's `Spellings` gains a `pascal` field (the codegen model design's
-D-2 carries one field per transform), and an empty `pascal` is defined as
-`camel_case(snake)`, so that a model written by an older toolchain still reads
-correctly and the field is additive.
+languages. With the check in place, ADR-0017 decision 5's enum-value half is
+done within one enum, with the two proto collisions above left to decision 4.
+The codegen model's `Spellings` gains a `pascal` field (the codegen model
+design's D-2 carries one field per transform), and an empty `pascal` is defined
+as `camel_case(snake)`, so that a model written by an older toolchain still
+reads correctly and the field is additive.
 
 The cost falls in two places. Every generated variant whose `pascal_case`
 spelling differs from its typl spelling is renamed — for a `SCREAMING_SNAKE`
