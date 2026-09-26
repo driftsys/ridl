@@ -11,9 +11,10 @@
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
-//! present, so a runtime may omit them. [`Wakeable`] is an extension too: it
-//! lets a task that found nothing on a port register to be woken when that
-//! changes, and a runtime that serves a generated async client implements it.
+//! present, so a runtime may omit them. [`Wakeable`] is an extension too: a
+//! task registers through it to be woken when what it waits for changes, and
+//! then reads the port. A runtime that serves a generated async client
+//! implements it.
 //!
 //! Each trait below names the generated method it backs, so a reader who
 //! arrived from generated code can find the port under it. The crate-level
@@ -184,7 +185,9 @@ pub trait Caller: Attached {
     /// A command's delivery acknowledgment (ridl §6.1), once it is known:
     /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
     /// `Err(CallError::Transport(Transport::Corrupt))` when the provider could
-    /// not read the command's argument bytes, and
+    /// not read the command's argument bytes,
+    /// `Err(CallError::Transport(Transport::Busy))` when the provider refused
+    /// the command at admission, and
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
@@ -391,10 +394,10 @@ pub trait CoherentSignals: SignalReader {
 /// - **One waker per key per handle.** A second `wake_on` for a key the handle
 ///   already holds replaces the stored waker and wakes the displaced one, so
 ///   no task waits on a registration that can no longer fire. A waker that
-///   [`will_wake`](Waker::will_wake) the stored one is the same task
-///   registering again: it displaces nothing and wakes nothing, because a task
-///   registers on every poll and waking it for its own registration would
-///   schedule another poll every time.
+///   [`will_wake`](Waker::will_wake) the stored one, registered under the same
+///   key, is the same task registering again: it displaces nothing and wakes
+///   nothing, because a task registers on every poll and waking it for its own
+///   registration would schedule another poll every time.
 /// - **Woken at most once.** A stored waker is woken after every change of its
 ///   key becomes visible, and is cleared when woken.
 /// - **Register, then read.** The caller registers on every poll, and

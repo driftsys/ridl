@@ -53,9 +53,9 @@
 //! Two properties hold everywhere and are worth knowing before reading any
 //! individual item. **No port method waits** — every one returns immediately,
 //! and a call's outcome is retrieved separately through a
-//! [`port::Correlation`]. A task that found nothing waiting registers a
-//! [`port::Interest`] through the [`port::Wakeable`] extension, and the
-//! runtime wakes it when that changes; waiting belongs to the face that polls.
+//! [`port::Correlation`]. A task registers a [`port::Interest`] through the
+//! [`port::Wakeable`] extension and then reads the port, and the runtime wakes
+//! it when what it waits for changes; waiting belongs to the face that polls.
 //! And **no port names a payload type** — ports carry interface numbers,
 //! ordinals and bytes, and the generated binding is what encodes and decodes,
 //! through [`payload::Ref`].

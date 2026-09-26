@@ -496,10 +496,11 @@ Semantics each implementation presents:
 - **`Caller::ack`** reports a command's delivery acknowledgment: `Ok(())`
   accepted, `Err(CallError::Contract(_))` a negative acknowledgment,
   `Err(CallError::Transport(Transport::Corrupt))` when the provider could not
-  read the command's argument bytes, and
-  `Err(CallError::Transport(Transport::Undelivered))` no acknowledgment within
-  the bound. It returns `None` for a query's correlation; a query's outcome
-  comes from `reply`.
+  read the command's argument bytes,
+  `Err(CallError::Transport(Transport::Busy))` when the provider refused it at
+  admission, and `Err(CallError::Transport(Transport::Undelivered))` no
+  acknowledgment within the bound. It returns `None` for a query's correlation;
+  a query's outcome comes from `reply`.
 - **`Caller::reply`**'s outer `ReadError` reports the port call itself (`Short`,
   `Detached`, never `Contract`); the inner `CallError` is the outcome from the
   peer or the transport.
@@ -521,19 +522,20 @@ Semantics each implementation presents:
 - **`Wakeable::wake_on`** stores a clone of the waker under its `Interest` on
   the handle it is called on, one waker per key: a second registration under a
   key the handle holds replaces the stored waker and wakes the displaced one,
-  except that a waker which `will_wake` the stored one is the same task
-  registering again and displaces nothing, because a task registers on every
-  poll. A stored waker is woken at most once, after every change of its key
-  becomes visible, and is cleared when woken. A caller registers before it reads
-  the port, so a change between the read and the return still wakes it.
-  `Outcome(c)` is the outcome of one call, `Slot` a free slot for a new call,
-  and `Event(i)` and `Claim(i)` an occurrence or a claim waiting on interface
-  `i` — keyed per interface, not per member, because `next` and `next_claim`
-  drain one queue whatever the ordinal. A runtime with one unkeyed "something
-  changed" source may wake every waiter it holds on any change. `Interest` is
-  exhaustive, because a runtime must handle every key and an unknown key has no
-  safe default. [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
-  decision 13 records the contract.
+  except that a waker which `will_wake` the stored one, under the same key, is
+  the same task registering again and displaces nothing, because a task
+  registers on every poll. A stored waker is woken at most once, after every
+  change of its key becomes visible, and is cleared when woken. A caller
+  registers before it reads the port, so a change between the read and the
+  return still wakes it. `Outcome(c)` is the outcome of one call, `Slot` a free
+  slot for a new call, and `Event(i)` and `Claim(i)` an occurrence or a claim
+  waiting on interface `i` — keyed per interface, not per member, because `next`
+  and `next_claim` drain one queue whatever the ordinal. A runtime with one
+  unkeyed "something changed" source may wake every waiter it holds on any
+  change. `Interest` is exhaustive, because a runtime must handle every key and
+  an unknown key has no safe default.
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13
+  records the contract.
 
 `ScannableSignals`, `CoherentSignals` and `Wakeable` are extensions: they
 describe mechanisms some runtimes have, not interaction semantics every runtime
@@ -582,7 +584,7 @@ compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 records the reasoning and the alternative it rejects, one runtime struct behind
 a mutex. Story E11.15 built the first runtime to this shape,
 [`ridl-loopback`](ridl-loopback.md): six handles, a `Send + Sync` reader handle,
-and an aggregate implementing all eleven traits by delegation.
+and an aggregate implementing every port trait by delegation.
 
 ## The `error` module and the port errors
 

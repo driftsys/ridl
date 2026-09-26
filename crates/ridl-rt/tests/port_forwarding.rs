@@ -61,9 +61,12 @@ impl Clock for Stub {
 }
 
 impl Wakeable for Stub {
-    /// Wakes at once, so a test can see that the call reached the stub.
-    fn wake_on(&self, _: Interest, waker: &Waker) {
-        waker.wake_by_ref();
+    /// Wakes at once for `Claim(IFACE)` and for nothing else, so a test can
+    /// see that the call and its key reached the stub.
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        if what == Interest::Claim(IFACE) {
+            waker.wake_by_ref();
+        }
     }
 }
 
@@ -331,7 +334,7 @@ fn wakeable_is_reached_through_a_borrow() {
         }
     }
     fn over<P: Wakeable>(port: P, waker: &Waker) {
-        port.wake_on(Interest::Slot, waker);
+        port.wake_on(Interest::Claim(IFACE), waker);
     }
     let counter = Arc::new(Counter(AtomicUsize::new(0)));
     let waker = Waker::from(Arc::clone(&counter));

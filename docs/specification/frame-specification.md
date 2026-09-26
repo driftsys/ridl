@@ -896,9 +896,9 @@ Each item is left out on purpose, with the record that takes it.
   §4; the bytes of each encoding are each projection record's.
 - **A wake hook.** The frame is push: a runtime learns of a frame from its
   binding. How it wakes an application that is waiting on a reply, an occurrence
-  or a claim is the runtime's, not the frame's
-  ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) open item
-  6).
+  or a claim is the runtime's, not the frame's: `port::Wakeable`
+  ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13,
+  which closed its open item 6).
 - **Unknown fields on decode**
   ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) open
   item 3) is a payload question, the proto3 projection's.

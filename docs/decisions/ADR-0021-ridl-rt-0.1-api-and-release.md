@@ -511,10 +511,12 @@ trusted with no `unsafe` and no second verification pass.
     `std::task::Wake`. This closes open question 6. Notes F-5 and F-6.
 
     **Note (2026-09-26, story E11.16, driftsys/ridl#510).** A waker that
-    `Waker::will_wake` the stored one is not a displacement: it is the same task
-    registering again, which it does on every poll, so the stored waker is kept
-    and nothing is woken. Waking it would schedule another poll of that task on
-    every poll. `port::Wakeable`'s documentation and `ridl-loopback` state and
+    `Waker::will_wake` the stored one, registered under the same key, is not a
+    displacement: it is the same task registering again, which it does on every
+    poll, so the stored waker is kept and nothing is woken. Waking it would
+    schedule another poll of that task on every poll. Under another key of the
+    same kind the stored registration is displaced and woken, even for the same
+    task. `port::Wakeable`'s documentation and `ridl-loopback` state and
     implement this.
 
 14. **Amendment (2026-09-26) — `Transport::Busy` crosses the frame (story
