@@ -35,7 +35,8 @@
 //! that sent it wakes it; a displacement by another task does, as for every
 //! kind. A caller stores one `Slot` waker, woken at once while a slot of the
 //! call table is free, and otherwise by the next reclaim of a slot — a
-//! `forget`, a settlement of a forgotten call, or a caller handle's drop —
+//! `forget`, a settlement of a forgotten call, a caller handle's drop, or a
+//! handler handle's drop while it holds a claim whose call was forgotten —
 //! which wakes every other caller's `Slot` waker. A registration
 //! under any other kind is woken at once, because nothing that handle could
 //! read changes under it, and a stored waker would never be woken.
@@ -554,8 +555,10 @@ impl HandlerHandle {
 }
 
 /// A claim this handler holds and has not settled returns to the waiting
-/// calls, and every handler that serves its member is woken. The handler's
-/// waker is dropped after the lock is released, as the source's is.
+/// calls, and every handler that serves its member is woken. A claim whose
+/// call the caller forgot is withdrawn instead: its slot is reclaimed, and no
+/// handler is presented it again or woken for it. The handler's waker is
+/// dropped after the lock is released, as the source's is.
 impl Drop for HandlerHandle {
     fn drop(&mut self) {
         let waiters = locked(&self.shared, |store, wake| {

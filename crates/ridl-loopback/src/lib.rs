@@ -159,9 +159,18 @@ pub struct Loopback {
 }
 
 impl Loopback {
-    /// The number of calls the runtime holds at once: sent, and not yet
-    /// released by [`Caller::forget`] or by the drop of the caller handle that
-    /// sent them. A settled call keeps its slot until it is released. With every slot taken, [`Caller::command`] and
+    /// The number of calls the runtime holds at once. A call holds its slot
+    /// from its send until one of these reclaims it:
+    ///
+    /// - [`Caller::forget`], or the drop of the caller handle that sent it,
+    ///   while it is settled or still waiting for a handler;
+    /// - its settlement, when it was forgotten while a handler held it;
+    /// - the drop of the handler that held it unsettled, when it was
+    ///   forgotten.
+    ///
+    /// So a settled call keeps its slot until it is forgotten, and a claimed
+    /// call keeps its slot after its `forget` until it is settled or its
+    /// handler is dropped. With every slot taken, [`Caller::command`] and
     /// [`Caller::query`] answer [`SendError::Busy`], on every caller handle,
     /// because the table is the runtime's.
     ///

@@ -445,8 +445,12 @@ call out of the waiting queue before it drops the entry for that reason.
 `a_dropped_callers_unclaimed_calls_are_withdrawn`,
 `a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order`,
 `a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot`,
-`a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped` and
-`a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter` pin the rule.
+`a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped`,
+`a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter`,
+`a_forget_withdrawal_wakes_no_claim_waiter_of_a_handler_serving_another_member`,
+`a_dropped_handler_withdraws_only_its_forgotten_claim_and_returns_the_others`
+and `a_dropped_callers_claimed_call_is_withdrawn_when_its_handler_is_dropped`
+pin the rule.
 
 ## The two signal extensions are implemented
 
@@ -533,7 +537,8 @@ the same reason.
 delivers each call once, not because it recognises a retransmission — nothing
 retransmits in a process. The one call presented again is a claim a dropped
 handler held and did not settle, which returns to the waiting calls for another
-serving handler to take ("Waking", above).
+serving handler to take ("Waking", above), unless its caller forgot it: that
+claim is withdrawn at the drop and is not presented again.
 
 A sink's counters are per channel for a reason a single counter per handle would
 break: a consumer subscribed to some of a sink's events would see the numbers of
