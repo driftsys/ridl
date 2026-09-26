@@ -193,6 +193,11 @@ design note, from the archive.
   (`CHECK_ENGINE` → `CheckEngine`), RIDL-149 extended to an enum's values, and
   the backends that keep the typl spelling. ADR-0016's 2026-09-26 amendment
   records the decision. Archive it with its plan once the code change lands.
+- **2026-09-26-enum-variant-pascal-case-plan.md** — the six-task plan that
+  implements that design: the transform, `Spellings.pascal`, RIDL-149 over an
+  enum's values, the Rust backend's four sites with the snapshots,
+  `-D non_camel_case_types` on the seven compile proofs that deny lints by name
+  or build their own `rustc` command, and the mutation check and gardening.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
