@@ -3656,7 +3656,10 @@ pub mod veh {
     // does not change. `non_camel_case_types` is denied too, for
     // driftsys/ridl#506. Appendix A's `DiagError` holds multi-word values
     // (`FILTER_INVALID`, `STORAGE_BUSY`, `ACCESS_DENIED`), so the deny fails
-    // on this fixture if a variant is not PascalCase.
+    // the proof if a generated variant keeps a typl SCREAMING_SNAKE spelling
+    // with an underscore, as `FILTER_INVALID` does. It does not by itself
+    // check the full `pascal_case` spelling, which the backend's unit tests
+    // pin.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
