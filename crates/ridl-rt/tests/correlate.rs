@@ -440,3 +440,21 @@ fn take_all_takes_every_kind_for_an_unkeyed_runtime() {
     assert_eq!((wakes(&count), wakes(&other)), (2, 1));
     assert_eq!(waiters.take_all().count(), 0, "every kind is cleared");
 }
+
+#[test]
+fn take_all_clears_every_kind_when_called_even_if_the_iterator_is_dropped() {
+    let mut waiters = Waiters::new();
+    let (count, waker) = counter();
+    let (other, other_waker) = counter();
+    let _ = waiters.register(Interest::Slot, &waker);
+    let _ = waiters.register(Interest::Claim(IFACE), &waker);
+    drop(waiters.take_all());
+    assert!(
+        waiters.register(Interest::Slot, &other_waker).is_none(),
+        "nothing was left to displace"
+    );
+    assert!(waiters
+        .register(Interest::Claim(IFACE), &other_waker)
+        .is_none());
+    assert_eq!((wakes(&count), wakes(&other)), (0, 0));
+}
