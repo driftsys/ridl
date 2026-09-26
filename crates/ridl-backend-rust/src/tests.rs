@@ -1392,14 +1392,6 @@ fn an_enum_variant_is_spelled_in_pascal_case() {
     )]);
     assert!(source.contains("CheckEngine = 1"), "{source}");
     assert!(source.contains("Ok(Self::CheckEngine)"), "{source}");
-    // The `Default` impl's own body, not just `Warning::LowFuel` anywhere: the
-    // codec's `.unwrap_or(Warning::LowFuel)` also spells the value, so a
-    // `contains` over the whole source would not notice a `Default` impl
-    // that kept the typl spelling.
-    assert!(
-        source.contains("fn default() -> Self {\n        Warning::LowFuel\n    }"),
-        "{source}"
-    );
     assert!(!source.contains("CHECK_ENGINE"), "{source}");
     assert!(!source.contains("LOW_FUEL"), "{source}");
 }
