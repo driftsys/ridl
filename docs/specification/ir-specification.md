@@ -169,7 +169,11 @@ cost per source level is two message levels for an array (`FieldType`,
 (`FieldType`, `TupleType`, `TupleField`); in JSON a level costs two brackets for
 an array or a map and four for a tuple. The tuple is therefore the shape that
 binds, at 386 message levels and 516 JSON levels; the array shape at the same
-source depth reaches 259 and 262.
+source depth reaches 259 and 262. A contract expression is bounded by the same
+limit — the front end builds an expression tree at most 128 nodes high, and each
+binary operator, member access, group and prefix raises that height by one level
+— but it reaches the IR as canonical text in `Contract.source`, so it adds no
+message level.
 
 **A reader of the canonical encoding must accept at least 516 JSON levels.** A
 reader built on a schema-typed protobuf JSON parser must in addition accept at

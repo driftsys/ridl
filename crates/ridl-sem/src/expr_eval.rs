@@ -105,15 +105,18 @@ impl std::fmt::Display for EvalError {
 /// would otherwise exhaust the stack — a panic by another name. Exceeding the
 /// limit is an [`EvalError::TypeMismatch`] like any other refusal.
 ///
-/// The value matches the parser's own `MAX_TYPE_DEPTH`, and **that agreement is
-/// load-bearing rather than decorative**. The parser's guard cuts one level
-/// earlier than this one on the shared paren path: 127 nested parentheses parse
-/// and evaluate, 128 are refused by the parser before evaluation is reached. So
-/// no tree the parser accepts can ever trip this guard through nesting, and the
-/// guard exists for the shape the parser does *not* cap — a binary chain, which
-/// it builds iteratively. Lowering the parser's limit without lowering this one
-/// would be harmless; raising this one above the parser's would make the paren
-/// path reachable again and must be done only against a measured frame budget.
+/// The value matches the parser's own `MAX_TYPE_DEPTH`. The parser bounds the
+/// height of every expression tree it builds at that many nodes, whatever the
+/// shape — a group tower, a prefix tower, or a binary chain, which it once
+/// built as high as the chain was long (driftsys/ridl#346) — and refuses the
+/// rest with FORM-102. Evaluation starts at depth 0 and adds one per level, so
+/// the deepest node of a tree the parser built is at depth 127 and never
+/// reaches this guard. The guard is kept as an independent check for an
+/// `ast::Expr` built some other way than by the parser, and so that
+/// [`eval_expr`] is total on its own terms rather than by the parser's
+/// promise. Lowering the parser's limit without lowering this one would be
+/// harmless; raising this one must be done only against a measured frame
+/// budget.
 ///
 /// The limit must stay **below** the stack budget, not merely above what
 /// contracts are written with. An earlier value of 256 could never fire at all:
@@ -532,9 +535,17 @@ fn malformed(what: &str) -> EvalError {
 /// ([`crate::expr::canonical_expr_text`]; the structured form is E5.1), so a
 /// consumer that wants to evaluate a lowered contract parses it back. The
 /// canonical rendering is idempotent, so this round-trips.
+///
+/// Returns `None` when the text draws any parse diagnostic: a syntax error,
+/// or an expression the parser refused past its height bound (FORM-102),
+/// whose tree would be a truncated prefix of the text rather than the
+/// expression it spells.
 pub fn parse_contract_expr(source: &str) -> Option<ast::Expr> {
     let text = format!("package p\ninterface I {{\n  command c() [ require {source} ]\n}}\n");
     let parse = ridl_syntax::parse(&text, ridl_syntax::Profile::Ridl);
+    if !parse.errors().is_empty() {
+        return None;
+    }
     parse
         .syntax()
         .descendants()
@@ -548,6 +559,17 @@ mod tests {
 
     fn parse(text: &str) -> ast::Expr {
         parse_contract_expr(text).unwrap_or_else(|| panic!("`{text}` must parse"))
+    }
+
+    /// The clause's tree whatever the parse reported — for the half-parsed
+    /// forms of the totality corpus, which `parse_contract_expr` refuses.
+    fn parse_leniently(text: &str) -> Option<ast::Expr> {
+        let file = format!("package p\ninterface I {{\n  command c() [ require {text} ]\n}}\n");
+        ridl_syntax::parse(&file, ridl_syntax::Profile::Ridl)
+            .syntax()
+            .descendants()
+            .find_map(ast::Attribute::cast)
+            .and_then(|attribute| attribute.expr())
     }
 
     /// An integer-backed number.
@@ -922,41 +944,54 @@ mod tests {
 
     // --- totality ----------------------------------------------------------
 
-    /// Note for anyone who sees this test die: with the depth guard removed or
-    /// raised, it does **not** fail with a clean assertion — it aborts the whole
-    /// test binary with `fatal runtime error: stack overflow` and SIGABRT, which
-    /// is the failure it exists to prevent. That is the correct signal, not a
-    /// broken test. Do not "fix" it by shrinking the chain below the guard.
+    /// A left-nested binary chain (`1 + 1 + 1 + …` nests one level per
+    /// operator) far past every limit never reaches the evaluator: the parser
+    /// bounds the height of every expression tree at its `MAX_TYPE_DEPTH`
+    /// (128, `crates/ridl-syntax/src/parser.rs`) and draws FORM-102
+    /// (driftsys/ridl#346), and [`parse_contract_expr`] refuses a text that
+    /// drew any diagnostic rather than hand over the truncated prefix.
     #[test]
     fn deep_nesting_is_refused_rather_than_exhausting_the_stack() {
-        // A LEFT-NESTED BINARY CHAIN, not parenthesis nesting: the parser caps
-        // type/paren depth at 128, below this guard's 256, so a paren tower can
-        // never reach the guard and a test built on one would pass whatever
-        // MAX_DEPTH said. `1 + 1 + 1 + …` nests one level per operator and does
-        // reach it.
-        // The ceiling is rowan's, not this module's: dropping a syntax tree
-        // thousands of levels deep recurses inside the library and overflows
-        // before anything here runs. These sizes are all far past MAX_DEPTH,
-        // which is what the test is about.
         for terms in [300, 1000, 2000] {
             let chain = vec!["1"; terms].join(" + ");
-            let text = format!("{chain} == 1");
-            let Some(expr) = parse_contract_expr(&text) else {
-                panic!("a {terms}-term chain must parse");
-            };
-            match eval_expr(&expr, &env(&[])) {
-                Err(EvalError::TypeMismatch(message)) => assert!(
-                    message.contains(&format!("nests deeper than {MAX_DEPTH}")),
-                    "the depth guard is what refused it, not something else: {message}"
-                ),
-                other => panic!("a {terms}-term chain must hit the depth guard, got {other:?}"),
-            }
+            assert!(
+                parse_contract_expr(&format!("{chain} == 1")).is_none(),
+                "a {terms}-term chain is refused at parse"
+            );
         }
-        // And just under the guard the same shape still evaluates, so the guard
-        // is not simply refusing everything.
+        // And well under the limit the same shape evaluates whole.
         let shallow = ["1"; 8].join(" + ");
         let expr = parse(&format!("{shallow} == 8"));
         assert_eq!(eval_expr(&expr, &env(&[])), Ok(Value::Bool(true)));
+    }
+
+    /// The guard is an independent check: an `ast::Expr` is a cast over
+    /// a syntax node, and `ridl_syntax` exports the node types, so a tree can
+    /// be built by hand with a `GreenNodeBuilder` (the `ast` tests do). No
+    /// tree the parser builds reaches it — the deepest node of one is at
+    /// depth 127 — so it is exercised from a starting depth at the limit: a
+    /// node at that depth is still evaluated, one level below it is refused.
+    #[test]
+    fn the_depth_guard_refuses_one_level_past_the_limit() {
+        let env = env(&[]);
+        assert_eq!(eval(&parse("1"), &env, MAX_DEPTH), Ok(int("1")));
+        match eval(&parse("(1)"), &env, MAX_DEPTH) {
+            Err(EvalError::TypeMismatch(message)) => assert!(
+                message.contains(&format!("nests deeper than {MAX_DEPTH}")),
+                "the depth guard is what refused it: {message}"
+            ),
+            other => panic!("the level past the limit must be refused, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_text_that_does_not_parse_cleanly_is_refused() {
+        for text in ["speed +", "( ", "1 == 1 == true"] {
+            assert!(
+                parse_contract_expr(text).is_none(),
+                "`{text}` must be refused"
+            );
+        }
     }
 
     #[test]
@@ -1020,7 +1055,7 @@ mod tests {
             "GearPosition.PARK == 1",
             "1 == 1 == true",
         ] {
-            let Some(expr) = parse_contract_expr(text) else {
+            let Some(expr) = parse_leniently(text) else {
                 continue;
             };
             // The assertion is that this call returns at all.
