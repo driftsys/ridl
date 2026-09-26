@@ -1,24 +1,37 @@
 # Architecture Decision Records
 
+An entry marked `_Proposed._` has that status in its own `## Status`; every
+other entry below is Accepted.
+
 - **ADR-0002 — Module system.** `package` / `import` / `as` / `internal`, the
   manifest, lockfile, and resolver.
-- **ADR-0004 — Implementation sequencing and stack.** The build order and
-  technology choices (companion to the roadmap). Amended 2026-09-12: §1's
-  sequencing and the V1/V2 release definitions are superseded by the roadmap's
-  two steps.
-- **ADR-0005 — Agent enablement.** Enabling AI agents to author and evolve RIDL.
+- **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
+  order and technology choices (companion to the roadmap). Amended 2026-08-03:
+  uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl
+  splits into a language half and a compute-runtime half, and the V1/V2 split
+  becomes V1/V2/V3. Amended 2026-09-12: §1's sequencing and the V1/V2 release
+  definitions are superseded by the roadmap's two steps.
+- **ADR-0005 — Agent enablement.** _Proposed._ Enabling AI agents to author and
+  evolve RIDL.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
 - **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar
   tooling, diagnostic namespaces, corpus layout, `ridl-sem` split, IR exactness,
-  scope cuts).
+  scope cuts). Decision 17, added at epic close-out when gardening reconciled
+  the plan's data model against the merged code, makes the imports data model
+  per-package rather than workspace-flat.
 - **ADR-0008 — Epic E2 execution.** E2-scoped execution decisions (general-form
   authority for the interaction surface, IR v2 placement, the TypeScript second
   backend, `ridl diff` placement and its classifier rules, the `RIDL-`
-  diagnostic allocations, and six close-out amendments).
+  diagnostic allocations, a later amendment, decision 15, and six close-out
+  amendments, decisions 16 to 21).
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
+  Amended 2026-09-12 for the markdownlint-cli retirement (decisions 5, 9, 10,
+  and 12, and two accepted consequences); amended 2026-09-14 for the first
+  toolchain bump (decisions 1 and 11) and for `ridl-rt`'s edition 2021 (decision
+  4).
 - **ADR-0010 — CLI conventions.** The exit-code taxonomy (0/1/2) across
   `ridl`/`ridlc`, which clig.dev guidance applies and which does not (the
   `diff(1)`/`grep(1)` precedent for a verdict-carrying exit 1, not clig), and
@@ -38,8 +51,14 @@
   obligations they carry, keyword spellings per family, and extensions that are
   spelling tables plus backends with no grammar, no IR nodes, and no semantics
   of their own. Promotes the attribute registry from an open question to a
-  precondition and requires fail-closed diff classification. Not epic-scoped: it
-  binds the language surface until superseded.
+  precondition and requires fail-closed diff classification. Not implemented:
+  epic E3 is re-cut against it as the boundary-model core, and the domain
+  spellings are descoped to E7. Not epic-scoped: it binds the language surface
+  until superseded. Amended twice on 2026-08-03: metrology anchoring
+  cross-checks the four obligations against the International Vocabulary of
+  Metrology with no decision change, and the `.rxdl` profile is given decision
+  7's extensions, absorbing both the layer and the domain readings of the
+  wildcard.
 
 - **ADR-0013 — Codegen backend scope.** _Proposed._ Classifies a backend by what
   its target can faithfully represent: a **wire** backend (proto3, FlatBuffers,
@@ -51,7 +70,14 @@
   FlatBuffers. Decision 7 adds field absence: `?` is declared once and realised
   per target — structurally where the target can, in-band from a value the range
   does not use where it cannot, never surfaced to consumers. Not epic-scoped: it
-  binds every backend the workspace grows.
+  binds every backend the workspace grows. Amended 2026-08-08 when the proto3
+  backend shipped, so decision 2's two tiers are no longer unimplemented;
+  amended 2026-08-09 when the FlatBuffers backend shipped, closing decision 6's
+  precondition by decision; amended 2026-09-12, changing the shape of decision
+  1's target list so a language backend need not live in this workspace.
+  Decision 2's conflict with ADR-0016 decision 10 over the `service` block is
+  resolved by ADR-0018 decision 18: decision 2 holds with its scope made
+  explicit, and decision 10 holds unqualified.
 
 - **ADR-0014 — IR encodings.** Canonical protobuf JSON replaces the `serde`
   rendering on every surface — artifacts, baselines, and goldens — because the
@@ -67,8 +93,9 @@
   consumes. Three amendments came out of implementation: decision 12 retracts
   the infallible serialization return, decision 13 contains the prototext
   reader, and decision 14 moves JSON off `prost-reflect` onto `pbjson`-generated
-  impls so the interchange artifact carries no recursion ceiling. The descriptor
-  pool now serves prototext alone.
+  impls so the interchange artifact carries no recursion ceiling. Decision 14 is
+  further corrected 2026-09-22, in place, on two facts it stated wrongly. The
+  descriptor pool now serves prototext alone.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
@@ -90,7 +117,12 @@
   tombstone, the ordinal spaces are keyed on (package, interface number),
   RIDL-146 to RIDL-148 are retired, and the five slot categories are replaced by
   `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions 12, 15, 17,
-  18, 19, 20 and 24, each dated).
+  18, 19, 20 and 24, each dated); decisions 9 and 10 each gain a further dated
+  paragraph following this record's citations into the rsdl reference v0.2.0
+  (rewritten 2026-09-13), which renumbered the sections they name and reserved
+  two of the codes. Amended again 2026-09-16: decision 9's coherence group is
+  corrected to be the provided interface, identified by its number in the
+  package's `interfaces.lock` rather than by the interface name.
 
 - **ADR-0016 — Schema projection and the pinned name transform.** The four
   properties every projection from IR identity to a target's namespace must
@@ -100,14 +132,21 @@
   on measured evidence — public in `ridl-ir`, with both backend copies deleted;
   the check in `ridl-sem`, over interaction members and parameters. Ratifies the
   schema-projection note and corrects three of its statements. Not epic-scoped:
-  it binds every backend that projects.
+  it binds every backend that projects. Amended 2026-08-08: decision 6's
+  totality property extends from numbers to names, recorded as a backend
+  obligation in ADR-0017 decision 4 rather than here. Amended 2026-09-20:
+  `camel_case` joins the pinned transforms of decision 2, moved into `ridl-ir`
+  beside `snake_case` with the backend copy deleted, and union arms join the
+  checked namespaces of decision 4, checked under both transforms because the
+  two collision sets are incomparable.
 
 - **ADR-0017 — The proto3 projection.** The rules the first wire backend needed
   that no earlier record supplied: how a foreign reference projects, where
   constraint information goes, and totality over names as well as over field
   numbers. Its decision 1 fixes `generate_with` as the API every later wire
-  backend inherits. Scoped to proto3, but read decision 1 before writing another
-  wire backend.
+  backend inherits. Decisions 1 and 4 bind every backend that projects onto a
+  namespaced target and are not proto3-scoped; decision 3 is proto3-scoped. Read
+  decision 1 before writing another wire backend.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and
@@ -124,7 +163,11 @@
   every typl struct a `table`, a map with no `(key)`, the target's own name
   scopes, `= null` on a field whose enum declares no zero member, and a name
   that reaches a word the validity oracle reserves emitted as it stands. All
-  seven are FlatBuffers-scoped; none binds another backend.
+  seven are FlatBuffers-scoped; none binds another backend. Amended 2026-09-21,
+  adding decision 8, the root rule: every declaration has a root table, and a
+  named scalar, an enum, and an enum set are rooted in
+  `table <Name>Box { value: … (id: 0); }`. Decision 8 is FlatBuffers-scoped like
+  the other seven.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
@@ -139,7 +182,12 @@
   in every language. Amends ADR-0018 decisions 3, 6 and 15, ADR-0013's target
   list, and ADR-0007 decision 13 — the last of those is the only amendment in
   the set that changes shipped code, because the Rust backend emits `#[repr(C)]`
-  on fixed-layout structs today.
+  on fixed-layout structs today. Amended 2026-09-22: decision 11's parity test
+  runs over the in-tree Rust backend rather than TypeScript, since Kotlin now
+  precedes TypeScript in the sequence; decisions 8, 9, 10 and 12 are unchanged.
+  Amended again the same day, when stage P4 ported the Rust backend: the Rust
+  parity test now exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
+  `ridlc-gen-model` one stays beside it.
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left
@@ -151,10 +199,15 @@
   change. Its 2026-09-20 amendment adds decisions 11 and 12: every port trait is
   implemented for `&mut P`, and the `&self`-only traits also for `&P`; and a
   runtime presents one handle per port role, with an aggregate handle for a face
-  that needs several, while the crate itself adds no `Send` or `Sync` bound.
-  Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the
-  ridl reference finalization pass (story E14.2). The two reference sentences it
-  gave that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  that needs several, while the crate itself adds no `Send` or `Sync` bound. Its
+  2026-09-26 amendment adds decisions 13 to 18: the `Wakeable` port extension
+  and its `Interest` keys, `Transport::Busy` crossing the frame, the `correlate`
+  module, `ClientError` and `ProviderError`, the E11.19 helpers ratified in
+  place, and the one 0.x minor that carries E11.16 to E11.19; it also folds
+  decision 8, corrects decision 11, and records open questions 5 and 6. Binds
+  every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
+  reference finalization pass (story E14.2). The two reference sentences it gave
+  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
   which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
