@@ -51,7 +51,9 @@
 //! the contract of both: its `wakeable` module, and the slot count its
 //! factory states (story E11.20, driftsys/ridl#514). The tests that stay
 //! here pin what the contract leaves to a runtime, and each falls under one
-//! of these reasons:
+//! of the reasons below. Not every one of these reasons is an item of the
+//! list in `ridl-rt-conformance`'s documentation: that list names what the
+//! suite leaves out, and some of the choices below are this runtime's alone.
 //!
 //! - **A registration whose key already holds is woken at once.** The
 //!   contract has the task read the port after it registers, so a runtime
@@ -65,8 +67,10 @@
 //!   `a_key_no_role_of_the_handle_observes_is_woken_at_once` and
 //!   `a_slot_registration_while_a_slot_is_free_is_woken_at_once`.
 //! - **A change wakes no waiter but its key's.** The contract allows a
-//!   spurious wake, so the suite never asserts that a change leaves a waker
-//!   unwoken, and this runtime's narrower wakes are pinned here:
+//!   spurious wake, so the suite asserts that a change leaves a waker unwoken
+//!   only where the contract rules the wake out — a refresh, or a waker
+//!   already woken or displaced and so cleared — and this runtime's narrower
+//!   wakes are pinned here:
 //!   `each_settlement_wakes_only_its_own_calls_waiter`,
 //!   `a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one`,
 //!   `a_send_wakes_the_handler_that_serves_the_member` (a handler serving
@@ -85,8 +89,8 @@
 //!   `a_serve_with_no_call_waiting_keeps_the_handlers_claim_waker`.
 //! - **A forget wakes its own call's waiter.** The task that forgets a call
 //!   is the task that waited on it, and the port states no rule for that
-//!   waker; this runtime wakes it (decision 2 of the pass-1 dispositions on
-//!   driftsys/ridl#553): `a_forgotten_call_wakes_its_waiter` and
+//!   waker; this runtime wakes it (driftsys/ridl#551, and decision 2 in the
+//!   description of driftsys/ridl#553): `a_forgotten_call_wakes_its_waiter` and
 //!   `forgetting_a_claimed_call_wakes_its_outcome_waiter`.
 //! - **The drop of a handle.** The suite drops no handle. What a dropped
 //!   handler's claims and a dropped caller's calls become, and that a drop

@@ -60,9 +60,10 @@
 //!   `wakeable::every_wake_runs_with_the_runtime_lock_released`, builds its
 //!   runtime on that thread.
 //! - **A wake the contract allows but does not require.** A runtime may wake
-//!   a waiter spuriously, for a change that is not its key's, so no test
-//!   asserts that a change leaves a waker unwoken; the one exception is a
-//!   refresh, which the contract says wakes nothing. Whether a registration
+//!   a waiter spuriously, for a change that is not its key's, so a test
+//!   asserts that a change leaves a waker unwoken only where the contract
+//!   rules the wake out: a refresh, which wakes nothing, and a waker already
+//!   woken or displaced, which the contract clears. Whether a registration
 //!   whose key already holds is woken at once is the runtime's too: the task
 //!   reads the port after it registers, and finds the change either way. The
 //!   tests assume a change made through a port is visible, and its waker

@@ -715,15 +715,17 @@ suite's clock hook and fault hook.
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under
 "What it cannot report" is not exercised by it. It asserts no wake the contract
-allows but does not require: it never asserts that a change leaves a waker
-unwoken, because a spurious wake is allowed, nor that a registration whose key
-already holds is woken at once. It drops no handle, and it accepts either result
-for a forgotten call no handler has claimed. What the suite leaves out, and why,
-is listed once, in the crate documentation of
-`crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
-keeps the tests of this runtime that fall under that list — this runtime's
-narrower wakes, its wakes at once, its `Drop`, its withdrawal, and its own
-numbers — and its module documentation names each test with its reason.
+allows but does not require: because a spurious wake is allowed, it asserts that
+a change leaves a waker unwoken only where the contract rules the wake out — a
+refresh, or a waker already woken or displaced and so cleared — and it never
+asserts that a registration whose key already holds is woken at once. It drops
+no handle, and it accepts either result for a forgotten call no handler has
+claimed. What the suite leaves out, and why, is listed once, in the crate
+documentation of `crates/ridl-rt-conformance/src/lib.rs`.
+`crates/ridl-loopback/tests/ports.rs` keeps the tests of this runtime's own
+choices — its narrower wakes, its wakes at once, its `Drop`, its withdrawal, and
+its own numbers — some of which fall under that list and some of which are this
+runtime's alone, and its module documentation names each test with its reason.
 
 ## What it replaced
 

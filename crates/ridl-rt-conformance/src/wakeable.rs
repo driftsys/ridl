@@ -62,8 +62,12 @@ fn wakes(count: &Count) -> usize {
 /// neither registration displaces the other. A settlement wakes its call's
 /// waker once, after which the outcome reads; the waker is cleared when
 /// woken, so neither another task's registration on the settled call nor a
-/// later settlement wakes it again. A task that registers after the
-/// settlement is woken at once or reads the outcome on the read that follows.
+/// later settlement wakes it again. A waker registered before a handler
+/// claims the call is kept across the claim and woken by the settlement.
+///
+/// Whether a task that registers after the settlement is woken at once is
+/// the runtime's: the read that follows its registration finds the outcome
+/// either way, so the late registration's own wake is not asserted.
 ///
 /// This is the test note F-14 names the mutation for: a runtime whose
 /// settlement does not wake the waiter fails it.
@@ -111,20 +115,27 @@ where
     // Another task registers on the settled call. Had the settlement left
     // the first waker stored, this registration would displace it and wake
     // it a second time.
-    let (late, late_waker) = task();
+    let (_, late_waker) = task();
     rt.wake_on(Interest::Outcome(first), &late_waker);
     assert_eq!(wakes(&a), 1, "a woken waker is cleared");
-    assert!(
-        wakes(&late) == 1 || rt.ack(first).is_some(),
-        "a task registering after the settlement is woken or reads the outcome"
-    );
 
+    // A third call, registered on before it is claimed. The claim is a
+    // change a runtime may wake on spuriously, so the waker is checked only
+    // once the settlement is made.
     let third = rt.command(IFACE, ORD, &[3]).expect("send");
+    let (c, c_waker) = task();
+    rt.wake_on(Interest::Outcome(third), &c_waker);
+    assert_eq!(wakes(&c), 0, "nothing has changed since the registration");
     let claim = rt
         .next_claim(&mut buf)
         .expect("next_claim")
         .expect("waiting");
     rt.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        wakes(&c),
+        1,
+        "a waker registered before the claim is woken once by the settlement"
+    );
     assert_eq!(rt.ack(third), Some(Ok(())));
     assert_eq!(
         (wakes(&a), wakes(&b)),
@@ -134,11 +145,14 @@ where
 }
 
 /// With every slot taken, each caller's `Slot` waker is woken when a slot is
-/// reclaimed, and the send that follows succeeds. A slot is reclaimed two
-/// ways: a forget of a settled call, and the settlement of a claimed call
-/// that was forgotten. A runtime may reclaim the second at the forget or at
-/// the settlement; either way both wakers have been woken once both are
-/// done.
+/// reclaimed, and the send that follows succeeds. A slot is reclaimed three
+/// ways: a forget of a settled call; the settlement of a claimed call that
+/// was forgotten, which a runtime may reclaim at the forget or at the
+/// settlement; and a forget of a call no handler has claimed, which a
+/// runtime may withdraw at once or hold until it is presented and settled
+/// (the case `calls::forget_before_the_claim_is_presented_withdraws_or_leaves_the_call`
+/// accepts both results of). Either way both wakers have been woken once the
+/// reclaim is done.
 pub fn every_slot_waker_is_woken_by_a_reclaim_and_the_send_that_follows_succeeds<F>()
 where
     F: Factory,
@@ -193,7 +207,34 @@ where
         (1, 1),
         "the reclaim wakes every caller's slot waker"
     );
-    rt.command(IFACE, ORD, &[1])
+    let unclaimed = rt
+        .command(IFACE, ORD, &[2])
+        .expect("the send that follows takes the reclaimed slot");
+
+    // A forget of a call no handler has claimed: withdrawn, or presented
+    // and settled.
+    let (mine, my_waker) = task();
+    let (theirs, their_waker) = task();
+    rt.wake_on(Interest::Slot, &my_waker);
+    second.wake_on(Interest::Slot, &their_waker);
+    assert_eq!(
+        (wakes(&mine), wakes(&theirs)),
+        (0, 0),
+        "the table is full again"
+    );
+    rt.forget(unclaimed);
+    if let Some(claim) = rt.next_claim(&mut buf).expect("next_claim") {
+        assert_eq!(&buf[..claim.len], &[2], "the forgotten call, held");
+        rt.settle(claim.id, Ok(&[]))
+            .expect("a call that is presented is still settled");
+    }
+    assert_eq!(
+        (wakes(&mine), wakes(&theirs)),
+        (1, 1),
+        "the reclaim wakes every caller's slot waker"
+    );
+    second
+        .command(IFACE, ORD, &[3])
         .expect("the send that follows takes the reclaimed slot");
 }
 
@@ -293,13 +334,15 @@ where
     let mut caller = F::caller(&rt);
     let mut source = F::source(&rt);
     let mut handler = F::handler(&rt);
-    rt.serve(IFACE, &[ORD]).expect("serve");
+    // Only `handler` serves the member, so the claim cases below ask only
+    // that a handler serving it is woken, not every one.
+    handler.serve(IFACE, &[ORD]).expect("serve");
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
     let mut buf = [0u8; 8];
 
     // An outcome.
     let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    let claim = rt
+    let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
         .expect("waiting");
@@ -308,7 +351,7 @@ where
     caller.wake_on(Interest::Outcome(c), &a_waker);
     caller.wake_on(Interest::Outcome(c), &b_waker);
     assert_eq!((wakes(&a), wakes(&b)), (1, 0), "`Outcome`: B displaces A");
-    rt.settle(claim.id, Ok(&[])).expect("settle");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
     assert_eq!(
         (wakes(&a), wakes(&b)),
         (1, 1),
@@ -341,7 +384,6 @@ where
     );
 
     // A claim, under one interface and then under another.
-    handler.serve(IFACE, &[ORD]).expect("serve");
     let (a, a_waker) = task();
     let (b, b_waker) = task();
     let (c, c_waker) = task();
@@ -403,13 +445,15 @@ where
     let mut caller = F::caller(&rt);
     let mut source = F::source(&rt);
     let mut handler = F::handler(&rt);
-    rt.serve(IFACE, &[ORD]).expect("serve");
+    // Only `handler` serves the member, so the claim cases below ask only
+    // that a handler serving it is woken, not every one.
+    handler.serve(IFACE, &[ORD]).expect("serve");
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
     let mut buf = [0u8; 8];
 
     // An outcome.
     let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    let claim = rt
+    let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
         .expect("waiting");
@@ -417,7 +461,7 @@ where
     caller.wake_on(Interest::Outcome(c), &waker);
     caller.wake_on(Interest::Outcome(c), &waker.clone());
     assert_eq!(wakes(&count), 0, "`Outcome`: a refresh wakes nothing");
-    rt.settle(claim.id, Ok(&[])).expect("settle");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
     assert_eq!(wakes(&count), 1, "`Outcome`: the settlement wakes the task");
     caller.forget(c);
 
@@ -430,7 +474,6 @@ where
     assert_eq!(wakes(&count), 1, "`Event`: the raise wakes the task");
 
     // A claim, refreshed under another interface of the kind.
-    handler.serve(IFACE, &[ORD]).expect("serve");
     let (count, waker) = task();
     handler.wake_on(Interest::Claim(IFACE2), &waker);
     handler.wake_on(Interest::Claim(IFACE), &waker.clone());
