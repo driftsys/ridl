@@ -26,7 +26,7 @@ class FakeClient implements LifecycleClient {
 
   start(): Promise<void> {
     if (this.state === "stopping") {
-      throw new Error("Client is currently stopping. Can only restart a client after it stopped or start it initially.");
+      throw new Error("Client is currently stopping. Can only restart a full stopped client");
     }
     if (this.onStart !== undefined) return this.onStart;
     this.starts += 1;
@@ -87,9 +87,9 @@ class FakeClient implements LifecycleClient {
 
   /**
    * The server exits and the library's error handler gives up: the client
-   * will not restart itself. Ends StartFailed if the exit happened during
-   * the first start (client.js:1467-1468), Stopped otherwise, matching the
-   * library.
+   * will not restart itself. Ends StartFailed if the exit happened while a
+   * start was in progress (client.js:1467-1468), Stopped otherwise, matching
+   * the library.
    */
   serverExitedAndLibraryGaveUp(): void {
     this.state = this.state === "starting" ? "startFailed" : "stopped";

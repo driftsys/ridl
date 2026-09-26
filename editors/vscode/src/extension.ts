@@ -23,6 +23,7 @@ import {
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
+  State,
   TransportKind,
 } from "vscode-languageclient/node";
 import {
@@ -40,10 +41,31 @@ const MCP_PROVIDER_ID = "ridl";
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * `this.state`'s numeric value, checked exhaustively against the library's
+ * own `State` enum so a future vscode-languageclient version that adds or
+ * renumbers a state fails this compile instead of only throwing at runtime
+ * inside `phaseOf`, which takes a plain number and so cannot check this
+ * itself (see its own comment).
+ */
+function libraryStateNumber(state: State): number {
+  switch (state) {
+    case State.Starting:
+    case State.Running:
+    case State.StartFailed:
+    case State.Stopped:
+      return state;
+    default: {
+      const exhaustive: never = state;
+      throw new Error(`unhandled vscode-languageclient state: ${String(exhaustive)}`);
+    }
+  }
+}
+
 /** A `LanguageClient` that reports its own state in the vocabulary `ClientLifecycle` reads. */
 class RidlLanguageClient extends LanguageClient {
   phase(): ClientPhase {
-    return phaseOf(this.state);
+    return phaseOf(libraryStateNumber(this.state));
   }
 }
 
