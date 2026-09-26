@@ -665,11 +665,10 @@ event speedLimitExceeded : SpeedLimitPayload @[100ms..2000ms]
 - **An invalid occurrence is delivered, marked invalid.** An occurrence whose
   payload violates its typl constraints (Stratum 2, §10.2) or is not a
   well-formed encoding (Stratum 3, §10.3) reaches the subscriber with an invalid
-  marker in place of the value, together with its envelope. The invalid payload
-  does not cause the occurrence to be withheld, because nothing fails silently
-  (§10.3, §10.4), and the occurrence is never delivered as a value, because the
-  contract does not admit the value. The time to live of §5.2 applies to it as
-  to any occurrence. Nothing is sent back to the provider, as on a signal (§4.5)
+  marker in place of the value, together with its envelope. The occurrence is
+  never withheld, because nothing fails silently (§10.3, §10.4), and never
+  delivered as a value, because the contract does not admit the value. Nothing
+  is sent back to the provider, as on a signal (§4.5)
   ([frame specification](frame-specification.md) §9.2)
 
 **Who receives an occurrence is not a contract term.** An occurrence is raised
