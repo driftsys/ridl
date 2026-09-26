@@ -1,8 +1,9 @@
 # Enum variants in PascalCase — design
 
 Status: design for driftsys/ridl#506, option B. Written 2026-09-26. The code
-change runs from an implementation plan written after this design merges. The
-decision it applies is recorded in
+change runs from the plan
+[`2026-09-26-enum-variant-pascal-case-plan.md`](2026-09-26-enum-variant-pascal-case-plan.md).
+The decision it applies is recorded in
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)'s
 amendment of 2026-09-26.
 
