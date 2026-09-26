@@ -240,12 +240,12 @@ aggregate sends each key to the handle that observes it.
 
 What wakes a stored waker:
 
-| Kind      | Woken by                                                                                                                                                 |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it      |
-| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call, the settlement of a call forgotten while in flight, or another caller handle's drop    |
-| `Event`   | a raise that queues an occurrence for this source                                                                                                        |
-| `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves |
+| Kind      | Woken by                                                                                                                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                               |
+| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, or another caller handle's drop |
+| `Event`   | a raise that queues an occurrence for this source                                                                                                                                                 |
+| `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                          |
 
 A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
 and puts it back, unwoken, when no call the handler now serves is waiting. A
@@ -288,11 +288,12 @@ answer:
   a time, would need storage the allocation-free table cannot hold, and a waiter
   that has no slot yet has no slot to be kept in (note F-5).
 - **A dropped caller forgets every call it sent and did not forget**, as
-  `Caller::forget` would: a settled call's slot is reclaimed at the drop, which
-  wakes the other callers' `Slot` waiters, and a call in flight is marked, so
-  its settlement reclaims the slot. No handle reads the outcome of a call whose
-  caller is gone, and a slot kept for it would be lost to every other caller.
-  The drop also removes the caller's own `Slot` waker.
+  `Caller::forget` would: a settled call's slot and the slot of a call no
+  handler has claimed are reclaimed at the drop, which wakes the other callers'
+  `Slot` waiters, and a claimed call in flight is marked, so its settlement
+  reclaims the slot. No handle reads the outcome of a call whose caller is gone,
+  and a slot kept for it would be lost to every other caller. The drop also
+  removes the caller's own `Slot` waker.
 - **A kind no role of the handle observes is woken at once.** The reader, writer
   and sink handles observe no kind of key, and the source and handler handles
   observe one each and the caller handle two, so a registration under any other
@@ -333,7 +334,7 @@ fails when that `Drop` returns the claims but leaves the handler's state in the
 store. Under "The bounded call table", removing the `Slot` wake from a reclaim
 fails
 `a_slot_registration_is_stored_while_every_slot_is_taken_and_woken_by_a_forget`,
-`the_settlement_of_a_forgotten_call_wakes_the_slot_waiters`, and two more.
+`a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement`, and others.
 
 ## A claim is not a correlation
 
@@ -381,18 +382,55 @@ presentation recorded an outcome the caller could read as an acknowledgment.
 `Loopback::fail_next_settle` is not scoped this way: it is the runtime's, so it
 fails whichever handler settles next.
 
-**`Caller::forget` releases the caller's interest, and cancels nothing.** A call
-whose outcome is already recorded has nothing left to happen to it, so its slot
-is reclaimed. A call still in flight keeps its slot, marked forgotten, until its
-settlement reclaims it: the provider is still presented it and still settles it,
-because `Handler`'s contract is that every claim is settled and a caller losing
-interest is not the provider's business. Either way the correlation answers
-`None` from `ack` and `reply` afterwards, which is what `Caller::forget` tells a
-caller to expect. The alternative rejected is removing the entry outright: it
-revokes a claim the provider may already hold, so the provider's `settle` fails
-and the generated `dispatch` does not count it — and, in the shape this crate
-first had, it left the call's identity in the waiting queue with no entry behind
-it, which made every later `next_claim` on that runtime panic.
+**`Caller::forget` releases the caller's interest, and withdraws only a call no
+handler has claimed.** What it does depends on where the call is:
+
+| Call at `forget`                  | What happens                                                              |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| settled                           | its slot is reclaimed now                                                 |
+| claimed by a handler, not settled | marked forgotten; its settlement reclaims the slot (ADR-0021 decision 15) |
+| waiting, claimed by no handler    | withdrawn: it leaves the waiting calls, and its slot is reclaimed now     |
+
+A claimed call is still settled, because `Handler`'s contract is that every
+claim is settled and a caller losing interest is not the provider's business.
+Without the withdrawal, a call to a member no handler serves is never settled,
+and sixteen such forgotten calls leave every later send `SendError::Busy` for
+the life of the runtime (decision 1 of the
+[pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640),
+with its
+[confirmed details](https://github.com/driftsys/ridl/pull/553#issuecomment-5848618786)).
+**A withdrawn command is never delivered**: no handler is presented it, so a
+caller that gave up on a command gets at-most-once delivery of it. **`forget`
+and the handler side — `serve` and `next_claim` — run under the store's one
+lock**, so a call is either claimed first, and then held until it is settled, or
+withdrawn first, and then never presented. A dropped caller's calls go through
+the same path.
+
+The withdrawal is this runtime's behaviour, not a port contract: a transport
+that has already sent a request cannot recall it. The `ridl-rt-conformance` case
+`forget_before_the_claim_is_presented_withdraws_or_leaves_the_call` therefore
+accepts either result — the call withdrawn, or presented and held until settled.
+
+The withdrawal adds nothing to `ridl-rt`'s API. Under the store's lock, the
+store takes the call out of the waiting calls, settles it through
+`Table::settle`, and then forgets it through `Table::forget`, which answers
+`Forgotten::Reclaimed` for a settled call. The outcome it settles with is
+discarded with the slot, and no reader can see it in between; it is
+`Transport::Undelivered`, the outcome that describes a call no provider
+received. A withdrawal wakes the call's `Outcome` waiter and every caller's
+`Slot` waiter, as any reclaim does, and no handler's `Claim` waiter. Either way
+the correlation answers `None` from `ack` and `reply` afterwards, which is what
+`Caller::forget` tells a caller to expect. The alternative rejected is removing
+a claimed call's entry outright: it revokes a claim the provider already holds,
+so the provider's `settle` fails and the generated `dispatch` does not count it
+— and, in the shape this crate first had, it left the call's identity in the
+waiting queue with no entry behind it, which made every later `next_claim` on
+that runtime panic. The withdrawal takes the call out of the waiting queue
+before it drops the entry for that reason.
+`forgotten_calls_to_an_unserved_member_leave_room_for_another_send`,
+`a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later`,
+`a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement` and
+`a_dropped_callers_unclaimed_calls_are_withdrawn` pin the rule.
 
 ## The two signal extensions are implemented
 
@@ -587,6 +625,22 @@ Three more that are the runtime's own shape rather than the descriptor's:
   No release of the crates happens before Task 4 (ADR-0021 decision 18). This
   runtime holds the outcome because nothing else can know the caller has read
   it.
+
+  Until then, a caller that uses the poll face must forget a correlation once it
+  has read the outcome, or this runtime's sixteen slots fill and it refuses the
+  seventeenth call with `SendError::Busy` (decision 2 of the
+  [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640)).
+  Two cases:
+
+  - **A `Client` built over `&mut port` for the call can forget.** The program
+    makes the call, reads the outcome, and once the `Client`'s borrow has ended
+    calls `port.forget(c.0)`: the correlation newtype's field is public, and
+    `Caller::forget` forwards through `&mut P`.
+  - **A `Client` that owns its port by value cannot forget**, because it has no
+    accessor for the port. The sixteen-call limit applies to it until Task 4.
+
+  The rule lasts until the generated async client lands, whose future forgets
+  its call when it has taken the outcome and when it is dropped.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when

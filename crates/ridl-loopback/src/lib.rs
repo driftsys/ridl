@@ -174,9 +174,13 @@ impl Loopback {
     /// The generated face does not call `forget` yet, so a program that calls
     /// through it over one runtime gets `SendError::Busy` from its
     /// seventeenth call on, unless it drops the caller handle, which forgets
-    /// that handle's calls. The async client of story E11.21 forgets each
-    /// call once it has taken the outcome, which closes this limit; no
-    /// release happens before it.
+    /// that handle's calls, or forgets each correlation itself once it has
+    /// read the outcome. A `Client` built over `&mut` this runtime for the
+    /// call leaves the runtime reachable for `forget(c.0)` once its borrow
+    /// ends; a `Client` that owns the runtime by value has no accessor for it,
+    /// so the limit applies to it. The async client of story E11.21 forgets
+    /// each call once it has taken the outcome, and on drop, which closes
+    /// this limit; no release happens before it.
     pub const SLOTS: usize = 16;
 
     /// A runtime attached to `catalog`, with an empty store and its clock at

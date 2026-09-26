@@ -457,6 +457,17 @@ and the reclaiming operations return the wakers to wake, and the runtime wakes
 them after releasing its lock, so no waker runs under a runtime's mutex. The
 plan fixes the method signatures.
 
+**Amended (2026-09-26).** In the loopback, a forgotten call that no handler has
+claimed is withdrawn: it leaves the waiting calls, and its slot is reclaimed at
+the `forget`, so a withdrawn command is never delivered. Under the store's lock
+the loopback settles the call and then forgets it through the existing `Table`
+API, which reaches `Forgotten::Reclaimed`; `ridl-rt` gains no item. A claimed
+call keeps its slot until its settlement, as above. The withdrawal is the
+loopback's behaviour, not a port contract. Decision 1 of the
+[pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640),
+with its
+[confirmed details](https://github.com/driftsys/ridl/pull/553#issuecomment-5848618786).
+
 **What the loopback's two hooks need from it.** Nothing. `fail_next_settle`
 fails `Handler::settle` before the table is touched and records no outcome, so
 the claim stays settleable, as today. The hand-driven clock stamps envelopes and

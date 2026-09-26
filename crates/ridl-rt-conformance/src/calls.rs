@@ -234,27 +234,24 @@ pub fn forget_releases_a_settled_correlation<F: Factory>() {
     );
 }
 
-/// `Caller::forget` releases the caller's interest in an outcome. It is not a
-/// cancellation: `Handler`'s contract is that every claim is settled, and a
-/// call already sent is the provider's.
-pub fn forget_before_the_claim_is_presented_leaves_the_call_for_the_provider<F: Factory>() {
+/// `Caller::forget` releases the caller's interest in an outcome. What
+/// happens to a call no provider has claimed yet is the runtime's: one may
+/// withdraw it, and one whose transport has already sent the request cannot
+/// recall it, so the call is still presented and settled. The test accepts
+/// either result. Either way the caller is not told the outcome.
+pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
     let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
     rt.forget(correlation);
 
     let mut buf = [0u8; 8];
-    let claim = rt
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("the call is still presented");
-    assert_eq!(&buf[..claim.len], &[1]);
-    rt.settle(claim.id, Ok(&[])).expect("and is still settled");
-    assert_eq!(
-        rt.ack(correlation),
-        None,
-        "but the caller asked not to be told"
-    );
+    if let Some(claim) = rt.next_claim(&mut buf).expect("next_claim") {
+        assert_eq!(&buf[..claim.len], &[1]);
+        rt.settle(claim.id, Ok(&[]))
+            .expect("a call that is presented is still settled");
+    }
+    assert_eq!(rt.ack(correlation), None, "the caller asked not to be told");
 }
 
 /// A `forget` between the claim and the settlement does not revoke the

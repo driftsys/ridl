@@ -185,7 +185,7 @@ macro_rules! suite {
             calls::a_claim_is_presented_once_and_settled_once,
             calls::a_short_buffer_leaves_the_claim_for_the_next_call,
             calls::forget_releases_a_settled_correlation,
-            calls::forget_before_the_claim_is_presented_leaves_the_call_for_the_provider,
+            calls::forget_before_the_claim_is_presented_withdraws_or_leaves_the_call,
             calls::forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid,
             calls::a_claim_that_was_never_presented_cannot_be_settled,
             calls::an_injected_settle_failure_is_not_spent_on_an_unknown_claim,
