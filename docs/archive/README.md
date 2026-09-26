@@ -308,3 +308,12 @@ provenance. Nothing here is normative — the current references live in
   when it was written. Four findings outlive it — driftsys/ridl#467,
   driftsys/ridl#469, driftsys/ridl#472 and driftsys/ridl#476 — and the closing
   comment on driftsys/ridl#328 carries each one's owner.
+- **2026-09-26-enum-variant-pascal-case-design.md** and
+  **2026-09-26-enum-variant-pascal-case-plan.md** — the design and the six-task
+  plan for driftsys/ridl#506: the Rust backend's enum variants projected through
+  the pinned `pascal_case` transform (`CHECK_ENGINE` becomes `CheckEngine`), and
+  RIDL-149 extended to an enum's values, keyed on `pascal_case` alone. Archived
+  as a pair once the code landed. The gardened records are
+  [ADR-0016's 2026-09-26 amendment](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
+  [ADR-0017 decision 5's 2026-09-26 amendment](../decisions/ADR-0017-proto3-projection-rules.md),
+  and the ridl reference's §16.4 RIDL-149 row.

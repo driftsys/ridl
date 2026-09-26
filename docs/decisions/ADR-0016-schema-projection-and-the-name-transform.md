@@ -100,10 +100,7 @@ E11.2 and E11.4 (ADR-0018 decision 16).
 **Amendment (2026-09-26), from driftsys/ridl#506.** `pascal_case` joins the
 pinned transforms of decision 2, and the values of one enum join the checked
 namespaces of decision 4. The design is
-[`docs/wip/2026-09-26-enum-variant-pascal-case-design.md`](../wip/2026-09-26-enum-variant-pascal-case-design.md).
-The decision is taken; the code lands from that design's plan, and until it
-merges the Rust backend still emits the typl spelling and RIDL-149 does not
-cover an enum's values.
+[`docs/archive/2026-09-26-enum-variant-pascal-case-design.md`](../archive/2026-09-26-enum-variant-pascal-case-design.md).
 
 The Rust backend emitted each enum value verbatim as a Rust variant, so a
 multi-word `SCREAMING_SNAKE` value such as `CHECK_ENGINE` drew rustc's
@@ -463,8 +460,8 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 | ridl §16.4        | RIDL-149's row gains a union's arms as a fourth checked namespace and the second pinned transform (2026-09-20 amendment)                                                                                                     |
 | ADR-0017          | decision 5's union-arm half is done and its enum-value half is not; open question 2 ("whether `ridl-backend-rust` should transform struct field names") is answered yes; the alternatives row follows (2026-09-20 amendment) |
 | `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                                                                                        |
-| ridl §16.4        | RIDL-149's row gains the values of one enum, checked under `pascal_case` (2026-09-26 amendment; changes with the check, not before it)                                                                                       |
-| ADR-0017          | decision 5's enum-value half is done: RIDL-149 covers an enum's values (2026-09-26 amendment; changes with the check, not before it)                                                                                         |
+| ridl §16.4        | RIDL-149's row gains the values of one enum, checked under `pascal_case` (2026-09-26 amendment)                                                                                                                              |
+| ADR-0017          | decision 5's enum-value half is done: RIDL-149 covers an enum's values (2026-09-26 amendment)                                                                                                                                |
 
 ## Open
 
