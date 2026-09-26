@@ -18,20 +18,21 @@
 //! handle adds to them, and the split follows the receiver of those methods,
 //! as ADR-0021 decision 12 derives it:
 //!
-//! | Handle            | Port roles beside `Attached` and `Wakeable`                                   | Keys it stores       | Threading     |
-//! | ----------------- | ----------------------------------------------------------------------------- | -------------------- | ------------- |
-//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                 | `Send + Sync` |
-//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                 | `Send`        |
-//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`              | `Send`        |
-//! | [`SinkHandle`]    | `EventSink`                                                                   | none                 | `Send`        |
-//! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome` and `Slot` | `Send`        |
-//! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`              | `Send`        |
+//! | Handle            | Port roles beside `Attached` and `Wakeable`                                   | Kinds of key it stores         | Threading     |
+//! | ----------------- | ----------------------------------------------------------------------------- | ------------------------------ | ------------- |
+//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                           | `Send + Sync` |
+//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                           | `Send`        |
+//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker             | `Send`        |
+//! | [`SinkHandle`]    | `EventSink`                                                                   | none                           | `Send`        |
+//! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome`, kept with each call | `Send`        |
+//! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`, one waker             | `Send`        |
 //!
-//! A handle stores a waker only under a key one of its roles observes. A
-//! registration under any other key is woken at once, because nothing that
-//! handle could read changes under it, and a stored waker would never be
-//! woken. `Slot` is woken at once too, because the call table has no bound and
-//! a slot is always free.
+//! A handle stores a waker only under a kind of key one of its roles
+//! observes, one waker per kind, and a change to any key of that kind wakes it
+//! (ADR-0021 decision 13). A registration under any other kind is woken at
+//! once, because nothing that handle could read changes under it, and a
+//! stored waker would never be woken. `Slot` is woken at once too, and never
+//! stored, because the call table has no bound and a slot is always free.
 //!
 //! Every method on the reader handle takes `&self`, so several threads may
 //! read one store at once; every other handle carries a trait with a
@@ -300,13 +301,13 @@ impl EventSource for SourceHandle {
     }
 }
 
-/// Stores one `Event` waker, woken by a raise of that interface that queues an
-/// occurrence for this source.
+/// Stores one `Event` waker, whatever interface it was registered under, woken
+/// by any raise that queues an occurrence for this source.
 impl Wakeable for SourceHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
-            Interest::Event(iface) => locked(&self.shared, |store, wake| {
-                store.wait_event(self.id, iface, waker, wake);
+            Interest::Event(_) => locked(&self.shared, |store, wake| {
+                store.wait_event(self.id, waker, wake);
             }),
             Interest::Outcome(_) | Interest::Slot | Interest::Claim(_) => wake_at_once(waker),
         }
@@ -512,9 +513,13 @@ impl HandlerHandle {
     }
 }
 
+/// A claim this handler holds and has not settled returns to the waiting
+/// calls, and every handler that serves its member is woken.
 impl Drop for HandlerHandle {
     fn drop(&mut self) {
-        lock(&self.shared).close_handler(self.id);
+        locked(&self.shared, |store, wake| {
+            store.close_handler(self.id, wake)
+        });
     }
 }
 
@@ -552,13 +557,15 @@ impl Handler for HandlerHandle {
     }
 }
 
-/// Stores one `Claim` waker, woken by a send of a member this handler serves,
-/// or by a `serve` that admits a call already waiting.
+/// Stores one `Claim` waker, whatever interface it was registered under, woken
+/// by a send of a member this handler serves, by a `serve` that admits a call
+/// already waiting, or by another handler's drop that returns a claim this
+/// handler serves.
 impl Wakeable for HandlerHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
-            Interest::Claim(iface) => locked(&self.shared, |store, wake| {
-                store.wait_claim(self.id, iface, waker, wake);
+            Interest::Claim(_) => locked(&self.shared, |store, wake| {
+                store.wait_claim(self.id, waker, wake);
             }),
             Interest::Outcome(_) | Interest::Slot | Interest::Event(_) => wake_at_once(waker),
         }

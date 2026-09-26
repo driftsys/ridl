@@ -21,7 +21,8 @@
 //! An operation that changes what a waiter waits for takes a `wake` list and
 //! pushes the wakers to wake onto it. It never wakes one itself: the handle
 //! wakes them after it has released the lock ([`crate::handle::locked`]), so
-//! no waker runs while the store is locked.
+//! no waker is woken while the store is locked. A waker is cloned under the
+//! lock, and a refreshed one is dropped under it; neither wakes a task.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::task::Waker;
@@ -63,13 +64,6 @@ struct QueuedEvent {
     envelope: Envelope,
 }
 
-/// A waker stored under `Interest::Event` or `Interest::Claim`, with the
-/// interface it was stored under.
-struct Waiter {
-    iface: InterfaceNo,
-    waker: Waker,
-}
-
 /// One source handle's subscription set, its own queue, and its waiter. `raise`
 /// copies an occurrence into the queue of every source subscribed to it at
 /// that moment, so each source reads its own occurrences in order and no
@@ -78,8 +72,10 @@ struct Waiter {
 struct SourceState {
     subscribed: BTreeSet<Key>,
     queue: VecDeque<QueuedEvent>,
-    /// The one `Interest::Event` waker this handle holds.
-    waiter: Option<Waiter>,
+    /// The one `Interest::Event` waker this handle holds, whatever interface
+    /// it was registered under: any occurrence queued for this source wakes
+    /// it.
+    waiter: Option<Waker>,
 }
 
 /// One handler handle's served set and its waiter.
@@ -88,8 +84,9 @@ struct HandlerState {
     /// The members `serve` recorded. Empty is no filter: see
     /// [`HandlerHandle`](crate::HandlerHandle).
     served: Vec<Key>,
-    /// The one `Interest::Claim` waker this handle holds.
-    waiter: Option<Waiter>,
+    /// The one `Interest::Claim` waker this handle holds, whatever interface
+    /// it was registered under: any call this handler serves wakes it.
+    waiter: Option<Waker>,
 }
 
 impl HandlerState {
@@ -433,26 +430,22 @@ impl Store {
                     bytes: bytes.to_vec(),
                     envelope,
                 });
-                take_waiter(&mut state.waiter, iface, wake);
+                wake.extend(state.waiter.take());
             }
         }
     }
 
-    /// Stores a source's `Interest::Event(iface)` waker, or wakes it at once
-    /// when an occurrence of that interface is already in the source's queue.
-    pub(crate) fn wait_event(
-        &mut self,
-        id: usize,
-        iface: InterfaceNo,
-        waker: &Waker,
-        wake: &mut Vec<Waker>,
-    ) {
+    /// Stores a source's `Interest::Event` waker, or wakes it at once when an
+    /// occurrence is already in the source's queue. The interface of the key
+    /// is not kept: the handle holds one `Event` waker, and any occurrence
+    /// queued for it wakes that waker.
+    pub(crate) fn wait_event(&mut self, id: usize, waker: &Waker, wake: &mut Vec<Waker>) {
         let Some(state) = self.sources.get_mut(&id) else {
             wake.push(waker.clone());
             return;
         };
-        let ready = state.queue.iter().any(|event| event.iface == iface);
-        register(&mut state.waiter, iface, waker, ready, wake);
+        let ready = !state.queue.is_empty();
+        replace(&mut state.waiter, waker, ready, wake);
     }
 
     pub(crate) fn next_event(
@@ -514,11 +507,7 @@ impl Store {
             },
         );
         self.pending.push_back(id);
-        for state in self.handlers.values_mut() {
-            if state.serves((iface, ord)) {
-                take_waiter(&mut state.waiter, iface, wake);
-            }
-        }
+        self.wake_handlers_serving((iface, ord), wake);
         Correlation(id)
     }
 
@@ -610,8 +599,36 @@ impl Store {
         id
     }
 
-    pub(crate) fn close_handler(&mut self, id: usize) {
+    /// Removes a dropped handler. Every claim it held and had not settled
+    /// returns to the waiting calls, in its place by send order, so another
+    /// handler that serves the member can take it, and every handler that
+    /// serves the member has its `Claim` waiter woken. The caller's deadline
+    /// still bounds its wait for the outcome.
+    pub(crate) fn close_handler(&mut self, id: usize, wake: &mut Vec<Waker>) {
         self.handlers.remove(&id);
+        let held: Vec<u64> = self
+            .claims
+            .iter()
+            .filter(|(_, owner)| owner.handler == id)
+            .map(|(claim, _)| *claim)
+            .collect();
+        for claim in held {
+            let owner = self.claims.remove(&claim).expect("listed above");
+            let at = self.pending.partition_point(|call| *call < owner.call);
+            self.pending.insert(at, owner.call);
+            let entry = &self.calls[&owner.call];
+            let key = (entry.iface, entry.ord);
+            self.wake_handlers_serving(key, wake);
+        }
+    }
+
+    /// Takes the `Claim` waker of every handler that serves `key`.
+    fn wake_handlers_serving(&mut self, key: Key, wake: &mut Vec<Waker>) {
+        for state in self.handlers.values_mut() {
+            if state.serves(key) {
+                wake.extend(state.waiter.take());
+            }
+        }
     }
 
     /// Adds members to a handler's served set. A call already waiting that
@@ -631,41 +648,35 @@ impl Store {
                 state.served.push((iface, *ord));
             }
         }
-        let Some(waiting) = state.waiter.as_ref().map(|waiter| waiter.iface) else {
-            return;
-        };
-        if self.claim_waiting(handler, waiting) {
+        if state.waiter.is_some() && self.claim_waiting(handler) {
             let state = self.handlers.get_mut(&handler).expect("looked up above");
-            take_waiter(&mut state.waiter, waiting, wake);
+            wake.extend(state.waiter.take());
         }
     }
 
-    /// Stores a handler's `Interest::Claim(iface)` waker, or wakes it at once
-    /// when a call of that interface is already waiting for the handler.
-    pub(crate) fn wait_claim(
-        &mut self,
-        handler: usize,
-        iface: InterfaceNo,
-        waker: &Waker,
-        wake: &mut Vec<Waker>,
-    ) {
-        let ready = self.claim_waiting(handler, iface);
+    /// Stores a handler's `Interest::Claim` waker, or wakes it at once when a
+    /// call it serves is already waiting. The interface of the key is not
+    /// kept: the handle holds one `Claim` waker, and any call it serves wakes
+    /// that waker.
+    pub(crate) fn wait_claim(&mut self, handler: usize, waker: &Waker, wake: &mut Vec<Waker>) {
+        let ready = self.claim_waiting(handler);
         let Some(state) = self.handlers.get_mut(&handler) else {
             wake.push(waker.clone());
             return;
         };
-        register(&mut state.waiter, iface, waker, ready, wake);
+        replace(&mut state.waiter, waker, ready, wake);
     }
 
-    /// Whether a call of `iface` is waiting that `next_claim` would present to
-    /// this handler.
-    fn claim_waiting(&self, handler: usize, iface: InterfaceNo) -> bool {
+    /// Whether a call is waiting that `next_claim` would present to this
+    /// handler. The scan stops at the first such call, and it is the same scan
+    /// `next_claim` makes.
+    fn claim_waiting(&self, handler: usize) -> bool {
         let Some(state) = self.handlers.get(&handler) else {
             return false;
         };
         self.pending.iter().any(|id| {
             let entry = &self.calls[id];
-            entry.iface == iface && state.serves((entry.iface, entry.ord))
+            state.serves((entry.iface, entry.ord))
         })
     }
 
@@ -765,37 +776,18 @@ impl Store {
 /// Stores `waker` in `slot`, the one waker a handle holds for one kind of key,
 /// or, when `ready`, puts it on `wake` at once and leaves `slot` empty.
 ///
-/// The waker it displaces is put on `wake`, so the task that stored it does
-/// not wait on a registration that can no longer fire — unless it wakes the
-/// same task as `waker` ([`Waker::will_wake`]). A task registers on every
-/// poll, and waking it for its own registration would schedule the next poll
-/// from every poll.
+/// A stored waker of another task is displaced: it is put on `wake`, so that
+/// task does not wait on a registration that can no longer fire. A stored
+/// waker that wakes the same task as `waker` ([`Waker::will_wake`]) is
+/// refreshed rather than displaced, and dropped without being woken: a task
+/// registers on every poll, and waking it for its own registration would
+/// schedule the next poll from every poll (ADR-0021 decision 13).
 fn replace(slot: &mut Option<Waker>, waker: &Waker, ready: bool, wake: &mut Vec<Waker>) {
     wake.extend(slot.take().filter(|displaced| !displaced.will_wake(waker)));
     if ready {
         wake.push(waker.clone());
     } else {
         *slot = Some(waker.clone());
-    }
-}
-
-/// [`replace`] for a waker stored with the interface it waits on.
-fn register(
-    slot: &mut Option<Waiter>,
-    iface: InterfaceNo,
-    waker: &Waker,
-    ready: bool,
-    wake: &mut Vec<Waker>,
-) {
-    let mut stored = slot.take().map(|waiter| waiter.waker);
-    replace(&mut stored, waker, ready, wake);
-    *slot = stored.map(|waker| Waiter { iface, waker });
-}
-
-/// Takes the waker in `slot` onto `wake` when it waits on `iface`.
-fn take_waiter(slot: &mut Option<Waiter>, iface: InterfaceNo, wake: &mut Vec<Waker>) {
-    if slot.as_ref().is_some_and(|waiter| waiter.iface == iface) {
-        wake.extend(slot.take().map(|waiter| waiter.waker));
     }
 }
 

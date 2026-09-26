@@ -221,52 +221,68 @@ does emit `invalidate_<name>`, so a provider that invalidates before its first
 ## Waking
 
 **Every handle implements `Wakeable`, and a handle stores a waker only under a
-key one of its roles observes** (story E11.16). A caller handle observes
+kind of key one of its roles observes** (story E11.16). A caller handle observes
 `Outcome`, a source handle `Event`, and a handler handle `Claim`. The store
-keeps one waker per kind of key per handle — one `Event` waker on a source, one
-`Claim` waker on a handler, each with the interface it was stored under — and
-keeps an `Outcome` waker with its call in the call table, because the outcome is
-the call's. The aggregate sends each key to the handle that observes it.
+keeps one waker per kind of key per handle, as ADR-0021 decision 13 states the
+contract: one `Event` waker on a source and one `Claim` waker on a handler,
+whatever interface each was registered under, and an `Outcome` waker with its
+call in the call table, because the outcome is the call's. A change to any key
+of the kind wakes the stored waker, so a task that registers `Event(a)` and then
+`Event(b)` on one source is woken by an occurrence of either. The aggregate
+sends each key to the handle that observes it.
 
 What wakes a stored waker:
 
-| Key            | Woken by                                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------------------------- |
-| `Outcome(c)`   | the settlement that records the outcome of `c`, or a `forget` of `c` while it is in flight                    |
-| `Event(iface)` | a raise of an event of `iface` that queues an occurrence for this source                                      |
-| `Claim(iface)` | a send of a member of `iface` this handler serves, or a `serve` that admits a call of `iface` already waiting |
+| Kind      | Woken by                                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight                                                     |
+| `Event`   | a raise that queues an occurrence for this source                                                                                                        |
+| `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves |
 
-A settlement, a raise, a send, a `serve` and a `forget` collect the wakers to
-wake inside their critical section and wake them after the lock is released, so
-no waker runs while the store is locked: a waker runs code this runtime does not
-control, and that code may call a port method on the same store.
+A settlement, a raise, a send, a `serve`, a `forget` and a handler's drop
+collect the wakers to wake inside their critical section, and wake them after
+the lock is released, so no waker is woken while the store is locked: a waker
+runs code this runtime does not control, and that code may call a port method on
+the same store. A waker is cloned under the lock, and a refreshed one is dropped
+under it; neither wakes a task.
 
-Four choices the `Wakeable` contract leaves to a runtime, and this one's answer:
+**A registration of the waker already stored does not wake it.** This is the
+contract's refresh rule (ADR-0021 decision 13): a task registers on every poll,
+so a waker for the same task (`Waker::will_wake`) replaces the stored one
+without waking it. A waker for another task displaces the stored one, and the
+displaced waker is woken.
+
+Three choices the `Wakeable` contract leaves to a runtime, and this one's
+answer:
 
 - **A registration whose key already holds is woken at once**, rather than
-  stored: an outcome already recorded, an occurrence of the interface already
-  queued for the source, a call of the interface already waiting for the
-  handler. The same holds for an `Outcome` of a correlation that names no call
-  in flight — unknown or forgotten — for which no outcome will ever be recorded.
-- **`Slot` is woken at once.** Nothing bounds the call table, so a slot is
-  always free. Story E11.18 gives the caller side 16 slots, and with them a
-  `Slot` waiter to store.
-- **A key no role of the handle observes is woken at once.** The reader, writer
-  and sink handles observe no key, and each other handle observes one or two, so
-  a registration under any other key has nothing that could change under it, and
-  a stored waker would never be woken.
-- **A registration of the waker already stored does not wake it.** The contract
-  wakes a displaced waker, so that no task waits on a registration that can no
-  longer fire. A task registers on every poll, so a waker for the same task
-  (`Waker::will_wake`) is not displaced: waking it would schedule the next poll
-  from every poll, and the task would never become idle. A waker for another
-  task is displaced and woken.
+  stored: an outcome already recorded, an occurrence already queued for the
+  source, a call the handler serves already waiting. The same holds for an
+  `Outcome` of a correlation that names no call in flight — unknown or forgotten
+  — for which no outcome will ever be recorded.
+- **`Slot` is woken at once, and never stored.** Nothing bounds the call table,
+  so a slot is always free. Story E11.18 gives the caller side 16 slots, and
+  with them a `Slot` waiter to store.
+- **A kind no role of the handle observes is woken at once.** The reader, writer
+  and sink handles observe no kind of key, and the caller, source and handler
+  handles observe one each — `Slot` aside — so a registration under any other
+  kind has nothing that could change under it, and a stored waker would never be
+  woken.
 
-The tests are under "Waking" in `crates/ridl-loopback/tests/ports.rs`.
-`a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement` is the one that
-fails when the wake is removed from the settlement path, and
-`a_waker_is_woken_after_the_lock_is_released` fails when a waker is woken with
-the lock held.
+**A handler dropped while it holds an unsettled claim returns the claim to the
+waiting calls**, in its place by send order, so another handler that serves the
+member can take it, and every handler that serves the member is woken. The
+caller's deadline still bounds its wait for the outcome. This is the one way a
+call is presented twice.
+
+The tests are under "Waking" in `crates/ridl-loopback/tests/ports.rs`. Removing
+the wake from the settlement path turns red every one that waits for a
+settlement, among them
+`a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement`;
+`a_waker_is_woken_after_the_lock_is_released` and
+`every_wake_is_run_with_the_lock_released` fail when a waker is woken with the
+lock held, and `a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails
+without the handler's `Drop`.
 
 ## A claim is not a correlation
 

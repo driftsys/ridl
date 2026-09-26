@@ -72,17 +72,19 @@
 //!
 //! # Waking
 //!
-//! Every handle implements [`Wakeable`], and a
-//! handle stores a waker only under a key one of its roles observes: a caller
-//! handle under `Interest::Outcome`, kept with the call, a source handle under
-//! `Interest::Event`, and a handler handle under `Interest::Claim`, one of
-//! each per handle. A settlement wakes the call's waiter, a raise wakes each
-//! source it queues the occurrence for, and a send wakes each handler that
-//! serves the member. A registration whose key already holds — the outcome
-//! is known, an occurrence or a call is waiting — is woken at once, and so is
-//! one under a key the handle does not observe, and `Interest::Slot`, because
-//! nothing bounds the call table and a slot is always free. No waker is woken
-//! while the store is locked.
+//! Every handle implements [`Wakeable`], and a handle stores a waker only
+//! under a kind of key one of its roles observes: a caller handle under
+//! `Interest::Outcome`, kept with each call, a source handle one waker under
+//! `Interest::Event`, and a handler handle one waker under `Interest::Claim`.
+//! A change to any key of the kind wakes the stored waker, whatever interface
+//! it was registered under (ADR-0021 decision 13). A settlement wakes the
+//! call's waiter, a raise wakes each source it queues the occurrence for, and
+//! a send wakes each handler that serves the member. A registration whose key
+//! already holds — the outcome is known, an occurrence or a call is waiting —
+//! is woken at once, and so is one under a kind the handle does not observe,
+//! and `Interest::Slot`, because nothing bounds the call table and a slot is
+//! always free. A registration of the waker already stored refreshes it
+//! without waking it. No waker is woken while the store is locked.
 //!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
