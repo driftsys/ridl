@@ -72,9 +72,13 @@
 //! the contract leaves to a runtime, and
 //! `a_dropped_caller_leaves_no_slot_waiter_behind` pins this runtime's
 //! `Drop`. `forgotten_calls_to_an_unserved_member_leave_room_for_another_send`,
-//! `a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later`
-//! and `a_dropped_callers_unclaimed_calls_are_withdrawn` pin this runtime's
-//! withdrawal of a forgotten call no handler has claimed. The withdrawal is
+//! `a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later`,
+//! `a_dropped_callers_unclaimed_calls_are_withdrawn`,
+//! `a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order`,
+//! `a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot`,
+//! `a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped`
+//! and `a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter` pin this
+//! runtime's withdrawal of a forgotten call no handler holds. The withdrawal is
 //! this runtime's behaviour and not a port contract, because a transport
 //! that has already sent a request cannot recall it, so the suite accepts
 //! either result.
@@ -1508,7 +1512,6 @@ fn a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later
     let withdrawn = caller.command(IFACE, ORD, &[1]).expect("send");
     let kept = caller.command(IFACE, ORD, &[2]).expect("send");
     caller.forget(withdrawn);
-    assert_eq!(wakes(&count), 0, "a withdrawal wakes no claim waiter");
 
     handler.serve(IFACE, &[ORD]).expect("serve");
     assert_eq!(wakes(&count), 1, "the call not forgotten is waiting");
@@ -1524,6 +1527,169 @@ fn a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later
         None,
         "the withdrawn call is never presented"
     );
+}
+
+#[test]
+fn a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    let middle = caller.command(IFACE, ORD, &[2]).expect("send");
+    caller.command(IFACE, ORD, &[3]).expect("send");
+    caller.forget(middle);
+
+    handler.serve(IFACE, &[ORD]).expect("serve");
+    for expected in [1u8, 3] {
+        let claim = handler
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        assert_eq!(
+            &buf[..claim.len],
+            &[expected],
+            "send order, less the middle"
+        );
+    }
+    assert_eq!(handler.next_claim(&mut buf).expect("next_claim"), None);
+}
+
+#[test]
+fn forgetting_a_claimed_call_wakes_its_outcome_waiter() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    handler
+        .next_claim(&mut [0u8; 8])
+        .expect("next_claim")
+        .expect("waiting");
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_eq!(wakes(&count), 0, "the claimed call is in flight");
+
+    caller.forget(c);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "no outcome will be readable for a forgotten call"
+    );
+}
+
+#[test]
+fn a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let old = caller.command(IFACE, ORD, &[1]).expect("send");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    caller.forget(old);
+
+    let new = caller
+        .command(IFACE, ORD, &[2])
+        .expect("send into the same slot");
+    assert_ne!(new, old, "the slot is reused under a new generation");
+    caller.forget(old);
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the stale correlation withdrew nothing");
+    assert_eq!(&buf[..claim.len], &[2]);
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(caller.ack(new), Some(Ok(())));
+}
+
+#[test]
+fn a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped() {
+    // Sixteen rounds of claim and forget, each call held by its own handler,
+    // then every handler dropped. No other handler serves the member, so a
+    // call returned to the waiting calls would hold its slot for the life of
+    // the runtime.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut buf = [0u8; 8];
+    let mut handlers = Vec::new();
+    for n in 0..Loopback::SLOTS {
+        let c = caller
+            .command(IFACE, ORD, &[u8::try_from(n).expect("small")])
+            .expect("a slot is free");
+        let mut handler = rt.handler();
+        handler.serve(IFACE, &[ORD]).expect("serve");
+        handler
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        caller.forget(c);
+        handlers.push(handler);
+    }
+    assert_eq!(
+        caller.command(IFACE, ORD, &[99]),
+        Err(SendError::Busy),
+        "a claimed call keeps its slot after its forget"
+    );
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Slot, &waker);
+    assert_eq!(wakes(&count), 0, "no slot is free: the waker is stored");
+
+    drop(handlers);
+    assert_eq!(wakes(&count), 1, "the drops reclaimed the slots");
+    for n in 0..Loopback::SLOTS {
+        caller
+            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")])
+            .expect("every withdrawn call's slot is free");
+    }
+    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    let mut later = rt.handler();
+    later.serve(IFACE, &[ORD]).expect("serve");
+    for n in 0..Loopback::SLOTS {
+        let claim = later
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        assert_eq!(
+            &buf[..claim.len],
+            &[100 + u8::try_from(n).expect("small")],
+            "no withdrawn call is presented again"
+        );
+    }
+    assert_eq!(later.next_claim(&mut buf).expect("next_claim"), None);
+}
+
+#[test]
+fn a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter() {
+    // The only withdrawal at which a handler that serves the member can hold
+    // a stored `Claim` waker: while a call it serves is waiting, its
+    // registration is woken at once, so a waiting call's withdrawal has no
+    // such waker to wake.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    first.serve(IFACE, &[ORD]).expect("serve");
+    second.serve(IFACE, &[ORD]).expect("serve");
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    first
+        .next_claim(&mut [0u8; 8])
+        .expect("next_claim")
+        .expect("waiting");
+    let (count, waker) = counting();
+    second.wake_on(Interest::Claim(IFACE), &waker);
+    assert_eq!(wakes(&count), 0, "nothing is waiting: the waker is stored");
+
+    caller.forget(c);
+    drop(first);
+    assert_eq!(
+        wakes(&count),
+        0,
+        "a withdrawal adds no call to claim, so it wakes no claim waiter"
+    );
+    assert_eq!(second.next_claim(&mut [0u8; 8]).expect("next_claim"), None);
 }
 
 #[test]
@@ -2029,8 +2195,9 @@ fn every_wake_is_run_with_the_lock_released() {
     drop(second);
     assert_released(&rx, "a handler's drop");
 
-    // Fill the table, then reclaim a slot both ways: a forget of a settled
-    // call, and the settlement of a forgotten one.
+    // Fill the table, then reclaim a slot three ways: a forget of a settled
+    // call, the settlement of a claimed call that was forgotten, and a
+    // forget that withdraws a waiting call.
     let claim = first
         .next_claim(&mut buf)
         .expect("next_claim")

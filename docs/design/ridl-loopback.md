@@ -240,12 +240,12 @@ aggregate sends each key to the handle that observes it.
 
 What wakes a stored waker:
 
-| Kind      | Woken by                                                                                                                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                               |
-| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, or another caller handle's drop |
-| `Event`   | a raise that queues an occurrence for this source                                                                                                                                                 |
-| `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                          |
+| Kind      | Woken by                                                                                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                                                                              |
+| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, the drop of the handler that held such a call, or another caller handle's drop |
+| `Event`   | a raise that queues an occurrence for this source                                                                                                                                                                                                |
+| `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                                                                         |
 
 A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
 and puts it back, unwoken, when no call the handler now serves is waiting. A
@@ -306,9 +306,11 @@ member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
 wait is the generated async client's deadline, which story E11.21 builds
 (ADR-0023 decision 6). This is the one way a call is presented again, and a call
-is presented once more for each holder dropped. The same `Drop` removes the
-handler's state from the store, its stored `Claim` waker with it, so no later
-send reaches a waker of a handler that is gone.
+is presented once more for each holder dropped. A claim whose call the caller
+forgot is not returned: it is withdrawn, its slot is reclaimed, and no handler
+is woken for it (see "`Caller::forget` releases the caller's interest" below).
+The same `Drop` removes the handler's state from the store, its stored `Claim`
+waker with it, so no later send reaches a waker of a handler that is gone.
 
 **The limit, stated.** This runtime measures no bound: its clock moves only
 under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
@@ -391,6 +393,13 @@ handler has claimed.** What it does depends on where the call is:
 | claimed by a handler, not settled | marked forgotten; its settlement reclaims the slot (ADR-0021 decision 15) |
 | waiting, claimed by no handler    | withdrawn: it leaves the waiting calls, and its slot is reclaimed now     |
 
+A claimed call that the caller forgot, and whose handler is then dropped without
+settling it, is withdrawn at that drop instead of being returned to the waiting
+calls (decision 2 of the
+[pass-1 dispositions on driftsys/ridl#557](https://github.com/driftsys/ridl/pull/557#issuecomment-5848835004)).
+So no forgotten call ever waits again, and no forgotten call holds a slot that
+only a handler which may never come could free.
+
 A claimed call is still settled, because `Handler`'s contract is that every
 claim is settled and a caller losing interest is not the provider's business.
 Without the withdrawal, a call to a member no handler serves is never settled,
@@ -400,11 +409,11 @@ the life of the runtime (decision 1 of the
 with its
 [confirmed details](https://github.com/driftsys/ridl/pull/553#issuecomment-5848618786)).
 **A withdrawn command is never delivered**: no handler is presented it, so a
-caller that gave up on a command gets at-most-once delivery of it. **`forget`
-and the handler side — `serve` and `next_claim` — run under the store's one
-lock**, so a call is either claimed first, and then held until it is settled, or
-withdrawn first, and then never presented. A dropped caller's calls go through
-the same path.
+command whose caller forgot it before any handler claimed it is delivered at
+most once. **`forget` and the handler side — `serve` and `next_claim` — run
+under the store's one lock**, so a call is either claimed first, and then held
+until it is settled, or withdrawn first, and then never presented. A dropped
+caller's calls go through the same path.
 
 The withdrawal is this runtime's behaviour, not a port contract: a transport
 that has already sent a request cannot recall it. The `ridl-rt-conformance` case
@@ -412,25 +421,32 @@ that has already sent a request cannot recall it. The `ridl-rt-conformance` case
 accepts either result — the call withdrawn, or presented and held until settled.
 
 The withdrawal adds nothing to `ridl-rt`'s API. Under the store's lock, the
-store takes the call out of the waiting calls, settles it through
+store takes a waiting call out of the waiting calls, settles it through
 `Table::settle`, and then forgets it through `Table::forget`, which answers
-`Forgotten::Reclaimed` for a settled call. The outcome it settles with is
-discarded with the slot, and no reader can see it in between; it is
-`Transport::Undelivered`, the outcome that describes a call no provider
-received. A withdrawal wakes the call's `Outcome` waiter and every caller's
-`Slot` waiter, as any reclaim does, and no handler's `Claim` waiter. Either way
-the correlation answers `None` from `ack` and `reply` afterwards, which is what
-`Caller::forget` tells a caller to expect. The alternative rejected is removing
-a claimed call's entry outright: it revokes a claim the provider already holds,
-so the provider's `settle` fails and the generated `dispatch` does not count it
-— and, in the shape this crate first had, it left the call's identity in the
-waiting queue with no entry behind it, which made every later `next_claim` on
-that runtime panic. The withdrawal takes the call out of the waiting queue
-before it drops the entry for that reason.
+`Forgotten::Reclaimed` for a settled call. A claimed call the caller forgot is
+already marked in the table, which has no query for the mark, so the loopback
+keeps its own mark on the call's entry; at the handler's drop it settles that
+call through `Table::settle`, which answers `Settled::Reclaimed` for a forgotten
+call. The outcome it settles with is discarded with the slot, and no reader can
+see it in between; it is `Transport::Undelivered`, the outcome that describes a
+call no provider settled. A withdrawal wakes the call's `Outcome` waiter and
+every caller's `Slot` waiter, as any reclaim does, and no handler's `Claim`
+waiter. Either way the correlation answers `None` from `ack` and `reply`
+afterwards, which is what `Caller::forget` tells a caller to expect. The
+alternative rejected is removing a claimed call's entry outright: it revokes a
+claim the provider already holds, so the provider's `settle` fails and the
+generated `dispatch` does not count it — and, in the shape this crate first had,
+it left the call's identity in the waiting queue with no entry behind it, which
+made every later `next_claim` on that runtime panic. The withdrawal takes the
+call out of the waiting queue before it drops the entry for that reason.
 `forgotten_calls_to_an_unserved_member_leave_room_for_another_send`,
 `a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later`,
-`a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement` and
-`a_dropped_callers_unclaimed_calls_are_withdrawn` pin the rule.
+`a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement`,
+`a_dropped_callers_unclaimed_calls_are_withdrawn`,
+`a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order`,
+`a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot`,
+`a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped` and
+`a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter` pin the rule.
 
 ## The two signal extensions are implemented
 

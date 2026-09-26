@@ -8,7 +8,7 @@
 
 use ridl_rt::contract::InterfaceNo;
 use ridl_rt::error::{CallError, Contract};
-use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SettleError};
+use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 
 use crate::{Factory, IFACE, ORD, runtime};
 
@@ -238,7 +238,9 @@ pub fn forget_releases_a_settled_correlation<F: Factory>() {
 /// happens to a call no provider has claimed yet is the runtime's: one may
 /// withdraw it, and one whose transport has already sent the request cannot
 /// recall it, so the call is still presented and settled. The test accepts
-/// either result. Either way the caller is not told the outcome.
+/// either result. Either way the caller is not told the outcome, and a
+/// withdrawn call holds no room: the runtime accepts as many further sends
+/// before `SendError::Busy` as a new runtime does.
 pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
@@ -250,8 +252,32 @@ pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Fact
         assert_eq!(&buf[..claim.len], &[1]);
         rt.settle(claim.id, Ok(&[]))
             .expect("a call that is presented is still settled");
+    } else {
+        let mut fresh = runtime::<F>();
+        fresh.serve(IFACE, &[ORD]).expect("serve");
+        assert_eq!(
+            sends_until_busy(&mut rt),
+            sends_until_busy(&mut fresh),
+            "the withdrawn call gave its room back"
+        );
     }
     assert_eq!(rt.ack(correlation), None, "the caller asked not to be told");
+}
+
+/// The number of commands `caller` accepts before it answers
+/// `SendError::Busy`, counting at most `SENDS_CHECKED`. A runtime that
+/// accepts that many is not checked further: the count is the same for it
+/// with or without the room a withdrawn call would hold.
+fn sends_until_busy<C: Caller>(caller: &mut C) -> usize {
+    const SENDS_CHECKED: usize = 1024;
+    for sent in 0..SENDS_CHECKED {
+        match caller.command(IFACE, ORD, &[2]) {
+            Ok(_) => {}
+            Err(SendError::Busy) => return sent,
+            Err(error) => panic!("a send failed other than busy: {error:?}"),
+        }
+    }
+    SENDS_CHECKED
 }
 
 /// A `forget` between the claim and the settlement does not revoke the
