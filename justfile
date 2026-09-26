@@ -471,10 +471,12 @@ lint:
 #    It compares every file, not only `.md` files, so it also catches anything
 #    else a future mdBook version creates there, not only a missing chapter.
 #
-# The fixture below verifies all three checks: a chapter that includes a file
-# that does not exist, for checks 1 and 2; and a chapter SUMMARY.md names but
-# that has no file, both at the top level and nested in a subdirectory, for
-# check 3.
+# The fixture below verifies all three checks independently: a chapter that
+# includes a file that does not exist, for check 1; a chapter carrying a
+# directive mdBook does not recognise, for check 2 (mdBook logs no `ERROR` for
+# this one, so check 1 cannot also catch it); and a chapter SUMMARY.md names
+# but that has no file, both at the top level and nested in a subdirectory,
+# for check 3.
 #
 # The mdBook guard is deliberate. Making this a `build` dependency makes mdBook
 # a hard requirement for every local build, and a missing binary would otherwise
@@ -533,12 +535,17 @@ book-check root="":
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Three cases:
+    # exports does not reach it. Four cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
-    # 2. A chapter that includes a file that does not exist. The gate has to
-    #    fail and report the logged error (checks 1 and 2).
-    # 3. The book from case 1, with a SUMMARY.md that also names a chapter
+    # 2. A chapter that includes a file that does not exist. mdBook logs an
+    #    `ERROR` line and leaves the directive as literal text; the gate has
+    #    to fail and report the logged error (check 1).
+    # 3. A chapter carrying a directive mdBook does not recognise. mdBook
+    #    leaves it as literal text too, but logs no `ERROR`, so this pins
+    #    check 2 on its own: the gate has to fail and report the surviving
+    #    directive.
+    # 4. The book from case 1, with a SUMMARY.md that also names a chapter
     #    file that does not exist, once at the top level and once nested in a
     #    subdirectory. The gate has to fail, name both files, and leave the
     #    tree unchanged (check 3).
@@ -576,7 +583,30 @@ book-check root="":
             exit 1
         fi
 
-        # Case 3: SUMMARY.md names chapter files that do not exist, one at
+        # Case 3: a chapter carrying a directive mdBook does not recognise.
+        # mdBook logs no `ERROR` for this one, so it pins check 2 on its own.
+        unresolved="$work/unresolved"
+        mkdir -p "$unresolved/docs/book"
+        printf '%s\n' '[book]' 'title = "unresolved"' 'src = "docs/book"' > "$unresolved/book.toml"
+        printf '%s\n' '# Summary' '' '- [Unresolved](unresolved.md)' > "$unresolved/docs/book/SUMMARY.md"
+        printf '%s\n' '# Unresolved' '' '{{{{#nosuchdirective foo}}' > "$unresolved/docs/book/unresolved.md"
+        if "{{just_executable()}}" book-check "$unresolved" >"$run" 2>&1; then
+            echo "book-check: the gate returned 0 over a fixture whose chapter carries a directive mdBook does not recognise:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if grep -q 'mdBook reported the error above' "$run"; then
+            echo "book-check: the gate reported a logged error where mdBook logged none, so this case no longer pins check 2 on its own:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q 'directive survived into the rendered output' "$run"; then
+            echo "book-check: the gate did not report the surviving directive:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 4: SUMMARY.md names chapter files that do not exist, one at
         # the top level and one nested in a subdirectory.
         printf '%s\n' '- [Ghost](ghost.md)' '- [Nested ghost](sub/nested.md)' >> "$book/docs/book/SUMMARY.md"
         if "{{just_executable()}}" book-check "$book" >"$run" 2>&1; then
