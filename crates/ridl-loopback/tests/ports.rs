@@ -57,9 +57,21 @@
 //! `a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handler`,
 //! `a_returned_claim_keeps_its_place_by_send_order`,
 //! `a_dropped_handler_leaves_no_waiter_behind`,
+//! `a_returned_claim_keeps_its_send_order_across_a_reused_slot`,
 //! `a_providers_busy_settlement_reaches_the_caller` (this runtime originates
-//! no `Busy` of its own), `a_waker_is_woken_after_the_lock_is_released` and
+//! no `Transport::Busy` of its own),
+//! `a_waker_is_woken_after_the_lock_is_released` and
 //! `every_wake_is_run_with_the_lock_released`.
+//!
+//! The tests under "The bounded call table" pin this runtime's move onto
+//! `ridl_rt::correlate` (story E11.18, driftsys/ridl#512). The suite gains a
+//! slot and reclaim case in the second half of story E11.20, over the slot
+//! count its factory states. Of these, `the_seventeenth_in_flight_call_is_busy`
+//! names this runtime's own count, `a_refused_send_draws_no_sequence_number`
+//! and `a_slot_registration_while_a_slot_is_free_is_woken_at_once` pin choices
+//! the contract leaves to a runtime, and
+//! `a_dropped_caller_leaves_no_slot_waiter_behind` pins this runtime's
+//! `Drop`.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -70,7 +82,7 @@ use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, Clock, EventSink, EventSource, FixedReader, Handler, Interest, ReadError,
-    SettleError, SignalReader, SignalWriter, Wakeable,
+    SendError, SettleError, SignalReader, SignalWriter, Wakeable,
 };
 use ridl_rt::sample::{Duration, Freshness, Timestamp};
 
@@ -1048,7 +1060,7 @@ fn a_registration_whose_key_already_holds_is_woken_at_once() {
     let handler = rt.handler();
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
 
-    // The call table has no bound, so a slot is always free.
+    // Nothing is in flight, so a slot is free.
     let (slot, slot_waker) = counting();
     caller.wake_on(Interest::Slot, &slot_waker);
     assert_eq!(wakes(&slot), 1, "a slot is free");
@@ -1200,6 +1212,310 @@ fn a_returned_claim_keeps_its_place_by_send_order() {
         &[1],
         "the returned call was sent first, so it is presented first"
     );
+}
+
+#[test]
+fn a_returned_claim_keeps_its_send_order_across_a_reused_slot() {
+    // A reused slot carries a higher generation, so a call sent into it has a
+    // larger correlation than a call sent later into a fresh slot. The order
+    // a returned claim goes back in is the order the calls were sent, not the
+    // order of their correlations.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    let mut buf = [0u8; 8];
+
+    let old = caller.command(IFACE, ORD, &[0]).expect("send");
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    first.settle(claim.id, Ok(&[])).expect("settle");
+    caller.forget(old);
+
+    let reused = caller.command(IFACE, ORD, &[1]).expect("send into slot 0");
+    let fresh = caller.command(IFACE, ORD, &[2]).expect("send into slot 1");
+    assert!(
+        reused.0 > fresh.0,
+        "the reused slot's correlation is the larger one"
+    );
+    first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the call sent first");
+    drop(first);
+
+    let claim = second
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(
+        &buf[..claim.len],
+        &[1],
+        "the returned call was sent first, so it is presented first"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The bounded call table: `Loopback::SLOTS` calls in flight, reclaimed by
+// `forget` (ADR-0021 decision 15, note F-9).
+// ---------------------------------------------------------------------------
+
+/// Sends `Loopback::SLOTS` commands through `caller`, which fills the table.
+fn fill(caller: &mut impl Caller) -> Vec<ridl_rt::port::Correlation> {
+    (0..Loopback::SLOTS)
+        .map(|n| {
+            caller
+                .command(IFACE, ORD, &[u8::try_from(n).expect("small")])
+                .expect("a slot is free")
+        })
+        .collect()
+}
+
+#[test]
+fn the_seventeenth_in_flight_call_is_busy() {
+    assert_eq!(Loopback::SLOTS, 16);
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut other = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let calls = fill(&mut caller);
+
+    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(caller.query(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(
+        other.command(IFACE, ORD, &[99]),
+        Err(SendError::Busy),
+        "the table is the runtime's, shared by every caller"
+    );
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(caller.ack(calls[0]), Some(Ok(())));
+    assert_eq!(
+        caller.command(IFACE, ORD, &[99]),
+        Err(SendError::Busy),
+        "a settled call keeps its slot until it is forgotten"
+    );
+
+    caller.forget(calls[0]);
+    other
+        .command(IFACE, ORD, &[99])
+        .expect("the forget freed a slot");
+    assert_eq!(caller.command(IFACE, ORD, &[100]), Err(SendError::Busy));
+}
+
+#[test]
+fn a_refused_send_draws_no_sequence_number() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let calls = fill(&mut caller);
+    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+
+    let mut last = 0;
+    for _ in &calls {
+        let claim = handler
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        last = claim.envelope.seq;
+        handler.settle(claim.id, Ok(&[])).expect("settle");
+    }
+    caller.forget(calls[0]);
+    caller.command(IFACE, ORD, &[99]).expect("a slot is free");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(
+        claim.envelope.seq,
+        last + 1,
+        "nothing was sent, so no number was used"
+    );
+}
+
+#[test]
+fn a_reclaimed_slots_old_correlation_answers_none() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+
+    let old = caller.query(IFACE, ORD, &[1]).expect("send");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[7])).expect("settle");
+    caller.forget(old);
+
+    let new = caller.query(IFACE, ORD, &[2]).expect("send");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[8, 8])).expect("settle");
+    assert_ne!(new, old, "the slot is reused under a new correlation");
+
+    assert_eq!(caller.reply(old, &mut buf), Ok(None), "the old one is gone");
+    assert_eq!(caller.ack(old), None);
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(old), &waker);
+    assert_eq!(wakes(&count), 1, "no outcome is to come under it");
+
+    caller.forget(old);
+    assert_eq!(
+        caller.reply(new, &mut buf),
+        Ok(Some(Ok(2))),
+        "forgetting the old correlation leaves the new call alone"
+    );
+    assert_eq!(&buf[..2], &[8, 8]);
+}
+
+#[test]
+fn a_slot_registration_is_stored_while_every_slot_is_taken_and_woken_by_a_forget() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let other = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let calls = fill(&mut caller);
+
+    let (mine, my_waker) = counting();
+    let (theirs, their_waker) = counting();
+    caller.wake_on(Interest::Slot, &my_waker);
+    other.wake_on(Interest::Slot, &their_waker);
+    assert_eq!((wakes(&mine), wakes(&theirs)), (0, 0), "no slot is free");
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        (wakes(&mine), wakes(&theirs)),
+        (0, 0),
+        "a settlement frees no slot"
+    );
+
+    caller.forget(calls[0]);
+    assert_eq!(
+        (wakes(&mine), wakes(&theirs)),
+        (1, 1),
+        "a reclaim wakes every caller's slot waiter, in no order"
+    );
+    caller.forget(calls[1]);
+    assert_eq!(
+        (wakes(&mine), wakes(&theirs)),
+        (1, 1),
+        "a woken waiter is cleared; forgetting a call in flight reclaims nothing"
+    );
+}
+
+#[test]
+fn the_settlement_of_a_forgotten_call_wakes_the_slot_waiters() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let calls = fill(&mut caller);
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Slot, &waker);
+
+    caller.forget(calls[0]);
+    assert_eq!(wakes(&count), 0, "the forgotten call still holds its slot");
+    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the provider still sees the forgotten call");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&count), 1, "its settlement reclaims the slot");
+    caller.command(IFACE, ORD, &[99]).expect("the slot is free");
+}
+
+#[test]
+fn a_slot_registration_while_a_slot_is_free_is_woken_at_once() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let calls = fill(&mut caller);
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    caller.forget(calls[0]);
+
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Slot, &waker);
+    assert_eq!(wakes(&count), 1, "one slot is free");
+    caller.command(IFACE, ORD, &[99]).expect("send");
+    caller.wake_on(Interest::Slot, &waker);
+    assert_eq!(wakes(&count), 1, "the table is full again: stored");
+}
+
+#[test]
+fn a_slot_registration_by_the_same_task_is_a_refresh_and_by_another_task_displaces() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let calls = fill(&mut caller);
+
+    let (first, first_waker) = counting();
+    caller.wake_on(Interest::Slot, &first_waker);
+    caller.wake_on(Interest::Slot, &first_waker.clone());
+    assert_eq!(wakes(&first), 0, "a refresh wakes nothing");
+
+    let (second, second_waker) = counting();
+    caller.wake_on(Interest::Slot, &second_waker);
+    assert_eq!(wakes(&first), 1, "another task's waker displaces the first");
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    caller.forget(calls[0]);
+    assert_eq!(
+        (wakes(&first), wakes(&second)),
+        (1, 1),
+        "the reclaim wakes the one stored"
+    );
+}
+
+#[test]
+fn a_dropped_caller_leaves_no_slot_waiter_behind() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let calls = fill(&mut caller);
+
+    let other = rt.caller();
+    let (count, waker) = counting();
+    other.wake_on(Interest::Slot, &waker);
+    assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
+    drop(other);
+    assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    caller.forget(calls[0]);
+    assert_eq!(wakes(&count), 0);
 }
 
 #[test]
@@ -1371,4 +1687,39 @@ fn every_wake_is_run_with_the_lock_released() {
     assert!(first.next_claim(&mut buf).expect("next_claim").is_none());
     drop(second);
     assert_released(&rx, "a handler's drop");
+
+    // Fill the table, then reclaim a slot both ways: a forget of a settled
+    // call, and the settlement of a forgotten one.
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the returned query");
+    first.settle(claim.id, Ok(&[])).expect("settle");
+    let mut sent = Vec::new();
+    while let Ok(c) = caller.command(IFACE, ORD, &[2]) {
+        sent.push(c);
+    }
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the first command");
+    first.settle(claim.id, Ok(&[])).expect("settle");
+
+    let (waker, rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Slot, &waker);
+    caller.forget(sent[0]);
+    assert_released(&rx, "a forget that reclaims a slot");
+
+    caller
+        .command(IFACE, ORD, &[3])
+        .expect("the reclaimed slot");
+    caller.forget(sent[1]);
+    let (waker, rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Slot, &waker);
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the forgotten command");
+    first.settle(claim.id, Ok(&[])).expect("settle");
+    assert_released(&rx, "a settlement that reclaims a slot");
 }

@@ -24,7 +24,7 @@
 //! | [`WriterHandle`]  | `SignalWriter`                                                                | none                           | `Send`        |
 //! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker             | `Send`        |
 //! | [`SinkHandle`]    | `EventSink`                                                                   | none                           | `Send`        |
-//! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome`, kept with each call | `Send`        |
+//! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome`, kept with each call; `Slot`, one waker | `Send`        |
 //! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`, one waker             | `Send`        |
 //!
 //! A handle stores a waker only under a kind of key one of its roles
@@ -32,10 +32,11 @@
 //! change to any key of that kind wakes it (ADR-0021 decision 13). An
 //! `Outcome` waker is per call: it is kept with its call, and no change but
 //! that call's settlement or `forget` wakes it; a displacement by another
-//! task does, as for every kind. A registration under any other kind is woken at
-//! once, because nothing that handle could read changes under it, and a
-//! stored waker would never be woken. `Slot` is woken at once too, and never
-//! stored, because the call table has no bound and a slot is always free.
+//! task does, as for every kind. A caller stores one `Slot` waker, woken at
+//! once while a slot of the call table is free, and otherwise by the next
+//! reclaim of a slot, which wakes every caller's `Slot` waker. A registration
+//! under any other kind is woken at once, because nothing that handle could
+//! read changes under it, and a stored waker would never be woken.
 //!
 //! Every method on the reader handle takes `&self`, so several threads may
 //! read one store at once; every other handle carries a trait with a
@@ -310,7 +311,7 @@ impl Wakeable for SourceHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Event(_) => locked(&self.shared, |store, wake| {
-                store.wait_event(self.id, waker, wake);
+                store.wait_event(self.id, what, waker, wake);
             }),
             Interest::Outcome(_) | Interest::Slot | Interest::Claim(_) => wake_at_once(waker),
         }
@@ -379,24 +380,51 @@ impl Wakeable for SinkHandle {
 /// is the caller instance (ADR-0021 decision 5, and driftsys/ridl#308's own
 /// report), so every call this caller sends draws from one sequence. That is
 /// what keeps two callers on one provider from colliding.
+///
+/// The call table is the runtime's, shared by every caller: with
+/// [`Loopback::SLOTS`](crate::Loopback::SLOTS) calls sent and not forgotten,
+/// a send answers [`SendError::Busy`] and draws no sequence number, because
+/// nothing was sent.
 pub struct CallerHandle {
     shared: Shared,
     catalog: CatalogRef,
+    id: usize,
     next_seq: u64,
 }
 
 impl CallerHandle {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
+        let id = lock(&shared).open_caller();
         CallerHandle {
             shared,
             catalog,
+            id,
             next_seq: 0,
         }
     }
 
-    fn take_seq(&mut self) -> u64 {
-        self.next_seq += 1;
-        self.next_seq
+    /// Sends one call. The sequence number is drawn only when the table
+    /// admits the call.
+    fn send(
+        &mut self,
+        kind: CallKind,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        args: &[u8],
+    ) -> Result<Correlation, SendError> {
+        let seq = self.next_seq + 1;
+        let c = locked(&self.shared, |store, wake| {
+            store.send(kind, iface, ord, args, seq, wake)
+        })?;
+        self.next_seq = seq;
+        Ok(c)
+    }
+}
+
+/// A dropped caller's `Slot` waker leaves the store. Its calls stay.
+impl Drop for CallerHandle {
+    fn drop(&mut self) {
+        lock(&self.shared).close_caller(self.id);
     }
 }
 
@@ -415,16 +443,19 @@ impl Clock for CallerHandle {
 }
 
 /// Stores one `Outcome` waker per call, kept with the call and woken by its
-/// settlement, its `forget`, or a displacement by another task. `Slot` is
-/// woken at once, because the call table has no bound and a slot is always
-/// free.
+/// settlement, its `forget`, or a displacement by another task. Stores one
+/// `Slot` waker, woken at once while a slot is free and otherwise by the next
+/// reclaim.
 impl Wakeable for CallerHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Outcome(c) => locked(&self.shared, |store, wake| {
                 store.wait_outcome(c, waker, wake);
             }),
-            Interest::Slot | Interest::Event(_) | Interest::Claim(_) => wake_at_once(waker),
+            Interest::Slot => locked(&self.shared, |store, wake| {
+                store.wait_slot(self.id, waker, wake);
+            }),
+            Interest::Event(_) | Interest::Claim(_) => wake_at_once(waker),
         }
     }
 }
@@ -436,10 +467,7 @@ impl Caller for CallerHandle {
         ord: Ordinal,
         args: &[u8],
     ) -> Result<Correlation, SendError> {
-        let seq = self.take_seq();
-        Ok(locked(&self.shared, |store, wake| {
-            store.send(CallKind::Command, iface, ord, args, seq, wake)
-        }))
+        self.send(CallKind::Command, iface, ord, args)
     }
 
     fn query(
@@ -448,10 +476,7 @@ impl Caller for CallerHandle {
         ord: Ordinal,
         args: &[u8],
     ) -> Result<Correlation, SendError> {
-        let seq = self.take_seq();
-        Ok(locked(&self.shared, |store, wake| {
-            store.send(CallKind::Query, iface, ord, args, seq, wake)
-        }))
+        self.send(CallKind::Query, iface, ord, args)
     }
 
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
@@ -569,7 +594,7 @@ impl Wakeable for HandlerHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Claim(_) => locked(&self.shared, |store, wake| {
-                store.wait_claim(self.id, waker, wake);
+                store.wait_claim(self.id, what, waker, wake);
             }),
             Interest::Outcome(_) | Interest::Slot | Interest::Event(_) => wake_at_once(waker),
         }
