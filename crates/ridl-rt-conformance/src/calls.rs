@@ -238,9 +238,9 @@ pub fn forget_releases_a_settled_correlation<F: Factory>() {
 /// happens to a call no provider has claimed yet is the runtime's: one may
 /// withdraw it, and one whose transport has already sent the request cannot
 /// recall it, so the call is still presented and settled. The test accepts
-/// either result. Either way the caller is not told the outcome, and a
-/// withdrawn call holds no room: the runtime accepts as many further sends
-/// before `SendError::Busy` as a new runtime does.
+/// either result. Either way the caller is not told the outcome, and once
+/// the call is withdrawn or settled it holds no slot: the runtime accepts
+/// [`Factory::SLOTS`] further sends before `SendError::Busy`.
 pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
@@ -248,36 +248,126 @@ pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Fact
     rt.forget(correlation);
 
     let mut buf = [0u8; 8];
-    if let Some(claim) = rt.next_claim(&mut buf).expect("next_claim") {
+    let result = if let Some(claim) = rt.next_claim(&mut buf).expect("next_claim") {
         assert_eq!(&buf[..claim.len], &[1]);
         rt.settle(claim.id, Ok(&[]))
             .expect("a call that is presented is still settled");
+        "held until settled"
     } else {
-        let mut fresh = runtime::<F>();
-        fresh.serve(IFACE, &[ORD]).expect("serve");
-        assert_eq!(
-            sends_until_busy(&mut rt),
-            sends_until_busy(&mut fresh),
-            "the withdrawn call gave its room back"
-        );
-    }
+        "withdrawn"
+    };
     assert_eq!(rt.ack(correlation), None, "the caller asked not to be told");
+    assert_eq!(
+        sends_until_busy::<F>(&mut rt),
+        F::SLOTS,
+        "the forgotten call, {result}, gave its slot back"
+    );
 }
 
 /// The number of commands `caller` accepts before it answers
-/// `SendError::Busy`, counting at most `SENDS_CHECKED`. A runtime that
-/// accepts that many is not checked further: the count is the same for it
-/// with or without the room a withdrawn call would hold.
-fn sends_until_busy<C: Caller>(caller: &mut C) -> usize {
-    const SENDS_CHECKED: usize = 1024;
-    for sent in 0..SENDS_CHECKED {
+/// `SendError::Busy`, counting at most one more than [`Factory::SLOTS`].
+fn sends_until_busy<F: Factory>(caller: &mut impl Caller) -> usize {
+    for sent in 0..=F::SLOTS {
         match caller.command(IFACE, ORD, &[2]) {
             Ok(_) => {}
             Err(SendError::Busy) => return sent,
             Err(error) => panic!("a send failed other than busy: {error:?}"),
         }
     }
-    SENDS_CHECKED
+    F::SLOTS + 1
+}
+
+/// The call table is the runtime's, shared by every caller on it: with
+/// [`Factory::SLOTS`] calls held, whichever callers sent them, a send by any
+/// caller is refused with `SendError::Busy`. Reading an outcome does not
+/// free a slot; forgetting a settled call does, and whichever caller sends
+/// next takes it (ADR-0021 decision 15).
+pub fn a_send_with_every_slot_taken_is_busy_for_every_caller<F: Factory>() {
+    assert!(F::SLOTS > 0, "a runtime holds at least one call");
+    let mut rt = runtime::<F>();
+    let mut second = F::caller(&rt);
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let mut buf = [0u8; 8];
+
+    // The two callers take turns, so each holds part of the table.
+    let mut mine = Vec::new();
+    let mut theirs = Vec::new();
+    for n in 0..F::SLOTS {
+        if n % 2 == 0 {
+            mine.push(rt.command(IFACE, ORD, &[1]).expect("a slot is free"));
+        } else {
+            theirs.push(second.command(IFACE, ORD, &[1]).expect("a slot is free"));
+        }
+        let claim = rt
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("the call just sent");
+        rt.settle(claim.id, Ok(&[])).expect("settle");
+    }
+
+    assert_eq!(rt.command(IFACE, ORD, &[2]), Err(SendError::Busy));
+    assert_eq!(rt.query(IFACE, ORD, &[2]), Err(SendError::Busy));
+    assert_eq!(
+        second.command(IFACE, ORD, &[2]),
+        Err(SendError::Busy),
+        "the table is the runtime's, shared by every caller"
+    );
+
+    for c in &mine {
+        assert_eq!(rt.ack(*c), Some(Ok(())));
+    }
+    for c in &theirs {
+        assert_eq!(second.ack(*c), Some(Ok(())));
+    }
+    assert_eq!(
+        second.command(IFACE, ORD, &[2]),
+        Err(SendError::Busy),
+        "reading an outcome frees no slot"
+    );
+
+    rt.forget(mine[0]);
+    second
+        .command(IFACE, ORD, &[3])
+        .expect("the slot the first caller's forget freed is the second caller's to take");
+    assert_eq!(
+        rt.command(IFACE, ORD, &[4]),
+        Err(SendError::Busy),
+        "and the table is full again"
+    );
+}
+
+/// A slot reclaimed and taken by a new call does not answer to the
+/// correlation it had before: the old correlation reads no outcome, not the
+/// new call's, and forgetting it again leaves the new call alone. With every
+/// other slot held, the new call can only take the slot that was reclaimed.
+pub fn a_reclaimed_slots_old_correlation_answers_none<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let old = crate::fill::<F>(&mut rt)[0];
+    rt.forget(old);
+
+    let new = rt.query(IFACE, ORD, &[2]).expect("the reclaimed slot");
+    assert_ne!(new, old, "the slot is taken under a new correlation");
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the new call");
+    rt.settle(claim.id, Ok(&[8, 8])).expect("settle");
+
+    assert_eq!(rt.ack(old), None, "the old correlation has no outcome");
+    assert_eq!(
+        rt.reply(old, &mut buf),
+        Ok(None),
+        "and does not read the new call's reply"
+    );
+    rt.forget(old);
+    assert_eq!(
+        rt.reply(new, &mut buf),
+        Ok(Some(Ok(2))),
+        "forgetting the old correlation again leaves the new call alone"
+    );
+    assert_eq!(&buf[..2], &[8, 8]);
 }
 
 /// A `forget` between the claim and the settlement does not revoke the

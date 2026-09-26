@@ -4,9 +4,10 @@
 //! [`ridl_rt::port`](https://docs.rs/ridl-rt) states a runtime does behind a
 //! port. The functions are generic over a [`Factory`], the one thing a runtime
 //! crate writes to run them: how to build a runtime, how to get a second
-//! handle of three port roles on it, and two hooks the port traits do not
-//! offer. A runtime runs the whole suite from its own test suite with the
-//! [`suite!`] macro, which writes one `#[test]` per function:
+//! handle of three port roles on it, the size of its call table
+//! ([`Factory::SLOTS`]), and two hooks the port traits do not offer. A
+//! runtime runs the whole suite from its own test suite with the [`suite!`]
+//! macro, which writes one `#[test]` per function:
 //!
 //! ```ignore
 //! struct MyFactory;
@@ -15,9 +16,9 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, and those of the two
-//! // signal extensions this runtime implements.
-//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent);
+//! // Every test of the ports every runtime presents, and those of the three
+//! // extensions this runtime implements.
+//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable);
 //! ```
 //!
 //! `ridl-loopback` is the first runtime to run it
@@ -55,15 +56,38 @@
 //! - **The threading model.** ADR-0021 decision 12 holds a runtime whose
 //!   handles are used from more than one thread to `Send` and `Sync` bounds,
 //!   and a single-threaded runtime to neither, so no test here moves a handle
-//!   to another thread.
+//!   to another thread. The one test that runs on a thread of its own,
+//!   `wakeable::every_wake_runs_with_the_runtime_lock_released`, builds its
+//!   runtime on that thread.
+//! - **A wake the contract allows but does not require.** A runtime may wake
+//!   a waiter spuriously, for a change that is not its key's, so no test
+//!   asserts that a change leaves a waker unwoken; the one exception is a
+//!   refresh, which the contract says wakes nothing. Whether a registration
+//!   whose key already holds is woken at once is the runtime's too: the task
+//!   reads the port after it registers, and finds the change either way. The
+//!   tests assume a change made through a port is visible, and its waker
+//!   woken, before that port call returns, on the thread that made it.
+//! - **Which serving handlers a call wakes.** Each source subscribed to an
+//!   occurrence is woken by it; a call is presented to one handler, and the
+//!   suite asserts only that a handler serving the member is woken.
+//! - **What a forget does to a call no handler has claimed.** A runtime may
+//!   withdraw it, as `ridl-loopback` does, or hold it until it is presented
+//!   and settled, because a transport that has already sent a request cannot
+//!   recall it. The suite accepts either, and asserts only that the call's
+//!   slot is back once it is withdrawn or settled. It does not assert when a
+//!   forgotten call that a handler has claimed gives its slot back, only
+//!   that it is back once the call is settled.
+//! - **The drop of a handle.** No test drops a handle to observe the
+//!   effect: what becomes of a dropped handler's claims or a dropped
+//!   caller's calls, and of their waiters, is not tested here.
 //! - **A runtime's own API beyond the factory**, such as how it hands out all
 //!   of its role handles at once (`Loopback::split`) or reports a handler's
 //!   served set (`HandlerHandle::served`).
 
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::port::{
-    Attached, Caller, Changed, Clock, EventSink, EventSource, Handler, RawSample, SignalReader,
-    SignalWriter,
+    Attached, Caller, Changed, Clock, Correlation, EventSink, EventSource, Handler, RawSample,
+    SignalReader, SignalWriter,
 };
 use ridl_rt::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
 
@@ -74,6 +98,7 @@ pub mod coherent;
 pub mod events;
 pub mod scannable;
 pub mod signals;
+pub mod wakeable;
 
 /// What the suite needs from a runtime beyond its port traits.
 ///
@@ -88,8 +113,10 @@ pub trait Factory {
     /// handle, one the runtime offers or one its test crate writes over the
     /// role handles.
     ///
-    /// The two signal extensions are not in this bound, because a runtime
-    /// may omit them; the tests of each ask for it where they need it.
+    /// The three extensions — the two signal extensions and `Wakeable` — are
+    /// not in this bound, because a runtime may omit them; the tests of each
+    /// ask for it where they need it, on this type and on the role handles
+    /// below.
     type Runtime: Attached
         + Clock
         + SignalReader
@@ -109,6 +136,20 @@ pub trait Factory {
     /// A second handler on a runtime, with its own served set and its own
     /// claims.
     type Handler: Handler;
+
+    /// The number of calls a runtime holds at once: the size of its call
+    /// table. It counts the calls sent through the runtime and through every
+    /// caller [`caller`](Factory::caller) makes on it, because the table is
+    /// the runtime's and not a caller's. A call holds its slot from its send
+    /// until it is reclaimed by [`Caller::forget`], at once for a settled
+    /// call and at the settlement for a call in flight (ADR-0021 decision
+    /// 15), and a send with every slot held is refused with
+    /// [`SendError::Busy`](ridl_rt::port::SendError::Busy). At least 1.
+    ///
+    /// The tests fill the table by sending this many calls, so a runtime
+    /// whose bound is large runs them more slowly, and one with no bound
+    /// cannot run them.
+    const SLOTS: usize;
 
     /// A new runtime attached to `catalog`, with nothing published, raised or
     /// sent.
@@ -146,12 +187,16 @@ pub trait Factory {
 /// Writes one `#[test]` for each test of the suite, over the [`Factory`]
 /// named first.
 ///
-/// `suite!(F)` writes the tests of the ports every runtime presents.
-/// `suite!(F; scannable)`, `suite!(F; coherent)` and
-/// `suite!(F; scannable, coherent)` add the tests of the signal extensions
-/// named, each of which requires `F::Runtime` to implement it. Each test is
-/// named after the function it calls, so a failure names the contract it
-/// breaks.
+/// `suite!(F)` writes the tests of the ports every runtime presents. Naming
+/// an extension after a semicolon adds its tests: `scannable` and
+/// `coherent`, the two signal extensions, and `wakeable`, in any
+/// combination, as in `suite!(F; scannable, coherent, wakeable)`. Each
+/// requires what that extension's tests ask for: `scannable` and `coherent`
+/// that `F::Runtime` implements the extension named, and `wakeable` that
+/// `F::Runtime` and the three role handles `F` makes implement `Wakeable`,
+/// and that `F` and those handles are `'static`, because one test runs on a
+/// thread of its own. Each test is named after the function it calls, so a
+/// failure names the contract it breaks.
 #[macro_export]
 macro_rules! suite {
     ($factory:ty) => {
@@ -186,6 +231,8 @@ macro_rules! suite {
             calls::a_short_buffer_leaves_the_claim_for_the_next_call,
             calls::forget_releases_a_settled_correlation,
             calls::forget_before_the_claim_is_presented_withdraws_or_leaves_the_call,
+            calls::a_send_with_every_slot_taken_is_busy_for_every_caller,
+            calls::a_reclaimed_slots_old_correlation_answers_none,
             calls::forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid,
             calls::a_claim_that_was_never_presented_cannot_be_settled,
             calls::an_injected_settle_failure_is_not_spent_on_an_unknown_claim,
@@ -209,6 +256,18 @@ macro_rules! suite {
         $crate::suite!(@tests $factory;
             coherent::a_coherent_read_answers_every_ordinal_from_one_publication,
             coherent::a_coherent_read_reports_a_short_output_and_a_short_sample_slice,
+        );
+    };
+    (@wakeable $factory:ty) => {
+        $crate::suite!(@tests $factory;
+            wakeable::an_outcome_waker_is_kept_with_its_call_and_woken_once_by_the_settlement,
+            wakeable::every_slot_waker_is_woken_by_a_reclaim_and_the_send_that_follows_succeeds,
+            wakeable::every_subscribed_source_is_woken_once_by_a_raise,
+            wakeable::a_call_to_a_served_member_wakes_the_handler_once,
+            wakeable::another_tasks_registration_displaces_the_stored_waker_and_wakes_it,
+            wakeable::the_same_tasks_registration_is_a_refresh_that_wakes_nothing,
+            wakeable::one_waker_per_kind_is_woken_by_a_change_on_any_interface_of_that_kind,
+            wakeable::every_wake_runs_with_the_runtime_lock_released,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
@@ -241,6 +300,25 @@ fn catalog() -> CatalogRef {
 
 fn runtime<F: Factory>() -> F::Runtime {
     F::runtime(catalog())
+}
+
+/// Takes every slot of `rt`'s call table: sends [`Factory::SLOTS`] commands
+/// through `rt`, and has `rt` claim and settle each one as it is sent, so
+/// every slot holds a settled call that nobody has forgotten. Returns the
+/// correlations in send order. `rt` must serve `IFACE`/`ORD` already.
+fn fill<F: Factory>(rt: &mut F::Runtime) -> Vec<Correlation> {
+    let mut buf = [0u8; 8];
+    (0..F::SLOTS)
+        .map(|_| {
+            let c = rt.command(IFACE, ORD, &[1]).expect("a slot is free");
+            let claim = rt
+                .next_claim(&mut buf)
+                .expect("next_claim")
+                .expect("the call just sent");
+            rt.settle(claim.id, Ok(&[])).expect("settle");
+            c
+        })
+        .collect()
 }
 
 /// `start` moved forward by `by`, for a test that compares a timestamp with
@@ -280,6 +358,7 @@ mod tests {
         Base,
         Scannable,
         Coherent,
+        Wakeable,
     }
 
     /// Every public function of a test module: its path under the crate, and
@@ -293,6 +372,7 @@ mod tests {
             ("events", include_str!("events.rs")),
             ("scannable", include_str!("scannable.rs")),
             ("signals", include_str!("signals.rs")),
+            ("wakeable", include_str!("wakeable.rs")),
         ];
         let mut found = Vec::new();
         for (module, source) in modules {
@@ -302,13 +382,19 @@ mod tests {
                 // The signature runs to the body's opening brace, and holds
                 // the where clause that asks for an extension.
                 let signature = rest.split('{').next().expect("a function body");
-                let scannable = signature.contains("ScannableSignals");
-                let coherent = signature.contains("CoherentSignals");
-                let arm = match (scannable, coherent) {
-                    (false, false) => Arm::Base,
-                    (true, false) => Arm::Scannable,
-                    (false, true) => Arm::Coherent,
-                    (true, true) => panic!("`{module}::{name}` asks for both extensions"),
+                let asked: Vec<Arm> = [
+                    ("ScannableSignals", Arm::Scannable),
+                    ("CoherentSignals", Arm::Coherent),
+                    ("Wakeable", Arm::Wakeable),
+                ]
+                .into_iter()
+                .filter(|(extension, _)| signature.contains(extension))
+                .map(|(_, arm)| arm)
+                .collect();
+                let arm = match asked[..] {
+                    [] => Arm::Base,
+                    [arm] => arm,
+                    _ => panic!("`{module}::{name}` asks for more than one extension"),
                 };
                 found.push((format!("{module}::{name}"), arm));
             }
@@ -317,7 +403,7 @@ mod tests {
     }
 
     /// The text of each arm of `suite!` that lists tests.
-    fn macro_arms() -> [(Arm, &'static str); 3] {
+    fn macro_arms() -> [(Arm, &'static str); 4] {
         let lib = include_str!("lib.rs");
         let between = |from: &str, to: &str| {
             let start = lib.find(from).expect("the arm's opening") + from.len();
@@ -332,7 +418,11 @@ mod tests {
             ),
             (
                 Arm::Coherent,
-                between("(@coherent $factory:ty) => {", "(@tests $factory:ty"),
+                between("(@coherent $factory:ty) => {", "(@wakeable"),
+            ),
+            (
+                Arm::Wakeable,
+                between("(@wakeable $factory:ty) => {", "(@tests $factory:ty"),
             ),
         ]
     }
