@@ -633,13 +633,16 @@ diag_codes! {
         /// names are distinct in source and only their projections collide.
         /// Scoped to the members of one interface, the parameters of one
         /// interaction (decision 4), the fields of one struct, which joined
-        /// in the commit where E9.8 started projecting them onto proto3, and
-        /// the arms of one union, which joined with the ADR-0016 amendment.
-        /// The first three namespaces are checked under `snake_case` alone;
-        /// a union's arms are checked under `snake_case` and `camel_case`
-        /// both, because a union arm reaches both namespaces and the two
-        /// collision sets are incomparable. The message names the transform
-        /// that collided. Emitted per-package by the checker (E9.7).
+        /// in the commit where E9.8 started projecting them onto proto3, the
+        /// arms of one union, which joined with the ADR-0016 amendment of
+        /// 2026-09-20, and the values of one enum, which joined with the
+        /// amendment of 2026-09-26. The first three namespaces are checked
+        /// under `snake_case` alone; a union's arms are checked under
+        /// `snake_case` and `camel_case` both, because a union arm reaches
+        /// both namespaces and the two collision sets are incomparable; an
+        /// enum's values are checked under `pascal_case` alone, because its
+        /// collision set contains `snake_case`'s. The message names the
+        /// transform that collided. Emitted per-package by the checker (E9.7).
         RIDL_149 = "RIDL-149", Error,
             "two names in one scope collide after a pinned name transform";
 

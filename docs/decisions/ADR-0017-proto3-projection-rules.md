@@ -131,15 +131,26 @@ distinct reachable cases.
    RIDL-149's existing message on four lines of one corpus snapshot. Enum value
    names still rest on decision 4's backend check; that half is unchanged.
 
+   **Amended 2026-09-26 by driftsys/ridl#506.** The enum-value half is done
+   within one enum. RIDL-149 now covers an enum's values, keyed on `pascal_case`
+   alone — the Rust backend's variant spelling since the same change. Proto's
+   prefixed value is `snake_case` upper-cased, and every pair that collides
+   under `snake_case` collides under `pascal_case`, so within one enum the one
+   key covers this backend as well. Proto's namespace is wider than one enum:
+   `enum A_B { C }` beside `enum A { B_C }` both give `A_B_C`, and a declared
+   `UNSPECIFIED` value in an enum with no zero meets the synthesized
+   `<PREFIX>_UNSPECIFIED`. Those stay with decision 4's backend check, which is
+   unchanged.
+
 ## Alternatives considered
 
-| Candidate                                                       | Verdict                                                                     | Reason                                                                                                                                                                                                                           |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A wrapper message per named scalar, making every ref importable | rejected                                                                    | +22 % on a `double` and +100 % on a small varint, and proto3 gives every message-typed field explicit presence, realising absence for fields that never declared `?` — the thing ADR-0013 decision 7 reserves for a declared `?` |
-| Mapping `ridl.std` onto the protobuf well-known types           | rejected                                                                    | `Duration` and `Timestamp` are seconds-and-nanos messages while the typl declarations are an `ms` float and an integer, so the mapping changes the wire encoding                                                                 |
-| Refusing every cross-package reference in v0.1                  | rejected                                                                    | the repository's own corpus is multi-package, so the backend would refuse real source                                                                                                                                            |
-| An options extension carrying constraints structurally          | deferred                                                                    | serves a consumer that does not exist; reopened by a consumer that must validate without the IR (decision 3)                                                                                                                     |
-| Extending RIDL-149 to enum values and union arms                | union arms taken 2026-09-20 (driftsys/ridl#451); enum values still deferred | the collision is a property of one target's namespace, and the extension carries a churn measurement of its own (decisions 4 and 5) — for union arms that churn turned out to be one word on four snapshot lines                 |
+| Candidate                                                       | Verdict                                                                                                            | Reason                                                                                                                                                                                                                           |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A wrapper message per named scalar, making every ref importable | rejected                                                                                                           | +22 % on a `double` and +100 % on a small varint, and proto3 gives every message-typed field explicit presence, realising absence for fields that never declared `?` — the thing ADR-0013 decision 7 reserves for a declared `?` |
+| Mapping `ridl.std` onto the protobuf well-known types           | rejected                                                                                                           | `Duration` and `Timestamp` are seconds-and-nanos messages while the typl declarations are an `ms` float and an integer, so the mapping changes the wire encoding                                                                 |
+| Refusing every cross-package reference in v0.1                  | rejected                                                                                                           | the repository's own corpus is multi-package, so the backend would refuse real source                                                                                                                                            |
+| An options extension carrying constraints structurally          | deferred                                                                                                           | serves a consumer that does not exist; reopened by a consumer that must validate without the IR (decision 3)                                                                                                                     |
+| Extending RIDL-149 to enum values and union arms                | union arms taken 2026-09-20 (driftsys/ridl#451); enum values taken 2026-09-26 (driftsys/ridl#506), within one enum | the collision is a property of one target's namespace, and the extension carries a churn measurement of its own (decisions 4 and 5) — for union arms that churn turned out to be one word on four snapshot lines                 |
 
 ## Consequences
 
