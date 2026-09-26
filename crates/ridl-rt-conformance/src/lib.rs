@@ -32,7 +32,8 @@
 //! This is the one list of what the suite does not test. A runtime that
 //! wants one of these pinned keeps its own test of it;
 //! `crates/ridl-loopback/tests/ports.rs` names the loopback's tests and the
-//! item of this list each one falls under.
+//! reason each one stays, which is an item of this list or a choice that is
+//! the loopback's alone.
 //!
 //! - **What the port contract leaves to a runtime.** Where the clock starts,
 //!   what [`Factory::advance`] does with a negative duration, and which error

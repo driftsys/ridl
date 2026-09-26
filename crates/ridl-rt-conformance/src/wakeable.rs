@@ -63,11 +63,12 @@ fn wakes(count: &Count) -> usize {
 /// waker once, after which the outcome reads; the waker is cleared when
 /// woken, so neither another task's registration on the settled call nor a
 /// later settlement wakes it again. A waker registered before a handler
-/// claims the call is kept across the claim and woken by the settlement.
+/// claims the call has been woken once by the time the settlement returns.
 ///
-/// Whether a task that registers after the settlement is woken at once is
-/// the runtime's: the read that follows its registration finds the outcome
-/// either way, so the late registration's own wake is not asserted.
+/// A task that registers after the settlement finds the outcome on the read
+/// that follows its registration, so the registration must leave the outcome
+/// readable. Whether that task is also woken at once is the runtime's, so
+/// the late registration's own wake is not asserted.
 ///
 /// This is the test note F-14 names the mutation for: a runtime whose
 /// settlement does not wake the waiter fails it.
@@ -118,10 +119,15 @@ where
     let (_, late_waker) = task();
     rt.wake_on(Interest::Outcome(first), &late_waker);
     assert_eq!(wakes(&a), 1, "a woken waker is cleared");
+    assert_eq!(
+        rt.ack(first),
+        Some(Ok(())),
+        "a registration after the settlement leaves the outcome readable"
+    );
 
     // A third call, registered on before it is claimed. The claim is a
-    // change a runtime may wake on spuriously, so the waker is checked only
-    // once the settlement is made.
+    // change a runtime may wake on spuriously, so nothing is checked between
+    // the claim and the settlement.
     let third = rt.command(IFACE, ORD, &[3]).expect("send");
     let (c, c_waker) = task();
     rt.wake_on(Interest::Outcome(third), &c_waker);
@@ -134,7 +140,7 @@ where
     assert_eq!(
         wakes(&c),
         1,
-        "a waker registered before the claim is woken once by the settlement"
+        "a waker registered before the claim has been woken once when the settlement returns"
     );
     assert_eq!(rt.ack(third), Some(Ok(())));
     assert_eq!(
