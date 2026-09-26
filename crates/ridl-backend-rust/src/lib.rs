@@ -768,7 +768,8 @@ fn snake_of(name: Option<&v1::Spellings>) -> &str {
 /// The pinned `pascal_case` of a declared name (ADR-0016, 2026-09-26
 /// amendment), which spells an enum variant. A model written by a toolchain
 /// older than `Spellings.pascal` carries it empty, and the field's contract
-/// is that an empty value is `camel_case(snake)` (design §4), so that is
+/// is that an empty value is `camel_case(snake)`
+/// (`docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §4), so that is
 /// what this returns for one.
 pub(crate) fn pascal_of(name: Option<&v1::Spellings>) -> String {
     match name {
