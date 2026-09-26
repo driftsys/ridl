@@ -65,7 +65,7 @@ use ridl_ir::codegen::v1;
 
 use crate::{
     Ctx, GenerateError, ScalarBacking, check_flatbuffers_bound, class_backing, declared, ident,
-    model_type_tokens, tuple_name, type_path, vis_tokens,
+    model_type_tokens, pascal_of, tuple_name, type_path, vis_tokens,
 };
 
 /// The alignment every buffer this codec writes is finished at: eight, the
@@ -957,7 +957,9 @@ impl<'a> Codec<'a> {
                     prim: Prim::I64,
                     repr: Repr::Enum {
                         name: owner.clone(),
-                        first: declared(first.name.as_ref()).to_string(),
+                        // The variant `emit_enum` declared, which is the
+                        // pinned `pascal_case` spelling.
+                        first: pascal_of(first.name.as_ref()),
                     },
                 }))
             }
@@ -2414,11 +2416,14 @@ impl<'a> Codec<'a> {
 
                 type View<'a> = #view<'a>;
 
+                // The concrete view type, not `Self::View`: an enum value or
+                // a union arm named `View` would make that path ambiguous
+                // (rustc `ambiguous_associated_items`, deny by default).
                 fn encode<'o>(
                     &self,
                     out: &'o mut [u8],
                 ) -> ::core::result::Result<
-                    ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+                    ::ridl_rt::payload::Encoded<'o, #view<'o>>,
                     ::ridl_rt::payload::EncodeError,
                 > {
                     let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -2434,7 +2439,7 @@ impl<'a> Codec<'a> {
 
                 fn verify(
                     buf: &[u8],
-                ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+                ) -> ::core::result::Result<#view<'_>, ::ridl_rt::payload::VerifyError> {
                     if buf.len()
                         > <Self as ::ridl_rt::payload::Payload<
                             ::ridl_rt::encoding::FlatBuffers,

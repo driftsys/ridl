@@ -35,7 +35,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "engaged",
               "snake": "engaged",
               "camel": "Engaged",
-              "screaming": "ENGAGED"
+              "screaming": "ENGAGED",
+              "pascal": "Engaged"
             },
             "kind": "KIND_SIGNAL",
             "row": 0,
@@ -74,7 +75,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "target",
               "snake": "target",
               "camel": "Target",
-              "screaming": "TARGET"
+              "screaming": "TARGET",
+              "pascal": "Target"
             },
             "kind": "KIND_SIGNAL",
             "row": 1,
@@ -113,7 +115,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "setLever",
               "snake": "set_lever",
               "camel": "SetLever",
-              "screaming": "SET_LEVER"
+              "screaming": "SET_LEVER",
+              "pascal": "SetLever"
             },
             "kind": "KIND_COMMAND",
             "row": 2,
@@ -131,7 +134,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                     "declared": "cmd",
                     "snake": "cmd",
                     "camel": "Cmd",
-                    "screaming": "CMD"
+                    "screaming": "CMD",
+                    "pascal": "Cmd"
                   },
                   "type": {
                     "optional": false,
@@ -165,7 +169,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "declared": "CruiseControl",
         "snake": "cruise_control",
         "camel": "CruiseControl",
-        "screaming": "CRUISE_CONTROL"
+        "screaming": "CRUISE_CONTROL",
+        "pascal": "CruiseControl"
       }
     },
     {
@@ -182,7 +187,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "active",
               "snake": "active",
               "camel": "Active",
-              "screaming": "ACTIVE"
+              "screaming": "ACTIVE",
+              "pascal": "Active"
             },
             "kind": "KIND_SIGNAL",
             "row": 0,
@@ -219,7 +225,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "declared": "LaneAssist",
         "snake": "lane_assist",
         "camel": "LaneAssist",
-        "screaming": "LANE_ASSIST"
+        "screaming": "LANE_ASSIST",
+        "pascal": "LaneAssist"
       }
     }
   ],
@@ -295,7 +302,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "declared": "Speed",
         "snake": "speed",
         "camel": "Speed",
-        "screaming": "SPEED"
+        "screaming": "SPEED",
+        "pascal": "Speed"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -333,7 +341,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "declared": "Engaged",
         "snake": "engaged",
         "camel": "Engaged",
-        "screaming": "ENGAGED"
+        "screaming": "ENGAGED",
+        "pascal": "Engaged"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -364,7 +373,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "declared": "LeverCmd",
         "snake": "lever_cmd",
         "camel": "LeverCmd",
-        "screaming": "LEVER_CMD"
+        "screaming": "LEVER_CMD",
+        "pascal": "LeverCmd"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -391,7 +401,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "SET",
               "snake": "set",
               "camel": "SET",
-              "screaming": "SET"
+              "screaming": "SET",
+              "pascal": "Set"
             },
             "value": "1",
             "doc": ""
@@ -401,7 +412,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "CANCEL",
               "snake": "cancel",
               "camel": "CANCEL",
-              "screaming": "CANCEL"
+              "screaming": "CANCEL",
+              "pascal": "Cancel"
             },
             "value": "2",
             "doc": ""
@@ -411,7 +423,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "RESUME",
               "snake": "resume",
               "camel": "RESUME",
-              "screaming": "RESUME"
+              "screaming": "RESUME",
+              "pascal": "Resume"
             },
             "value": "3",
             "doc": ""
@@ -426,7 +439,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "declared": "FaultReport",
         "snake": "fault_report",
         "camel": "FaultReport",
-        "screaming": "FAULT_REPORT"
+        "screaming": "FAULT_REPORT",
+        "pascal": "FaultReport"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -455,7 +469,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "declared": "count",
                 "snake": "count",
                 "camel": "Count",
-                "screaming": "COUNT"
+                "screaming": "COUNT",
+                "pascal": "Count"
               },
               "type": {
                 "optional": false,
@@ -633,7 +648,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "declared": "readFaults",
               "snake": "read_faults",
               "camel": "ReadFaults",
-              "screaming": "READ_FAULTS"
+              "screaming": "READ_FAULTS",
+              "pascal": "ReadFaults"
             },
             "kind": "KIND_QUERY",
             "row": 0,

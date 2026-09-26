@@ -1,7 +1,7 @@
 //! The name transforms the model carries (design note D-2).
 
 use super::v1;
-use crate::name::{camel_case, snake_case};
+use crate::name::{camel_case, pascal_case, snake_case};
 
 /// Every namespace a target can need for one declared identifier.
 pub(crate) fn spellings(declared: &str) -> v1::Spellings {
@@ -9,6 +9,7 @@ pub(crate) fn spellings(declared: &str) -> v1::Spellings {
     v1::Spellings {
         declared: declared.to_string(),
         camel: camel_case(declared),
+        pascal: pascal_case(declared),
         screaming: snake.to_uppercase(),
         snake,
     }

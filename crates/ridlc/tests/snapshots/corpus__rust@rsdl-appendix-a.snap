@@ -106,17 +106,19 @@ impl Default for Engaged {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum LeverCmd {
-    SET = 1,
-    CANCEL = 2,
-    RESUME = 3,
+    Set = 1,
+    Cancel = 2,
+    Resume = 3,
 }
 impl ::core::convert::TryFrom<i64> for LeverCmd {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
-            1 => ::core::result::Result::Ok(Self::SET),
-            2 => ::core::result::Result::Ok(Self::CANCEL),
-            3 => ::core::result::Result::Ok(Self::RESUME),
+            1 => ::core::result::Result::Ok(Self::Set),
+            2 => ::core::result::Result::Ok(Self::Cancel),
+            3 => ::core::result::Result::Ok(Self::Resume),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "LeverCmd",
@@ -133,7 +135,7 @@ impl ::core::convert::From<LeverCmd> for i64 {
 }
 impl Default for LeverCmd {
     fn default() -> Self {
-        LeverCmd::SET
+        LeverCmd::Set
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -245,7 +247,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -259,7 +261,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -378,7 +380,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, EngagedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -392,7 +394,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<EngagedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -494,7 +496,7 @@ pub(crate) fn __ridl_fb_decode_lever_cmd(buf: &[u8], table: usize) -> LeverCmd {
         <LeverCmd as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(LeverCmd::SET)
+            .unwrap_or(LeverCmd::Set)
     }
 }
 #[allow(deprecated)]
@@ -516,7 +518,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LeverCmd 
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, LeverCmdFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -533,7 +535,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LeverCmd 
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<LeverCmdFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -690,7 +692,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultRepo
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, FaultReportFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -707,7 +709,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultRepo
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<FaultReportFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,

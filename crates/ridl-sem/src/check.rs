@@ -32,7 +32,7 @@ use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
 use ridl_core::interface_lock::{self, InterfaceLock, LockEntry, LockKey};
 use ridl_core::package::{Package, Workspace, package_of};
-use ridl_ir::name::{camel_case, snake_case};
+use ridl_ir::name::{camel_case, pascal_case, snake_case};
 use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
 use ridl_syntax::{Profile, SyntaxKind};
@@ -639,12 +639,14 @@ impl LoweredType {
 /// Which pinned name transform a pair of names collided under (RIDL-149,
 /// ADR-0016 decision 3 as amended).
 ///
-/// The two transforms are incomparable — neither collision set contains the
-/// other — so a namespace projected through both is checked under both, and
-/// the diagnostic has to say which projection is the problem. A
-/// `camel_case`-only collision is a Rust defect (one enum, two variants of
-/// one name); a `snake_case`-only collision is a refusal from both wire
-/// backends.
+/// `snake_case` and `camel_case` are incomparable — neither collision set
+/// contains the other — so a namespace projected through both is checked
+/// under both, and the diagnostic has to say which projection is the
+/// problem. A `camel_case`-only collision is a Rust defect (one enum, two
+/// variants of one name); a `snake_case`-only collision is a refusal from
+/// both wire backends. `pascal_case` is `camel_case` of `snake_case`, so its
+/// collision set contains `snake_case`'s: an enum's values are checked under
+/// `pascal_case` alone, and the diagnostic names that one transform.
 enum Collision {
     /// The two names this report mentions project to this one snake_case
     /// identifier. It states nothing about their CamelCase projections: they
@@ -660,6 +662,10 @@ enum Collision {
     /// The two names this report mentions collide under both transforms —
     /// the same earlier name is the first under each.
     Both { snake: String, camel: String },
+    /// The two names this report mentions project to this one PascalCase
+    /// identifier — an enum's values, checked under `pascal_case` alone
+    /// because its collision set contains `snake_case`'s.
+    Pascal(String),
 }
 
 impl Checker<'_> {
@@ -2637,6 +2643,10 @@ impl Checker<'_> {
         let mut values = Vec::new();
         let mut reserved = Vec::new();
         let mut seen: HashSet<i64> = HashSet::new();
+        // RIDL-149 over the values' Rust spelling; see
+        // `check_enum_value_projection`.
+        let mut declared_values: HashSet<String> = HashSet::new();
+        let mut pascal_values: HashMap<String, (String, TextRange)> = HashMap::new();
         // Values and tombstones interleave in source order; the typed
         // iterators are per-kind, so walk the children directly.
         for child in decl.syntax().children() {
@@ -2704,6 +2714,18 @@ impl Checker<'_> {
                     DiagCode::TYPL_203,
                     value_range,
                     format!("duplicate enum value {value}"),
+                );
+            }
+            // A value name repeated verbatim is not a collision after a
+            // transform, so it is held out of the projection map, as a
+            // union arm's is. The exact-duplicate rule for an enum's values
+            // is driftsys/ridl#554. A value skipped above for a missing
+            // integer is not emitted, so it is not checked either.
+            if declared_values.insert(name.clone()) {
+                self.check_enum_value_projection(
+                    &name,
+                    member_name_range(value_node.name(), value_node.syntax()),
+                    &mut pascal_values,
                 );
             }
             values.push(v2::EnumValue {
@@ -3498,10 +3520,39 @@ impl Checker<'_> {
             .or_insert_with(|| (name.to_string(), range));
     }
 
+    /// RIDL-149 over one enum value name, against the values already seen.
+    ///
+    /// The Rust backend spells the variant with `pascal_case`; proto's
+    /// prefixed value is `snake_case` upper-cased. `pascal_case` is a function
+    /// of `snake_case`'s output, so every pair that collides under
+    /// `snake_case` collides here too, and one key covers both targets
+    /// (ADR-0016, 2026-09-26 amendment). First wins, so the secondary label
+    /// points at the value that keeps the projected name.
+    fn check_enum_value_projection(
+        &mut self,
+        name: &str,
+        range: TextRange,
+        pascal_seen: &mut HashMap<String, (String, TextRange)>,
+    ) {
+        let pascal = pascal_case(name);
+        if let Some((first, first_range)) = pascal_seen.get(&pascal).cloned() {
+            self.colliding_projected_name(
+                name,
+                &first,
+                &Collision::Pascal(pascal.clone()),
+                range,
+                first_range,
+            );
+        }
+        pascal_seen
+            .entry(pascal)
+            .or_insert_with(|| (name.to_string(), range));
+    }
+
     /// RIDL-149: two names in one scope that collide after a pinned name
     /// transform (ADR-0016 decision 3, as amended). Shared by the
-    /// interface-member, parameter, struct-field and union-arm checks — one
-    /// rule over four namespaces.
+    /// interface-member, parameter, struct-field, union-arm and enum-value
+    /// checks — one rule over five namespaces.
     ///
     /// The message names the transform that actually collided. It used to
     /// state `snake_case` for every input, which stopped being true when
@@ -3531,6 +3582,13 @@ impl Checker<'_> {
                 format!(
                     "`{projected}` under the camel_case name transform, so a target \
                      whose namespace is CamelCase would carry one identifier twice"
+                ),
+                format!("`{first}` becomes `{projected}` here"),
+            ),
+            Collision::Pascal(projected) => (
+                format!(
+                    "`{projected}` under the pascal_case name transform, so a target \
+                     whose namespace is PascalCase would carry one identifier twice"
                 ),
                 format!("`{first}` becomes `{projected}` here"),
             ),
@@ -6527,6 +6585,179 @@ mod tests {
     fn a_union_arm_repeated_verbatim_draws_no_ridl_149() {
         let checked = check_source("app", &union_source("foo", "foo"));
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    // --- RIDL-149 over an enum's values (ADR-0016, 2026-09-26 amendment) ---
+
+    fn enum_source(first: &str, second: &str) -> String {
+        format!("package app\nenum E {{ {first} = 0, {second} = 1 }}\n")
+    }
+
+    /// Three values, for the reports that must all name the first one.
+    fn enum_source_3(first: &str, second: &str, third: &str) -> String {
+        format!("package app\nenum E {{ {first} = 0, {second} = 1, {third} = 2 }}\n")
+    }
+
+    /// The pair differs under `snake_case` and collides under `pascal_case`:
+    /// the Rust backend would emit the variant `CheckEngine` twice.
+    #[test]
+    fn ridl_149_enum_values_colliding_under_pascal_case_are_refused() {
+        let checked = check_source("app", &enum_source("CHECK_ENGINE", "CHECK__ENGINE"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// A pair that collides under `snake_case` collides under `pascal_case`
+    /// too, and is refused once.
+    #[test]
+    fn ridl_149_enum_values_colliding_under_snake_case_are_refused_once() {
+        let checked = check_source("app", &enum_source("checkEngine", "CHECK_ENGINE"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Letter case alone: `PARK` and `Park` both become `Park`.
+    #[test]
+    fn ridl_149_enum_values_differing_only_in_case_are_refused() {
+        let checked = check_source("app", &enum_source("PARK", "Park"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    #[test]
+    fn ridl_149_enum_values_that_do_not_collide_are_accepted() {
+        let checked = check_source("app", &enum_source("LOW_FUEL", "CHECK_ENGINE"));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// `A_B` gives `AB` and `AB` gives `Ab`: distinct, so accepted. A check
+    /// keyed on `name.to_lowercase().replace('_', "")` refuses this pair.
+    #[test]
+    fn ridl_149_enum_values_that_collide_only_under_a_merged_transform_are_accepted() {
+        let checked = check_source("app", &enum_source("A_B", "AB"));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// A `reserved` value emits no variant, so it is not in the namespace.
+    #[test]
+    fn ridl_149_a_reserved_enum_value_is_not_in_the_checked_namespace() {
+        let checked = check_source(
+            "app",
+            "package app\nenum E { reserved CHECK__ENGINE, CHECK_ENGINE = 0 }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// A value name repeated verbatim is not a transform collision; the
+    /// exact-duplicate rule is driftsys/ridl#554. This pins that RIDL-149
+    /// does not claim it.
+    #[test]
+    fn ridl_149_does_not_report_an_enum_value_repeated_verbatim() {
+        let checked = check_source("app", &enum_source("A", "A"));
+        assert!(
+            !codes(&checked).contains(&"RIDL-149"),
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// The message and the label name the transform, the primary span covers
+    /// the second value's name alone, not its `= 1`, and the secondary label's
+    /// span covers the first value's name alone, not the second.
+    #[test]
+    fn ridl_149_names_pascal_case_for_an_enum_value() {
+        let source = enum_source("CHECK_ENGINE", "CHECK__ENGINE");
+        let checked = check_source("app", &source);
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(
+            diagnostic.message,
+            "`CHECK__ENGINE` and `CHECK_ENGINE` both become `CheckEngine` under the \
+             pascal_case name transform, so a target whose namespace is PascalCase would \
+             carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 \
+             decision 3)"
+        );
+        assert_eq!(
+            only_label(diagnostic),
+            "`CHECK_ENGINE` becomes `CheckEngine` here"
+        );
+        let range = diagnostic.primary.range;
+        assert_eq!(
+            &source[usize::from(range.start())..usize::from(range.end())],
+            "CHECK__ENGINE",
+            "the span must cover exactly the second value's name",
+        );
+        let label_range = diagnostic.labels[0].span.range;
+        assert_eq!(
+            &source[usize::from(label_range.start())..usize::from(label_range.end())],
+            "CHECK_ENGINE",
+            "the secondary label's span must cover exactly the first value's name",
+        );
+    }
+
+    /// Three values that all become `CheckEngine`. Each later value is
+    /// reported against the value that keeps the projected name — the first
+    /// one — so the third value names the first and not the second.
+    #[test]
+    fn ridl_149_a_third_enum_value_is_reported_against_the_first() {
+        let checked = check_source(
+            "app",
+            &enum_source_3("checkEngine", "CHECK_ENGINE", "Check_Engine"),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .starts_with("`CHECK_ENGINE` and `checkEngine` both become `CheckEngine`"),
+            "got: {}",
+            checked.diagnostics[0].message
+        );
+        assert!(
+            checked.diagnostics[1]
+                .message
+                .starts_with("`Check_Engine` and `checkEngine` both become `CheckEngine`"),
+            "got: {}",
+            checked.diagnostics[1].message
+        );
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                only_label(diagnostic),
+                "`checkEngine` becomes `CheckEngine` here"
+            );
+        }
+    }
+
+    /// A value with no explicit integer draws TYPL-203 and is skipped before
+    /// the projection check reaches it: it emits no variant, so it is not in
+    /// the namespace. The pair would otherwise collide under `pascal_case`.
+    #[test]
+    fn ridl_149_does_not_check_an_enum_value_skipped_for_a_missing_integer() {
+        let checked = check_source(
+            "app",
+            "package app\nenum E { CHECK_ENGINE, CHECK__ENGINE = 1 }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-203"],
+            "got: {:?}",
+            checked.diagnostics
+        );
     }
 
     /// The member, parameter and struct-field namespaces are checked under

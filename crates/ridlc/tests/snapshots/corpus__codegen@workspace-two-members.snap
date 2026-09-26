@@ -24,7 +24,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "declared": "Speed",
         "snake": "speed",
         "camel": "Speed",
-        "screaming": "SPEED"
+        "screaming": "SPEED",
+        "pascal": "Speed"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -62,7 +63,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "declared": "Temperature",
         "snake": "temperature",
         "camel": "Temperature",
-        "screaming": "TEMPERATURE"
+        "screaming": "TEMPERATURE",
+        "pascal": "Temperature"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -181,7 +183,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "declared": "ClusterReading",
         "snake": "cluster_reading",
         "camel": "ClusterReading",
-        "screaming": "CLUSTER_READING"
+        "screaming": "CLUSTER_READING",
+        "pascal": "ClusterReading"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -210,7 +213,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
                 "declared": "speed",
                 "snake": "speed",
                 "camel": "Speed",
-                "screaming": "SPEED"
+                "screaming": "SPEED",
+                "pascal": "Speed"
               },
               "type": {
                 "optional": false,

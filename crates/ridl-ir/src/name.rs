@@ -2,16 +2,20 @@
 //!
 //! [`snake_case`] serves every target whose namespace is snake_case, and
 //! [`camel_case`] every target whose namespace is CamelCase — the Rust
-//! backend's union variants and its induced tuple struct names. They live
-//! here rather than in a backend because a projection is a pure function from
-//! IR identity to a target's namespace, and because `ridl-ir` is the only
-//! crate `ridl-sem` and the backends already depend on.
+//! backend's union variants and its induced tuple struct names.
+//! [`pascal_case`], the composition of the two, serves the Rust backend's
+//! enum variants. They live here rather than in a backend because a
+//! projection is a pure function from IR identity to a target's namespace,
+//! and because `ridl-ir` is the only crate `ridl-sem` and the backends
+//! already depend on.
 //!
-//! The two are **incomparable**: neither collision set contains the other.
-//! `XY` and `x_y` collide under [`camel_case`] and not under [`snake_case`];
-//! `HTTPServer` and `httpServer` collide under [`snake_case`] and not under
-//! [`camel_case`]. A namespace projected through both is therefore checked
-//! under both.
+//! [`snake_case`] and [`camel_case`] are **incomparable**: neither collision
+//! set contains the other. `XY` and `x_y` collide under [`camel_case`] and not
+//! under [`snake_case`]; `HTTPServer` and `httpServer` collide under
+//! [`snake_case`] and not under [`camel_case`]. A namespace projected through
+//! both is therefore checked under both. [`pascal_case`] is [`camel_case`] of
+//! [`snake_case`], so its collision set contains [`snake_case`]'s, and a
+//! namespace projected through it is checked under it alone.
 
 /// snake_case of a ridl name: `currentSpeed` becomes `current_speed`.
 ///
@@ -76,9 +80,30 @@ pub fn camel_case(name: &str) -> String {
         .collect()
 }
 
+/// PascalCase of any name the lexer admits: `CHECK_ENGINE` becomes
+/// `CheckEngine`. Used for the Rust backend's enum variant names (ADR-0016,
+/// 2026-09-26 amendment).
+///
+/// It is [`camel_case`] of [`snake_case`]: `snake_case` lower-cases the name
+/// and separates its words, and `camel_case` then upper-cases the first
+/// character of each word and removes the separators. [`camel_case`] alone
+/// does not serve, because it leaves each segment's tail as written and so
+/// gives `CHECKENGINE`. Composing the two also defines the result for a name
+/// outside the typl convention: `checkEngine` gives `CheckEngine`.
+///
+/// **The transform is not injective**, and its collision set contains
+/// [`snake_case`]'s: two names that share a `snake_case` output share this
+/// one, because this is a function of that output. The converse fails —
+/// `CHECK_ENGINE` and `CHECK__ENGINE` collide here only. So RIDL-149 checks
+/// an enum's values under this transform alone. It is not idempotent either:
+/// `A_B` gives `AB`, and `AB` gives `Ab`. Nothing applies it twice.
+pub fn pascal_case(name: &str) -> String {
+    camel_case(&snake_case(name))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{camel_case, snake_case};
+    use super::{camel_case, pascal_case, snake_case};
 
     /// The outputs the docstring names, pinned as values. The relational
     /// tests below constrain which names share an output, not what that
@@ -146,6 +171,93 @@ mod tests {
         ] {
             let once = snake_case(name);
             assert_eq!(snake_case(&once), once, "not idempotent on `{name}`");
+        }
+    }
+
+    /// The outputs `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §3 names,
+    /// pinned as values.
+    #[test]
+    fn pascal_case_pins_the_outputs_the_design_names() {
+        for (input, expected) in [
+            ("CHECK_ENGINE", "CheckEngine"),
+            ("PARK", "Park"),
+            ("OK", "Ok"),
+            ("A", "A"),
+            ("X2", "X2"),
+            ("ABS_V2", "AbsV2"),
+            ("V2_ABS", "V2Abs"),
+            ("LEVEL_10", "Level10"),
+            ("HTTP_SERVER", "HttpServer"),
+            ("A__B", "AB"),
+            ("A_", "A"),
+            ("checkEngine", "CheckEngine"),
+            ("HTTPServer", "HttpServer"),
+            ("SELF", "Self"),
+        ] {
+            assert_eq!(pascal_case(input), expected, "pascal_case(`{input}`)");
+        }
+    }
+
+    /// Every name of one to five characters over `a`, `B`, `_` and `2` that
+    /// starts with a letter, as the lexer requires.
+    fn enumerated_names() -> Vec<String> {
+        let alphabet = ['a', 'B', '_', '2'];
+        let mut names: Vec<String> = vec!["a".to_string(), "B".to_string()];
+        let mut frontier = names.clone();
+        for _ in 1..5 {
+            let mut next = Vec::new();
+            for name in &frontier {
+                for c in alphabet {
+                    next.push(format!("{name}{c}"));
+                }
+            }
+            names.extend(next.iter().cloned());
+            frontier = next;
+        }
+        names
+    }
+
+    /// Property 4 of `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §3:
+    /// two names that share a `snake_case` output share a `pascal_case`
+    /// output. This is why RIDL-149 keys an enum's values on `pascal_case`
+    /// alone.
+    #[test]
+    fn pascal_case_collides_wherever_snake_case_does() {
+        let mut by_snake: std::collections::HashMap<String, (String, String)> =
+            std::collections::HashMap::new();
+        for name in enumerated_names() {
+            let pascal = pascal_case(&name);
+            let (first, first_pascal) = by_snake
+                .entry(snake_case(&name))
+                .or_insert_with(|| (name.clone(), pascal.clone()));
+            assert_eq!(
+                *first_pascal, pascal,
+                "`{first}` and `{name}` share a snake_case output but not a pascal_case one"
+            );
+        }
+    }
+
+    /// The containment is strict: this pair differs under `snake_case` and
+    /// collides under `pascal_case`.
+    #[test]
+    fn pascal_case_collides_where_snake_case_does_not() {
+        assert_ne!(snake_case("CHECK_ENGINE"), snake_case("CHECK__ENGINE"));
+        assert_eq!(pascal_case("CHECK_ENGINE"), pascal_case("CHECK__ENGINE"));
+    }
+
+    /// Property 2 of `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §3:
+    /// every output is a name rustc's `non_camel_case_types` accepts —
+    /// non-empty, no underscore, and an upper-case first character.
+    #[test]
+    fn every_pascal_case_output_satisfies_non_camel_case_types() {
+        for name in enumerated_names() {
+            let pascal = pascal_case(&name);
+            assert!(!pascal.is_empty(), "`{name}` gives an empty name");
+            assert!(!pascal.contains('_'), "`{name}` gives `{pascal}`");
+            assert!(
+                pascal.starts_with(|c: char| c.is_ascii_uppercase()),
+                "`{name}` gives `{pascal}`"
+            );
         }
     }
 }

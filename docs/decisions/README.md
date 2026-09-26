@@ -143,7 +143,7 @@ other entry below is Accepted.
   pinned transforms and spells the Rust backend's enum variants (`CHECK_ENGINE`
   becomes `CheckEngine`), and an enum's values join RIDL-149's checked
   namespaces under `pascal_case` alone, because its collision set contains
-  `snake_case`'s. Decided; the code change follows from its plan.
+  `snake_case`'s.
 
 - **ADR-0017 — The proto3 projection.** The rules the first wire backend needed
   that no earlier record supplied: how a foreign reference projects, where

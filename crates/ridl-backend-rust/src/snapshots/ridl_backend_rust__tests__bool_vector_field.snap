@@ -138,7 +138,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, EngagedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -152,7 +152,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<EngagedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -451,7 +451,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Flags {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, FlagsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -465,7 +465,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Flags {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<FlagsFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,

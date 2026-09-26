@@ -13,8 +13,8 @@
 //! T15 computed with full resolution.
 
 use crate::{
-    Ctx, ScalarBacking, bool_tokens, class_backing, declared, ident, numeric_tokens, scalar_ctor,
-    snake_of, tuple_name, type_path,
+    Ctx, ScalarBacking, bool_tokens, class_backing, declared, ident, numeric_tokens, pascal_of,
+    scalar_ctor, snake_of, tuple_name, type_path,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -281,7 +281,7 @@ fn enum_default(name: &str, ed: &v1::Enum) -> Option<TokenStream> {
     // The lowering picks the member once, as `Enum.init_member`.
     let chosen = ed.values.get(ed.init_member? as usize)?;
     let name_id = ident(name);
-    let variant = ident(declared(chosen.name.as_ref()));
+    let variant = ident(&pascal_of(chosen.name.as_ref()));
     Some(quote! { #name_id::#variant })
 }
 

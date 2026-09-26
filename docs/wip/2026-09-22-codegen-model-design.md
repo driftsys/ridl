@@ -159,6 +159,7 @@ a foreign declaration indexes this list (§3.4).
       string snake = 2;                          // ridl_ir::name::snake_case (ADR-0016 decision 1)
       string camel = 3;                          // ridl_ir::name::camel_case (ADR-0016, 2026-09-20 amendment)
       string screaming = 4;                      // snake, upper-cased — what P and F call screaming_snake_case
+      string pascal = 5;                         // ridl_ir::name::pascal_case, camel_case of snake (ADR-0016, 2026-09-26 amendment) — the Rust backend's enum variant names
     }
 
     message DottedName {                         // a package name or a service name
@@ -173,12 +174,13 @@ a foreign declaration indexes this list (§3.4).
       string wire = 2;                           // owner + type_name(field), nested by Field<N>, …Element/…Key/…Value — proto3 and FlatBuffers agree
     }
 
-A `Spellings` carries the three pinned outputs and the composition every wire
+A `Spellings` carries the four pinned outputs and the composition every wire
 backend makes of one of them. A printer whose namespace is snake_case reads
-`snake`, one whose namespace is CamelCase reads `camel`, and a printer that
-keeps the source spelling — TypeScript, for a field — reads `declared`. The
-target set is open (a plugin is any executable), which is why the fields are
-named after the transform and not after a language (D-2).
+`snake`, one whose namespace is CamelCase reads `camel`, one whose namespace is
+PascalCase — the Rust backend, for an enum variant — reads `pascal`, and a
+printer that keeps the source spelling — TypeScript, for a field — reads
+`declared`. The target set is open (a plugin is any executable), which is why
+the fields are named after the transform and not after a language (D-2).
 
 `DottedName.joined_camel` pins the wire backends' `type_name` rule, which
 ADR-0016 does not cover (§9, item 4): `camel_case` splits on underscores, so
@@ -816,7 +818,7 @@ four printers already word one each.
 ### D-2. Names are carried by transform, not by language; induced names by rule
 
 Every declared identifier carries `Spellings` (declared, snake, camel,
-screaming); every dotted name carries `DottedName` (dotted, segments,
+screaming, pascal); every dotted name carries `DottedName` (dotted, segments,
 joined_camel, underscored); every induced tuple carries `InducedName` with the
 Rust rule and the wire rule spelled out (§3.2).
 
@@ -1174,9 +1176,11 @@ rule and no projection rule inside it. What that excludes, by printer:
   slot.
 - **`min == max`** for a fixed array, and **`is_wide`** for a 64-bit width.
 
-Two things are deliberately carried although a printer could compute them, each
-with its reason stated where it sits: `Spellings.screaming` (one composition
-three printers make of a pinned transform; §3.2) and `EnumSet.declared_mask` (a
+Three things are deliberately carried although a printer could compute them,
+each with its reason stated where it sits: `Spellings.screaming` (one
+composition three printers make of a pinned transform; §3.2), `Spellings.pascal`
+(`camel_case` of `snake` when a toolchain older than this field wrote it empty,
+so the Rust backend need not recompute it; §3.2), and `EnumSet.declared_mask` (a
 typl §9 fact two printers fold; §3.3).
 
 ## 8. How drift is caught

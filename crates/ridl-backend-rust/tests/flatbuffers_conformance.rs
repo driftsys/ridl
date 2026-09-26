@@ -159,10 +159,10 @@ fn conformance() -> Report {
         blob: Blob::new_unchecked(vec![1, 2, 3]),
         ratio: Ratio::new_unchecked(0.25),
         engaged: Engaged::new(true),
-        health: Health::WARN,
+        health: Health::Warn,
         flags: WarningFlags::HIGH,
         inner: inner(120, "inner"),
-        outcome: Outcome::Bad(Health::FAIL),
+        outcome: Outcome::Bad(Health::Fail),
         range: ReportRange {
             min: Speed::new_unchecked(10),
             max: Speed::new_unchecked(300),
@@ -172,7 +172,7 @@ fn conformance() -> Report {
             Speed::new_unchecked(2),
             Speed::new_unchecked(3),
         ],
-        faults: vec![Health::OK, Health::FAIL],
+        faults: vec![Health::Ok, Health::Fail],
         meta: vec![
             (Label::new_unchecked(String::from("a")), Count::new_unchecked(1)),
             (Label::new_unchecked(String::from("bb")), Count::new_unchecked(2)),
@@ -182,7 +182,7 @@ fn conformance() -> Report {
             Label::new_unchecked(String::from("second")),
         ],
         inners: vec![inner(1, "one"), inner(2, "two")],
-        outcomes: vec![Outcome::Ok(inner(3, "three")), Outcome::Bad(Health::WARN)],
+        outcomes: vec![Outcome::Ok(inner(3, "three")), Outcome::Bad(Health::Warn)],
         points: vec![
             ReportPointsElement {
                 x: Speed::new_unchecked(10),

@@ -293,7 +293,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Name {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, NameFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -307,7 +307,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Name {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<NameFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -434,7 +434,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Digest {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, DigestFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -448,7 +448,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Digest {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<DigestFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -570,7 +570,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, RatioFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -584,7 +584,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<RatioFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,

@@ -1378,6 +1378,176 @@ fn enum_with_discriminants() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// driftsys/ridl#506: a variant is spelled through `pascal_case`, at every
+/// site that names one — the declaration, the `TryFrom` arm, and the
+/// `Default` value.
+#[test]
+fn an_enum_variant_is_spelled_in_pascal_case() {
+    let source = rust_for(vec![public_decl(
+        "Warning",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: warning_bits(),
+            reserved: Vec::new(),
+        }),
+    )]);
+    assert!(source.contains("CheckEngine = 1"), "{source}");
+    assert!(source.contains("Ok(Self::CheckEngine)"), "{source}");
+    assert!(!source.contains("CHECK_ENGINE"), "{source}");
+    assert!(!source.contains("LOW_FUEL"), "{source}");
+}
+
+/// `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §4: a model
+/// written by a toolchain older than `Spellings.pascal` carries it empty, and
+/// the backend derives it from `snake`. The output must be the same as from a
+/// current model.
+#[test]
+fn an_empty_pascal_spelling_is_derived_from_snake() {
+    let package = package(
+        "veh.common",
+        vec![public_decl(
+            "Warning",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: warning_bits(),
+                reserved: Vec::new(),
+            }),
+        )],
+    );
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let mut older = model.clone();
+    for decl in &mut older.declarations {
+        if let Some(ridl_ir::codegen::v1::declaration::Kind::Enum(def)) = decl.kind.as_mut() {
+            for value in &mut def.values {
+                value
+                    .name
+                    .as_mut()
+                    .expect("a lowered value is named")
+                    .pascal
+                    .clear();
+            }
+        }
+    }
+    let current = super::generate_pipeline_over(&model, super::WireEncoding::FlatBuffers)
+        .expect("generation succeeds")
+        .rust_source;
+    let derived = super::generate_pipeline_over(&older, super::WireEncoding::FlatBuffers)
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(current.contains("CheckEngine"), "{current}");
+    assert_eq!(derived, current);
+}
+
+/// Values outside the typl convention (`docs/archive/2026-09-26-enum-variant-pascal-case-plan.md`,
+/// Review Focus 1). `SELF` becomes
+/// `Self`, which cannot be an identifier, and `ident()` escapes it to
+/// `Self_`; `checkEngine` and `HTTPServer` become `CheckEngine` and
+/// `HttpServer`. The generated enum must compile with
+/// `non_camel_case_types` denied.
+#[test]
+fn an_enum_value_outside_the_typl_convention_compiles() {
+    let rust_source = rust_for(vec![public_decl(
+        "Direction",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                enum_value("SELF", 0),
+                enum_value("checkEngine", 1),
+                enum_value("HTTPServer", 2),
+                // `Error` and `View` are the names of the associated types the
+                // generated `TryFrom` and `Payload` impls declare. A variant
+                // with the same name makes `Self::Error` / `Self::View`
+                // ambiguous (rustc `ambiguous_associated_items`, deny by
+                // default), so every emitted path to an associated item is
+                // fully qualified.
+                enum_value("ERROR", 3),
+                enum_value("VIEW", 4),
+            ],
+            reserved: Vec::new(),
+        }),
+    )]);
+    assert!(rust_source.contains("Self_ = 0"), "{rust_source}");
+    assert!(rust_source.contains("CheckEngine = 1"), "{rust_source}");
+    assert!(rust_source.contains("HttpServer = 2"), "{rust_source}");
+    assert!(rust_source.contains("Error = 3"), "{rust_source}");
+    assert!(rust_source.contains("View = 4"), "{rust_source}");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("outside_convention.rs");
+    let meta_path = dir.path().join("outside_convention.rmeta");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "non_camel_case_types",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "generated Rust must compile:\n{rust_source}"
+    );
+}
+
+/// A union arm named `view` becomes the variant `View`, the name of the
+/// associated type the generated `Payload` impl declares. The emitted paths
+/// to that type are fully qualified, so the generated crate compiles.
+#[test]
+fn a_union_arm_named_view_compiles() {
+    let union = v2::UnionDef {
+        arms: vec![v2::UnionArm {
+            name: "view".to_string(),
+            ordinal: 1,
+            type_ref: "Speed".to_string(),
+            doc: String::new(),
+        }],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    let rust_source = rust_for(vec![
+        speed_decl(),
+        public_decl("Reading", v2::decl::Kind::UnionDef(union)),
+    ]);
+    assert!(rust_source.contains("View(Speed)"), "{rust_source}");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("union_arm_view.rs");
+    let meta_path = dir.path().join("union_arm_view.rmeta");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "non_camel_case_types",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "generated Rust must compile:\n{rust_source}"
+    );
+}
+
 #[test]
 fn enumset_standalone_form() {
     let decls = vec![public_decl(
@@ -1402,7 +1572,7 @@ fn enum_converts_from_a_raw_discriminant() {
     // fixture numbered contiguously from zero, arms built from the position
     // emit identical source.
     assert!(
-        source.contains("7 => ::core::result::Result::Ok(Self::REVERSE)"),
+        source.contains("7 => ::core::result::Result::Ok(Self::Reverse)"),
         "the arm maps the declared discriminant, got:\n{source}"
     );
 }
@@ -1876,8 +2046,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
 
     // The proof. `private-interfaces` and `private-bounds` are denied by name
     // rather than with a blanket `-D warnings`, matching `rustc_accepts` in
-    // `crates/ridlc/tests/corpus.rs`: the generated code carries by-design
-    // naming and dead-code lints that say nothing about visibility.
+    // `crates/ridlc/tests/corpus.rs`: the generated code carries dead-code
+    // lints that say nothing about visibility.
     //
     // `non_snake_case` is denied beside them so that a field name reaching
     // generated Rust verbatim fails this run rather than warning in it. It is
@@ -1885,8 +2055,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     // proof that guards issue #243 is `appendix_a_compiles_with_rustc`, whose
     // IR carries `sensorId` and `isOpen`. The deny here is what makes this
     // proof stay a proof if a multi-word field name is ever added to the
-    // fixture. An enum variant keeps its typl `SCREAMING_SNAKE` spelling and
-    // draws `non_camel_case_types`, a different lint, which stays undenied.
+    // fixture. `non_camel_case_types` is denied too, for driftsys/ridl#506; it
+    // is inert on this fixture, which declares no enum.
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
@@ -1905,6 +2075,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
             "private-bounds",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
@@ -2177,7 +2349,7 @@ fn enum_default_prefers_the_zero_discriminant() {
         }),
     )]);
     assert!(
-        source.contains("Mode::SLOW"),
+        source.contains("Mode::Slow"),
         "with no zero value the default is the lowest discriminant, got:\n{source}"
     );
 }
@@ -2857,9 +3029,10 @@ pub mod ridl {
     // Appendix B, whose every field name is a single word; the proof that
     // guards issue #243 is `appendix_a_compiles_with_rustc`. The deny here is
     // what makes this proof stay a proof if a multi-word field name is ever
-    // added to the fixture. An enum variant keeps its typl `SCREAMING_SNAKE`
-    // spelling and draws `non_camel_case_types`, a different lint, which
-    // stays undenied.
+    // added to the fixture. An enum variant is the `pascal_case` of its typl
+    // name (driftsys/ridl#506), and `non_camel_case_types` is denied too.
+    // Appendix B holds multi-word enum values, so this deny is the proof that
+    // guards #506 on this fixture.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2870,6 +3043,8 @@ pub mod ridl {
             "metadata",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -2906,7 +3081,7 @@ fn main() {
     // The declared discriminants are 0, 1, 7, 9 — not contiguous, so a
     // conversion keyed on the variant's position would map 7 to nothing.
     match GearPosition::try_from(7) {
-        Ok(GearPosition::REVERSE) => {}
+        Ok(GearPosition::Reverse) => {}
         _ => panic!("7 is REVERSE"),
     }
     // 2 is a gap in the declared discriminants, so it is out of contract.
@@ -2914,7 +3089,7 @@ fn main() {
         Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Variant),
         Ok(_) => panic!("2 names no declared variant"),
     }
-    assert_eq!(i64::from(GearPosition::NEUTRAL), 9);
+    assert_eq!(i64::from(GearPosition::Neutral), 9);
 
     // Bits 0 to 3 are declared, so the mask is 0b1111.
     assert_eq!(Features::DECLARED_MASK, 15);
@@ -3024,7 +3199,8 @@ fn constructible_collections_compile() {
     // a single word. It is denied for the same reason as in
     // `appendix_b_compiles_with_rustc`: to keep this proof a proof if a
     // multi-word field name is ever added. Issue #243 is guarded by
-    // `appendix_a_compiles_with_rustc`.
+    // `appendix_a_compiles_with_rustc`. `-D non_camel_case_types` is inert
+    // here too: this fixture declares no enum.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3035,6 +3211,8 @@ fn constructible_collections_compile() {
             "metadata",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -3475,8 +3653,13 @@ pub mod veh {
     // issue #243: the Appendix A IR carries the field names `sensorId` and
     // `isOpen`, so a field name reaching generated Rust verbatim fails this
     // run. The assertion is otherwise on the exit status, which a warning
-    // does not change. `non_camel_case_types`, which a screaming-case enum
-    // variant draws by design, stays undenied.
+    // does not change. `non_camel_case_types` is denied too, for
+    // driftsys/ridl#506. Appendix A's `DiagError` holds multi-word values
+    // (`FILTER_INVALID`, `STORAGE_BUSY`, `ACCESS_DENIED`), so the deny fails
+    // the proof if a generated variant keeps a typl SCREAMING_SNAKE spelling
+    // with an underscore, as `FILTER_INVALID` does. It does not by itself
+    // check the full `pascal_case` spelling, which the backend's unit tests
+    // pin.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3487,6 +3670,8 @@ pub mod veh {
             "metadata",
             "-D",
             "non_snake_case",
+            "-D",
+            "non_camel_case_types",
         ])
         .arg("-o")
         .arg(&meta_path)

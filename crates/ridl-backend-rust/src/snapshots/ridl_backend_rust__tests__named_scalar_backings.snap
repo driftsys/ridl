@@ -353,7 +353,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -367,7 +367,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -488,7 +488,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, CounterFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -502,7 +502,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<CounterFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -621,7 +621,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Enabled {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, EnabledFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -635,7 +635,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Enabled {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<EnabledFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -756,7 +756,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, LabelFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -770,7 +770,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<LabelFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -897,7 +897,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Blob {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, BlobFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -911,7 +911,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Blob {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<BlobFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,

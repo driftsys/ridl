@@ -209,15 +209,17 @@ impl Default for Odometer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum LockState {
-    UNLOCKED = 0,
-    LOCKED = 1,
+    Unlocked = 0,
+    Locked = 1,
 }
 impl ::core::convert::TryFrom<i64> for LockState {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
-            0 => ::core::result::Result::Ok(Self::UNLOCKED),
-            1 => ::core::result::Result::Ok(Self::LOCKED),
+            0 => ::core::result::Result::Ok(Self::Unlocked),
+            1 => ::core::result::Result::Ok(Self::Locked),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "LockState",
@@ -234,7 +236,7 @@ impl ::core::convert::From<LockState> for i64 {
 }
 impl Default for LockState {
     fn default() -> Self {
-        LockState::UNLOCKED
+        LockState::Unlocked
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -254,15 +256,17 @@ impl Default for DoorReport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum DoorFault {
-    JAMMED = 0,
-    UNPOWERED = 1,
+    Jammed = 0,
+    Unpowered = 1,
 }
 impl ::core::convert::TryFrom<i64> for DoorFault {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
-            0 => ::core::result::Result::Ok(Self::JAMMED),
-            1 => ::core::result::Result::Ok(Self::UNPOWERED),
+            0 => ::core::result::Result::Ok(Self::Jammed),
+            1 => ::core::result::Result::Ok(Self::Unpowered),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "DoorFault",
@@ -279,7 +283,7 @@ impl ::core::convert::From<DoorFault> for i64 {
 }
 impl Default for DoorFault {
     fn default() -> Self {
-        DoorFault::JAMMED
+        DoorFault::Jammed
     }
 }
 /// An accessor over FlatBuffers bytes `DoorId`'s `verify` accepted.
@@ -381,7 +385,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, DoorIdFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -395,7 +399,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<DoorIdFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -518,7 +522,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, PercentFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -532,7 +536,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<PercentFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -655,7 +659,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer 
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, OdometerFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -672,7 +676,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer 
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<OdometerFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -774,7 +778,7 @@ pub(crate) fn __ridl_fb_decode_lock_state(buf: &[u8], table: usize) -> LockState
         <LockState as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(LockState::UNLOCKED)
+            .unwrap_or(LockState::Unlocked)
     }
 }
 #[allow(deprecated)]
@@ -796,7 +800,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, LockStateFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -813,7 +817,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<LockStateFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -872,7 +876,7 @@ impl<'a> DoorReportFbView<'a> {
         <LockState as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64))
-            .unwrap_or(LockState::UNLOCKED)
+            .unwrap_or(LockState::Unlocked)
     }
 }
 /// Writes `DoorReport` as a FlatBuffers table and returns its position.
@@ -998,7 +1002,7 @@ pub(crate) fn __ridl_fb_decode_door_report(buf: &[u8], table: usize) -> DoorRepo
             <LockState as ::core::convert::TryFrom<
                 i64,
             >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-                .unwrap_or(LockState::UNLOCKED)
+                .unwrap_or(LockState::Unlocked)
         },
     }
 }
@@ -1021,7 +1025,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, DoorReportFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1038,7 +1042,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<DoorReportFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1140,7 +1144,7 @@ pub(crate) fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault
         <DoorFault as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(DoorFault::JAMMED)
+            .unwrap_or(DoorFault::Jammed)
     }
 }
 #[allow(deprecated)]
@@ -1162,7 +1166,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, DoorFaultFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1179,7 +1183,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<DoorFaultFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1210,15 +1214,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum DoorFault {
-    STUCK = 0,
-    NO_POWER = 1,
+    Stuck = 0,
+    NoPower = 1,
 }
 impl ::core::convert::TryFrom<i64> for DoorFault {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
-            0 => ::core::result::Result::Ok(Self::STUCK),
-            1 => ::core::result::Result::Ok(Self::NO_POWER),
+            0 => ::core::result::Result::Ok(Self::Stuck),
+            1 => ::core::result::Result::Ok(Self::NoPower),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "DoorFault",
@@ -1235,7 +1241,7 @@ impl ::core::convert::From<DoorFault> for i64 {
 }
 impl Default for DoorFault {
     fn default() -> Self {
-        DoorFault::STUCK
+        DoorFault::Stuck
     }
 }
 /// An accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
@@ -1316,7 +1322,7 @@ pub(crate) fn __ridl_fb_decode_door_fault(buf: &[u8], table: usize) -> DoorFault
         <DoorFault as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(DoorFault::STUCK)
+            .unwrap_or(DoorFault::Stuck)
     }
 }
 #[allow(deprecated)]
@@ -1338,7 +1344,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, DoorFaultFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1355,7 +1361,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<DoorFaultFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,

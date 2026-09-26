@@ -24,7 +24,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "DoorId",
         "snake": "door_id",
         "camel": "DoorId",
-        "screaming": "DOOR_ID"
+        "screaming": "DOOR_ID",
+        "pascal": "DoorId"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -60,7 +61,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "Percent",
         "snake": "percent",
         "camel": "Percent",
-        "screaming": "PERCENT"
+        "screaming": "PERCENT",
+        "pascal": "Percent"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -98,7 +100,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "Odometer",
         "snake": "odometer",
         "camel": "Odometer",
-        "screaming": "ODOMETER"
+        "screaming": "ODOMETER",
+        "pascal": "Odometer"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -134,7 +137,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "LockState",
         "snake": "lock_state",
         "camel": "LockState",
-        "screaming": "LOCK_STATE"
+        "screaming": "LOCK_STATE",
+        "pascal": "LockState"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -161,7 +165,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "UNLOCKED",
               "snake": "unlocked",
               "camel": "UNLOCKED",
-              "screaming": "UNLOCKED"
+              "screaming": "UNLOCKED",
+              "pascal": "Unlocked"
             },
             "value": "0",
             "doc": ""
@@ -171,7 +176,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "LOCKED",
               "snake": "locked",
               "camel": "LOCKED",
-              "screaming": "LOCKED"
+              "screaming": "LOCKED",
+              "pascal": "Locked"
             },
             "value": "1",
             "doc": ""
@@ -187,7 +193,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "DoorReport",
         "snake": "door_report",
         "camel": "DoorReport",
-        "screaming": "DOOR_REPORT"
+        "screaming": "DOOR_REPORT",
+        "pascal": "DoorReport"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -216,7 +223,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "declared": "door",
                 "snake": "door",
                 "camel": "Door",
-                "screaming": "DOOR"
+                "screaming": "DOOR",
+                "pascal": "Door"
               },
               "type": {
                 "optional": false,
@@ -246,7 +254,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "declared": "locked",
                 "snake": "locked",
                 "camel": "Locked",
-                "screaming": "LOCKED"
+                "screaming": "LOCKED",
+                "pascal": "Locked"
               },
               "type": {
                 "optional": false,
@@ -278,7 +287,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "DoorFault",
         "snake": "door_fault",
         "camel": "DoorFault",
-        "screaming": "DOOR_FAULT"
+        "screaming": "DOOR_FAULT",
+        "pascal": "DoorFault"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": true,
@@ -305,7 +315,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "JAMMED",
               "snake": "jammed",
               "camel": "JAMMED",
-              "screaming": "JAMMED"
+              "screaming": "JAMMED",
+              "pascal": "Jammed"
             },
             "value": "0",
             "doc": ""
@@ -315,7 +326,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "UNPOWERED",
               "snake": "unpowered",
               "camel": "UNPOWERED",
-              "screaming": "UNPOWERED"
+              "screaming": "UNPOWERED",
+              "pascal": "Unpowered"
             },
             "value": "1",
             "doc": ""
@@ -343,7 +355,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "lockState",
               "snake": "lock_state",
               "camel": "LockState",
-              "screaming": "LOCK_STATE"
+              "screaming": "LOCK_STATE",
+              "pascal": "LockState"
             },
             "kind": "KIND_SIGNAL",
             "row": 0,
@@ -383,7 +396,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "doorMoved",
               "snake": "door_moved",
               "camel": "DoorMoved",
-              "screaming": "DOOR_MOVED"
+              "screaming": "DOOR_MOVED",
+              "pascal": "DoorMoved"
             },
             "kind": "KIND_EVENT",
             "row": 1,
@@ -417,7 +431,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "lock",
               "snake": "lock",
               "camel": "Lock",
-              "screaming": "LOCK"
+              "screaming": "LOCK",
+              "pascal": "Lock"
             },
             "kind": "KIND_COMMAND",
             "row": 2,
@@ -435,7 +450,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "declared": "door",
                     "snake": "door",
                     "camel": "Door",
-                    "screaming": "DOOR"
+                    "screaming": "DOOR",
+                    "pascal": "Door"
                   },
                   "type": {
                     "optional": false,
@@ -472,7 +488,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "readDoor",
               "snake": "read_door",
               "camel": "ReadDoor",
-              "screaming": "READ_DOOR"
+              "screaming": "READ_DOOR",
+              "pascal": "ReadDoor"
             },
             "kind": "KIND_QUERY",
             "row": 3,
@@ -490,7 +507,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "declared": "door",
                     "snake": "door",
                     "camel": "Door",
-                    "screaming": "DOOR"
+                    "screaming": "DOOR",
+                    "pascal": "Door"
                   },
                   "type": {
                     "optional": false,
@@ -547,7 +565,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "doorCount",
               "snake": "door_count",
               "camel": "DoorCount",
-              "screaming": "DOOR_COUNT"
+              "screaming": "DOOR_COUNT",
+              "pascal": "DoorCount"
             },
             "kind": "KIND_FIXED",
             "row": 4,
@@ -584,7 +603,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "DoorControl",
         "snake": "door_control",
         "camel": "DoorControl",
-        "screaming": "DOOR_CONTROL"
+        "screaming": "DOOR_CONTROL",
+        "pascal": "DoorControl"
       }
     },
     {
@@ -601,7 +621,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "distance",
               "snake": "distance",
               "camel": "Distance",
-              "screaming": "DISTANCE"
+              "screaming": "DISTANCE",
+              "pascal": "Distance"
             },
             "kind": "KIND_SIGNAL",
             "row": 0,
@@ -641,7 +662,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "fuelLevel",
               "snake": "fuel_level",
               "camel": "FuelLevel",
-              "screaming": "FUEL_LEVEL"
+              "screaming": "FUEL_LEVEL",
+              "pascal": "FuelLevel"
             },
             "kind": "KIND_QUERY",
             "row": 1,
@@ -702,7 +724,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "Telemetry",
         "snake": "telemetry",
         "camel": "Telemetry",
-        "screaming": "TELEMETRY"
+        "screaming": "TELEMETRY",
+        "pascal": "Telemetry"
       }
     }
   ],
@@ -913,7 +936,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declared": "DoorFault",
         "snake": "door_fault",
         "camel": "DoorFault",
-        "screaming": "DOOR_FAULT"
+        "screaming": "DOOR_FAULT",
+        "pascal": "DoorFault"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": true,
@@ -940,7 +964,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "STUCK",
               "snake": "stuck",
               "camel": "STUCK",
-              "screaming": "STUCK"
+              "screaming": "STUCK",
+              "pascal": "Stuck"
             },
             "value": "0",
             "doc": ""
@@ -950,7 +975,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "NO_POWER",
               "snake": "no_power",
               "camel": "NOPOWER",
-              "screaming": "NO_POWER"
+              "screaming": "NO_POWER",
+              "pascal": "NoPower"
             },
             "value": "1",
             "doc": ""
@@ -1042,7 +1068,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "foldAngle",
               "snake": "fold_angle",
               "camel": "FoldAngle",
-              "screaming": "FOLD_ANGLE"
+              "screaming": "FOLD_ANGLE",
+              "pascal": "FoldAngle"
             },
             "kind": "KIND_SIGNAL",
             "row": 0,
@@ -1081,7 +1108,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "fold",
               "snake": "fold",
               "camel": "Fold",
-              "screaming": "FOLD"
+              "screaming": "FOLD",
+              "pascal": "Fold"
             },
             "kind": "KIND_COMMAND",
             "row": 1,
@@ -1099,7 +1127,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "declared": "door",
                     "snake": "door",
                     "camel": "Door",
-                    "screaming": "DOOR"
+                    "screaming": "DOOR",
+                    "pascal": "Door"
                   },
                   "type": {
                     "optional": false,
@@ -1135,7 +1164,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "readFold",
               "snake": "read_fold",
               "camel": "ReadFold",
-              "screaming": "READ_FOLD"
+              "screaming": "READ_FOLD",
+              "pascal": "ReadFold"
             },
             "kind": "KIND_QUERY",
             "row": 2,
@@ -1153,7 +1183,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "declared": "door",
                     "snake": "door",
                     "camel": "Door",
-                    "screaming": "DOOR"
+                    "screaming": "DOOR",
+                    "pascal": "Door"
                   },
                   "type": {
                     "optional": false,
@@ -1233,7 +1264,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "mirrorCount",
               "snake": "mirror_count",
               "camel": "MirrorCount",
-              "screaming": "MIRROR_COUNT"
+              "screaming": "MIRROR_COUNT",
+              "pascal": "MirrorCount"
             },
             "kind": "KIND_FIXED",
             "row": 3,
@@ -1271,7 +1303,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "readDoor",
               "snake": "read_door",
               "camel": "ReadDoor",
-              "screaming": "READ_DOOR"
+              "screaming": "READ_DOOR",
+              "pascal": "ReadDoor"
             },
             "kind": "KIND_QUERY",
             "row": 4,
@@ -1289,7 +1322,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "declared": "door",
                     "snake": "door",
                     "camel": "Door",
-                    "screaming": "DOOR"
+                    "screaming": "DOOR",
+                    "pascal": "Door"
                   },
                   "type": {
                     "optional": false,
@@ -1345,7 +1379,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "declared": "readLegacyDoor",
               "snake": "read_legacy_door",
               "camel": "ReadLegacyDoor",
-              "screaming": "READ_LEGACY_DOOR"
+              "screaming": "READ_LEGACY_DOOR",
+              "pascal": "ReadLegacyDoor"
             },
             "kind": "KIND_QUERY",
             "row": 5,
@@ -1363,7 +1398,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "declared": "door",
                     "snake": "door",
                     "camel": "Door",
-                    "screaming": "DOOR"
+                    "screaming": "DOOR",
+                    "pascal": "Door"
                   },
                   "type": {
                     "optional": false,

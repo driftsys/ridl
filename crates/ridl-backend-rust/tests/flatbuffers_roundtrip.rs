@@ -56,10 +56,10 @@ fn sample() -> Report {
         blob: Blob::new_unchecked(vec![1, 2, 3]),
         ratio: Ratio::new_unchecked(0.25),
         engaged: Engaged::new(true),
-        health: Health::WARN,
+        health: Health::Warn,
         flags: WarningFlags::HIGH,
         inner: inner(120, "inner"),
-        outcome: Outcome::Bad(Health::FAIL),
+        outcome: Outcome::Bad(Health::Fail),
         range: ReportRange {
             min: Speed::new_unchecked(0),
             max: Speed::new_unchecked(300),
@@ -69,7 +69,7 @@ fn sample() -> Report {
             Speed::new_unchecked(2),
             Speed::new_unchecked(3),
         ],
-        faults: vec![Health::OK, Health::FAIL],
+        faults: vec![Health::Ok, Health::Fail],
         meta: vec![
             (Label::new_unchecked(String::from("a")), Count::new_unchecked(1)),
             (Label::new_unchecked(String::from("bb")), Count::new_unchecked(2)),
@@ -79,7 +79,7 @@ fn sample() -> Report {
             Label::new_unchecked(String::from("second")),
         ],
         inners: vec![inner(1, "one"), inner(2, "two")],
-        outcomes: vec![Outcome::Ok(inner(3, "three")), Outcome::Bad(Health::WARN)],
+        outcomes: vec![Outcome::Ok(inner(3, "three")), Outcome::Bad(Health::Warn)],
         points: vec![
             ReportPointsElement {
                 x: Speed::new_unchecked(10),
@@ -109,10 +109,10 @@ fn defaults() -> Report {
         blob: Blob::new_unchecked(Vec::new()),
         ratio: Ratio::new_unchecked(0.0),
         engaged: Engaged::new(false),
-        health: Health::OK,
+        health: Health::Ok,
         flags: WarningFlags::LOW,
         inner: inner(0, ""),
-        outcome: Outcome::Bad(Health::OK),
+        outcome: Outcome::Bad(Health::Ok),
         range: ReportRange {
             min: Speed::new_unchecked(0),
             max: Speed::new_unchecked(0),
@@ -284,7 +284,7 @@ use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::{Payload, Ref};
 
 fn main() {
-    for value in [Outcome::Ok(inner(42, "table arm")), Outcome::Bad(Health::FAIL)] {
+    for value in [Outcome::Ok(inner(42, "table arm")), Outcome::Bad(Health::Fail)] {
         let mut out = vec![0u8; <Outcome as Payload<FlatBuffers>>::MAX_SIZE];
         let bytes = value.encode(&mut out).expect("encode").bytes.to_vec();
         let proof: Ref<'_, Outcome, FlatBuffers> = Ref::verify(&bytes).expect("verify");

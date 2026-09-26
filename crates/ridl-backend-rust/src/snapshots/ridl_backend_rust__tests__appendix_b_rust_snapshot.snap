@@ -385,19 +385,21 @@ pub const MAX_GEAR: i64 = 6;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum GearPosition {
-    PARK = 0,
-    DRIVE = 1,
-    REVERSE = 2,
-    NEUTRAL = 3,
+    Park = 0,
+    Drive = 1,
+    Reverse = 2,
+    Neutral = 3,
 }
 impl ::core::convert::TryFrom<i64> for GearPosition {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
-            0 => ::core::result::Result::Ok(Self::PARK),
-            1 => ::core::result::Result::Ok(Self::DRIVE),
-            2 => ::core::result::Result::Ok(Self::REVERSE),
-            3 => ::core::result::Result::Ok(Self::NEUTRAL),
+            0 => ::core::result::Result::Ok(Self::Park),
+            1 => ::core::result::Result::Ok(Self::Drive),
+            2 => ::core::result::Result::Ok(Self::Reverse),
+            3 => ::core::result::Result::Ok(Self::Neutral),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "GearPosition",
@@ -414,25 +416,27 @@ impl ::core::convert::From<GearPosition> for i64 {
 }
 impl Default for GearPosition {
     fn default() -> Self {
-        GearPosition::PARK
+        GearPosition::Park
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Warning {
-    LOW_FUEL = 0,
-    CHECK_ENGINE = 1,
-    DOOR_OPEN = 2,
-    SEATBELT = 3,
+    LowFuel = 0,
+    CheckEngine = 1,
+    DoorOpen = 2,
+    Seatbelt = 3,
 }
 impl ::core::convert::TryFrom<i64> for Warning {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
-            0 => ::core::result::Result::Ok(Self::LOW_FUEL),
-            1 => ::core::result::Result::Ok(Self::CHECK_ENGINE),
-            2 => ::core::result::Result::Ok(Self::DOOR_OPEN),
-            3 => ::core::result::Result::Ok(Self::SEATBELT),
+            0 => ::core::result::Result::Ok(Self::LowFuel),
+            1 => ::core::result::Result::Ok(Self::CheckEngine),
+            2 => ::core::result::Result::Ok(Self::DoorOpen),
+            3 => ::core::result::Result::Ok(Self::Seatbelt),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "Warning",
@@ -449,7 +453,7 @@ impl ::core::convert::From<Warning> for i64 {
 }
 impl Default for Warning {
     fn default() -> Self {
-        Warning::LOW_FUEL
+        Warning::LowFuel
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -738,7 +742,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -752,7 +756,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -875,7 +879,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, TemperatureFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -892,7 +896,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<TemperatureFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1015,7 +1019,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, RPMFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1029,7 +1033,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<RPMFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1152,7 +1156,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, RatioFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1166,7 +1170,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<RatioFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1287,7 +1291,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, CounterFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1301,7 +1305,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<CounterFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1424,7 +1428,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, GainFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1438,7 +1442,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<GainFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1540,7 +1544,7 @@ pub(crate) fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPo
         <GearPosition as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(GearPosition::PARK)
+            .unwrap_or(GearPosition::Park)
     }
 }
 #[allow(deprecated)]
@@ -1562,7 +1566,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, GearPositionFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1579,7 +1583,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<
+        GearPositionFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1681,7 +1688,7 @@ pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
         <Warning as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(Warning::LOW_FUEL)
+            .unwrap_or(Warning::LowFuel)
     }
 }
 #[allow(deprecated)]
@@ -1703,7 +1710,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, WarningFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1717,7 +1724,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<WarningFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1841,7 +1848,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, WarningFlagsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -1858,7 +1865,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<
+        WarningFlagsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -2068,7 +2078,7 @@ for SpeedLimitPayload {
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, SpeedLimitPayloadFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -2085,7 +2095,10 @@ for SpeedLimitPayload {
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<
+        SpeedLimitPayloadFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -2302,7 +2315,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
         &self,
         out: &'o mut [u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+        ::ridl_rt::payload::Encoded<'o, RawWheelFrameFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -2319,7 +2332,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
     }
     fn verify(
         buf: &[u8],
-    ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+    ) -> ::core::result::Result<
+        RawWheelFrameFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
