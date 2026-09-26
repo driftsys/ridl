@@ -404,9 +404,9 @@ fn a_package_directory_named_merge_is_a_path_when_spelled_with_a_dot() {
 ///
 /// A git hook runs with `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` in its
 /// environment, and each of those outranks the child process's working
-/// directory. This repository's pre-push hook runs the test suite, so the
-/// inherited git environment is removed here: without that, this helper would
-/// drive the repository being pushed from instead of the temporary one.
+/// directory. If this test suite is ever run as a subprocess of a git hook,
+/// the inherited git environment is removed here: without that, this helper
+/// would drive the repository being pushed from instead of the temporary one.
 fn git(dir: &Path, args: &[&str]) -> String {
     let mut command = Command::new("git");
     command
