@@ -1449,6 +1449,14 @@ fn an_enum_value_outside_the_typl_convention_compiles() {
                 enum_value("SELF", 0),
                 enum_value("checkEngine", 1),
                 enum_value("HTTPServer", 2),
+                // `Error` and `View` are the names of the associated types the
+                // generated `TryFrom` and `Payload` impls declare. A variant
+                // with the same name makes `Self::Error` / `Self::View`
+                // ambiguous (rustc `ambiguous_associated_items`, deny by
+                // default), so every emitted path to an associated item is
+                // fully qualified.
+                enum_value("ERROR", 3),
+                enum_value("VIEW", 4),
             ],
             reserved: Vec::new(),
         }),
@@ -1456,10 +1464,62 @@ fn an_enum_value_outside_the_typl_convention_compiles() {
     assert!(rust_source.contains("Self_ = 0"), "{rust_source}");
     assert!(rust_source.contains("CheckEngine = 1"), "{rust_source}");
     assert!(rust_source.contains("HttpServer = 2"), "{rust_source}");
+    assert!(rust_source.contains("Error = 3"), "{rust_source}");
+    assert!(rust_source.contains("View = 4"), "{rust_source}");
 
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("outside_convention.rs");
     let meta_path = dir.path().join("outside_convention.rmeta");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "non_camel_case_types",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "generated Rust must compile:\n{rust_source}"
+    );
+}
+
+/// A union arm named `view` becomes the variant `View`, the name of the
+/// associated type the generated `Payload` impl declares. The emitted paths
+/// to that type are fully qualified, so the generated crate compiles.
+#[test]
+fn a_union_arm_named_view_compiles() {
+    let union = v2::UnionDef {
+        arms: vec![v2::UnionArm {
+            name: "view".to_string(),
+            ordinal: 1,
+            type_ref: "Speed".to_string(),
+            doc: String::new(),
+        }],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    let rust_source = rust_for(vec![
+        speed_decl(),
+        public_decl("Reading", v2::decl::Kind::UnionDef(union)),
+    ]);
+    assert!(rust_source.contains("View(Speed)"), "{rust_source}");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("union_arm_view.rs");
+    let meta_path = dir.path().join("union_arm_view.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")

@@ -1575,7 +1575,12 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
         #allow_deprecated
         impl ::core::convert::TryFrom<i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
-            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+            // The concrete type, not `Self::Error`: a variant named `Error`
+            // would make that path ambiguous (rustc
+            // `ambiguous_associated_items`, deny by default).
+            fn try_from(
+                value: i64,
+            ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
                 match value {
                     #(#arms,)*
                     _ => ::core::result::Result::Err(::ridl_rt::payload::Violation {

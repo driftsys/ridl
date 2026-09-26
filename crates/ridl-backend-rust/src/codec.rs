@@ -2416,11 +2416,14 @@ impl<'a> Codec<'a> {
 
                 type View<'a> = #view<'a>;
 
+                // The concrete view type, not `Self::View`: an enum value or
+                // a union arm named `View` would make that path ambiguous
+                // (rustc `ambiguous_associated_items`, deny by default).
                 fn encode<'o>(
                     &self,
                     out: &'o mut [u8],
                 ) -> ::core::result::Result<
-                    ::ridl_rt::payload::Encoded<'o, Self::View<'o>>,
+                    ::ridl_rt::payload::Encoded<'o, #view<'o>>,
                     ::ridl_rt::payload::EncodeError,
                 > {
                     let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
@@ -2436,7 +2439,7 @@ impl<'a> Codec<'a> {
 
                 fn verify(
                     buf: &[u8],
-                ) -> ::core::result::Result<Self::View<'_>, ::ridl_rt::payload::VerifyError> {
+                ) -> ::core::result::Result<#view<'_>, ::ridl_rt::payload::VerifyError> {
                     if buf.len()
                         > <Self as ::ridl_rt::payload::Payload<
                             ::ridl_rt::encoding::FlatBuffers,
