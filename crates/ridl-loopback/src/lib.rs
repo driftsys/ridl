@@ -82,8 +82,9 @@
 //! For `Event` and `Claim` the rule is one waker per kind, and a change to
 //! any key of the kind wakes the stored waker, whatever interface it was
 //! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,
-//! and no change but that call's settlement or `forget` wakes it (a
-//! displacement by another task does, as for every kind). A settlement wakes the
+//! and no change but that call's settlement, its `forget`, or the drop of the
+//! caller handle that sent it wakes it (a displacement by another task does,
+//! as for every kind). A settlement wakes the
 //! call's waiter, a raise wakes each source it queues the occurrence for, and
 //! a send wakes each handler that serves the member, and a reclaimed slot of
 //! the call table wakes every caller's `Slot` waiter. A registration whose key
@@ -159,8 +160,8 @@ pub struct Loopback {
 
 impl Loopback {
     /// The number of calls the runtime holds at once: sent, and not yet
-    /// released by [`Caller::forget`]. A settled call keeps its slot until it
-    /// is forgotten. With every slot taken, [`Caller::command`] and
+    /// released by [`Caller::forget`] or by the drop of the caller handle that
+    /// sent them. A settled call keeps its slot until it is released. With every slot taken, [`Caller::command`] and
     /// [`Caller::query`] answer [`SendError::Busy`], on every caller handle,
     /// because the table is the runtime's.
     ///

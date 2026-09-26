@@ -1571,6 +1571,87 @@ fn a_dropped_caller_forgets_its_calls_and_their_slots_come_back() {
     assert_eq!(other.command(IFACE, ORD, &[99]), Err(SendError::Busy));
 }
 
+#[test]
+fn a_dropped_caller_forgets_only_its_own_calls() {
+    let rt = runtime();
+    let mut first = rt.caller();
+    let mut second = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    first.command(IFACE, ORD, &[1]).expect("send");
+    let theirs = second.command(IFACE, ORD, &[2]).expect("send");
+    while let Some(claim) = handler.next_claim(&mut buf).expect("next_claim") {
+        handler.settle(claim.id, Ok(&[])).expect("settle");
+    }
+
+    drop(first);
+    assert_eq!(
+        second.ack(theirs),
+        Some(Ok(())),
+        "the other caller's settled call is still readable"
+    );
+}
+
+#[test]
+fn a_dropped_callers_call_in_flight_wakes_its_outcome_waiter() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_eq!(wakes(&count), 0, "the call is in flight");
+
+    drop(caller);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "the drop forgot the call, so no outcome will be readable for it"
+    );
+}
+
+#[test]
+fn a_dropped_callers_own_slot_waiter_is_not_woken_by_its_drop() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let other = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    fill(&mut caller);
+    while let Some(claim) = handler.next_claim(&mut buf).expect("next_claim") {
+        handler.settle(claim.id, Ok(&[])).expect("settle");
+    }
+    let (own, own_waker) = counting();
+    let (theirs, their_waker) = counting();
+    caller.wake_on(Interest::Slot, &own_waker);
+    other.wake_on(Interest::Slot, &their_waker);
+
+    drop(caller);
+    assert_eq!(
+        (wakes(&own), wakes(&theirs)),
+        (0, 1),
+        "the dropped caller's waiters leave before its calls are reclaimed"
+    );
+    assert_eq!(Arc::strong_count(&own), 2, "and its waker is released");
+}
+
+#[test]
+fn a_serve_with_no_call_waiting_keeps_the_handlers_claim_waker() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let (count, waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &waker);
+    handler.serve(IFACE, &[ORD]).expect("serve");
+    assert_eq!(wakes(&count), 0, "nothing is waiting");
+
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(
+        wakes(&count),
+        1,
+        "the waker is still stored, so the send wakes it"
+    );
+}
+
 /// A waker that owns a handle of the runtime it is registered with. When the
 /// store holds the last reference to it, dropping the waker drops the handle,
 /// and the handle's own `Drop` takes the store's lock.
@@ -1597,6 +1678,10 @@ fn owning<H: Send + 'static>(handle: H) -> Waker {
 
 /// Drops `handle` on another thread and fails, rather than hangs, when the
 /// drop does not finish.
+///
+/// The thread is not joined, on purpose: a deadlocked drop never finishes,
+/// and a join would wait for it forever instead of failing after the
+/// timeout.
 fn assert_drop_finishes<H: Send + 'static>(handle: H, what: &str) {
     let (done, finished) = mpsc::channel();
     std::thread::spawn(move || {

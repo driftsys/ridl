@@ -234,18 +234,25 @@ kind wakes the stored waker, so a task that registers `Event(a)` and then
 three are a `ridl_rt::correlate::Waiters` (story E11.18). An `Outcome` waker is
 per call: it is kept with its call in the slot of the call table,
 `ridl_rt::correlate::Table`, because the outcome is the call's, and no change
-but that call's settlement or `forget` wakes it (a displacement by another task
-does, as for every kind). The aggregate sends each key to the handle that
-observes it.
+but that call's settlement, its `forget`, or the drop of the caller handle that
+sent it wakes it (a displacement by another task does, as for every kind). The
+aggregate sends each key to the handle that observes it.
 
 What wakes a stored waker:
 
 | Kind      | Woken by                                                                                                                                                 |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight                                                     |
-| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call, or the settlement of a call forgotten while in flight                                  |
+| `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it      |
+| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call, the settlement of a call forgotten while in flight, or another caller handle's drop    |
 | `Event`   | a raise that queues an occurrence for this source                                                                                                        |
 | `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves |
+
+A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
+and puts it back, unwoken, when no call the handler now serves is waiting. A
+`serve` with no waker registered therefore scans nothing, as it did before the
+waker moved into a `ridl_rt::correlate::Waiters`, which has no query for an
+empty kind. This is the one change story E11.18 makes on the claim side, and it
+changes nothing about what wakes the waker.
 
 A settlement, a raise, a send, a `serve`, a `forget`, a caller's drop and a
 handler's drop collect the wakers to wake inside their critical section, and
@@ -333,18 +340,19 @@ fails
 The call table is `ridl_rt::correlate::Table`, with `Loopback::SLOTS` — sixteen
 — slots and no byte budget, because the loopback has no catalog descriptor to
 size one from until E16.2 (note F-9). A call holds a slot from the caller's send
-until `forget` reclaims it; a send with every slot taken answers
-`SendError::Busy`, on every caller handle, because the table is the runtime's. A
-correlation is `(generation << 16) | slot`, and a reclaim advances the slot's
-generation, so the correlation a reused slot had before answers as unknown:
-`ack` and `reply` answer `None`, and an `Outcome` registration under it is woken
-at once. The table holds the outcome status and the `Outcome` waker; the
-loopback keeps each call's arguments, its envelope, its place in send order and
-its reply bytes beside it, by slot. A returned claim goes back among the waiting
-calls by send order, not by correlation, because a reused slot's correlation is
-larger than that of a call sent later into a fresh slot. A refused send draws no
-sequence number, because nothing was sent. Two identities address a call, and
-they are separate:
+until `forget`, or the drop of the caller handle that sent it, reclaims it; a
+send with every slot taken answers `SendError::Busy`, on every caller handle,
+because the table is the runtime's. A correlation is
+`(generation << 16) | slot`, and a reclaim advances the slot's generation, so
+the correlation a reused slot had before answers as unknown: `ack` and `reply`
+answer `None`, and an `Outcome` registration under it is woken at once. The
+table holds the outcome status and the `Outcome` waker; the loopback keeps each
+call's arguments, its envelope, its place in send order and its reply bytes
+beside it, by slot. A returned claim goes back among the waiting calls by send
+order, not by correlation, because a reused slot's correlation is larger than
+that of a call sent later into a fresh slot. A refused send draws no sequence
+number, because nothing was sent. Two identities address a call, and they are
+separate:
 
 - a **`Correlation`**, returned by `command` and `query`, is the caller's name
   for the outcome it will read back;
@@ -572,12 +580,13 @@ Three more that are the runtime's own shape rather than the descriptor's:
   and nothing the Rust backend emits today calls `Caller::forget`. **A program
   that makes calls through the generated face over one `Loopback` therefore
   finds every send `SendError::Busy` from its seventeenth call on**, where every
-  call succeeded before story E11.18. Nothing in this repository sends more than
-  sixteen calls over one runtime — the tests, `just demo` and `examples/cabin`
-  all pass — and plan Task 4 (story E11.21) closes the limit: its future forgets
-  the call once it has taken the outcome, and on drop. No release of the crates
-  happens before Task 4 (ADR-0021 decision 18). This runtime holds the outcome
-  because nothing else can know the caller has read it.
+  call succeeded before story E11.18. Nothing in this repository holds more than
+  sixteen unforgotten calls over one runtime at once — the tests, `just demo`
+  and `examples/cabin` all pass — and plan Task 4 (story E11.21) closes the
+  limit: its future forgets the call once it has taken the outcome, and on drop.
+  No release of the crates happens before Task 4 (ADR-0021 decision 18). This
+  runtime holds the outcome because nothing else can know the caller has read
+  it.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when
