@@ -1392,13 +1392,22 @@ fn an_enum_variant_is_spelled_in_pascal_case() {
     )]);
     assert!(source.contains("CheckEngine = 1"), "{source}");
     assert!(source.contains("Ok(Self::CheckEngine)"), "{source}");
-    assert!(source.contains("Warning::LowFuel"), "{source}");
+    // The `Default` impl's own body, not just `Warning::LowFuel` anywhere: the
+    // codec's `.unwrap_or(Warning::LowFuel)` also spells the value, so a
+    // `contains` over the whole source would not notice a `Default` impl
+    // that kept the typl spelling.
+    assert!(
+        source.contains("fn default() -> Self {\n        Warning::LowFuel\n    }"),
+        "{source}"
+    );
     assert!(!source.contains("CHECK_ENGINE"), "{source}");
+    assert!(!source.contains("LOW_FUEL"), "{source}");
 }
 
-/// Design §4: a model written by a toolchain older than `Spellings.pascal`
-/// carries it empty, and the backend derives it from `snake`. The output
-/// must be the same as from a current model.
+/// `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §4: a model
+/// written by a toolchain older than `Spellings.pascal` carries it empty, and
+/// the backend derives it from `snake`. The output must be the same as from a
+/// current model.
 #[test]
 fn an_empty_pascal_spelling_is_derived_from_snake() {
     let package = package(
@@ -1435,7 +1444,8 @@ fn an_empty_pascal_spelling_is_derived_from_snake() {
     assert_eq!(derived, current);
 }
 
-/// Values outside the typl convention (Review Focus 1). `SELF` becomes
+/// Values outside the typl convention (`docs/archive/2026-09-26-enum-variant-pascal-case-plan.md`,
+/// Review Focus 1). `SELF` becomes
 /// `Self`, which cannot be an identifier, and `ident()` escapes it to
 /// `Self_`; `checkEngine` and `HTTPServer` become `CheckEngine` and
 /// `HttpServer`. The generated enum must compile with
@@ -3197,7 +3207,8 @@ fn constructible_collections_compile() {
     // a single word. It is denied for the same reason as in
     // `appendix_b_compiles_with_rustc`: to keep this proof a proof if a
     // multi-word field name is ever added. Issue #243 is guarded by
-    // `appendix_a_compiles_with_rustc`.
+    // `appendix_a_compiles_with_rustc`. `-D non_camel_case_types` is inert
+    // here too: this fixture declares no enum.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3652,8 +3663,8 @@ pub mod veh {
     // run. The assertion is otherwise on the exit status, which a warning
     // does not change. `non_camel_case_types` is denied too, for
     // driftsys/ridl#506. Appendix A's `DiagError` holds multi-word values
-    // (`FILTER_INVALID`, `STORAGE_BUSY`, `ACCESS_DENIED`), so the deny bites
-    // on this fixture.
+    // (`FILTER_INVALID`, `STORAGE_BUSY`, `ACCESS_DENIED`), so the deny fails
+    // on this fixture if a variant is not PascalCase.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
