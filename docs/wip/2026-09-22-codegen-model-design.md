@@ -159,6 +159,7 @@ a foreign declaration indexes this list (§3.4).
       string snake = 2;                          // ridl_ir::name::snake_case (ADR-0016 decision 1)
       string camel = 3;                          // ridl_ir::name::camel_case (ADR-0016, 2026-09-20 amendment)
       string screaming = 4;                      // snake, upper-cased — what P and F call screaming_snake_case
+      string pascal = 5;                         // ridl_ir::name::pascal_case, camel_case of snake (ADR-0016, 2026-09-26 amendment) — the Rust backend's enum variant names
     }
 
     message DottedName {                         // a package name or a service name
@@ -173,7 +174,7 @@ a foreign declaration indexes this list (§3.4).
       string wire = 2;                           // owner + type_name(field), nested by Field<N>, …Element/…Key/…Value — proto3 and FlatBuffers agree
     }
 
-A `Spellings` carries the three pinned outputs and the composition every wire
+A `Spellings` carries the four pinned outputs and the composition every wire
 backend makes of one of them. A printer whose namespace is snake_case reads
 `snake`, one whose namespace is CamelCase reads `camel`, and a printer that
 keeps the source spelling — TypeScript, for a field — reads `declared`. The
@@ -816,7 +817,7 @@ four printers already word one each.
 ### D-2. Names are carried by transform, not by language; induced names by rule
 
 Every declared identifier carries `Spellings` (declared, snake, camel,
-screaming); every dotted name carries `DottedName` (dotted, segments,
+screaming, pascal); every dotted name carries `DottedName` (dotted, segments,
 joined_camel, underscored); every induced tuple carries `InducedName` with the
 Rust rule and the wire rule spelled out (§3.2).
 
