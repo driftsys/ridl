@@ -23,7 +23,8 @@ other entry below is Accepted.
 - **ADR-0008 — Epic E2 execution.** E2-scoped execution decisions (general-form
   authority for the interaction surface, IR v2 placement, the TypeScript second
   backend, `ridl diff` placement and its classifier rules, the `RIDL-`
-  diagnostic allocations, and seven close-out amendments, decisions 15 to 21).
+  diagnostic allocations, a later amendment, decision 15, and six close-out
+  amendments, decisions 16 to 21).
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
@@ -143,8 +144,8 @@ other entry below is Accepted.
   that no earlier record supplied: how a foreign reference projects, where
   constraint information goes, and totality over names as well as over field
   numbers. Its decision 1 fixes `generate_with` as the API every later wire
-  backend inherits. Decisions 1 and 3 bind every backend that projects onto a
-  namespaced target and are not proto3-scoped; decision 2 is proto3-scoped. Read
+  backend inherits. Decisions 1 and 4 bind every backend that projects onto a
+  namespaced target and are not proto3-scoped; decision 3 is proto3-scoped. Read
   decision 1 before writing another wire backend.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
@@ -205,8 +206,8 @@ other entry below is Accepted.
   place, and the one 0.x minor that carries E11.16 to E11.19; it also folds
   decision 8, corrects decision 11, and records open questions 5 and 6. Binds
   every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
-  reference finalization pass (story E14.2). The two reference sentences it
-  gave that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  reference finalization pass (story E14.2). The two reference sentences it gave
+  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
   which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
