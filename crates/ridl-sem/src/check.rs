@@ -6591,6 +6591,11 @@ mod tests {
         format!("package app\nenum E {{ {first} = 0, {second} = 1 }}\n")
     }
 
+    /// Three values, for the reports that must all name the first one.
+    fn enum_source_3(first: &str, second: &str, third: &str) -> String {
+        format!("package app\nenum E {{ {first} = 0, {second} = 1, {third} = 2 }}\n")
+    }
+
     /// The pair differs under `snake_case` and collides under `pascal_case`:
     /// the Rust backend would emit the variant `CheckEngine` twice.
     #[test]
@@ -6666,9 +6671,12 @@ mod tests {
         );
     }
 
+    /// The message and the label name the transform, and the primary span
+    /// covers the second value's name alone, not its `= 1`.
     #[test]
     fn ridl_149_names_pascal_case_for_an_enum_value() {
-        let checked = check_source("app", &enum_source("CHECK_ENGINE", "CHECK__ENGINE"));
+        let source = enum_source("CHECK_ENGINE", "CHECK__ENGINE");
+        let checked = check_source("app", &source);
         let diagnostic = &checked.diagnostics[0];
         assert_eq!(
             diagnostic.message,
@@ -6680,6 +6688,66 @@ mod tests {
         assert_eq!(
             only_label(diagnostic),
             "`CHECK_ENGINE` becomes `CheckEngine` here"
+        );
+        let range = diagnostic.primary.range;
+        assert_eq!(
+            &source[usize::from(range.start())..usize::from(range.end())],
+            "CHECK__ENGINE",
+            "the span must cover exactly the second value's name",
+        );
+    }
+
+    /// Three values that all become `CheckEngine`. Each later value is
+    /// reported against the value that keeps the projected name — the first
+    /// one — so the third value names the first and not the second.
+    #[test]
+    fn ridl_149_a_third_enum_value_is_reported_against_the_first() {
+        let checked = check_source(
+            "app",
+            &enum_source_3("checkEngine", "CHECK_ENGINE", "Check_Engine"),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .starts_with("`CHECK_ENGINE` and `checkEngine` both become `CheckEngine`"),
+            "got: {}",
+            checked.diagnostics[0].message
+        );
+        assert!(
+            checked.diagnostics[1]
+                .message
+                .starts_with("`Check_Engine` and `checkEngine` both become `CheckEngine`"),
+            "got: {}",
+            checked.diagnostics[1].message
+        );
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                only_label(diagnostic),
+                "`checkEngine` becomes `CheckEngine` here"
+            );
+        }
+    }
+
+    /// A value with no explicit integer draws TYPL-203 and is skipped before
+    /// the projection check reaches it: it emits no variant, so it is not in
+    /// the namespace. The pair would otherwise collide under `pascal_case`.
+    #[test]
+    fn ridl_149_does_not_check_an_enum_value_skipped_for_a_missing_integer() {
+        let checked = check_source(
+            "app",
+            "package app\nenum E { CHECK_ENGINE, CHECK__ENGINE = 1 }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-203"],
+            "got: {:?}",
+            checked.diagnostics
         );
     }
 
