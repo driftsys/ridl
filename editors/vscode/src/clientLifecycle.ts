@@ -27,6 +27,32 @@
 /** The phase vscode-languageclient's public `State` enum reports, spelled without the `State.` import this module avoids. */
 export type ClientPhase = "starting" | "running" | "startFailed" | "stopped";
 
+/**
+ * Maps a vscode-languageclient client's numeric `State` to the `ClientPhase`
+ * this lifecycle reads. Takes a plain number rather than the library's own
+ * `State` enum, because importing anything from `vscode-languageclient/node`
+ * pulls in a transitive `import "vscode"` that only resolves inside a running
+ * extension host, and this module stays free of that so it can be
+ * unit-tested directly. The numbers are the library's own
+ * (lib/common/client.d.ts): Stopped = 1, Running = 2, Starting = 3,
+ * StartFailed = 4. A numeric `State` enum member is assignable to `number`,
+ * so a caller passes `this.state` straight through.
+ */
+export function phaseOf(state: number): ClientPhase {
+  switch (state) {
+    case 3:
+      return "starting";
+    case 2:
+      return "running";
+    case 4:
+      return "startFailed";
+    case 1:
+      return "stopped";
+    default:
+      throw new Error(`unhandled vscode-languageclient state: ${state}`);
+  }
+}
+
 /** The part of a vscode-languageclient `LanguageClient` the lifecycle drives. */
 export interface LifecycleClient {
   start(): Promise<void>;

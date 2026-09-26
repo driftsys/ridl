@@ -23,7 +23,6 @@ import {
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
-  State,
   TransportKind,
 } from "vscode-languageclient/node";
 import {
@@ -33,8 +32,9 @@ import {
   resolveMcpDefinition,
   shouldStartClientForLanguage,
 } from "./binaryResolution";
-import { ClientLifecycle, ClientPhase } from "./clientLifecycle";
+import { ClientLifecycle, ClientPhase, phaseOf } from "./clientLifecycle";
 import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
+import { runOnce } from "./runOnce";
 
 const MCP_PROVIDER_ID = "ridl";
 
@@ -43,30 +43,17 @@ const execFileAsync = promisify(execFile);
 /** A `LanguageClient` that reports its own state in the vocabulary `ClientLifecycle` reads. */
 class RidlLanguageClient extends LanguageClient {
   phase(): ClientPhase {
-    switch (this.state) {
-      case State.Starting:
-        return "starting";
-      case State.Running:
-        return "running";
-      case State.StartFailed:
-        return "startFailed";
-      case State.Stopped:
-        return "stopped";
-      default: {
-        const exhaustive: never = this.state;
-        throw new Error(`unhandled vscode-languageclient state: ${String(exhaustive)}`);
-      }
-    }
+    return phaseOf(this.state);
   }
 }
 
 let lifecycle: ClientLifecycle<RidlLanguageClient> | undefined;
 
-// Whether the stale-copy offer has run this activation. It runs at most once
-// per activation, after the first start that brings a client up, whether
-// from a document open or a restart (for example, one reached through a
-// corrected `ridl.serverPath` after an earlier start failure).
-let offeredStaleCopyCheck = false;
+// Runs the stale-copy offer at most once per activation, after the first
+// start that brings a client up, whether from a document open or a restart
+// (for example, one reached through a corrected `ridl.serverPath` after an
+// earlier start failure). Set in `activate`, once `context` is available.
+let offerStaleCopyOnce: (() => void) | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Shared by every client the lifecycle creates: a client whose start fails
@@ -78,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const outputChannel = vscode.window.createOutputChannel("RIDL Language Server", { log: true });
   context.subscriptions.push(outputChannel);
   lifecycle = new ClientLifecycle(() => createClient(context, outputChannel));
+  offerStaleCopyOnce = runOnce(() => void offerRefreshOfStaleCopy(context));
   const configured = configuredServerPath();
   if (configured && isLegacyServerName(configured)) {
     void vscode.window.showWarningMessage(
@@ -95,7 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // gate on "a document was opened" lives inside `lifecycle.restart`.
       if (event.affectsConfiguration("ridl.serverPath")) {
         if (await lifecycle?.restart()) {
-          offerStaleCopyOnce(context);
+          offerStaleCopyOnce!();
         }
       }
     }),
@@ -124,15 +112,8 @@ export async function deactivate(): Promise<void> {
  */
 async function startClientIfNeeded(context: vscode.ExtensionContext): Promise<void> {
   if (await lifecycle!.startIfNeeded()) {
-    offerStaleCopyOnce(context);
+    offerStaleCopyOnce!();
   }
-}
-
-/** Runs the stale-copy offer at most once per activation, on the first start that brings a client up. */
-function offerStaleCopyOnce(context: vscode.ExtensionContext): void {
-  if (offeredStaleCopyCheck) return;
-  offeredStaleCopyCheck = true;
-  void offerRefreshOfStaleCopy(context);
 }
 
 /** The `ridl.serverPath` setting, trimmed, or undefined when blank. */

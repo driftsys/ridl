@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { ClientLifecycle, ClientPhase, LifecycleClient } from "./clientLifecycle";
+import { ClientLifecycle, ClientPhase, LifecycleClient, phaseOf } from "./clientLifecycle";
 
 // A fake language client that follows the state machine of
 // vscode-languageclient 10.1.0 (lib/common/client.js): `start` moves the
@@ -25,6 +25,9 @@ class FakeClient implements LifecycleClient {
   ) {}
 
   start(): Promise<void> {
+    if (this.state === "stopping") {
+      throw new Error("Client is currently stopping. Can only restart a client after it stopped or start it initially.");
+    }
     if (this.onStart !== undefined) return this.onStart;
     this.starts += 1;
     this.state = "starting";
@@ -54,9 +57,11 @@ class FakeClient implements LifecycleClient {
     this.onStop = this.stopOutcome.then(
       () => {
         this.state = "stopped";
+        this.onStart = undefined;
       },
       (error: unknown) => {
         this.state = "stopped";
+        this.onStart = undefined;
         throw error;
       },
     );
@@ -80,9 +85,14 @@ class FakeClient implements LifecycleClient {
     return this.state === "running";
   }
 
-  /** The server exits and the library's error handler gives up: the client ends Stopped and will not restart itself. */
+  /**
+   * The server exits and the library's error handler gives up: the client
+   * will not restart itself. Ends StartFailed if the exit happened during
+   * the first start (client.js:1467-1468), Stopped otherwise, matching the
+   * library.
+   */
   serverExitedAndLibraryGaveUp(): void {
-    this.state = "stopped";
+    this.state = this.state === "starting" ? "startFailed" : "stopped";
     this.onStart = undefined;
   }
 
@@ -327,12 +337,31 @@ test("while the library restarts the server itself, startIfNeeded creates no sec
   await lifecycle.startIfNeeded();
   const restarting = deferred();
   created[0].serverExitedAndLibraryRestarts(restarting.promise);
-  const started = lifecycle.startIfNeeded();
+  let settled = false;
+  const started = lifecycle.startIfNeeded().then((result) => {
+    settled = true;
+    return result;
+  });
   await queuedWorkHasRun();
+  assert.equal(settled, false, "startIfNeeded resolved before the library's own restart settled");
   restarting.resolve();
   assert.equal(await started, false);
   assert.equal(created.length, 1);
   assert.equal(created[0].isRunning(), true);
+});
+
+test("while the library restarts the server itself but that restart fails, startIfNeeded creates a new client", async () => {
+  const { lifecycle, created } = lifecycleWith("ok", "ok");
+  await lifecycle.startIfNeeded();
+  const restarting = deferred();
+  created[0].serverExitedAndLibraryRestarts(restarting.promise);
+  const started = lifecycle.startIfNeeded();
+  await queuedWorkHasRun();
+  restarting.reject(new Error("spawn ridl-lsp ENOENT"));
+  assert.equal(await started, true);
+  assert.equal(created.length, 2);
+  assert.equal(created[0].isRunning(), false);
+  assert.equal(created[1].isRunning(), true);
 });
 
 test("while the library restarts the server itself, restart waits for it, stops that client once, and starts a new one", async () => {
@@ -349,6 +378,20 @@ test("while the library restarts the server itself, restart waits for it, stops 
   assert.equal(created[1].isRunning(), true);
 });
 
+test("while the library restarts the server itself but that restart fails, restart calls stop on nothing and starts a new client", async () => {
+  const { lifecycle, created } = lifecycleWith("ok", "ok");
+  await lifecycle.startIfNeeded();
+  const restarting = deferred();
+  created[0].serverExitedAndLibraryRestarts(restarting.promise);
+  const doingRestart = lifecycle.restart();
+  await queuedWorkHasRun();
+  restarting.reject(new Error("spawn ridl-lsp ENOENT"));
+  assert.equal(await doingRestart, true);
+  assert.equal(created.length, 2);
+  assert.equal(created[0].stops, 0);
+  assert.equal(created[1].isRunning(), true);
+});
+
 test("while the library restarts the server itself, stop waits for it, stops that client once, and leaves client undefined", async () => {
   const { lifecycle, created } = lifecycleWith("ok");
   await lifecycle.startIfNeeded();
@@ -359,6 +402,19 @@ test("while the library restarts the server itself, stop waits for it, stops tha
   restarting.resolve();
   await stopping;
   assert.equal(created[0].stops, 1);
+  assert.equal(lifecycle.client, undefined);
+});
+
+test("while the library restarts the server itself but that restart fails, stop does not throw and leaves client undefined", async () => {
+  const { lifecycle, created } = lifecycleWith("ok");
+  await lifecycle.startIfNeeded();
+  const restarting = deferred();
+  created[0].serverExitedAndLibraryRestarts(restarting.promise);
+  const stopping = lifecycle.stop();
+  await queuedWorkHasRun();
+  restarting.reject(new Error("spawn ridl-lsp ENOENT"));
+  await assert.doesNotReject(stopping);
+  assert.equal(created[0].stops, 0);
   assert.equal(lifecycle.client, undefined);
 });
 
@@ -402,4 +458,71 @@ test("the queue keeps running after an operation rejects", async () => {
   const started = await lifecycle.startIfNeeded();
   assert.equal(started, true);
   assert.ok(lifecycle.client);
+});
+
+test("a constructor error during restart rejects restart, and the queue keeps running afterward", async () => {
+  let calls = 0;
+  const lifecycle = new ClientLifecycle<FakeClient>(() => {
+    calls += 1;
+    if (calls === 2) throw new Error("constructor error");
+    return new FakeClient(Promise.resolve());
+  });
+  await lifecycle.startIfNeeded();
+  await assert.rejects(lifecycle.restart(), /constructor error/);
+  const started = await lifecycle.startIfNeeded();
+  assert.equal(started, true);
+  assert.ok(lifecycle.client);
+});
+
+test("phaseOf maps every vscode-languageclient State number to its ClientPhase", () => {
+  // The library's own numbers (lib/common/client.d.ts): Stopped = 1, Running = 2, Starting = 3, StartFailed = 4.
+  assert.equal(phaseOf(3), "starting");
+  assert.equal(phaseOf(2), "running");
+  assert.equal(phaseOf(4), "startFailed");
+  assert.equal(phaseOf(1), "stopped");
+});
+
+test("phaseOf throws for a state number the library does not declare", () => {
+  assert.throws(() => phaseOf(99), /unhandled vscode-languageclient state/);
+});
+
+test("FakeClient.stop called again while stopping does not stop it a second time", async () => {
+  const client = new FakeClient(Promise.resolve());
+  await client.start();
+  const first = client.stop();
+  const second = client.stop();
+  await Promise.all([first, second]);
+  assert.equal(client.stops, 1);
+  assert.equal(client.phase(), "stopped");
+});
+
+test("FakeClient.start throws while the client is stopping, matching vscode-languageclient", async () => {
+  const client = new FakeClient(Promise.resolve());
+  await client.start();
+  const stopping = client.stop();
+  assert.throws(() => client.start(), /currently stopping/);
+  await stopping;
+});
+
+test("FakeClient.start after a stop starts a new promise instead of returning the old one, matching vscode-languageclient", async () => {
+  const client = new FakeClient(Promise.resolve());
+  await client.start();
+  await client.stop();
+  await client.start();
+  assert.equal(client.starts, 2);
+  assert.equal(client.isRunning(), true);
+});
+
+test("FakeClient.serverExitedAndLibraryGaveUp during the first start ends startFailed, matching vscode-languageclient", () => {
+  const client = new FakeClient(new Promise(() => undefined));
+  void client.start();
+  client.serverExitedAndLibraryGaveUp();
+  assert.equal(client.phase(), "startFailed");
+});
+
+test("FakeClient.serverExitedAndLibraryGaveUp while running ends stopped", async () => {
+  const client = new FakeClient(Promise.resolve());
+  await client.start();
+  client.serverExitedAndLibraryGaveUp();
+  assert.equal(client.phase(), "stopped");
 });
