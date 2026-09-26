@@ -368,13 +368,12 @@ runtime's local name for the outcome it will read back through `Caller::ack`; a
 runtime may use the request's `seq` as its value, and nothing on the frame
 depends on that choice.
 
-**What the provider does.** A providing runtime that cannot admit a call — no
+**What the provider does.** A providing runtime that cannot admit the call — no
 slot, no budget, or a call faster than the member's `min` (§8) — does not
-present it and answers with a `response` whose outcome is **`busy`**. On a
-`request` naming a command that it admits, the providing runtime presents it
-once to application code as a claim (`Handler::next_claim`, with a `ClaimId`
-that is the provider's local name and never crosses), and the generated
-`dispatch`:
+present it and answers with a `response` whose outcome is `busy`. Otherwise, on
+a `request` naming a command, the providing runtime presents it once to
+application code as a claim (`Handler::next_claim`, with a `ClaimId` that is the
+provider's local name and never crosses), and the generated `dispatch`:
 
 1. runs `Payload::verify` over the argument bytes; a structure failure settles
    `corrupt`, a typl violation settles `contract(InvalidValue(violation))`;
@@ -418,9 +417,9 @@ method returns.
 correlation always.
 
 **What the provider does.** Admission is the command's: a query the providing
-runtime cannot admit is answered `busy` and not presented. Steps 1 and 2 are the
-command's. Then the generated `dispatch` calls the provider's method, evaluates
-the query's `ensure` clauses over the arguments and the reply, and settles
+runtime cannot admit is answered `busy`. Steps 1 and 2 are the command's. Then
+the generated `dispatch` calls the provider's method, evaluates the query's
+`ensure` clauses over the arguments and the reply, and settles
 `contract(ContractBroken)` when a clause is false — an `ensure` failure is a
 provider defect (ridl §10.2) and the reply it would have carried does not cross
 — or `reply` with the encoded reply otherwise. **A query settles after the
@@ -725,14 +724,14 @@ as §3 states.
 
 ### 9.6 Which failures cross
 
-Of the five `Transport` variants, exactly two cross a boundary, both as a
+Of the five `Transport` variants, exactly two cross a boundary, each as a
 `response` outcome: **`Corrupt`**, because the provider detected it, and
-**`Busy`**, because the provider refused. `Timeout`, `Undelivered` and `Down`
-are the **absence** of a frame, detected by the caller's runtime against its own
-clock and its binding's session state, and never sent by anyone. Of the four
-`Contract` categories, every one may cross as a `response` or `answer` outcome.
-`Detected(_)` never crosses: it is the consumer's own finding about bytes it
-received.
+**`Busy`**, because the provider refused the call at admission. `Timeout`,
+`Undelivered` and `Down` are the **absence** of a frame, detected by the
+caller's runtime against its own clock and its binding's session state, and
+never sent by anyone. Of the four `Contract` categories, every one may cross as
+a `response` or `answer` outcome. `Detected(_)` never crosses: it is the
+consumer's own finding about bytes it received.
 
 ## 10. What a Binding Decides
 
@@ -896,9 +895,9 @@ Each item is left out on purpose, with the record that takes it.
   §4; the bytes of each encoding are each projection record's.
 - **A wake hook.** The frame is push: a runtime learns of a frame from its
   binding. How it wakes an application that is waiting on a reply, an occurrence
-  or a claim is the runtime's, not the frame's: `port::Wakeable`
-  ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13,
-  which closed its open item 6).
+  or a claim is the runtime's, not the frame's
+  ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) open item
+  6).
 - **Unknown fields on decode**
   ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) open
   item 3) is a payload question, the proto3 projection's.
@@ -923,8 +922,7 @@ Each item is left out on purpose, with the record that takes it.
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 6 and 7;
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 2,
-  3, 5, 6, 7 and 14 (the last, `busy` as a `response` outcome, story E11.16,
-  driftsys/ridl#510);
+  3, 5, 6 and 7;
   [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decisions
   3, 10 and 17
 - Vocabulary: [the `ridl-rt` design record](../design/ridl-rt.md), and
