@@ -500,24 +500,29 @@ fn a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one() {
 #[test]
 fn a_source_registered_under_two_interfaces_is_woken_by_either() {
     // One waker per kind of key: the second registration of the same task
-    // refreshes the `Event` waker rather than narrowing it to the second
-    // interface (ADR-0021 decision 13).
+    // refreshes the `Event` waker rather than narrowing it to either
+    // interface (ADR-0021 decision 13). Each interface is tried in turn.
     let rt = runtime();
     let mut sink = rt.sink();
     let mut source = rt.source();
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
     source.subscribe(InterfaceNo(2), &[ORD]).expect("subscribe");
+    let mut out = [0u8; 8];
     let (count, waker) = counting();
-    source.wake_on(Interest::Event(IFACE), &waker);
-    source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
-    assert_eq!(wakes(&count), 0, "the same task registered twice");
 
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
-    assert_eq!(
-        wakes(&count),
-        1,
-        "an occurrence of the first interface wakes it"
-    );
+    for (turn, iface) in [IFACE, InterfaceNo(2)].into_iter().enumerate() {
+        source.wake_on(Interest::Event(IFACE), &waker);
+        source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
+        assert_eq!(wakes(&count), turn, "the same task registered twice");
+        sink.raise(iface, ORD, &[1]).expect("raise");
+        assert_eq!(
+            wakes(&count),
+            turn + 1,
+            "an occurrence of interface {} wakes it",
+            iface.0
+        );
+        while source.next(&mut out).expect("next").is_some() {}
+    }
 }
 
 #[test]
@@ -527,13 +532,138 @@ fn a_handler_registered_under_two_interfaces_is_woken_by_either() {
     let mut handler = rt.handler();
     handler.serve(IFACE, &[ORD]).expect("serve");
     handler.serve(InterfaceNo(2), &[ORD]).expect("serve");
+    let mut buf = [0u8; 8];
+    let (count, waker) = counting();
+
+    for (turn, iface) in [IFACE, InterfaceNo(2)].into_iter().enumerate() {
+        handler.wake_on(Interest::Claim(IFACE), &waker);
+        handler.wake_on(Interest::Claim(InterfaceNo(2)), &waker);
+        assert_eq!(wakes(&count), turn, "the same task registered twice");
+        caller.command(iface, ORD, &[1]).expect("send");
+        assert_eq!(
+            wakes(&count),
+            turn + 1,
+            "a call on interface {} wakes it",
+            iface.0
+        );
+        let claim = handler
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        handler.settle(claim.id, Ok(&[])).expect("settle");
+    }
+}
+
+#[test]
+fn a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once() {
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut source = rt.source();
+    source.subscribe(InterfaceNo(2), &[ORD]).expect("subscribe");
+    sink.raise(InterfaceNo(2), ORD, &[1]).expect("raise");
+
+    let (count, waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &waker);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "an occurrence of another interface is waiting"
+    );
+}
+
+#[test]
+fn a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    handler.serve(InterfaceNo(2), &[ORD]).expect("serve");
+    caller.command(InterfaceNo(2), ORD, &[1]).expect("send");
+
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
-    handler.wake_on(Interest::Claim(InterfaceNo(2)), &waker);
-    assert_eq!(wakes(&count), 0, "the same task registered twice");
+    assert_eq!(wakes(&count), 1, "a call on another interface is waiting");
+}
 
+#[test]
+fn an_event_or_claim_waiter_is_cleared_when_woken() {
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut caller = rt.caller();
+    let mut source = rt.source();
+    let mut handler = rt.handler();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    handler.serve(IFACE, &[ORD]).expect("serve");
+
+    let (event, event_waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &event_waker);
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[2]).expect("raise");
+    assert_eq!(wakes(&event), 1, "the first raise cleared the waker");
+
+    let (claim, claim_waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
     caller.command(IFACE, ORD, &[1]).expect("send");
-    assert_eq!(wakes(&count), 1, "a call on the first interface wakes it");
+    caller.command(IFACE, ORD, &[2]).expect("send");
+    assert_eq!(wakes(&claim), 1, "the first send cleared the waker");
+}
+
+#[test]
+fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handler() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut keeper = rt.handler();
+    let mut dropped = rt.handler();
+    let mut other = rt.handler();
+    keeper.serve(IFACE, &[ORD]).expect("serve");
+    dropped.serve(IFACE, &[ORD]).expect("serve");
+    other.serve(IFACE, &[ORD]).expect("serve");
+    let mut buf = [0u8; 8];
+
+    let kept = caller.command(IFACE, ORD, &[1]).expect("send");
+    let kept_claim = keeper
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    caller.command(IFACE, ORD, &[2]).expect("send");
+    dropped
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+
+    let (first, first_waker) = counting();
+    let (second, second_waker) = counting();
+    keeper.wake_on(Interest::Claim(IFACE), &first_waker);
+    other.wake_on(Interest::Claim(IFACE), &second_waker);
+    drop(dropped);
+    assert_eq!(
+        wakes(&first),
+        1,
+        "every serving handler is woken: the first"
+    );
+    assert_eq!(
+        wakes(&second),
+        1,
+        "every serving handler is woken: the second"
+    );
+
+    let returned = other
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("returned");
+    assert_eq!(
+        &buf[..returned.len],
+        &[2],
+        "only the dropped handler's call"
+    );
+    assert_eq!(
+        other.next_claim(&mut buf).expect("next_claim"),
+        None,
+        "the call another handler holds stays with it"
+    );
+    keeper
+        .settle(kept_claim.id, Ok(&[]))
+        .expect("the keeper still holds its claim");
+    assert_eq!(caller.ack(kept), Some(Ok(())));
 }
 
 #[test]
