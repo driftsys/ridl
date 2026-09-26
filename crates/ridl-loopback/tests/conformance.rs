@@ -1,7 +1,7 @@
 //! The port contract suite of `ridl-rt-conformance`, run over this runtime.
 //!
 //! Every test the suite has runs here, including those of both signal
-//! extensions, which the loopback implements. The tests of what only this
+//! extensions and of `Wakeable`, which the loopback implements. The tests of what only this
 //! runtime can express are in `tests/ports.rs`.
 
 use ridl_loopback::{CallerHandle, HandlerHandle, Loopback, SourceHandle};
@@ -10,7 +10,8 @@ use ridl_rt::sample::Duration;
 use ridl_rt_conformance::Factory;
 
 /// The loopback as the suite builds it: the aggregate, the additional role
-/// handles `Loopback` hands out, and its two test hooks.
+/// handles `Loopback` hands out, its call table's size, and its two test
+/// hooks.
 struct LoopbackFactory;
 
 impl Factory for LoopbackFactory {
@@ -18,6 +19,8 @@ impl Factory for LoopbackFactory {
     type Source = SourceHandle;
     type Caller = CallerHandle;
     type Handler = HandlerHandle;
+
+    const SLOTS: usize = Loopback::SLOTS;
 
     fn runtime(catalog: CatalogRef) -> Loopback {
         Loopback::new(catalog)
@@ -44,4 +47,4 @@ impl Factory for LoopbackFactory {
     }
 }
 
-ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent);
+ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent, wakeable);

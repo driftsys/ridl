@@ -324,19 +324,21 @@ runtime's limit, not a defect of the face, whose future has no timer of its own
 (ADR-0023 decision 6, "The bound"); whether this runtime ever measures a bound
 is not decided.
 
-The tests are under "Waking" in `crates/ridl-loopback/tests/ports.rs`. Removing
-the wake from the settlement path turns red every one that waits for a
-settlement, among them
-`a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement`;
-`a_waker_is_woken_after_the_lock_is_released` and
-`every_wake_is_run_with_the_lock_released` fail when a waker is woken with the
-lock held; `a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails
-without the handler's `Drop`, and `a_dropped_handler_leaves_no_waiter_behind`
-fails when that `Drop` returns the claims but leaves the handler's state in the
-store. Under "The bounded call table", removing the `Slot` wake from a reclaim
-fails
-`a_slot_registration_is_stored_while_every_slot_is_taken_and_woken_by_a_forget`,
-`a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement`, and others.
+The contract cases are in the `ridl-rt-conformance` suite this runtime runs, in
+its `wakeable` module and in the two slot cases of its `calls` module;
+`crates/ridl-loopback/tests/ports.rs` keeps, under "Waking" and "The bounded
+call table", the tests of what this runtime chooses where the contract leaves
+the choice open. Removing the wake from the settlement path turns red
+`an_outcome_waker_is_kept_with_its_call_and_woken_once_by_the_settlement` and
+every other suite case that waits for a settlement;
+`every_wake_runs_with_the_runtime_lock_released` in the suite and
+`every_wake_is_run_with_the_lock_released` in `ports.rs` fail when a waker is
+woken with the lock held; removing the `Slot` wake from a reclaim fails
+`every_slot_waker_is_woken_by_a_reclaim_and_the_send_that_follows_succeeds` and
+three other suite cases. In `ports.rs`,
+`a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails without the
+handler's `Drop`, and `a_dropped_handler_leaves_no_waiter_behind` fails when
+that `Drop` returns the claims but leaves the handler's state in the store.
 
 ## A claim is not a correlation
 
@@ -702,24 +704,28 @@ absences:
 ## It runs the port contract suite
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
-`ridl-rt-conformance` over this runtime, the tests of both signal extensions
-included (story E11.20, driftsys/ridl#514). The factory it writes for the suite
-is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
-`Loopback::source`, `Loopback::caller` and `Loopback::handler` hand out, and
-`Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
-and fault hook.
+`ridl-rt-conformance` over this runtime, the tests of both signal extensions and
+of `Wakeable` included (story E11.20, driftsys/ridl#514). The factory it writes
+for the suite is the aggregate, the `SourceHandle`, `CallerHandle` and
+`HandlerHandle` that `Loopback::source`, `Loopback::caller` and
+`Loopback::handler` hand out, `Loopback::SLOTS` as the size of the call table
+the suite fills, and `Loopback::advance` and `Loopback::fail_next_settle` as the
+suite's clock hook and fault hook.
 
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under
-"What it cannot report" is not exercised by it. What the suite leaves out, and
-why, is listed once, in the crate documentation of
-`crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
-keeps the tests of this runtime that fall under that list, and its module
-documentation names each test with its reason. It also keeps the tests under
-"Waking", which arrived with `Wakeable` before the suite covers it; the suite
-gains the `Wakeable` contract tests in the second half of story E11.20, and the
-module documentation names the tests that stay after that because each pins a
-choice the contract leaves to a runtime.
+"What it cannot report" is not exercised by it. It asserts no wake the contract
+allows but does not require: because a spurious wake is allowed, it asserts that
+a change leaves a waker unwoken only where the contract rules the wake out — a
+refresh, or a waker already woken or displaced and so cleared — and it never
+asserts that a registration whose key already holds is woken at once. It drops
+no handle, and it accepts either result for a forgotten call no handler has
+claimed. What the suite leaves out, and why, is listed once, in the crate
+documentation of `crates/ridl-rt-conformance/src/lib.rs`.
+`crates/ridl-loopback/tests/ports.rs` keeps the tests of this runtime's own
+choices — its narrower wakes, its wakes at once, its `Drop`, its withdrawal, and
+its own numbers — some of which fall under that list and some of which are this
+runtime's alone, and its module documentation names each test with its reason.
 
 ## What it replaced
 
