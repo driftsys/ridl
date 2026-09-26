@@ -408,8 +408,8 @@ impl Store {
     /// now. A source that subscribes later receives nothing retroactive, which
     /// is ridl's own rule for a late joiner on an event.
     ///
-    /// Each source it queues the occurrence for has its `Event` waiter for the
-    /// interface woken.
+    /// Each source it queues the occurrence for has its `Event` waiter woken,
+    /// whatever interface that waiter was registered under.
     pub(crate) fn raise(
         &mut self,
         iface: InterfaceNo,
@@ -477,7 +477,8 @@ impl Store {
     // -- calls -------------------------------------------------------------
 
     /// Queues a call for presentation. Every handler that serves the member
-    /// has its `Claim` waiter for the interface woken.
+    /// has its `Claim` waiter woken, whatever interface that waiter was
+    /// registered under.
     pub(crate) fn send(
         &mut self,
         kind: CallKind,
@@ -602,8 +603,9 @@ impl Store {
     /// Removes a dropped handler. Every claim it held and had not settled
     /// returns to the waiting calls, in its place by send order, so another
     /// handler that serves the member can take it, and every handler that
-    /// serves the member has its `Claim` waiter woken. The caller's deadline
-    /// still bounds its wait for the outcome.
+    /// serves the member has its `Claim` waiter woken. The loopback enforces
+    /// no deadline on the returned call: what bounds the caller's wait is the
+    /// generated async client's deadline (story E11.21, ADR-0023 decision 6).
     pub(crate) fn close_handler(&mut self, id: usize, wake: &mut Vec<Waker>) {
         self.handlers.remove(&id);
         let held: Vec<u64> = self

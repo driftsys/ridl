@@ -76,8 +76,10 @@
 //! under a kind of key one of its roles observes: a caller handle under
 //! `Interest::Outcome`, kept with each call, a source handle one waker under
 //! `Interest::Event`, and a handler handle one waker under `Interest::Claim`.
-//! A change to any key of the kind wakes the stored waker, whatever interface
-//! it was registered under (ADR-0021 decision 13). A settlement wakes the
+//! For `Slot`, `Event` and `Claim` the rule is one waker per kind, and a
+//! change to any key of the kind wakes the stored waker, whatever interface it
+//! was registered under (ADR-0021 decision 13); an `Outcome` waker is per
+//! call, and only that call's settlement or `forget` wakes it. A settlement wakes the
 //! call's waiter, a raise wakes each source it queues the occurrence for, and
 //! a send wakes each handler that serves the member. A registration whose key
 //! already holds — the outcome is known, an occurrence or a call is waiting —

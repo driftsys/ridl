@@ -222,14 +222,15 @@ does emit `invalidate_<name>`, so a provider that invalidates before its first
 
 **Every handle implements `Wakeable`, and a handle stores a waker only under a
 kind of key one of its roles observes** (story E11.16). A caller handle observes
-`Outcome`, a source handle `Event`, and a handler handle `Claim`. The store
-keeps one waker per kind of key per handle, as ADR-0021 decision 13 states the
-contract: one `Event` waker on a source and one `Claim` waker on a handler,
-whatever interface each was registered under, and an `Outcome` waker with its
-call in the call table, because the outcome is the call's. A change to any key
-of the kind wakes the stored waker, so a task that registers `Event(a)` and then
-`Event(b)` on one source is woken by an occurrence of either. The aggregate
-sends each key to the handle that observes it.
+`Outcome`, a source handle `Event`, and a handler handle `Claim`. For `Slot`,
+`Event` and `Claim` the store keeps one waker per kind of key per handle, as
+ADR-0021 decision 13 states the contract: one `Event` waker on a source and one
+`Claim` waker on a handler, whatever interface each was registered under, and a
+change to any key of the kind wakes the stored waker, so a task that registers
+`Event(a)` and then `Event(b)` on one source is woken by an occurrence of
+either. An `Outcome` waker is per call: it is kept with its call in the call
+table, because the outcome is the call's, and only that call's settlement or
+`forget` wakes it. The aggregate sends each key to the handle that observes it.
 
 What wakes a stored waker:
 
@@ -272,8 +273,9 @@ answer:
 **A handler dropped while it holds an unsettled claim returns the claim to the
 waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
-caller's deadline still bounds its wait for the outcome. This is the one way a
-call is presented twice.
+loopback enforces no deadline on the returned call: what bounds the caller's
+wait is the generated async client's deadline, which story E11.21 builds
+(ADR-0023 decision 6). This is the one way a call is presented twice.
 
 The tests are under "Waking" in `crates/ridl-loopback/tests/ports.rs`. Removing
 the wake from the settlement path turns red every one that waits for a

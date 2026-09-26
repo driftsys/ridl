@@ -28,8 +28,10 @@
 //! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`, one waker             | `Send`        |
 //!
 //! A handle stores a waker only under a kind of key one of its roles
-//! observes, one waker per kind, and a change to any key of that kind wakes it
-//! (ADR-0021 decision 13). A registration under any other kind is woken at
+//! observes. For `Slot`, `Event` and `Claim` that is one waker per kind, and a
+//! change to any key of that kind wakes it (ADR-0021 decision 13). An
+//! `Outcome` waker is per call: it is kept with its call, and only that call's
+//! settlement or `forget` wakes it. A registration under any other kind is woken at
 //! once, because nothing that handle could read changes under it, and a
 //! stored waker would never be woken. `Slot` is woken at once too, and never
 //! stored, because the call table has no bound and a slot is always free.
