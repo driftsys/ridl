@@ -24,7 +24,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "Speed",
         "snake": "speed",
         "camel": "Speed",
-        "screaming": "SPEED"
+        "screaming": "SPEED",
+        "pascal": "Speed"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -62,7 +63,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "Temperature",
         "snake": "temperature",
         "camel": "Temperature",
-        "screaming": "TEMPERATURE"
+        "screaming": "TEMPERATURE",
+        "pascal": "Temperature"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -100,7 +102,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "RPM",
         "snake": "rpm",
         "camel": "RPM",
-        "screaming": "RPM"
+        "screaming": "RPM",
+        "pascal": "Rpm"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -138,7 +141,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "Ratio",
         "snake": "ratio",
         "camel": "Ratio",
-        "screaming": "RATIO"
+        "screaming": "RATIO",
+        "pascal": "Ratio"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -176,7 +180,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "Counter",
         "snake": "counter",
         "camel": "Counter",
-        "screaming": "COUNTER"
+        "screaming": "COUNTER",
+        "pascal": "Counter"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -212,7 +217,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "Gain",
         "snake": "gain",
         "camel": "Gain",
-        "screaming": "GAIN"
+        "screaming": "GAIN",
+        "pascal": "Gain"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -249,7 +255,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "MAX_SPEED",
         "snake": "max_speed",
         "camel": "MAXSPEED",
-        "screaming": "MAX_SPEED"
+        "screaming": "MAX_SPEED",
+        "pascal": "MaxSpeed"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -272,7 +279,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "SPEED_LIMIT_EU",
         "snake": "speed_limit_eu",
         "camel": "SPEEDLIMITEU",
-        "screaming": "SPEED_LIMIT_EU"
+        "screaming": "SPEED_LIMIT_EU",
+        "pascal": "SpeedLimitEu"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -295,7 +303,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "MAX_GEAR",
         "snake": "max_gear",
         "camel": "MAXGEAR",
-        "screaming": "MAX_GEAR"
+        "screaming": "MAX_GEAR",
+        "pascal": "MaxGear"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -311,7 +320,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "IDLE_RPM",
         "snake": "idle_rpm",
         "camel": "IDLERPM",
-        "screaming": "IDLE_RPM"
+        "screaming": "IDLE_RPM",
+        "pascal": "IdleRpm"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -334,7 +344,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "GearPosition",
         "snake": "gear_position",
         "camel": "GearPosition",
-        "screaming": "GEAR_POSITION"
+        "screaming": "GEAR_POSITION",
+        "pascal": "GearPosition"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -361,7 +372,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "PARK",
               "snake": "park",
               "camel": "PARK",
-              "screaming": "PARK"
+              "screaming": "PARK",
+              "pascal": "Park"
             },
             "value": "0",
             "doc": ""
@@ -371,7 +383,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "DRIVE",
               "snake": "drive",
               "camel": "DRIVE",
-              "screaming": "DRIVE"
+              "screaming": "DRIVE",
+              "pascal": "Drive"
             },
             "value": "1",
             "doc": ""
@@ -381,7 +394,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "REVERSE",
               "snake": "reverse",
               "camel": "REVERSE",
-              "screaming": "REVERSE"
+              "screaming": "REVERSE",
+              "pascal": "Reverse"
             },
             "value": "2",
             "doc": ""
@@ -391,7 +405,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "NEUTRAL",
               "snake": "neutral",
               "camel": "NEUTRAL",
-              "screaming": "NEUTRAL"
+              "screaming": "NEUTRAL",
+              "pascal": "Neutral"
             },
             "value": "3",
             "doc": ""
@@ -407,7 +422,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "Warning",
         "snake": "warning",
         "camel": "Warning",
-        "screaming": "WARNING"
+        "screaming": "WARNING",
+        "pascal": "Warning"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -434,7 +450,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "LOW_FUEL",
               "snake": "low_fuel",
               "camel": "LOWFUEL",
-              "screaming": "LOW_FUEL"
+              "screaming": "LOW_FUEL",
+              "pascal": "LowFuel"
             },
             "value": "0",
             "doc": ""
@@ -444,7 +461,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "CHECK_ENGINE",
               "snake": "check_engine",
               "camel": "CHECKENGINE",
-              "screaming": "CHECK_ENGINE"
+              "screaming": "CHECK_ENGINE",
+              "pascal": "CheckEngine"
             },
             "value": "1",
             "doc": ""
@@ -454,7 +472,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "DOOR_OPEN",
               "snake": "door_open",
               "camel": "DOOROPEN",
-              "screaming": "DOOR_OPEN"
+              "screaming": "DOOR_OPEN",
+              "pascal": "DoorOpen"
             },
             "value": "2",
             "doc": ""
@@ -464,7 +483,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "SEATBELT",
               "snake": "seatbelt",
               "camel": "SEATBELT",
-              "screaming": "SEATBELT"
+              "screaming": "SEATBELT",
+              "pascal": "Seatbelt"
             },
             "value": "3",
             "doc": ""
@@ -480,7 +500,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "WarningFlags",
         "snake": "warning_flags",
         "camel": "WarningFlags",
-        "screaming": "WARNING_FLAGS"
+        "screaming": "WARNING_FLAGS",
+        "pascal": "WarningFlags"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -515,7 +536,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "LOW_FUEL",
               "snake": "low_fuel",
               "camel": "LOWFUEL",
-              "screaming": "LOW_FUEL"
+              "screaming": "LOW_FUEL",
+              "pascal": "LowFuel"
             },
             "value": "0",
             "doc": ""
@@ -525,7 +547,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "CHECK_ENGINE",
               "snake": "check_engine",
               "camel": "CHECKENGINE",
-              "screaming": "CHECK_ENGINE"
+              "screaming": "CHECK_ENGINE",
+              "pascal": "CheckEngine"
             },
             "value": "1",
             "doc": ""
@@ -535,7 +558,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "DOOR_OPEN",
               "snake": "door_open",
               "camel": "DOOROPEN",
-              "screaming": "DOOR_OPEN"
+              "screaming": "DOOR_OPEN",
+              "pascal": "DoorOpen"
             },
             "value": "2",
             "doc": ""
@@ -545,7 +569,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "SEATBELT",
               "snake": "seatbelt",
               "camel": "SEATBELT",
-              "screaming": "SEATBELT"
+              "screaming": "SEATBELT",
+              "pascal": "Seatbelt"
             },
             "value": "3",
             "doc": ""
@@ -560,7 +585,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "SpeedLimitPayload",
         "snake": "speed_limit_payload",
         "camel": "SpeedLimitPayload",
-        "screaming": "SPEED_LIMIT_PAYLOAD"
+        "screaming": "SPEED_LIMIT_PAYLOAD",
+        "pascal": "SpeedLimitPayload"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -589,7 +615,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "limit",
                 "snake": "limit",
                 "camel": "Limit",
-                "screaming": "LIMIT"
+                "screaming": "LIMIT",
+                "pascal": "Limit"
               },
               "type": {
                 "optional": false,
@@ -619,7 +646,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "actual",
                 "snake": "actual",
                 "camel": "Actual",
-                "screaming": "ACTUAL"
+                "screaming": "ACTUAL",
+                "pascal": "Actual"
               },
               "type": {
                 "optional": false,
@@ -651,7 +679,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "DriverProfile",
         "snake": "driver_profile",
         "camel": "DriverProfile",
-        "screaming": "DRIVER_PROFILE"
+        "screaming": "DRIVER_PROFILE",
+        "pascal": "DriverProfile"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -680,7 +709,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "name",
                 "snake": "name",
                 "camel": "Name",
-                "screaming": "NAME"
+                "screaming": "NAME",
+                "pascal": "Name"
               },
               "type": {
                 "optional": false,
@@ -709,7 +739,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "speed",
                 "snake": "speed",
                 "camel": "Speed",
-                "screaming": "SPEED"
+                "screaming": "SPEED",
+                "pascal": "Speed"
               },
               "type": {
                 "optional": false,
@@ -739,7 +770,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "override",
                 "snake": "override",
                 "camel": "Override",
-                "screaming": "OVERRIDE"
+                "screaming": "OVERRIDE",
+                "pascal": "Override"
               },
               "type": {
                 "optional": true,
@@ -768,7 +800,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "gears",
                 "snake": "gears",
                 "camel": "Gears",
-                "screaming": "GEARS"
+                "screaming": "GEARS",
+                "pascal": "Gears"
               },
               "type": {
                 "optional": false,
@@ -802,7 +835,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "SensorBounds",
         "snake": "sensor_bounds",
         "camel": "SensorBounds",
-        "screaming": "SENSOR_BOUNDS"
+        "screaming": "SENSOR_BOUNDS",
+        "pascal": "SensorBounds"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -831,7 +865,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "range",
                 "snake": "range",
                 "camel": "Range",
-                "screaming": "RANGE"
+                "screaming": "RANGE",
+                "pascal": "Range"
               },
               "type": {
                 "optional": false,
@@ -855,7 +890,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "readings",
                 "snake": "readings",
                 "camel": "Readings",
-                "screaming": "READINGS"
+                "screaming": "READINGS",
+                "pascal": "Readings"
               },
               "type": {
                 "optional": false,
@@ -891,7 +927,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "labels",
                 "snake": "labels",
                 "camel": "Labels",
-                "screaming": "LABELS"
+                "screaming": "LABELS",
+                "pascal": "Labels"
               },
               "type": {
                 "optional": false,
@@ -927,7 +964,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "meta",
                 "snake": "meta",
                 "camel": "Meta",
-                "screaming": "META"
+                "screaming": "META",
+                "pascal": "Meta"
               },
               "type": {
                 "optional": false,
@@ -977,7 +1015,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "SensorResult",
         "snake": "sensor_result",
         "camel": "SensorResult",
-        "screaming": "SENSOR_RESULT"
+        "screaming": "SENSOR_RESULT",
+        "pascal": "SensorResult"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -1004,7 +1043,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "ok",
               "snake": "ok",
               "camel": "Ok",
-              "screaming": "OK"
+              "screaming": "OK",
+              "pascal": "Ok"
             },
             "ordinal": 1,
             "type": {
@@ -1023,7 +1063,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "declared": "err",
               "snake": "err",
               "camel": "Err",
-              "screaming": "ERR"
+              "screaming": "ERR",
+              "pascal": "Err"
             },
             "ordinal": 2,
             "type": {
@@ -1047,7 +1088,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "SensorReading",
         "snake": "sensor_reading",
         "camel": "SensorReading",
-        "screaming": "SENSOR_READING"
+        "screaming": "SENSOR_READING",
+        "pascal": "SensorReading"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -1076,7 +1118,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "value",
                 "snake": "value",
                 "camel": "Value",
-                "screaming": "VALUE"
+                "screaming": "VALUE",
+                "pascal": "Value"
               },
               "type": {
                 "optional": false,
@@ -1106,7 +1149,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "timestamp",
                 "snake": "timestamp",
                 "camel": "Timestamp",
-                "screaming": "TIMESTAMP"
+                "screaming": "TIMESTAMP",
+                "pascal": "Timestamp"
               },
               "type": {
                 "optional": false,
@@ -1138,7 +1182,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "SensorFault",
         "snake": "sensor_fault",
         "camel": "SensorFault",
-        "screaming": "SENSOR_FAULT"
+        "screaming": "SENSOR_FAULT",
+        "pascal": "SensorFault"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "isError": true,
@@ -1167,7 +1212,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "code",
                 "snake": "code",
                 "camel": "Code",
-                "screaming": "CODE"
+                "screaming": "CODE",
+                "pascal": "Code"
               },
               "type": {
                 "optional": false,
@@ -1197,7 +1243,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "message",
                 "snake": "message",
                 "camel": "Message",
-                "screaming": "MESSAGE"
+                "screaming": "MESSAGE",
+                "pascal": "Message"
               },
               "type": {
                 "optional": false,
@@ -1228,7 +1275,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "declared": "RawWheelFrame",
         "snake": "raw_wheel_frame",
         "camel": "RawWheelFrame",
-        "screaming": "RAW_WHEEL_FRAME"
+        "screaming": "RAW_WHEEL_FRAME",
+        "pascal": "RawWheelFrame"
       },
       "visibility": "VISIBILITY_INTERNAL",
       "isError": false,
@@ -1257,7 +1305,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "ticks",
                 "snake": "ticks",
                 "camel": "Ticks",
-                "screaming": "TICKS"
+                "screaming": "TICKS",
+                "pascal": "Ticks"
               },
               "type": {
                 "optional": false,
@@ -1287,7 +1336,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "declared": "frame",
                 "snake": "frame",
                 "camel": "Frame",
-                "screaming": "FRAME"
+                "screaming": "FRAME",
+                "pascal": "Frame"
               },
               "type": {
                 "optional": false,
@@ -1326,7 +1376,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "declared": "min",
             "snake": "min",
             "camel": "Min",
-            "screaming": "MIN"
+            "screaming": "MIN",
+            "pascal": "Min"
           },
           "type": {
             "optional": false,
@@ -1352,7 +1403,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "declared": "max",
             "snake": "max",
             "camel": "Max",
-            "screaming": "MAX"
+            "screaming": "MAX",
+            "pascal": "Max"
           },
           "type": {
             "optional": false,

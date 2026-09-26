@@ -109,16 +109,17 @@ fn model() -> v1::Model {
     lower(&package(), &[])
 }
 
-/// Every declared identifier carries the three pinned transforms and the one
-/// composition the wire backends make of them (design note D-2).
+/// Every declared identifier carries the pinned transforms and the
+/// compositions the backends make of them (design note D-2).
 #[test]
-fn every_identifier_carries_its_four_spellings() {
+fn every_identifier_carries_its_five_spellings() {
     let model = model();
     let name = model.declarations[2].name.as_ref().expect("a name");
     assert_eq!(name.declared, "Dashboard");
     assert_eq!(name.snake, "dashboard");
     assert_eq!(name.camel, "Dashboard");
     assert_eq!(name.screaming, "DASHBOARD");
+    assert_eq!(name.pascal, "Dashboard");
 
     let v1::declaration::Kind::Struct(def) = model.declarations[2].kind.as_ref().expect("a kind")
     else {
@@ -132,6 +133,27 @@ fn every_identifier_carries_its_four_spellings() {
     assert_eq!(name.snake, "current_speed");
     assert_eq!(name.camel, "CurrentSpeed");
     assert_eq!(name.screaming, "CURRENT_SPEED");
+    assert_eq!(name.pascal, "CurrentSpeed");
+
+    let gear = model
+        .declarations
+        .iter()
+        .find(|decl| {
+            decl.name
+                .as_ref()
+                .is_some_and(|name| name.declared == "GearState")
+        })
+        .expect("GearState is lowered");
+    let Some(v1::declaration::Kind::Enum(def)) = gear.kind.as_ref() else {
+        panic!("GearState is an enum");
+    };
+    let reverse = def
+        .values
+        .iter()
+        .filter_map(|value| value.name.as_ref())
+        .find(|name| name.declared == "REVERSE")
+        .expect("REVERSE is lowered");
+    assert_eq!(reverse.pascal, "Reverse");
 }
 
 /// A package name carries the dotted form, its segments, the wire backends'
