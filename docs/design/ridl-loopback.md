@@ -224,11 +224,11 @@ does emit `invalidate_<name>`, so a provider that invalidates before its first
 
 **Every handle implements `Wakeable`, and a handle stores a waker only under a
 kind of key one of its roles observes** (story E11.16). A caller handle observes
-`Outcome`, a source handle `Event`, and a handler handle `Claim`. For `Slot`,
-`Event` and `Claim` the store keeps one waker per kind of key per handle, as
-ADR-0021 decision 13 states the contract: one `Event` waker on a source and one
-`Claim` waker on a handler, whatever interface each was registered under, and a
-change to any key of the kind wakes the stored waker, so a task that registers
+`Outcome`, a source handle `Event`, and a handler handle `Claim`. For `Event`
+and `Claim` the store keeps one waker per kind of key per handle, as ADR-0021
+decision 13 states the contract: one `Event` waker on a source and one `Claim`
+waker on a handler, whatever interface each was registered under, and a change
+to any key of the kind wakes the stored waker, so a task that registers
 `Event(a)` and then `Event(b)` on one source is woken by an occurrence of
 either. An `Outcome` waker is per call: it is kept with its call in the call
 table, because the outcome is the call's, and only that call's settlement or
