@@ -1,5 +1,5 @@
 //! Every port trait is implemented for a mutable borrow of a port, and the
-//! six whose methods all take `&self` also for a shared borrow. What these
+//! seven whose methods all take `&self` also for a shared borrow. What these
 //! impls buy is one thing: a value generic over a port trait can be given a
 //! reference to a port rather than the port itself. A wrapper or a test
 //! double is accepted by such a bound with or without them, because it
@@ -11,13 +11,17 @@
 
 #![forbid(unsafe_code)]
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::{Wake, Waker};
+
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
 
@@ -53,6 +57,13 @@ impl Attached for Stub {
 impl Clock for Stub {
     fn now(&self) -> Timestamp {
         Timestamp(42)
+    }
+}
+
+impl Wakeable for Stub {
+    /// Wakes at once, so a test can see that the call reached the stub.
+    fn wake_on(&self, _: Interest, waker: &Waker) {
+        waker.wake_by_ref();
     }
 }
 
@@ -309,4 +320,24 @@ fn coherent_signals_is_reached_through_a_borrow() {
     let mut stub = Stub;
     assert_eq!(over(&stub), Ok(0));
     assert_eq!(over(&mut stub), Ok(0));
+}
+
+#[test]
+fn wakeable_is_reached_through_a_borrow() {
+    struct Counter(AtomicUsize);
+    impl Wake for Counter {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    fn over<P: Wakeable>(port: P, waker: &Waker) {
+        port.wake_on(Interest::Slot, waker);
+    }
+    let counter = Arc::new(Counter(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&counter));
+    let mut stub = Stub;
+    over(&stub, &waker);
+    assert_eq!(counter.0.load(Ordering::SeqCst), 1);
+    over(&mut stub, &waker);
+    assert_eq!(counter.0.load(Ordering::SeqCst), 2);
 }

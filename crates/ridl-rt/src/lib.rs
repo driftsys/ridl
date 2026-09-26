@@ -53,9 +53,12 @@
 //! Two properties hold everywhere and are worth knowing before reading any
 //! individual item. **No port method waits** — every one returns immediately,
 //! and a call's outcome is retrieved separately through a
-//! [`port::Correlation`]. And **no port names a payload type** — ports carry
-//! interface numbers, ordinals and bytes, and the generated binding is what
-//! encodes and decodes, through [`payload::Ref`].
+//! [`port::Correlation`]. A task that found nothing waiting registers a
+//! [`port::Interest`] through the [`port::Wakeable`] extension, and the
+//! runtime wakes it when that changes; waiting belongs to the face that polls.
+//! And **no port names a payload type** — ports carry interface numbers,
+//! ordinals and bytes, and the generated binding is what encodes and decodes,
+//! through [`payload::Ref`].
 //!
 //! # How a runtime presents its ports
 //!
@@ -107,6 +110,7 @@ pub mod task;
 ///         ridl_rt::error::Transport::Undelivered => {}
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
+///         ridl_rt::error::Transport::Busy => {}
 ///     }
 /// }
 /// ```
@@ -256,13 +260,15 @@ pub mod task;
 ///         ridl_rt::error::Transport::Undelivered => {}
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
+///         ridl_rt::error::Transport::Busy => {}
 ///         _ => {}
 ///     }
 /// }
 /// ```
 ///
-/// `Contract` and `CallError` stay exhaustive under R-11: a match naming
-/// every variant, with no `_` arm, compiles.
+/// `Contract` and `CallError` stay exhaustive under R-11, and so does
+/// `port::Interest` (ADR-0021 decision 13): a match naming every variant, with
+/// no `_` arm, compiles.
 ///
 /// ```
 /// fn contract(x: ridl_rt::error::Contract) {
@@ -277,6 +283,14 @@ pub mod task;
 ///     match x {
 ///         ridl_rt::error::CallError::Contract(_) => {}
 ///         ridl_rt::error::CallError::Transport(_) => {}
+///     }
+/// }
+/// fn interest(x: ridl_rt::port::Interest) {
+///     match x {
+///         ridl_rt::port::Interest::Outcome(_) => {}
+///         ridl_rt::port::Interest::Slot => {}
+///         ridl_rt::port::Interest::Event(_) => {}
+///         ridl_rt::port::Interest::Claim(_) => {}
 ///     }
 /// }
 /// ```
