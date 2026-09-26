@@ -514,10 +514,12 @@ trusted with no `unsafe` and no second verification pass.
     `Waker::will_wake` the stored one, registered under the same key, is not a
     displacement: it is the same task registering again, which it does on every
     poll, so the stored waker is kept and nothing is woken. Waking it would
-    schedule another poll of that task on every poll. Under another key of the
-    same kind the stored registration is displaced and woken, even for the same
-    task. `port::Wakeable`'s documentation and `ridl-loopback` state and
-    implement this.
+    schedule another poll of that task on every poll. `port::Wakeable`'s
+    documentation states this, and `ridl-loopback` implements it. A runtime that
+    keeps one slot per kind of key, as `ridl-loopback` does for `Event` and
+    `Claim`, displaces and wakes the stored registration when a registration
+    under another key of that kind arrives, even from the same task; that is the
+    runtime's storage choice, not part of this contract.
 
 14. **Amendment (2026-09-26) — `Transport::Busy` crosses the frame (story
     E11.16).** `Transport` gains `Busy`: the providing runtime refused the call

@@ -53,8 +53,10 @@
 //! contract: an `Event` or `Claim` registration woken at once when its key's
 //! change already happened, a `Slot` waiter woken at once because nothing is
 //! bounded, a forgotten correlation's waiter, a key a role handle does not
-//! carry, the aggregate's routing, `Clock` on the caller handle, and a waker
-//! run only after the store's lock is released.
+//! carry, one slot for `Event` and `Claim` that a registration under another
+//! interface displaces, a dropped handler's waiter, the aggregate's routing,
+//! `Clock` on the caller handle, a provider's `Transport::Busy` carried back
+//! to the caller, and a waker run only after the store's lock is released.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -62,7 +64,7 @@ use std::task::{Wake, Waker};
 
 use ridl_loopback::{Loopback, ReaderHandle};
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
-use ridl_rt::error::Contract;
+use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, Clock, EventSink, EventSource, FixedReader, Handler, Interest, ReadError,
     SettleError, SignalReader, SignalWriter, Wakeable,
@@ -696,12 +698,70 @@ fn the_same_task_under_another_interface_is_woken_for_the_first() {
     // The slot holds one key. A task that moves its registration from
     // interface 1 to interface 2 is woken, so it cannot miss a change of
     // interface 1 it registered for first.
-    let rt = runtime();
-    let source = rt.source();
+    let mut rt = runtime();
+    let mut source = rt.source();
+    let two = InterfaceNo(2);
+    source.subscribe(two, &[ORD]).expect("subscribe");
     let (count, waker) = counter();
     source.wake_on(Interest::Event(IFACE), &waker);
-    source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
+    source.wake_on(Interest::Event(two), &waker);
     assert_eq!(wakes(&count), 1);
+    rt.raise(two, ORD, &[1]).expect("raise");
+    assert_eq!(
+        wakes(&count),
+        2,
+        "the registration under interface 2 is kept"
+    );
+}
+
+#[test]
+fn the_same_task_registering_an_event_or_claim_key_again_wakes_nothing() {
+    let mut rt = runtime();
+    let mut source = rt.source();
+    let mut caller = rt.caller();
+    let handler = rt.handler();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    let (event, event_waker) = counter();
+    source.wake_on(Interest::Event(IFACE), &event_waker);
+    source.wake_on(Interest::Event(IFACE), &event_waker.clone());
+    assert_eq!(
+        wakes(&event),
+        0,
+        "`Event`: the same task is kept, not woken"
+    );
+    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&event), 1);
+
+    let (claim, claim_waker) = counter();
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker.clone());
+    assert_eq!(
+        wakes(&claim),
+        0,
+        "`Claim`: the same task is kept, not woken"
+    );
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&claim), 1);
+}
+
+#[test]
+fn a_providers_busy_settlement_reaches_the_caller() {
+    // The loopback never refuses a call itself; a provider that settles with
+    // `Transport::Busy` has it carried back unchanged.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let busy = CallError::Transport(Transport::Busy);
+
+    let command = caller.command(IFACE, ORD, &[1]).expect("send");
+    let query = caller.query(IFACE, ORD, &[2]).expect("send");
+    while let Some(claim) = handler.next_claim(&mut buf).expect("next_claim") {
+        handler.settle(claim.id, Err(busy)).expect("settle");
+    }
+    assert_eq!(caller.ack(command), Some(Err(busy)));
+    assert_eq!(caller.reply(query, &mut buf), Ok(Some(Err(busy))));
 }
 
 #[test]

@@ -488,8 +488,10 @@ absences:
 
 ## Waking
 
-**The three handles a task waits on implement `Wakeable`, and each stores one
-waker per key of its own role** (ADR-0021 decision 13, story E11.16):
+**The three handles a task waits on implement `Wakeable` for the keys of their
+own role** (ADR-0021 decision 13, story E11.16). An `Outcome` waker is stored
+per call, so a caller holds one for each call it waits on; `Event` and `Claim`
+each have one slot per handle, holding one key at a time:
 
 | Key                    | Registered on                  | Stored                         | Woken by                                                                          |
 | ---------------------- | ------------------------------ | ------------------------------ | --------------------------------------------------------------------------------- |
@@ -522,8 +524,9 @@ The rules the table does not show:
   neither. A task registers on every poll; if its own earlier registration
   counted as displaced and was woken, every poll would schedule another poll.
   Under another key of the same kind — `Event(2)` after `Event(1)` — the stored
-  registration is displaced and woken even for the same task, because the slot
-  holds one key and the first would otherwise never wake it.
+  registration is displaced and woken even for the same task, because the
+  `Event` and `Claim` slots hold one key and the first would otherwise never
+  wake it. This is this runtime's storage choice, not the contract's.
 - **A send wakes every handler waiting on the interface**, not only the handlers
   whose served set holds the member. The served set is on the handle, and a
   handler woken for a member it does not serve finds nothing on its next
