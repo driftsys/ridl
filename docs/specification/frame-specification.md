@@ -895,9 +895,9 @@ Each item is left out on purpose, with the record that takes it.
   §4; the bytes of each encoding are each projection record's.
 - **A wake hook.** The frame is push: a runtime learns of a frame from its
   binding. How it wakes an application that is waiting on a reply, an occurrence
-  or a claim is the runtime's, not the frame's
-  ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) open item
-  6).
+  or a claim is the runtime's, not the frame's: `port::Wakeable`
+  ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13,
+  which closed its open item 6).
 - **Unknown fields on decode**
   ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) open
   item 3) is a payload question, the proto3 projection's.
@@ -922,7 +922,8 @@ Each item is left out on purpose, with the record that takes it.
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 6 and 7;
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 2,
-  3, 5, 6 and 7;
+  3, 5, 6, 7 and 14 (the last, `busy` as a `response` outcome, story E11.16,
+  driftsys/ridl#510);
   [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decisions
   3, 10 and 17
 - Vocabulary: [the `ridl-rt` design record](../design/ridl-rt.md), and

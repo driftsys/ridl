@@ -385,9 +385,10 @@ pub trait CoherentSignals: SignalReader {
 /// Extension: a port that can wake a task. A runtime that serves a generated
 /// async client implements it.
 ///
-/// No port method waits, so a task that finds nothing to read registers its
-/// interest here and returns; the runtime wakes the task when the thing it
-/// waits for may have changed, and the task reads the port again.
+/// No port method waits, so a task registers its interest here, reads the
+/// port, and returns when the read finds nothing; the runtime wakes the task
+/// when the thing it waits for may have changed, and the task reads the port
+/// again.
 ///
 /// The contract:
 ///

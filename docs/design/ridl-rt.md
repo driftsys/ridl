@@ -521,18 +521,19 @@ Semantics each implementation presents:
   `Result<Option<_>, ReadError>`, so a caller that receives
   `ReadError::Short { needed }` resizes and reads the same item again.
 
-`ScannableSignals` and `CoherentSignals` are extensions: they describe
-mechanisms some runtimes have, not interaction semantics every runtime must
-present, so a runtime may omit either.
+`ScannableSignals`, `CoherentSignals` and `Wakeable` are extensions: they
+describe mechanisms some runtimes have, not interaction semantics every runtime
+must present, so a runtime may omit any of them.
 
 **`Wakeable` is the extension a face that waits is built on** (story E11.16,
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13).
-No port method waits, so a task that finds nothing to read calls
-`wake_on(what, waker)` and returns, and the runtime wakes it when the thing
-`what` names may have changed. `Interest` is the key: `Outcome(c)`, the outcome
-of one call is known; `Slot`, a slot for a new call is free; `Event(iface)`, an
-occurrence of one of the interface's events is waiting; `Claim(iface)`, a claim
-on one of the interface's members is waiting. The contract a runtime presents:
+No port method waits, so a task calls `wake_on(what, waker)`, reads the port,
+and returns when the read finds nothing; the runtime wakes it when the thing
+`what` names may have changed, and the task reads again. `Interest` is the key:
+`Outcome(c)`, the outcome of one call is known; `Slot`, a slot for a new call is
+free; `Event(iface)`, an occurrence of one of the interface's events is waiting;
+`Claim(iface)`, a claim on one of the interface's members is waiting. The
+contract a runtime presents:
 
 - **One waker per kind of key per handle.** A handle stores one waker for each
   kind — `Slot`, `Event`, `Claim` — and an `Outcome` waker with its call. A
@@ -575,10 +576,10 @@ so these impls are what let it be built over a borrow of a handle. An owned
 handle, a `Clone` handle and a wrapper that adds tracing or a test double are
 accepted by the face's trait bounds with or without them, because such a type
 implements the port traits itself rather than borrowing through them. The impls
-are additive and need no `alloc`; `Box<P>` is not forwarded, because that would
-need `alloc`, which no feature combination of this crate brought in until the
-`std` feature arrived on 2026-09-25 — whether the impl is added under `std` is
-left to lane F's amendment of ADR-0021 (the note under its decision 11).
+are additive and need no `alloc`; `Box<P>` is not forwarded, under `std` either,
+although that feature brings `alloc` in: nothing needs a boxed port, because a
+face holds its port by value or by `&mut`, and an impl nothing uses is not added
+(ADR-0021 decision 11, amended 2026-09-26).
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 records them and the reasoning.
 

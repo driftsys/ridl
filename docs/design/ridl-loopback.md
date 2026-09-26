@@ -61,7 +61,7 @@ generated code links — and a host runtime is not among them.
 **Every handle of one runtime holds the same `Arc<Mutex<Store>>`.** The store is
 `crates/ridl-loopback/src/store.rs`: the signal map, the per interface
 generation counters, the provisioned `fixed` values, one queue per event source,
-the call table, and the clock.
+the call table, the clock, and every stored waker.
 
 A port method that reaches the store takes the lock, does its work and returns.
 None waits for data while holding it, which is what `ridl_rt::port` requires of
@@ -122,8 +122,10 @@ The caller handle carries `Clock` as well as the reader handle, because a
 generated async `Client` over an interface with a call is bound on `Caller`,
 `Clock` and `Wakeable` together
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6),
-and a role handle that cannot build one is not a handle for that role. Both read
-the one clock in the store.
+and a role handle that cannot build one is not a handle for that role. The Rust
+backend does not emit that client yet (story E11.21); the roles are here first
+so that it can be built over this handle when it is. Both handles read the one
+clock in the store.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
 on the reader handle takes `&self`, so several threads may read one store at
@@ -275,7 +277,20 @@ waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
 wait is the generated async client's deadline, which story E11.21 builds
-(ADR-0023 decision 6). This is the one way a call is presented twice.
+(ADR-0023 decision 6). This is the one way a call is presented twice. The same
+`Drop` removes the handler's state from the store, its stored `Claim` waker with
+it, so no later send reaches a waker of a handler that is gone.
+
+**The limit, stated.** This runtime measures no bound: its clock moves only
+under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
+`Timeout` when its `max` passes, so nothing wakes a task when a call's deadline
+passes. A call over this runtime is polled again when a key wakes it — its
+settlement, or its `forget` — or when the executor polls it for its own reasons:
+a blocking client's park timeout, or a frame loop's cadence. Under a general
+executor with no timeout, a call whose provider never settles it waits for as
+long as that is true. That is this runtime's limit, not a defect of the face,
+whose future has no timer of its own (ADR-0023 decision 6, "The bound"); whether
+this runtime ever measures a bound is not decided.
 
 The tests are under "Waking" in `crates/ridl-loopback/tests/ports.rs`. Removing
 the wake from the settlement path turns red every one that waits for a
@@ -283,8 +298,10 @@ settlement, among them
 `a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement`;
 `a_waker_is_woken_after_the_lock_is_released` and
 `every_wake_is_run_with_the_lock_released` fail when a waker is woken with the
-lock held, and `a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails
-without the handler's `Drop`.
+lock held; `a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails
+without the handler's `Drop`, and `a_dropped_handler_leaves_no_waiter_behind`
+fails when that `Drop` returns the claims but leaves the handler's state in the
+store.
 
 ## A claim is not a correlation
 
@@ -496,13 +513,16 @@ and therefore:
 
 Three more, for reasons other than the descriptor: nothing detaches, because
 every handle holds the store alive, so `Detached` never appears; nothing is
-bounded, so `Busy` and `TooLarge` never appear outside the one injected failure
-below; and `Attached::catalog` returns the `CatalogRef` the runtime was built
-with, unexamined. ADR-0021 decision 3 places the check of it against an
-interface's own `CATALOG` in the generated face's constructor, once, when the
-face is built; the constructor the Rust backend emits today performs no such
-check, which driftsys/ridl#448 is open on. Either way the check is the face's
-and not the runtime's.
+bounded, so this runtime originates neither `Busy` nor `TooLarge` — `TooLarge`
+appears only from the one injected failure below, and `Transport::Busy`, a
+provider's refusal at admission, reaches a caller only when a provider settles a
+call with it (`a_providers_busy_settlement_reaches_the_caller`); and
+`Attached::catalog` returns the `CatalogRef` the runtime was built with,
+unexamined. ADR-0021 decision 3 places the check of it against an interface's
+own `CATALOG` in the generated face's constructor, once, when the face is built;
+the constructor the Rust backend emits today performs no such check, which
+driftsys/ridl#448 is open on. Either way the check is the face's and not the
+runtime's.
 
 Three more that are the runtime's own shape rather than the descriptor's:
 
@@ -566,7 +586,11 @@ before they take a claim, so the deviation from `Handler::serve` recorded under
 why, is listed once, in the crate documentation of
 `crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
 keeps the tests of this runtime that fall under that list, and its module
-documentation names each test with its reason.
+documentation names each test with its reason. It also keeps the tests under
+"Waking", which arrived with `Wakeable` before the suite covers it; the suite
+gains the `Wakeable` contract tests in the second half of story E11.20, and the
+module documentation names the tests that stay after that because each pins a
+choice the contract leaves to a runtime.
 
 ## What it replaced
 

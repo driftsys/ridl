@@ -67,8 +67,10 @@
 //! [`FixedReader::read_fixed`](ridl_rt::port::FixedReader::read_fixed)'s, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either; and
-//! nothing is bounded, so `Busy` and `TooLarge` do not appear outside
-//! [`Loopback::fail_next_settle`].
+//! nothing is bounded, so the loopback originates neither `Busy` nor
+//! `TooLarge`: `TooLarge` appears only from [`Loopback::fail_next_settle`],
+//! and `Transport::Busy` reaches a caller only when a provider settles a call
+//! with it.
 //!
 //! # Waking
 //!
