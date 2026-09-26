@@ -639,12 +639,14 @@ impl LoweredType {
 /// Which pinned name transform a pair of names collided under (RIDL-149,
 /// ADR-0016 decision 3 as amended).
 ///
-/// The two transforms are incomparable — neither collision set contains the
-/// other — so a namespace projected through both is checked under both, and
-/// the diagnostic has to say which projection is the problem. A
-/// `camel_case`-only collision is a Rust defect (one enum, two variants of
-/// one name); a `snake_case`-only collision is a refusal from both wire
-/// backends.
+/// `snake_case` and `camel_case` are incomparable — neither collision set
+/// contains the other — so a namespace projected through both is checked
+/// under both, and the diagnostic has to say which projection is the
+/// problem. A `camel_case`-only collision is a Rust defect (one enum, two
+/// variants of one name); a `snake_case`-only collision is a refusal from
+/// both wire backends. `pascal_case` is `camel_case` of `snake_case`, so its
+/// collision set contains `snake_case`'s: an enum's values are checked under
+/// `pascal_case` alone, and the diagnostic names that one transform.
 enum Collision {
     /// The two names this report mentions project to this one snake_case
     /// identifier. It states nothing about their CamelCase projections: they
