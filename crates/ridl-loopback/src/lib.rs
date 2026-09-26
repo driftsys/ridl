@@ -1,6 +1,6 @@
 //! `ridl-loopback` — the in-process reference runtime.
 //!
-//! This crate implements the eleven port traits of
+//! This crate implements the twelve port traits of
 //! [`ridl_rt::port`](https://docs.rs/ridl-rt) over one in-memory store. It is
 //! the first runtime in this workspace (ADR-0020 decision 6, which names the
 //! crate and fixes `ridl-rt` as its only dependency), and it is what the
@@ -23,13 +23,15 @@
 //! A runtime presents one handle type per port role rather than one type
 //! implementing them all, and may also offer an aggregate handle covering the
 //! port set one interface's face needs (ADR-0021 decision 12). This crate
-//! offers both. Its six handles group the eleven roles the way that decision
+//! offers both. Its six handles group eleven roles the way that decision
 //! derives the threading split: a handle each for the five roles with a
 //! `&mut self` method, and one handle for the six whose methods all take
-//! `&self`, which are exactly the roles several threads may hold at once.
-//! [`Loopback`] is the aggregate: it implements all eleven port traits by delegating to the six
-//! role handles it holds, and it is what a generated `Client`, `Publisher` or
-//! `dispatch` is normally built over.
+//! `&self`, which are exactly the roles several threads may hold at once. The
+//! twelfth port trait, `Wakeable`, is implemented on every handle, because
+//! each handle wakes its own waiters (see "Waking" below).
+//! [`Loopback`] is the aggregate: it implements all twelve port traits by
+//! delegating to the six role handles it holds, and it is what a generated
+//! `Client`, `Publisher` or `dispatch` is normally built over.
 //!
 //! ```
 //! use ridl_loopback::Loopback;
@@ -68,6 +70,20 @@
 //! nothing is bounded, so `Busy` and `TooLarge` do not appear outside
 //! [`Loopback::fail_next_settle`].
 //!
+//! # Waking
+//!
+//! Every handle implements [`Wakeable`], and a
+//! handle stores a waker only under a key one of its roles observes: a caller
+//! handle under `Interest::Outcome`, kept with the call, a source handle under
+//! `Interest::Event`, and a handler handle under `Interest::Claim`, one of
+//! each per handle. A settlement wakes the call's waiter, a raise wakes each
+//! source it queues the occurrence for, and a send wakes each handler that
+//! serves the member. A registration whose key already holds — the outcome
+//! is known, an occurrence or a call is waiting — is woken at once, and so is
+//! one under a key the handle does not observe, and `Interest::Slot`, because
+//! nothing bounds the call table and a slot is always free. No waker is woken
+//! while the store is locked.
+//!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
 //! places a check of it against the interface's own `CATALOG` in a generated
@@ -85,9 +101,9 @@ use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Duration, Timestamp};
 
@@ -118,7 +134,7 @@ pub struct Handles {
     pub handler: HandlerHandle,
 }
 
-/// The aggregate handle: one value implementing all eleven port traits by
+/// The aggregate handle: one value implementing all twelve port traits by
 /// delegating to the six role handles it holds.
 ///
 /// A face is built over one value implementing at least the port traits its
@@ -248,7 +264,7 @@ impl Loopback {
 }
 
 // ---------------------------------------------------------------------------
-// The aggregate's eleven port implementations, each one a delegation.
+// The aggregate's twelve port implementations, each one a delegation.
 // ---------------------------------------------------------------------------
 
 impl Attached for Loopback {
@@ -396,6 +412,18 @@ impl Handler for Loopback {
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
         self.handles.handler.settle(claim, outcome)
+    }
+}
+
+/// Each key goes to the handle that observes it: `Outcome` and `Slot` to the
+/// caller, `Event` to the source, and `Claim` to the handler.
+impl Wakeable for Loopback {
+    fn wake_on(&self, what: Interest, waker: &std::task::Waker) {
+        match what {
+            Interest::Outcome(_) | Interest::Slot => self.handles.caller.wake_on(what, waker),
+            Interest::Event(_) => self.handles.source.wake_on(what, waker),
+            Interest::Claim(_) => self.handles.handler.wake_on(what, waker),
+        }
     }
 }
 

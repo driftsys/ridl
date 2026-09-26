@@ -44,13 +44,25 @@
 //!   ADR-0021 decision 12. That decision holds a single-threaded runtime to
 //!   neither `Send` nor `Sync`, and both tests reach the role handles through
 //!   `Loopback::split`.
+//!
+//! The tests under "Waking" pin this runtime's `Wakeable` (story E11.16,
+//! driftsys/ridl#510). The suite does not cover `Wakeable` yet; the second
+//! half of story E11.20 adds the contract cases to it. Three of the tests
+//! here stay after that, because each pins a choice the contract leaves to a
+//! runtime: `a_registration_whose_key_already_holds_is_woken_at_once`,
+//! `a_key_no_role_of_the_handle_observes_is_woken_at_once`, and
+//! `a_waker_is_woken_after_the_lock_is_released`.
 
-use ridl_loopback::Loopback;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, mpsc};
+use std::task::{Wake, Waker};
+
+use ridl_loopback::{Handles, Loopback};
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::Contract;
 use ridl_rt::port::{
-    Attached, Caller, Clock, EventSink, EventSource, FixedReader, Handler, ReadError, SettleError,
-    SignalReader, SignalWriter,
+    Attached, Caller, Clock, EventSink, EventSource, FixedReader, Handler, Interest, ReadError,
+    SettleError, SignalReader, SignalWriter, Wakeable,
 };
 use ridl_rt::sample::{Duration, Freshness, Timestamp};
 
@@ -299,4 +311,404 @@ fn a_reader_handle_is_shared_between_threads() {
     for reader in readers {
         assert_eq!(reader.join().expect("the reading thread finished"), vec![3]);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Waking.
+// ---------------------------------------------------------------------------
+
+/// A waker that counts its wakes.
+struct Count(AtomicUsize);
+
+impl Wake for Count {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// A fresh waker and the counter it increments.
+fn counting() -> (Arc<Count>, Waker) {
+    let count = Arc::new(Count(AtomicUsize::new(0)));
+    (Arc::clone(&count), Waker::from(count))
+}
+
+fn wakes(count: &Count) -> usize {
+    count.0.load(Ordering::SeqCst)
+}
+
+#[test]
+fn a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement() {
+    let Handles {
+        mut caller,
+        mut handler,
+        ..
+    } = runtime().split();
+    let (count, waker) = counting();
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_eq!(wakes(&count), 0, "nothing is known about the call yet");
+
+    let mut buf = [0u8; 8];
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(wakes(&count), 0, "a presented call has no outcome yet");
+
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&count), 1, "the settlement wakes the waiter");
+    assert_eq!(caller.ack(c), Some(Ok(())));
+
+    // The waker was cleared when it was woken, so a later settlement of
+    // another call does not reach it.
+    caller.command(IFACE, ORD, &[2]).expect("send");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&count), 1, "a waiter is woken at most once");
+}
+
+#[test]
+fn a_waiter_registered_after_the_settlement_is_woken_at_once() {
+    let Handles {
+        mut caller,
+        mut handler,
+        ..
+    } = runtime().split();
+    let c = caller.query(IFACE, ORD, &[1]).expect("send");
+    let mut buf = [0u8; 8];
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[7])).expect("settle");
+
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_eq!(wakes(&count), 1, "the outcome is already known");
+    assert_eq!(caller.reply(c, &mut buf), Ok(Some(Ok(1))));
+}
+
+#[test]
+fn a_second_registration_under_a_key_wakes_the_displaced_waker() {
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut source = rt.source();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    let mut buf = [0u8; 8];
+
+    // An outcome.
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let (first, first_waker) = counting();
+    let (second, second_waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &first_waker);
+    caller.wake_on(Interest::Outcome(c), &second_waker);
+    assert_eq!(wakes(&first), 1, "the displaced waker is woken");
+    assert_eq!(wakes(&second), 0);
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&first), 1, "the displaced waker is not stored");
+    assert_eq!(wakes(&second), 1, "the settlement wakes the stored waker");
+
+    // An event.
+    let (first, first_waker) = counting();
+    let (second, second_waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &first_waker);
+    source.wake_on(Interest::Event(IFACE), &second_waker);
+    assert_eq!(wakes(&first), 1, "the displaced waker is woken");
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&first), 1, "the displaced waker is not stored");
+    assert_eq!(wakes(&second), 1, "the raise wakes the stored waker");
+
+    // A claim.
+    let (first, first_waker) = counting();
+    let (second, second_waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &first_waker);
+    handler.wake_on(Interest::Claim(IFACE), &second_waker);
+    assert_eq!(wakes(&first), 1, "the displaced waker is woken");
+    caller.command(IFACE, ORD, &[2]).expect("send");
+    assert_eq!(wakes(&first), 1, "the displaced waker is not stored");
+    assert_eq!(wakes(&second), 1, "the send wakes the stored waker");
+}
+
+#[test]
+fn a_registration_of_the_waker_already_stored_does_not_wake_it() {
+    // A task registers on every poll. If registering its own waker again
+    // woke it, every poll would schedule the next one and the task would
+    // never become idle.
+    let Handles {
+        mut caller,
+        mut handler,
+        ..
+    } = runtime().split();
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &waker);
+    caller.wake_on(Interest::Outcome(c), &waker.clone());
+    assert_eq!(wakes(&count), 0, "the same task registered twice");
+
+    let mut buf = [0u8; 8];
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&count), 1, "and is still woken by the settlement");
+}
+
+#[test]
+fn a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one() {
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut subscribed = rt.source();
+    let mut elsewhere = rt.source();
+    subscribed.subscribe(IFACE, &[ORD]).expect("subscribe");
+    // Subscribed to another event of the same interface: its key is the same
+    // `Event(IFACE)`, and the occurrence below is still not its.
+    elsewhere.subscribe(IFACE, &[OTHER]).expect("subscribe");
+    let unsubscribed = rt.source();
+
+    let (woken, woken_waker) = counting();
+    let (other, other_waker) = counting();
+    let (none, none_waker) = counting();
+    subscribed.wake_on(Interest::Event(IFACE), &woken_waker);
+    elsewhere.wake_on(Interest::Event(IFACE), &other_waker);
+    unsubscribed.wake_on(Interest::Event(IFACE), &none_waker);
+
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&woken), 1, "the subscribed source is woken");
+    assert_eq!(
+        wakes(&other),
+        0,
+        "a source subscribed to another event is not"
+    );
+    assert_eq!(wakes(&none), 0, "an unsubscribed source is not");
+
+    let mut out = [0u8; 8];
+    assert!(subscribed.next(&mut out).expect("next").is_some());
+}
+
+#[test]
+fn a_raise_does_not_wake_a_waiter_on_another_interface() {
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut source = rt.source();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    let (count, waker) = counting();
+    source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
+
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&count), 0, "the key names another interface");
+}
+
+#[test]
+fn a_send_wakes_the_handler_that_serves_the_member() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut serving = rt.handler();
+    let mut elsewhere = rt.handler();
+    serving.serve(IFACE, &[ORD]).expect("serve");
+    // Serves another member of the same interface: its key is the same
+    // `Claim(IFACE)`, and the call below is still not presented to it.
+    elsewhere.serve(IFACE, &[OTHER]).expect("serve");
+
+    let (woken, woken_waker) = counting();
+    let (other, other_waker) = counting();
+    serving.wake_on(Interest::Claim(IFACE), &woken_waker);
+    elsewhere.wake_on(Interest::Claim(IFACE), &other_waker);
+
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&woken), 1, "the serving handler is woken");
+    assert_eq!(wakes(&other), 0, "a handler serving another member is not");
+
+    let mut buf = [0u8; 8];
+    assert!(serving.next_claim(&mut buf).expect("next_claim").is_some());
+}
+
+#[test]
+fn a_serve_that_admits_a_waiting_call_wakes_the_handler() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    handler.serve(IFACE, &[OTHER]).expect("serve");
+    let (count, waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &waker);
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&count), 0, "the handler does not serve the member");
+
+    handler.serve(IFACE, &[ORD]).expect("serve");
+    assert_eq!(wakes(&count), 1, "the call is now waiting for this handler");
+}
+
+#[test]
+fn a_caller_handle_reads_the_clock() {
+    let mut rt = runtime();
+    let caller = rt.caller();
+    rt.advance(Duration(250));
+    assert_eq!(caller.now(), Timestamp(250));
+    assert_eq!(caller.now(), rt.now());
+}
+
+#[test]
+fn a_registration_whose_key_already_holds_is_woken_at_once() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut sink = rt.sink();
+    let mut source = rt.source();
+    let handler = rt.handler();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    // The call table has no bound, so a slot is always free.
+    let (slot, slot_waker) = counting();
+    caller.wake_on(Interest::Slot, &slot_waker);
+    assert_eq!(wakes(&slot), 1, "a slot is free");
+
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    let (event, event_waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &event_waker);
+    assert_eq!(wakes(&event), 1, "an occurrence is waiting");
+
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    let (claim, claim_waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
+    assert_eq!(wakes(&claim), 1, "a call is waiting");
+
+    // A correlation that names no call in flight has no outcome to wait for;
+    // storing its waker would leave it waiting on nothing.
+    let (unknown, unknown_waker) = counting();
+    caller.wake_on(
+        Interest::Outcome(ridl_rt::port::Correlation(99)),
+        &unknown_waker,
+    );
+    assert_eq!(wakes(&unknown), 1, "no call has that correlation");
+}
+
+#[test]
+fn a_forgotten_call_wakes_its_waiter() {
+    // After `forget`, a settlement records nothing, so the stored waker would
+    // never be woken.
+    let Handles { mut caller, .. } = runtime().split();
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &waker);
+    caller.forget(c);
+    assert_eq!(wakes(&count), 1, "the forget wakes the waiter");
+}
+
+#[test]
+fn a_key_no_role_of_the_handle_observes_is_woken_at_once() {
+    // A reader handle holds no call, no queue and no served set, so nothing
+    // it could observe changes under any key; a stored waker would never be
+    // woken.
+    let Handles {
+        reader,
+        writer,
+        sink,
+        caller,
+        source,
+        handler,
+    } = runtime().split();
+    let (count, waker) = counting();
+    reader.wake_on(Interest::Slot, &waker);
+    writer.wake_on(Interest::Event(IFACE), &waker);
+    sink.wake_on(Interest::Claim(IFACE), &waker);
+    caller.wake_on(Interest::Event(IFACE), &waker);
+    caller.wake_on(Interest::Claim(IFACE), &waker);
+    source.wake_on(Interest::Slot, &waker);
+    source.wake_on(Interest::Claim(IFACE), &waker);
+    handler.wake_on(Interest::Slot, &waker);
+    handler.wake_on(Interest::Event(IFACE), &waker);
+    assert_eq!(wakes(&count), 9);
+}
+
+#[test]
+fn the_aggregate_routes_each_key_to_the_handle_that_observes_it() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+
+    let c = rt.command(IFACE, ORD, &[1]).expect("send");
+    let (outcome, outcome_waker) = counting();
+    rt.wake_on(Interest::Outcome(c), &outcome_waker);
+    assert_eq!(wakes(&outcome), 0, "stored, not woken at once");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    rt.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&outcome), 1, "woken by the settlement");
+
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    let (event, event_waker) = counting();
+    rt.wake_on(Interest::Event(IFACE), &event_waker);
+    assert_eq!(wakes(&event), 0, "stored, not woken at once");
+    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&event), 1, "woken by the raise");
+
+    let (claim, claim_waker) = counting();
+    rt.wake_on(Interest::Claim(IFACE), &claim_waker);
+    assert_eq!(wakes(&claim), 0, "stored, not woken at once");
+    rt.caller().command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&claim), 1, "woken by the send");
+}
+
+/// A waker that, when woken, reads the clock from another thread and reports
+/// whether that read finished within a second.
+struct ReadsTheStore {
+    reader: Arc<ridl_loopback::ReaderHandle>,
+    done: std::sync::Mutex<Option<mpsc::Sender<bool>>>,
+}
+
+impl Wake for ReadsTheStore {
+    fn wake(self: Arc<Self>) {
+        let (tx, rx) = mpsc::channel();
+        let reader = Arc::clone(&self.reader);
+        std::thread::spawn(move || {
+            reader.now();
+            let _ = tx.send(());
+        });
+        // Under the store's lock, the read above cannot finish until this
+        // wake returns and the lock is released.
+        let finished = rx.recv_timeout(std::time::Duration::from_secs(1)).is_ok();
+        if let Some(done) = self.done.lock().expect("not poisoned").take() {
+            let _ = done.send(finished);
+        }
+    }
+}
+
+#[test]
+fn a_waker_is_woken_after_the_lock_is_released() {
+    let rt = runtime();
+    let reader = Arc::new(rt.reader());
+    let Handles {
+        mut caller,
+        mut handler,
+        ..
+    } = rt.split();
+    let (tx, rx) = mpsc::channel();
+    let waker = Waker::from(Arc::new(ReadsTheStore {
+        reader,
+        done: std::sync::Mutex::new(Some(tx)),
+    }));
+
+    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.wake_on(Interest::Outcome(c), &waker);
+    let mut buf = [0u8; 8];
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+
+    assert_eq!(
+        rx.recv_timeout(std::time::Duration::from_secs(5)),
+        Ok(true),
+        "the waker ran with the store's lock released"
+    );
 }

@@ -2,27 +2,36 @@
 //!
 //! A **port role** is one port trait, and a runtime presents one handle type
 //! per role rather than one type implementing them all (ADR-0021 decision 12).
-//! The six here group the eleven roles the way that decision derives the
+//! The six here group eleven roles the way that decision derives the
 //! threading split: the five roles with a `&mut self` method take a handle
 //! each, and the six whose methods all take `&self` share one, because they
-//! are exactly the roles several threads may hold at once. Every handle here
+//! are exactly the roles several threads may hold at once. The twelfth port
+//! trait, `Wakeable`, is on every handle, because each handle wakes its own
+//! waiters. Every handle here
 //! holds the same `Arc<Mutex<Store>>` and its own copy of the
 //! [`CatalogRef`](ridl_rt::contract::CatalogRef) the runtime was built with,
 //! so `Attached::catalog` can return a reference without reaching through the
 //! lock.
 //!
-//! Every handle implements `Attached`, which every port trait but `Clock` has
-//! as a supertrait. The table lists what each handle adds to it, and the split
-//! follows the receiver of those methods, as ADR-0021 decision 12 derives it:
+//! Every handle implements `Attached`, which every port trait but `Clock` and
+//! `Wakeable` has as a supertrait, and `Wakeable`. The table lists what each
+//! handle adds to them, and the split follows the receiver of those methods,
+//! as ADR-0021 decision 12 derives it:
 //!
-//! | Handle            | Port roles beside `Attached`                                                  | Threading     |
-//! | ----------------- | ----------------------------------------------------------------------------- | ------------- |
-//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
-//! | [`WriterHandle`]  | `SignalWriter`                                                                | `Send`        |
-//! | [`SourceHandle`]  | `EventSource`                                                                 | `Send`        |
-//! | [`SinkHandle`]    | `EventSink`                                                                   | `Send`        |
-//! | [`CallerHandle`]  | `Caller`                                                                      | `Send`        |
-//! | [`HandlerHandle`] | `Handler`                                                                     | `Send`        |
+//! | Handle            | Port roles beside `Attached` and `Wakeable`                                   | Keys it stores       | Threading     |
+//! | ----------------- | ----------------------------------------------------------------------------- | -------------------- | ------------- |
+//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                 | `Send + Sync` |
+//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                 | `Send`        |
+//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`              | `Send`        |
+//! | [`SinkHandle`]    | `EventSink`                                                                   | none                 | `Send`        |
+//! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome` and `Slot` | `Send`        |
+//! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`              | `Send`        |
+//!
+//! A handle stores a waker only under a key one of its roles observes. A
+//! registration under any other key is woken at once, because nothing that
+//! handle could read changes under it, and a stored waker would never be
+//! woken. `Slot` is woken at once too, because the call table has no bound and
+//! a slot is always free.
 //!
 //! Every method on the reader handle takes `&self`, so several threads may
 //! read one store at once; every other handle carries a trait with a
@@ -32,14 +41,15 @@
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::task::Waker;
 
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::Timestamp;
 
@@ -59,6 +69,30 @@ pub(crate) fn lock(shared: &Shared) -> MutexGuard<'_, Store> {
     shared
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Takes the one lock, runs `f` with a list of wakers to wake, releases the
+/// lock, and then wakes each waker `f` put on the list.
+///
+/// A waker runs code the runtime does not control — an executor's scheduling,
+/// or a test's own — and that code may call a port method on this runtime. So
+/// no waker is woken while the lock is held.
+pub(crate) fn locked<R>(shared: &Shared, f: impl FnOnce(&mut Store, &mut Vec<Waker>) -> R) -> R {
+    let mut wake = Vec::new();
+    let result = {
+        let mut store = lock(shared);
+        f(&mut store, &mut wake)
+    };
+    for waker in wake {
+        waker.wake();
+    }
+    result
+}
+
+/// `Wakeable` on a handle none of whose roles observes any key: every
+/// registration is woken at once.
+fn wake_at_once(waker: &Waker) {
+    waker.wake_by_ref();
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +125,12 @@ impl Attached for ReaderHandle {
 impl Clock for ReaderHandle {
     fn now(&self) -> Timestamp {
         lock(&self.shared).now()
+    }
+}
+
+impl Wakeable for ReaderHandle {
+    fn wake_on(&self, _: Interest, waker: &Waker) {
+        wake_at_once(waker);
     }
 }
 
@@ -200,6 +240,12 @@ impl SignalWriter for WriterHandle {
     }
 }
 
+impl Wakeable for WriterHandle {
+    fn wake_on(&self, _: Interest, waker: &Waker) {
+        wake_at_once(waker);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The event handles
 // ---------------------------------------------------------------------------
@@ -254,6 +300,19 @@ impl EventSource for SourceHandle {
     }
 }
 
+/// Stores one `Event` waker, woken by a raise of that interface that queues an
+/// occurrence for this source.
+impl Wakeable for SourceHandle {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        match what {
+            Interest::Event(iface) => locked(&self.shared, |store, wake| {
+                store.wait_event(self.id, iface, waker, wake);
+            }),
+            Interest::Outcome(_) | Interest::Slot | Interest::Claim(_) => wake_at_once(waker),
+        }
+    }
+}
+
 /// The `EventSink` port role.
 ///
 /// The sequence counters are the handle's own, one per event channel, for the
@@ -293,8 +352,16 @@ impl Attached for SinkHandle {
 impl EventSink for SinkHandle {
     fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError> {
         let seq = self.take_seq((iface, ord));
-        lock(&self.shared).raise(iface, ord, bytes, seq);
+        locked(&self.shared, |store, wake| {
+            store.raise(iface, ord, bytes, seq, wake);
+        });
         Ok(())
+    }
+}
+
+impl Wakeable for SinkHandle {
+    fn wake_on(&self, _: Interest, waker: &Waker) {
+        wake_at_once(waker);
     }
 }
 
@@ -335,6 +402,28 @@ impl Attached for CallerHandle {
     }
 }
 
+/// The caller reads the runtime's one clock, so a generated async `Client`
+/// can compute a call's deadline over this handle alone.
+impl Clock for CallerHandle {
+    fn now(&self) -> Timestamp {
+        lock(&self.shared).now()
+    }
+}
+
+/// Stores one `Outcome` waker per call, kept with the call and woken by its
+/// settlement or its `forget`. `Slot` is woken at once, because the call table
+/// has no bound and a slot is always free.
+impl Wakeable for CallerHandle {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        match what {
+            Interest::Outcome(c) => locked(&self.shared, |store, wake| {
+                store.wait_outcome(c, waker, wake);
+            }),
+            Interest::Slot | Interest::Event(_) | Interest::Claim(_) => wake_at_once(waker),
+        }
+    }
+}
+
 impl Caller for CallerHandle {
     fn command(
         &mut self,
@@ -343,7 +432,9 @@ impl Caller for CallerHandle {
         args: &[u8],
     ) -> Result<Correlation, SendError> {
         let seq = self.take_seq();
-        Ok(lock(&self.shared).send(CallKind::Command, iface, ord, args, seq))
+        Ok(locked(&self.shared, |store, wake| {
+            store.send(CallKind::Command, iface, ord, args, seq, wake)
+        }))
     }
 
     fn query(
@@ -353,7 +444,9 @@ impl Caller for CallerHandle {
         args: &[u8],
     ) -> Result<Correlation, SendError> {
         let seq = self.take_seq();
-        Ok(lock(&self.shared).send(CallKind::Query, iface, ord, args, seq))
+        Ok(locked(&self.shared, |store, wake| {
+            store.send(CallKind::Query, iface, ord, args, seq, wake)
+        }))
     }
 
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
@@ -369,7 +462,7 @@ impl Caller for CallerHandle {
     }
 
     fn forget(&mut self, c: Correlation) {
-        lock(&self.shared).forget(c);
+        locked(&self.shared, |store, wake| store.forget(c, wake));
     }
 }
 
@@ -388,6 +481,11 @@ impl Caller for CallerHandle {
 /// would be presented nothing at all by it. `serve` with an empty slice
 /// records nothing and so leaves the handler unfiltered, the same as never
 /// having called it. [`served`](HandlerHandle::served) reads the set back.
+///
+/// The served set is kept twice: here, for `served` to return a slice, and in
+/// the store, where `next_claim` filters by it and a caller's send reads it to
+/// know which handler to wake. `serve` is the one method that changes it, and
+/// it changes both.
 pub struct HandlerHandle {
     shared: Shared,
     catalog: CatalogRef,
@@ -414,6 +512,12 @@ impl HandlerHandle {
     }
 }
 
+impl Drop for HandlerHandle {
+    fn drop(&mut self) {
+        lock(&self.shared).close_handler(self.id);
+    }
+}
+
 impl Attached for HandlerHandle {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
@@ -427,16 +531,14 @@ impl Handler for HandlerHandle {
                 self.served.push((iface, *ord));
             }
         }
+        locked(&self.shared, |store, wake| {
+            store.serve(self.id, iface, ords, wake);
+        });
         Ok(())
     }
 
     fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
-        let served = if self.served.is_empty() {
-            None
-        } else {
-            Some(self.served.as_slice())
-        };
-        lock(&self.shared).next_claim(self.id, served, out)
+        lock(&self.shared).next_claim(self.id, out)
     }
 
     fn settle(
@@ -444,6 +546,21 @@ impl Handler for HandlerHandle {
         claim: ClaimId,
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
-        lock(&self.shared).settle(self.id, claim, outcome)
+        locked(&self.shared, |store, wake| {
+            store.settle(self.id, claim, outcome, wake)
+        })
+    }
+}
+
+/// Stores one `Claim` waker, woken by a send of a member this handler serves,
+/// or by a `serve` that admits a call already waiting.
+impl Wakeable for HandlerHandle {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        match what {
+            Interest::Claim(iface) => locked(&self.shared, |store, wake| {
+                store.wait_claim(self.id, iface, waker, wake);
+            }),
+            Interest::Outcome(_) | Interest::Slot | Interest::Event(_) => wake_at_once(waker),
+        }
     }
 }
