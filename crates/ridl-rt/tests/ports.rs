@@ -328,12 +328,14 @@ fn wakeable_is_usable_as_a_trait_object() {
 // trait is (`tests/port_forwarding.rs`), and the key reaches the port
 // unchanged.
 
-/// Records the last key it was given.
+/// Records the last key it was given, and wakes the waker it was given, so a
+/// test can tell that both arrived unchanged.
 struct Recorder(std::sync::Mutex<Option<Interest>>);
 
 impl Wakeable for Recorder {
-    fn wake_on(&self, what: Interest, _: &Waker) {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
         *self.0.lock().expect("not poisoned") = Some(what);
+        waker.wake_by_ref();
     }
 }
 
@@ -342,7 +344,11 @@ fn wakeable_is_reached_through_a_borrow() {
     fn over<P: Wakeable>(port: P, what: Interest, waker: &Waker) {
         port.wake_on(what, waker);
     }
-    let waker = Waker::from(Arc::new(Count(AtomicUsize::new(0))));
+    fn take(recorder: &Recorder) -> Option<Interest> {
+        recorder.0.lock().expect("not poisoned").take()
+    }
+    let count = Arc::new(Count(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&count));
     let mut recorder = Recorder(std::sync::Mutex::new(None));
     let keys = [
         Interest::Outcome(Correlation(7)),
@@ -350,20 +356,23 @@ fn wakeable_is_reached_through_a_borrow() {
         Interest::Event(IFACE),
         Interest::Claim(InterfaceNo(2)),
     ];
+    let mut expected = 0;
     for what in keys {
         over(&recorder, what, &waker);
+        expected += 1;
+        assert_eq!(take(&recorder), Some(what), "the key through `&P`");
         assert_eq!(
-            *recorder.0.lock().expect("not poisoned"),
-            Some(what),
-            "through `&P`"
+            count.0.load(Ordering::SeqCst),
+            expected,
+            "the waker through `&P`"
         );
-        *recorder.0.lock().expect("not poisoned") = None;
         over(&mut recorder, what, &waker);
+        expected += 1;
+        assert_eq!(take(&recorder), Some(what), "the key through `&mut P`");
         assert_eq!(
-            *recorder.0.lock().expect("not poisoned"),
-            Some(what),
-            "through `&mut P`"
+            count.0.load(Ordering::SeqCst),
+            expected,
+            "the waker through `&mut P`"
         );
-        *recorder.0.lock().expect("not poisoned") = None;
     }
 }
