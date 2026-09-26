@@ -40,7 +40,7 @@ use std::task::Waker;
 
 use ridl_rt::contract::{InterfaceNo, Ordinal};
 use ridl_rt::correlate::{Forgotten, Settled, Table, Waiters};
-use ridl_rt::error::CallError;
+use ridl_rt::error::{CallError, Transport};
 use ridl_rt::port::{
     Changed, Claim, ClaimId, Correlation, Interest, RawOccurrence, RawSample, ReadError, SendError,
     SettleError, Watermark,
@@ -127,9 +127,11 @@ pub(crate) enum CallKind {
 /// whether the call was forgotten, and its `Interest::Outcome` waker are the
 /// table's.
 ///
-/// A forgotten call keeps its entry until its slot is reclaimed, because the
-/// provider's side of the call is not the caller's to revoke: a claim already
-/// presented is still settled, and a call still waiting is still presented.
+/// A forgotten call that a handler holds keeps its entry until its
+/// settlement reclaims the slot, because a claim already presented is the
+/// provider's and is still settled. A forgotten call that no handler holds is
+/// withdrawn: its entry goes with its slot, at the `forget` for a waiting
+/// call and at the handler's drop for a claimed one.
 struct CallEntry {
     /// The call's correlation, which a dropped caller's calls are forgotten
     /// by.
@@ -146,6 +148,10 @@ struct CallEntry {
     sent: u64,
     /// The bytes of a successful settlement. Empty until then.
     reply: Vec<u8>,
+    /// `true` once the caller forgot the call while a handler held it. The
+    /// table keeps the same mark, but has no query for it; a dropped
+    /// handler's claim is withdrawn rather than returned by this one.
+    forgotten: bool,
 }
 
 /// Everything two handles must agree on.
@@ -548,6 +554,7 @@ impl Store {
                 envelope,
                 sent,
                 reply: Vec::new(),
+                forgotten: false,
             },
         );
         self.pending.push_back(c);
@@ -602,23 +609,86 @@ impl Store {
     }
 
     /// Releases the caller's interest in a correlation, which is the one
-    /// operation that frees a slot.
+    /// operation that frees a slot. What it does depends on where the call
+    /// is:
     ///
-    /// A call whose outcome is already recorded has nothing left to happen to
-    /// it, so its slot is reclaimed now. A call still in flight keeps its slot
-    /// and is marked forgotten: the provider still sees it at `next_claim` and
-    /// still settles it — `Handler`'s contract is that every claim is settled,
-    /// and a caller losing interest is not the provider's business — and the
-    /// slot is reclaimed when that settlement lands. Either way the
-    /// correlation answers `None` from `ack` and `reply` afterwards.
+    /// - **Settled**: nothing is left to happen to it, so its slot is
+    ///   reclaimed now.
+    /// - **Claimed by a handler and not settled**: it is marked forgotten and
+    ///   keeps its slot. The provider still settles it — `Handler`'s contract
+    ///   is that every claim is settled, and a caller losing interest is not
+    ///   the provider's business — and the slot is reclaimed when that
+    ///   settlement lands (ADR-0021 decision 15). If the handler is dropped
+    ///   first, [`Store::close_handler`] withdraws the call instead of
+    ///   returning it to the waiting calls.
+    /// - **Waiting, claimed by no handler**: it is withdrawn. It leaves the
+    ///   waiting calls, so no handler is ever presented it, and its slot is
+    ///   reclaimed now. A call to a member no handler serves is never
+    ///   settled, so without this its slot would be lost for the life of the
+    ///   runtime. This is this runtime's behaviour, not a port contract: a
+    ///   transport that has already sent a request cannot recall it (decision
+    ///   1 of the pass-1 dispositions on driftsys/ridl#553).
     ///
-    /// A waiter on the outcome of a call still in flight is woken: no outcome
-    /// will be recorded for it, so it would otherwise never be.
+    /// `forget` and the handler side — `serve` and `next_claim` — run under
+    /// the store's one lock, so a call is either claimed first, and held
+    /// until settled, or withdrawn first, and never presented. Either way
+    /// the correlation answers `None` from `ack` and `reply` afterwards. A
+    /// waiter on the outcome of a call still in flight is woken: no outcome
+    /// will be readable for it, so it would otherwise never be. A withdrawal
+    /// wakes every caller's `Slot` waiter, as any reclaim does, and no
+    /// handler's `Claim` waiter, because it adds no call to claim.
     pub(crate) fn forget(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
+        if let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
+            self.pending.remove(at);
+            self.withdraw(c, wake);
+            return;
+        }
         match self.table.forget(c) {
             Forgotten::Reclaimed => self.reclaimed(c, wake),
-            Forgotten::Marked(waker) => wake.extend(waker),
+            Forgotten::Marked(waker) => {
+                wake.extend(waker);
+                self.calls
+                    .get_mut(&Calls::slot(c))
+                    .expect("a call in flight has its entry")
+                    .forgotten = true;
+            }
             Forgotten::Unknown => {}
+        }
+    }
+
+    /// Withdraws a call that no handler holds and that is not among the
+    /// waiting calls: the table settles it and, when the caller has not
+    /// forgotten it yet, forgets it, which reclaims its slot either way. The
+    /// table calls are made under the one lock the caller of this function
+    /// holds, so no reader sees the settlement in between.
+    ///
+    /// Two paths reach it: `forget` of a waiting call, which it has just
+    /// taken out of the queue, and `close_handler` for a claim whose call
+    /// the caller forgot while the dropped handler held it.
+    fn withdraw(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
+        // The table discards this outcome with the slot, so no reader ever
+        // sees it. `Undelivered` is chosen because it is what happened — no
+        // provider settled the call — so the value does not read as an
+        // acknowledgment.
+        match self
+            .table
+            .settle(c, Err(CallError::Transport(Transport::Undelivered)))
+        {
+            // A waiting call, which the caller forgets now.
+            Settled::Recorded(waker) => {
+                wake.extend(waker);
+                match self.table.forget(c) {
+                    Forgotten::Reclaimed => self.reclaimed(c, wake),
+                    Forgotten::Marked(_) | Forgotten::Unknown => {
+                        unreachable!("the call was settled just above")
+                    }
+                }
+            }
+            // A call the caller forgot while a handler held it, withdrawn at
+            // that handler's drop: the table marked it, so the settlement
+            // reclaims the slot.
+            Settled::Reclaimed => self.reclaimed(c, wake),
+            Settled::Unknown => unreachable!("a withdrawn call is in flight"),
         }
     }
 
@@ -640,10 +710,12 @@ impl Store {
     }
 
     /// Removes a dropped caller, and forgets every call it sent and did not
-    /// forget: a settled one's slot is reclaimed now, and one still in flight
-    /// is marked, so its settlement reclaims the slot. No handle can read the
-    /// outcome of a call whose caller is gone, and a slot kept for it would
-    /// be lost to every other caller.
+    /// forget, under the rule of [`Store::forget`]: a settled one's slot is
+    /// reclaimed now, one no handler has claimed is withdrawn from the
+    /// waiting calls and its slot reclaimed now, and one a handler has
+    /// claimed is marked, so its settlement reclaims the slot. No handle can
+    /// read the outcome of a call whose caller is gone, and a slot kept for
+    /// it would be lost to every other caller.
     ///
     /// Returns the caller's waiters, for the handle to drop after the lock is
     /// released, as `close_source` explains.
@@ -682,7 +754,11 @@ impl Store {
     /// Removes a dropped handler. Every claim it held and had not settled
     /// returns to the waiting calls, in its place by send order, so another
     /// handler that serves the member can take it, and every handler that
-    /// serves the member has its `Claim` waiter woken. The loopback enforces
+    /// serves the member has its `Claim` waiter woken. A claim whose call the
+    /// caller forgot is withdrawn instead, as [`Store::forget`] withdraws a
+    /// waiting call: its slot is reclaimed now, no handler is presented it
+    /// again, and no `Claim` waiter is woken for it (decision 2 of the pass-1
+    /// dispositions on driftsys/ridl#557). The loopback enforces
     /// no deadline on the returned call: what bounds the caller's wait is the
     /// generated async client's deadline (story E11.21, ADR-0023 decision 6).
     ///
@@ -699,6 +775,10 @@ impl Store {
         for claim in held {
             let owner = self.claims.remove(&claim).expect("listed above");
             let entry = self.entry(owner.call);
+            if entry.forgotten {
+                self.withdraw(owner.call, wake);
+                continue;
+            }
             let (sent, key) = (entry.sent, (entry.iface, entry.ord));
             let at = self
                 .pending

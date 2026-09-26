@@ -215,11 +215,13 @@ future with the result of that attempt inside it. A `require` failure, or a send
 error other than `Busy`, is a future that is ready with `Err`; `Busy` is a
 future in the slot-waiting phase (F-3). Dropping the future in the waiting phase
 calls `Caller::forget` on its correlation; a command already sent is not taken
-back, and a query already sent is still served and settled by the provider. A
-future dropped in the slot-waiting phase sends nothing. A future that has taken
-its outcome calls `Caller::forget` at once, so `forget` is the one operation
-that reclaims a slot (F-9), and the port's `ack` and `reply` stay non-consuming,
-as they are today.
+back, and a query already sent is still served and settled by the provider.
+(Corrected 2026-09-26: that is what the face promises over a transport; a
+runtime may withdraw a command no provider has taken, and the loopback does, per
+the #553 and #557 decisions.) A future dropped in the slot-waiting phase sends
+nothing. A future that has taken its outcome calls `Caller::forget` at once, so
+`forget` is the one operation that reclaims a slot (F-9), and the port's `ack`
+and `reply` stay non-consuming, as they are today.
 
 **What the future holds.** A `&'a mut P` to the port, the argument value (kept
 only until the send succeeds, for the retry), the phase — unsent with its
@@ -456,6 +458,17 @@ drop while waiting (F-4); `ack` and `reply` do not consume, as today. `settle`
 and the reclaiming operations return the wakers to wake, and the runtime wakes
 them after releasing its lock, so no waker runs under a runtime's mutex. The
 plan fixes the method signatures.
+
+**Amended (2026-09-26).** In the loopback, a forgotten call that no handler has
+claimed is withdrawn: it leaves the waiting calls, and its slot is reclaimed at
+the `forget`, so a withdrawn command is never delivered. Under the store's lock
+the loopback settles the call and then forgets it through the existing `Table`
+API, which reaches `Forgotten::Reclaimed`; `ridl-rt` gains no item. A claimed
+call keeps its slot until its settlement, as above. The withdrawal is the
+loopback's behaviour, not a port contract. Decision 1 of the
+[pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640),
+with its
+[confirmed details](https://github.com/driftsys/ridl/pull/553#issuecomment-5848618786).
 
 **What the loopback's two hooks need from it.** Nothing. `fail_next_settle`
 fails `Handler::settle` before the table is touched and records no outcome, so
