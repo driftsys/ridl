@@ -12,18 +12,20 @@ A typl `enum` value is declared in `SCREAMING_SNAKE` (typl §2.3, §15.1). The
 Rust backend emits it verbatim as a Rust enum variant, so
 `enum Warning { LOW_FUEL = 0, CHECK_ENGINE = 1 }` becomes
 `pub enum Warning { LOW_FUEL = 0, CHECK_ENGINE = 1 }`, and rustc warns
-`non_camel_case_types` on every multi-word variant in every consumer's build.
-Struct fields had the same defect under driftsys/ridl#243 and moved to
-`snake_case` in #451. After that change, enum variants are the only generated
-Rust identifier that does not follow the Rust naming convention.
+`non_camel_case_types` on every multi-word variant wherever the generated code
+is compiled as part of the consumer's own workspace (Cargo caps the lints of a
+registry dependency). Struct fields had the same defect under driftsys/ridl#243
+and moved to `snake_case` in #451. After that change, enum variants are the only
+generated Rust identifier that does not follow the Rust naming convention.
 
 The maintainer chose option B on 2026-09-26: project each variant through a
 pinned PascalCase transform (`CHECK_ENGINE` → `CheckEngine`), with the collision
 check ADR-0016 requires for every pinned transform, and amend ADR-0016. The
-change renames every multi-word generated variant. That breaks a consumer that
-names a variant, which the 0.x rule allows (ADR-0021 decision 10 states the rule
-for `ridl-rt`; generated code is released with the same toolchain and follows
-it).
+change renames every generated variant — `PARK` becomes `Park` as well as
+`CHECK_ENGINE` becoming `CheckEngine` — although only the multi-word ones draw
+the lint today. That breaks a consumer that names a variant, which the 0.x rule
+allows (ADR-0021 decision 10 states the rule for `ridl-rt`; generated code is
+released with the same toolchain and follows it).
 
 ## 2. The state this design starts from
 
@@ -59,22 +61,37 @@ Measured on `main` at 6557cc4.
   associated constant (`pub const LOW_FUEL: WarningFlags`), and
   `SCREAMING_SNAKE` is the Rust convention for a constant. It does not name the
   paired enum's variants.
-- **Three test comments and one lint allowance call the verbatim spelling "by
-  design":** `crates/ridl-backend-rust/src/tests.rs` (the rustc compile proof
-  that denies `non_snake_case` and leaves `non_camel_case_types` undenied),
-  `crates/ridlc/tests/corpus.rs` (two compile proofs, same pattern), and the
-  `#[allow(clippy::upper_case_acronyms)]` on the checked-in generated module in
-  `crates/ridl-backend-rust/tests/interaction_face.rs`.
-- **Snapshots that hold a multi-word variant:** 15 variant lines across
+- **Four rustc compile proofs deny `non_snake_case` and leave
+  `non_camel_case_types` undenied**, and their comments say an enum variant
+  draws it by design or as a non-fatal lint. Three are in
+  `crates/ridl-backend-rust/src/tests.rs` —
+  `a_tuple_under_an_internal_declaration_is_package_private`,
+  `appendix_b_compiles_with_rustc` and `appendix_a_compiles_with_rustc` — and
+  one is `rustc_accepts` in `crates/ridlc/tests/corpus.rs`, which the
+  `veh-common`, `veh-cluster` and two-member workspace proofs share. Two doc
+  comments in `corpus.rs`, on `veh_common_generated_rust_compiles_with_rustc`
+  and on `rustc_accepts`, give `non_camel_case_types` on a screaming-case
+  variant as their example of a non-fatal lint. The checked-in generated module
+  in `crates/ridl-backend-rust/tests/interaction_face.rs` carries
+  `#[allow(clippy::upper_case_acronyms)]` for the same spelling.
+- **Snapshots that hold a multi-word variant:** 18 variant lines across
   `ridl_backend_rust__tests__appendix_b_rust_snapshot.snap`,
   `ridl_backend_rust__tests__enumset_derived_form.snap`, and
   `corpus__rust@{veh-cluster,services-workspace,veh-common}.snap`. Single-word
   variants move too (`PARK` → `Park`), so every snapshot with an enum moves.
+- **Checked-in generated code and hand-written tests name variants in the typl
+  spelling:** `crates/ridl-backend-rust/tests/generated/interaction_face.rs`
+  (regenerated with `RIDL_UPDATE_GENERATED=1`), and the tests that use it or
+  build their own enums — `crates/ridl-backend-rust/tests/interaction_face.rs`,
+  `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`,
+  `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`, and assertions in
+  `crates/ridl-backend-rust/src/tests.rs`.
 - **`examples/cabin`** names `api::Health::WARN` twice in
   `examples/cabin/consumer/src/main.rs`.
-- **The book** holds no Rust fence that names an enum variant, and no
-  specification, design or technote prose states the verbatim spelling. The
-  claim lives only in code comments.
+- **One document names a generated variant:**
+  `docs/technotes/ridl-rt-by-example.md` writes `health: Health::WARN` in a Rust
+  fence. The book holds no Rust fence that names an enum variant, and no
+  specification or design prose states the verbatim spelling.
 
 ## 3. The transform
 
@@ -135,9 +152,10 @@ holds an underscore. The other Rust keywords are lower-case, so no PascalCase
 output reaches them.
 
 **`Ok`, `Err`, `Some` and `None` are legal variant names.** The generated code
-spells the `core` types with full paths (`::core::result::Result::Ok`) and
-always qualifies a variant with its enum (`Self::Ok`, `Health::Ok`), so a
-variant with one of these names does not shadow anything.
+always qualifies a variant with its enum (`Self::Ok`, `Health::Ok`) and never
+brings an enum's variants into scope with a `use`, so a bare `None` or `Some`
+elsewhere in the generated code still resolves to the prelude's `Option`, and a
+variant with one of these names shadows nothing.
 
 ## 4. Where the transform lives
 
@@ -167,8 +185,9 @@ The `model.proto` comment on the field states that an empty `pascal` is
 `camel_case(snake)`, and the Rust backend reads the field through one helper
 that applies that fallback. With that meaning, the field is additive and the
 schema package stays `ridl.codegen.v1`. The cost is snapshot growth: every
-`Spellings` in the five `corpus__codegen@*.snap` files gains one line, about 270
-lines in total.
+`Spellings` in the five `corpus__codegen@*.snap` files that carry a model gains
+one line, about 270 lines in total. The other three `corpus__codegen@*.snap`
+files are the placeholders of packages that fail to check, and do not move.
 
 **The Rust backend reads `pascal` at the four sites of §2,** in place of
 `declared`. The `Repr::Enum { first }` string in `codec.rs` stores the `pascal`
@@ -201,8 +220,20 @@ are incomparable (ADR-0016, 2026-09-20 amendment). An enum value reaches two
 transformed namespaces as well — the Rust variant (`pascal_case`) and proto's
 prefixed value (`snake_case` upper-cased). Here the collision sets are nested,
 by property 4 of §3: every pair that collides under `snake_case` also collides
-under `pascal_case`. Checking `pascal_case` alone therefore rejects every
-package that either transform would break. A second key would find no new pair.
+under `pascal_case`. So, **within one enum**, checking `pascal_case` alone
+rejects every pair that either transform would break, and a second key would
+find no new pair.
+
+**Proto's namespace is wider than one enum, and stays with its backend check.**
+proto3 scopes an enum's values as siblings of the enum, so the proto backend
+claims every value in the file's package-wide namespace, and it adds a
+`<PREFIX>_UNSPECIFIED` value to an enum that declares no zero. Two collisions
+come from that and are outside one enum: `enum A_B { C }` beside
+`enum A { B_C }` both give `A_B_C`, and a declared `UNSPECIFIED` value in an
+enum with no zero meets the synthesized one. RIDL-149 compares the values of one
+enum, which is the whole of the Rust namespace — a Rust variant is scoped by its
+enum — and not the whole of proto's. Those cross-enum collisions stay with the
+proto backend's `names.claim` refusal (ADR-0017 decision 4), as they are today.
 
 The TypeScript and FlatBuffers backends emit the declared name (§6), whose
 collision set is exact equality. That case is a verbatim repeat, which is
@@ -239,16 +270,21 @@ either way: rename one value.
 
 ### 5.5 What the new error rejects
 
-A package that compiled on every backend before this change and is rejected
-after it declares two values of one enum that differ only in underscores or in
-letter case — `CHECK_ENGINE` beside `CHECK__ENGINE`, `A` beside `A_`, `PARK`
-beside `Park`. Measured over every tracked `.ridl` and `.typl` file: no enum
-value has a doubled or a trailing underscore, and the only values that are not
-`SCREAMING_SNAKE` are in `crates/ridl-syntax/test_data/parser/err/`, which does
-not reach the checker. The book's fences are compiled by
-`crates/ridl/tests/book_examples.rs`, so the implementation's test run covers
-them. The rejection is expected to reject nothing that exists today, and the
-plan verifies it by running the full suite.
+The new error rejects two values of one enum that share a `pascal_case` output.
+Some of those pairs were already refused by the proto backend, because they
+share a `snake_case` output too — `PARK` beside `Park`, `checkEngine` beside
+`CHECK_ENGINE`. The pairs that compiled on every backend before this change and
+are refused after it are the ones that differ under `snake_case` and not under
+`pascal_case`: two values that differ only in where their underscores fall —
+`CHECK_ENGINE` beside `CHECK__ENGINE`, `A` beside `A_`, `LEVEL_10` beside
+`LEVEL10`.
+
+Measured by computing `pascal_case` over the values of every `enum` in every
+tracked `.ridl` and `.typl` file and every Markdown file under `docs/book/`: 59
+enums, 182 values, and no two values of one enum share an output. The check is
+expected to reject nothing that exists today, and the plan verifies it by
+running the full suite, which compiles the book's fences through
+`crates/ridl/tests/book_examples.rs`.
 
 ## 6. Every backend and runtime
 
@@ -265,6 +301,8 @@ plan verifies it by running the full suite.
 | `ridl-sem`                                                   | RIDL-149 over one enum's values (§5)                                                                               |
 | `ridl-rt`, `ridl-loopback`, `ridlc-gen-model`                | none; none of them spells a generated enum variant                                                                 |
 | `examples/cabin`                                             | `api::Health::WARN` becomes `api::Health::Warn` in `consumer/src/main.rs`                                          |
+| `docs/technotes/ridl-rt-by-example.md`                       | `Health::WARN` becomes `Health::Warn` in its Rust fence; the ridl fence keeps `WARN`                               |
+| The tests that name a generated variant                      | updated with the snapshots (§2's list); the checked-in face is regenerated                                         |
 | The book                                                     | none; no page shows a generated variant. The plan re-greps before it ends                                          |
 | C header                                                     | none; ADR-0016 names `crates/ridl-backend-rust/src/c_header.rs`, but no such file exists in the workspace today    |
 
@@ -297,12 +335,12 @@ The plan turns each of these into a task step.
   message; a verbatim repeat is not reported as RIDL-149; a `reserved` value
   does not collide; two distinct values that do not collide pass; the message
   names `pascal_case`.
-- **The compile proofs deny `non_camel_case_types`.** The three rustc proofs
-  whose comments say the variant spelling is "by design" gain
-  `-D non_camel_case_types`, and the comments are rewritten. #451 found that a
-  deny flag on a fixture with no multi-word name tests nothing, so the plan
-  names the fixtures that hold a multi-word variant (`veh-cluster` holds 8) and
-  proves the flag bites by reverting one emit site and watching the proof fail.
+- **The compile proofs deny `non_camel_case_types`.** The four rustc proofs of
+  §2 gain `-D non_camel_case_types`, and their comments, with the two
+  `corpus.rs` doc comments, are rewritten. #451 found that a deny flag on a
+  fixture with no multi-word name tests nothing, so the plan names the fixtures
+  that hold a multi-word variant (`veh-cluster` holds 8) and proves the flag
+  bites by reverting one emit site and watching the proof fail.
 - **Snapshots move in the same commit as the emit change,** as #506's "Done
   when" asks.
 - **`interaction_face.rs`** loses its `clippy::upper_case_acronyms` allowance,
@@ -313,13 +351,15 @@ The plan turns each of these into a task step.
 
 ## 8. Documents this change amends
 
-| Document                                                        | When                    | Change                                                                                 |
-| --------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------- |
-| ADR-0016                                                        | this design's PR        | the 2026-09-26 amendment: `pascal_case` pinned, enum values join RIDL-149's namespaces |
-| `docs/decisions/README.md`                                      | this design's PR        | ADR-0016's summary gains the amendment                                                 |
-| `docs/specification/ridl-language-reference.md` §16.4, RIDL-149 | the implementation's PR | the row gains the values of one enum, checked under `pascal_case`                      |
-| ADR-0017 decision 5                                             | the implementation's PR | its enum-value half is done: RIDL-149 covers an enum's values                          |
-| `model.proto` comment on `Spellings`                            | the implementation's PR | the `pascal` field, citing ADR-0016's 2026-09-26 amendment                             |
+| Document                                                        | When                    | Change                                                                                  |
+| --------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------- |
+| ADR-0016                                                        | this design's PR        | the 2026-09-26 amendment: `pascal_case` pinned, enum values join RIDL-149's namespaces  |
+| `docs/decisions/README.md`                                      | this design's PR        | ADR-0016's summary gains the amendment                                                  |
+| `docs/specification/ridl-language-reference.md` §16.4, RIDL-149 | the implementation's PR | the row gains the values of one enum, checked under `pascal_case`                       |
+| ADR-0017 decision 5                                             | the implementation's PR | its enum-value half is done within one enum; cross-enum collisions stay with decision 4 |
+| ADR-0017 "Alternatives considered", the RIDL-149 row            | the implementation's PR | "enum values still deferred" becomes taken, with the same scope                         |
+| `docs/technotes/ridl-rt-by-example.md`                          | the implementation's PR | the Rust fence's `Health::WARN` becomes `Health::Warn`                                  |
+| `model.proto` comment on `Spellings`                            | the implementation's PR | the `pascal` field, citing ADR-0016's 2026-09-26 amendment                              |
 
 The language reference and ADR-0017 describe what is checked, so they change in
 the commit that adds the check, not before it (ADR-0016 decision 4 asks for the
