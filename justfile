@@ -467,8 +467,8 @@ lint:
 #    needs to show this syntax literally will trip it; that is a deliberate
 #    change, and the author can escape the directive as `\{{#...}}` and adjust
 #    this check with it.
-# 3. Every file under the copy's `docs/` is present under the tree's `docs/`.
-#    It compares every file, not only `.md` files, so it also catches anything
+# 3. Every file in the copy after the build was already there before it. It
+#    compares every file, not only `.md` files, so it also catches anything
 #    else a future mdBook version creates there, not only a missing chapter.
 #
 # The fixture below verifies all three checks independently: a chapter that
@@ -535,7 +535,7 @@ book-check root="":
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Four cases:
+    # exports does not reach it. Five cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
     # 2. A chapter that includes a file that does not exist. mdBook logs an
@@ -549,6 +549,10 @@ book-check root="":
     #    file that does not exist, once at the top level and once nested in a
     #    subdirectory. The gate has to fail, name both files, and leave the
     #    tree unchanged (check 3).
+    # 5. The book from case 1 again, built with a stand-in `mdbook` that
+    #    deletes a tree file and then runs the real mdbook. The gate has to
+    #    pass, because the pre-build file list check 3 compares against comes
+    #    from the copy, not from reading the tree again after the build.
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
@@ -614,18 +618,48 @@ book-check root="":
             cat "$run" >&2
             exit 1
         fi
-        if ! grep -qx 'docs/book/ghost.md' "$run"; then
+        # Built from $d rather than written out, because this file is itself
+        # scanned by doc-path-check: a literal docs/… string that resolves
+        # nowhere would be reported against this recipe's own line.
+        d=docs
+        if ! grep -qx "$d/book/ghost.md" "$run"; then
             echo "book-check: the gate did not name the top-level chapter file its fixture is missing:" >&2
             cat "$run" >&2
             exit 1
         fi
-        if ! grep -qx 'docs/book/sub/nested.md' "$run"; then
+        if ! grep -qx "$d/book/sub/nested.md" "$run"; then
             echo "book-check: the gate did not name the nested chapter file its fixture is missing:" >&2
             cat "$run" >&2
             exit 1
         fi
         if [ -e "$book/docs/book/ghost.md" ] || [ -e "$book/docs/book/sub/nested.md" ]; then
             echo "book-check: the gate wrote into the tree it was checking." >&2
+            exit 1
+        fi
+
+        # Case 5: the tree loses a file while the build runs, after the copy
+        # is made. This pins the fix that takes the pre-build file list from
+        # the copy instead of re-reading the tree: reading the tree again
+        # after the build would see the file gone and wrongly report it as
+        # one mdBook created. A stand-in `mdbook`, placed first on PATH,
+        # removes the file from the tree and then runs the real mdbook.
+        race="$work/race"
+        mkdir -p "$race/docs/book"
+        printf '%s\n' '[book]' 'title = "race"' 'src = "docs/book"' > "$race/book.toml"
+        printf '%s\n' '# Summary' '' '- [Present](present.md)' > "$race/docs/book/SUMMARY.md"
+        printf '%s\n' '# Present' > "$race/docs/book/present.md"
+        real_mdbook="$(command -v mdbook)"
+        stand_in="$work/bin"
+        mkdir -p "$stand_in"
+        printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            "rm -f '$race/docs/book/present.md'" \
+            "exec '$real_mdbook' \"\$@\"" \
+            > "$stand_in/mdbook"
+        chmod +x "$stand_in/mdbook"
+        if ! PATH="$stand_in:$PATH" "{{just_executable()}}" book-check "$race" >"$run" 2>&1; then
+            echo "book-check: the gate reported a file the tree lost during the build as one mdBook created, so it read the tree again after the build instead of using the pre-build copy:" >&2
+            cat "$run" >&2
             exit 1
         fi
     )
