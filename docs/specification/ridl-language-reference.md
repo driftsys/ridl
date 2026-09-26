@@ -192,10 +192,10 @@ Every interaction instance — a signal publication, an event occurrence, a
 command call, a query request and reply — carries an **envelope** supplied by
 the runtime and never declared in the contract:
 
-| Envelope field      | Meaning                                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **timestamp**       | when the instance was published/raised/called — **stamped by the sender**, at the producing binding, before transmission |
-| **sequence number** | per-channel monotonic counter (frame number), assigned by the sender per provider instance                               |
+| Envelope field      | Meaning                                                                                                                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **timestamp**       | when the instance was published/raised/called — **stamped by the sender**, at the producing binding, before transmission                                                                                                                                                    |
+| **sequence number** | monotonic counter (frame number) assigned by the sender: per channel per provider instance on a signal or an event; on a command or a query, per caller over every request it sends, and per provider over its responses ([frame specification](frame-specification.md) §7) |
 
 Timestamping is a **sender-side act, always**: no broker, relay, or receiver
 ever (re)stamps the envelope. Under the synchronized time base (below) this is
@@ -206,13 +206,16 @@ clock minus envelope timestamp. Receive time is a local runtime observable,
 never envelope data.
 
 The envelope is what the machinery runs on: TTL, debounce, and freshness (§9)
-are evaluated on envelope timestamps; command duplicate suppression and retry
-(§6.1) on sequence numbers; **sequence gaps make loss detectable** on pub/sub (a
-Stratum 3 detection, feeding §10.4 management); AUTOSAR E2E protection consumes
-the counter; deterministic replay (concept note §9.3) is ordered by it;
-observability spans derive from both. Generated subscriber/caller APIs expose
-the envelope alongside the value (value + provenance + envelope); request/reply
-correlation is likewise runtime-internal.
+are evaluated on envelope timestamps; duplicate suppression of a retried call
+(§6.1) on the caller's identity plus the request's sequence number, so two
+callers are never merged under one sequence number, and a retry resends the
+request with its envelope unchanged
+([frame specification](frame-specification.md) §7); **sequence gaps make loss
+detectable** on pub/sub (a Stratum 3 detection, feeding §10.4 management);
+AUTOSAR E2E protection consumes the counter; deterministic replay (concept note
+§9.3) is ordered by it; observability spans derive from both. Generated
+subscriber/caller APIs expose the envelope alongside the value (value +
+provenance + envelope); request/reply correlation is likewise runtime-internal.
 
 **System time.** The platform assumes **one synchronized time base across the
 system** — gPTP/PTP (IEEE 802.1AS in vehicle networks) or an equivalent shared
@@ -659,6 +662,14 @@ event speedLimitExceeded : SpeedLimitPayload @[100ms..2000ms]
   is the test/observability plane's job, not the contract's.)
 - **Subscription granularity is the interaction.** A consumer subscribes to an
   event, not to a group of them and not to a set chosen per consumer.
+- **An invalid occurrence is delivered, marked invalid.** An occurrence whose
+  payload violates its typl constraints (Stratum 2, §10.2) or is not a
+  well-formed encoding (Stratum 3, §10.3) reaches the subscriber with an invalid
+  marker in place of the value, together with its envelope. The occurrence is
+  never withheld, because nothing fails silently (§10.3, §10.4), and never
+  delivered as a value, because the contract does not admit the value. Nothing
+  is sent back to the provider, as on a signal (§4.5)
+  ([frame specification](frame-specification.md) §9.2)
 
 **Who receives an occurrence is not a contract term.** An occurrence is raised
 to every consumer subscribed to that event; the contract says what is raised and
@@ -732,8 +743,9 @@ command uploadFirmware(data: <FwBlock>)
   (§10.2). The ack carries no functional payload, never reaches the contract
   surface, and is not application-visible as a return value — it exists so the
   runtime can implement retries, delivery supervision, and duplicate suppression
-  (envelope sequence numbers, §3.1), and so a rejected command is a _detected_
-  event in a safety context rather than a silent one
+  (keyed on the caller's identity plus the envelope sequence number, §3.1), and
+  so a rejected command is a _detected_ event in a safety context rather than a
+  silent one
 - **A command is therefore fallible like everything else** — invalid payload or
   failed precondition (Stratum 2, negative ack), or undelivered (Stratum 3, ack
   timeout) — all visible to the calling _runtime_, none to the _contract_. What
@@ -1046,12 +1058,12 @@ functional errors**. They are never declared — the typl constraints and
 `require` clauses already describe them completely — and never occupy an error
 type. The spec defines the categories once; bindings implement them uniformly:
 
-| Category              | Trigger                                                                        | RPC surface (caller sees)                                                                                         | Pub/sub surface                                                            |
-| --------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `INVALID_VALUE`       | payload violates typl constraints (range, step, bounds, pattern) at a boundary | standard error, distinct from any result-union error arm — gRPC `INVALID_ARGUMENT`, SOME/IP `E_MALFORMED_MESSAGE` | channel transitions to **invalid state**, propagated to subscribers (§4.5) |
-| `PRECONDITION_FAILED` | a `require` clause evaluates false                                             | standard error — gRPC `FAILED_PRECONDITION`, SOME/IP `E_NOT_OK`                                                   | command: negative ack to calling runtime + observability (§6.2)            |
-| `CONTRACT_BROKEN`     | an `ensure` clause evaluates false — a **provider bug**                        | standard error to caller; incident-grade telemetry on provider                                                    | n/a                                                                        |
-| `UNKNOWN_INTERACTION` | ordinal/version mismatch between peers (§11)                                   | standard error — SOME/IP `E_UNKNOWN_METHOD`                                                                       | subscription fails at bind time                                            |
+| Category              | Trigger                                                                        | RPC surface (caller sees)                                                                                         | Pub/sub surface                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `INVALID_VALUE`       | payload violates typl constraints (range, step, bounds, pattern) at a boundary | standard error, distinct from any result-union error arm — gRPC `INVALID_ARGUMENT`, SOME/IP `E_MALFORMED_MESSAGE` | signal: channel transitions to **invalid state**, propagated to subscribers (§4.5); event: occurrence delivered marked invalid (§5.1) |
+| `PRECONDITION_FAILED` | a `require` clause evaluates false                                             | standard error — gRPC `FAILED_PRECONDITION`, SOME/IP `E_NOT_OK`                                                   | command: negative ack to calling runtime + observability (§6.2)                                                                       |
+| `CONTRACT_BROKEN`     | an `ensure` clause evaluates false — a **provider bug**                        | standard error to caller; incident-grade telemetry on provider                                                    | n/a                                                                                                                                   |
+| `UNKNOWN_INTERACTION` | ordinal/version mismatch between peers (§11)                                   | standard error — SOME/IP `E_UNKNOWN_METHOD`                                                                       | subscription fails at bind time                                                                                                       |
 
 Provider bindings evaluate constraints and `require` **before** application code
 runs, and `ensure` after; application code never sees a contract-violating
@@ -2337,7 +2349,7 @@ errors-as-data (no error syntax at all) and derived Stratum 2, typl vocabulary
 | **freshness SLO**                    | the alertable staleness bound derived from a signal's timing — the contract's definition of "late"                                                                                                                                                                     |
 | **last-value guarantee**             | §4.4: a signal channel is never empty — subscribing delivers a value immediately (init before first publication, latest published value after); the normative demand behind broker caches, MQTT retained, DDS `TRANSIENT_LOCAL`                                        |
 | **late joiner**                      | a subscriber that binds after publication began; served by the last-value guarantee on signals, receives nothing retroactive on events                                                                                                                                 |
-| **quarantine**                       | withholding a constraint-violating payload from application code, with the violation recorded. No interaction quarantines silently: a stream element that violates its constraints ends the call (§12.4), and a signal's invalidity propagates as channel state (§4.5) |
+| **quarantine**                       | withholding a constraint-violating payload from application code, with the violation recorded. No quarantine is silent: an invalid stream element ends the call (§12.4), a signal's invalidity is channel state (§4.5), and an invalid event is still delivered (§5.1) |
 | **functional error (Stratum 1)**     | a domain-level failure expressed as data — the error arm of a fallible query's return; the provider _answered_: no                                                                                                                                                     |
 | **contract error (Stratum 2)**       | an implicit, standardized violation derived from the contract itself: `INVALID_VALUE`, `PRECONDITION_FAILED`, `CONTRACT_BROKEN`, `UNKNOWN_INTERACTION` — never declared, never an error-type value                                                                     |
 | **transport error (Stratum 3)**      | **infrastructure failure — detected, undeclared** (general form §6.4): a timeout, broker loss or reset, observed by the runtime and carried by runtime types, with no vocabulary in the contract language                                                              |
@@ -2354,7 +2366,7 @@ errors-as-data (no error syntax at all) and derived Stratum 2, typl vocabulary
 | **service catalog**                  | the flat global namespace of all `service` declarations — the system-wide SSOT of contracts                                                                                                                                                                            |
 | **posture**                          | how a service is realized on the wire — static (bus signals/events, Classic) or discovered (SOME/IP/DDS/uProtocol, Adaptive); a deployment matter, not in the contract; deriving it per deployment is reserved (rsdl §12)                                              |
 | **binding**                          | generated per-transport code realising a contract: validation, caching, error mapping, (de)serialization                                                                                                                                                               |
-| **envelope**                         | runtime-supplied metadata on every interaction instance — timestamp + per-channel sequence number — never declared, never in payloads; powers timing evaluation, dedup, loss detection, E2E counters, and replay (§3.1)                                                |
+| **envelope**                         | runtime-supplied metadata on every interaction instance — timestamp + sequence number (scoped per interaction kind) — never declared, never in payloads; powers timing evaluation, dedup, loss detection, E2E counters, and replay (§3.1)                              |
 | **system time**                      | the platform's one synchronized time base (gPTP/PTP or shared realtime clock) — an assumed platform property; envelope timestamps live in it and are comparable system-wide (§3.1)                                                                                     |
 | **epoch (platform)**                 | 1970-01-01 00:00:00 TAI (the PTP epoch); platform time = `int64` microseconds since it — continuous, leap-second-free; civil datetime is presentation only                                                                                                             |
 | **init value**                       | the value a signal channel holds before the provider's first publication — the payload type's init (typl §5.8) or the signal's bare `= value` override (§4.4); no keyword — `init` is rmdl's alone                                                                     |

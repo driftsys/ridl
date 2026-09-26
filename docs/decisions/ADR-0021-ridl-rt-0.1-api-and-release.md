@@ -163,6 +163,14 @@ trusted with no `unsafe` and no second verification pass.
    reads `seq` 0, stamped when the channel is created — the convention E14.2
    confirms rather than changes.
 
+   **Note (2026-09-26, driftsys/ridl#544).** The ridl reference no longer waits
+   on E14.2 for this sentence: ridl §3.1 and §6.1 now match
+   [frame specification](../specification/frame-specification.md) §7, which
+   gives a caller one counter over every request it sends and keys duplicate
+   suppression on the caller's identity plus the request's `seq`. A counter
+   unique per caller is also unique per (caller instance, channel). The `seq` 0
+   convention is stated in frame specification §7 and not yet in the reference.
+
 6. **driftsys/ridl#309: an event that fails its check is delivered with an
    invalid marker, not withheld.** `EventSource::next` stays unvalidated — it
    returns bytes, and the generated binding runs the check — so the typed face
@@ -173,6 +181,11 @@ trusted with no `unsafe` and no second verification pass.
    is never produced and nothing built against 0.1 breaks. E14.2 receives: an
    event payload that violates its typl constraints is delivered to the
    subscriber with an invalid marker and its envelope.
+
+   **Note (2026-09-26, driftsys/ridl#544).** The ridl reference no longer waits
+   on E14.2 for this sentence: ridl §5.1 now states it, matching
+   [frame specification](../specification/frame-specification.md) §9.2, and
+   quarantine is not chosen.
 
 7. **A payload is decoded only from a proof, and the set of encodings is
    closed.** `payload::Ref` has private fields; the only functions that build
@@ -645,7 +658,9 @@ trusted with no `unsafe` and no second verification pass.
   invalid-event-payload delivery) but stay uncorrected until that pass runs; the
   `Init` envelope convention needs a sentence that confirms it, not a
   correction. A reader of the reference alone, without this record, sees the
-  older wording until E14.2 adds these sentences.
+  older wording until E14.2 adds these sentences. **Note (2026-09-26):** the two
+  corrections are made — driftsys/ridl#544 aligned ridl §3.1, §5.1 and §6.1 with
+  the frame specification for #308 and #309.
 - **Positive — added 2026-09-20.** Once decision 11's impls land, a face can be
   built over a borrowed port, a wrapped port or a test double rather than only
   over a runtime's own value; and from now on the threading model a runtime
