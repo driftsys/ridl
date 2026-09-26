@@ -1121,7 +1121,8 @@ fn veh_common_generated_rust_compiles_with_rustc() {
             "metadata",
             // driftsys/ridl#506: an enum variant is the `pascal_case` of its
             // typl name, and this deny keeps it there. `veh-common` holds
-            // multi-word enum values, so it bites on this fixture.
+            // multi-word enum values, so the deny fails on this fixture if a
+            // variant is not PascalCase.
             "-D",
             "non_camel_case_types",
         ])
@@ -1318,8 +1319,8 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             // name is what keeps it there. The same holds for an enum
             // variant and `non_camel_case_types` (driftsys/ridl#506): the
             // variant goes through `ridl_ir::name::pascal_case`.
-            // `veh-cluster` holds multi-word enum values, so the deny bites
-            // on it.
+            // `veh-cluster` holds multi-word enum values, so the deny fails
+            // on it if a variant is not PascalCase.
             "-D",
             "non_snake_case",
             "-D",
