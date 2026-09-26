@@ -247,12 +247,18 @@ What wakes a stored waker:
 | `Event`   | a raise that queues an occurrence for this source                                                                                                        |
 | `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves |
 
-A settlement, a raise, a send, a `serve`, a `forget` and a handler's drop
-collect the wakers to wake inside their critical section, and wake them after
-the lock is released, so no waker is woken while the store is locked: a waker
-runs code this runtime does not control, and that code may call a port method on
-the same store. A waker is cloned under the lock, and a refreshed one is dropped
-under it; neither wakes a task.
+A settlement, a raise, a send, a `serve`, a `forget`, a caller's drop and a
+handler's drop collect the wakers to wake inside their critical section, and
+wake them after the lock is released, so no waker is woken while the store is
+locked: a waker runs code this runtime does not control, and that code may call
+a port method on the same store. A waker is cloned under the lock, and a
+refreshed one is dropped under it; neither wakes a task. **A dropped source,
+caller or handler drops its stored wakers after the lock is released**, not
+under it: the store may hold the last reference to a waker whose task owns
+another handle of this runtime, and dropping that waker drops the handle, whose
+own `Drop` takes the lock. Review pass 1 on driftsys/ridl#553 reproduced that
+deadlock for all three handles, the source's and the handler's predating the
+caller's; the `…_drops_without_deadlock` tests pin the fix.
 
 **A registration of the waker already stored does not wake it.** This is the
 contract's refresh rule (ADR-0021 decision 13): a task registers on every poll,
@@ -273,8 +279,13 @@ answer:
   to send again takes the slot, and the others find the table full, answer
   `SendError::Busy` again, and register again. A queue of waiters, woken one at
   a time, would need storage the allocation-free table cannot hold, and a waiter
-  that has no slot yet has no slot to be kept in (note F-5). A caller's drop
-  removes its `Slot` waker from the store; its calls stay in the table.
+  that has no slot yet has no slot to be kept in (note F-5).
+- **A dropped caller forgets every call it sent and did not forget**, as
+  `Caller::forget` would: a settled call's slot is reclaimed at the drop, which
+  wakes the other callers' `Slot` waiters, and a call in flight is marked, so
+  its settlement reclaims the slot. No handle reads the outcome of a call whose
+  caller is gone, and a slot kept for it would be lost to every other caller.
+  The drop also removes the caller's own `Slot` waker.
 - **A kind no role of the handle observes is woken at once.** The reader, writer
   and sink handles observe no kind of key, and the source and handler handles
   observe one each and the caller handle two, so a registration under any other
@@ -557,12 +568,16 @@ on. Either way the check is the face's and not the runtime's.
 Three more that are the runtime's own shape rather than the descriptor's:
 
 - **A settled outcome is kept until the caller releases it.** A call holds its
-  slot of the call table until it is forgotten, and the only thing that reclaims
-  a settled one is `Caller::forget`, which nothing the Rust backend emits calls.
-  A program that makes calls over this runtime and never forgets a correlation
-  therefore finds every send `SendError::Busy` after its sixteenth call. This
-  runtime holds the outcome because nothing else can know the caller has read
-  it.
+  slot of the call table until it is forgotten or its caller handle is dropped,
+  and nothing the Rust backend emits today calls `Caller::forget`. **A program
+  that makes calls through the generated face over one `Loopback` therefore
+  finds every send `SendError::Busy` from its seventeenth call on**, where every
+  call succeeded before story E11.18. Nothing in this repository sends more than
+  sixteen calls over one runtime — the tests, `just demo` and `examples/cabin`
+  all pass — and plan Task 4 (story E11.21) closes the limit: its future forgets
+  the call once it has taken the outcome, and on drop. No release of the crates
+  happens before Task 4 (ADR-0021 decision 18). This runtime holds the outcome
+  because nothing else can know the caller has read it.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when

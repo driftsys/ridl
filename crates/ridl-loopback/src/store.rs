@@ -30,7 +30,10 @@
 //! pushes the wakers to wake onto it. It never wakes one itself: the handle
 //! wakes them after it has released the lock ([`crate::handle::locked`]), so
 //! no waker is woken while the store is locked. A waker is cloned under the
-//! lock, and a refreshed one is dropped under it; neither wakes a task.
+//! lock, and a refreshed one is dropped under it; neither wakes a task. The
+//! wakers of a closing handle are dropped after the lock is released, because
+//! the last reference to one may own another handle whose `Drop` takes the
+//! lock.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::task::Waker;
@@ -128,6 +131,11 @@ pub(crate) enum CallKind {
 /// provider's side of the call is not the caller's to revoke: a claim already
 /// presented is still settled, and a call still waiting is still presented.
 struct CallEntry {
+    /// The call's correlation, which a dropped caller's calls are forgotten
+    /// by.
+    correlation: Correlation,
+    /// The caller handle that sent the call.
+    caller: usize,
     kind: CallKind,
     iface: InterfaceNo,
     ord: Ordinal,
@@ -513,6 +521,7 @@ impl Store {
     /// interface that waiter was registered under.
     pub(crate) fn send(
         &mut self,
+        caller: usize,
         kind: CallKind,
         (iface, ord): Key,
         args: &[u8],
@@ -530,6 +539,8 @@ impl Store {
         self.calls.insert(
             Calls::slot(c),
             CallEntry {
+                correlation: c,
+                caller,
                 kind,
                 iface,
                 ord,
@@ -628,14 +639,26 @@ impl Store {
         id
     }
 
-    /// Removes a dropped caller's `Slot` waker. Its calls stay in the table:
-    /// a call the dropped caller did not forget keeps its slot, as it would
-    /// if the caller were still open and never forgot it.
+    /// Removes a dropped caller, and forgets every call it sent and did not
+    /// forget: a settled one's slot is reclaimed now, and one still in flight
+    /// is marked, so its settlement reclaims the slot. No handle can read the
+    /// outcome of a call whose caller is gone, and a slot kept for it would
+    /// be lost to every other caller.
     ///
     /// Returns the caller's waiters, for the handle to drop after the lock is
     /// released, as `close_source` explains.
-    pub(crate) fn close_caller(&mut self, id: usize) -> Option<Waiters> {
-        self.callers.remove(&id)
+    pub(crate) fn close_caller(&mut self, id: usize, wake: &mut Vec<Waker>) -> Option<Waiters> {
+        let waiters = self.callers.remove(&id);
+        let sent: Vec<Correlation> = self
+            .calls
+            .values()
+            .filter(|entry| entry.caller == id)
+            .map(|entry| entry.correlation)
+            .collect();
+        for c in sent {
+            self.forget(c, wake);
+        }
+        waiters
     }
 
     /// Stores a caller's `Interest::Slot` waker, or wakes it at once when a
@@ -712,9 +735,17 @@ impl Store {
                 state.served.push((iface, *ord));
             }
         }
+        // Only a registered waker is worth the scan of the waiting calls: take
+        // it, and put it back when no call it serves is waiting.
+        let Some(waker) = state.waiters.take(Interest::Claim(iface)) else {
+            return;
+        };
         if self.claim_waiting(handler) {
+            wake.push(waker);
+        } else {
             let state = self.handlers.get_mut(&handler).expect("looked up above");
-            wake.extend(state.waiters.take(Interest::Claim(iface)));
+            let displaced = state.waiters.register(Interest::Claim(iface), &waker);
+            debug_assert!(displaced.is_none(), "the kind was empty");
         }
     }
 

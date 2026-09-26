@@ -18,14 +18,14 @@
 //! handle adds to them, and the split follows the receiver of those methods,
 //! as ADR-0021 decision 12 derives it:
 //!
-//! | Handle            | Port roles beside `Attached` and `Wakeable`                                   | Kinds of key it stores         | Threading     |
-//! | ----------------- | ----------------------------------------------------------------------------- | ------------------------------ | ------------- |
-//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                           | `Send + Sync` |
-//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                           | `Send`        |
-//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker             | `Send`        |
-//! | [`SinkHandle`]    | `EventSink`                                                                   | none                           | `Send`        |
+//! | Handle            | Port roles beside `Attached` and `Wakeable`                                   | Kinds of key it stores                            | Threading     |
+//! | ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------- |
+//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                                              | `Send + Sync` |
+//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                                              | `Send`        |
+//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker                                | `Send`        |
+//! | [`SinkHandle`]    | `EventSink`                                                                   | none                                              | `Send`        |
 //! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome`, kept with each call; `Slot`, one waker | `Send`        |
-//! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`, one waker             | `Send`        |
+//! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`, one waker                                | `Send`        |
 //!
 //! A handle stores a waker only under a kind of key one of its roles
 //! observes. For `Event` and `Claim` that is one waker per kind, and a
@@ -418,18 +418,21 @@ impl CallerHandle {
     ) -> Result<Correlation, SendError> {
         let seq = self.next_seq + 1;
         let c = locked(&self.shared, |store, wake| {
-            store.send(kind, (iface, ord), args, seq, wake)
+            store.send(self.id, kind, (iface, ord), args, seq, wake)
         })?;
         self.next_seq = seq;
         Ok(c)
     }
 }
 
-/// A dropped caller's `Slot` waker leaves the store. Its calls stay. The
-/// waker is dropped after the lock is released, as the source's is.
+/// A dropped caller's `Slot` waker leaves the store, and every call it sent
+/// and did not forget is forgotten, so its slot comes back. The waker is
+/// dropped after the lock is released, as the source's is.
 impl Drop for CallerHandle {
     fn drop(&mut self) {
-        let waiters = lock(&self.shared).close_caller(self.id);
+        let waiters = locked(&self.shared, |store, wake| {
+            store.close_caller(self.id, wake)
+        });
         drop(waiters);
     }
 }

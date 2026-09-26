@@ -1518,6 +1518,59 @@ fn a_dropped_caller_leaves_no_slot_waiter_behind() {
     assert_eq!(wakes(&count), 0);
 }
 
+#[test]
+fn a_dropped_caller_forgets_its_calls_and_their_slots_come_back() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut other = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    fill(&mut caller);
+    for _ in 0..8 {
+        let claim = handler
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        handler.settle(claim.id, Ok(&[])).expect("settle");
+    }
+    assert_eq!(other.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    let (count, waker) = counting();
+    other.wake_on(Interest::Slot, &waker);
+
+    drop(caller);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "the drop reclaimed the settled calls' slots"
+    );
+    for n in 0..8 {
+        other
+            .command(IFACE, ORD, &[n])
+            .expect("a slot of a settled call of the dropped caller");
+    }
+    assert_eq!(
+        other.command(IFACE, ORD, &[99]),
+        Err(SendError::Busy),
+        "the dropped caller's calls in flight keep their slots until settled"
+    );
+
+    // The provider still sees and settles the eight calls in flight; each
+    // settlement reclaims a slot, because the drop forgot the call.
+    for _ in 0..8 {
+        let claim = handler
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("the dropped caller's call is still presented");
+        handler.settle(claim.id, Ok(&[])).expect("settle");
+    }
+    for n in 0..8 {
+        other
+            .command(IFACE, ORD, &[n])
+            .expect("a slot of a call in flight of the dropped caller");
+    }
+    assert_eq!(other.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+}
+
 /// A waker that owns a handle of the runtime it is registered with. When the
 /// store holds the last reference to it, dropping the waker drops the handle,
 /// and the handle's own `Drop` takes the store's lock.

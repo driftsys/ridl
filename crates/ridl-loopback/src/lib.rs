@@ -169,6 +169,13 @@ impl Loopback {
     /// than after its memory grows. The loopback has no catalog descriptor to
     /// size a byte budget from (story E16.2), so the slot count is its only
     /// bound (note F-9 of the async face design).
+    ///
+    /// The generated face does not call `forget` yet, so a program that calls
+    /// through it over one runtime gets `SendError::Busy` from its
+    /// seventeenth call on, unless it drops the caller handle, which forgets
+    /// that handle's calls. The async client of story E11.21 forgets each
+    /// call once it has taken the outcome, which closes this limit; no
+    /// release happens before it.
     pub const SLOTS: usize = 16;
 
     /// A runtime attached to `catalog`, with an empty store and its clock at
