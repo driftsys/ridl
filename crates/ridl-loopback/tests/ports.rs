@@ -1518,6 +1518,84 @@ fn a_dropped_caller_leaves_no_slot_waiter_behind() {
     assert_eq!(wakes(&count), 0);
 }
 
+/// A waker that owns a handle of the runtime it is registered with. When the
+/// store holds the last reference to it, dropping the waker drops the handle,
+/// and the handle's own `Drop` takes the store's lock.
+struct OwnsAHandle<H>(std::sync::Mutex<Option<H>>);
+
+impl<H: Send + 'static> Wake for OwnsAHandle<H> {
+    /// Waking reaches the owned handle and leaves it in place: what the tests
+    /// below exercise is the drop of the last reference, not the wake.
+    fn wake(self: Arc<Self>) {
+        let owned = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(
+            owned.is_some(),
+            "the handle is owned until the waker is dropped"
+        );
+    }
+}
+
+fn owning<H: Send + 'static>(handle: H) -> Waker {
+    Waker::from(Arc::new(OwnsAHandle(std::sync::Mutex::new(Some(handle)))))
+}
+
+/// Drops `handle` on another thread and fails, rather than hangs, when the
+/// drop does not finish.
+fn assert_drop_finishes<H: Send + 'static>(handle: H, what: &str) {
+    let (done, finished) = mpsc::channel();
+    std::thread::spawn(move || {
+        drop(handle);
+        let _ = done.send(());
+    });
+    assert_eq!(
+        finished.recv_timeout(std::time::Duration::from_secs(5)),
+        Ok(()),
+        "{what}: the drop finished, so no waker was dropped under the store's lock"
+    );
+}
+
+// Each of the three builds its own runtime and leaks it before the drop under
+// test. Were the drop to deadlock, the assertion's panic would otherwise drop
+// the runtime's own handles while the lock is still held, and hang the test
+// instead of failing it.
+
+#[test]
+fn a_caller_whose_stored_waker_owns_another_handle_drops_without_deadlock() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    fill(&mut caller);
+    let waker = owning(rt.caller());
+    caller.wake_on(Interest::Slot, &waker);
+    drop(waker);
+    std::mem::forget(rt);
+    assert_drop_finishes(caller, "a caller");
+}
+
+#[test]
+fn a_source_whose_stored_waker_owns_another_handle_drops_without_deadlock() {
+    let rt = runtime();
+    let source = rt.source();
+    let waker = owning(rt.source());
+    source.wake_on(Interest::Event(IFACE), &waker);
+    drop(waker);
+    std::mem::forget(rt);
+    assert_drop_finishes(source, "a source");
+}
+
+#[test]
+fn a_handler_whose_stored_waker_owns_another_handle_drops_without_deadlock() {
+    let rt = runtime();
+    let handler = rt.handler();
+    let waker = owning(rt.handler());
+    handler.wake_on(Interest::Claim(IFACE), &waker);
+    drop(waker);
+    std::mem::forget(rt);
+    assert_drop_finishes(handler, "a handler");
+}
+
 #[test]
 fn the_aggregate_routes_each_key_to_the_handle_that_observes_it() {
     let mut rt = runtime();

@@ -396,8 +396,12 @@ impl Store {
         id
     }
 
-    pub(crate) fn close_source(&mut self, id: usize) {
-        self.sources.remove(&id);
+    /// Removes a dropped source and returns its waiters, for the handle to
+    /// drop after the lock is released: a stored waker may be the last
+    /// reference to a task that owns another handle of this runtime, and that
+    /// handle's own `Drop` takes the lock.
+    pub(crate) fn close_source(&mut self, id: usize) -> Option<Waiters> {
+        self.sources.remove(&id).map(|state| state.waiters)
     }
 
     pub(crate) fn subscribe(&mut self, id: usize, iface: InterfaceNo, ords: &[Ordinal]) {
@@ -510,8 +514,7 @@ impl Store {
     pub(crate) fn send(
         &mut self,
         kind: CallKind,
-        iface: InterfaceNo,
-        ord: Ordinal,
+        (iface, ord): Key,
         args: &[u8],
         seq: u64,
         wake: &mut Vec<Waker>,
@@ -628,8 +631,11 @@ impl Store {
     /// Removes a dropped caller's `Slot` waker. Its calls stay in the table:
     /// a call the dropped caller did not forget keeps its slot, as it would
     /// if the caller were still open and never forgot it.
-    pub(crate) fn close_caller(&mut self, id: usize) {
-        self.callers.remove(&id);
+    ///
+    /// Returns the caller's waiters, for the handle to drop after the lock is
+    /// released, as `close_source` explains.
+    pub(crate) fn close_caller(&mut self, id: usize) -> Option<Waiters> {
+        self.callers.remove(&id)
     }
 
     /// Stores a caller's `Interest::Slot` waker, or wakes it at once when a
@@ -656,8 +662,11 @@ impl Store {
     /// serves the member has its `Claim` waiter woken. The loopback enforces
     /// no deadline on the returned call: what bounds the caller's wait is the
     /// generated async client's deadline (story E11.21, ADR-0023 decision 6).
-    pub(crate) fn close_handler(&mut self, id: usize, wake: &mut Vec<Waker>) {
-        self.handlers.remove(&id);
+    ///
+    /// Returns the handler's waiters, for the handle to drop after the lock is
+    /// released, as `close_source` explains.
+    pub(crate) fn close_handler(&mut self, id: usize, wake: &mut Vec<Waker>) -> Option<Waiters> {
+        let waiters = self.handlers.remove(&id).map(|state| state.waiters);
         let held: Vec<u64> = self
             .claims
             .iter()
@@ -674,6 +683,7 @@ impl Store {
             self.pending.insert(at, owner.call);
             self.wake_handlers_serving(key, wake);
         }
+        waiters
     }
 
     /// Takes the `Claim` waker of every handler that serves `key`.

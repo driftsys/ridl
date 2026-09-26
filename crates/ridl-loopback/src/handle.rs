@@ -278,9 +278,13 @@ impl SourceHandle {
     }
 }
 
+/// The source's waker is dropped after the lock is released: it may be the
+/// last reference to a task that owns another handle of this runtime, and
+/// that handle's own `Drop` takes the lock.
 impl Drop for SourceHandle {
     fn drop(&mut self) {
-        lock(&self.shared).close_source(self.id);
+        let waiters = lock(&self.shared).close_source(self.id);
+        drop(waiters);
     }
 }
 
@@ -414,17 +418,19 @@ impl CallerHandle {
     ) -> Result<Correlation, SendError> {
         let seq = self.next_seq + 1;
         let c = locked(&self.shared, |store, wake| {
-            store.send(kind, iface, ord, args, seq, wake)
+            store.send(kind, (iface, ord), args, seq, wake)
         })?;
         self.next_seq = seq;
         Ok(c)
     }
 }
 
-/// A dropped caller's `Slot` waker leaves the store. Its calls stay.
+/// A dropped caller's `Slot` waker leaves the store. Its calls stay. The
+/// waker is dropped after the lock is released, as the source's is.
 impl Drop for CallerHandle {
     fn drop(&mut self) {
-        lock(&self.shared).close_caller(self.id);
+        let waiters = lock(&self.shared).close_caller(self.id);
+        drop(waiters);
     }
 }
 
@@ -543,12 +549,14 @@ impl HandlerHandle {
 }
 
 /// A claim this handler holds and has not settled returns to the waiting
-/// calls, and every handler that serves its member is woken.
+/// calls, and every handler that serves its member is woken. The handler's
+/// waker is dropped after the lock is released, as the source's is.
 impl Drop for HandlerHandle {
     fn drop(&mut self) {
-        locked(&self.shared, |store, wake| {
+        let waiters = locked(&self.shared, |store, wake| {
             store.close_handler(self.id, wake)
         });
+        drop(waiters);
     }
 }
 
