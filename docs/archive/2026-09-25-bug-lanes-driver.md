@@ -1,5 +1,19 @@
 # Bug lanes D and Q — driver
 
+> **Archived, 2026-09-26: lanes D and Q are closed.** Every stage that stayed in
+> the lanes merged: D1 (driftsys/ridl#528), D2 (driftsys/ridl#525), D3
+> (driftsys/ridl#532), D4 (driftsys/ridl#536), D5 (driftsys/ridl#539), Q1
+> (driftsys/ridl#527), Q2 (driftsys/ridl#535), Q3 (driftsys/ridl#537), and Q4
+> (driftsys/ridl#540). driftsys/ridl#544, coordinated on driftsys/ridl#507 after
+> the lanes were scoped, aligned the ridl reference for driftsys/ridl#308 and
+> driftsys/ridl#309. Q5 (driftsys/ridl#506) left the lane under option B: design
+> driftsys/ridl#555 and plan driftsys/ridl#556, implementation in progress.
+> Follow-ups left open: driftsys/ridl#542, driftsys/ridl#543, driftsys/ridl#548,
+> driftsys/ridl#549, driftsys/ridl#554.
+>
+> Read the rest as the prompt the lanes ran under, not as a description of the
+> result.
+
 Transient working memory for the two bug lanes coordinated on driftsys/ridl#507.
 Start a fresh session in the lane's worktree and paste the lane's block below as
 the first message, once per stage. Each stage is one session, one branch and one
