@@ -153,7 +153,9 @@
   runtime presents one handle per port role, with an aggregate handle for a face
   that needs several, while the crate itself adds no `Send` or `Sync` bound.
   Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the
-  ridl reference finalization pass (story E14.2).
+  ridl reference finalization pass (story E14.2). The two reference sentences it
+  gave that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

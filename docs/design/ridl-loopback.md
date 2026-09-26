@@ -381,8 +381,9 @@ the face returns the init value under the port's own provenance without running
 hand-written port; and a signal invalidated with no prior publication, where the
 port reports `Provenance::Invalid(Cause::Declared)` with zero bytes, pinned by
 `round_trip_signal_reads_as_init_when_invalidated_before_any_publication` over
-this crate. Nothing here would change if E14.2 chose differently, because this
-crate never looks.
+this crate. Nothing here depends on how the reference words the rule, because
+this crate never looks; the ridl reference states the event rule (ridl §5.1)
+since driftsys/ridl#544, matching frame specification §9.2.
 
 The alternative rejected is a runtime that verifies. It cannot: a port carries
 interface numbers, ordinals and bytes and names no payload type, so the runtime
@@ -535,7 +536,8 @@ that.
 - Depends on: `ridl-rt` 0.1 ([the design record](ridl-rt.md), "The ports")
 - Issues this crate is evidence for: driftsys/ridl#308 (sequence-number scope),
   driftsys/ridl#309 (an invalid event payload). It changes no specification
-  text; both are the ridl finalization pass's, story E14.2
+  text; driftsys/ridl#544 aligned the ridl reference with the frame
+  specification on both
 - Open against it: driftsys/ridl#350's `Watermark::seq` question, on which this
   crate takes a reading; driftsys/ridl#378 (E16.2), which gives it a catalog
   descriptor and with it every report in "What it cannot report"
