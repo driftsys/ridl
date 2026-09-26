@@ -1,16 +1,23 @@
 //! Every port is usable as a trait object, and each port's supertrait is
 //! reachable through that trait object. A later signature that breaks `dyn`
-//! use, or a removed supertrait, fails this build.
+//! use, or a removed supertrait, fails this build. The forwarding of
+//! `Wakeable` through `&P` and `&mut P` is tested here too, beside its
+//! trait-object test; the other port traits' forwarding is in
+//! `tests/port_forwarding.rs`.
 
 #![forbid(unsafe_code)]
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::{Wake, Waker};
 
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
 
@@ -154,6 +161,25 @@ impl CoherentSignals for Stub {
     }
 }
 
+/// Wakes the waker at once for `Interest::Slot` and stores nothing for any
+/// other key, so a test can tell which key reached it.
+impl Wakeable for Stub {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        if what == Interest::Slot {
+            waker.wake_by_ref();
+        }
+    }
+}
+
+/// A waker that counts its wakes.
+struct Count(AtomicUsize);
+
+impl Wake for Count {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
 const IFACE: InterfaceNo = InterfaceNo(1);
 const ORD: Ordinal = Ordinal(1);
 
@@ -287,4 +313,40 @@ fn every_port_error_is_copy_and_owns_nothing() {
     owns_nothing::<SubscribeError>();
     owns_nothing::<ServeError>();
     owns_nothing::<SettleError>();
+}
+
+#[test]
+fn wakeable_is_usable_as_a_trait_object() {
+    let count = Arc::new(Count(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&count));
+    let wakeable: &dyn Wakeable = &Stub;
+    wakeable.wake_on(Interest::Slot, &waker);
+    assert_eq!(count.0.load(Ordering::SeqCst), 1);
+}
+
+// `Wakeable` is reached through `&P` and `&mut P` the way every other port
+// trait is (`tests/port_forwarding.rs`), and the key reaches the port
+// unchanged.
+
+#[test]
+fn wakeable_is_reached_through_a_borrow() {
+    fn over<P: Wakeable>(port: P, what: Interest, waker: &Waker) {
+        port.wake_on(what, waker);
+    }
+    let count = Arc::new(Count(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&count));
+    let mut stub = Stub;
+
+    over(&stub, Interest::Slot, &waker);
+    assert_eq!(count.0.load(Ordering::SeqCst), 1, "through `&P`");
+    over(&mut stub, Interest::Slot, &waker);
+    assert_eq!(count.0.load(Ordering::SeqCst), 2, "through `&mut P`");
+
+    over(&stub, Interest::Outcome(Correlation(1)), &waker);
+    over(&mut stub, Interest::Claim(IFACE), &waker);
+    assert_eq!(
+        count.0.load(Ordering::SeqCst),
+        2,
+        "another key reaches the port as itself"
+    );
 }

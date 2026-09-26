@@ -53,9 +53,12 @@
 //! Two properties hold everywhere and are worth knowing before reading any
 //! individual item. **No port method waits** — every one returns immediately,
 //! and a call's outcome is retrieved separately through a
-//! [`port::Correlation`]. And **no port names a payload type** — ports carry
-//! interface numbers, ordinals and bytes, and the generated binding is what
-//! encodes and decodes, through [`payload::Ref`].
+//! [`port::Correlation`]. A face that waits registers its interest with the
+//! [`port::Wakeable`] extension, keyed by a [`port::Interest`], and reads the
+//! port again when the runtime wakes it; a runtime that serves a generated
+//! async client implements that extension. And **no port names a payload
+//! type** — ports carry interface numbers, ordinals and bytes, and the
+//! generated binding is what encodes and decodes, through [`payload::Ref`].
 //!
 //! # How a runtime presents its ports
 //!
@@ -107,6 +110,7 @@ pub mod task;
 ///         ridl_rt::error::Transport::Undelivered => {}
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
+///         ridl_rt::error::Transport::Busy => {}
 ///     }
 /// }
 /// ```
@@ -256,6 +260,7 @@ pub mod task;
 ///         ridl_rt::error::Transport::Undelivered => {}
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
+///         ridl_rt::error::Transport::Busy => {}
 ///         _ => {}
 ///     }
 /// }
@@ -277,6 +282,20 @@ pub mod task;
 ///     match x {
 ///         ridl_rt::error::CallError::Contract(_) => {}
 ///         ridl_rt::error::CallError::Transport(_) => {}
+///     }
+/// }
+/// ```
+///
+/// `port::Interest` is exhaustive too, because a runtime must handle every key
+/// (ADR-0021 decision 13): a match naming every key, with no `_` arm, compiles.
+///
+/// ```
+/// fn interest(x: ridl_rt::port::Interest) {
+///     match x {
+///         ridl_rt::port::Interest::Outcome(_) => {}
+///         ridl_rt::port::Interest::Slot => {}
+///         ridl_rt::port::Interest::Event(_) => {}
+///         ridl_rt::port::Interest::Claim(_) => {}
 ///     }
 /// }
 /// ```

@@ -11,7 +11,9 @@
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
-//! present, so a runtime may omit them.
+//! present, so a runtime may omit them. [`Wakeable`] is an extension too: it
+//! is how a face that waits learns when to read a port again, and a runtime
+//! that serves a generated async client implements it.
 //!
 //! Each trait below names the generated method it backs, so a reader who
 //! arrived from generated code can find the port under it. The crate-level
@@ -180,7 +182,9 @@ pub trait Caller: Attached {
     /// A command's delivery acknowledgment (ridl §6.1), once it is known:
     /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
     /// `Err(CallError::Transport(Transport::Corrupt))` when the provider could
-    /// not read the command's argument bytes, and
+    /// not read the command's argument bytes,
+    /// `Err(CallError::Transport(Transport::Busy))` when the providing runtime
+    /// refused the command at admission, and
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
@@ -378,6 +382,57 @@ pub trait CoherentSignals: SignalReader {
     ) -> Result<usize, ReadError>;
 }
 
+/// Extension: a port that can wake a task. A runtime that serves a generated
+/// async client implements it.
+///
+/// No port method waits, so a task that finds nothing to read registers its
+/// interest here and returns; the runtime wakes the task when the thing it
+/// waits for may have changed, and the task reads the port again.
+///
+/// The contract:
+///
+/// - **One waker per key per handle.** [`wake_on`](Wakeable::wake_on) stores
+///   a clone of `waker` under `what` on the handle it is called on. A second
+///   `wake_on` for a key the handle already holds replaces the stored waker
+///   and wakes the displaced one, so no task waits on a registration that can
+///   no longer fire. A second task waiting for the same events holds a second
+///   handle, and each handle's waiter is woken.
+/// - **Woken at most once.** A stored waker is woken after every change of
+///   its key becomes visible, and is cleared when woken. A runtime with one
+///   unkeyed "something changed" source may wake every waiter it holds on
+///   any change: the contract is never that a waiter is woken only for its
+///   key.
+/// - **Register, then read.** The caller registers on every poll, and
+///   registers before it reads the port, so a change between the read and
+///   the return still wakes it.
+///
+/// [`Interest::Event`] and [`Interest::Claim`] are keyed per interface,
+/// because [`EventSource::next`] and [`Handler::next_claim`] drain one queue
+/// whatever the ordinal, and the subscription and the served set already
+/// filter by member.
+pub trait Wakeable {
+    /// Wakes `waker` when the thing `what` names may have changed, under the
+    /// contract above.
+    fn wake_on(&self, what: Interest, waker: &core::task::Waker);
+}
+
+/// What a task waits for, as [`Wakeable::wake_on`] takes it.
+///
+/// Exhaustive: a runtime handles every key, because an unknown key has no
+/// safe default. Ignoring it leaves the waiter waiting, and waking it at once
+/// makes a busy loop. A new key is a 0.x minor (ADR-0021 decision 13).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Interest {
+    /// The outcome of one call is known.
+    Outcome(Correlation),
+    /// A slot for a new call is free.
+    Slot,
+    /// An occurrence of one of the interface's events is waiting.
+    Event(InterfaceNo),
+    /// A claim on one of the interface's members is waiting.
+    Claim(InterfaceNo),
+}
+
 /// A read that failed.
 ///
 /// One enum serves every read on every port, so a variant can be unreachable
@@ -498,9 +553,10 @@ pub enum SettleError {
 
 // Forwarding impls (ADR-0021 decision 11).
 //
-// Every port trait above is implemented for `&mut P`, and the six whose
+// Every port trait above is implemented for `&mut P`, and the seven whose
 // methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
-// `FixedReader`, `ScannableSignals` and `CoherentSignals` — also for `&P`.
+// `FixedReader`, `ScannableSignals`, `CoherentSignals` and `Wakeable` — also
+// for `&P`.
 // What they buy is one thing: a value generic over a port trait, such as a
 // generated face, can be built over a reference to a port rather than over the
 // port itself. A wrapper that adds tracing and a test double are accepted by
@@ -699,5 +755,17 @@ impl<P: CoherentSignals + ?Sized> CoherentSignals for &mut P {
         samples: &mut [RawSample],
     ) -> Result<usize, ReadError> {
         (**self).read_coherent(iface, ords, out, samples)
+    }
+}
+
+impl<P: Wakeable + ?Sized> Wakeable for &P {
+    fn wake_on(&self, what: Interest, waker: &core::task::Waker) {
+        (**self).wake_on(what, waker);
+    }
+}
+
+impl<P: Wakeable + ?Sized> Wakeable for &mut P {
+    fn wake_on(&self, what: Interest, waker: &core::task::Waker) {
+        (**self).wake_on(what, waker);
     }
 }
