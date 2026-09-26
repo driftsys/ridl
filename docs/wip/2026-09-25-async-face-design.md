@@ -215,11 +215,13 @@ future with the result of that attempt inside it. A `require` failure, or a send
 error other than `Busy`, is a future that is ready with `Err`; `Busy` is a
 future in the slot-waiting phase (F-3). Dropping the future in the waiting phase
 calls `Caller::forget` on its correlation; a command already sent is not taken
-back, and a query already sent is still served and settled by the provider. A
-future dropped in the slot-waiting phase sends nothing. A future that has taken
-its outcome calls `Caller::forget` at once, so `forget` is the one operation
-that reclaims a slot (F-9), and the port's `ack` and `reply` stay non-consuming,
-as they are today.
+back, and a query already sent is still served and settled by the provider.
+(Corrected 2026-09-26: that is what the face promises over a transport; a
+runtime may withdraw a command no provider has taken, and the loopback does, per
+the #553 and #557 decisions.) A future dropped in the slot-waiting phase sends
+nothing. A future that has taken its outcome calls `Caller::forget` at once, so
+`forget` is the one operation that reclaims a slot (F-9), and the port's `ack`
+and `reply` stay non-consuming, as they are today.
 
 **What the future holds.** A `&'a mut P` to the port, the argument value (kept
 only until the send succeeds, for the retry), the phase — unsent with its
