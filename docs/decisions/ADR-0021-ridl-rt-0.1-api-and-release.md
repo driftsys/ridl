@@ -516,19 +516,20 @@ trusted with no `unsafe` and no second verification pass.
     after every change of its kind becomes visible, and is cleared when woken;
     the caller registers on every poll and registers before it reads the port.
     (The per-kind storage and the refresh rule replace "one waker per key" and
-    an unconditional wake of the displaced waker, on driftsys/ridl#546.) A
-    second task waiting for the same events holds a second handle, and each
-    handle's waiter is woken. `Event` and `Claim` are keyed per interface,
-    because `EventSource::next` and `Handler::next_claim` drain one queue
-    whatever the ordinal and the subscription and the served set already filter
-    by member. `Interest` is exhaustive, because a runtime must handle every key
-    and an unknown key has no safe default; a new key is a 0.x minor under
-    decision 10. A runtime with one unkeyed "something changed" source may wake
-    every waiter it holds on any change; the contract is never that a waiter is
-    woken only for its key. Every runtime that serves a generated async client
-    implements the trait; a runtime with no wake source of its own has none to
-    offer. The name is `Interest`, not `Wake`, because `task` already imports
-    `std::task::Wake`. This closes open question 6. Notes F-5 and F-6.
+    an unconditional wake of the displaced waker, decided on driftsys/ridl#546
+    and landed by driftsys/ridl#551.) A second task waiting for the same events
+    holds a second handle, and each handle's waiter is woken. `Event` and
+    `Claim` are keyed per interface, because `EventSource::next` and
+    `Handler::next_claim` drain one queue whatever the ordinal and the
+    subscription and the served set already filter by member. `Interest` is
+    exhaustive, because a runtime must handle every key and an unknown key has
+    no safe default; a new key is a 0.x minor under decision 10. A runtime with
+    one unkeyed "something changed" source may wake every waiter it holds on any
+    change; the contract is never that a waiter is woken only for its key. Every
+    runtime that serves a generated async client implements the trait; a runtime
+    with no wake source of its own has none to offer. The name is `Interest`,
+    not `Wake`, because `task` already imports `std::task::Wake`. This closes
+    open question 6. Notes F-5 and F-6.
 
 14. **Amendment (2026-09-26) — `Transport::Busy` crosses the frame (story
     E11.16).** `Transport` gains `Busy`: the providing runtime refused the call

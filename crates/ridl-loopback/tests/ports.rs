@@ -1026,9 +1026,11 @@ fn a_key_no_role_of_the_handle_observes_is_woken_at_once() {
     caller.wake_on(Interest::Claim(IFACE), &waker);
     source.wake_on(Interest::Slot, &waker);
     source.wake_on(Interest::Claim(IFACE), &waker);
+    source.wake_on(Interest::Outcome(ridl_rt::port::Correlation(0)), &waker);
     handler.wake_on(Interest::Slot, &waker);
     handler.wake_on(Interest::Event(IFACE), &waker);
-    assert_eq!(wakes(&count), 9);
+    handler.wake_on(Interest::Outcome(ridl_rt::port::Correlation(0)), &waker);
+    assert_eq!(wakes(&count), 11);
 }
 
 #[test]
