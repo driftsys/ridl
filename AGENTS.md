@@ -148,9 +148,11 @@ member; rsdl is the apex.
                          run) against a fixture release
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy — catches a SUMMARY.md mdBook
-                         cannot parse and a {{#include}} that does not resolve
-                         (mdBook exits 0 on the second, so two checks read the
-                         log and the rendered output)
+                         cannot parse, a {{#include}} that does not resolve,
+                         and a chapter file SUMMARY.md names that mdBook
+                         creates instead of reporting as missing (mdBook exits
+                         0 on the last two, so three checks read the log, the
+                         rendered output, and the copy's file list)
     just link-check      every relative Markdown link resolves, over every
                          tracked .md — book-check cannot do this, because
                          mdBook exits 0 on an unresolved relative link
