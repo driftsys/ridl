@@ -9,11 +9,13 @@
 //! and because `ridl-ir` is the only crate `ridl-sem` and the backends
 //! already depend on.
 //!
-//! The two are **incomparable**: neither collision set contains the other.
-//! `XY` and `x_y` collide under [`camel_case`] and not under [`snake_case`];
-//! `HTTPServer` and `httpServer` collide under [`snake_case`] and not under
-//! [`camel_case`]. A namespace projected through both is therefore checked
-//! under both.
+//! [`snake_case`] and [`camel_case`] are **incomparable**: neither collision
+//! set contains the other. `XY` and `x_y` collide under [`camel_case`] and not
+//! under [`snake_case`]; `HTTPServer` and `httpServer` collide under
+//! [`snake_case`] and not under [`camel_case`]. A namespace projected through
+//! both is therefore checked under both. [`pascal_case`] is [`camel_case`] of
+//! [`snake_case`], so its collision set contains [`snake_case`]'s, and a
+//! namespace projected through it is checked under it alone.
 
 /// snake_case of a ridl name: `currentSpeed` becomes `current_speed`.
 ///
@@ -172,7 +174,8 @@ mod tests {
         }
     }
 
-    /// The outputs design §3 names, pinned as values.
+    /// The outputs `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §3 names,
+    /// pinned as values.
     #[test]
     fn pascal_case_pins_the_outputs_the_design_names() {
         for (input, expected) in [
@@ -214,9 +217,10 @@ mod tests {
         names
     }
 
-    /// Design §3 property 4: two names that share a `snake_case` output share
-    /// a `pascal_case` output. This is why RIDL-149 keys an enum's values on
-    /// `pascal_case` alone.
+    /// Property 4 of `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §3:
+    /// two names that share a `snake_case` output share a `pascal_case`
+    /// output. This is why RIDL-149 keys an enum's values on `pascal_case`
+    /// alone.
     #[test]
     fn pascal_case_collides_wherever_snake_case_does() {
         let mut by_snake: std::collections::HashMap<String, (String, String)> =
@@ -241,9 +245,9 @@ mod tests {
         assert_eq!(pascal_case("CHECK_ENGINE"), pascal_case("CHECK__ENGINE"));
     }
 
-    /// Design §3 property 2: every output is a name rustc's
-    /// `non_camel_case_types` accepts — non-empty, no underscore, and an
-    /// upper-case first character.
+    /// Property 2 of `docs/archive/2026-09-26-enum-variant-pascal-case-design.md` §3:
+    /// every output is a name rustc's `non_camel_case_types` accepts —
+    /// non-empty, no underscore, and an upper-case first character.
     #[test]
     fn every_pascal_case_output_satisfies_non_camel_case_types() {
         for name in enumerated_names() {

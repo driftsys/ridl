@@ -104,8 +104,10 @@ message Spellings {
   // `ridl_ir::name::pascal_case`, which is `camel_case` of `snake`
   // (ADR-0016, 2026-09-26 amendment): the Rust backend's enum variant names.
   // Empty in a model written by a toolchain older than this field; a reader
-  // that meets an empty value derives it as `camel_case(snake)`, which is
-  // what makes the field additive (IR stability design D-5).
+  // that meets an empty value derives it as `camel_case(snake)`. Additive in
+  // the sense of the IR stability design's D-5: a plugin's lenient reader
+  // ignores a key it does not know, while the toolchain's own reader is
+  // strict by design (ADR-0014).
   string pascal = 5;
 }
 
