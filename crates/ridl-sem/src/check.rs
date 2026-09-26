@@ -6673,8 +6673,9 @@ mod tests {
         );
     }
 
-    /// The message and the label name the transform, and the primary span
-    /// covers the second value's name alone, not its `= 1`.
+    /// The message and the label name the transform, the primary span covers
+    /// the second value's name alone, not its `= 1`, and the secondary label's
+    /// span covers the first value's name alone, not the second.
     #[test]
     fn ridl_149_names_pascal_case_for_an_enum_value() {
         let source = enum_source("CHECK_ENGINE", "CHECK__ENGINE");
@@ -6696,6 +6697,12 @@ mod tests {
             &source[usize::from(range.start())..usize::from(range.end())],
             "CHECK__ENGINE",
             "the span must cover exactly the second value's name",
+        );
+        let label_range = diagnostic.labels[0].span.range;
+        assert_eq!(
+            &source[usize::from(label_range.start())..usize::from(label_range.end())],
+            "CHECK_ENGINE",
+            "the secondary label's span must cover exactly the first value's name",
         );
     }
 
