@@ -312,7 +312,7 @@ types, marked throwaway in its own module documentation. Both are gone.
 **The ports are `ridl-loopback`'s**, the in-process reference runtime (ADR-0020
 decision 6, story E11.15, [its design record](ridl-loopback.md)). Every
 `round_trip_*` test builds its face over that crate's aggregate handle, which
-implements all eleven port traits by delegating to one handle per port role.
+implements all twelve port traits by delegating to one handle per port role.
 Through E11.13 the ports were instead a disposable double at
 `tests/support/loopback.rs`, which implemented nine of the eleven traits and
 neither signal extension; E11.15 deleted it and moved its own tests into

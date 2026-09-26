@@ -466,6 +466,13 @@ pub trait CoherentSignals: SignalReader {
     fn read_coherent(&self, iface: InterfaceNo, ords: &[Ordinal],
                      out: &mut [u8], samples: &mut [RawSample]) -> Result<usize, ReadError>;
 }
+
+/// Extension: a port that can wake a task. A runtime that serves a generated
+/// async client implements it.
+pub trait Wakeable {
+    fn wake_on(&self, what: Interest, waker: &core::task::Waker);
+}
+pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
 ```
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
@@ -489,7 +496,9 @@ Semantics each implementation presents:
 - **`Caller::ack`** reports a command's delivery acknowledgment: `Ok(())`
   accepted, `Err(CallError::Contract(_))` a negative acknowledgment,
   `Err(CallError::Transport(Transport::Corrupt))` when the provider could not
-  read the command's argument bytes, and
+  read the command's argument bytes,
+  `Err(CallError::Transport(Transport::Busy))` when the providing runtime
+  refused the command at admission, and
   `Err(CallError::Transport(Transport::Undelivered))` no acknowledgment within
   the bound. It returns `None` for a query's correlation; a query's outcome
   comes from `reply`.
@@ -516,12 +525,43 @@ Semantics each implementation presents:
 mechanisms some runtimes have, not interaction semantics every runtime must
 present, so a runtime may omit either.
 
+**`Wakeable` is the extension a face that waits is built on** (story E11.16,
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13).
+No port method waits, so a task that finds nothing to read calls
+`wake_on(what, waker)` and returns, and the runtime wakes it when the thing
+`what` names may have changed. `Interest` is the key: `Outcome(c)`, the outcome
+of one call is known; `Slot`, a slot for a new call is free; `Event(iface)`, an
+occurrence of one of the interface's events is waiting; `Claim(iface)`, a claim
+on one of the interface's members is waiting. The contract a runtime presents:
+
+- **One waker per key per handle.** A second `wake_on` for a key the handle
+  already holds replaces the stored waker and wakes the displaced one, so no
+  task waits on a registration that can no longer fire. A second task waiting
+  for the same events holds a second handle, and each handle's waiter is woken.
+- **Woken at most once, after every change.** A stored waker is woken after
+  every change of its key becomes visible, and is cleared when woken. A runtime
+  with one unkeyed "something changed" source may wake every waiter it holds on
+  any change: a spurious wake costs one poll, a missed one leaves a task
+  waiting.
+- **Register, then read.** A task registers on every poll, and before it reads
+  the port, so a change between the read and the return still wakes it.
+
+`Event` and `Claim` are keyed per interface, not per member, because
+`EventSource::next` and `Handler::next_claim` drain one queue whatever the
+ordinal, and the subscription and the served set already filter by member.
+`Interest` is exhaustive, because a runtime must handle every key and an unknown
+key has no safe default; a new key is a 0.x minor. `Wakeable` has no supertrait,
+like `Clock`. The key type is named `Interest`, not `Wake`, because the `task`
+module imports `std::task::Wake`. A runtime with no wake source of its own has
+none to offer and does not implement the trait;
+[`ridl-loopback`](ridl-loopback.md) implements it on every handle.
+
 **Every port trait is implemented for `&mut P`, and the `&self`-only traits also
 for `&P`.** For each port trait `T`, the crate provides
 `impl<P: T + ?Sized> T for &mut P`; for the traits whose methods all take
-`&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`
-and `CoherentSignals` — it also provides `impl<P: T + ?Sized> T for &P`. A
-generated face holds its port by value
+`&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
+`ScannableSignals`, `CoherentSignals` and `Wakeable` — it also provides
+`impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
 so these impls are what let it be built over a borrow of a handle. An owned
 handle, a `Clone` handle and a wrapper that adds tracing or a test double are
@@ -557,14 +597,14 @@ compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 records the reasoning and the alternative it rejects, one runtime struct behind
 a mutex. Story E11.15 built the first runtime to this shape,
 [`ridl-loopback`](ridl-loopback.md): six handles, a `Send + Sync` reader handle,
-and an aggregate implementing all eleven traits by delegation.
+and an aggregate implementing all twelve traits by delegation.
 
 ## The `error` module and the port errors
 
 ```rust
 // error::
 pub enum Contract  { InvalidValue(Violation), PreconditionFailed, ContractBroken, UnknownInteraction }
-#[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt }
+#[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt, Busy }
 pub enum CallError { Contract(Contract), Transport(Transport) }
 
 // port::
@@ -578,10 +618,16 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 ```
 
 `Contract` is ridl §10.2's four categories; `Transport` is §10.3's detected
-infrastructure failures. `Detached` — the runtime behind the port is gone — is
-local to the port, not a stratum. Why `Contract` and `CallError` stay exhaustive
-while `Transport` and the seven port error enums stay `#[non_exhaustive]` is
-ADR-0021 decision 9. Every error type here is `Copy` and owns nothing.
+infrastructure failures. `Transport::Busy` is the providing runtime refusing a
+call at admission — no slot, no budget, or a call faster than the member's `min`
+— and the caller may retry later; it crosses the frame as a `response` outcome,
+the second `Transport` variant to cross after `Corrupt`
+([frame specification](../specification/frame-specification.md) §9.6, ADR-0021
+decision 14). `SendError::Busy` is the local case, a refusal before anything is
+sent. `Detached` — the runtime behind the port is gone — is local to the port,
+not a stratum. Why `Contract` and `CallError` stay exhaustive while `Transport`
+and the seven port error enums stay `#[non_exhaustive]` is ADR-0021 decision 9.
+Every error type here is `Copy` and owns nothing.
 
 ## What 0.1 leaves out
 

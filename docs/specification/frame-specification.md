@@ -109,7 +109,7 @@ definition, or the crate's own source under `crates/ridl-rt/src/`.
 | `Freshness`   | `ridl_rt::sample`   | `Fresh`, `Stale { by }` or `Unbounded`, measured by the consumer's runtime (§8)                                                                         |
 | `Correlation` | `ridl_rt::port`     | a `u64` identifying one sent call to its caller                                                                                                         |
 | `Contract`    | `ridl_rt::error`    | the four contract-error categories of ridl §10.2: `InvalidValue(Violation)`, `PreconditionFailed`, `ContractBroken`, `UnknownInteraction`               |
-| `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`                                                         |
+| `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`, `Busy`                                                 |
 | `Violation`   | `ridl_rt::payload`  | the name of the typl type whose constraint failed, and the `Rule` that failed: `Range`, `Step`, `Length`, `Pattern` or `Variant`                        |
 | `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `ReprC`, each named as its cargo feature is                                               |
 
@@ -357,7 +357,7 @@ consumer to provider, and one `response`, provider to consumer.
 | `kind`        | `Command`                                                                                  | `Command`                                                                                          |
 | `envelope`    | the caller's `stamp` when it sent the call, and the caller's `seq` (unique per caller, §7) | the provider's `stamp` when it settled, and the provider's `seq` for its responses on this session |
 | `correlation` | absent — the request's own `seq` is what the response echoes                               | the request's `seq`                                                                                |
-| `outcome`     | absent                                                                                     | `accepted`, `contract(Contract)`, or `corrupt`                                                     |
+| `outcome`     | absent                                                                                     | `accepted`, `contract(Contract)`, `corrupt`, or `busy`                                             |
 | `payload`     | always present: the argument value                                                         | absent — an acknowledgment carries no functional payload (ridl §6.1)                               |
 
 **What the caller sends.** `Caller::command` encodes the argument, evaluates the
@@ -368,10 +368,12 @@ runtime's local name for the outcome it will read back through `Caller::ack`; a
 runtime may use the request's `seq` as its value, and nothing on the frame
 depends on that choice.
 
-**What the provider does.** On a `request` naming a command, the providing
-runtime presents it once to application code as a claim (`Handler::next_claim`,
-with a `ClaimId` that is the provider's local name and never crosses), and the
-generated `dispatch`:
+**What the provider does.** A providing runtime that cannot admit the call — no
+slot, no budget, or a call faster than the member's `min` (§8) — does not
+present it and answers with a `response` whose outcome is `busy`. Otherwise, on
+a `request` naming a command, the providing runtime presents it once to
+application code as a claim (`Handler::next_claim`, with a `ClaimId` that is the
+provider's local name and never crosses), and the generated `dispatch`:
 
 1. runs `Payload::verify` over the argument bytes; a structure failure settles
    `corrupt`, a typl violation settles `contract(InvalidValue(violation))`;
@@ -387,11 +389,12 @@ command is rejected whole or accepted whole; it is never partially executed
 (ridl §6.2).
 
 **What the caller does with the response.** `Caller::ack` reports `Ok(())` for
-`accepted`, `Err(CallError::Contract(c))` for `contract(c)`, and
-`Err(CallError::Transport(Corrupt))` for `corrupt`. A `response` whose
-`correlation` names no call in flight is discarded. No `response` within the
-command's response bound is `Transport::Undelivered` (§8), detected by the
-caller's runtime; the response bound covers acceptance, not execution
+`accepted`, `Err(CallError::Contract(c))` for `contract(c)`,
+`Err(CallError::Transport(Corrupt))` for `corrupt`, and
+`Err(CallError::Transport(Busy))` for `busy`. A `response` whose `correlation`
+names no call in flight is discarded. No `response` within the command's
+response bound is `Transport::Undelivered` (§8), detected by the caller's
+runtime; the response bound covers acceptance, not execution
 ([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision 3).
 
 ### 5.4 Query
@@ -401,38 +404,40 @@ A query is request/response with a mandatory reply (ridl §7). It crosses as one
 the response carries the reply, and the settlement happens after the provider's
 method returns.
 
-| Field         | On the `request`                   | On the `response`                                                                          |
-| ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `kind`        | `Query`                            | `Query`                                                                                    |
-| `envelope`    | as for a command                   | as for a command                                                                           |
-| `correlation` | absent                             | the request's `seq`                                                                        |
-| `outcome`     | absent                             | `reply`, `contract(Contract)`, or `corrupt`                                                |
-| `payload`     | always present: the argument value | **present under `reply`**, the declared return type; absent under `contract` and `corrupt` |
+| Field         | On the `request`                   | On the `response`                                                                                  |
+| ------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `kind`        | `Query`                            | `Query`                                                                                            |
+| `envelope`    | as for a command                   | as for a command                                                                                   |
+| `correlation` | absent                             | the request's `seq`                                                                                |
+| `outcome`     | absent                             | `reply`, `contract(Contract)`, `corrupt`, or `busy`                                                |
+| `payload`     | always present: the argument value | **present under `reply`**, the declared return type; absent under `contract`, `corrupt` and `busy` |
 
 **What the caller sends** is as for a command; the outcome is read back through
 `Caller::reply`, never through `Caller::ack`, which answers `None` for a query's
 correlation always.
 
-**What the provider does.** Steps 1 and 2 are the command's. Then the generated
-`dispatch` calls the provider's method, evaluates the query's `ensure` clauses
-over the arguments and the reply, and settles `contract(ContractBroken)` when a
-clause is false — an `ensure` failure is a provider defect (ridl §10.2) and the
-reply it would have carried does not cross — or `reply` with the encoded reply
-otherwise. **A query settles after the provider's method returns**, because its
-settlement carries the reply.
+**What the provider does.** Admission is the command's: a query the providing
+runtime cannot admit is answered `busy`. Steps 1 and 2 are the command's. Then
+the generated `dispatch` calls the provider's method, evaluates the query's
+`ensure` clauses over the arguments and the reply, and settles
+`contract(ContractBroken)` when a clause is false — an `ensure` failure is a
+provider defect (ridl §10.2) and the reply it would have carried does not cross
+— or `reply` with the encoded reply otherwise. **A query settles after the
+provider's method returns**, because its settlement carries the reply.
 
 **The error arm is inside the payload.** A fallible query's return type is an
 inline `T | E` (ridl §10.1), and the reply payload is that union: a Stratum 1
 failure is a `reply` whose payload holds the error arm. It is never an `outcome`
 value, because it is data the contract declares, and this frame's `outcome`
-carries only what the contract does not declare — Stratum 2 and the one Stratum
-3 failure a provider can report (§9.6).
+carries only what the contract does not declare — Stratum 2 and the two Stratum
+3 failures a provider can report (§9.6).
 
 **What the caller does with the response.** `Caller::reply` returns the reply
-bytes for `reply`, `Err(CallError::Contract(c))` for `contract(c)` and
-`Err(CallError::Transport(Corrupt))` for `corrupt`. The generated binding
-verifies the reply bytes (§9.3). No `response` within the query's response bound
-is `Transport::Timeout` (§8), detected by the caller's runtime.
+bytes for `reply`, `Err(CallError::Contract(c))` for `contract(c)`,
+`Err(CallError::Transport(Corrupt))` for `corrupt` and
+`Err(CallError::Transport(Busy))` for `busy`. The generated binding verifies the
+reply bytes (§9.3). No `response` within the query's response bound is
+`Transport::Timeout` (§8), detected by the caller's runtime.
 
 ### 5.5 Fixed
 
@@ -461,13 +466,13 @@ provisioned into the providing runtime, not published by application code.
 The same facts in one table. "—" is absent; the parenthesised form is the frame
 the column describes.
 
-| Kind      | Frames                 | `envelope`                              | `provenance`                          | `correlation`     | `outcome`                             | `payload`                   |
-| --------- | ---------------------- | --------------------------------------- | ------------------------------------- | ----------------- | ------------------------------------- | --------------------------- |
-| `signal`  | `publish`              | provider stamp, channel `seq`           | `Init` / `Live` / `Invalid(Declared)` | —                 | —                                     | under `Live` only           |
-| `event`   | `occurrence`           | provider stamp, channel `seq`           | —                                     | —                 | —                                     | always                      |
-| `command` | `request` / `response` | caller stamp, caller `seq` / provider's | —                                     | — / request `seq` | — / `accepted`, `contract`, `corrupt` | always / —                  |
-| `query`   | `request` / `response` | caller stamp, caller `seq` / provider's | —                                     | — / request `seq` | — / `reply`, `contract`, `corrupt`    | always / under `reply` only |
-| `fixed`   | `publish` (on `read`)  | provider stamp, `seq` 0                 | `Live`                                | —                 | —                                     | always                      |
+| Kind      | Frames                 | `envelope`                              | `provenance`                          | `correlation`     | `outcome`                                     | `payload`                   |
+| --------- | ---------------------- | --------------------------------------- | ------------------------------------- | ----------------- | --------------------------------------------- | --------------------------- |
+| `signal`  | `publish`              | provider stamp, channel `seq`           | `Init` / `Live` / `Invalid(Declared)` | —                 | —                                             | under `Live` only           |
+| `event`   | `occurrence`           | provider stamp, channel `seq`           | —                                     | —                 | —                                             | always                      |
+| `command` | `request` / `response` | caller stamp, caller `seq` / provider's | —                                     | — / request `seq` | — / `accepted`, `contract`, `corrupt`, `busy` | always / —                  |
+| `query`   | `request` / `response` | caller stamp, caller `seq` / provider's | —                                     | — / request `seq` | — / `reply`, `contract`, `corrupt`, `busy`    | always / under `reply` only |
+| `fixed`   | `publish` (on `read`)  | provider stamp, `seq` 0                 | `Live`                                | —                 | —                                             | always                      |
 
 ## 6. The Control Plane
 
@@ -629,7 +634,7 @@ failure outside this document (ridl §10.4).
 | Bound                  | On a signal                                                                                                                                                        | On an event                                                                                          | On a command or a query                                                                                                                                                                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max`, staleness bound | the **consuming** runtime computes `Freshness` on every read: `Fresh` while `now − stamp ≤ max`, else `Stale { by: now − stamp − max }`; `Unbounded` with no `max` | the **consuming** runtime discards an occurrence with `now − stamp > max` inside `EventSource::next` | the **calling** runtime reports `Transport::Undelivered` (command) or `Transport::Timeout` (query) through `ack` or `reply` once `now − request stamp > max` with no `response`; the **providing** runtime presents `Claim.remaining = max − (now − request stamp)`, `None` with no `max` |
-| `min`, rate floor      | the **providing** runtime coalesces a faster `set` into the next publication                                                                                       | the **providing** runtime refuses a faster `raise` with `RaiseError::Busy`, or delays it             | the **providing** runtime may refuse a faster call at admission; how it answers one is not fixed here                                                                                                                                                                                     |
+| `min`, rate floor      | the **providing** runtime coalesces a faster `set` into the next publication                                                                                       | the **providing** runtime refuses a faster `raise` with `RaiseError::Busy`, or delays it             | the **providing** runtime may refuse a faster call at admission, and answers with `busy`                                                                                                                                                                                                  |
 
 Under `@Xms`, the strict period, the providing runtime publishes the signal
 every `X` whether or not it changed, which is a `touch` when nothing changed
@@ -719,8 +724,9 @@ as §3 states.
 
 ### 9.6 Which failures cross
 
-Of the four `Transport` variants, exactly one crosses a boundary: **`Corrupt`**,
-as a `response` outcome, because the provider detected it. `Timeout`,
+Of the five `Transport` variants, exactly two cross a boundary, each as a
+`response` outcome: **`Corrupt`**, because the provider detected it, and
+**`Busy`**, because the provider refused the call at admission. `Timeout`,
 `Undelivered` and `Down` are the **absence** of a frame, detected by the
 caller's runtime against its own clock and its binding's session state, and
 never sent by anyone. Of the four `Contract` categories, every one may cross as
