@@ -62,8 +62,8 @@ Read both before Task 1.
 
 1. **A value outside the typl convention.** `checkEngine`, `HTTPServer` or
    `SELF` as an enum value must generate Rust that compiles. Task 1 pins their
-   `pascal_case` outputs, and Task 4 compiles a package holding `SELF` (which
-   becomes `Self_` through `ident()`).
+   `pascal_case` outputs, and Task 4 runs rustc, with `-D non_camel_case_types`,
+   over a package holding all three (`SELF` becomes `Self_` through `ident()`).
 2. **Two values that differ only in underscores or case** (`CHECK_ENGINE`,
    `CHECK__ENGINE`) must be refused at check time, not by rustc. Task 3.
 3. **A model written by an older toolchain**, with every `pascal` empty, must
@@ -184,7 +184,7 @@ these tests at the end of the module:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cargo test -p ridl-ir --lib name::tests` Expected: FAIL to compile, with
-"cannot find function `pascal_case`".
+error E0432, "unresolved import `super::pascal_case`".
 
 - [ ] **Step 3: Write the implementation**
 
@@ -331,11 +331,17 @@ Run: `cargo test -p ridl-ir --lib codegen::tests` Expected: PASS.
 
 Run: `INSTA_UPDATE=always cargo test -p ridlc --test corpus --no-fail-fast`
 Then: `git diff --stat crates/ridlc/tests/snapshots/` Expected: only the five
-`corpus__codegen@*.snap` files change, and every added line is a
-`"pascal": "..."` entry. Check with
-`git diff crates/ridlc/tests/snapshots/ | grep '^[-+] ' | grep -v '"pascal"'`,
-which must print nothing. Then rerun
-`cargo test -p ridlc --test corpus --no-fail-fast` and expect PASS.
+`corpus__codegen@*.snap` files that carry a model change. Each change is an
+added `"pascal": "..."` line, plus the `"screaming"` line above it, which gains
+a trailing comma because it is no longer the object's last field. Check with
+`git diff crates/ridlc/tests/snapshots/ | grep '^[-+] ' | grep -v '"pascal"\|"screaming"'`,
+which must print nothing, and with
+`git diff crates/ridlc/tests/snapshots/ | grep '^-.*"screaming"' | sed 's/^-//; s/$/,/' | sort > /tmp/before && git diff crates/ridlc/tests/snapshots/ | grep '^+.*"screaming"' | sed 's/^+//' | sort > /tmp/after && diff /tmp/before /tmp/after`,
+which must print nothing: every `"screaming"` line changed only by that comma.
+If the field order puts `"pascal"` elsewhere in the object, the line that gains
+the comma is a different field; adjust the second check to that field and report
+it. Then rerun `cargo test -p ridlc --test corpus --no-fail-fast` and expect
+PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -355,7 +361,7 @@ git commit -m "feat(ridl-ir): carry the pascal_case spelling in the codegen mode
   `check_arm_projection` (line 3441), `colliding_projected_name` at lines
   3514-3556 and its doc comment above it, and tests after the union-arm RIDL-149
   tests (around line 6520)
-- Modify: `crates/ridl-core/src/diag.rs:612-643` (RIDL-149's doc comment)
+- Modify: `crates/ridl-core/src/diag.rs:622-643` (RIDL-149's doc comment)
 - Modify: `docs/specification/ridl-language-reference.md` §16.4, the RIDL-149
   row (line 1760)
 - Modify: `docs/decisions/ADR-0017-proto3-projection-rules.md` decision 5 (lines
@@ -580,12 +586,16 @@ contradicts design §5.5's measurement: stop and report it.
 
 - [ ] **Step 6: Update the records that describe the check**
 
-In `crates/ridl-core/src/diag.rs`, RIDL-149's doc comment: replace "and the arms
-of one union, which joined with the ADR-0016 amendment." through the end of the
-sentence "The message names the transform that collided." with:
+In `crates/ridl-core/src/diag.rs`, RIDL-149's doc comment: replace the whole
+lines from `/// Scoped to the members of one interface, the parameters of one`
+through `/// that collided. Emitted per-package by the checker (E9.7).`, keeping
+the 8-space indentation of the lines around them, with:
 
 ```rust
-/// the arms of one union, which joined with the ADR-0016 amendment of
+/// Scoped to the members of one interface, the parameters of one
+/// interaction (decision 4), the fields of one struct, which joined
+/// in the commit where E9.8 started projecting them onto proto3, the
+/// arms of one union, which joined with the ADR-0016 amendment of
 /// 2026-09-20, and the values of one enum, which joined with the
 /// amendment of 2026-09-26. The first three namespaces are checked
 /// under `snake_case` alone; a union's arms are checked under
@@ -593,7 +603,7 @@ sentence "The message names the transform that collided." with:
 /// both namespaces and the two collision sets are incomparable; an
 /// enum's values are checked under `pascal_case` alone, because its
 /// collision set contains `snake_case`'s. The message names the
-/// transform that collided.
+/// transform that collided. Emitted per-package by the checker (E9.7).
 ```
 
 In `docs/specification/ridl-language-reference.md`, the RIDL-149 row's text
@@ -660,7 +670,7 @@ git commit -m "feat(ridl-sem): check an enum's values under pascal_case with RID
   `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs` (around lines
   59-287), `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` (around
   lines 162-185), and assertions in `crates/ridl-backend-rust/src/tests.rs`
-  (around lines 1405, 2909 and 2917)
+  (around lines 1405, 2180 — `Mode::SLOW` — 2909 and 2917)
 - Modify: `examples/cabin/consumer/src/main.rs:81,92`
 - Modify: `docs/technotes/ridl-rt-by-example.md:355`
 
@@ -732,26 +742,63 @@ fn an_empty_pascal_spelling_is_derived_from_snake() {
     assert_eq!(derived, current);
 }
 
-/// `SELF` becomes `Self`, which cannot be an identifier; `ident()` escapes
-/// it to `Self_`. Review Focus 1.
+/// Values outside the typl convention (Review Focus 1). `SELF` becomes
+/// `Self`, which cannot be an identifier, and `ident()` escapes it to
+/// `Self_`; `checkEngine` and `HTTPServer` become `CheckEngine` and
+/// `HttpServer`. The generated enum must compile with
+/// `non_camel_case_types` denied.
 #[test]
-fn an_enum_value_named_self_generates_an_escaped_variant() {
-    let source = rust_for(vec![public_decl(
+fn an_enum_value_outside_the_typl_convention_compiles() {
+    let rust_source = rust_for(vec![public_decl(
         "Direction",
         v2::decl::Kind::EnumDef(v2::EnumDef {
-            values: vec![enum_value("SELF", 0), enum_value("OTHER", 1)],
+            values: vec![
+                enum_value("SELF", 0),
+                enum_value("checkEngine", 1),
+                enum_value("HTTPServer", 2),
+            ],
             reserved: Vec::new(),
         }),
     )]);
-    assert!(source.contains("Self_ = 0"), "{source}");
-    assert!(source.contains("Ok(Self::Self_)"), "{source}");
+    assert!(rust_source.contains("Self_ = 0"), "{rust_source}");
+    assert!(rust_source.contains("CheckEngine = 1"), "{rust_source}");
+    assert!(rust_source.contains("HttpServer = 2"), "{rust_source}");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("outside_convention.rs");
+    let meta_path = dir.path().join("outside_convention.rmeta");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "non_camel_case_types",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(status.success(), "generated Rust must compile:\n{rust_source}");
 }
+
+This follows `a_tuple_under_an_internal_declaration_is_package_private`
+(line 1732), which writes the generated source with no prelude and links
+`ridl_rt` through `ridl_rt_rlib` (line 2574).
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run:
-`cargo test -p ridl-backend-rust --lib -- an_enum_variant_is_spelled_in_pascal_case an_empty_pascal_spelling_is_derived_from_snake an_enum_value_named_self_generates_an_escaped_variant`
+`cargo test -p ridl-backend-rust --lib -- an_enum_variant_is_spelled_in_pascal_case an_empty_pascal_spelling_is_derived_from_snake an_enum_value_outside_the_typl_convention_compiles`
 Expected: all three FAIL; the output still spells `CHECK_ENGINE` and `SELF`.
 
 - [ ] **Step 3: Write the implementation**
@@ -841,9 +888,11 @@ becomes `health: Health::Warn`. Leave lines 71-73 as they are: they are the ridl
 source, which keeps its `SCREAMING_SNAKE` spelling.
 
 Then search for any other consumer:
-`git grep -nE '::(OK|WARN|FAIL|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\b' -- '*.rs' '*.md' ':!docs/archive' ':!docs/wip' ':!*.snap'`
-and check each hit. A hit that is a generated enum variant is updated. A
-constant (`MAX_BUFFER_SIZE`), an enumset bit, or a hand-written Rust item stays.
+`git grep -nE '::[A-Z][A-Z0-9_]*[A-Z0-9]\b' -- '*.rs' '*.md' ':!docs/archive' ':!docs/wip' ':!*.snap'`
+(every path segment of two or more capitals, which catches single-word variants
+such as `Mode::SLOW` as well as multi-word ones) and check each hit. A hit that
+is a generated enum variant is updated. A constant (`MAX_BUFFER_SIZE`), an
+enumset bit, or a hand-written Rust item stays.
 
 - [ ] **Step 7: Run the suites and the demo**
 
@@ -887,14 +936,21 @@ EOF
   (the `"metadata",` argument at line 1241), and `rustc_accepts` (line 1266; its
   doc comment at 1258-1262, the two comments at 1289-1298 and 1302-1308, args at
   1309-1310)
-- Modify: `crates/ridl-backend-rust/tests/interaction_face.rs:68-74` (remove the
+- Modify: `crates/ridl-backend-rust/tests/interaction_face.rs:69-74` (remove the
   `clippy::upper_case_acronyms` allowance)
 
 - [ ] **Step 1: Add the deny flag to the seven proofs**
 
-Seven proofs compile generated Rust (design §2). In the five `rustc` argument
-lists that already hold `"non_snake_case",` — the four in
-`crates/ridl-backend-rust/src/tests.rs` and `rustc_accepts` — add after it:
+Seven rustc invocations are the compile proofs this task changes (design §2):
+the five that deny a lint by name and the two corpus proofs that build their own
+command. Other tests also compile generated Rust — around
+`crates/ridl-backend-rust/src/tests.rs:1213` and `:2949`,
+`crates/ridl-backend-rust/tests/rust_crate_emit.rs:46` and
+`crates/ridl/tests/cabin_example.rs:73` — and deny no lint; they stay as they
+are, because the four proofs whose fixtures hold multi-word values guard #506.
+In the five `rustc` argument lists that already hold `"non_snake_case",` — the
+four in `crates/ridl-backend-rust/src/tests.rs` and `rustc_accepts` — add after
+it:
 
 ```rust
 "-D",
@@ -941,9 +997,9 @@ Replace the comments:
   so this deny is the proof that guards #506 on this fixture."
 - `appendix_a_compiles_with_rustc`: the sentence "`non_camel_case_types`, which
   a screaming-case enum variant draws by design, stays undenied." becomes
-  "`non_camel_case_types` is denied too, for driftsys/ridl#506. It is inert on
-  Appendix A, whose enum values are single words; it keeps this a proof if a
-  multi-word value is added."
+  "`non_camel_case_types` is denied too, for driftsys/ridl#506. Appendix A's
+  `DiagError` holds multi-word values (`FILTER_INVALID`, `STORAGE_BUSY`,
+  `ACCESS_DENIED`), so the deny bites on this fixture."
 - `rustc_accepts`, first comment in the argument list: "(`non_camel_case_types`
   on a screaming-case enum variant, dead code in a crate with no consumers)"
   becomes "(dead code in a crate with no consumers)".
@@ -951,8 +1007,12 @@ Replace the comments:
   which a screaming-case enum variant draws by design, stays undenied." becomes
   "The same holds for an enum variant and `non_camel_case_types`
   (driftsys/ridl#506): the variant goes through `ridl_ir::name::pascal_case`.
-  `veh-common` and `veh-cluster` hold multi-word enum values, so the deny bites
-  on them."
+  `veh-cluster` holds multi-word enum values, so the deny bites on it."
+- `rustc_accepts`'s doc comment, and the first comment in its argument list,
+  count the lints denied by name: "Three lints are denied by name" becomes "Four
+  lints are denied by name", the list after it gains "and `non_camel_case_types`
+  (issue #506)", and "The first of the three lints" becomes "The first of the
+  four lints".
 
 If a deny fails on a name that is not an enum variant, stop and report it: the
 design assumed no other generated type name draws the lint.
@@ -960,7 +1020,8 @@ design assumed no other generated type name draws the lint.
 - [ ] **Step 2: Remove the lint allowance the old spelling needed**
 
 Delete the `#[allow(clippy::upper_case_acronyms, reason = "...")]` attribute at
-`crates/ridl-backend-rust/tests/interaction_face.rs:68-74`.
+`crates/ridl-backend-rust/tests/interaction_face.rs:69-74`. Line 68 closes the
+`clippy::derivable_impls` attribute before it, which stays.
 
 - [ ] **Step 3: Run the proofs and the lint**
 
@@ -970,14 +1031,18 @@ and `just lint`. Expected: PASS for every proof, and clippy clean.
 
 - [ ] **Step 4: Prove the deny bites**
 
-Revert the variant site alone: in `emit_enum`, change the first
-`ident(&pascal_of(value.name.as_ref()))` back to
-`ident(declared(value.name.as_ref()))`, and run
+Revert the spelling at every site at once, so that the generated code stays
+consistent and only the lint can fail it: change the body of `pascal_of` to
+`name.map(|name| name.declared.clone()).unwrap_or_default()`. Reverting one site
+alone is not a test of the deny — the other sites still name the PascalCase
+variant, and rustc fails with E0599 whether or not the lint is denied. Run
 `cargo test -p ridl-backend-rust -p ridlc --no-fail-fast -- compiles_with_rustc`.
-Expected: `appendix_b_compiles_with_rustc`,
+Expected: `appendix_a_compiles_with_rustc`, `appendix_b_compiles_with_rustc`,
 `veh_common_generated_rust_compiles_with_rustc` and
-`veh_cluster_generated_rust_compiles_with_rustc` FAIL. Then restore the line and
-rerun: PASS. Record the three failing test names for the pull request.
+`veh_cluster_generated_rust_compiles_with_rustc` FAIL, each reporting
+`non_camel_case_types`. Any other failure is recorded with its reason. Then
+restore `pascal_of` and rerun: PASS. Record the failing test names for the pull
+request.
 
 - [ ] **Step 5: Commit**
 
@@ -1032,8 +1097,10 @@ the check, not before it" drop that clause; `docs/wip/README.md` loses the entry
 and `docs/archive/README.md` gains one. Then grep for dead citations that
 link-check cannot see:
 `git grep -n "2026-09-26-enum-variant-pascal-case" -- ':!docs/archive'` and fix
-every hit in a `.rs`, `.ridl` or Markdown file. Run
-`just link-check doc-path-check check`.
+every hit in a `.rs`, `.ridl` or Markdown file. Run `just link-check`,
+`just doc-path-check` and `just check`, one at a time (`doc-path-check` takes an
+optional argument, so a second recipe name on the same line would be read as
+that argument).
 
 - [ ] **Step 4: Commit and open the pull request**
 

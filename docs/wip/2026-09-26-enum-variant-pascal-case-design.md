@@ -65,9 +65,11 @@ Measured on `main` at 6557cc4.
   associated constant (`pub const LOW_FUEL: WarningFlags`), and
   `SCREAMING_SNAKE` is the Rust convention for a constant. It does not name the
   paired enum's variants.
-- **Seven rustc compile proofs compile generated Rust, and none denies
-  `non_camel_case_types`.** Four are in `crates/ridl-backend-rust/src/tests.rs`
-  — `a_tuple_under_an_internal_declaration_is_package_private`,
+- **Seven rustc compile proofs deny a lint by name or build their own `rustc`
+  command, and none denies `non_camel_case_types`.** Other tests compile
+  generated Rust with no lint denied, and are not listed here. Four are in
+  `crates/ridl-backend-rust/src/tests.rs` —
+  `a_tuple_under_an_internal_declaration_is_package_private`,
   `constructible_collections_compile`, `appendix_b_compiles_with_rustc` and
   `appendix_a_compiles_with_rustc` — and deny `non_snake_case`; three of their
   comments say an enum variant draws `non_camel_case_types` by design. Three are
@@ -77,9 +79,10 @@ Measured on `main` at 6557cc4.
   `veh_common_generated_rust_compiles_with_rustc` and
   `workspace_two_members_composed_compiles_with_rustc` build their own `rustc`
   command and deny no lint. The fixtures that hold a multi-word enum value are
-  Appendix B, `veh-common` and `veh-cluster`. Two doc comments in `corpus.rs`,
-  on `veh_common_generated_rust_compiles_with_rustc` and on `rustc_accepts`,
-  give `non_camel_case_types` on a screaming-case variant as their example of a
+  Appendix A (its `DiagError`), Appendix B, `veh-common` and `veh-cluster`. Two
+  doc comments in `corpus.rs`, on
+  `veh_common_generated_rust_compiles_with_rustc` and on `rustc_accepts`, give
+  `non_camel_case_types` on a screaming-case variant as their example of a
   non-fatal lint. The checked-in generated module in
   `crates/ridl-backend-rust/tests/interaction_face.rs` carries
   `#[allow(clippy::upper_case_acronyms)]` for the same spelling.
@@ -352,8 +355,9 @@ The plan turns each of these into a task step.
   their comments, with the two `corpus.rs` doc comments, are rewritten. #451
   found that a deny flag on a fixture with no multi-word name tests nothing, so
   the plan names the fixtures that hold a multi-word variant (`veh-cluster`
-  holds 8) and proves the flag bites by reverting one emit site and watching the
-  proof fail.
+  holds 8) and proves the flag bites by reverting the spelling at every site at
+  once — reverting one site alone makes rustc fail with E0599 whatever the lint
+  setting — and watching those proofs fail on `non_camel_case_types`.
 - **Snapshots move in the same commit as the emit change,** as #506's "Done
   when" asks.
 - **`interaction_face.rs`** loses its `clippy::upper_case_acronyms` allowance,
