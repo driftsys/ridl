@@ -11,10 +11,9 @@
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
-//! present, so a runtime may omit them. [`Wakeable`] is an extension too: a
-//! task registers through it to be woken when what it waits for changes, and
-//! then reads the port. A runtime that serves a generated async client
-//! implements it.
+//! present, so a runtime may omit them. [`Wakeable`] is an extension too: it
+//! is how a face that waits learns when to read a port again, and a runtime
+//! that serves a generated async client implements it.
 //!
 //! Each trait below names the generated method it backs, so a reader who
 //! arrived from generated code can find the port under it. The crate-level
@@ -186,8 +185,8 @@ pub trait Caller: Attached {
     /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
     /// `Err(CallError::Transport(Transport::Corrupt))` when the provider could
     /// not read the command's argument bytes,
-    /// `Err(CallError::Transport(Transport::Busy))` when the provider refused
-    /// the command at admission, and
+    /// `Err(CallError::Transport(Transport::Busy))` when the providing runtime
+    /// refused the command at admission, and
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
@@ -227,8 +226,11 @@ pub struct Correlation(pub u64);
 ///
 /// `next_claim` presents each delivered call once. A retransmission of a call
 /// already presented is not presented again and receives the cached
-/// acknowledgment. Calls from two callers are never merged, even when they
-/// carry the same `seq`. A call lost in transport is never presented. The
+/// acknowledgment. The one call presented again is a claim a dropped handler
+/// held and did not settle: the runtime returns it to the waiting calls, so
+/// another handler that serves the member can take it, as many times as a
+/// holder is dropped (ADR-0021 decision 5). Calls from two callers are never
+/// merged, even when they carry the same `seq`. A call lost in transport is never presented. The
 /// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
 /// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
 /// once the response bound passes.
@@ -388,41 +390,52 @@ pub trait CoherentSignals: SignalReader {
 /// Extension: a port that can wake a task. A runtime that serves a generated
 /// async client implements it.
 ///
-/// [`wake_on`](Wakeable::wake_on) stores a clone of `waker` under `what` on
-/// the handle it is called on. The contract:
+/// No port method waits, so a task registers its interest here, reads the
+/// port, and returns when the read finds nothing; the runtime wakes the task
+/// when the thing it waits for may have changed, and the task reads the port
+/// again.
 ///
-/// - **One waker per key per handle.** A second `wake_on` for a key the handle
-///   already holds replaces the stored waker and wakes the displaced one, so
-///   no task waits on a registration that can no longer fire. A waker that
-///   [`will_wake`](Waker::will_wake) the stored one, registered under the same
-///   key, is the same task registering again: it displaces nothing and wakes
-///   nothing, because a task registers on every poll and waking it for its own
-///   registration would schedule another poll every time.
-/// - **Woken at most once.** A stored waker is woken after every change of its
-///   key becomes visible, and is cleared when woken.
+/// The contract:
+///
+/// - **One waker per kind of key per handle.** [`wake_on`](Wakeable::wake_on)
+///   stores a clone of `waker` on the handle it is called on, one for each
+///   kind — `Slot`, `Event`, `Claim` — and an `Outcome` waker with its call.
+///   A change to any key of that kind that the handle observes wakes the
+///   stored waker, so a task that registers `Event(a)` and then `Event(b)` is
+///   woken by an occurrence of either; the task reads the port again and
+///   finds out which.
+/// - **A refresh or a displacement.** A `wake_on` whose waker
+///   [`will_wake`](Waker::will_wake) the stored one is a refresh:
+///   it replaces the stored waker without waking it, because a task
+///   registers on every poll and waking it for its own registration would
+///   schedule the next poll from every poll. A waker of another task
+///   displaces the stored one, and the displaced waker is woken, so no task
+///   waits on a registration that can no longer fire. A second task waiting
+///   for the same events holds a second handle, and each handle's waiter is
+///   woken.
+/// - **Woken at most once.** A stored waker is woken after every change of
+///   its kind becomes visible, and is cleared when woken. A spurious wake is
+///   allowed: a runtime with one unkeyed "something changed" source may wake
+///   every waiter it holds on any change.
 /// - **Register, then read.** The caller registers on every poll, and
-///   registers before it reads the port, so a change between the read and the
-///   return still wakes it.
+///   registers before it reads the port, so a change between the read and
+///   the return still wakes it.
 ///
-/// A second task waiting for the same interface's events holds a second
-/// handle, and each handle's waiter is woken. A runtime with one "something
-/// changed" source may wake every waiter it holds on any change: a spurious
-/// wake costs one poll and a missed wake hangs a task, so the contract is that
-/// a waiter is woken after every change of its key, never that it is woken
-/// only then. A runtime with no wake source of its own has none to offer and
-/// does not implement this trait.
+/// [`Interest::Event`] and [`Interest::Claim`] are keyed per interface,
+/// because [`EventSource::next`] and [`Handler::next_claim`] drain one queue
+/// whatever the ordinal, and the subscription and the served set already
+/// filter by member.
 pub trait Wakeable {
-    /// Registers `waker` to be woken when `what` changes.
+    /// Wakes `waker` when the thing `what` names may have changed, under the
+    /// contract above.
     fn wake_on(&self, what: Interest, waker: &Waker);
 }
 
-/// What a task waits for, as [`Wakeable::wake_on`] keys it.
+/// What a task waits for, as [`Wakeable::wake_on`] takes it.
 ///
-/// `Event` and `Claim` are keyed per interface, not per member:
-/// [`EventSource::next`] and [`Handler::next_claim`] drain one queue whatever
-/// the ordinal, and the subscription and the served set already filter by
-/// member. The enum is exhaustive, because a runtime must handle every key and
-/// an unknown key has no safe default.
+/// Exhaustive: a runtime handles every key, because an unknown key has no
+/// safe default. Ignoring it leaves the waiter waiting, and waking it at once
+/// makes a busy loop. A new key is a 0.x minor (ADR-0021 decision 13).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interest {
     /// The outcome of one call is known.

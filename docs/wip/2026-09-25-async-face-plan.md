@@ -131,11 +131,12 @@ Run: `cargo test -p ridl-loopback --locked` — expected: fail to compile
 - [ ] **Step 2: Add the `ridl-rt` items**
 
 `Interest` and `Wakeable` in `port.rs` after `CoherentSignals`, with F-6's doc
-comments and the contract of F-5 in the trait's rustdoc: one waker per key per
-handle, the displaced waker woken, register before reading.
-`impl<P: Wakeable +
-?Sized> Wakeable for &P` and `for &mut P`. `Transport::Busy`
-in `error.rs`.
+comments and the contract of F-5 in the trait's rustdoc: one waker per kind of
+key per handle, woken by a change to any key of that kind, a same-task
+registration a refresh, the displaced waker of another task woken, register
+before reading. `impl<P: Wakeable +
+?Sized> Wakeable for &P` and `for &mut P`.
+`Transport::Busy` in `error.rs`.
 
 Run: `cargo test -p ridl-rt --locked --all-features` — expected: PASS (nothing
 tests the new items yet).
@@ -219,13 +220,13 @@ loopback-only tests; `just wasm-check`; `just compat-check`; the generated face
       pub fn settle(&mut self, c: Correlation, outcome: Result<(), CallError>) -> Settled; // the waker to wake, and whether the slot was reclaimed
       pub fn outcome(&self, c: Correlation) -> Option<Result<(), CallError>>;
       pub fn forget(&mut self, c: Correlation) -> Forgotten; // the one reclaim: at once, or at the settlement of a call in flight
-      pub fn wake_on(&mut self, c: Correlation, waker: &Waker) -> Option<Waker>;  // the displaced waker
+      pub fn wake_on(&mut self, c: Correlation, waker: &Waker) -> Option<Waker>;  // the displaced waker of another task; None on a refresh
       pub fn slot(c: Correlation) -> usize;                       // for the runtime's byte storage
   }
-  pub struct Waiters { /* Slot, Event and Claim: one Option<Waker> per kind, with its key */ }
+  pub struct Waiters { /* Slot, Event and Claim: one Option<Waker> per kind; any key of the kind takes it */ }
   impl Waiters {
       pub const fn new() -> Self;
-      pub fn register(&mut self, what: Interest, waker: &Waker) -> Option<Waker>; // the displaced waker
+      pub fn register(&mut self, what: Interest, waker: &Waker) -> Option<Waker>; // the displaced waker of another task; None on a refresh
       pub fn take(&mut self, what: Interest) -> Option<Waker>;
       pub fn take_all(&mut self) -> impl Iterator<Item = Waker> + '_;             // for an unkeyed runtime
   }
@@ -246,8 +247,9 @@ correlation; `insert` is `None` at `N` calls in flight and `Some` after one is
 forgotten; `outcome` does not reclaim; the byte budget refuses a reservation
 that does not fit and accepts it after a reclaim; `forget` of a settled call
 reclaims, of a call in flight marks, and the settlement then reclaims; `wake_on`
-returns the displaced waker; `settle` returns the stored waker once. `Waiters`:
-one per kind, displaced returned, `take` clears.
+returns the displaced waker of another task and nothing on a refresh; `settle`
+returns the stored waker once. `Waiters`: one per kind, any key of the kind
+takes it, the displaced waker of another task returned, `take` clears.
 
 - [ ] **Step 2: Implement `correlate` and the error types**
 

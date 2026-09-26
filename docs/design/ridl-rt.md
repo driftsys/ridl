@@ -497,21 +497,27 @@ Semantics each implementation presents:
   accepted, `Err(CallError::Contract(_))` a negative acknowledgment,
   `Err(CallError::Transport(Transport::Corrupt))` when the provider could not
   read the command's argument bytes,
-  `Err(CallError::Transport(Transport::Busy))` when the provider refused it at
-  admission, and `Err(CallError::Transport(Transport::Undelivered))` no
-  acknowledgment within the bound. It returns `None` for a query's correlation;
-  a query's outcome comes from `reply`.
+  `Err(CallError::Transport(Transport::Busy))` when the providing runtime
+  refused the command at admission, and
+  `Err(CallError::Transport(Transport::Undelivered))` no acknowledgment within
+  the bound. It returns `None` for a query's correlation; a query's outcome
+  comes from `reply`.
 - **`Caller::reply`**'s outer `ReadError` reports the port call itself (`Short`,
   `Detached`, never `Contract`); the inner `CallError` is the outcome from the
   peer or the transport.
 - **`Handler`** presents each delivered call once through `next_claim`: a
   retransmission of an already-presented call is not presented again and
   receives the cached acknowledgment, and two callers are never merged even
-  under the same `seq`. Every claim is settled — a command settles `Ok(&[])`
-  after its arguments and `require` pass and before application code runs; a
-  query settles with the reply bytes or the `CallError` outcome. A provider
-  settles `CallError::Transport(Transport::Corrupt)` when the argument bytes
-  fail the structure check.
+  under the same `seq`. The one call presented again is a claim a dropped
+  handler held and did not settle, which the runtime returns to the waiting
+  calls so that another handler serving the member can take it; the call's
+  deadline still bounds the caller's wait (ADR-0021 decision 5, amended
+  2026-09-26). Every claim is settled by the handler holding it, or returned by
+  that handler's drop — a command settles `Ok(&[])` after its arguments and
+  `require` pass and before application code runs; a query settles with the
+  reply bytes or the `CallError` outcome. A provider settles
+  `CallError::Transport(Transport::Corrupt)` when the argument bytes fail the
+  structure check.
 - **`ScannableSignals::scan`** writes each interface's changes into `out` all
   together or not at all: when an interface's changes do not fit in the rest of
   `out`, none of them is written, that interface's mark is not updated, and
@@ -519,29 +525,50 @@ Semantics each implementation presents:
 - **A `Short` error does not consume.** `next`, `next_claim` and `reply` return
   `Result<Option<_>, ReadError>`, so a caller that receives
   `ReadError::Short { needed }` resizes and reads the same item again.
-- **`Wakeable::wake_on`** stores a clone of the waker under its `Interest` on
-  the handle it is called on, one waker per key: a second registration under a
-  key the handle holds replaces the stored waker and wakes the displaced one,
-  except that a waker which `will_wake` the stored one, under the same key, is
-  the same task registering again and displaces nothing, because a task
-  registers on every poll. A stored waker is woken at most once, after every
-  change of its key becomes visible, and is cleared when woken. A caller
-  registers before it reads the port, so a change between the read and the
-  return still wakes it. `Outcome(c)` is the outcome of one call, `Slot` a free
-  slot for a new call, and `Event(i)` and `Claim(i)` an occurrence or a claim
-  waiting on interface `i` — keyed per interface, not per member, because `next`
-  and `next_claim` drain one queue whatever the ordinal. A runtime with one
-  unkeyed "something changed" source may wake every waiter it holds on any
-  change. `Interest` is exhaustive, because a runtime must handle every key and
-  an unknown key has no safe default.
-  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13
-  records the contract.
 
 `ScannableSignals`, `CoherentSignals` and `Wakeable` are extensions: they
 describe mechanisms some runtimes have, not interaction semantics every runtime
-must present, so a runtime may omit any of them. A runtime that serves a
-generated async client implements `Wakeable`; one with no wake source of its own
-has none to offer.
+must present, so a runtime may omit any of them.
+
+**`Wakeable` is the extension a face that waits is built on** (story E11.16,
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13).
+No port method waits, so a task calls `wake_on(what, waker)`, reads the port,
+and returns when the read finds nothing; the runtime wakes it when the thing
+`what` names may have changed, and the task reads again. `Interest` is the key:
+`Outcome(c)`, the outcome of one call is known; `Slot`, a slot for a new call is
+free; `Event(iface)`, an occurrence of one of the interface's events is waiting;
+`Claim(iface)`, a claim on one of the interface's members is waiting. The
+contract a runtime presents:
+
+- **One waker per kind of key per handle.** A handle stores one waker for each
+  kind — `Slot`, `Event`, `Claim` — and an `Outcome` waker with its call. A
+  change to any key of that kind that the handle observes wakes the stored
+  waker, so a task that registers `Event(a)` and then `Event(b)` is woken by an
+  occurrence of either, and reads the port again to find out which.
+- **A refresh or a displacement.** A `wake_on` whose waker `will_wake` the
+  stored one is a refresh: it replaces the stored waker without waking it,
+  because a task registers on every poll and waking it for its own registration
+  would schedule the next poll from every poll. A waker of another task
+  displaces the stored one and wakes it, so no task waits on a registration that
+  can no longer fire. A second task waiting for the same events holds a second
+  handle, and each handle's waiter is woken.
+- **Woken at most once, after every change.** A stored waker is woken after
+  every change of its kind becomes visible, and is cleared when woken. A
+  spurious wake is allowed: a runtime with one unkeyed "something changed"
+  source may wake every waiter it holds on any change. A spurious wake costs one
+  poll, and a missed one leaves a task waiting.
+- **Register, then read.** A task registers on every poll, and before it reads
+  the port, so a change between the read and the return still wakes it.
+
+`Event` and `Claim` are keyed per interface, not per member, because
+`EventSource::next` and `Handler::next_claim` drain one queue whatever the
+ordinal, and the subscription and the served set already filter by member.
+`Interest` is exhaustive, because a runtime must handle every key and an unknown
+key has no safe default; a new key is a 0.x minor. `Wakeable` has no supertrait,
+like `Clock`. The key type is named `Interest`, not `Wake`, because the `task`
+module imports `std::task::Wake`. A runtime with no wake source of its own has
+none to offer and does not implement the trait;
+[`ridl-loopback`](ridl-loopback.md) implements it on every handle.
 
 **Every port trait is implemented for `&mut P`, and the `&self`-only traits also
 for `&P`.** For each port trait `T`, the crate provides
@@ -584,7 +611,7 @@ compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 records the reasoning and the alternative it rejects, one runtime struct behind
 a mutex. Story E11.15 built the first runtime to this shape,
 [`ridl-loopback`](ridl-loopback.md): six handles, a `Send + Sync` reader handle,
-and an aggregate implementing every port trait by delegation.
+and an aggregate implementing all twelve traits by delegation.
 
 ## The `error` module and the port errors
 
@@ -605,17 +632,16 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 ```
 
 `Contract` is ridl §10.2's four categories; `Transport` is §10.3's detected
-infrastructure failures. `Transport::Busy` is the providing runtime's refusal of
-a call at admission — no slot, no budget, or a call faster than the member's
-`min` — and the caller may retry later; it crosses the frame as a `response`
-outcome, the second of the two `Transport` variants that do
-([the frame specification](../specification/frame-specification.md) §9.6,
-ADR-0021 decision 14). `SendError::Busy` is the local case: the caller's own
-runtime cannot accept the call. `Detached` — the runtime behind the port is gone
-— is local to the port, not a stratum. Why `Contract` and `CallError` stay
-exhaustive while `Transport` and the seven port error enums stay
-`#[non_exhaustive]` is ADR-0021 decision 9. Every error type here is `Copy` and
-owns nothing.
+infrastructure failures. `Transport::Busy` is the providing runtime refusing a
+call at admission — no slot, no budget, or a call faster than the member's `min`
+— and the caller may retry later; it crosses the frame as a `response` outcome,
+the second `Transport` variant to cross after `Corrupt`
+([frame specification](../specification/frame-specification.md) §9.6, ADR-0021
+decision 14). `SendError::Busy` is the local case, a refusal before anything is
+sent. `Detached` — the runtime behind the port is gone — is local to the port,
+not a stratum. Why `Contract` and `CallError` stay exhaustive while `Transport`
+and the seven port error enums stay `#[non_exhaustive]` is ADR-0021 decision 9.
+Every error type here is `Copy` and owns nothing.
 
 ## What 0.1 leaves out
 

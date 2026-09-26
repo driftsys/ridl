@@ -248,16 +248,27 @@ layer. Taking the port by value into the future: moves the port out of the
 client for the length of the call. Cancelling a sent command on drop: the port
 has no such operation, and ridl §6.1 says a delivered command is the provider's.
 
-### F-5 — one waiter per key per port handle; a displaced waiter is woken
+### F-5 — one waiter per kind of key per port handle; a displaced waiter is woken
+
+> **Amended on driftsys/ridl#546 (Sebastien, 2026-09-26).** "One waker per key"
+> became one waker per kind of key, woken by a change to any key of that kind,
+> and a registration of the same task's waker became a refresh. The text below
+> is the amended decision; ADR-0021 decision 13 carries the same wording.
 
 **Decision.** `Wakeable::wake_on(&self, what: Interest, waker: &Waker)` stores a
-clone of `waker` under `what` on the handle it is called on. A handle holds one
-waker per key; a second `wake_on` for a key the handle already holds replaces
-the stored waker and wakes the displaced one, so no task waits on a registration
-that can no longer fire. A stored waker is woken at most once and cleared when
-woken; a caller registers on every poll, and registers before it reads the port,
-so a wake caused by a change between the read and the return is delivered.
-"Exactly one waiter is woken per key" means this: the one registered on that
+clone of `waker` on the handle it is called on, under the kind of `what`. A
+handle holds one waker per kind of key — `Slot`, `Event`, `Claim` — and a change
+to any key of that kind the handle observes wakes it, so a task that registers
+`Event(a)` and then `Event(b)` is woken by an occurrence of either; a spurious
+wake is allowed, and the future re-checks. A `wake_on` whose waker `will_wake`
+the stored one is a refresh: it replaces the stored waker without waking it,
+because a task registers on every poll and waking it for its own registration
+would schedule the next poll from every poll. A waker of another task displaces
+the stored one and wakes it, so no task waits on a registration that can no
+longer fire. A stored waker is woken at most once and cleared when woken; a
+caller registers on every poll, and registers before it reads the port, so a
+wake caused by a change between the read and the return is delivered. "Exactly
+one waiter is woken per key" means this: the one of that kind registered on that
 handle. A second task waiting for the same interface's events holds a second
 handle — one thread drives a handle with a `&mut self` method (decision 12), and
 one task per handle follows from it — and each handle's waiter is woken. The
@@ -274,15 +285,17 @@ silently strands one. Register-then-read is the order that makes a wake between
 a read and a registration impossible to lose, and it needs no ordering rule from
 the runtime beyond "wake after the change is visible".
 
-**Rejected.** A list of waiters per key: needs storage the crate does not
-allocate, and a use — several tasks on one handle — decision 12 already rules
-out. Dropping the displaced waker without waking it: strands the task that
-registered it. Read-then-register: the wake between the two is lost unless the
-runtime keeps a wake token, which every runtime would then have to implement.
-FIFO slot waiters woken one at a time, as the driver's F3 text and the E11.18
-roadmap row propose: a queue of waiters needs storage the allocation-free table
-cannot hold, a waiter without a slot has no slot to keep it in, and waking every
-waiter costs one extra poll per contender.
+**Rejected.** One waker per key, as this note first said: a task that registers
+`Event(a)` and then `Event(b)` on one handle loses the first registration, and
+an occurrence of `a` then wakes nothing. A list of waiters per key: needs
+storage the crate does not allocate, and a use — several tasks on one handle —
+decision 12 already rules out. Dropping the displaced waker without waking it:
+strands the task that registered it. Read-then-register: the wake between the
+two is lost unless the runtime keeps a wake token, which every runtime would
+then have to implement. FIFO slot waiters woken one at a time, as the driver's
+F3 text and the E11.18 roadmap row propose: a queue of waiters needs storage the
+allocation-free table cannot hold, a waiter without a slot has no slot to keep
+it in, and waking every waiter costs one extra poll per contender.
 
 ### F-6 — the key set is `Interest::{Outcome, Slot, Event, Claim}`, keyed per interface
 
@@ -662,8 +675,10 @@ these contract tests, each generic over the runtime factory:
   an unsubscribed one.
 - `Interest::Claim`: a send wakes the waiter of the handler that serves the
   member.
-- A second registration under a key wakes the displaced waker and the new one is
-  the one woken by the change.
+- A second registration under a key of the same kind, by another task, wakes the
+  displaced waker, and the new one is the one woken by the change; a
+  registration of the same task's waker wakes nothing, and a change to any key
+  of the kind wakes the stored waker.
 - Register, then read: a change made after the registration and before the read
   is seen by the read and also wakes the waker.
 - Through the ports, over the slot count the factory states: a send with every

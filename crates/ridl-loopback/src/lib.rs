@@ -23,12 +23,12 @@
 //! A runtime presents one handle type per port role rather than one type
 //! implementing them all, and may also offer an aggregate handle covering the
 //! port set one interface's face needs (ADR-0021 decision 12). This crate
-//! offers both. Its six handles group the eleven roles the way that decision
+//! offers both. Its six handles group eleven roles the way that decision
 //! derives the threading split: a handle each for the five roles with a
 //! `&mut self` method, and one handle for the six whose methods all take
-//! `&self`, which are exactly the roles several threads may hold at once.
-//! The twelfth, `Wakeable`, is on the three handles a task waits on — the
-//! source, the caller and the handler — each for the keys of its own role.
+//! `&self`, which are exactly the roles several threads may hold at once. The
+//! twelfth port trait, `Wakeable`, is implemented on every handle, because
+//! each handle wakes its own waiters (see "Waking" below).
 //! [`Loopback`] is the aggregate: it implements all twelve port traits by
 //! delegating to the six role handles it holds, and it is what a generated
 //! `Client`, `Publisher` or `dispatch` is normally built over.
@@ -67,10 +67,29 @@
 //! [`FixedReader::read_fixed`](ridl_rt::port::FixedReader::read_fixed)'s, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either; and
-//! nothing is bounded, so `Busy` and `TooLarge` do not appear outside
-//! [`Loopback::fail_next_settle`]. Nor does this runtime originate
-//! `Transport::Busy`, a provider's refusal at admission: it reports one only
-//! when a provider settles a call with it.
+//! nothing is bounded, so the loopback originates neither `Busy` nor
+//! `TooLarge`: `TooLarge` appears only from [`Loopback::fail_next_settle`],
+//! and `Transport::Busy` reaches a caller only when a provider settles a call
+//! with it.
+//!
+//! # Waking
+//!
+//! Every handle implements [`Wakeable`], and a handle stores a waker only
+//! under a kind of key one of its roles observes: a caller handle under
+//! `Interest::Outcome`, kept with each call, a source handle one waker under
+//! `Interest::Event`, and a handler handle one waker under `Interest::Claim`.
+//! For `Event` and `Claim` the rule is one waker per kind, and a change to
+//! any key of the kind wakes the stored waker, whatever interface it was
+//! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,
+//! and no change but that call's settlement or `forget` wakes it (a
+//! displacement by another task does, as for every kind). A settlement wakes the
+//! call's waiter, a raise wakes each source it queues the occurrence for, and
+//! a send wakes each handler that serves the member. A registration whose key
+//! already holds — the outcome is known, an occurrence or a call is waiting —
+//! is woken at once, and so is one under a kind the handle does not observe,
+//! and `Interest::Slot`, because nothing bounds the call table and a slot is
+//! always free. A registration of the waker already stored refreshes it
+//! without waking it. No waker is woken while the store is locked.
 //!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
@@ -404,9 +423,9 @@ impl Handler for Loopback {
     }
 }
 
+/// Each key goes to the handle that observes it: `Outcome` and `Slot` to the
+/// caller, `Event` to the source, and `Claim` to the handler.
 impl Wakeable for Loopback {
-    /// Routes each key to the role handle that carries it: `Outcome` and
-    /// `Slot` to the caller, `Event` to the source, `Claim` to the handler.
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Outcome(_) | Interest::Slot => self.handles.caller.wake_on(what, waker),
