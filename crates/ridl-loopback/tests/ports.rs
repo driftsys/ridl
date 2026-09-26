@@ -50,9 +50,15 @@
 //! half of story E11.20 adds the contract cases to it. Some of the tests here
 //! stay after that, because each pins a choice the contract leaves to a
 //! runtime: `a_registration_whose_key_already_holds_is_woken_at_once`,
+//! `a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once`,
+//! `a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once`,
 //! `a_key_no_role_of_the_handle_observes_is_woken_at_once`,
 //! `a_dropped_handler_returns_its_claims_to_the_waiting_calls`,
-//! `a_waker_is_woken_after_the_lock_is_released` and
+//! `a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handler`,
+//! `a_returned_claim_keeps_its_place_by_send_order`,
+//! `a_dropped_handler_leaves_no_waiter_behind`,
+//! `a_providers_busy_settlement_reaches_the_caller` (this runtime originates
+//! no `Busy` of its own), `a_waker_is_woken_after_the_lock_is_released` and
 //! `every_wake_is_run_with_the_lock_released`.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -61,7 +67,7 @@ use std::task::{Wake, Waker};
 
 use ridl_loopback::{Handles, Loopback};
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
-use ridl_rt::error::Contract;
+use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, Clock, EventSink, EventSource, FixedReader, Handler, Interest, ReadError,
     SettleError, SignalReader, SignalWriter, Wakeable,
@@ -373,6 +379,47 @@ fn a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement() {
 }
 
 #[test]
+fn each_settlement_wakes_only_its_own_calls_waiter() {
+    // An `Outcome` waker is per call, not per handle: two calls' wakers are
+    // held at once, and a settlement wakes the one of the call it settles.
+    let Handles {
+        mut caller,
+        mut handler,
+        ..
+    } = runtime().split();
+    let mut buf = [0u8; 8];
+
+    let first_call = caller.command(IFACE, ORD, &[1]).expect("send");
+    let second_call = caller.command(IFACE, ORD, &[2]).expect("send");
+    let (first, first_waker) = counting();
+    let (second, second_waker) = counting();
+    caller.wake_on(Interest::Outcome(first_call), &first_waker);
+    caller.wake_on(Interest::Outcome(second_call), &second_waker);
+    assert_eq!(
+        (wakes(&first), wakes(&second)),
+        (0, 0),
+        "two calls, two wakers, no displacement"
+    );
+
+    let claim_one = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    let claim_two = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim_two.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        (wakes(&first), wakes(&second)),
+        (0, 1),
+        "only the second call is settled"
+    );
+    handler.settle(claim_one.id, Ok(&[])).expect("settle");
+    assert_eq!((wakes(&first), wakes(&second)), (1, 1));
+}
+
+#[test]
 fn a_waiter_registered_after_the_settlement_is_woken_at_once() {
     let Handles {
         mut caller,
@@ -463,6 +510,33 @@ fn a_registration_of_the_waker_already_stored_does_not_wake_it() {
         .expect("waiting");
     handler.settle(claim.id, Ok(&[])).expect("settle");
     assert_eq!(wakes(&count), 1, "and is still woken by the settlement");
+}
+
+#[test]
+fn the_same_task_registering_an_event_or_claim_key_again_wakes_nothing() {
+    // The refresh rule for the two per-kind slots, under the same key each
+    // time: the stored waker is replaced, not woken, and the change still
+    // wakes the task.
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut caller = rt.caller();
+    let mut source = rt.source();
+    let handler = rt.handler();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    let (event, event_waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &event_waker);
+    source.wake_on(Interest::Event(IFACE), &event_waker.clone());
+    assert_eq!(wakes(&event), 0, "`Event`: the same task is refreshed");
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&event), 1, "and the raise wakes it");
+
+    let (claim, claim_waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker.clone());
+    assert_eq!(wakes(&claim), 0, "`Claim`: the same task is refreshed");
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&claim), 1, "and the send wakes it");
 }
 
 #[test]
@@ -955,6 +1029,43 @@ fn a_key_no_role_of_the_handle_observes_is_woken_at_once() {
     handler.wake_on(Interest::Slot, &waker);
     handler.wake_on(Interest::Event(IFACE), &waker);
     assert_eq!(wakes(&count), 9);
+}
+
+#[test]
+fn a_dropped_handler_leaves_no_waiter_behind() {
+    // The one `Drop` removes the handler's state, its stored waker with it,
+    // and returns its claims; a later send reaches no waker of the dropped
+    // handler.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let handler = rt.handler();
+    let (count, waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &waker);
+    assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
+    drop(handler);
+    assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&count), 0, "nothing wakes a dropped handler's waker");
+}
+
+#[test]
+fn a_providers_busy_settlement_reaches_the_caller() {
+    // The loopback never refuses a call itself; a provider that settles with
+    // `Transport::Busy` has it carried back unchanged, to `ack` for a
+    // command and to `reply` for a query.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let busy = CallError::Transport(Transport::Busy);
+
+    let command = caller.command(IFACE, ORD, &[1]).expect("send");
+    let query = caller.query(IFACE, ORD, &[2]).expect("send");
+    while let Some(claim) = handler.next_claim(&mut buf).expect("next_claim") {
+        handler.settle(claim.id, Err(busy)).expect("settle");
+    }
+    assert_eq!(caller.ack(command), Some(Err(busy)));
+    assert_eq!(caller.reply(query, &mut buf), Ok(Some(Err(busy))));
 }
 
 #[test]
