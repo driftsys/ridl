@@ -784,6 +784,11 @@ fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handl
         0,
         "a handler serving another member is not woken"
     );
+    assert_eq!(
+        elsewhere.next_claim(&mut buf).expect("next_claim"),
+        None,
+        "and is presented nothing"
+    );
 
     let returned = other
         .next_claim(&mut buf)

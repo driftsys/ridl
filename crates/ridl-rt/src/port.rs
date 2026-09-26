@@ -226,10 +226,11 @@ pub struct Correlation(pub u64);
 ///
 /// `next_claim` presents each delivered call once. A retransmission of a call
 /// already presented is not presented again and receives the cached
-/// acknowledgment. The one call presented twice is a claim a dropped handler
-/// held and did not settle: the runtime returns it to the waiting calls, and
-/// another handler that serves the member takes it (ADR-0021 decision 5). Calls from two callers are never merged, even when they
-/// carry the same `seq`. A call lost in transport is never presented. The
+/// acknowledgment. The one call presented again is a claim a dropped handler
+/// held and did not settle: the runtime returns it to the waiting calls, so
+/// another handler that serves the member can take it, as many times as a
+/// holder is dropped (ADR-0021 decision 5). Calls from two callers are never
+/// merged, even when they carry the same `seq`. A call lost in transport is never presented. The
 /// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
 /// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
 /// once the response bound passes.

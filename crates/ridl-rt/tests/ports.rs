@@ -299,6 +299,7 @@ fn an_interest_is_copy_and_compares_by_its_key() {
     assert_eq!(Interest::Event(IFACE), Interest::Event(InterfaceNo(1)));
     assert_ne!(Interest::Event(IFACE), Interest::Claim(IFACE));
     assert_ne!(Interest::Event(IFACE), Interest::Event(InterfaceNo(2)));
+    assert_ne!(Interest::Claim(IFACE), Interest::Claim(InterfaceNo(2)));
     assert_ne!(
         Interest::Outcome(Correlation(1)),
         Interest::Outcome(Correlation(2))

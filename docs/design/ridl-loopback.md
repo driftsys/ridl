@@ -278,9 +278,10 @@ waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
 wait is the generated async client's deadline, which story E11.21 builds
-(ADR-0023 decision 6). This is the one way a call is presented twice. The same
-`Drop` removes the handler's state from the store, its stored `Claim` waker with
-it, so no later send reaches a waker of a handler that is gone.
+(ADR-0023 decision 6). This is the one way a call is presented again, and a call
+is presented once more for each holder dropped. The same `Drop` removes the
+handler's state from the store, its stored `Claim` waker with it, so no later
+send reaches a waker of a handler that is gone.
 
 **The limit, stated.** This runtime measures no bound: its clock moves only
 under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
@@ -432,9 +433,9 @@ the same reason.
 
 **The loopback deduplicates nothing.** It presents each call once because it
 delivers each call once, not because it recognises a retransmission — nothing
-retransmits in a process. The one call presented twice is a claim a dropped
-handler held and did not settle, which returns to the waiting calls ("Waking",
-above).
+retransmits in a process. The one call presented again is a claim a dropped
+handler held and did not settle, which returns to the waiting calls for another
+serving handler to take ("Waking", above).
 
 A sink's counters are per channel for a reason a single counter per handle would
 break: a consumer subscribed to some of a sink's events would see the numbers of

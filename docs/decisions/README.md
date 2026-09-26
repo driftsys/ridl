@@ -204,10 +204,13 @@ other entry below is Accepted.
   and its `Interest` keys, `Transport::Busy` crossing the frame, the `correlate`
   module, `ClientError` and `ProviderError`, the E11.19 helpers ratified in
   place, and the one 0.x minor that carries E11.16 to E11.19; it also folds
-  decision 8, corrects decision 11, and records open questions 5 and 6. Binds
-  every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
-  reference finalization pass (story E14.2). The two reference sentences it gave
-  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  decision 8, corrects decision 11, and records open questions 5 and 6. Story
+  E11.16's re-land (driftsys/ridl#551) amended decision 5 in place (a dropped
+  handler's unsettled claim is returned and presented again) and decision 13 in
+  place (one waker per kind of key; a same-task registration is a refresh).
+  Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the
+  ridl reference finalization pass (story E14.2). The two reference sentences it
+  gave that pass for #308 and #309 are in the reference since driftsys/ridl#544,
   which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives

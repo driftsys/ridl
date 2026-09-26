@@ -67,7 +67,11 @@ disposition, and the items the reviews of driftsys/ridl#519, #522 and #523 left
 for this amendment on driftsys/ridl#509. Decisions 13, 14, 15 and 16 land in
 stories E11.16 and E11.18; until they merge this record describes items
 `crates/ridl-rt/src/port.rs`, `error.rs` and a `correlate.rs` do not yet
-contain. Decision 17 ratifies what E11.19 built.
+contain. Decision 17 ratifies what E11.19 built. The same day, story E11.16's
+re-land (driftsys/ridl#551) amended decision 5 in place: a dropped handler's
+unsettled claim is returned to the waiting calls and presented again, and
+amended decision 13 in place: one waker per kind of key, and a same-task
+registration is a refresh.
 
 ## Context
 
@@ -156,17 +160,17 @@ trusted with no `unsafe` and no second verification pass.
    call receives the cached acknowledgment rather than being presented again,
    two callers are never merged even under the same `seq`, and `ClaimId` is the
    key unique per channel. **Amended (2026-09-26, story E11.16).** The one call
-   presented twice is a claim a dropped handler held and did not settle: the
-   runtime returns it to the waiting calls, in its place by send order, and
-   another handler that serves the member takes it, so a call does not wait on a
-   handler that is gone (decided on driftsys/ridl#546, landed by
-   driftsys/ridl#551). On a claim, `envelope.seq` is unique per caller, not per
-   channel. The ridl reference finalization pass (story E14.2) receives the
-   corrected sentence: on a call, the sequence number is scoped per (caller
-   instance, channel), and duplicate suppression keys on the caller's identity
-   plus the sequence number. Before a signal's first publication, its envelope
-   reads `seq` 0, stamped when the channel is created — the convention E14.2
-   confirms rather than changes.
+   presented again is a claim a dropped handler held and did not settle: the
+   runtime returns it to the waiting calls, in its place by send order, so
+   another handler that serves the member can take it and a call does not wait
+   on a handler that is gone; the call's deadline still bounds the caller's wait
+   (decided on driftsys/ridl#546, landed by driftsys/ridl#551). On a claim,
+   `envelope.seq` is unique per caller, not per channel. The ridl reference
+   finalization pass (story E14.2) receives the corrected sentence: on a call,
+   the sequence number is scoped per (caller instance, channel), and duplicate
+   suppression keys on the caller's identity plus the sequence number. Before a
+   signal's first publication, its envelope reads `seq` 0, stamped when the
+   channel is created — the convention E14.2 confirms rather than changes.
 
    **Note (2026-09-26, driftsys/ridl#544).** The ridl reference no longer waits
    on E14.2 for this sentence: ridl §3.1 and §6.1 now match
@@ -521,20 +525,22 @@ trusted with no `unsafe` and no second verification pass.
     after every change of its kind becomes visible, and is cleared when woken;
     the caller registers on every poll and registers before it reads the port.
     (The per-kind storage replaces "one waker per key", and the refresh rule
-    moves into the decision from the dated note that first stated it; decided on
-    driftsys/ridl#546, landed by driftsys/ridl#551.) A second task waiting for
-    the same events holds a second handle, and each handle's waiter is woken.
-    `Event` and `Claim` are keyed per interface, because `EventSource::next` and
-    `Handler::next_claim` drain one queue whatever the ordinal and the
-    subscription and the served set already filter by member. `Interest` is
-    exhaustive, because a runtime must handle every key and an unknown key has
-    no safe default; a new key is a 0.x minor under decision 10. A runtime with
-    one unkeyed "something changed" source may wake every waiter it holds on any
-    change; the contract is never that a waiter is woken only for its key. Every
-    runtime that serves a generated async client implements the trait; a runtime
-    with no wake source of its own has none to offer. The name is `Interest`,
-    not `Wake`, because `task` already imports `std::task::Wake`. This closes
-    open question 6. Notes F-5 and F-6.
+    moves into the decision from the note of 2026-09-26 (story E11.16,
+    driftsys/ridl#510, landed by driftsys/ridl#545) that first stated it, which
+    driftsys/ridl#551 removed; decided on driftsys/ridl#546, landed by
+    driftsys/ridl#551.) A second task waiting for the same events holds a second
+    handle, and each handle's waiter is woken. `Event` and `Claim` are keyed per
+    interface, because `EventSource::next` and `Handler::next_claim` drain one
+    queue whatever the ordinal and the subscription and the served set already
+    filter by member. `Interest` is exhaustive, because a runtime must handle
+    every key and an unknown key has no safe default; a new key is a 0.x minor
+    under decision 10. A runtime with one unkeyed "something changed" source may
+    wake every waiter it holds on any change; the contract is never that a
+    waiter is woken only for its key. Every runtime that serves a generated
+    async client implements the trait; a runtime with no wake source of its own
+    has none to offer. The name is `Interest`, not `Wake`, because `task`
+    already imports `std::task::Wake`. This closes open question 6. Notes F-5
+    and F-6.
 
 14. **Amendment (2026-09-26) — `Transport::Busy` crosses the frame (story
     E11.16).** `Transport` gains `Busy`: the providing runtime refused the call
@@ -738,9 +744,9 @@ trusted with no `unsafe` and no second verification pass.
 | [ADR-0023](ADR-0023-interaction-face-generation.md)                                              | its 2026-09-26 amendment, decision 6, is the face built over decisions 13 to 16; the two records were amended together                                                                                                                                                                                                           |
 | [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) open question 5                       | a 2026-09-26 note answers it for the generated face (note F-15)                                                                                                                                                                                                                                                                  |
 | [the frame specification](../specification/frame-specification.md) §5.3, §5.4, §5.6, §8 and §9.6 | `Busy` crosses as a `response` outcome (decision 14), written in story E11.16's pull request                                                                                                                                                                                                                                     |
-| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table, the ports, the errors and the helpers sections follow decisions 13 to 17 as each story lands; its "seven unconditional modules" sentence lands with E11.18                                                                                                                                                     |
+| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table, the ports, the errors and the helpers sections follow decisions 13 to 17 as each story lands; its "seven unconditional modules" sentence lands with E11.18; the `Handler` bullet states decision 5's 2026-09-26 amendment                                                                                      |
 | [the roadmap](../ROADMAP.md), stories E11.16 and E11.18                                          | `Wake` is `Interest`, and "FIFO slot waiters" is "every `Slot` waiter woken on a reclaim" (decisions 13 and 15)                                                                                                                                                                                                                  |
-| `crates/ridl-rt/src/port.rs`                                                                     | `SignalReader::read`'s zero-bytes rule (decision 17) and the `Box<P>` comment (decision 11) are doc-comment changes made with this amendment                                                                                                                                                                                     |
+| `crates/ridl-rt/src/port.rs`                                                                     | `SignalReader::read`'s zero-bytes rule (decision 17) and the `Box<P>` comment (decision 11) are doc-comment changes made with this amendment; the `Handler` docs state decision 5's 2026-09-26 amendment, the returned claim                                                                                                     |
 
 ## References
 

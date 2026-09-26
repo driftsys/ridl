@@ -415,8 +415,9 @@ impl Clock for CallerHandle {
 }
 
 /// Stores one `Outcome` waker per call, kept with the call and woken by its
-/// settlement, its `forget`, or a displacement by another task. `Slot` is woken at once, because the call table
-/// has no bound and a slot is always free.
+/// settlement, its `forget`, or a displacement by another task. `Slot` is
+/// woken at once, because the call table has no bound and a slot is always
+/// free.
 impl Wakeable for CallerHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
