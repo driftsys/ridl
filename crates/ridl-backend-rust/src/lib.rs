@@ -765,6 +765,19 @@ fn snake_of(name: Option<&v1::Spellings>) -> &str {
     name.map(|name| name.snake.as_str()).unwrap_or_default()
 }
 
+/// The pinned `pascal_case` of a declared name (ADR-0016, 2026-09-26
+/// amendment), which spells an enum variant. A model written by a toolchain
+/// older than `Spellings.pascal` carries it empty, and the field's contract
+/// is that an empty value is `camel_case(snake)` (design §4), so that is
+/// what this returns for one.
+pub(crate) fn pascal_of(name: Option<&v1::Spellings>) -> String {
+    match name {
+        Some(name) if !name.pascal.is_empty() => name.pascal.clone(),
+        Some(name) => ridl_ir::name::camel_case(&name.snake),
+        None => String::new(),
+    }
+}
+
 /// The pinned `camel_case` of a declared name (ADR-0016, 2026-09-20
 /// amendment), spelled once by the lowering.
 fn camel_of(name: Option<&v1::Spellings>) -> &str {
@@ -1523,14 +1536,15 @@ fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
 }
 
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
-/// Variant names keep their typl `SCREAMING_SNAKE` spelling.
+/// Variant names are the pinned `pascal_case` of the typl name (ADR-0016,
+/// 2026-09-26 amendment), so `CHECK_ENGINE` becomes `CheckEngine`.
 fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
-        let vname = ident(declared(value.name.as_ref()));
+        let vname = ident(&pascal_of(value.name.as_ref()));
         let disc = int_tokens(value.value);
         let vdoc = doc_attrs(&value.doc);
         quote! { #vdoc #vname = #disc }
@@ -1540,7 +1554,7 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
     // actually enters a program: a wire backend emits no constructor
     // (ADR-0013 decision 2), so this is the validating seam.
     let arms = ed.values.iter().map(|value| {
-        let vname = ident(declared(value.name.as_ref()));
+        let vname = ident(&pascal_of(value.name.as_ref()));
         let disc = int_tokens(value.value);
         quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
     });

@@ -78,7 +78,7 @@ fn main() {
     cabin::Publisher::new(&mut port)
         .warning(api::Warning {
             code: api::Level::new_unchecked(5),
-            health: api::Health::WARN,
+            health: api::Health::Warn,
         })
         .expect("raise warning");
     let event = cabin::Client::new(&mut port)
@@ -89,7 +89,7 @@ fn main() {
         cabin::Event::Warning(occurrence) => {
             let warning = occurrence.payload.expect("payload verifies");
             assert_eq!(warning.code.get(), 5);
-            assert!(matches!(warning.health, api::Health::WARN));
+            assert!(matches!(warning.health, api::Health::Warn));
             warning.code.get()
         }
     };

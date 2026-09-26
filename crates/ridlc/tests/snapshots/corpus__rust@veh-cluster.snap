@@ -426,19 +426,19 @@ pub const IDLE_RPM: RPM = RPM::new_unchecked(800.0);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum GearPosition {
-    PARK = 0,
-    DRIVE = 1,
-    REVERSE = 2,
-    NEUTRAL = 3,
+    Park = 0,
+    Drive = 1,
+    Reverse = 2,
+    Neutral = 3,
 }
 impl ::core::convert::TryFrom<i64> for GearPosition {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         match value {
-            0 => ::core::result::Result::Ok(Self::PARK),
-            1 => ::core::result::Result::Ok(Self::DRIVE),
-            2 => ::core::result::Result::Ok(Self::REVERSE),
-            3 => ::core::result::Result::Ok(Self::NEUTRAL),
+            0 => ::core::result::Result::Ok(Self::Park),
+            1 => ::core::result::Result::Ok(Self::Drive),
+            2 => ::core::result::Result::Ok(Self::Reverse),
+            3 => ::core::result::Result::Ok(Self::Neutral),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "GearPosition",
@@ -455,25 +455,25 @@ impl ::core::convert::From<GearPosition> for i64 {
 }
 impl Default for GearPosition {
     fn default() -> Self {
-        GearPosition::PARK
+        GearPosition::Park
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum Warning {
-    LOW_FUEL = 0,
-    CHECK_ENGINE = 1,
-    DOOR_OPEN = 2,
-    SEATBELT = 3,
+    LowFuel = 0,
+    CheckEngine = 1,
+    DoorOpen = 2,
+    Seatbelt = 3,
 }
 impl ::core::convert::TryFrom<i64> for Warning {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         match value {
-            0 => ::core::result::Result::Ok(Self::LOW_FUEL),
-            1 => ::core::result::Result::Ok(Self::CHECK_ENGINE),
-            2 => ::core::result::Result::Ok(Self::DOOR_OPEN),
-            3 => ::core::result::Result::Ok(Self::SEATBELT),
+            0 => ::core::result::Result::Ok(Self::LowFuel),
+            1 => ::core::result::Result::Ok(Self::CheckEngine),
+            2 => ::core::result::Result::Ok(Self::DoorOpen),
+            3 => ::core::result::Result::Ok(Self::Seatbelt),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "Warning",
@@ -490,7 +490,7 @@ impl ::core::convert::From<Warning> for i64 {
 }
 impl Default for Warning {
     fn default() -> Self {
-        Warning::LOW_FUEL
+        Warning::LowFuel
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1583,7 +1583,7 @@ pub(crate) fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPo
         <GearPosition as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(GearPosition::PARK)
+            .unwrap_or(GearPosition::Park)
     }
 }
 #[allow(deprecated)]
@@ -1724,7 +1724,7 @@ pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
         <Warning as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(Warning::LOW_FUEL)
+            .unwrap_or(Warning::LowFuel)
     }
 }
 #[allow(deprecated)]
@@ -2427,17 +2427,17 @@ pub struct FaultEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum DiagError {
-    FILTER_INVALID = 0,
-    STORAGE_BUSY = 1,
-    ACCESS_DENIED = 2,
+    FilterInvalid = 0,
+    StorageBusy = 1,
+    AccessDenied = 2,
 }
 impl ::core::convert::TryFrom<i64> for DiagError {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         match value {
-            0 => ::core::result::Result::Ok(Self::FILTER_INVALID),
-            1 => ::core::result::Result::Ok(Self::STORAGE_BUSY),
-            2 => ::core::result::Result::Ok(Self::ACCESS_DENIED),
+            0 => ::core::result::Result::Ok(Self::FilterInvalid),
+            1 => ::core::result::Result::Ok(Self::StorageBusy),
+            2 => ::core::result::Result::Ok(Self::AccessDenied),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "DiagError",
@@ -2454,7 +2454,7 @@ impl ::core::convert::From<DiagError> for i64 {
 }
 impl Default for DiagError {
     fn default() -> Self {
-        DiagError::FILTER_INVALID
+        DiagError::FilterInvalid
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -2652,15 +2652,15 @@ impl Default for ClimateReport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum HvacError {
-    COMPRESSOR_OFF = 0,
-    SENSOR_FAULT = 1,
+    CompressorOff = 0,
+    SensorFault = 1,
 }
 impl ::core::convert::TryFrom<i64> for HvacError {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         match value {
-            0 => ::core::result::Result::Ok(Self::COMPRESSOR_OFF),
-            1 => ::core::result::Result::Ok(Self::SENSOR_FAULT),
+            0 => ::core::result::Result::Ok(Self::CompressorOff),
+            1 => ::core::result::Result::Ok(Self::SensorFault),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: "HvacError",
@@ -2677,7 +2677,7 @@ impl ::core::convert::From<HvacError> for i64 {
 }
 impl Default for HvacError {
     fn default() -> Self {
-        HvacError::COMPRESSOR_OFF
+        HvacError::CompressorOff
     }
 }
 /// A declared constant, so a contract clause can reference one. The guaranteed
@@ -3137,7 +3137,7 @@ pub(crate) fn __ridl_fb_decode_diag_error(buf: &[u8], table: usize) -> DiagError
         <DiagError as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(DiagError::FILTER_INVALID)
+            .unwrap_or(DiagError::FilterInvalid)
     }
 }
 #[allow(deprecated)]
@@ -4033,7 +4033,7 @@ pub(crate) fn __ridl_fb_decode_hvac_error(buf: &[u8], table: usize) -> HvacError
         <HvacError as ::core::convert::TryFrom<
             i64,
         >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(HvacError::COMPRESSOR_OFF)
+            .unwrap_or(HvacError::CompressorOff)
     }
 }
 #[allow(deprecated)]

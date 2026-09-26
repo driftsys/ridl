@@ -342,22 +342,22 @@ impl ridl_rt::port::SignalReader for ReportsInitOverRealBytes {
 /// exists to exclude. Runs over the signal-only `horn` interface, so the
 /// wrapper needs to implement only `SignalReader`, the same minimal shape as
 /// `DistinctiveInitPort` above. `Health::default()` (the descriptor's init
-/// value) is `Health::OK`, so publishing `Health::WARN` gives a decoded value
+/// value) is `Health::Ok`, so publishing `Health::Warn` gives a decoded value
 /// the init value cannot be confused with. A guard that took the `Init` arm
-/// at any length would substitute `Health::OK` here instead of decoding, and
+/// at any length would substitute `Health::Ok` here instead of decoding, and
 /// the `sample.value` assertion below would fail (driftsys/ridl#519).
 #[test]
 fn round_trip_signal_reported_as_init_with_real_bytes_decodes_them() {
     let mut port = ReportsInitOverRealBytes { inner: loopback() };
     {
         let mut publisher = generated::horn::Publisher::new(&mut port.inner);
-        publisher.active(generated::Health::WARN).expect("set");
+        publisher.active(generated::Health::Warn).expect("set");
         publisher.commit();
     }
 
     let client = generated::horn::Client::new(&mut port);
     let sample = client.active().expect("read");
-    assert_eq!(sample.value, generated::Health::WARN);
+    assert_eq!(sample.value, generated::Health::Warn);
     assert_eq!(sample.provenance, Provenance::Init);
 }
 
@@ -373,7 +373,7 @@ fn round_trip_event_raise_and_receive() {
         publisher
             .warning(generated::Warning {
                 code: generated::Level::new_unchecked(5),
-                health: generated::Health::WARN,
+                health: generated::Health::Warn,
             })
             .expect("raise");
     }
@@ -387,7 +387,7 @@ fn round_trip_event_raise_and_receive() {
         generated::cabin::Event::Warning(occurrence) => {
             let warning = occurrence.payload.expect("payload verifies");
             assert_eq!(warning.code.get(), 5);
-            assert!(matches!(warning.health, generated::Health::WARN));
+            assert!(matches!(warning.health, generated::Health::Warn));
         }
     }
 }

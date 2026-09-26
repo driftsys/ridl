@@ -352,7 +352,7 @@ ports rather than one: `EventSink` to raise, `EventSource` to receive.
 Raising is the simpler half, and it is on the same `Publisher`:
 
 ```rust
-publisher.warning(Warning { code: Level(5), health: Health::WARN })?;
+publisher.warning(Warning { code: Level(5), health: Health::Warn })?;
 ```
 
 There is no `commit`. `EventSink::raise` publishes one occurrence immediately —

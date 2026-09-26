@@ -1378,6 +1378,114 @@ fn enum_with_discriminants() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// driftsys/ridl#506: a variant is spelled through `pascal_case`, at every
+/// site that names one — the declaration, the `TryFrom` arm, and the
+/// `Default` value.
+#[test]
+fn an_enum_variant_is_spelled_in_pascal_case() {
+    let source = rust_for(vec![public_decl(
+        "Warning",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: warning_bits(),
+            reserved: Vec::new(),
+        }),
+    )]);
+    assert!(source.contains("CheckEngine = 1"), "{source}");
+    assert!(source.contains("Ok(Self::CheckEngine)"), "{source}");
+    assert!(source.contains("Warning::LowFuel"), "{source}");
+    assert!(!source.contains("CHECK_ENGINE"), "{source}");
+}
+
+/// Design §4: a model written by a toolchain older than `Spellings.pascal`
+/// carries it empty, and the backend derives it from `snake`. The output
+/// must be the same as from a current model.
+#[test]
+fn an_empty_pascal_spelling_is_derived_from_snake() {
+    let package = package(
+        "veh.common",
+        vec![public_decl(
+            "Warning",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: warning_bits(),
+                reserved: Vec::new(),
+            }),
+        )],
+    );
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let mut older = model.clone();
+    for decl in &mut older.declarations {
+        if let Some(ridl_ir::codegen::v1::declaration::Kind::Enum(def)) = decl.kind.as_mut() {
+            for value in &mut def.values {
+                value
+                    .name
+                    .as_mut()
+                    .expect("a lowered value is named")
+                    .pascal
+                    .clear();
+            }
+        }
+    }
+    let current = super::generate_pipeline_over(&model, super::WireEncoding::FlatBuffers)
+        .expect("generation succeeds")
+        .rust_source;
+    let derived = super::generate_pipeline_over(&older, super::WireEncoding::FlatBuffers)
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(current.contains("CheckEngine"), "{current}");
+    assert_eq!(derived, current);
+}
+
+/// Values outside the typl convention (Review Focus 1). `SELF` becomes
+/// `Self`, which cannot be an identifier, and `ident()` escapes it to
+/// `Self_`; `checkEngine` and `HTTPServer` become `CheckEngine` and
+/// `HttpServer`. The generated enum must compile with
+/// `non_camel_case_types` denied.
+#[test]
+fn an_enum_value_outside_the_typl_convention_compiles() {
+    let rust_source = rust_for(vec![public_decl(
+        "Direction",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                enum_value("SELF", 0),
+                enum_value("checkEngine", 1),
+                enum_value("HTTPServer", 2),
+            ],
+            reserved: Vec::new(),
+        }),
+    )]);
+    assert!(rust_source.contains("Self_ = 0"), "{rust_source}");
+    assert!(rust_source.contains("CheckEngine = 1"), "{rust_source}");
+    assert!(rust_source.contains("HttpServer = 2"), "{rust_source}");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("outside_convention.rs");
+    let meta_path = dir.path().join("outside_convention.rmeta");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "non_camel_case_types",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "generated Rust must compile:\n{rust_source}"
+    );
+}
+
 #[test]
 fn enumset_standalone_form() {
     let decls = vec![public_decl(
@@ -1402,7 +1510,7 @@ fn enum_converts_from_a_raw_discriminant() {
     // fixture numbered contiguously from zero, arms built from the position
     // emit identical source.
     assert!(
-        source.contains("7 => ::core::result::Result::Ok(Self::REVERSE)"),
+        source.contains("7 => ::core::result::Result::Ok(Self::Reverse)"),
         "the arm maps the declared discriminant, got:\n{source}"
     );
 }
@@ -2177,7 +2285,7 @@ fn enum_default_prefers_the_zero_discriminant() {
         }),
     )]);
     assert!(
-        source.contains("Mode::SLOW"),
+        source.contains("Mode::Slow"),
         "with no zero value the default is the lowest discriminant, got:\n{source}"
     );
 }
@@ -2906,7 +3014,7 @@ fn main() {
     // The declared discriminants are 0, 1, 7, 9 — not contiguous, so a
     // conversion keyed on the variant's position would map 7 to nothing.
     match GearPosition::try_from(7) {
-        Ok(GearPosition::REVERSE) => {}
+        Ok(GearPosition::Reverse) => {}
         _ => panic!("7 is REVERSE"),
     }
     // 2 is a gap in the declared discriminants, so it is out of contract.
@@ -2914,7 +3022,7 @@ fn main() {
         Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Variant),
         Ok(_) => panic!("2 names no declared variant"),
     }
-    assert_eq!(i64::from(GearPosition::NEUTRAL), 9);
+    assert_eq!(i64::from(GearPosition::Neutral), 9);
 
     // Bits 0 to 3 are declared, so the mask is 0b1111.
     assert_eq!(Features::DECLARED_MASK, 15);
