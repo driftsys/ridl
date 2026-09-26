@@ -45,46 +45,95 @@
 //!   neither `Send` nor `Sync`, and both tests reach the role handles through
 //!   `Loopback::split`.
 //!
-//! The tests under "Waking" pin this runtime's `Wakeable` (story E11.16,
-//! driftsys/ridl#510). The suite does not cover `Wakeable` yet; the second
-//! half of story E11.20 adds the contract cases to it. Some of the tests here
-//! stay after that, because each pins a choice the contract leaves to a
-//! runtime: `a_registration_whose_key_already_holds_is_woken_at_once`,
-//! `a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once`,
-//! `a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once`,
-//! `a_key_no_role_of_the_handle_observes_is_woken_at_once`,
-//! `a_dropped_handler_returns_its_claims_to_the_waiting_calls`,
-//! `a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handler`,
-//! `a_returned_claim_keeps_its_place_by_send_order`,
-//! `a_dropped_handler_leaves_no_waiter_behind`,
-//! `a_returned_claim_keeps_its_send_order_across_a_reused_slot`,
-//! `a_providers_busy_settlement_reaches_the_caller` (this runtime originates
-//! no `Transport::Busy` of its own),
-//! `a_waker_is_woken_after_the_lock_is_released` and
-//! `every_wake_is_run_with_the_lock_released`.
+//! The tests under "Waking" and "The bounded call table" pin this runtime's
+//! `Wakeable` (story E11.16, driftsys/ridl#510) and its move onto
+//! `ridl_rt::correlate` (story E11.18, driftsys/ridl#512). The suite covers
+//! the contract of both: its `wakeable` module, and the slot count its
+//! factory states (story E11.20, driftsys/ridl#514). The tests that stay
+//! here pin what the contract leaves to a runtime, and each falls under one
+//! of these reasons:
 //!
-//! The tests under "The bounded call table" pin this runtime's move onto
-//! `ridl_rt::correlate` (story E11.18, driftsys/ridl#512). The suite gains a
-//! slot and reclaim case in the second half of story E11.20, over the slot
-//! count its factory states. Of these, `the_seventeenth_in_flight_call_is_busy`
-//! names this runtime's own count, `a_refused_send_draws_no_sequence_number`
-//! and `a_slot_registration_while_a_slot_is_free_is_woken_at_once` pin choices
-//! the contract leaves to a runtime, and
-//! `a_dropped_caller_leaves_no_slot_waiter_behind` pins this runtime's
-//! `Drop`. `forgotten_calls_to_an_unserved_member_leave_room_for_another_send`,
-//! `a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later`,
-//! `a_dropped_callers_unclaimed_calls_are_withdrawn`,
-//! `a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order`,
-//! `a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot`,
-//! `a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped`,
-//! `a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter`,
-//! `a_forget_withdrawal_wakes_no_claim_waiter_of_a_handler_serving_another_member`,
-//! `a_dropped_handler_withdraws_only_its_forgotten_claim_and_returns_the_others`
-//! and `a_dropped_callers_claimed_call_is_withdrawn_when_its_handler_is_dropped`
-//! pin this runtime's withdrawal of a forgotten call no handler holds. The
-//! withdrawal is this runtime's behaviour and not a port contract, because a
-//! transport that has already sent a request cannot recall it, so the suite
-//! accepts either result.
+//! - **A registration whose key already holds is woken at once.** The
+//!   contract has the task read the port after it registers, so a runtime
+//!   may instead store the waker and let the read find the change:
+//!   `a_waiter_registered_after_the_settlement_is_woken_at_once`,
+//!   `a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once`,
+//!   `a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once`,
+//!   `a_waiter_woken_at_once_is_not_stored`,
+//!   `a_registration_on_a_forgotten_call_is_woken_at_once`,
+//!   `a_registration_whose_key_already_holds_is_woken_at_once`,
+//!   `a_key_no_role_of_the_handle_observes_is_woken_at_once` and
+//!   `a_slot_registration_while_a_slot_is_free_is_woken_at_once`.
+//! - **A change wakes no waiter but its key's.** The contract allows a
+//!   spurious wake, so the suite never asserts that a change leaves a waker
+//!   unwoken, and this runtime's narrower wakes are pinned here:
+//!   `each_settlement_wakes_only_its_own_calls_waiter`,
+//!   `a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one`,
+//!   `a_send_wakes_the_handler_that_serves_the_member` (a handler serving
+//!   another member of the interface is not woken),
+//!   `a_claim_registration_is_not_woken_by_a_call_the_handler_does_not_serve`
+//!   and `a_serve_that_admits_nothing_does_not_wake_the_handler`.
+//! - **Every serving handler is woken.**
+//!   `every_subscribed_source_and_every_serving_handler_is_woken`: the
+//!   contract says each handle waiting for the same events is woken, and the
+//!   suite asserts that for sources; a call is presented to one handler, and
+//!   which serving handlers a runtime wakes for it is the runtime's.
+//! - **A serve after the registration, or a call that waits for a serve.**
+//!   The suite serves before it registers or sends; whether a call to a
+//!   member no handler serves waits for a later serve is this runtime's
+//!   queueing: `a_serve_that_admits_a_waiting_call_wakes_the_handler` and
+//!   `a_serve_with_no_call_waiting_keeps_the_handlers_claim_waker`.
+//! - **A forget wakes its own call's waiter.** The task that forgets a call
+//!   is the task that waited on it, and the port states no rule for that
+//!   waker; this runtime wakes it (decision 2 of the pass-1 dispositions on
+//!   driftsys/ridl#553): `a_forgotten_call_wakes_its_waiter` and
+//!   `forgetting_a_claimed_call_wakes_its_outcome_waiter`.
+//! - **The drop of a handle.** The suite drops no handle. What a dropped
+//!   handler's claims and a dropped caller's calls become, and that a drop
+//!   leaves no waiter behind and no lock held, is this runtime's `Drop`:
+//!   `a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handler`,
+//!   `a_dropped_handler_returns_its_claims_to_the_waiting_calls`,
+//!   `a_dropped_handler_leaves_no_waiter_behind`,
+//!   `a_dropped_source_leaves_no_waiter_behind`,
+//!   `a_returned_claim_keeps_its_place_by_send_order`,
+//!   `a_returned_claim_keeps_its_send_order_across_a_reused_slot`,
+//!   `a_dropped_caller_leaves_no_slot_waiter_behind`,
+//!   `a_dropped_caller_forgets_its_calls_and_their_slots_come_back`,
+//!   `a_dropped_caller_forgets_only_its_own_calls`,
+//!   `a_dropped_callers_call_in_flight_wakes_its_outcome_waiter`,
+//!   `a_dropped_callers_own_slot_waiter_is_not_woken_by_its_drop`,
+//!   `a_caller_whose_stored_waker_owns_another_handle_drops_without_deadlock`,
+//!   `a_source_whose_stored_waker_owns_another_handle_drops_without_deadlock`
+//!   and
+//!   `a_handler_whose_stored_waker_owns_another_handle_drops_without_deadlock`.
+//! - **The withdrawal of a forgotten call no handler holds.** The suite
+//!   accepts either result for such a call, withdrawn or held until settled,
+//!   because a transport that has already sent a request cannot recall it;
+//!   this runtime withdraws it:
+//!   `forgotten_calls_to_an_unserved_member_leave_room_for_another_send`,
+//!   `a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later`,
+//!   `a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order`,
+//!   `a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot`,
+//!   `a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped`,
+//!   `a_forget_withdrawal_wakes_no_claim_waiter_of_a_handler_serving_another_member`,
+//!   `a_dropped_handler_withdraws_only_its_forgotten_claim_and_returns_the_others`,
+//!   `a_dropped_callers_claimed_call_is_withdrawn_when_its_handler_is_dropped`,
+//!   `a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter` and
+//!   `a_dropped_callers_unclaimed_calls_are_withdrawn`.
+//! - **This runtime's own numbers and choices.**
+//!   `the_seventeenth_in_flight_call_is_busy` names this runtime's sixteen
+//!   slots; `a_refused_send_draws_no_sequence_number` pins a choice the
+//!   contract leaves open; `a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement`
+//!   pins when the slot comes back, which the suite leaves to a runtime as
+//!   long as it is back once the call is settled;
+//!   `a_providers_busy_settlement_reaches_the_caller` stays because this
+//!   runtime originates no `Transport::Busy` of its own;
+//!   `a_caller_handle_reads_the_clock` pins `Clock` on `CallerHandle`, which
+//!   the factory does not ask of its second caller;
+//!   `the_aggregate_routes_each_key_to_the_handle_that_observes_it` pins
+//!   `Loopback`'s own routing; and `every_wake_is_run_with_the_lock_released`
+//!   takes the wake paths the suite does not: a registration woken at once,
+//!   a serve, a handler's drop and a withdrawal.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -370,40 +419,6 @@ fn wakes(count: &Count) -> usize {
 }
 
 #[test]
-fn a_waiter_on_an_outcome_is_woken_exactly_once_by_its_settlement() {
-    let Handles {
-        mut caller,
-        mut handler,
-        ..
-    } = runtime().split();
-    let (count, waker) = counting();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    caller.wake_on(Interest::Outcome(c), &waker);
-    assert_eq!(wakes(&count), 0, "nothing is known about the call yet");
-
-    let mut buf = [0u8; 8];
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    assert_eq!(wakes(&count), 0, "a presented call has no outcome yet");
-
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    assert_eq!(wakes(&count), 1, "the settlement wakes the waiter");
-    assert_eq!(caller.ack(c), Some(Ok(())));
-
-    // The waker was cleared when it was woken, so a later settlement of
-    // another call does not reach it.
-    caller.command(IFACE, ORD, &[2]).expect("send");
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    assert_eq!(wakes(&count), 1, "a waiter is woken at most once");
-}
-
-#[test]
 fn each_settlement_wakes_only_its_own_calls_waiter() {
     // An `Outcome` waker is per call, not per handle: two calls' wakers are
     // held at once, and a settlement wakes the one of the call it settles.
@@ -466,105 +481,6 @@ fn a_waiter_registered_after_the_settlement_is_woken_at_once() {
 }
 
 #[test]
-fn a_second_registration_under_a_key_wakes_the_displaced_waker() {
-    let rt = runtime();
-    let mut sink = rt.sink();
-    let mut caller = rt.caller();
-    let mut handler = rt.handler();
-    let mut source = rt.source();
-    source.subscribe(IFACE, &[ORD]).expect("subscribe");
-    let mut buf = [0u8; 8];
-
-    // An outcome.
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    let (first, first_waker) = counting();
-    let (second, second_waker) = counting();
-    caller.wake_on(Interest::Outcome(c), &first_waker);
-    caller.wake_on(Interest::Outcome(c), &second_waker);
-    assert_eq!(wakes(&first), 1, "the displaced waker is woken");
-    assert_eq!(wakes(&second), 0);
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    assert_eq!(wakes(&first), 1, "the displaced waker is not stored");
-    assert_eq!(wakes(&second), 1, "the settlement wakes the stored waker");
-
-    // An event.
-    let (first, first_waker) = counting();
-    let (second, second_waker) = counting();
-    source.wake_on(Interest::Event(IFACE), &first_waker);
-    source.wake_on(Interest::Event(IFACE), &second_waker);
-    assert_eq!(wakes(&first), 1, "the displaced waker is woken");
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
-    assert_eq!(wakes(&first), 1, "the displaced waker is not stored");
-    assert_eq!(wakes(&second), 1, "the raise wakes the stored waker");
-
-    // A claim.
-    let (first, first_waker) = counting();
-    let (second, second_waker) = counting();
-    handler.wake_on(Interest::Claim(IFACE), &first_waker);
-    handler.wake_on(Interest::Claim(IFACE), &second_waker);
-    assert_eq!(wakes(&first), 1, "the displaced waker is woken");
-    caller.command(IFACE, ORD, &[2]).expect("send");
-    assert_eq!(wakes(&first), 1, "the displaced waker is not stored");
-    assert_eq!(wakes(&second), 1, "the send wakes the stored waker");
-}
-
-#[test]
-fn a_registration_of_the_waker_already_stored_does_not_wake_it() {
-    // A task registers on every poll. If registering its own waker again
-    // woke it, every poll would schedule the next one and the task would
-    // never become idle.
-    let Handles {
-        mut caller,
-        mut handler,
-        ..
-    } = runtime().split();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    let (count, waker) = counting();
-    caller.wake_on(Interest::Outcome(c), &waker);
-    caller.wake_on(Interest::Outcome(c), &waker.clone());
-    assert_eq!(wakes(&count), 0, "the same task registered twice");
-
-    let mut buf = [0u8; 8];
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    assert_eq!(wakes(&count), 1, "and is still woken by the settlement");
-}
-
-#[test]
-fn the_same_task_registering_an_event_or_claim_key_again_wakes_nothing() {
-    // The refresh rule for the two per-kind slots, under the same key each
-    // time: the stored waker is replaced, not woken, and the change still
-    // wakes the task.
-    let rt = runtime();
-    let mut sink = rt.sink();
-    let mut caller = rt.caller();
-    let mut source = rt.source();
-    let handler = rt.handler();
-    source.subscribe(IFACE, &[ORD]).expect("subscribe");
-
-    let (event, event_waker) = counting();
-    source.wake_on(Interest::Event(IFACE), &event_waker);
-    source.wake_on(Interest::Event(IFACE), &event_waker.clone());
-    assert_eq!(wakes(&event), 0, "`Event`: the same task is refreshed");
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
-    assert_eq!(wakes(&event), 1, "and the raise wakes it");
-
-    let (claim, claim_waker) = counting();
-    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
-    handler.wake_on(Interest::Claim(IFACE), &claim_waker.clone());
-    assert_eq!(wakes(&claim), 0, "`Claim`: the same task is refreshed");
-    caller.command(IFACE, ORD, &[1]).expect("send");
-    assert_eq!(wakes(&claim), 1, "and the send wakes it");
-}
-
-#[test]
 fn a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one() {
     let rt = runtime();
     let mut sink = rt.sink();
@@ -597,119 +513,6 @@ fn a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one() {
 }
 
 #[test]
-fn a_source_registered_under_two_interfaces_is_woken_by_either() {
-    // One waker per kind of key: the second registration of the same task
-    // refreshes the `Event` waker rather than narrowing it to either
-    // interface (ADR-0021 decision 13). Each interface is tried in turn.
-    let rt = runtime();
-    let mut sink = rt.sink();
-    let mut source = rt.source();
-    source.subscribe(IFACE, &[ORD]).expect("subscribe");
-    source.subscribe(InterfaceNo(2), &[ORD]).expect("subscribe");
-    let mut out = [0u8; 8];
-    let (count, waker) = counting();
-
-    for (turn, iface) in [IFACE, InterfaceNo(2)].into_iter().enumerate() {
-        source.wake_on(Interest::Event(IFACE), &waker);
-        source.wake_on(Interest::Event(InterfaceNo(2)), &waker);
-        assert_eq!(wakes(&count), turn, "the same task registered twice");
-        sink.raise(iface, ORD, &[1]).expect("raise");
-        assert_eq!(
-            wakes(&count),
-            turn + 1,
-            "an occurrence of interface {} wakes it",
-            iface.0
-        );
-        while source.next(&mut out).expect("next").is_some() {}
-    }
-}
-
-#[test]
-fn a_handler_registered_under_two_interfaces_is_woken_by_either() {
-    let rt = runtime();
-    let mut caller = rt.caller();
-    let mut handler = rt.handler();
-    handler.serve(IFACE, &[ORD]).expect("serve");
-    handler.serve(InterfaceNo(2), &[ORD]).expect("serve");
-    let mut buf = [0u8; 8];
-    let (count, waker) = counting();
-
-    for (turn, iface) in [IFACE, InterfaceNo(2)].into_iter().enumerate() {
-        handler.wake_on(Interest::Claim(IFACE), &waker);
-        handler.wake_on(Interest::Claim(InterfaceNo(2)), &waker);
-        assert_eq!(wakes(&count), turn, "the same task registered twice");
-        caller.command(iface, ORD, &[1]).expect("send");
-        assert_eq!(
-            wakes(&count),
-            turn + 1,
-            "a call on interface {} wakes it",
-            iface.0
-        );
-        let claim = handler
-            .next_claim(&mut buf)
-            .expect("next_claim")
-            .expect("waiting");
-        handler.settle(claim.id, Ok(&[])).expect("settle");
-    }
-}
-
-#[test]
-fn a_registration_under_one_interface_is_woken_by_a_change_on_another() {
-    // Per-kind storage, with one registration only: the interface of the key
-    // is not kept, so a store that keeps one waker per key, and wakes it only
-    // for that key, leaves both tasks asleep here.
-    let rt = runtime();
-    let mut sink = rt.sink();
-    let mut caller = rt.caller();
-    let mut source = rt.source();
-    let mut handler = rt.handler();
-    source.subscribe(InterfaceNo(2), &[ORD]).expect("subscribe");
-    handler.serve(InterfaceNo(2), &[ORD]).expect("serve");
-
-    let (event, event_waker) = counting();
-    source.wake_on(Interest::Event(IFACE), &event_waker);
-    sink.raise(InterfaceNo(2), ORD, &[1]).expect("raise");
-    assert_eq!(wakes(&event), 1, "an occurrence of interface 2 wakes it");
-
-    let (claim, claim_waker) = counting();
-    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
-    caller.command(InterfaceNo(2), ORD, &[1]).expect("send");
-    assert_eq!(wakes(&claim), 1, "a call on interface 2 wakes it");
-}
-
-#[test]
-fn two_tasks_under_two_interfaces_of_one_kind_share_the_one_slot() {
-    // Per-kind storage, with two tasks: task A registers under interface 1
-    // and task B under interface 2 of the same kind on one handle. B
-    // displaces A, so A is woken at once, and a change on interface 1 then
-    // wakes B, the one stored waker. A per-key store would keep both, wake
-    // neither at registration, and wake A rather than B on the change.
-    let rt = runtime();
-    let mut sink = rt.sink();
-    let mut caller = rt.caller();
-    let mut source = rt.source();
-    let mut handler = rt.handler();
-    source.subscribe(IFACE, &[ORD]).expect("subscribe");
-    handler.serve(IFACE, &[ORD]).expect("serve");
-
-    let (a, a_waker) = counting();
-    let (b, b_waker) = counting();
-    source.wake_on(Interest::Event(IFACE), &a_waker);
-    source.wake_on(Interest::Event(InterfaceNo(2)), &b_waker);
-    assert_eq!((wakes(&a), wakes(&b)), (1, 0), "B displaces A");
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
-    assert_eq!((wakes(&a), wakes(&b)), (1, 1), "interface 1 wakes B");
-
-    let (a, a_waker) = counting();
-    let (b, b_waker) = counting();
-    handler.wake_on(Interest::Claim(IFACE), &a_waker);
-    handler.wake_on(Interest::Claim(InterfaceNo(2)), &b_waker);
-    assert_eq!((wakes(&a), wakes(&b)), (1, 0), "B displaces A");
-    caller.command(IFACE, ORD, &[1]).expect("send");
-    assert_eq!((wakes(&a), wakes(&b)), (1, 1), "interface 1 wakes B");
-}
-
-#[test]
 fn a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once() {
     let rt = runtime();
     let mut sink = rt.sink();
@@ -737,29 +540,6 @@ fn a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once() {
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
     assert_eq!(wakes(&count), 1, "a call on another interface is waiting");
-}
-
-#[test]
-fn an_event_or_claim_waiter_is_cleared_when_woken() {
-    let rt = runtime();
-    let mut sink = rt.sink();
-    let mut caller = rt.caller();
-    let mut source = rt.source();
-    let mut handler = rt.handler();
-    source.subscribe(IFACE, &[ORD]).expect("subscribe");
-    handler.serve(IFACE, &[ORD]).expect("serve");
-
-    let (event, event_waker) = counting();
-    source.wake_on(Interest::Event(IFACE), &event_waker);
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
-    sink.raise(IFACE, ORD, &[2]).expect("raise");
-    assert_eq!(wakes(&event), 1, "the first raise cleared the waker");
-
-    let (claim, claim_waker) = counting();
-    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
-    caller.command(IFACE, ORD, &[1]).expect("send");
-    caller.command(IFACE, ORD, &[2]).expect("send");
-    assert_eq!(wakes(&claim), 1, "the first send cleared the waker");
 }
 
 #[test]
@@ -836,32 +616,6 @@ fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handl
 }
 
 #[test]
-fn a_waiter_is_cleared_when_woken() {
-    let Handles {
-        mut caller,
-        mut handler,
-        ..
-    } = runtime().split();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    let (first, first_waker) = counting();
-    caller.wake_on(Interest::Outcome(c), &first_waker);
-    let mut buf = [0u8; 8];
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    assert_eq!(wakes(&first), 1);
-
-    // Another task registers on the settled call. Had the settlement left the
-    // first waker stored, this registration would displace and wake it again.
-    let (second, second_waker) = counting();
-    caller.wake_on(Interest::Outcome(c), &second_waker);
-    assert_eq!(wakes(&second), 1, "the outcome is known");
-    assert_eq!(wakes(&first), 1, "the first waker was cleared when woken");
-}
-
-#[test]
 fn a_waiter_woken_at_once_is_not_stored() {
     let rt = runtime();
     let mut sink = rt.sink();
@@ -923,18 +677,6 @@ fn every_subscribed_source_and_every_serving_handler_is_woken() {
     caller.command(IFACE, ORD, &[1]).expect("send");
     assert_eq!(wakes(&wakers[2].0), 1, "the first handler");
     assert_eq!(wakes(&wakers[3].0), 1, "the second handler");
-}
-
-#[test]
-fn a_query_wakes_the_handler_that_serves_it() {
-    let rt = runtime();
-    let mut caller = rt.caller();
-    let mut handler = rt.handler();
-    handler.serve(IFACE, &[ORD]).expect("serve");
-    let (count, waker) = counting();
-    handler.wake_on(Interest::Claim(IFACE), &waker);
-    caller.query(IFACE, ORD, &[1]).expect("send");
-    assert_eq!(wakes(&count), 1, "the query wakes the serving handler");
 }
 
 #[test]
@@ -1363,88 +1105,6 @@ fn a_refused_send_draws_no_sequence_number() {
 }
 
 #[test]
-fn a_reclaimed_slots_old_correlation_answers_none() {
-    let rt = runtime();
-    let mut caller = rt.caller();
-    let mut handler = rt.handler();
-    let mut buf = [0u8; 8];
-
-    let old = caller.query(IFACE, ORD, &[1]).expect("send");
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[7])).expect("settle");
-    caller.forget(old);
-
-    let new = caller.query(IFACE, ORD, &[2]).expect("send");
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[8, 8])).expect("settle");
-    assert_ne!(new, old, "the slot is reused under a new correlation");
-
-    assert_eq!(caller.reply(old, &mut buf), Ok(None), "the old one is gone");
-    assert_eq!(caller.ack(old), None);
-    let (count, waker) = counting();
-    caller.wake_on(Interest::Outcome(old), &waker);
-    assert_eq!(wakes(&count), 1, "no outcome is to come under it");
-
-    caller.forget(old);
-    assert_eq!(
-        caller.reply(new, &mut buf),
-        Ok(Some(Ok(2))),
-        "forgetting the old correlation leaves the new call alone"
-    );
-    assert_eq!(&buf[..2], &[8, 8]);
-}
-
-#[test]
-fn a_slot_registration_is_stored_while_every_slot_is_taken_and_woken_by_a_forget() {
-    let rt = runtime();
-    let mut caller = rt.caller();
-    let other = rt.caller();
-    let mut handler = rt.handler();
-    let mut buf = [0u8; 8];
-    let calls = fill(&mut caller);
-
-    let (mine, my_waker) = counting();
-    let (theirs, their_waker) = counting();
-    caller.wake_on(Interest::Slot, &my_waker);
-    other.wake_on(Interest::Slot, &their_waker);
-    assert_eq!((wakes(&mine), wakes(&theirs)), (0, 0), "no slot is free");
-
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    assert_eq!(
-        (wakes(&mine), wakes(&theirs)),
-        (0, 0),
-        "a settlement frees no slot"
-    );
-
-    caller.forget(calls[0]);
-    assert_eq!(
-        (wakes(&mine), wakes(&theirs)),
-        (1, 1),
-        "a reclaim wakes every caller's slot waiter, in no order"
-    );
-    handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    caller.forget(calls[1]);
-    assert_eq!(
-        (wakes(&mine), wakes(&theirs)),
-        (1, 1),
-        "a woken waiter is cleared; forgetting a claimed call reclaims nothing"
-    );
-}
-
-#[test]
 fn a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement() {
     let rt = runtime();
     let mut caller = rt.caller();
@@ -1827,36 +1487,6 @@ fn a_slot_registration_while_a_slot_is_free_is_woken_at_once() {
 }
 
 #[test]
-fn a_slot_registration_by_the_same_task_is_a_refresh_and_by_another_task_displaces() {
-    let rt = runtime();
-    let mut caller = rt.caller();
-    let mut handler = rt.handler();
-    let mut buf = [0u8; 8];
-    let calls = fill(&mut caller);
-
-    let (first, first_waker) = counting();
-    caller.wake_on(Interest::Slot, &first_waker);
-    caller.wake_on(Interest::Slot, &first_waker.clone());
-    assert_eq!(wakes(&first), 0, "a refresh wakes nothing");
-
-    let (second, second_waker) = counting();
-    caller.wake_on(Interest::Slot, &second_waker);
-    assert_eq!(wakes(&first), 1, "another task's waker displaces the first");
-
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-    caller.forget(calls[0]);
-    assert_eq!(
-        (wakes(&first), wakes(&second)),
-        (1, 1),
-        "the reclaim wakes the one stored"
-    );
-}
-
-#[test]
 fn a_dropped_caller_leaves_no_slot_waiter_behind() {
     let rt = runtime();
     let mut caller = rt.caller();
@@ -2194,37 +1824,6 @@ impl Wake for ReadsTheStore {
             let _ = done.send(finished);
         }
     }
-}
-
-#[test]
-fn a_waker_is_woken_after_the_lock_is_released() {
-    let rt = runtime();
-    let reader = Arc::new(rt.reader());
-    let Handles {
-        mut caller,
-        mut handler,
-        ..
-    } = rt.split();
-    let (tx, rx) = mpsc::channel();
-    let waker = Waker::from(Arc::new(ReadsTheStore {
-        reader,
-        done: std::sync::Mutex::new(Some(tx)),
-    }));
-
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
-    caller.wake_on(Interest::Outcome(c), &waker);
-    let mut buf = [0u8; 8];
-    let claim = handler
-        .next_claim(&mut buf)
-        .expect("next_claim")
-        .expect("waiting");
-    handler.settle(claim.id, Ok(&[])).expect("settle");
-
-    assert_eq!(
-        rx.recv_timeout(std::time::Duration::from_secs(5)),
-        Ok(true),
-        "the waker ran with the store's lock released"
-    );
 }
 
 /// A waker whose wake reports whether the store's lock was released, and the
