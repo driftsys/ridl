@@ -128,34 +128,37 @@ under `pascal_case`. The converse fails (`CHECK_ENGINE` and `CHECK__ENGINE`), so
 within one enum `pascal_case` is the key that covers both. The check does not
 cover proto's whole namespace, which is wider than one enum: proto3 scopes an
 enum's values as siblings of the enum, so `enum A_B { C }` beside
-`enum A { B_C }` both give `A_B_C`, and the backend synthesizes a
-`<PREFIX>_UNSPECIFIED` value for an enum with no zero. Those collisions stay
-with the proto backend's refusal under
-[ADR-0017](ADR-0017-proto3-projection-rules.md) decision 4. The message names
-`pascal_case`. A `reserved` value emits no variant and is not in the namespace.
-A value name repeated verbatim is not a transform collision and is held out of
-the check, as a union arm's is; the missing exact-duplicate rule is
-driftsys/ridl#554.
+`enum A { B_C }` both give `A_B_C`, and a declared `UNSPECIFIED` value meets the
+`<PREFIX>_UNSPECIFIED` value the backend synthesizes for an enum with no zero,
+which is not a declared value. Those collisions stay with the proto backend's
+refusal under [ADR-0017](ADR-0017-proto3-projection-rules.md) decision 4. The
+message names `pascal_case`. A `reserved` value emits no variant and is not in
+the namespace. A value name repeated verbatim is not a transform collision and
+is held out of the check, as a union arm's is; the missing exact-duplicate rule
+is driftsys/ridl#554.
 
 The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
 has the defect, and a wire schema's value names are read by peers in other
 languages. When the check lands, ADR-0017 decision 5's enum-value half is done
-within one enum, with the cross-enum collisions above left to decision 4. The
+within one enum, with the two proto collisions above left to decision 4. The
 codegen model's `Spellings` gains a `pascal` field (the codegen model design's
 D-2 carries one field per transform), and an empty `pascal` is defined as
 `camel_case(snake)`, so that a model written by an older toolchain still reads
 correctly and the field is additive.
 
-The cost falls in two places. Every generated variant is renamed, single-word
-ones included (`PARK` becomes `Park`), which breaks a consumer that names one;
-the 0.x rule allows it. And a package whose enum declares two values that differ
-only in where their underscores fall — `CHECK_ENGINE` beside `CHECK__ENGINE`,
-`LEVEL_10` beside `LEVEL10` — compiled on every backend and is now refused at
-check time. A pair that differs only in letter case (`PARK` beside `Park`) was
-already refused by the proto backend. Measured by computing `pascal_case` over
-the 182 values of the 59 enums in every tracked `.ridl` and `.typl` file and in
-the book, no two values of one enum share an output, so the check is expected to
-reject nothing that exists.
+The cost falls in two places. Every generated variant whose `pascal_case`
+spelling differs from its typl spelling is renamed — for a `SCREAMING_SNAKE`
+value, every value with two or more letters, single-word ones included (`PARK`
+becomes `Park`; `A` and `X2` stay) — which breaks a consumer that names one; the
+0.x rule allows it. And a package whose enum declares two values whose
+`snake_case` outputs differ and whose `pascal_case` outputs do not —
+`CHECK_ENGINE` beside `CHECK__ENGINE`, `LEVEL_10` beside `LEVEL10` — compiled on
+every backend and is now refused at check time. A pair that shares a
+`snake_case` output too, such as `PARK` beside `Park`, was already refused by
+the proto backend. Measured by computing `pascal_case` over the 182 values of
+the 59 enums in every tracked `.ridl` and `.typl` file and in the book, no two
+values of one enum share an output, so the check is expected to reject nothing
+that exists.
 
 ## Context
 

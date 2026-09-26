@@ -21,11 +21,14 @@ generated Rust identifier that does not follow the Rust naming convention.
 The maintainer chose option B on 2026-09-26: project each variant through a
 pinned PascalCase transform (`CHECK_ENGINE` → `CheckEngine`), with the collision
 check ADR-0016 requires for every pinned transform, and amend ADR-0016. The
-change renames every generated variant — `PARK` becomes `Park` as well as
-`CHECK_ENGINE` becoming `CheckEngine` — although only the multi-word ones draw
-the lint today. That breaks a consumer that names a variant, which the 0.x rule
-allows (ADR-0021 decision 10 states the rule for `ridl-rt`; generated code is
-released with the same toolchain and follows it).
+change renames every generated variant whose `pascal_case` spelling differs from
+its typl spelling. For a `SCREAMING_SNAKE` value that is every value with two or
+more letters — `PARK` becomes `Park` as well as `CHECK_ENGINE` becoming
+`CheckEngine` — although only the multi-word ones draw the lint today; a value
+with one letter (`A`, `X2`) keeps its spelling. The renaming breaks a consumer
+that names a variant, which the 0.x rule allows (ADR-0021 decision 10 states the
+rule for `ridl-rt`; generated code is released with the same toolchain and
+follows it).
 
 ## 2. The state this design starts from
 
@@ -61,18 +64,23 @@ Measured on `main` at 6557cc4.
   associated constant (`pub const LOW_FUEL: WarningFlags`), and
   `SCREAMING_SNAKE` is the Rust convention for a constant. It does not name the
   paired enum's variants.
-- **Four rustc compile proofs deny `non_snake_case` and leave
-  `non_camel_case_types` undenied**, and their comments say an enum variant
-  draws it by design or as a non-fatal lint. Three are in
-  `crates/ridl-backend-rust/src/tests.rs` —
-  `a_tuple_under_an_internal_declaration_is_package_private`,
-  `appendix_b_compiles_with_rustc` and `appendix_a_compiles_with_rustc` — and
-  one is `rustc_accepts` in `crates/ridlc/tests/corpus.rs`, which the
-  `veh-common`, `veh-cluster` and two-member workspace proofs share. Two doc
-  comments in `corpus.rs`, on `veh_common_generated_rust_compiles_with_rustc`
-  and on `rustc_accepts`, give `non_camel_case_types` on a screaming-case
-  variant as their example of a non-fatal lint. The checked-in generated module
-  in `crates/ridl-backend-rust/tests/interaction_face.rs` carries
+- **Seven rustc compile proofs compile generated Rust, and none denies
+  `non_camel_case_types`.** Four are in `crates/ridl-backend-rust/src/tests.rs`
+  — `a_tuple_under_an_internal_declaration_is_package_private`,
+  `constructible_collections_compile`, `appendix_b_compiles_with_rustc` and
+  `appendix_a_compiles_with_rustc` — and deny `non_snake_case`; three of their
+  comments say an enum variant draws `non_camel_case_types` by design. Three are
+  in `crates/ridlc/tests/corpus.rs`:
+  `veh_cluster_generated_rust_compiles_with_rustc` goes through `rustc_accepts`,
+  which denies `non_snake_case` and two visibility lints, while
+  `veh_common_generated_rust_compiles_with_rustc` and
+  `workspace_two_members_composed_compiles_with_rustc` build their own `rustc`
+  command and deny no lint. The fixtures that hold a multi-word enum value are
+  Appendix B, `veh-common` and `veh-cluster`. Two doc comments in `corpus.rs`,
+  on `veh_common_generated_rust_compiles_with_rustc` and on `rustc_accepts`,
+  give `non_camel_case_types` on a screaming-case variant as their example of a
+  non-fatal lint. The checked-in generated module in
+  `crates/ridl-backend-rust/tests/interaction_face.rs` carries
   `#[allow(clippy::upper_case_acronyms)]` for the same spelling.
 - **Snapshots that hold a multi-word variant:** 18 variant lines across
   `ridl_backend_rust__tests__appendix_b_rust_snapshot.snap`,
@@ -224,16 +232,18 @@ under `pascal_case`. So, **within one enum**, checking `pascal_case` alone
 rejects every pair that either transform would break, and a second key would
 find no new pair.
 
-**Proto's namespace is wider than one enum, and stays with its backend check.**
-proto3 scopes an enum's values as siblings of the enum, so the proto backend
-claims every value in the file's package-wide namespace, and it adds a
+**Proto claims names RIDL-149 does not compare, and those stay with its backend
+check.** proto3 scopes an enum's values as siblings of the enum, so the proto
+backend claims every value in the file's package-wide namespace, and it adds a
 `<PREFIX>_UNSPECIFIED` value to an enum that declares no zero. Two collisions
-come from that and are outside one enum: `enum A_B { C }` beside
-`enum A { B_C }` both give `A_B_C`, and a declared `UNSPECIFIED` value in an
-enum with no zero meets the synthesized one. RIDL-149 compares the values of one
-enum, which is the whole of the Rust namespace — a Rust variant is scoped by its
-enum — and not the whole of proto's. Those cross-enum collisions stay with the
-proto backend's `names.claim` refusal (ADR-0017 decision 4), as they are today.
+come from that. `enum A_B { C }` beside `enum A { B_C }` both give `A_B_C`,
+across two enums. And a declared `UNSPECIFIED` value in an enum with no zero
+meets the synthesized one, inside one enum but against a name that is not a
+declared value. RIDL-149 compares the declared values of one enum, which is the
+whole of the Rust namespace — a Rust variant is scoped by its enum, and the Rust
+backend synthesizes no value — and not the whole of proto's. Both collisions
+stay with the proto backend's `names.claim` refusal (ADR-0017 decision 4), as
+they are today.
 
 The TypeScript and FlatBuffers backends emit the declared name (§6), whose
 collision set is exact equality. That case is a verbatim repeat, which is
@@ -274,10 +284,10 @@ The new error rejects two values of one enum that share a `pascal_case` output.
 Some of those pairs were already refused by the proto backend, because they
 share a `snake_case` output too — `PARK` beside `Park`, `checkEngine` beside
 `CHECK_ENGINE`. The pairs that compiled on every backend before this change and
-are refused after it are the ones that differ under `snake_case` and not under
-`pascal_case`: two values that differ only in where their underscores fall —
-`CHECK_ENGINE` beside `CHECK__ENGINE`, `A` beside `A_`, `LEVEL_10` beside
-`LEVEL10`.
+are refused after it are the ones whose `snake_case` outputs differ and whose
+`pascal_case` outputs do not — `CHECK_ENGINE` beside `CHECK__ENGINE`, `A` beside
+`A_`, `LEVEL_10` beside `LEVEL10` or `Level10`. No shorter description fits:
+`A_B` beside `AB` differ only in an underscore and are accepted (`AB` and `Ab`).
 
 Measured by computing `pascal_case` over the values of every `enum` in every
 tracked `.ridl` and `.typl` file and every Markdown file under `docs/book/`: 59
@@ -335,12 +345,14 @@ The plan turns each of these into a task step.
   message; a verbatim repeat is not reported as RIDL-149; a `reserved` value
   does not collide; two distinct values that do not collide pass; the message
   names `pascal_case`.
-- **The compile proofs deny `non_camel_case_types`.** The four rustc proofs of
-  §2 gain `-D non_camel_case_types`, and their comments, with the two
-  `corpus.rs` doc comments, are rewritten. #451 found that a deny flag on a
-  fixture with no multi-word name tests nothing, so the plan names the fixtures
-  that hold a multi-word variant (`veh-cluster` holds 8) and proves the flag
-  bites by reverting one emit site and watching the proof fail.
+- **The compile proofs deny `non_camel_case_types`.** All seven rustc proofs of
+  §2 gain `-D non_camel_case_types` — the two `corpus.rs` proofs that build
+  their own command included, because `veh-common` holds multi-word values — and
+  their comments, with the two `corpus.rs` doc comments, are rewritten. #451
+  found that a deny flag on a fixture with no multi-word name tests nothing, so
+  the plan names the fixtures that hold a multi-word variant (`veh-cluster`
+  holds 8) and proves the flag bites by reverting one emit site and watching the
+  proof fail.
 - **Snapshots move in the same commit as the emit change,** as #506's "Done
   when" asks.
 - **`interaction_face.rs`** loses its `clippy::upper_case_acronyms` allowance,
