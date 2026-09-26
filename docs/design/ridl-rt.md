@@ -534,15 +534,23 @@ of one call is known; `Slot`, a slot for a new call is free; `Event(iface)`, an
 occurrence of one of the interface's events is waiting; `Claim(iface)`, a claim
 on one of the interface's members is waiting. The contract a runtime presents:
 
-- **One waker per key per handle.** A second `wake_on` for a key the handle
-  already holds replaces the stored waker and wakes the displaced one, so no
-  task waits on a registration that can no longer fire. A second task waiting
-  for the same events holds a second handle, and each handle's waiter is woken.
+- **One waker per kind of key per handle.** A handle stores one waker for each
+  kind — `Slot`, `Event`, `Claim` — and an `Outcome` waker with its call. A
+  change to any key of that kind that the handle observes wakes the stored
+  waker, so a task that registers `Event(a)` and then `Event(b)` is woken by an
+  occurrence of either, and reads the port again to find out which.
+- **A refresh or a displacement.** A `wake_on` whose waker `will_wake` the
+  stored one is a refresh: it replaces the stored waker without waking it,
+  because a task registers on every poll and waking it for its own registration
+  would schedule the next poll from every poll. A waker of another task
+  displaces the stored one and wakes it, so no task waits on a registration that
+  can no longer fire. A second task waiting for the same events holds a second
+  handle, and each handle's waiter is woken.
 - **Woken at most once, after every change.** A stored waker is woken after
-  every change of its key becomes visible, and is cleared when woken. A runtime
-  with one unkeyed "something changed" source may wake every waiter it holds on
-  any change: a spurious wake costs one poll, a missed one leaves a task
-  waiting.
+  every change of its kind becomes visible, and is cleared when woken. A
+  spurious wake is allowed: a runtime with one unkeyed "something changed"
+  source may wake every waiter it holds on any change. A spurious wake costs one
+  poll, and a missed one leaves a task waiting.
 - **Register, then read.** A task registers on every poll, and before it reads
   the port, so a change between the read and the return still wakes it.
 

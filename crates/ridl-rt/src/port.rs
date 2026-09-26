@@ -391,17 +391,26 @@ pub trait CoherentSignals: SignalReader {
 ///
 /// The contract:
 ///
-/// - **One waker per key per handle.** [`wake_on`](Wakeable::wake_on) stores
-///   a clone of `waker` under `what` on the handle it is called on. A second
-///   `wake_on` for a key the handle already holds replaces the stored waker
-///   and wakes the displaced one, so no task waits on a registration that can
-///   no longer fire. A second task waiting for the same events holds a second
-///   handle, and each handle's waiter is woken.
+/// - **One waker per kind of key per handle.** [`wake_on`](Wakeable::wake_on)
+///   stores a clone of `waker` on the handle it is called on, one for each
+///   kind — `Slot`, `Event`, `Claim` — and an `Outcome` waker with its call.
+///   A change to any key of that kind that the handle observes wakes the
+///   stored waker, so a task that registers `Event(a)` and then `Event(b)` is
+///   woken by an occurrence of either; the task reads the port again and
+///   finds out which.
+/// - **A refresh or a displacement.** A `wake_on` whose waker
+///   [`will_wake`](core::task::Waker::will_wake) the stored one is a refresh:
+///   it replaces the stored waker without waking it, because a task
+///   registers on every poll and waking it for its own registration would
+///   schedule the next poll from every poll. A waker of another task
+///   displaces the stored one, and the displaced waker is woken, so no task
+///   waits on a registration that can no longer fire. A second task waiting
+///   for the same events holds a second handle, and each handle's waiter is
+///   woken.
 /// - **Woken at most once.** A stored waker is woken after every change of
-///   its key becomes visible, and is cleared when woken. A runtime with one
-///   unkeyed "something changed" source may wake every waiter it holds on
-///   any change: the contract is never that a waiter is woken only for its
-///   key.
+///   its kind becomes visible, and is cleared when woken. A spurious wake is
+///   allowed: a runtime with one unkeyed "something changed" source may wake
+///   every waiter it holds on any change.
 /// - **Register, then read.** The caller registers on every poll, and
 ///   registers before it reads the port, so a change between the read and
 ///   the return still wakes it.

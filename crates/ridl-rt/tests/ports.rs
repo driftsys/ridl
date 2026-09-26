@@ -328,25 +328,42 @@ fn wakeable_is_usable_as_a_trait_object() {
 // trait is (`tests/port_forwarding.rs`), and the key reaches the port
 // unchanged.
 
+/// Records the last key it was given.
+struct Recorder(std::sync::Mutex<Option<Interest>>);
+
+impl Wakeable for Recorder {
+    fn wake_on(&self, what: Interest, _: &Waker) {
+        *self.0.lock().expect("not poisoned") = Some(what);
+    }
+}
+
 #[test]
 fn wakeable_is_reached_through_a_borrow() {
     fn over<P: Wakeable>(port: P, what: Interest, waker: &Waker) {
         port.wake_on(what, waker);
     }
-    let count = Arc::new(Count(AtomicUsize::new(0)));
-    let waker = Waker::from(Arc::clone(&count));
-    let mut stub = Stub;
-
-    over(&stub, Interest::Slot, &waker);
-    assert_eq!(count.0.load(Ordering::SeqCst), 1, "through `&P`");
-    over(&mut stub, Interest::Slot, &waker);
-    assert_eq!(count.0.load(Ordering::SeqCst), 2, "through `&mut P`");
-
-    over(&stub, Interest::Outcome(Correlation(1)), &waker);
-    over(&mut stub, Interest::Claim(IFACE), &waker);
-    assert_eq!(
-        count.0.load(Ordering::SeqCst),
-        2,
-        "another key reaches the port as itself"
-    );
+    let waker = Waker::from(Arc::new(Count(AtomicUsize::new(0))));
+    let mut recorder = Recorder(std::sync::Mutex::new(None));
+    let keys = [
+        Interest::Outcome(Correlation(7)),
+        Interest::Slot,
+        Interest::Event(IFACE),
+        Interest::Claim(InterfaceNo(2)),
+    ];
+    for what in keys {
+        over(&recorder, what, &waker);
+        assert_eq!(
+            *recorder.0.lock().expect("not poisoned"),
+            Some(what),
+            "through `&P`"
+        );
+        *recorder.0.lock().expect("not poisoned") = None;
+        over(&mut recorder, what, &waker);
+        assert_eq!(
+            *recorder.0.lock().expect("not poisoned"),
+            Some(what),
+            "through `&mut P`"
+        );
+        *recorder.0.lock().expect("not poisoned") = None;
+    }
 }
