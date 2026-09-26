@@ -506,12 +506,19 @@ trusted with no `unsafe` and no second verification pass.
 
     `Wakeable` has no supertrait, like `Clock`, and is forwarded through `&P`
     and `&mut P` under decision 11. Its contract: a handle stores one waker per
-    key; a second `wake_on` for a key the handle already holds replaces the
-    stored waker and wakes the displaced one; a stored waker is woken at most
-    once, after every change of its key becomes visible, and is cleared when
-    woken; the caller registers on every poll and registers before it reads the
-    port. A second task waiting for the same events holds a second handle, and
-    each handle's waiter is woken. `Event` and `Claim` are keyed per interface,
+    kind of key — `Slot`, `Event`, `Claim` — and an `Outcome` waker with its
+    call; a change to any key of that kind that the handle observes wakes the
+    stored waker, so a task that registers `Event(a)` and then `Event(b)` is
+    woken by an occurrence of either, and a spurious wake is allowed; a
+    `wake_on` whose waker `will_wake` the stored one is a refresh, which
+    replaces the stored waker without waking it, and a waker of another task
+    displaces the stored one and wakes it; a stored waker is woken at most once,
+    after every change of its kind becomes visible, and is cleared when woken;
+    the caller registers on every poll and registers before it reads the port.
+    (The per-kind storage and the refresh rule replace "one waker per key" and
+    an unconditional wake of the displaced waker, on driftsys/ridl#546.) A
+    second task waiting for the same events holds a second handle, and each
+    handle's waiter is woken. `Event` and `Claim` are keyed per interface,
     because `EventSource::next` and `Handler::next_claim` drain one queue
     whatever the ordinal and the subscription and the served set already filter
     by member. `Interest` is exhaustive, because a runtime must handle every key
@@ -553,11 +560,13 @@ trusted with no `unsafe` and no second verification pass.
     would wake returns the waker instead, and the runtime wakes it after
     releasing its lock, so no waker runs under a runtime's mutex. `Waiters` is
     the bounded registry a handle keeps behind `Wakeable`: one `Option<Waker>`
-    per kind of key, `register` returning the displaced waker, `take` clearing.
-    Both allocate nothing and hold no lock. The exact method signatures are the
-    plan's and the design record's. `ridl-loopback` moves its caller side onto
-    both in the same story, with sixteen slots and no byte budget until E16.2
-    gives it a descriptor. Notes F-5, F-8 and F-9.
+    per kind of key, woken by a change to any key of that kind, `register`
+    returning the displaced waker of another task and nothing on a refresh
+    (decision 13), `take` clearing. Both allocate nothing and hold no lock. The
+    exact method signatures are the plan's and the design record's.
+    `ridl-loopback` moves its caller side onto both in the same story, with
+    sixteen slots and no byte budget until E16.2 gives it a descriptor. Notes
+    F-5, F-8 and F-9.
 
 16. **Amendment (2026-09-26) — `ClientError` and `ProviderError`.** `error`
     gains `ClientError { Send(SendError), Call(CallError), Read(ReadError) }`,
