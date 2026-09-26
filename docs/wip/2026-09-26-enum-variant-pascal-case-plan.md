@@ -70,7 +70,8 @@ Read both before Task 1.
    generate the same Rust as a current one. Task 4.
 4. **A multi-word variant reaching a compile proof.** The deny flag must bite on
    a fixture that holds one; a deny on a fixture with only single-word variants
-   tests nothing. Task 5 proves it by reverting one site.
+   tests nothing. Task 5 proves it by reverting the spelling at every site at
+   once, through `pascal_of`.
 5. **A variant named `Ok`, `Err`, `None` or `Some`** must not shadow the `core`
    type in generated code. `OK` in `examples/cabin` becomes `Ok`, and
    `just demo` compiles and runs it (Task 4); the Appendix B and corpus proofs
@@ -361,7 +362,7 @@ git commit -m "feat(ridl-ir): carry the pascal_case spelling in the codegen mode
   `check_arm_projection` (line 3441), `colliding_projected_name` at lines
   3514-3556 and its doc comment above it, and tests after the union-arm RIDL-149
   tests (around line 6520)
-- Modify: `crates/ridl-core/src/diag.rs:622-643` (RIDL-149's doc comment)
+- Modify: `crates/ridl-core/src/diag.rs:622-642` (RIDL-149's doc comment)
 - Modify: `docs/specification/ridl-language-reference.md` §16.4, the RIDL-149
   row (line 1760)
 - Modify: `docs/decisions/ADR-0017-proto3-projection-rules.md` decision 5 (lines
@@ -789,11 +790,11 @@ fn an_enum_value_outside_the_typl_convention_compiles() {
         .expect("rustc must be installed and runnable for this test to be meaningful");
     assert!(status.success(), "generated Rust must compile:\n{rust_source}");
 }
+```
 
-This follows `a_tuple_under_an_internal_declaration_is_package_private`
+This test follows `a_tuple_under_an_internal_declaration_is_package_private`
 (line 1732), which writes the generated source with no prelude and links
 `ridl_rt` through `ridl_rt_rlib` (line 2574).
-```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -887,12 +888,28 @@ In `docs/technotes/ridl-rt-by-example.md`, line 355: `health: Health::WARN`
 becomes `health: Health::Warn`. Leave lines 71-73 as they are: they are the ridl
 source, which keeps its `SCREAMING_SNAKE` spelling.
 
-Then search for any other consumer:
-`git grep -nE '::[A-Z][A-Z0-9_]*[A-Z0-9]\b' -- '*.rs' '*.md' ':!docs/archive' ':!docs/wip' ':!*.snap'`
-(every path segment of two or more capitals, which catches single-word variants
-such as `Mode::SLOW` as well as multi-word ones) and check each hit. A hit that
-is a generated enum variant is updated. A constant (`MAX_BUFFER_SIZE`), an
-enumset bit, or a hand-written Rust item stays.
+Then search for any other consumer, by the variant names the snapshots renamed.
+Build the list from the diff, then search for each name after `::`:
+
+```bash
+git diff -U0 -- '*.snap' crates/ridl-backend-rust/tests/generated/ \
+  | sed -nE 's/^-[[:space:]]+([A-Z][A-Z0-9_]*) = .*/\1/p' | sort -u > /tmp/old-variants
+git grep -nE "::($(paste -sd'|' /tmp/old-variants))([^A-Za-z0-9_]|$)" \
+  -- '*.rs' '*.md' ':!docs/archive' ':!docs/wip' ':!*.snap'
+```
+
+Do not use `\b` in a `git grep -E` pattern: with `-E` it matches nothing, and
+the search then reports no consumer. Measured before this change with the list
+`WARN|SLOW`, the search finds `crates/ridl-backend-rust/src/tests.rs:2180`,
+`crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`,
+`crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`,
+`crates/ridl-backend-rust/tests/interaction_face.rs`,
+`docs/technotes/ridl-rt-by-example.md` and
+`examples/cabin/consumer/src/main.rs`. Check each hit. A hit that names a
+generated enum variant is updated; a hit on an enumset bit
+(`WarningFlags::LOW_FUEL`) or a hand-written Rust item with the same name stays.
+`Mode::SLOW` at line 2180 is inside a string the test compares against the
+output, and becomes `Mode::Slow`.
 
 - [ ] **Step 7: Run the suites and the demo**
 
@@ -943,14 +960,16 @@ EOF
 
 Seven rustc invocations are the compile proofs this task changes (design §2):
 the five that deny a lint by name and the two corpus proofs that build their own
-command. Other tests also compile generated Rust — around
-`crates/ridl-backend-rust/src/tests.rs:1213` and `:2949`,
-`crates/ridl-backend-rust/tests/rust_crate_emit.rs:46` and
-`crates/ridl/tests/cabin_example.rs:73` — and deny no lint; they stay as they
-are, because the four proofs whose fixtures hold multi-word values guard #506.
-In the five `rustc` argument lists that already hold `"non_snake_case",` — the
-four in `crates/ridl-backend-rust/src/tests.rs` and `rustc_accepts` — add after
-it:
+command. Other tests also compile generated Rust, and stay as they are: some
+deny no lint (for example around `crates/ridl-backend-rust/src/tests.rs:1213`
+and `:2949`, `crates/ridlc/tests/rust_crate_emit.rs:46` and
+`crates/ridlc/tests/cabin_example.rs:73`), and the FlatBuffers tests compile
+through `crates/ridl-backend-rust/tests/support/rustc.rs` with `-D warnings`,
+which already denies `non_camel_case_types`; their fixtures hold only
+single-word values, which the lint accepts in either spelling. The four proofs
+whose fixtures hold multi-word values are the ones that guard #506. In the five
+`rustc` argument lists that already hold `"non_snake_case",` — the four in
+`crates/ridl-backend-rust/src/tests.rs` and `rustc_accepts` — add after it:
 
 ```rust
 "-D",
@@ -1110,8 +1129,8 @@ git commit -m "docs(docs): archive the enum variant PascalCase design and plan (
 git push -u origin HEAD
 ```
 
-Open the pull request with a body that says "Closes #506", lists the three
-compile proofs Task 5 Step 4 recorded, and the mutation results of Step 1.
+Open the pull request with a body that says "Closes #506", lists the compile
+proofs Task 5 Step 4 recorded as failing, and the mutation results of Step 1.
 Before merging, check that the body names no other issue after a closing
 keyword:
 `gh pr view --json body -q .body | grep -niE '(close|fix|resolve)[sd]? #'`.

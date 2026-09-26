@@ -65,9 +65,12 @@ Measured on `main` at 6557cc4.
   associated constant (`pub const LOW_FUEL: WarningFlags`), and
   `SCREAMING_SNAKE` is the Rust convention for a constant. It does not name the
   paired enum's variants.
-- **Seven rustc compile proofs deny a lint by name or build their own `rustc`
-  command, and none denies `non_camel_case_types`.** Other tests compile
-  generated Rust with no lint denied, and are not listed here. Four are in
+- **Seven rustc compile proofs deny lints by name or build their own `rustc`
+  command, and none of the seven denies `non_camel_case_types`.** Other tests
+  compile generated Rust too and are not listed here: some deny no lint, and the
+  FlatBuffers tests pass `-D warnings` through
+  `crates/ridl-backend-rust/tests/support/rustc.rs`, over fixtures whose values
+  are single words, which the lint accepts. Four are in
   `crates/ridl-backend-rust/src/tests.rs` —
   `a_tuple_under_an_internal_declaration_is_package_private`,
   `constructible_collections_compile`, `appendix_b_compiles_with_rustc` and
