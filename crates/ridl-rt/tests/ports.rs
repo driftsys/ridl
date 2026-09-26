@@ -4,13 +4,17 @@
 
 #![forbid(unsafe_code)]
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::{Wake, Waker};
+
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
 
@@ -43,6 +47,13 @@ impl Attached for Stub {
 impl Clock for Stub {
     fn now(&self) -> Timestamp {
         Timestamp(42)
+    }
+}
+
+impl Wakeable for Stub {
+    /// Wakes at once, so a test can see that the call reached the stub.
+    fn wake_on(&self, _: Interest, waker: &Waker) {
+        waker.wake_by_ref();
     }
 }
 
@@ -264,6 +275,37 @@ fn both_extensions_are_usable_as_trait_objects() {
         Err(ReadError::TooFewSamples { needed: 2 })
     );
     assert_eq!(coherent.read(IFACE, ORD, &mut out), Ok(RAW));
+}
+
+#[test]
+fn the_wakeable_extension_is_usable_as_a_trait_object() {
+    struct Counter(AtomicUsize);
+    impl Wake for Counter {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    let counter = Arc::new(Counter(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&counter));
+
+    let wakeable: &dyn Wakeable = &Stub;
+    wakeable.wake_on(Interest::Outcome(Correlation(3)), &waker);
+    wakeable.wake_on(Interest::Slot, &waker);
+    wakeable.wake_on(Interest::Event(IFACE), &waker);
+    wakeable.wake_on(Interest::Claim(IFACE), &waker);
+    assert_eq!(counter.0.load(Ordering::SeqCst), 4);
+}
+
+#[test]
+fn an_interest_is_copy_and_compares_by_its_key() {
+    fn owns_nothing<T: Copy + Eq + core::fmt::Debug + 'static>() {}
+    owns_nothing::<Interest>();
+    assert_eq!(Interest::Event(IFACE), Interest::Event(InterfaceNo(1)));
+    assert_ne!(Interest::Event(IFACE), Interest::Claim(IFACE));
+    assert_ne!(
+        Interest::Outcome(Correlation(1)),
+        Interest::Outcome(Correlation(2))
+    );
 }
 
 #[test]

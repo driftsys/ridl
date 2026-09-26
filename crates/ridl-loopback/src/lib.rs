@@ -1,6 +1,6 @@
 //! `ridl-loopback` — the in-process reference runtime.
 //!
-//! This crate implements the eleven port traits of
+//! This crate implements the twelve port traits of
 //! [`ridl_rt::port`](https://docs.rs/ridl-rt) over one in-memory store. It is
 //! the first runtime in this workspace (ADR-0020 decision 6, which names the
 //! crate and fixes `ridl-rt` as its only dependency), and it is what the
@@ -27,9 +27,11 @@
 //! derives the threading split: a handle each for the five roles with a
 //! `&mut self` method, and one handle for the six whose methods all take
 //! `&self`, which are exactly the roles several threads may hold at once.
-//! [`Loopback`] is the aggregate: it implements all eleven port traits by delegating to the six
-//! role handles it holds, and it is what a generated `Client`, `Publisher` or
-//! `dispatch` is normally built over.
+//! The twelfth, `Wakeable`, is on the three handles a task waits on — the
+//! source, the caller and the handler — each for the keys of its own role.
+//! [`Loopback`] is the aggregate: it implements all twelve port traits by
+//! delegating to the six role handles it holds, and it is what a generated
+//! `Client`, `Publisher` or `dispatch` is normally built over.
 //!
 //! ```
 //! use ridl_loopback::Loopback;
@@ -66,7 +68,9 @@
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either; and
 //! nothing is bounded, so `Busy` and `TooLarge` do not appear outside
-//! [`Loopback::fail_next_settle`].
+//! [`Loopback::fail_next_settle`]. Nor does this runtime originate
+//! `Transport::Busy`, a provider's refusal at admission: it reports one only
+//! when a provider settles a call with it.
 //!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
@@ -80,14 +84,15 @@
 //! choices, is `docs/design/ridl-loopback.md` in this repository.
 
 use std::sync::{Arc, Mutex};
+use std::task::Waker;
 
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Duration, Timestamp};
 
@@ -118,7 +123,7 @@ pub struct Handles {
     pub handler: HandlerHandle,
 }
 
-/// The aggregate handle: one value implementing all eleven port traits by
+/// The aggregate handle: one value implementing all twelve port traits by
 /// delegating to the six role handles it holds.
 ///
 /// A face is built over one value implementing at least the port traits its
@@ -248,7 +253,7 @@ impl Loopback {
 }
 
 // ---------------------------------------------------------------------------
-// The aggregate's eleven port implementations, each one a delegation.
+// The aggregate's twelve port implementations, each one a delegation.
 // ---------------------------------------------------------------------------
 
 impl Attached for Loopback {
@@ -396,6 +401,18 @@ impl Handler for Loopback {
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
         self.handles.handler.settle(claim, outcome)
+    }
+}
+
+impl Wakeable for Loopback {
+    /// Routes each key to the role handle that carries it: `Outcome` and
+    /// `Slot` to the caller, `Event` to the source, `Claim` to the handler.
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        match what {
+            Interest::Outcome(_) | Interest::Slot => self.handles.caller.wake_on(what, waker),
+            Interest::Event(_) => self.handles.source.wake_on(what, waker),
+            Interest::Claim(_) => self.handles.handler.wake_on(what, waker),
+        }
     }
 }
 

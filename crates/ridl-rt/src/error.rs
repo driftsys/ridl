@@ -32,6 +32,10 @@ pub enum Transport {
     Down,
     /// A payload is not a well-formed encoding.
     Corrupt,
+    /// The providing runtime refused the call at admission and the caller may
+    /// retry later. Crosses the frame as a `response` outcome (frame
+    /// specification §9.6).
+    Busy,
 }
 
 /// The outcome of a call that did not succeed.

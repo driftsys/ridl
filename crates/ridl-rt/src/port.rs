@@ -11,13 +11,18 @@
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
-//! present, so a runtime may omit them.
+//! present, so a runtime may omit them. [`Wakeable`] is an extension too: a
+//! task registers through it to be woken when what it waits for changes, and
+//! then reads the port. A runtime that serves a generated async client
+//! implements it.
 //!
 //! Each trait below names the generated method it backs, so a reader who
 //! arrived from generated code can find the port under it. The crate-level
 //! documentation has the whole table, and
 //! `docs/technotes/ridl-rt-by-example.md` in this repository walks it against
 //! concrete generated code.
+
+use core::task::Waker;
 
 use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
 use crate::error::{CallError, Contract};
@@ -180,7 +185,9 @@ pub trait Caller: Attached {
     /// A command's delivery acknowledgment (ridl §6.1), once it is known:
     /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
     /// `Err(CallError::Transport(Transport::Corrupt))` when the provider could
-    /// not read the command's argument bytes, and
+    /// not read the command's argument bytes,
+    /// `Err(CallError::Transport(Transport::Busy))` when the provider refused
+    /// the command at admission, and
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
@@ -378,6 +385,56 @@ pub trait CoherentSignals: SignalReader {
     ) -> Result<usize, ReadError>;
 }
 
+/// Extension: a port that can wake a task. A runtime that serves a generated
+/// async client implements it.
+///
+/// [`wake_on`](Wakeable::wake_on) stores a clone of `waker` under `what` on
+/// the handle it is called on. The contract:
+///
+/// - **One waker per key per handle.** A second `wake_on` for a key the handle
+///   already holds replaces the stored waker and wakes the displaced one, so
+///   no task waits on a registration that can no longer fire. A waker that
+///   [`will_wake`](Waker::will_wake) the stored one, registered under the same
+///   key, is the same task registering again: it displaces nothing and wakes
+///   nothing, because a task registers on every poll and waking it for its own
+///   registration would schedule another poll every time.
+/// - **Woken at most once.** A stored waker is woken after every change of its
+///   key becomes visible, and is cleared when woken.
+/// - **Register, then read.** The caller registers on every poll, and
+///   registers before it reads the port, so a change between the read and the
+///   return still wakes it.
+///
+/// A second task waiting for the same interface's events holds a second
+/// handle, and each handle's waiter is woken. A runtime with one "something
+/// changed" source may wake every waiter it holds on any change: a spurious
+/// wake costs one poll and a missed wake hangs a task, so the contract is that
+/// a waiter is woken after every change of its key, never that it is woken
+/// only then. A runtime with no wake source of its own has none to offer and
+/// does not implement this trait.
+pub trait Wakeable {
+    /// Registers `waker` to be woken when `what` changes.
+    fn wake_on(&self, what: Interest, waker: &Waker);
+}
+
+/// What a task waits for, as [`Wakeable::wake_on`] keys it.
+///
+/// `Event` and `Claim` are keyed per interface, not per member:
+/// [`EventSource::next`] and [`Handler::next_claim`] drain one queue whatever
+/// the ordinal, and the subscription and the served set already filter by
+/// member. The enum is exhaustive, because a runtime must handle every key and
+/// an unknown key has no safe default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Interest {
+    /// The outcome of one call is known.
+    Outcome(Correlation),
+    /// A slot for a new call is free.
+    Slot,
+    /// An occurrence of one of the interface's events is waiting.
+    Event(InterfaceNo),
+    /// A claim on one of the interface's members is waiting.
+    Claim(InterfaceNo),
+}
+
 /// A read that failed.
 ///
 /// One enum serves every read on every port, so a variant can be unreachable
@@ -498,9 +555,10 @@ pub enum SettleError {
 
 // Forwarding impls (ADR-0021 decision 11).
 //
-// Every port trait above is implemented for `&mut P`, and the six whose
+// Every port trait above is implemented for `&mut P`, and the seven whose
 // methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
-// `FixedReader`, `ScannableSignals` and `CoherentSignals` — also for `&P`.
+// `FixedReader`, `ScannableSignals`, `CoherentSignals` and `Wakeable` — also
+// for `&P`.
 // What they buy is one thing: a value generic over a port trait, such as a
 // generated face, can be built over a reference to a port rather than over the
 // port itself. A wrapper that adds tracing and a test double are accepted by
@@ -699,5 +757,17 @@ impl<P: CoherentSignals + ?Sized> CoherentSignals for &mut P {
         samples: &mut [RawSample],
     ) -> Result<usize, ReadError> {
         (**self).read_coherent(iface, ords, out, samples)
+    }
+}
+
+impl<P: Wakeable + ?Sized> Wakeable for &P {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        (**self).wake_on(what, waker);
+    }
+}
+
+impl<P: Wakeable + ?Sized> Wakeable for &mut P {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        (**self).wake_on(what, waker);
     }
 }
