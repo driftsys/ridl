@@ -97,6 +97,69 @@ methods — and decision 10 holds unqualified, satisfied by the access service
 that record defines. The store and dispatcher themselves sit in Epic 11 stories
 E11.2 and E11.4 (ADR-0018 decision 16).
 
+**Amendment (2026-09-26), from driftsys/ridl#506.** `pascal_case` joins the
+pinned transforms of decision 2, and the values of one enum join the checked
+namespaces of decision 4. The design is
+[`docs/wip/2026-09-26-enum-variant-pascal-case-design.md`](../wip/2026-09-26-enum-variant-pascal-case-design.md).
+The decision is taken; the code lands from that design's plan, and until it
+merges the Rust backend still emits the typl spelling and RIDL-149 does not
+cover an enum's values.
+
+The Rust backend emitted each enum value verbatim as a Rust variant, so a
+multi-word `SCREAMING_SNAKE` value such as `CHECK_ENGINE` drew rustc's
+`non_camel_case_types` wherever the generated code is compiled in the consumer's
+own workspace — the defect struct fields had before driftsys/ridl#243. The
+maintainer chose, on 2026-09-26, to project the variant rather than emit
+`#[allow(non_camel_case_types)]`. The transform is
+`pascal_case(name) = camel_case(snake_case(name))`, in
+`crates/ridl-ir/src/name.rs` beside the other two, so `CHECK_ENGINE` gives
+`CheckEngine` and `PARK` gives `Park`. `camel_case` alone does not serve: it
+leaves a segment's tail as written, so `CHECK_ENGINE` gives `CHECKENGINE`.
+Composing the two pinned transforms, rather than writing a third algorithm,
+defines the result for every name the lexer admits, including a value that does
+not follow the typl convention (`checkEngine` gives `CheckEngine`).
+
+The check is RIDL-149 over the values of one enum, **keyed on `pascal_case`
+alone**. An enum value reaches two transformed namespaces — the Rust variant,
+and proto's prefixed value, which is `snake_case` upper-cased — but unlike a
+union arm's two, these collision sets are nested: `pascal_case` is a function of
+`snake_case`'s output, so every pair that collides under `snake_case` collides
+under `pascal_case`. The converse fails (`CHECK_ENGINE` and `CHECK__ENGINE`), so
+within one enum `pascal_case` is the key that covers both. The check does not
+cover proto's whole namespace, which is wider than one enum: proto3 scopes an
+enum's values as siblings of the enum, so `enum A_B { C }` beside
+`enum A { B_C }` both give `A_B_C`, and a declared `UNSPECIFIED` value meets the
+`<PREFIX>_UNSPECIFIED` value the backend synthesizes for an enum with no zero,
+which is not a declared value. Those collisions stay with the proto backend's
+refusal under [ADR-0017](ADR-0017-proto3-projection-rules.md) decision 4. The
+message names `pascal_case`. A `reserved` value emits no variant and is not in
+the namespace. A value name repeated verbatim is not a transform collision and
+is held out of the check, as a union arm's is; the missing exact-duplicate rule
+is driftsys/ridl#554.
+
+The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
+has the defect, and a wire schema's value names are read by peers in other
+languages. When the check lands, ADR-0017 decision 5's enum-value half is done
+within one enum, with the two proto collisions above left to decision 4. The
+codegen model's `Spellings` gains a `pascal` field (the codegen model design's
+D-2 carries one field per transform), and an empty `pascal` is defined as
+`camel_case(snake)`, so that a model written by an older toolchain still reads
+correctly and the field is additive.
+
+The cost falls in two places. Every generated variant whose `pascal_case`
+spelling differs from its typl spelling is renamed — for a `SCREAMING_SNAKE`
+value, every value with two or more letters, single-word ones included (`PARK`
+becomes `Park`; `A` and `X2` stay) — which breaks a consumer that names one; the
+0.x rule allows it. And a package whose enum declares two values whose
+`snake_case` outputs differ and whose `pascal_case` outputs do not —
+`CHECK_ENGINE` beside `CHECK__ENGINE`, `LEVEL_10` beside `LEVEL10` — compiled on
+every backend and is now refused at check time. A pair that shares a
+`snake_case` output too, such as `PARK` beside `Park`, was already refused by
+the proto backend. Measured by computing `pascal_case` over the 182 values of
+the 59 enums in every tracked `.ridl` and `.typl` file and in the book, no two
+values of one enum share an output, so the check is expected to reject nothing
+that exists.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what
@@ -400,6 +463,8 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 | ridl §16.4        | RIDL-149's row gains a union's arms as a fourth checked namespace and the second pinned transform (2026-09-20 amendment)                                                                                                     |
 | ADR-0017          | decision 5's union-arm half is done and its enum-value half is not; open question 2 ("whether `ridl-backend-rust` should transform struct field names") is answered yes; the alternatives row follows (2026-09-20 amendment) |
 | `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                                                                                        |
+| ridl §16.4        | RIDL-149's row gains the values of one enum, checked under `pascal_case` (2026-09-26 amendment; changes with the check, not before it)                                                                                       |
+| ADR-0017          | decision 5's enum-value half is done: RIDL-149 covers an enum's values (2026-09-26 amendment; changes with the check, not before it)                                                                                         |
 
 ## Open
 

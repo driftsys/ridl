@@ -188,6 +188,11 @@ design note, from the archive.
   reverses the lane P driver's D-P5. Written for a session with no prior
   context. Six stages; one design note inside it stops for Sebastien's
   disposition of fifteen decisions. Coordination issue: #328.
+- **2026-09-26-enum-variant-pascal-case-design.md** — driftsys/ridl#506, option
+  B: the Rust backend's enum variants projected through a pinned `pascal_case`
+  (`CHECK_ENGINE` → `CheckEngine`), RIDL-149 extended to an enum's values, and
+  the backends that keep the typl spelling. ADR-0016's 2026-09-26 amendment
+  records the decision. Archive it with its plan once the code change lands.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

@@ -138,7 +138,12 @@ other entry below is Accepted.
   `camel_case` joins the pinned transforms of decision 2, moved into `ridl-ir`
   beside `snake_case` with the backend copy deleted, and union arms join the
   checked namespaces of decision 4, checked under both transforms because the
-  two collision sets are incomparable.
+  two collision sets are incomparable. Amended 2026-09-26 (driftsys/ridl#506):
+  `pascal_case`, the composition `camel_case(snake_case(name))`, joins the
+  pinned transforms and spells the Rust backend's enum variants (`CHECK_ENGINE`
+  becomes `CheckEngine`), and an enum's values join RIDL-149's checked
+  namespaces under `pascal_case` alone, because its collision set contains
+  `snake_case`'s. Decided; the code change follows from its plan.
 
 - **ADR-0017 — The proto3 projection.** The rules the first wire backend needed
   that no earlier record supplied: how a foreign reference projects, where
