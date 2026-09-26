@@ -159,9 +159,18 @@ pub struct Loopback {
 }
 
 impl Loopback {
-    /// The number of calls the runtime holds at once: sent, and not yet
-    /// released by [`Caller::forget`] or by the drop of the caller handle that
-    /// sent them. A settled call keeps its slot until it is released. With every slot taken, [`Caller::command`] and
+    /// The number of calls the runtime holds at once. A call holds its slot
+    /// from its send until one of these reclaims it:
+    ///
+    /// - [`Caller::forget`], or the drop of the caller handle that sent it,
+    ///   while it is settled or still waiting for a handler;
+    /// - its settlement, when it was forgotten while a handler held it;
+    /// - the drop of the handler that held it unsettled, when it was
+    ///   forgotten.
+    ///
+    /// So a settled call keeps its slot until it is forgotten, and a claimed
+    /// call keeps its slot after its `forget` until it is settled or its
+    /// handler is dropped. With every slot taken, [`Caller::command`] and
     /// [`Caller::query`] answer [`SendError::Busy`], on every caller handle,
     /// because the table is the runtime's.
     ///
@@ -174,9 +183,13 @@ impl Loopback {
     /// The generated face does not call `forget` yet, so a program that calls
     /// through it over one runtime gets `SendError::Busy` from its
     /// seventeenth call on, unless it drops the caller handle, which forgets
-    /// that handle's calls. The async client of story E11.21 forgets each
-    /// call once it has taken the outcome, which closes this limit; no
-    /// release happens before it.
+    /// that handle's calls, or forgets each correlation itself once it has
+    /// read the outcome. A `Client` built over `&mut` this runtime for the
+    /// call leaves the runtime reachable for `forget(c.0)` once its borrow
+    /// ends; a `Client` that owns the runtime by value has no accessor for it,
+    /// so the limit applies to it. The async client of story E11.21 forgets
+    /// each call once it has taken the outcome, and on drop, which closes
+    /// this limit; no release happens before it.
     pub const SLOTS: usize = 16;
 
     /// A runtime attached to `catalog`, with an empty store and its clock at

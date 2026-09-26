@@ -344,6 +344,15 @@ argument for it in the command case.
    correction says, and stand untouched; its open question 5 carries a dated
    answer for the face. Note F-15.
 
+   **Note (2026-09-26).** "A command already sent is not taken back" states what
+   the face promises over a transport, which cannot recall a request it has
+   sent. A runtime may withdraw a command no provider has taken, and
+   `ridl-loopback` does: a call its caller forgets before any handler claims it
+   is never presented (decision 1 of the
+   [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640);
+   decision 1 of the
+   [pass-1 dispositions on driftsys/ridl#557](https://github.com/driftsys/ridl/pull/557#issuecomment-5848835004)).
+
 ## Alternatives considered
 
 | Alternative                                                                             | Why not                                                                                                                                                                                                                                                                                                 |

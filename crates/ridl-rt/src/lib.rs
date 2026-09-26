@@ -62,6 +62,23 @@
 //! type** — ports carry interface numbers, ordinals and bytes, and the
 //! generated binding is what encodes and decodes, through [`payload::Ref`].
 //!
+//! A call made through the poll face returns a newtype over a
+//! [`port::Correlation`], and the runtime keeps the call's outcome until the
+//! caller releases it. Until the generated async client lands (story E11.21),
+//! whose future forgets its call when it is dropped, a caller that uses the
+//! poll face must call [`port::Caller::forget`] on a correlation once it has
+//! read the outcome. Otherwise a runtime that bounds how many calls it holds
+//! at once refuses every call with [`port::SendError::Busy`] once that bound
+//! is reached. Two cases:
+//!
+//! - **A `Client` built over `&mut port` for the call can forget.** Make the
+//!   call, read the outcome, and once the `Client`'s borrow has ended call
+//!   `port.forget(c.0)`: the newtype's field is public, and
+//!   [`port::Caller::forget`] forwards through `&mut P`.
+//! - **A `Client` that owns its port by value cannot forget**, because it has
+//!   no accessor for the port, so the runtime's bound limits how many calls it
+//!   can make until the async client lands.
+//!
 //! # How a runtime presents its ports
 //!
 //! A runtime crate exposes one handle type per port role it implements — a
