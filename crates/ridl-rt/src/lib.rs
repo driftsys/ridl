@@ -3,7 +3,9 @@
 //! `ridl-rt` defines, once, the vocabulary that a package generated from ridl
 //! and a runtime agree on: identity, time and the envelope, samples, the
 //! payload traits, the interaction descriptors, the ports, and the contract and
-//! transport errors. It contains no runtime. A runtime is a separate crate that
+//! transport errors. It contains no runtime, but it carries the pure data
+//! structures every runtime would otherwise write alone, such as the
+//! [`correlate`] call table. A runtime is a separate crate that
 //! implements the traits of the `port` module (ADR-0020 decision 6), and
 //! generated code calls those traits without naming the runtime.
 //!
@@ -21,7 +23,7 @@
 //! that links the standard library and allocates — one `Arc` per call of either
 //! function. Every other module stays `no_std` with the feature on.
 //!
-//! Every public item lives in one of six modules, or in one of the two that
+//! Every public item lives in one of seven modules, or in one of the two that
 //! the `flatbuffers` and `std` features add. Generated code names each
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
 //! none, because several names here — `Duration`, `Handler`, `Kind` — are also
@@ -85,6 +87,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 pub mod contract;
+pub mod correlate;
 pub mod encoding;
 pub mod error;
 #[cfg(feature = "flatbuffers")]
@@ -97,8 +100,9 @@ pub mod task;
 
 /// Pins which enums stay `#[non_exhaustive]` under R-11: `Transport`,
 /// `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`,
-/// `ServeError` and `SettleError`. Each `compile_fail` block below matches
-/// every variant of one such enum, with no `_` arm. Matching a
+/// `ServeError`, `SettleError`, `ClientError` and `ProviderError`. Each
+/// `compile_fail` block below matches every variant of one such enum, with
+/// no `_` arm. Matching a
 /// `#[non_exhaustive]` enum from outside its crate with no `_` arm does not
 /// compile, so a block fails until `#[non_exhaustive]` is removed from the
 /// enum it names.
@@ -189,7 +193,26 @@ pub mod task;
 /// }
 /// ```
 ///
-/// The same eight matches, each with a `_` arm, compile: every path and every
+/// ```compile_fail
+/// fn f(x: ridl_rt::error::ClientError) {
+///     match x {
+///         ridl_rt::error::ClientError::Send(_) => {}
+///         ridl_rt::error::ClientError::Call(_) => {}
+///         ridl_rt::error::ClientError::Read(_) => {}
+///     }
+/// }
+/// ```
+///
+/// ```compile_fail
+/// fn f(x: ridl_rt::error::ProviderError) {
+///     match x {
+///         ridl_rt::error::ProviderError::Serve(_) => {}
+///         ridl_rt::error::ProviderError::Claim(_) => {}
+///     }
+/// }
+/// ```
+///
+/// The same ten matches, each with a `_` arm, compile: every path and every
 /// variant name above resolves, so a block above fails only because it names
 /// no `_` arm against a `#[non_exhaustive]` enum.
 ///
@@ -261,6 +284,21 @@ pub mod task;
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
 ///         ridl_rt::error::Transport::Busy => {}
+///         _ => {}
+///     }
+/// }
+/// fn client_error(x: ridl_rt::error::ClientError) {
+///     match x {
+///         ridl_rt::error::ClientError::Send(_) => {}
+///         ridl_rt::error::ClientError::Call(_) => {}
+///         ridl_rt::error::ClientError::Read(_) => {}
+///         _ => {}
+///     }
+/// }
+/// fn provider_error(x: ridl_rt::error::ProviderError) {
+///     match x {
+///         ridl_rt::error::ProviderError::Serve(_) => {}
+///         ridl_rt::error::ProviderError::Claim(_) => {}
 ///         _ => {}
 ///     }
 /// }

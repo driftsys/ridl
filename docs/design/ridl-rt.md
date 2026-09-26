@@ -22,9 +22,10 @@ every section below cites for the contract it implements.
 
 ## Module layout
 
-Six modules, each public item living in exactly one (ADR-0020 decision 5;
+Seven modules, each public item living in exactly one (ADR-0020 decision 5;
 `error` renamed from that decision's original `strata`, amended in place
-2026-09-13), plus two that a cargo feature adds:
+2026-09-13; `correlate` added by ADR-0021 decision 15), plus two that a cargo
+feature adds:
 
 | Module        | Contents                                                                                                                                                                                                                                                             |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -33,7 +34,8 @@ Six modules, each public item living in exactly one (ADR-0020 decision 5;
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                         |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`                                |
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
-| `error`       | `Contract`, `Transport`, `CallError`                                                                                                                                                                                                                                 |
+| `correlate`   | since story E11.18: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                       |
+| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
 | `task`        | under the `std` feature, since 2026-09-25 (story E11.17): `block_on`, `noop_waker`                                                                                                                                                                                   |
 
@@ -210,11 +212,12 @@ Four computations every runtime needs are defined once here, so that two
 runtimes compute them the same way (story E11.19). Each is `no_std`, allocates
 nothing and sits behind no cargo feature. They live beside the types they read —
 the envelope helpers in `sample`, the descriptor helpers in `contract` — rather
-than in a new module, so the crate keeps its six unconditional modules. `sample`
-now imports `InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already
-imported `Duration` from `sample`, so the two modules depend on each other; Rust
-accepts a dependency cycle between modules of one crate. `encoding` likewise
-imports `EncodedSizes` from `contract`, which imports `Encoding`.
+than in a new module; the one module added after them, `correlate`, holds
+storage rather than a computation over an existing type. `sample` now imports
+`InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already imported
+`Duration` from `sample`, so the two modules depend on each other; Rust accepts
+a dependency cycle between modules of one crate. `encoding` likewise imports
+`EncodedSizes` from `contract`, which imports `Encoding`.
 
 ```rust
 impl Freshness {
@@ -613,6 +616,112 @@ a mutex. Story E11.15 built the first runtime to this shape,
 [`ridl-loopback`](ridl-loopback.md): six handles, a `Send + Sync` reader handle,
 and an aggregate implementing all twelve traits by delegation.
 
+## The correlation table
+
+`correlate` holds the two pieces of storage every runtime with asynchronous
+replies would otherwise write alone (story E11.18, ADR-0021 decision 15): the
+caller-side call table and the waiter registry a handle keeps behind `Wakeable`.
+Both are pure data structures — `no_std`, allocation-free, behind no feature,
+holding no lock — and neither wakes anything: every operation that would wake a
+task returns the waker, and the runtime wakes it after releasing its own lock.
+
+```rust
+// correlate::
+pub struct Table<const N: usize> { /* private */ }
+impl<const N: usize> Table<N> {
+    pub const fn new(budget: Option<u64>) -> Self;       // N <= 65536, checked at compile time
+    pub fn insert(&mut self, reservation: u64) -> Option<Correlation>;
+    pub fn settle(&mut self, c: Correlation, outcome: Result<(), CallError>) -> Settled;
+    pub fn outcome(&self, c: Correlation) -> Option<Result<(), CallError>>;
+    pub fn forget(&mut self, c: Correlation) -> Forgotten;
+    pub fn wake_on(&mut self, c: Correlation, waker: &Waker) -> Option<Waker>;
+    pub fn slot(c: Correlation) -> usize;
+}
+#[must_use] pub enum Settled   { Recorded(Option<Waker>), Reclaimed, Unknown }
+#[must_use] pub enum Forgotten { Reclaimed, Marked(Option<Waker>), Unknown }
+
+pub struct Waiters { /* one Option<Waker> each for Slot, Event and Claim */ }
+impl Waiters {
+    pub const fn new() -> Self;                           // and Default
+    pub fn register(&mut self, what: Interest, waker: &Waker) -> Option<Waker>;
+    pub fn take(&mut self, what: Interest) -> Option<Waker>;
+    pub fn take_all(&mut self) -> impl Iterator<Item = Waker> + use<>;
+}
+```
+
+**A correlation is `(generation << 16) | slot`.** The slot index takes the low
+16 bits, so `N` is at most 65536, and an associated `const` assertion refuses a
+larger `N` when `Table::new` is instantiated. The generation takes the other 48
+bits and wraps to 0 after `2^48 - 1` reclaims of one slot. `insert` takes the
+lowest free slot, so a table's correlations are the same on every run.
+
+**`forget` is the one operation that reclaims a slot**: at once for a settled
+call, and at the settlement for a call in flight, which `forget` marks.
+`outcome` does not reclaim, which is what keeps `Caller::ack` and
+`Caller::reply` non-consuming. A reclaim advances the slot's generation, so the
+correlation the slot had answers as unknown to `outcome`, `settle`, `forget` and
+`wake_on`, and it credits the slot's reservation back to the budget. The budget
+is the optional byte budget of `new`, debited at `insert` from the member's
+reservation (`Member::reservation`, summed by `table_budget`); with none, only
+the slot count bounds the calls in flight, and `insert` does not read its
+argument.
+
+**`Settled` and `Forgotten` are how a runtime learns what to do next**, as enums
+rather than a waker and a flag, because a runtime must tell the three cases
+apart:
+
+| Return                     | Meaning                                                                                                      | What the runtime does                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `Settled::Recorded(waker)` | the outcome is recorded; the call's `Outcome` waker, if any, is handed back                                  | stores the reply bytes by slot, wakes the waker                           |
+| `Settled::Reclaimed`       | the call had been forgotten in flight; nothing is recorded, and the slot is free                             | drops what it kept for the slot, wakes every `Slot` waiter                |
+| `Settled::Unknown`         | no call in flight has the correlation — never issued, already settled, or an old generation; nothing changed | nothing; the first settlement of a call is its outcome                    |
+| `Forgotten::Reclaimed`     | the call was settled; the slot is free                                                                       | drops what it kept for the slot, wakes every `Slot` waiter                |
+| `Forgotten::Marked(waker)` | the call is in flight and marked; the slot is reclaimed at its settlement                                    | wakes the handed-back `Outcome` waker: no outcome will be readable for it |
+| `Forgotten::Unknown`       | no call is held under the correlation, or it was already forgotten                                           | nothing                                                                   |
+
+Both are exhaustive, because they are the transitions of one slot's states —
+free, in flight, forgotten in flight, settled — and a runtime's `match` has a
+correct arm for each. Both are `#[must_use]`: a waker or a reclaim ignored
+leaves a task waiting. `Forgotten::Marked` hands the `Outcome` waker back rather
+than dropping it, because no outcome will ever be readable under the correlation
+and a task still registered on it would otherwise wait on nothing
+(driftsys/ridl#551, which made the same choice in `ridl-loopback` before the
+table existed).
+
+**`Table::wake_on` returns the waker to wake**, which is one of three: the
+displaced waker, when the call held a waker of another task; nothing, on a
+refresh by the same task (`Waker::will_wake`), which replaces the stored waker
+without waking it (ADR-0021 decision 13); or `waker` itself, not stored, when no
+outcome is still to be recorded — the outcome is already known, the call was
+forgotten, or the table holds no call under the correlation. The third case is
+why the return is "the waker to wake" rather than only "the displaced waker": a
+stored waker under a settled or forgotten call would never be woken. A settled
+slot never holds a waker, because its settlement took it, so the three cases
+never need two wakers at once.
+
+**`Waiters` holds one waker per kind of key** — `Slot`, `Event`, `Claim` —
+whatever interface an `Event` or `Claim` key names, so any key of the kind takes
+it (ADR-0021 decision 13). `register` returns the displaced waker of another
+task, nothing on a refresh, and, for `Interest::Outcome`, which a `Table` holds,
+`waker` itself, not stored: a registration there could never be taken. Whether a
+key's change has already happened is the runtime's to know, so a runtime
+registers and then `take`s the waker back when the change is already visible.
+`take_all` is for a runtime with one unkeyed "something changed" source; it
+clears every kind when it is called, whether or not the iterator is consumed,
+and the iterator does not borrow the registry (`+ use<>`, precise capturing,
+stable since Rust 1.82 and so within the crate's 1.83 floor), so a runtime can
+register again while it still holds the iterator. `Waiters` implements `Default`
+beside `new`, as `EventSeqTracker` does, because Clippy's `new_without_default`
+lint fails the gate on a public `new` with no argument and no `Default`.
+
+**What a `Slot` waiter is woken by is the runtime's**: on a reclaim it wakes
+every `Slot` waiter it holds, one per handle, and the first to send again takes
+the slot while the others find the table full and register again. A queue of
+waiters woken one at a time would need storage the allocation-free table cannot
+hold (note F-5). `ridl-loopback` is the first runtime on the table, with sixteen
+slots and no budget ([its design record](ridl-loopback.md), "A claim is not a
+correlation").
+
 ## The `error` module and the port errors
 
 ```rust
@@ -620,6 +729,8 @@ and an aggregate implementing all twelve traits by delegation.
 pub enum Contract  { InvalidValue(Violation), PreconditionFailed, ContractBroken, UnknownInteraction }
 #[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt, Busy }
 pub enum CallError { Contract(Contract), Transport(Transport) }
+#[non_exhaustive] pub enum ClientError   { Send(SendError), Call(CallError), Read(ReadError) }
+#[non_exhaustive] pub enum ProviderError { Serve(ServeError), Claim(ReadError) }
 
 // port::
 #[non_exhaustive] pub enum ReadError      { Short { needed: usize }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
@@ -642,6 +753,19 @@ sent. `Detached` — the runtime behind the port is gone — is local to the por
 not a stratum. Why `Contract` and `CallError` stay exhaustive while `Transport`
 and the seven port error enums stay `#[non_exhaustive]` is ADR-0021 decision 9.
 Every error type here is `Copy` and owns nothing.
+
+`ClientError` and `ProviderError` compose these into one error per side of a
+call (story E11.18, ADR-0021 decision 16, note F-1): a generated client call
+returns `Result<T, ClientError>`, and a generated `serve` resolves to
+`Result<Infallible, ProviderError>`. Each has a `From` impl for each inner type,
+so `?` lands a port error or a call outcome in the variant for its side.
+`ClientError::Send` is here rather than in `CallError`, because a send failure
+is not a settlement outcome and `CallError` is exhaustive. `ClientError::Read`
+is the reply read's port failure; only `ReadError::Detached` reaches it, because
+the reply buffer is sized from `MAX_SIZE`, and it is kept as what it is rather
+than mapped onto a `Transport` variant, which would give a local failure a
+frame-level meaning. Both are `#[non_exhaustive]` under decision 9 and `Copy`.
+No generated code returns either yet: the async face that does is story E11.21.
 
 ## What 0.1 leaves out
 

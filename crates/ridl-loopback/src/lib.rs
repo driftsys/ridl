@@ -66,29 +66,31 @@
 //! port error's `Contract` variant except
 //! [`FixedReader::read_fixed`](ridl_rt::port::FixedReader::read_fixed)'s, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
-//! handle holds the store alive, so `Detached` never appears either; and
-//! nothing is bounded, so the loopback originates neither `Busy` nor
-//! `TooLarge`: `TooLarge` appears only from [`Loopback::fail_next_settle`],
-//! and `Transport::Busy` reaches a caller only when a provider settles a call
-//! with it.
+//! handle holds the store alive, so `Detached` never appears either. The one
+//! bound is the call table's [`Loopback::SLOTS`]: a send with every slot
+//! taken answers `SendError::Busy`. Nothing else is bounded, so `TooLarge`
+//! appears only from [`Loopback::fail_next_settle`], and `Transport::Busy`
+//! reaches a caller only when a provider settles a call with it.
 //!
 //! # Waking
 //!
 //! Every handle implements [`Wakeable`], and a handle stores a waker only
 //! under a kind of key one of its roles observes: a caller handle under
-//! `Interest::Outcome`, kept with each call, a source handle one waker under
-//! `Interest::Event`, and a handler handle one waker under `Interest::Claim`.
+//! `Interest::Outcome`, kept with each call, and one waker under
+//! `Interest::Slot`, a source handle one waker under `Interest::Event`, and a
+//! handler handle one waker under `Interest::Claim`.
 //! For `Event` and `Claim` the rule is one waker per kind, and a change to
 //! any key of the kind wakes the stored waker, whatever interface it was
 //! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,
-//! and no change but that call's settlement or `forget` wakes it (a
-//! displacement by another task does, as for every kind). A settlement wakes the
+//! and no change but that call's settlement, its `forget`, or the drop of the
+//! caller handle that sent it wakes it (a displacement by another task does,
+//! as for every kind). A settlement wakes the
 //! call's waiter, a raise wakes each source it queues the occurrence for, and
-//! a send wakes each handler that serves the member. A registration whose key
-//! already holds — the outcome is known, an occurrence or a call is waiting —
-//! is woken at once, and so is one under a kind the handle does not observe,
-//! and `Interest::Slot`, because nothing bounds the call table and a slot is
-//! always free. A registration of the waker already stored refreshes it
+//! a send wakes each handler that serves the member, and a reclaimed slot of
+//! the call table wakes every caller's `Slot` waiter. A registration whose key
+//! already holds — the outcome is known, an occurrence or a call is waiting, a
+//! slot is free — is woken at once, and so is one under a kind the handle does
+//! not observe. A registration of the waker already stored refreshes it
 //! without waking it. No waker is woken while the store is locked.
 //!
 //! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
@@ -157,6 +159,26 @@ pub struct Loopback {
 }
 
 impl Loopback {
+    /// The number of calls the runtime holds at once: sent, and not yet
+    /// released by [`Caller::forget`] or by the drop of the caller handle that
+    /// sent them. A settled call keeps its slot until it is released. With every slot taken, [`Caller::command`] and
+    /// [`Caller::query`] answer [`SendError::Busy`], on every caller handle,
+    /// because the table is the runtime's.
+    ///
+    /// Sixteen is a small bound, chosen so that a test reaches it in a few
+    /// sends and a program that never forgets a call finds out at once rather
+    /// than after its memory grows. The loopback has no catalog descriptor to
+    /// size a byte budget from (story E16.2), so the slot count is its only
+    /// bound (note F-9 of the async face design).
+    ///
+    /// The generated face does not call `forget` yet, so a program that calls
+    /// through it over one runtime gets `SendError::Busy` from its
+    /// seventeenth call on, unless it drops the caller handle, which forgets
+    /// that handle's calls. The async client of story E11.21 forgets each
+    /// call once it has taken the outcome, which closes this limit; no
+    /// release happens before it.
+    pub const SLOTS: usize = 16;
+
     /// A runtime attached to `catalog`, with an empty store and its clock at
     /// [`Timestamp`] 0.
     ///
