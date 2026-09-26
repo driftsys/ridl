@@ -1,6 +1,6 @@
 # `ridl-loopback` — the in-process reference runtime
 
-`ridl-loopback` is the first runtime in this workspace. It implements the eleven
+`ridl-loopback` is the first runtime in this workspace. It implements the twelve
 port traits of `ridl-rt`'s `port` module over one in-memory store, so a
 generated interaction face can be built over a runtime rather than over a test
 double.
@@ -61,7 +61,7 @@ generated code links — and a host runtime is not among them.
 **Every handle of one runtime holds the same `Arc<Mutex<Store>>`.** The store is
 `crates/ridl-loopback/src/store.rs`: the signal map, the per interface
 generation counters, the provisioned `fixed` values, one queue per event source,
-the call table, and the clock.
+the call table, the clock, and every stored waker.
 
 A port method that reaches the store takes the lock, does its work and returns.
 None waits for data while holding it, which is what `ridl_rt::port` requires of
@@ -99,22 +99,33 @@ runtime a test compares output against has no reason to be nondeterministic.
 
 **One handle type per port role rather than one type implementing them all, plus
 an aggregate**, which is ADR-0021 decision 12's shape and this story's
-`Done when`. The six here group the eleven roles the way that decision derives
-the threading split: a handle each for the five roles with a `&mut self` method,
-and one handle for the six whose methods all take `&self`, which are exactly the
-roles several threads may hold at once.
+`Done when`. The six here group eleven of the twelve roles the way that decision
+derives the threading split: a handle each for the five roles with a `&mut self`
+method, and one handle for the six whose methods all take `&self`, which are
+exactly the roles several threads may hold at once. The twelfth, `Wakeable`, is
+on the three handles a task waits on (story E11.16); its one method takes
+`&self`, and each handle that carries it also carries a `&mut self` role, so it
+moves no handle across the split.
 
-Every handle implements `Attached`, which every port trait but `Clock` carries
-as a supertrait. The table lists what each handle adds to it.
+Every handle implements `Attached`, which every port trait but `Clock` and
+`Wakeable` carries as a supertrait. The table lists what each handle adds to it.
 
 | Handle          | Port roles beside `Attached`                                                  | Threading     |
 | --------------- | ----------------------------------------------------------------------------- | ------------- |
 | `ReaderHandle`  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
 | `WriterHandle`  | `SignalWriter`                                                                | `Send`        |
-| `SourceHandle`  | `EventSource`                                                                 | `Send`        |
+| `SourceHandle`  | `EventSource`, `Wakeable`                                                     | `Send`        |
 | `SinkHandle`    | `EventSink`                                                                   | `Send`        |
-| `CallerHandle`  | `Caller`                                                                      | `Send`        |
-| `HandlerHandle` | `Handler`                                                                     | `Send`        |
+| `CallerHandle`  | `Caller`, `Clock`, `Wakeable`                                                 | `Send`        |
+| `HandlerHandle` | `Handler`, `Wakeable`                                                         | `Send`        |
+
+`CallerHandle` carries `Clock` and `Wakeable` because a generated `Client` over
+an interface with a command or a query is bound on both — `Clock` for the
+deadline and `Wakeable` for the wait — and a role handle that cannot build the
+client of an interface with calls only is not a handle for that role. The
+reader, the writer and the sink carry no `Wakeable`: no key of `Interest` is a
+change a task can wait for through them, and a face that reads signals, writes
+signals or raises events never waits.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
 on the reader handle takes `&self`, so several threads may read one store at
@@ -129,7 +140,7 @@ the assertion ADR-0021 decision 12 asks a runtime crate to carry.
 asserting them.
 
 **`Loopback` is the aggregate.** It holds one of each handle, implements all
-eleven port traits by delegating to the one that has each, and is what
+twelve port traits by delegating to the one that has each, and is what
 `Loopback::new(catalog)` returns. It exists because a generated `Client` is
 commonly bound over `SignalReader + EventSource + Caller` at once and no single
 role handle satisfies a multi-trait bound (ADR-0021 decision 12, second
@@ -159,7 +170,10 @@ is in the store, and state belonging to one handle alone is on that handle.
 On a handle: a writer's staged changes and its per channel sequence counters, a
 sink's and a caller's sequence counters, a source's identity, and a handler's
 served set. In the store: the published signals, the generations, the `fixed`
-values, the event queues, the call table, and the clock.
+values, the event queues, the call table, the clock, and every stored waker. A
+waker is registered through one handle and woken by another handle's operation —
+a settlement wakes a caller, a send wakes a handler, a raise wakes a source — so
+it is state two handles must agree on.
 
 Staging on the writer handle is the visible consequence: `set`, `invalidate` and
 `touch` take no lock at all, and `commit` takes it once. A test pins that a
@@ -414,7 +428,8 @@ and therefore:
 Three more, for reasons other than the descriptor: nothing detaches, because
 every handle holds the store alive, so `Detached` never appears; nothing is
 bounded, so `Busy` and `TooLarge` never appear outside the one injected failure
-below; and `Attached::catalog` returns the `CatalogRef` the runtime was built
+below, and `Transport::Busy`, a provider's refusal at admission, never appears
+at all; and `Attached::catalog` returns the `CatalogRef` the runtime was built
 with, unexamined. ADR-0021 decision 3 places the check of it against an
 interface's own `CATALOG` in the generated face's constructor, once, when the
 face is built; the constructor the Rust backend emits today performs no such
@@ -466,6 +481,70 @@ absences:
   before the injected failure is consumed, so arming it and then settling a
   claim that does not exist answers `UnknownClaim` and leaves the injection
   armed for the next real settlement.
+
+## Waking
+
+**The three handles a task waits on implement `Wakeable`, and each stores one
+waker per key of its own role** (ADR-0021 decision 13, story E11.16):
+
+| Key                    | Registered on                  | Stored                         | Woken by                                                                          |
+| ---------------------- | ------------------------------ | ------------------------------ | --------------------------------------------------------------------------------- |
+| `Interest::Outcome(c)` | `CallerHandle`, the aggregate  | with the call `c` in the table | `Handler::settle` of `c`                                                          |
+| `Interest::Slot`       | `CallerHandle`, the aggregate  | nowhere                        | the registration itself, at once                                                  |
+| `Interest::Event(i)`   | `SourceHandle`, the aggregate  | with the source's queue        | `EventSink::raise` of an event of `i` this source is subscribed to                |
+| `Interest::Claim(i)`   | `HandlerHandle`, the aggregate | with the handler's identity    | `Caller::command` or `Caller::query` on `i`, whatever the handler's served set is |
+
+The rules the table does not show:
+
+- **The waker is woken after the lock is released.** Every store operation that
+  would wake returns the wakers, and the handle wakes them once the guard is
+  dropped. An executor may poll a task on the thread that wakes it, and that
+  poll reaches back into this runtime; under the lock it would wait for itself.
+  `a_waker_is_woken_after_the_store_lock_is_released` runs a waker that reads
+  the clock from another thread inside `wake` and fails if that read cannot
+  finish.
+- **A registration whose change already happened is woken at once.** An
+  `Outcome` registered after the settlement, an `Event` registered while an
+  occurrence of that interface is queued for the source, and a `Claim`
+  registered while a call on that interface that the handler would be presented
+  is waiting. The contract allows a runtime to leave the waiter stored and let
+  the read after the registration find the change instead; waking at once gives
+  the same result for a caller that registers and then reads, and does not
+  strand one that registers and returns.
+- **`Slot` is woken at once, and nothing stores it.** Nothing here is bounded,
+  so a slot is always free, and a send never answers `SendError::Busy`.
+- **A registration from the same task displaces nothing.** A waker that
+  `will_wake` the stored one keeps the stored waker and wakes neither. A task
+  registers on every poll; if its own earlier registration counted as displaced
+  and was woken, every poll would schedule another poll.
+- **A send wakes every handler waiting on the interface**, not only the handlers
+  whose served set holds the member. The served set is on the handle, and a
+  handler woken for a member it does not serve finds nothing on its next
+  `next_claim` and registers again: a spurious wake costs one poll, which the
+  contract allows, and a missed one would hang a task. A registration made while
+  a call is already waiting does apply the served set, so a handler that
+  registers on every poll is not woken at once, again and again, by another
+  handler's call.
+- **A forgotten correlation has no waiter.** `Caller::forget` drops the waiter
+  of a call still in flight, and a registration for a correlation the table no
+  longer holds — never sent, or forgotten — is not stored, which is what `ack`
+  and `reply` answer for it.
+- **A key a handle's role does not carry is not stored.** No change of an
+  `Event` is visible through a caller handle, so a `CallerHandle` never wakes an
+  `Event` waiter; the aggregate routes each key to the handle that carries it.
+  An aggregate an application writes over role handles routes the same way.
+
+**The limit, stated.** This runtime measures no bound: its clock moves only
+under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
+`Timeout` when its `max` passes. So nothing wakes a task when a call's deadline
+passes. A generated async call over this runtime is polled again only when a key
+wakes it — its settlement — or when the executor polls it for its own reasons: a
+blocking client's park timeout, or a frame loop's cadence. Under a general
+executor with no timeout, a call whose provider never settles it waits for as
+long as that is true. That is this runtime's limit, not a defect of the face,
+whose future has no timer
+([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6,
+"The bound"); whether this runtime ever measures a bound is not decided.
 
 ## It runs the port contract suite
 

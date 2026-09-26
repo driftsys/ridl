@@ -2,27 +2,40 @@
 //!
 //! A **port role** is one port trait, and a runtime presents one handle type
 //! per role rather than one type implementing them all (ADR-0021 decision 12).
-//! The six here group the eleven roles the way that decision derives the
-//! threading split: the five roles with a `&mut self` method take a handle
-//! each, and the six whose methods all take `&self` share one, because they
-//! are exactly the roles several threads may hold at once. Every handle here
+//! The six here group eleven of the twelve roles the way that decision derives
+//! the threading split: the five roles with a `&mut self` method take a
+//! handle each, and the six whose methods all take `&self` share one, because
+//! they are exactly the roles several threads may hold at once. The twelfth,
+//! `Wakeable`, takes `&self` too, and sits beside a `&mut self` role on each
+//! handle that carries it, so it moves none of them. Every handle here
 //! holds the same `Arc<Mutex<Store>>` and its own copy of the
 //! [`CatalogRef`](ridl_rt::contract::CatalogRef) the runtime was built with,
 //! so `Attached::catalog` can return a reference without reaching through the
 //! lock.
 //!
-//! Every handle implements `Attached`, which every port trait but `Clock` has
-//! as a supertrait. The table lists what each handle adds to it, and the split
-//! follows the receiver of those methods, as ADR-0021 decision 12 derives it:
+//! Every handle implements `Attached`, which every port trait but `Clock` and
+//! `Wakeable` has as a supertrait. The table lists what each handle adds to
+//! it, and the split follows the receiver of those methods, as ADR-0021
+//! decision 12 derives it:
 //!
 //! | Handle            | Port roles beside `Attached`                                                  | Threading     |
 //! | ----------------- | ----------------------------------------------------------------------------- | ------------- |
 //! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | `Send + Sync` |
 //! | [`WriterHandle`]  | `SignalWriter`                                                                | `Send`        |
-//! | [`SourceHandle`]  | `EventSource`                                                                 | `Send`        |
+//! | [`SourceHandle`]  | `EventSource`, `Wakeable`                                                     | `Send`        |
 //! | [`SinkHandle`]    | `EventSink`                                                                   | `Send`        |
-//! | [`CallerHandle`]  | `Caller`                                                                      | `Send`        |
-//! | [`HandlerHandle`] | `Handler`                                                                     | `Send`        |
+//! | [`CallerHandle`]  | `Caller`, `Clock`, `Wakeable`                                                 | `Send`        |
+//! | [`HandlerHandle`] | `Handler`, `Wakeable`                                                         | `Send`        |
+//!
+//! `Wakeable` is on the three handles a task waits on, each for the keys of
+//! its own role: the source for `Interest::Event`, the caller for
+//! `Interest::Outcome` and `Interest::Slot`, the handler for
+//! `Interest::Claim`. A key a handle's role does not carry is not stored and
+//! never woken, because no change of it is visible through that handle; the
+//! aggregate routes each key to the handle that carries it. The reader, the
+//! writer and the sink have no key to wait on. `CallerHandle` carries `Clock`
+//! too, so a generated client over an interface with calls only, which is
+//! bound on `Caller + Clock + Wakeable`, can be built over it alone.
 //!
 //! Every method on the reader handle takes `&self`, so several threads may
 //! read one store at once; every other handle carries a trait with a
@@ -32,14 +45,15 @@
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::task::Waker;
 
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
+    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
     ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::Timestamp;
 
@@ -59,6 +73,15 @@ pub(crate) fn lock(shared: &Shared) -> MutexGuard<'_, Store> {
     shared
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Wakes what a store operation returned. Every caller drops the guard
+/// before calling this, because the guard is a temporary of the statement
+/// that took it: no waker runs under the lock.
+fn wake(wakers: impl IntoIterator<Item = Waker>) {
+    for waker in wakers {
+        waker.wake();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +277,18 @@ impl EventSource for SourceHandle {
     }
 }
 
+impl Wakeable for SourceHandle {
+    /// Stores `Interest::Event(iface)`: a `raise` that queues an occurrence of
+    /// `iface` for this source wakes it, and an occurrence already queued
+    /// wakes it at once. Every other key is not stored (module documentation).
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        if let Interest::Event(iface) = what {
+            let wakers = lock(&self.shared).wake_on_event(self.id, iface, waker);
+            wake(wakers);
+        }
+    }
+}
+
 /// The `EventSink` port role.
 ///
 /// The sequence counters are the handle's own, one per event channel, for the
@@ -293,7 +328,8 @@ impl Attached for SinkHandle {
 impl EventSink for SinkHandle {
     fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError> {
         let seq = self.take_seq((iface, ord));
-        lock(&self.shared).raise(iface, ord, bytes, seq);
+        let wakers = lock(&self.shared).raise(iface, ord, bytes, seq);
+        wake(wakers);
         Ok(())
     }
 }
@@ -343,7 +379,9 @@ impl Caller for CallerHandle {
         args: &[u8],
     ) -> Result<Correlation, SendError> {
         let seq = self.take_seq();
-        Ok(lock(&self.shared).send(CallKind::Command, iface, ord, args, seq))
+        let (c, wakers) = lock(&self.shared).send(CallKind::Command, iface, ord, args, seq);
+        wake(wakers);
+        Ok(c)
     }
 
     fn query(
@@ -353,7 +391,9 @@ impl Caller for CallerHandle {
         args: &[u8],
     ) -> Result<Correlation, SendError> {
         let seq = self.take_seq();
-        Ok(lock(&self.shared).send(CallKind::Query, iface, ord, args, seq))
+        let (c, wakers) = lock(&self.shared).send(CallKind::Query, iface, ord, args, seq);
+        wake(wakers);
+        Ok(c)
     }
 
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
@@ -370,6 +410,31 @@ impl Caller for CallerHandle {
 
     fn forget(&mut self, c: Correlation) {
         lock(&self.shared).forget(c);
+    }
+}
+
+impl Clock for CallerHandle {
+    fn now(&self) -> Timestamp {
+        lock(&self.shared).now()
+    }
+}
+
+impl Wakeable for CallerHandle {
+    /// Stores `Interest::Outcome(c)`: the settlement of `c` wakes it, and an
+    /// outcome already known wakes it at once. A correlation the store no
+    /// longer holds, never sent or forgotten, is not stored.
+    ///
+    /// Wakes `Interest::Slot` at once: nothing here is bounded, so a slot is
+    /// always free. Every other key is not stored (module documentation).
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        match what {
+            Interest::Outcome(c) => {
+                let wakers = lock(&self.shared).wake_on_outcome(c, waker);
+                wake(wakers);
+            }
+            Interest::Slot => waker.wake_by_ref(),
+            Interest::Event(_) | Interest::Claim(_) => {}
+        }
     }
 }
 
@@ -412,6 +477,22 @@ impl HandlerHandle {
     pub fn served(&self) -> &[(InterfaceNo, Ordinal)] {
         &self.served
     }
+
+    /// The filter `next_claim` applies: `None` when this handler has served
+    /// nothing and is presented every call.
+    fn filter(&self) -> Option<&[Key]> {
+        if self.served.is_empty() {
+            None
+        } else {
+            Some(self.served.as_slice())
+        }
+    }
+}
+
+impl Drop for HandlerHandle {
+    fn drop(&mut self) {
+        lock(&self.shared).close_handler(self.id);
+    }
 }
 
 impl Attached for HandlerHandle {
@@ -431,12 +512,7 @@ impl Handler for HandlerHandle {
     }
 
     fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
-        let served = if self.served.is_empty() {
-            None
-        } else {
-            Some(self.served.as_slice())
-        };
-        lock(&self.shared).next_claim(self.id, served, out)
+        lock(&self.shared).next_claim(self.id, self.filter(), out)
     }
 
     fn settle(
@@ -444,6 +520,21 @@ impl Handler for HandlerHandle {
         claim: ClaimId,
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
-        lock(&self.shared).settle(self.id, claim, outcome)
+        let waker = lock(&self.shared).settle(self.id, claim, outcome)?;
+        wake(waker);
+        Ok(())
+    }
+}
+
+impl Wakeable for HandlerHandle {
+    /// Stores `Interest::Claim(iface)`: a send of a call on `iface` wakes it,
+    /// and a call on `iface` this handler would be presented, already
+    /// waiting, wakes it at once. Every other key is not stored (module
+    /// documentation).
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        if let Interest::Claim(iface) = what {
+            let wakers = lock(&self.shared).wake_on_claim(self.id, iface, self.filter(), waker);
+            wake(wakers);
+        }
     }
 }
