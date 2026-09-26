@@ -1342,9 +1342,9 @@ disagreeing sources is the correct one.
 - docs/specification/ridl-language-reference.md — the language E2 builds.
 - docs/specification/typl-language-reference.md — §2.8, the duration-atom list
   decision 16 extends.
-- docs/wip/family-general-form.md — §4 (attributes) and §6 (the four
+- docs/specification/family-general-form.md — §4 (attributes) and §6 (the four
   supersessions decision 1 adopts).
-- docs/wip/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code contract,
-  decision 9).
+- docs/archive/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code
+  contract, decision 9).
 - docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md — the execution plan
   citing these decisions, archived from `docs/wip/` at epic close.

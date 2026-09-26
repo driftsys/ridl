@@ -6,12 +6,15 @@ heritage, keyword discipline) from a style statement into checkable rules.
 
 Version: 0.2.0 — Draft (design sessions of 2026-07-16)
 
-> **Status.** Pre-ADR working spec. The invariants in §3 were _discovered, not
-> invented_: an audit of the typl v0.1, ridl v0.2, and uxdl v0.1 references
-> showed they already hold everywhere — this document makes them law so they
-> keep holding. §4 (attributes), §5 (formatting), and §6 (readability hardening)
-> record decisions taken in design session; §7 lists the errata those decisions
-> imply for the existing references.
+> **Status.** Pre-ADR working spec. The language references and the family
+> overview cite it, and where a published reference disagrees with it, the
+> reference outranks it (ADR-0007 decision 11, ADR-0008 decision 1). The
+> invariants in §3 were _discovered, not invented_: an audit of the typl v0.1,
+> ridl v0.2, and uxdl v0.1 references showed they already hold everywhere — this
+> document makes them law so they keep holding. §4 (attributes), §5
+> (formatting), and §6 (readability hardening) record decisions taken in design
+> session; §7 lists the errata those decisions imply for the existing
+> references.
 
 ---
 

@@ -457,11 +457,11 @@ Recorded rather than decided; none blocks the core work.
 - `docs/specification/rxdl-language-reference.md` — the spelling layer this
   decision leaves over
 - `docs/archive/uxdl-language-reference-v0.1.md` — retired by decision 1
-- `docs/wip/ridl-family-concept.md` §1.2, §2, §3, §12.3 — the five-language
+- `docs/archive/ridl-family-concept.md` §1.2, §2, §3, §12.3 — the five-language
   proposal and the uxdl-vocabulary question this closes
-- `docs/wip/family-general-form.md` §4.1–§4.5, §4.8, §9.4 — the attribute model,
-  the deletion test, the promotion path, and the registry question decision 8
-  promotes
+- `docs/specification/family-general-form.md` §4.1–§4.5, §4.8, §9.4 — the
+  attribute model, the deletion test, the promotion path, and the registry
+  question decision 8 promotes
 - `docs/specification/ridl-language-reference.md` §3.1, §4.4–4.5, §9, §11 — the
   envelope, init and invalid channels, timing, and evolution the obligations
   extend

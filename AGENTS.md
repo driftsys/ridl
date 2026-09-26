@@ -30,9 +30,9 @@ as-built map.
   the doctrines, the decision ledger, the open questions. Read it before editing
   a specification or an ADR; its footer lists the sections to update when a
   reference changes.
-- `docs/wip/family-general-form.md` — the three declaration shapes, the nine
-  surface invariants, the attribute model. Read it before changing the grammar,
-  the parser, an attribute, or `ridl-fmt`.
+- `docs/specification/family-general-form.md` — the three declaration shapes,
+  the nine surface invariants, the attribute model. Read it before changing the
+  grammar, the parser, an attribute, or `ridl-fmt`.
 - `docs/specification/{typl,ridl,rsdl}-language-reference.md` — read one before
   changing that language's parser, checks, or lowering; read
   `docs/specification/expr-core-specification.md` before changing expression

@@ -16,6 +16,11 @@ provenance. Nothing here is normative — the current references live in
   provenance — its coverage analysis, its operation-shape taxonomy, and its
   prior-art survey are the source material for both. Read it as prior work,
   never as current design.
+- **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
+  the platform/IR model, the naming ledger. Pre-ADR. Superseded by
+  [ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md), which retired
+  uxdl as a family member; the concept note's family table still lists uxdl.
+  Read it as prior work, never as current design.
 - **rsdl-language-reference-v0.1.md** — the architecture layer as first drafted:
   components as situated reactions, application-notation wiring,
   capability-class targets, `place`, transport and posture derivation, bundles,

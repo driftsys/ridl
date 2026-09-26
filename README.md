@@ -69,6 +69,7 @@ docs/
 │                               Published to https://driftsys.github.io/ridl/ on every push to main
 ├── specification/              The normative language references + the family overview
 │   ├── ridl-family-overview.md     Entry point: the map, shared doctrines, decision ledger, open questions
+│   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   ├── typl-language-reference.md
 │   ├── ridl-language-reference.md
 │   ├── rxdl-language-reference.md
@@ -76,8 +77,6 @@ docs/
 │   ├── rsdl-language-reference.md
 │   └── expr-core-specification.md  The shared contract-term grammar (require / ensure, and rmdl's function layer)
 ├── wip/                        Pre-ADR drafts and working specs — nothing here is ratified
-│   ├── ridl-family-concept.md      Concept note — the family direction (pre-ADR)
-│   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   └── …                           Design notes feeding the roadmap; see wip/README.md
 ├── design/                      Architecture records — a crate/component, as built
 │   └── ridl-rt.md               The ridl-rt 0.1 runtime library: modules, types, traits
@@ -86,6 +85,7 @@ docs/
 ├── archive/                    Superseded documents + landed epic plans
 │   ├── ridl-language-reference-v0.1.md   Split into typl + ridl v0.2
 │   ├── uxdl-language-reference-v0.1.md   Retired by ADR-0012; its content moved into ridl and rxdl
+│   ├── ridl-family-concept.md      Concept note — the family direction; superseded by ADR-0012
 │   ├── 2026-07-18-e0-walking-skeleton-plan.md
 │   ├── 2026-07-18-e1-typl-tooling-spine-plan.md
 │   ├── 2026-07-19-e2-ridl-interface-layer-plan.md
@@ -121,7 +121,7 @@ docs/
   [`docs/specification/ridl-family-overview.md`](docs/specification/ridl-family-overview.md)
   — the map and reading-path guide.
 - Want the motivation and the big picture?
-  [`docs/wip/ridl-family-concept.md`](docs/wip/ridl-family-concept.md).
+  [`docs/archive/ridl-family-concept.md`](docs/archive/ridl-family-concept.md).
 - Building the toolchain? [`docs/ROADMAP.md`](docs/ROADMAP.md) and the ADRs
   under [`docs/decisions/`](docs/decisions/).
 
