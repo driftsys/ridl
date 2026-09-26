@@ -168,11 +168,11 @@ One rule decides where a piece of state lives: state two handles must agree on
 is in the store, and state belonging to one handle alone is on that handle.
 
 On a handle: a writer's staged changes and its per channel sequence counters, a
-sink's and a caller's sequence counters, and a source's and a handler's
-identity. In the store: the published signals, the generations, the `fixed`
-values, the event queues, the call table, the handlers' served sets, the stored
-wakers, and the clock. A served set is in the store because a caller's send
-reads it to know which handler to wake; the handler handle keeps a copy for
+sink's and a caller's sequence counters, and a source's, a caller's and a
+handler's identity. In the store: the published signals, the generations, the
+`fixed` values, the event queues, the call table, the handlers' served sets, the
+stored wakers, and the clock. A served set is in the store because a caller's
+send reads it to know which handler to wake; the handler handle keeps a copy for
 `HandlerHandle::served`, which returns a slice, and `serve` is the one method
 that changes both. A waker is in the store because another handle's operation
 wakes it.
@@ -224,22 +224,26 @@ does emit `invalidate_<name>`, so a provider that invalidates before its first
 
 **Every handle implements `Wakeable`, and a handle stores a waker only under a
 kind of key one of its roles observes** (story E11.16). A caller handle observes
-`Outcome`, a source handle `Event`, and a handler handle `Claim`. For `Event`
-and `Claim` the store keeps one waker per kind of key per handle, as ADR-0021
-decision 13 states the contract: one `Event` waker on a source and one `Claim`
-waker on a handler, whatever interface each was registered under, and a change
-to any key of the kind wakes the stored waker, so a task that registers
-`Event(a)` and then `Event(b)` on one source is woken by an occurrence of
-either. An `Outcome` waker is per call: it is kept with its call in the call
-table, because the outcome is the call's, and no change but that call's
-settlement or `forget` wakes it (a displacement by another task does, as for
-every kind). The aggregate sends each key to the handle that observes it.
+`Outcome` and `Slot`, a source handle `Event`, and a handler handle `Claim`. For
+`Slot`, `Event` and `Claim` the store keeps one waker per kind of key per
+handle, as ADR-0021 decision 13 states the contract: one `Slot` waker on a
+caller, one `Event` waker on a source and one `Claim` waker on a handler,
+whatever interface each was registered under, and a change to any key of the
+kind wakes the stored waker, so a task that registers `Event(a)` and then
+`Event(b)` on one source is woken by an occurrence of either. Each handle's
+three are a `ridl_rt::correlate::Waiters` (story E11.18). An `Outcome` waker is
+per call: it is kept with its call in the slot of the call table,
+`ridl_rt::correlate::Table`, because the outcome is the call's, and no change
+but that call's settlement or `forget` wakes it (a displacement by another task
+does, as for every kind). The aggregate sends each key to the handle that
+observes it.
 
 What wakes a stored waker:
 
 | Kind      | Woken by                                                                                                                                                 |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Outcome` | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight                                                     |
+| `Slot`    | a reclaimed slot of the call table: a `forget` of a settled call, or the settlement of a call forgotten while in flight                                  |
 | `Event`   | a raise that queues an occurrence for this source                                                                                                        |
 | `Claim`   | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves |
 
@@ -263,13 +267,17 @@ answer:
   stored: an outcome already recorded, an occurrence already queued for the
   source, a call the handler serves already waiting. The same holds for an
   `Outcome` of a correlation that names no call in flight — unknown or forgotten
-  — for which no outcome will ever be recorded.
-- **`Slot` is woken at once, and never stored.** Nothing bounds the call table,
-  so a slot is always free. Story E11.18 gives the caller side 16 slots, and
-  with them a `Slot` waiter to store.
+  — for which no outcome will ever be recorded, and for a `Slot` registration
+  while a slot of the call table is free.
+- **A reclaim wakes every caller's `Slot` waiter**, not one of them: the first
+  to send again takes the slot, and the others find the table full, answer
+  `SendError::Busy` again, and register again. A queue of waiters, woken one at
+  a time, would need storage the allocation-free table cannot hold, and a waiter
+  that has no slot yet has no slot to be kept in (note F-5). A caller's drop
+  removes its `Slot` waker from the store; its calls stay in the table.
 - **A kind no role of the handle observes is woken at once.** The reader, writer
-  and sink handles observe no kind of key, and the caller, source and handler
-  handles observe one each — `Slot` aside — so a registration under any other
+  and sink handles observe no kind of key, and the source and handler handles
+  observe one each and the caller handle two, so a registration under any other
   kind has nothing that could change under it, and a stored waker would never be
   woken.
 
@@ -287,12 +295,13 @@ send reaches a waker of a handler that is gone.
 under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
 `Timeout` when its `max` passes, so nothing wakes a task when a call's deadline
 passes. A call over this runtime is polled again when a key wakes it — its
-settlement, or its `forget` — or when the executor polls it for its own reasons:
-a blocking client's park timeout, or a frame loop's cadence. Under a general
-executor with no timeout, a call whose provider never settles it waits for as
-long as that is true. That is this runtime's limit, not a defect of the face,
-whose future has no timer of its own (ADR-0023 decision 6, "The bound"); whether
-this runtime ever measures a bound is not decided.
+settlement, its `forget`, or a reclaimed slot while it waits for one — or when
+the executor polls it for its own reasons: a blocking client's park timeout, or
+a frame loop's cadence. Under a general executor with no timeout, a call whose
+provider never settles it waits for as long as that is true. That is this
+runtime's limit, not a defect of the face, whose future has no timer of its own
+(ADR-0023 decision 6, "The bound"); whether this runtime ever measures a bound
+is not decided.
 
 The tests are under "Waking" in `crates/ridl-loopback/tests/ports.rs`. Removing
 the wake from the settlement path turns red every one that waits for a
@@ -303,12 +312,28 @@ settlement, among them
 lock held; `a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails
 without the handler's `Drop`, and `a_dropped_handler_leaves_no_waiter_behind`
 fails when that `Drop` returns the claims but leaves the handler's state in the
-store.
+store. Under "The bounded call table", removing the `Slot` wake from a reclaim
+fails
+`a_slot_registration_is_stored_while_every_slot_is_taken_and_woken_by_a_forget`,
+`the_settlement_of_a_forgotten_call_wakes_the_slot_waiters`, and two more.
 
 ## A claim is not a correlation
 
-The call table holds one entry per call sent, from the caller's send to the
-provider's settlement. Two identities address it, and they are separate:
+The call table is `ridl_rt::correlate::Table`, with `Loopback::SLOTS` — sixteen
+— slots and no byte budget, because the loopback has no catalog descriptor to
+size one from until E16.2 (note F-9). A call holds a slot from the caller's send
+until `forget` reclaims it; a send with every slot taken answers
+`SendError::Busy`, on every caller handle, because the table is the runtime's. A
+correlation is `(generation << 16) | slot`, and a reclaim advances the slot's
+generation, so the correlation a reused slot had before answers as unknown:
+`ack` and `reply` answer `None`, and an `Outcome` registration under it is woken
+at once. The table holds the outcome status and the `Outcome` waker; the
+loopback keeps each call's arguments, its envelope, its place in send order and
+its reply bytes beside it, by slot. A returned claim goes back among the waiting
+calls by send order, not by correlation, because a reused slot's correlation is
+larger than that of a call sent later into a fresh slot. A refused send draws no
+sequence number, because nothing was sent. Two identities address a call, and
+they are separate:
 
 - a **`Correlation`**, returned by `command` and `query`, is the caller's name
   for the outcome it will read back;
@@ -338,17 +363,17 @@ presentation recorded an outcome the caller could read as an acknowledgment.
 fails whichever handler settles next.
 
 **`Caller::forget` releases the caller's interest, and cancels nothing.** A call
-whose outcome is already recorded has nothing left to happen to it, so its entry
-goes. A call still in flight keeps its entry, marked forgotten: the provider is
-still presented it and still settles it, because `Handler`'s contract is that
-every claim is settled and a caller losing interest is not the provider's
-business. Either way the correlation answers `None` from `ack` and `reply`
-afterwards, which is what `Caller::forget` tells a caller to expect. The
-alternative rejected is removing the entry outright: it revokes a claim the
-provider may already hold, so the provider's `settle` fails and the generated
-`dispatch` does not count it — and, in the shape this crate first had, it left
-the call's identity in the waiting queue with no entry behind it, which made
-every later `next_claim` on that runtime panic.
+whose outcome is already recorded has nothing left to happen to it, so its slot
+is reclaimed. A call still in flight keeps its slot, marked forgotten, until its
+settlement reclaims it: the provider is still presented it and still settles it,
+because `Handler`'s contract is that every claim is settled and a caller losing
+interest is not the provider's business. Either way the correlation answers
+`None` from `ack` and `reply` afterwards, which is what `Caller::forget` tells a
+caller to expect. The alternative rejected is removing the entry outright: it
+revokes a claim the provider may already hold, so the provider's `settle` fails
+and the generated `dispatch` does not count it — and, in the shape this crate
+first had, it left the call's identity in the waiting queue with no entry behind
+it, which made every later `next_claim` on that runtime panic.
 
 ## The two signal extensions are implemented
 
@@ -516,27 +541,28 @@ and therefore:
   occurrence is discarded is a member's, too.
 
 Three more, for reasons other than the descriptor: nothing detaches, because
-every handle holds the store alive, so `Detached` never appears; nothing is
-bounded, so this runtime originates neither `Busy` nor `TooLarge` — `TooLarge`
-appears only from the one injected failure below, and `Transport::Busy`, a
-provider's refusal at admission, reaches a caller only when a provider settles a
-call with it (`a_providers_busy_settlement_reaches_the_caller`); and
-`Attached::catalog` returns the `CatalogRef` the runtime was built with,
-unexamined. ADR-0021 decision 3 places the check of it against an interface's
-own `CATALOG` in the generated face's constructor, once, when the face is built;
-the constructor the Rust backend emits today performs no such check, which
-driftsys/ridl#448 is open on. Either way the check is the face's and not the
-runtime's.
+every handle holds the store alive, so `Detached` never appears; nothing but the
+call table is bounded, so the one `Busy` this runtime originates is
+`SendError::Busy` with every slot taken, and it originates no `TooLarge` —
+`TooLarge` appears only from the one injected failure below, and
+`Transport::Busy`, a provider's refusal at admission, reaches a caller only when
+a provider settles a call with it
+(`a_providers_busy_settlement_reaches_the_caller`); and `Attached::catalog`
+returns the `CatalogRef` the runtime was built with, unexamined. ADR-0021
+decision 3 places the check of it against an interface's own `CATALOG` in the
+generated face's constructor, once, when the face is built; the constructor the
+Rust backend emits today performs no such check, which driftsys/ridl#448 is open
+on. Either way the check is the face's and not the runtime's.
 
 Three more that are the runtime's own shape rather than the descriptor's:
 
-- **A settled outcome is kept until the caller releases it.** The call table
-  holds one entry per call sent, and the only thing that reclaims a settled one
-  is `Caller::forget`, which nothing the Rust backend emits calls. A program
-  that makes calls over this runtime and never forgets a correlation therefore
-  grows its call table with them. A runtime with a session, or one that bounded
-  the outcome table, would reclaim; this one holds the outcome because nothing
-  else can know the caller has read it.
+- **A settled outcome is kept until the caller releases it.** A call holds its
+  slot of the call table until it is forgotten, and the only thing that reclaims
+  a settled one is `Caller::forget`, which nothing the Rust backend emits calls.
+  A program that makes calls over this runtime and never forgets a correlation
+  therefore finds every send `SendError::Busy` after its sixteenth call. This
+  runtime holds the outcome because nothing else can know the caller has read
+  it.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when
@@ -634,14 +660,15 @@ that.
 
 - Roadmap: [`docs/ROADMAP.md`](../ROADMAP.md) — E11.15
 - Tracking issue: driftsys/ridl#445, split from E11.9 (driftsys/ridl#265);
-  `Wakeable` and the caller handle's `Clock`: E11.16, driftsys/ridl#510
+  `Wakeable` and the caller handle's `Clock`: E11.16, driftsys/ridl#510; the
+  call table on `ridl_rt::correlate`: E11.18, driftsys/ridl#512
 - Coordination: driftsys/ridl#328
 - Binds:
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 6 (the runtimes live outside `ridl-rt`, and this crate's dependency);
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 5,
-  11, 12 and 13 (the duplicate-suppression disposition, the forwarding impls,
-  the handle model, the `Wakeable` contract);
+  11, 12, 13 and 15 (the duplicate-suppression disposition, the forwarding
+  impls, the handle model, the `Wakeable` contract, the call table);
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5 (a
   face holds its port by value)
 - Depends on: `ridl-rt` 0.1 ([the design record](ridl-rt.md), "The ports")
