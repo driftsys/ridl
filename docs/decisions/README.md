@@ -1,5 +1,8 @@
 # Architecture Decision Records
 
+An entry marked `_Proposed._` has that status in its own `## Status`; every
+other entry below is Accepted.
+
 - **ADR-0002 — Module system.** `package` / `import` / `as` / `internal`, the
   manifest, lockfile, and resolver.
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
@@ -20,7 +23,7 @@
 - **ADR-0008 — Epic E2 execution.** E2-scoped execution decisions (general-form
   authority for the interaction surface, IR v2 placement, the TypeScript second
   backend, `ridl diff` placement and its classifier rules, the `RIDL-`
-  diagnostic allocations, and six close-out amendments).
+  diagnostic allocations, and seven close-out amendments, decisions 15 to 21).
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
@@ -47,12 +50,14 @@
   obligations they carry, keyword spellings per family, and extensions that are
   spelling tables plus backends with no grammar, no IR nodes, and no semantics
   of their own. Promotes the attribute registry from an open question to a
-  precondition and requires fail-closed diff classification. Not epic-scoped: it
-  binds the language surface until superseded. Amended twice on 2026-08-03:
-  metrology anchoring cross-checks the four obligations against the
-  International Vocabulary of Metrology with no decision change, and the `.rxdl`
-  profile is given decision 7's extensions, absorbing both the layer and the
-  domain readings of the wildcard.
+  precondition and requires fail-closed diff classification. Not implemented:
+  epic E3 is re-cut against it as the boundary-model core, and the domain
+  spellings are descoped to E7. Not epic-scoped: it binds the language surface
+  until superseded. Amended twice on 2026-08-03: metrology anchoring
+  cross-checks the four obligations against the International Vocabulary of
+  Metrology with no decision change, and the `.rxdl` profile is given decision
+  7's extensions, absorbing both the layer and the domain readings of the
+  wildcard.
 
 - **ADR-0013 — Codegen backend scope.** _Proposed._ Classifies a backend by what
   its target can faithfully represent: a **wire** backend (proto3, FlatBuffers,
@@ -87,8 +92,9 @@
   consumes. Three amendments came out of implementation: decision 12 retracts
   the infallible serialization return, decision 13 contains the prototext
   reader, and decision 14 moves JSON off `prost-reflect` onto `pbjson`-generated
-  impls so the interchange artifact carries no recursion ceiling. The descriptor
-  pool now serves prototext alone.
+  impls so the interchange artifact carries no recursion ceiling. Decision 14 is
+  further corrected 2026-09-22, in place, on two facts it stated wrongly. The
+  descriptor pool now serves prototext alone.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
@@ -110,9 +116,12 @@
   tombstone, the ordinal spaces are keyed on (package, interface number),
   RIDL-146 to RIDL-148 are retired, and the five slot categories are replaced by
   `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions 12, 15, 17,
-  18, 19, 20 and 24, each dated). Amended again 2026-09-16: decision 9's
-  coherence-group identity is corrected to key on the lock's binding rather than
-  on the interface name.
+  18, 19, 20 and 24, each dated); decisions 9 and 10 each gain a further dated
+  paragraph following this record's citations into the rsdl reference v0.2.0
+  (rewritten 2026-09-13), which renumbered the sections they name and reserved
+  two of the codes. Amended again 2026-09-16: decision 9's coherence group is
+  corrected to be the provided interface, identified by its number in the
+  package's `interfaces.lock` rather than by the interface name.
 
 - **ADR-0016 — Schema projection and the pinned name transform.** The four
   properties every projection from IR identity to a target's namespace must
@@ -134,8 +143,9 @@
   that no earlier record supplied: how a foreign reference projects, where
   constraint information goes, and totality over names as well as over field
   numbers. Its decision 1 fixes `generate_with` as the API every later wire
-  backend inherits. Scoped to proto3, but read decision 1 before writing another
-  wire backend.
+  backend inherits. Decisions 1 and 3 bind every backend that projects onto a
+  namespaced target and are not proto3-scoped; decision 2 is proto3-scoped. Read
+  decision 1 before writing another wire backend.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and
@@ -174,6 +184,9 @@
   on fixed-layout structs today. Amended 2026-09-22: decision 11's parity test
   runs over the in-tree Rust backend rather than TypeScript, since Kotlin now
   precedes TypeScript in the sequence; decisions 8, 9, 10 and 12 are unchanged.
+  Amended again the same day, when stage P4 ported the Rust backend: the Rust
+  parity test now exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
+  `ridlc-gen-model` one stays beside it.
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left
@@ -189,8 +202,9 @@
   2026-09-26 amendment adds decisions 13 to 18: the `Wakeable` port extension
   and its `Interest` keys, `Transport::Busy` crossing the frame, the `correlate`
   module, `ClientError` and `ProviderError`, the E11.19 helpers ratified in
-  place, and the one 0.x minor that carries E11.16 to E11.19. Binds every
-  consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
+  place, and the one 0.x minor that carries E11.16 to E11.19; it also folds
+  decision 8, corrects decision 11, and records open questions 5 and 6. Binds
+  every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
   reference finalization pass (story E14.2).
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives

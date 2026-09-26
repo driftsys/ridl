@@ -28,7 +28,8 @@ as-built map.
   workspace: which crate owns what. Read it before a code change in `crates/`.
 - `docs/specification/ridl-family-overview.md` — the map of the specifications:
   the doctrines, the decision ledger, the open questions. Read it before editing
-  a specification or an ADR; its footer lists what to update with it.
+  a specification or an ADR; its footer lists the sections to update when a
+  reference changes.
 - `docs/wip/family-general-form.md` — the three declaration shapes, the nine
   surface invariants, the attribute model. Read it before changing the grammar,
   the parser, an attribute, or `ridl-fmt`.
@@ -39,23 +40,29 @@ as-built map.
 - `docs/decisions/` — the ADRs. `docs/decisions/README.md` summarises each one;
   the record's own `## Status` is authoritative for its status and amendments.
   Read the record itself before the matching work:
+  - ADR-0002 — before changing packages, imports, visibility, the manifest, or
+    the resolver and lockfile.
+  - ADR-0005 (_proposed_) — before building agent-facing tooling: `ridl-mcp`,
+    `ridl-lsp`, or a skill.
   - ADR-0008 — read its `## Status` before editing it.
   - ADR-0009 (toolchain pin and gate parity) and ADR-0010 (CLI conventions) —
     bind every contributor and every subcommand.
-  - ADR-0012 and ADR-0015 — before changing the language surface.
-  - ADR-0014 (the IR's encodings) and ADR-0016 (the pinned name transform) —
-    bind every backend.
+  - ADR-0011, ADR-0012 and ADR-0015 — before changing the language surface.
+  - ADR-0013 (codegen backend scope, _proposed_), ADR-0014 (the IR's encodings)
+    and ADR-0016 (the pinned name transform) — bind every backend.
   - ADR-0017 decision 1 — before writing another wire backend; `generate_with`
     is the API every later wire backend inherits.
-  - ADR-0018, with ADR-0020's **Documents amended** table — before writing
-    anything about what a backend emits, a backend, or a runtime library. In
-    ADR-0018 `ridl-rt` names the engine; everywhere else it names the library.
+  - ADR-0018 (_proposed_) — before writing anything about what a backend emits.
+    In ADR-0018 `ridl-rt` names the engine; everywhere else it names the
+    library.
   - ADR-0019 decision 8 — before changing what the FlatBuffers backend emits for
     a declaration that is not a struct or a union.
+  - ADR-0020 (_proposed_) — before writing a backend, a runtime library, or the
+    codegen plugin protocol; read its **Documents amended** table first.
   - ADR-0021 and `docs/design/ridl-rt.md` — before changing `ridl-rt` or
     anything that consumes it.
   - ADR-0022 and `docs/technotes/rsdl-implementation.md` — before changing the
-    system artifact, `ridl build`'s exit contract, or `ridl diff`.
+    IR's system artifact, the `ridl build` contract, or `ridl diff`.
   - ADR-0023 and `docs/design/interaction-face.md` — before extending the Rust
     backend's interaction face; its decision 6 before changing what the face
     emits for a call.
