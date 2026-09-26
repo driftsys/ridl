@@ -629,6 +629,62 @@ fn a_handler_registered_under_two_interfaces_is_woken_by_either() {
 }
 
 #[test]
+fn a_registration_under_one_interface_is_woken_by_a_change_on_another() {
+    // Per-kind storage, with one registration only: the interface of the key
+    // is not kept, so a store that keeps one waker per key, and wakes it only
+    // for that key, leaves both tasks asleep here.
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut caller = rt.caller();
+    let mut source = rt.source();
+    let mut handler = rt.handler();
+    source.subscribe(InterfaceNo(2), &[ORD]).expect("subscribe");
+    handler.serve(InterfaceNo(2), &[ORD]).expect("serve");
+
+    let (event, event_waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &event_waker);
+    sink.raise(InterfaceNo(2), ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&event), 1, "an occurrence of interface 2 wakes it");
+
+    let (claim, claim_waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &claim_waker);
+    caller.command(InterfaceNo(2), ORD, &[1]).expect("send");
+    assert_eq!(wakes(&claim), 1, "a call on interface 2 wakes it");
+}
+
+#[test]
+fn two_tasks_under_two_interfaces_of_one_kind_share_the_one_slot() {
+    // Per-kind storage, with two tasks: task A registers under interface 1
+    // and task B under interface 2 of the same kind on one handle. B
+    // displaces A, so A is woken at once, and a change on interface 1 then
+    // wakes B, the one stored waker. A per-key store would keep both, wake
+    // neither at registration, and wake A rather than B on the change.
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut caller = rt.caller();
+    let mut source = rt.source();
+    let mut handler = rt.handler();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    handler.serve(IFACE, &[ORD]).expect("serve");
+
+    let (a, a_waker) = counting();
+    let (b, b_waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &a_waker);
+    source.wake_on(Interest::Event(InterfaceNo(2)), &b_waker);
+    assert_eq!((wakes(&a), wakes(&b)), (1, 0), "B displaces A");
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!((wakes(&a), wakes(&b)), (1, 1), "interface 1 wakes B");
+
+    let (a, a_waker) = counting();
+    let (b, b_waker) = counting();
+    handler.wake_on(Interest::Claim(IFACE), &a_waker);
+    handler.wake_on(Interest::Claim(InterfaceNo(2)), &b_waker);
+    assert_eq!((wakes(&a), wakes(&b)), (1, 0), "B displaces A");
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!((wakes(&a), wakes(&b)), (1, 1), "interface 1 wakes B");
+}
+
+#[test]
 fn a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once() {
     let rt = runtime();
     let mut sink = rt.sink();
@@ -688,9 +744,11 @@ fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handl
     let mut keeper = rt.handler();
     let mut dropped = rt.handler();
     let mut other = rt.handler();
+    let mut elsewhere = rt.handler();
     keeper.serve(IFACE, &[ORD]).expect("serve");
     dropped.serve(IFACE, &[ORD]).expect("serve");
     other.serve(IFACE, &[ORD]).expect("serve");
+    elsewhere.serve(IFACE, &[OTHER]).expect("serve");
     let mut buf = [0u8; 8];
 
     let kept = caller.command(IFACE, ORD, &[1]).expect("send");
@@ -706,8 +764,10 @@ fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handl
 
     let (first, first_waker) = counting();
     let (second, second_waker) = counting();
+    let (third, third_waker) = counting();
     keeper.wake_on(Interest::Claim(IFACE), &first_waker);
     other.wake_on(Interest::Claim(IFACE), &second_waker);
+    elsewhere.wake_on(Interest::Claim(IFACE), &third_waker);
     drop(dropped);
     assert_eq!(
         wakes(&first),
@@ -718,6 +778,11 @@ fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handl
         wakes(&second),
         1,
         "every serving handler is woken: the second"
+    );
+    assert_eq!(
+        wakes(&third),
+        0,
+        "a handler serving another member is not woken"
     );
 
     let returned = other
@@ -885,6 +950,10 @@ fn a_dropped_handler_returns_its_claims_to_the_waiting_calls() {
     let (count, waker) = counting();
     second.wake_on(Interest::Claim(IFACE), &waker);
     assert_eq!(wakes(&count), 0);
+    // The caller waits on the first call across the drop: the return does not
+    // wake it, and the settlement by the handler that takes it does.
+    let (outcome, outcome_waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &outcome_waker);
 
     drop(first);
     assert_eq!(
@@ -892,6 +961,7 @@ fn a_dropped_handler_returns_its_claims_to_the_waiting_calls() {
         1,
         "the returned claims wake a serving handler"
     );
+    assert_eq!(wakes(&outcome), 0, "a returned claim is not an outcome");
 
     // They return in send order, and are settled by the handler that takes
     // them.
@@ -901,6 +971,11 @@ fn a_dropped_handler_returns_its_claims_to_the_waiting_calls() {
         .expect("returned");
     assert_eq!(&buf[..again.len], &[1], "the earlier call first");
     second.settle(again.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        wakes(&outcome),
+        1,
+        "the settlement by the second handler wakes the caller"
+    );
     let then = second
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -1040,14 +1115,39 @@ fn a_dropped_handler_leaves_no_waiter_behind() {
     // handler.
     let rt = runtime();
     let mut caller = rt.caller();
-    let handler = rt.handler();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    // The handler holds a claim, so its drop returns one; the handler's own
+    // state must be gone before the return wakes the handlers that serve the
+    // member, or the dropped handler's waker would be woken with them.
+    caller.command(IFACE, ORD, &[1]).expect("send");
+    handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
     assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
     drop(handler);
     assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    assert_eq!(wakes(&count), 0, "the returned claim does not wake it");
+    caller.command(IFACE, ORD, &[2]).expect("send");
     assert_eq!(wakes(&count), 0, "nothing wakes a dropped handler's waker");
+}
+
+#[test]
+fn a_dropped_source_leaves_no_waiter_behind() {
+    let rt = runtime();
+    let mut sink = rt.sink();
+    let mut source = rt.source();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    let (count, waker) = counting();
+    source.wake_on(Interest::Event(IFACE), &waker);
+    assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
+    drop(source);
+    assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
+    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    assert_eq!(wakes(&count), 0, "nothing wakes a dropped source's waker");
 }
 
 #[test]

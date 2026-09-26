@@ -30,8 +30,9 @@
 //! A handle stores a waker only under a kind of key one of its roles
 //! observes. For `Event` and `Claim` that is one waker per kind, and a
 //! change to any key of that kind wakes it (ADR-0021 decision 13). An
-//! `Outcome` waker is per call: it is kept with its call, and only that call's
-//! settlement or `forget` wakes it. A registration under any other kind is woken at
+//! `Outcome` waker is per call: it is kept with its call, and no change but
+//! that call's settlement or `forget` wakes it; a displacement by another
+//! task does, as for every kind. A registration under any other kind is woken at
 //! once, because nothing that handle could read changes under it, and a
 //! stored waker would never be woken. `Slot` is woken at once too, and never
 //! stored, because the call table has no bound and a slot is always free.
@@ -414,7 +415,7 @@ impl Clock for CallerHandle {
 }
 
 /// Stores one `Outcome` waker per call, kept with the call and woken by its
-/// settlement or its `forget`. `Slot` is woken at once, because the call table
+/// settlement, its `forget`, or a displacement by another task. `Slot` is woken at once, because the call table
 /// has no bound and a slot is always free.
 impl Wakeable for CallerHandle {
     fn wake_on(&self, what: Interest, waker: &Waker) {

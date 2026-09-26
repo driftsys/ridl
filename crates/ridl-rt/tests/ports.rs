@@ -293,6 +293,20 @@ fn both_extensions_are_usable_as_trait_objects() {
 }
 
 #[test]
+fn an_interest_is_copy_and_compares_by_its_key() {
+    fn owns_nothing<T: Copy + Eq + core::fmt::Debug + 'static>() {}
+    owns_nothing::<Interest>();
+    assert_eq!(Interest::Event(IFACE), Interest::Event(InterfaceNo(1)));
+    assert_ne!(Interest::Event(IFACE), Interest::Claim(IFACE));
+    assert_ne!(Interest::Event(IFACE), Interest::Event(InterfaceNo(2)));
+    assert_ne!(
+        Interest::Outcome(Correlation(1)),
+        Interest::Outcome(Correlation(2))
+    );
+    assert_ne!(Interest::Slot, Interest::Outcome(Correlation(1)));
+}
+
+#[test]
 fn a_raw_occurrence_is_built_from_its_four_fields() {
     let occurrence = RawOccurrence {
         iface: IFACE,

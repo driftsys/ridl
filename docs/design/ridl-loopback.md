@@ -231,8 +231,9 @@ waker on a handler, whatever interface each was registered under, and a change
 to any key of the kind wakes the stored waker, so a task that registers
 `Event(a)` and then `Event(b)` on one source is woken by an occurrence of
 either. An `Outcome` waker is per call: it is kept with its call in the call
-table, because the outcome is the call's, and only that call's settlement or
-`forget` wakes it. The aggregate sends each key to the handle that observes it.
+table, because the outcome is the call's, and no change but that call's
+settlement or `forget` wakes it (a displacement by another task does, as for
+every kind). The aggregate sends each key to the handle that observes it.
 
 What wakes a stored waker:
 
@@ -431,7 +432,9 @@ the same reason.
 
 **The loopback deduplicates nothing.** It presents each call once because it
 delivers each call once, not because it recognises a retransmission — nothing
-retransmits in a process.
+retransmits in a process. The one call presented twice is a claim a dropped
+handler held and did not settle, which returns to the waiting calls ("Waking",
+above).
 
 A sink's counters are per channel for a reason a single counter per handle would
 break: a consumer subscribed to some of a sink's events would see the numbers of

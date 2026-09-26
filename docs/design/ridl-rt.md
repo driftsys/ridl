@@ -508,11 +508,13 @@ Semantics each implementation presents:
 - **`Handler`** presents each delivered call once through `next_claim`: a
   retransmission of an already-presented call is not presented again and
   receives the cached acknowledgment, and two callers are never merged even
-  under the same `seq`. Every claim is settled — a command settles `Ok(&[])`
-  after its arguments and `require` pass and before application code runs; a
-  query settles with the reply bytes or the `CallError` outcome. A provider
-  settles `CallError::Transport(Transport::Corrupt)` when the argument bytes
-  fail the structure check.
+  under the same `seq`. The one call presented twice is a claim a dropped
+  handler held and did not settle, which the runtime returns to the waiting
+  calls (ADR-0021 decision 5, amended 2026-09-26). Every claim is settled — a
+  command settles `Ok(&[])` after its arguments and `require` pass and before
+  application code runs; a query settles with the reply bytes or the `CallError`
+  outcome. A provider settles `CallError::Transport(Transport::Corrupt)` when
+  the argument bytes fail the structure check.
 - **`ScannableSignals::scan`** writes each interface's changes into `out` all
   together or not at all: when an interface's changes do not fit in the rest of
   `out`, none of them is written, that interface's mark is not updated, and

@@ -21,6 +21,8 @@
 //! `docs/technotes/ridl-rt-by-example.md` in this repository walks it against
 //! concrete generated code.
 
+use core::task::Waker;
+
 use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
 use crate::error::{CallError, Contract};
 use crate::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
@@ -224,7 +226,9 @@ pub struct Correlation(pub u64);
 ///
 /// `next_claim` presents each delivered call once. A retransmission of a call
 /// already presented is not presented again and receives the cached
-/// acknowledgment. Calls from two callers are never merged, even when they
+/// acknowledgment. The one call presented twice is a claim a dropped handler
+/// held and did not settle: the runtime returns it to the waiting calls, and
+/// another handler that serves the member takes it (ADR-0021 decision 5). Calls from two callers are never merged, even when they
 /// carry the same `seq`. A call lost in transport is never presented. The
 /// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
 /// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
@@ -400,7 +404,7 @@ pub trait CoherentSignals: SignalReader {
 ///   woken by an occurrence of either; the task reads the port again and
 ///   finds out which.
 /// - **A refresh or a displacement.** A `wake_on` whose waker
-///   [`will_wake`](core::task::Waker::will_wake) the stored one is a refresh:
+///   [`will_wake`](Waker::will_wake) the stored one is a refresh:
 ///   it replaces the stored waker without waking it, because a task
 ///   registers on every poll and waking it for its own registration would
 ///   schedule the next poll from every poll. A waker of another task
@@ -423,7 +427,7 @@ pub trait CoherentSignals: SignalReader {
 pub trait Wakeable {
     /// Wakes `waker` when the thing `what` names may have changed, under the
     /// contract above.
-    fn wake_on(&self, what: Interest, waker: &core::task::Waker);
+    fn wake_on(&self, what: Interest, waker: &Waker);
 }
 
 /// What a task waits for, as [`Wakeable::wake_on`] takes it.
@@ -769,13 +773,13 @@ impl<P: CoherentSignals + ?Sized> CoherentSignals for &mut P {
 }
 
 impl<P: Wakeable + ?Sized> Wakeable for &P {
-    fn wake_on(&self, what: Interest, waker: &core::task::Waker) {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
         (**self).wake_on(what, waker);
     }
 }
 
 impl<P: Wakeable + ?Sized> Wakeable for &mut P {
-    fn wake_on(&self, what: Interest, waker: &core::task::Waker) {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
         (**self).wake_on(what, waker);
     }
 }

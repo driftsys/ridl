@@ -155,8 +155,13 @@ trusted with no `unsafe` and no second verification pass.
    presents each delivered call once, a retransmission of an already-presented
    call receives the cached acknowledgment rather than being presented again,
    two callers are never merged even under the same `seq`, and `ClaimId` is the
-   key unique per channel. On a claim, `envelope.seq` is unique per caller, not
-   per channel. The ridl reference finalization pass (story E14.2) receives the
+   key unique per channel. **Amended (2026-09-26, story E11.16).** The one call
+   presented twice is a claim a dropped handler held and did not settle: the
+   runtime returns it to the waiting calls, in its place by send order, and
+   another handler that serves the member takes it, so a call does not wait on a
+   handler that is gone (decided on driftsys/ridl#546, landed by
+   driftsys/ridl#551). On a claim, `envelope.seq` is unique per caller, not per
+   channel. The ridl reference finalization pass (story E14.2) receives the
    corrected sentence: on a call, the sequence number is scoped per (caller
    instance, channel), and duplicate suppression keys on the caller's identity
    plus the sequence number. Before a signal's first publication, its envelope
@@ -515,11 +520,11 @@ trusted with no `unsafe` and no second verification pass.
     displaces the stored one and wakes it; a stored waker is woken at most once,
     after every change of its kind becomes visible, and is cleared when woken;
     the caller registers on every poll and registers before it reads the port.
-    (The per-kind storage and the refresh rule replace "one waker per key" and
-    an unconditional wake of the displaced waker, decided on driftsys/ridl#546
-    and landed by driftsys/ridl#551.) A second task waiting for the same events
-    holds a second handle, and each handle's waiter is woken. `Event` and
-    `Claim` are keyed per interface, because `EventSource::next` and
+    (The per-kind storage replaces "one waker per key", and the refresh rule
+    moves into the decision from the dated note that first stated it; decided on
+    driftsys/ridl#546, landed by driftsys/ridl#551.) A second task waiting for
+    the same events holds a second handle, and each handle's waiter is woken.
+    `Event` and `Claim` are keyed per interface, because `EventSource::next` and
     `Handler::next_claim` drain one queue whatever the ordinal and the
     subscription and the served set already filter by member. `Interest` is
     exhaustive, because a runtime must handle every key and an unknown key has

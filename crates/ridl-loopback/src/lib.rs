@@ -81,7 +81,8 @@
 //! For `Event` and `Claim` the rule is one waker per kind, and a change to
 //! any key of the kind wakes the stored waker, whatever interface it was
 //! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,
-//! and only that call's settlement or `forget` wakes it. A settlement wakes the
+//! and no change but that call's settlement or `forget` wakes it (a
+//! displacement by another task does, as for every kind). A settlement wakes the
 //! call's waiter, a raise wakes each source it queues the occurrence for, and
 //! a send wakes each handler that serves the member. A registration whose key
 //! already holds — the outcome is known, an occurrence or a call is waiting —
@@ -102,6 +103,7 @@
 //! choices, is `docs/design/ridl-loopback.md` in this repository.
 
 use std::sync::{Arc, Mutex};
+use std::task::Waker;
 
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
@@ -424,7 +426,7 @@ impl Handler for Loopback {
 /// Each key goes to the handle that observes it: `Outcome` and `Slot` to the
 /// caller, `Event` to the source, and `Claim` to the handler.
 impl Wakeable for Loopback {
-    fn wake_on(&self, what: Interest, waker: &std::task::Waker) {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Outcome(_) | Interest::Slot => self.handles.caller.wake_on(what, waker),
             Interest::Event(_) => self.handles.source.wake_on(what, waker),
