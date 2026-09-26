@@ -176,10 +176,11 @@ a foreign declaration indexes this list (§3.4).
 
 A `Spellings` carries the four pinned outputs and the composition every wire
 backend makes of one of them. A printer whose namespace is snake_case reads
-`snake`, one whose namespace is CamelCase reads `camel`, and a printer that
-keeps the source spelling — TypeScript, for a field — reads `declared`. The
-target set is open (a plugin is any executable), which is why the fields are
-named after the transform and not after a language (D-2).
+`snake`, one whose namespace is CamelCase reads `camel`, one whose namespace is
+PascalCase — the Rust backend, for an enum variant — reads `pascal`, and a
+printer that keeps the source spelling — TypeScript, for a field — reads
+`declared`. The target set is open (a plugin is any executable), which is why
+the fields are named after the transform and not after a language (D-2).
 
 `DottedName.joined_camel` pins the wire backends' `type_name` rule, which
 ADR-0016 does not cover (§9, item 4): `camel_case` splits on underscores, so
@@ -1175,9 +1176,11 @@ rule and no projection rule inside it. What that excludes, by printer:
   slot.
 - **`min == max`** for a fixed array, and **`is_wide`** for a 64-bit width.
 
-Two things are deliberately carried although a printer could compute them, each
-with its reason stated where it sits: `Spellings.screaming` (one composition
-three printers make of a pinned transform; §3.2) and `EnumSet.declared_mask` (a
+Three things are deliberately carried although a printer could compute them,
+each with its reason stated where it sits: `Spellings.screaming` (one
+composition three printers make of a pinned transform; §3.2), `Spellings.pascal`
+(`camel_case` of `snake` when a toolchain older than this field wrote it empty,
+so the Rust backend need not recompute it; §3.2), and `EnumSet.declared_mask` (a
 typl §9 fact two printers fold; §3.3).
 
 ## 8. How drift is caught
