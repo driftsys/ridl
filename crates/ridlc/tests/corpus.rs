@@ -1120,9 +1120,11 @@ fn veh_common_generated_rust_compiles_with_rustc() {
             "--emit",
             "metadata",
             // driftsys/ridl#506: an enum variant is the `pascal_case` of its
-            // typl name, and this deny keeps it there. `veh-common` holds
-            // multi-word enum values, so the deny fails on this fixture if a
-            // variant is not PascalCase.
+            // typl name. `veh-common` holds multi-word enum values
+            // (`CHECK_ENGINE`), so the deny fails the proof if a generated
+            // variant keeps a typl SCREAMING_SNAKE spelling with an
+            // underscore. It does not by itself check the full `pascal_case`
+            // spelling, which the backend's unit tests pin.
             "-D",
             "non_camel_case_types",
         ])
@@ -1319,8 +1321,11 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             // name is what keeps it there. The same holds for an enum
             // variant and `non_camel_case_types` (driftsys/ridl#506): the
             // variant goes through `ridl_ir::name::pascal_case`.
-            // `veh-cluster` holds multi-word enum values, so the deny fails
-            // on it if a variant is not PascalCase.
+            // `veh-cluster` holds multi-word enum values (`CHECK_ENGINE`), so
+            // the deny fails the proof if a generated variant keeps a typl
+            // SCREAMING_SNAKE spelling with an underscore. It does not by
+            // itself check the full `pascal_case` spelling, which the
+            // backend's unit tests pin.
             "-D",
             "non_snake_case",
             "-D",
