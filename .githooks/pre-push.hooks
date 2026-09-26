@@ -3,5 +3,5 @@
 #   !  check     run command, block push on failure
 #   ?  advisory  run command, never block push
 #
-# Full pre-PR gate before pushing.
-! just verify
+# Lint and static-check gate before pushing — see `pre-push` in the justfile.
+! just pre-push

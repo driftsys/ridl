@@ -137,6 +137,10 @@ member; rsdl is the apex.
                          postdate both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
+    just pre-push        lint-commits + the static-check members of build,
+                         keeping compile — skips test, wasm-check,
+                         compat-check, demo, and install-check — wired as the
+                         pre-push hook
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages
@@ -162,9 +166,10 @@ of those is done. When CI needs a variant of a check, give the recipe a
 parameter and pass it (as `commit-lint` does with `just lint-commits <base>`);
 do not write a second copy of the command into the workflow (ADR-0009).
 
-`gate-parity` covers only the members of `build`. `verify` and `lint-commits`
-are outside its reach, which is where the workflow and the justfile last drifted
-apart unnoticed — check those two by reading when you touch either file.
+`gate-parity` covers only the members of `build`. `verify`, `lint-commits`, and
+`pre-push` are outside its reach, which is where the workflow and the justfile
+last drifted apart unnoticed — check those by reading when you touch any of
+them.
 
 ## Conventions
 

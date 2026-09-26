@@ -867,7 +867,7 @@ doc-path-check root="":
     # A git call that ignores an inherited git environment.
     #
     # This recipe runs from inside a git hook: the pre-push hook invokes `just
-    # verify`, and a hook exports GIT_DIR. Under that environment `git -C <dir>`
+    # pre-push`, and a hook exports GIT_DIR. Under that environment `git -C <dir>`
     # changes directory but still reads and writes the repository GIT_DIR names,
     # so the fixture below would build its repository in this one's index rather
     # than its own. Clearing the inherited variables makes every call here act
@@ -1016,7 +1016,7 @@ doc-path-check root="":
         # call below acts on the decoy rather than on the directory it is
         # given, the listings come back empty and the assertions fail. It also
         # keeps a call that escapes the clearing away from this repository,
-        # which is the accident that has to be made impossible — `just verify`
+        # which is the accident that has to be made impossible — `just pre-push`
         # runs from the pre-push hook, so an inherited GIT_DIR here is this
         # repository's own.
         decoy="$work/decoy"
@@ -1114,8 +1114,8 @@ doc-path-check root="":
 # workflow file. It does not check that the step is reached: dropping a job from
 # the `ci` aggregate's `needs:`, narrowing `on:`, or adding an `if:` that never
 # holds all leave this green while the two gates genuinely diverge. It also says
-# nothing about `verify` and `lint-commits`, which are not dependencies of
-# `build`.
+# nothing about `verify`, `lint-commits`, and `pre-push`, none of which are
+# dependencies of `build`.
 #
 # Whole-line YAML comments are excluded, so a recipe named only in a comment —
 # this workflow's own header names several — does not satisfy the check. A
@@ -1396,8 +1396,8 @@ install-check:
 # ADR-0009 brought back to this side. Two of decision 11's were absent until
 # issue #182: `cargo fmt --all --check` was in no recipe at all, and `wasm-check`
 # was a recipe that nothing depended on. Anything the gate names has to be
-# reachable from here, because `just verify` is what the pre-push hook runs — a
-# member that is not a dependency of `build` is not enforced.
+# reachable from here, because a member that is not a dependency of `build` is
+# not covered by `gate-parity`'s CI-parity check.
 #
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
@@ -1448,8 +1448,17 @@ lint-commits base="main":
         git std lint --range "$ref"..HEAD
     fi
 
+# Lint and static-check gate before pushing — skips `test`, `wasm-check`,
+# `compat-check`, `demo`, and `install-check`. `compile` stays in (ahead of
+# `lint`) so a `Cargo.lock` that a manifest change left stale fails on its
+# `--locked` guard instead of being silently rewritten by `lint`'s unlocked
+# `cargo clippy`. Wired as the pre-push hook (.githooks/pre-push.hooks). CI
+# (ci.yml) still runs the full `just build` gate on the PR; `just verify` runs
+# that same gate locally before opening one.
+pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check link-check book-check compile lint
+
 # Commit-message lint over commits not yet on origin/main, then build.
-# Run before opening a PR (also wired as the pre-push hook).
+# Run before opening a PR.
 verify: lint-commits build
 
 # Cut a release: git-std bumps the version, writes the changelog, tags.
