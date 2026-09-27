@@ -35,7 +35,7 @@ fn cabin() -> String {
 /// satisfied by the same token in the client's own clause evaluation.
 fn dispatch_source() -> String {
     let module = cabin();
-    module[at(&module, "pubfndispatch")..].to_string()
+    module[at(&module, "pub(crate)fndispatch")..].to_string()
 }
 
 /// The byte offset of `needle`, or a failure naming it.
@@ -48,12 +48,23 @@ fn at(source: &str, needle: &str) -> usize {
 #[test]
 fn dispatch_has_the_settled_signature() {
     let d = dispatch_source();
+    // The internal one-pass step `serve` drains through (the async face
+    // design, note F-7): `pub(crate)`, and the handler port's failure is
+    // returned rather than swallowed, because it is the value `serve`
+    // resolves to.
     assert!(
-        d.contains("pubfndispatch<H,P>(h:&mutH,p:&mutP,buf:&mut[u8])->usize"),
+        d.contains(
+            "pub(crate)fndispatch<H,P>(h:&mutH,p:&mutP,buf:&mut[u8],)\
+             ->::core::result::Result<usize,::ridl_rt::port::ReadError>"
+        ),
         "dispatch signature",
     );
     assert!(d.contains("H:::ridl_rt::port::Handler"), "handler bound");
     assert!(d.contains("P:Provider"), "provider bound");
+    assert!(
+        d.contains("letSome(claim)=h.next_claim(buf)?else{returnOk(settled);};"),
+        "a failing next_claim leaves the pass with its error; an empty handler ends it with the count",
+    );
 }
 
 #[test]
@@ -64,7 +75,7 @@ fn dispatch_checks_the_caller_owned_buffer_before_it_polls() {
     // returns 0 without consuming a claim, so the caller can retry with a
     // correctly sized buffer.
     assert!(
-        d.contains("ifbuf.len()<super::Cabin::MAX_BUFFER_SIZE{return0;}"),
+        d.contains("ifbuf.len()<super::Cabin::MAX_BUFFER_SIZE{returnOk(0);}"),
         "the buffer precondition returns 0",
     );
     assert!(
@@ -246,7 +257,7 @@ fn the_two_buffer_constants_are_used_where_each_belongs() {
     );
     // The event constant is not what dispatch checks, and the call constant is
     // not what the event poll allocates.
-    let dispatch_start = at(&d, "pubfndispatch");
+    let dispatch_start = at(&d, "pub(crate)fndispatch");
     assert!(
         !d[dispatch_start..].contains("EVENT_SOURCE_BUFFER_SIZE"),
         "dispatch must not size from the event-only maximum",

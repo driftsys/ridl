@@ -30,7 +30,7 @@ fn max_size_path(type_name: &str) -> String {
 fn the_fixture_compiles_clean() {
     let package = ir::compile_fixture("interaction_face.ridl");
     assert_eq!(package.name, "face.demo");
-    assert_eq!(package.shapes().count(), 2);
+    assert_eq!(package.shapes().count(), 4);
 }
 
 #[test]

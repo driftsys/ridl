@@ -180,16 +180,14 @@ impl Loopback {
     /// size a byte budget from (story E16.2), so the slot count is its only
     /// bound (note F-9 of the async face design).
     ///
-    /// The generated face does not call `forget` yet, so a program that calls
-    /// through it over one runtime gets `SendError::Busy` from its
-    /// seventeenth call on, unless it drops the caller handle, which forgets
-    /// that handle's calls, or forgets each correlation itself once it has
-    /// read the outcome. A `Client` built over `&mut` this runtime for the
-    /// call leaves the runtime reachable for `forget(c.0)` once its borrow
-    /// ends; a `Client` that owns the runtime by value has no accessor for it,
-    /// so the limit applies to it. The async client of story E11.21 forgets
-    /// each call once it has taken the outcome, and on drop, which closes
-    /// this limit; no release happens before it.
+    /// The generated async client's future (story E11.21) forgets its call
+    /// when it leaves the waiting phase: in the poll that takes the outcome,
+    /// at the call's deadline, and on drop while the call is still waiting.
+    /// So a program that calls through the generated face holds one slot per
+    /// call in flight. A program that sends through the `Caller` port
+    /// directly must forget each correlation itself once it has read the
+    /// outcome, or drop the caller handle, which forgets that handle's calls;
+    /// otherwise it gets `SendError::Busy` from its seventeenth call on.
     pub const SLOTS: usize = 16;
 
     /// A runtime attached to `catalog`, with an empty store and its clock at

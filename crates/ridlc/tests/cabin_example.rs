@@ -44,11 +44,14 @@
 //! bare `rustc` against an `ridl-rt` rlib it builds itself, so it needs no
 //! manifest, no lock and no registry, and it is what runs under `just test`.
 //!
-//! That is also why the `ridl-rt` this links is built with the three encoding
-//! features and not with the `std` and `validate-pattern` defaults the
-//! emitted `Cargo.toml` declares: a generated item gated behind either of
-//! those two is outside this proof, and inside `just demo`'s, which builds
-//! the generated crate with its default features through cargo.
+//! That is also why the emitted crate is built here with no feature, and not
+//! with the `std` and `validate-pattern` defaults its `Cargo.toml` declares: a
+//! generated item gated behind either of those two is outside this proof, and
+//! inside `just demo`'s, which builds the generated crate with its default
+//! features through cargo. The `ridl-rt` this links is built with the three
+//! encoding features and with `std`, because the consumer polls the generated
+//! async client's futures by hand with `ridl_rt::task::noop_waker`, which the
+//! `std` feature gates.
 
 use std::path::Path;
 

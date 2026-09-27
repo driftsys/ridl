@@ -3,28 +3,47 @@
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §6).
 //!
 //! For each named interface this module emits one `pub mod`, named after the
-//! interface, holding what the design note's §8 calls the face:
+//! interface, holding what the design note's §8 calls the face, as story
+//! E11.21's first half reshaped it (`docs/wip/2026-09-25-async-face-design.md`,
+//! notes F-2 to F-7 and F-10):
 //!
-//! - one `Copy` correlation newtype per command and per query,
-//!   `<Name>Correlation`, which the call's send method returns and its
-//!   `<name>_reply` or `<name>_ack` takes;
 //! - `Client<P>`, the consumer face, generic over exactly the ports the
 //!   interface's own interactions need and no others (RA-19): `SignalReader`
 //!   when it declares a signal, `EventSource` when it declares an event,
-//!   `Caller` when it declares a command or a query;
+//!   `Caller` when it declares a command or a query, plus `Clock` for a call's
+//!   deadline and `Wakeable` for a call's or an event's wait. A signal read
+//!   returns its sample; a command, a query and `next_event` each return a
+//!   named future;
+//! - one future type per command and per query, `<Name>Call`, which sends
+//!   when the method is called, waits for a slot while the port is busy,
+//!   resolves on the outcome or at the member's bound, and forgets its call
+//!   when it leaves the waiting phase, on drop included; and `NextEvent`,
+//!   the event future;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
 //! - `Provider`, the trait the application implements, with one method per
 //!   command and query;
-//! - `dispatch`, which routes a claim, checks the argument bytes, evaluates
-//!   `require`, calls the provider, evaluates a query's `ensure`, and settles.
+//! - `serve`, which registers the interface's calls with the handler and
+//!   returns the future that settles every claim, and resolves only when the
+//!   handler port fails;
+//! - the internal poll face those futures are built over, `pub(crate)`: one
+//!   `Copy` correlation newtype per command and per query,
+//!   `<Name>Correlation`; `send_<name>`, `poll_<name>_ack`,
+//!   `poll_<name>_reply` and `poll_next_event` over a bare port; and
+//!   `dispatch`, the one-pass step that routes a claim, checks the argument
+//!   bytes, evaluates `require`, calls the provider, evaluates a query's
+//!   `ensure`, and settles.
 //!
 //! An item whose interface declares nothing for it is not emitted: a
-//! signal-only interface gets a `Client` and a `Publisher` and no `Provider`
-//! or `dispatch`, because no call can reach it.
+//! signal-only interface gets a `Client` and a `Publisher` and no `Provider`,
+//! `dispatch` or `serve`, because no call can reach it.
 //!
-//! Every method returns without waiting (RA-20). There is no thread, future,
-//! socket or timer here, and no method is bounded on `CoherentSignals`.
+//! RA-20, as note F-15 restates it: generated code contains no thread, socket
+//! or timer, and no port waits; a face may return a future, and that future
+//! never blocks. Each future's `poll` registers its interest with the port,
+//! then reads the port — a call or event future once, `Serve` until the
+//! handler has no claim waiting — and returns; what waits is the executor or
+//! the frame loop that polls it. No method is bounded on `CoherentSignals`.
 //!
 //! Since E11.14 the face is reached from [`crate::generate_pipeline`], which
 //! is what `ridl build --emit rust` calls, as well as from
@@ -159,12 +178,15 @@ pub(crate) fn one_interface(
     if !events.is_empty() {
         body.push(event_enum(iface_name, &events));
     }
+    body.extend(futures(&iface, iface_name, &events, &commands, &queries));
+    body.extend(plumbing(&iface, iface_name, &events, &commands, &queries));
     if !signals.is_empty() || !events.is_empty() {
         body.push(publisher(&iface, iface_name, &signals, &events));
     }
     if !commands.is_empty() || !queries.is_empty() {
         body.push(provider(iface_name, &commands, &queries));
         body.push(dispatch(&iface, iface_name, &commands, &queries));
+        body.push(serve(&iface, iface_name, &commands, &queries));
     }
 
     if body.is_empty() {
@@ -189,14 +211,16 @@ fn correlation_type(call: &Call) -> Ident {
     ident(&format!("{}Correlation", call.member.camel))
 }
 
-/// One `Copy` correlation newtype per command and per query.
+/// One `Copy` correlation newtype per command and per query, `pub(crate)`
+/// since the public surface became the futures (the async face design, note
+/// F-12).
 ///
 /// The newtype is the face's, not the port's: `ridl_rt::port::Correlation`
 /// stays untyped, because which interaction a correlation belongs to is a
 /// payload-shaped fact and a port never carries one (ADR-0023 decision 4's
 /// 2026-09-20 amendment). What the newtype buys is that a query's correlation
-/// cannot be passed to an `ack` and a command's cannot be passed to a
-/// `*_reply`.
+/// cannot be passed to `poll_<name>_ack` and a command's cannot be passed to
+/// `poll_<name>_reply`.
 fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
     let mut items = Vec::new();
     for (call, kind) in commands
@@ -207,14 +231,14 @@ fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
         let name = correlation_type(call);
         let doc = format!(
             "Identifies one sent {kind} `{}` to its caller. It is returned by \
-             the send method and accepted by that call's own outcome method, \
+             the internal send and accepted by that call's own outcome read, \
              and by no other.",
             call.member.declared
         );
         items.push(quote! {
             #[doc = #doc]
             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-            pub struct #name(pub ::ridl_rt::port::Correlation);
+            pub(crate) struct #name(pub ::ridl_rt::port::Correlation);
         });
     }
     items
@@ -229,6 +253,7 @@ fn client(
     queries: &[Call],
 ) -> TokenStream {
     let number = interface_number(iface);
+    let has_calls = !commands.is_empty() || !queries.is_empty();
     let mut bounds: Vec<TokenStream> = Vec::new();
     if !signals.is_empty() {
         bounds.push(quote! { ::ridl_rt::port::SignalReader });
@@ -236,8 +261,17 @@ fn client(
     if !events.is_empty() {
         bounds.push(quote! { ::ridl_rt::port::EventSource });
     }
-    if !commands.is_empty() || !queries.is_empty() {
+    if has_calls {
         bounds.push(quote! { ::ridl_rt::port::Caller });
+        // A call's future measures the member's bound on the port's clock
+        // (the async face design, note F-2).
+        bounds.push(quote! { ::ridl_rt::port::Clock });
+    }
+    if has_calls || !events.is_empty() {
+        // A call's future waits on a slot and on its outcome, and the event
+        // future waits on the queue; an event has no response bound, so an
+        // event-only client needs no `Clock` (note F-10).
+        bounds.push(quote! { ::ridl_rt::port::Wakeable });
     }
 
     let mut methods: Vec<TokenStream> = Vec::new();
@@ -319,157 +353,36 @@ fn client(
     }
 
     if !events.is_empty() {
-        let buffer = quote! { [0u8; super::#iface::EVENT_SOURCE_BUFFER_SIZE] };
-        let arms = events.iter().map(|(member, payload)| {
-            let ordinal = &member.ordinal;
-            let variant = ident(member.camel);
-            let path = ty(payload);
-            quote! {
-                #ordinal => Ok(Some(Event::#variant(::ridl_rt::sample::Occurrence {
-                    payload: match ::ridl_rt::payload::Ref::<
-                        #path,
-                        super::Wire,
-                    >::verify(&buf[..occurrence.len]) {
-                        Ok(checked) => Ok(checked.decode()),
-                        Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                            Err(::ridl_rt::sample::Detection::InvalidValue(violation))
-                        }
-                        Err(_) => Err(::ridl_rt::sample::Detection::Corrupt),
-                    },
-                    envelope: occurrence.envelope,
-                })))
-            }
-        });
         let doc = format!(
             "Takes the next occurrence of any subscribed event of interface \
-             `{iface_name}`, routed to its variant by ordinal. `Ok(None)` when \
-             none is waiting. One method serves every event, because the \
-             payload type is not known until the occurrence's ordinal is \
-             read.\n\nThe interface number is checked before the ordinal, \
-             for the reason `dispatch` checks it: a port is attached to a \
-             whole catalog, ordinals restart at 1 in each interface, and an \
-             occurrence of a sibling interface at the same ordinal would \
-             otherwise be decoded as this interface's payload. Such an \
-             occurrence is reported as `Contract::UnknownInteraction`; \
-             `EventSource::next` has already consumed it, so this face cannot \
-             hand it back to the interface it belongs to. Subscribe on a port \
-             this interface owns."
+             `{iface_name}`, routed to its variant by ordinal, as a future: it \
+             resolves when an occurrence is waiting and is `Pending` while \
+             none is. One method serves every event, because the payload type \
+             is not known until the occurrence's ordinal is read. The future \
+             holds this client's port until it is dropped.\n\nThe interface \
+             number is checked before the ordinal, for the reason `serve` \
+             checks it: a port is attached to a whole catalog, ordinals \
+             restart at 1 in each interface, and an occurrence of a sibling \
+             interface at the same ordinal would otherwise be decoded as this \
+             interface's payload. Such an occurrence is reported as \
+             `Contract::UnknownInteraction`; `EventSource::next` has already \
+             consumed it, so this face cannot hand it back to the interface it \
+             belongs to. Subscribe on a port this interface owns."
         );
         methods.push(quote! {
             #[doc = #doc]
-            pub fn next_event(
-                &mut self,
-            ) -> ::core::result::Result<
-                ::core::option::Option<Event>,
-                ::ridl_rt::port::ReadError,
-            > {
-                let mut buf = #buffer;
-                let Some(occurrence) = self.port.next(&mut buf)? else {
-                    return Ok(None);
-                };
-                if occurrence.iface
-                    != <super::#iface as ::ridl_rt::contract::Interface>::NUMBER
-                {
-                    return Err(::ridl_rt::port::ReadError::Contract(
-                        ::ridl_rt::error::Contract::UnknownInteraction,
-                    ));
-                }
-                match occurrence.ord {
-                    #(#arms,)*
-                    _ => Err(::ridl_rt::port::ReadError::Contract(
-                        ::ridl_rt::error::Contract::UnknownInteraction,
-                    )),
-                }
+            pub fn next_event(&mut self) -> NextEvent<'_, P> {
+                NextEvent { port: &mut self.port }
             }
         });
     }
 
     for call in commands {
-        methods.push(send(
-            &number,
-            call,
-            quote! { ::ridl_rt::contract::Command },
-            quote! { command },
-            "command",
-        ));
+        methods.push(call_method(call, "command"));
     }
 
     for call in queries {
-        methods.push(send(
-            &number,
-            call,
-            quote! { ::ridl_rt::contract::Query },
-            quote! { query },
-            "query",
-        ));
-
-        let member = &call.member;
-        let reply = call.reply_type.unwrap_or(call.arg_type);
-        let correlation = correlation_type(call);
-        let method = ident(&format!("{}_reply", member.method));
-        let path = ty(reply);
-        let buffer = payload_buffer(reply);
-        let doc = format!(
-            "Takes query `{}`'s reply once it is known, or `Ok(None)` while it \
-             is not. It does not wait.",
-            member.declared
-        );
-        methods.push(quote! {
-            #[doc = #doc]
-            pub fn #method(
-                &mut self,
-                correlation: #correlation,
-            ) -> ::core::result::Result<
-                ::core::option::Option<
-                    ::core::result::Result<#path, ::ridl_rt::error::CallError>,
-                >,
-                ::ridl_rt::port::ReadError,
-            > {
-                let mut buf = #buffer;
-                match self.port.reply(correlation.0, &mut buf)? {
-                    None => Ok(None),
-                    Some(Err(error)) => Ok(Some(Err(error))),
-                    Some(Ok(len)) => Ok(Some(
-                        match ::ridl_rt::payload::Ref::<
-                            #path,
-                            super::Wire,
-                        >::verify(&buf[..len]) {
-                            Ok(checked) => Ok(checked.decode()),
-                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                                Err(::ridl_rt::error::CallError::Contract(
-                                    ::ridl_rt::error::Contract::InvalidValue(violation),
-                                ))
-                            }
-                            Err(_) => Err(::ridl_rt::error::CallError::Transport(
-                                ::ridl_rt::error::Transport::Corrupt,
-                            )),
-                        },
-                    )),
-                }
-            }
-        });
-    }
-
-    for call in commands {
-        let member = &call.member;
-        let correlation = correlation_type(call);
-        let method = ident(&format!("{}_ack", member.method));
-        let doc = format!(
-            "Takes command `{}`'s delivery acknowledgment once it is known, \
-             or `None` while it is not. It does not wait.",
-            member.declared
-        );
-        methods.push(quote! {
-            #[doc = #doc]
-            pub fn #method(
-                &mut self,
-                correlation: #correlation,
-            ) -> ::core::option::Option<
-                ::core::result::Result<(), ::ridl_rt::error::CallError>,
-            > {
-                self.port.ack(correlation.0)
-            }
-        });
+        methods.push(call_method(call, "query"));
     }
 
     let doc = format!(
@@ -494,8 +407,384 @@ fn client(
     }
 }
 
-/// One consumer-side call method: evaluate `require`, encode the argument,
-/// hand it to the `Caller` port.
+/// The name of one call's future type, `<Name>Call`.
+fn future_type(call: &Call) -> Ident {
+    ident(&format!("{}Call", call.member.camel))
+}
+
+/// The name of one call's phase enum, `<Name>Phase`, private to the module.
+fn phase_type(call: &Call) -> Ident {
+    ident(&format!("{}Phase", call.member.camel))
+}
+
+/// The name of one call's internal send, `send_<name>`.
+fn send_fn(call: &Call) -> Ident {
+    ident(&format!("send_{}", call.member.method))
+}
+
+/// The name of one call's internal outcome read: `poll_<name>_ack` for a
+/// command, `poll_<name>_reply` for a query.
+fn read_fn(call: &Call) -> Ident {
+    let suffix = if call.reply_type.is_some() {
+        "reply"
+    } else {
+        "ack"
+    };
+    ident(&format!("poll_{}_{suffix}", call.member.method))
+}
+
+/// One public call method: sends when it is called, and returns the call's
+/// future with the result of that attempt inside it (the async face design,
+/// note F-4).
+///
+/// The parameter keeps the ridl name, so a reader sees the name the source
+/// used, and the body rebinds it to `__arg` on its first line, before any
+/// local is declared. A ridl identifier cannot start with an underscore
+/// (`ridl check` refuses one), so `__arg`, like the codec's `__p` and `__v`,
+/// cannot be the name of a parameter, and the locals that follow — `deadline`,
+/// `phase`, `correlation`, `error` — cannot shadow the argument whatever it is
+/// called. The futures' `poll` binds the same `__arg` in place of the ridl
+/// name, for the same reason, and the internal send names its port parameter
+/// `__port`. `dispatch` still binds the ridl name directly beside its own
+/// locals; that collision predates the async face and is not covered here.
+fn call_method(call: &Call, kind: &str) -> TokenStream {
+    let member = &call.member;
+    let method = &member.method;
+    let descriptor = &member.descriptor;
+    let arg = &call.arg;
+    let path = ty(call.arg_type);
+    let future = future_type(call);
+    let phase = phase_type(call);
+    let send = send_fn(call);
+    let doc = format!(
+        "Sends {kind} `{}` and returns its future. The call is sent when this \
+         method runs, not when the future is first polled, and the future \
+         resolves on the outcome. A `require` clause that fails, or a send \
+         failure other than `SendError::Busy`, is a future that is ready with \
+         `ClientError::Send` and sends nothing. `SendError::Busy` is a future \
+         that waits for a free slot and sends on a later poll.\n\nThe call's \
+         bound is the member's `max`, measured from the port's clock when \
+         this method runs; a member with no `max` waits without a bound. The \
+         future holds this client's port until it is dropped.",
+        member.declared
+    );
+    quote! {
+        #[doc = #doc]
+        pub fn #method(&mut self, #arg: #path) -> #future<'_, P> {
+            let __arg = #arg;
+            let deadline = <#descriptor as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match #send(&mut self.port, &__arg) {
+                Ok(correlation) => #phase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => #phase::Unsent(__arg),
+                Err(error) => #phase::Failed(error),
+            };
+            #future {
+                port: &mut self.port,
+                phase,
+                deadline,
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The futures.
+// ---------------------------------------------------------------------------
+
+/// The named future of every call — commands, then queries — and, when the
+/// interface declares an event, `NextEvent` after them.
+fn futures(
+    iface: &Ident,
+    iface_name: &str,
+    events: &[(Member, &str)],
+    commands: &[Call],
+    queries: &[Call],
+) -> Vec<TokenStream> {
+    let mut items = Vec::new();
+    for call in commands {
+        items.push(call_future(call, "command"));
+    }
+    for call in queries {
+        items.push(call_future(call, "query"));
+    }
+    if !events.is_empty() {
+        items.push(next_event_future(iface, iface_name));
+    }
+    items
+}
+
+/// One call's future: the state machine of note F-4, with the deadline rule
+/// of notes F-2 and F-3.
+///
+/// The phases are `Unsent` with the argument, kept for the retry while the
+/// port answers `Busy`; `Waiting` with the correlation; `Failed` with a send
+/// error other than `Busy`, which the first poll reports; and `Done`. Every
+/// poll registers the interest of its phase, then reads the port, then
+/// returns (note F-5). Leaving `Waiting` inside `poll` forgets the call
+/// there, so `Drop` forgets only a future that is still waiting.
+fn call_future(call: &Call, kind: &str) -> TokenStream {
+    let member = &call.member;
+    let method = &member.method;
+    let arg_path = ty(call.arg_type);
+    let future = future_type(call);
+    let phase = phase_type(call);
+    let correlation = correlation_type(call);
+    let send = send_fn(call);
+    let read = read_fn(call);
+    let bounds = quote! {
+        ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable
+    };
+
+    // A sent call whose bound passes resolves to the port's own expired
+    // variant for its kind (note F-3).
+    let not_yet = |expired: TokenStream| {
+        quote! {
+            if !this.expired() {
+                this.phase = #phase::Waiting(correlation);
+                return ::core::task::Poll::Pending;
+            }
+            Err(::ridl_rt::error::ClientError::Call(
+                ::ridl_rt::error::CallError::Transport(#expired),
+            ))
+        }
+    };
+    let (output, read_outcome) = match call.reply_type {
+        None => {
+            let not_yet = not_yet(quote! { ::ridl_rt::error::Transport::Undelivered });
+            (
+                quote! { () },
+                quote! {
+                    match #read(&mut *this.port, correlation) {
+                        Some(outcome) => outcome.map_err(::ridl_rt::error::ClientError::Call),
+                        None => { #not_yet }
+                    }
+                },
+            )
+        }
+        Some(reply) => {
+            let not_yet = not_yet(quote! { ::ridl_rt::error::Transport::Timeout });
+            (
+                ty(reply),
+                quote! {
+                    match #read(&mut *this.port, correlation) {
+                        Ok(Some(outcome)) => outcome.map_err(::ridl_rt::error::ClientError::Call),
+                        Err(error) => Err(::ridl_rt::error::ClientError::Read(error)),
+                        Ok(None) => { #not_yet }
+                    }
+                },
+            )
+        }
+    };
+
+    let resolves_to = if call.reply_type.is_some() {
+        "the decoded reply, or the outcome the provider settled"
+    } else {
+        "the delivery acknowledgment: `Ok(())`, or the outcome the provider settled"
+    };
+    let doc = format!(
+        "The future of {kind} `{}`, returned by `Client::{method}`. It \
+         resolves to {resolves_to}; to `ClientError::Send` when the call was \
+         not sent, including `SendError::Busy` when no slot was free within \
+         the call's bound; and to the port's own expired outcome when the call \
+         was sent and its bound passed. Each poll registers its interest, reads \
+         the port once, and returns. Dropping the future while it waits for its \
+         outcome calls `Caller::forget` on the call; a future that has taken \
+         its outcome has already done so. Polling it again after it resolved \
+         panics.",
+        member.declared
+    );
+    let must_use = format!(
+        "the {kind} was sent, or waits for a slot; its outcome is taken only when \
+         the future is polled"
+    );
+    let phase_doc = format!(
+        "Where {kind} `{}` is, as its future's `poll` moves it.",
+        member.declared
+    );
+    let polled_after = format!("`{future}` polled after completion");
+
+    quote! {
+        #[doc = #doc]
+        #[must_use = #must_use]
+        pub struct #future<'a, P: #bounds> {
+            port: &'a mut P,
+            phase: #phase,
+            deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+        }
+
+        #[doc = #phase_doc]
+        enum #phase {
+            /// The port answered `SendError::Busy`; the argument is kept for
+            /// the retry.
+            Unsent(#arg_path),
+            /// Sent, and waiting for the outcome under this correlation.
+            Waiting(#correlation),
+            /// The send failed before anything was sent; the first poll
+            /// reports it.
+            Failed(::ridl_rt::port::SendError),
+            /// The output was taken.
+            Done,
+        }
+
+        impl<P: #bounds> #future<'_, P> {
+            /// Whether the call's bound has passed on the port's clock. A
+            /// call with no bound never expires here.
+            fn expired(&self) -> bool {
+                self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+            }
+        }
+
+        impl<P: #bounds> ::core::future::Future for #future<'_, P> {
+            type Output = ::core::result::Result<#output, ::ridl_rt::error::ClientError>;
+
+            fn poll(
+                self: ::core::pin::Pin<&mut Self>,
+                cx: &mut ::core::task::Context<'_>,
+            ) -> ::core::task::Poll<Self::Output> {
+                let this = self.get_mut();
+                loop {
+                    match ::core::mem::replace(&mut this.phase, #phase::Done) {
+                        #phase::Done => panic!(#polled_after),
+                        #phase::Failed(error) => {
+                            return ::core::task::Poll::Ready(Err(
+                                ::ridl_rt::error::ClientError::Send(error),
+                            ));
+                        }
+                        #phase::Unsent(__arg) => {
+                            // The bound covers the wait for a slot: a call
+                            // still unsent when it passes is not sent, even
+                            // when a slot is free now.
+                            if this.expired() {
+                                return ::core::task::Poll::Ready(Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ));
+                            }
+                            this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                            match #send(&mut *this.port, &__arg) {
+                                Ok(correlation) => this.phase = #phase::Waiting(correlation),
+                                Err(::ridl_rt::port::SendError::Busy) => {
+                                    this.phase = #phase::Unsent(__arg);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(error) => {
+                                    return ::core::task::Poll::Ready(Err(
+                                        ::ridl_rt::error::ClientError::Send(error),
+                                    ));
+                                }
+                            }
+                        }
+                        #phase::Waiting(correlation) => {
+                            this.port.wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                            let outcome = #read_outcome;
+                            this.port.forget(correlation.0);
+                            return ::core::task::Poll::Ready(outcome);
+                        }
+                    }
+                }
+            }
+        }
+
+        impl<P: #bounds> ::core::ops::Drop for #future<'_, P> {
+            fn drop(&mut self) {
+                if let #phase::Waiting(correlation) = &self.phase {
+                    self.port.forget(correlation.0);
+                }
+            }
+        }
+    }
+}
+
+/// The event future: no deadline, because an event has no response bound,
+/// and no `Drop`, because it holds nothing at the port (note F-10).
+fn next_event_future(iface: &Ident, iface_name: &str) -> TokenStream {
+    let number = interface_number(iface);
+    let bounds = quote! { ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable };
+    let doc = format!(
+        "The future of `Client::next_event` over interface `{iface_name}`. Each \
+         poll registers its interest in the interface's events, reads the \
+         queue once, and returns: an occurrence resolves it, and a read \
+         failure resolves it with that failure. It can be polled again after \
+         it resolved, for the next occurrence."
+    );
+    quote! {
+        #[doc = #doc]
+        #[must_use = "an occurrence is taken only when the future is polled"]
+        pub struct NextEvent<'a, P: #bounds> {
+            port: &'a mut P,
+        }
+
+        impl<P: #bounds> ::core::future::Future for NextEvent<'_, P> {
+            type Output = ::core::result::Result<Event, ::ridl_rt::port::ReadError>;
+
+            fn poll(
+                self: ::core::pin::Pin<&mut Self>,
+                cx: &mut ::core::task::Context<'_>,
+            ) -> ::core::task::Poll<Self::Output> {
+                let this = self.get_mut();
+                this.port.wake_on(::ridl_rt::port::Interest::Event(#number), cx.waker());
+                match poll_next_event(&mut *this.port) {
+                    Ok(Some(event)) => ::core::task::Poll::Ready(Ok(event)),
+                    Ok(None) => ::core::task::Poll::Pending,
+                    Err(error) => ::core::task::Poll::Ready(Err(error)),
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The internal poll face the futures are built over. `pub(crate)`: the
+// public surface is the futures (the async face design, note F-12).
+// ---------------------------------------------------------------------------
+
+/// The send, the outcome read of each call, and the event read, as functions
+/// over a bare port, so a future that holds `&mut P` can call them.
+fn plumbing(
+    iface: &Ident,
+    iface_name: &str,
+    events: &[(Member, &str)],
+    commands: &[Call],
+    queries: &[Call],
+) -> Vec<TokenStream> {
+    let number = interface_number(iface);
+    let mut items = Vec::new();
+    for call in commands {
+        items.push(send(
+            &number,
+            call,
+            quote! { ::ridl_rt::contract::Command },
+            quote! { command },
+            "command",
+        ));
+        items.push(poll_ack(call));
+    }
+    for call in queries {
+        items.push(send(
+            &number,
+            call,
+            quote! { ::ridl_rt::contract::Query },
+            quote! { query },
+            "query",
+        ));
+        items.push(poll_reply(call));
+    }
+    if !events.is_empty() {
+        items.push(poll_next_event(iface, iface_name, events));
+    }
+    items
+}
+
+/// One call's send: evaluate `require`, encode the argument, hand it to the
+/// `Caller` port once.
 fn send(
     number: &TokenStream,
     call: &Call,
@@ -508,36 +797,181 @@ fn send(
     let ordinal = &member.ordinal;
     let descriptor = &member.descriptor;
     let correlation = correlation_type(call);
+    let future = future_type(call);
+    let name = send_fn(call);
     let arg = &call.arg;
     let path = ty(call.arg_type);
     let buffer = payload_buffer(call.arg_type);
     let encode = encode_into(
         call.arg_type,
-        quote! { &#arg },
+        quote! { __arg },
         quote! { &mut buf },
         "the argument buffer",
     );
     let doc = format!(
-        "Sends {kind} `{}` and returns the correlation of its outcome. A \
-         `require` clause that fails is reported as \
+        "Sends {kind} `{}` once and returns the correlation of its outcome, or \
+         the send's failure. A `require` clause that fails is \
          `SendError::Contract(Contract::PreconditionFailed)` and nothing is \
-         sent.",
+         sent. `Client::{method}` calls it when the method runs, and \
+         `{future}` calls it again on each poll while the port answers \
+         `SendError::Busy`.",
         member.declared
     );
+    // The port parameter and the rebinding carry emitter-owned names, so a
+    // ridl parameter named `port`, `buf` or `bytes` collides with nothing in
+    // this body (see `call_method`). `dispatch` binds the ridl name directly
+    // and is not covered.
     quote! {
         #[doc = #doc]
-        pub fn #method(
-            &mut self,
-            #arg: #path,
+        pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
+            __port: &mut P,
+            #arg: &#path,
         ) -> ::core::result::Result<#correlation, ::ridl_rt::port::SendError> {
-            <#descriptor as #contract_trait>::require(&#arg).map_err(|()| {
+            let __arg = #arg;
+            <#descriptor as #contract_trait>::require(__arg).map_err(|()| {
                 ::ridl_rt::port::SendError::Contract(
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
             let mut buf = #buffer;
             let bytes = #encode;
-            self.port.#port_method(#number, #ordinal, bytes).map(#correlation)
+            __port.#port_method(#number, #ordinal, bytes).map(#correlation)
+        }
+    }
+}
+
+/// One command's acknowledgment read.
+fn poll_ack(call: &Call) -> TokenStream {
+    let member = &call.member;
+    let correlation = correlation_type(call);
+    let future = future_type(call);
+    let name = read_fn(call);
+    let doc = format!(
+        "Reads command `{}`'s delivery acknowledgment: `Some` once it is \
+         known, `None` while it is not. It does not wait; `{future}` polls it.",
+        member.declared
+    );
+    quote! {
+        #[doc = #doc]
+        pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
+            port: &mut P,
+            correlation: #correlation,
+        ) -> ::core::option::Option<
+            ::core::result::Result<(), ::ridl_rt::error::CallError>,
+        > {
+            port.ack(correlation.0)
+        }
+    }
+}
+
+/// One query's reply read, with the reply's own check.
+fn poll_reply(call: &Call) -> TokenStream {
+    let member = &call.member;
+    let reply = call.reply_type.unwrap_or(call.arg_type);
+    let correlation = correlation_type(call);
+    let future = future_type(call);
+    let name = read_fn(call);
+    let path = ty(reply);
+    let buffer = payload_buffer(reply);
+    let doc = format!(
+        "Reads query `{}`'s reply: `Ok(Some)` once it is known, `Ok(None)` \
+         while it is not, and the port's own failure when the read itself \
+         fails. It does not wait; `{future}` polls it.",
+        member.declared
+    );
+    quote! {
+        #[doc = #doc]
+        pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
+            port: &mut P,
+            correlation: #correlation,
+        ) -> ::core::result::Result<
+            ::core::option::Option<
+                ::core::result::Result<#path, ::ridl_rt::error::CallError>,
+            >,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = #buffer;
+            match port.reply(correlation.0, &mut buf)? {
+                None => Ok(None),
+                Some(Err(error)) => Ok(Some(Err(error))),
+                Some(Ok(len)) => Ok(Some(
+                    match ::ridl_rt::payload::Ref::<
+                        #path,
+                        super::Wire,
+                    >::verify(&buf[..len]) {
+                        Ok(checked) => Ok(checked.decode()),
+                        Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                            Err(::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                            ))
+                        }
+                        Err(_) => Err(::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Corrupt,
+                        )),
+                    },
+                )),
+            }
+        }
+    }
+}
+
+/// The event read `NextEvent` polls: one occurrence of any subscribed event,
+/// routed to its variant by ordinal.
+fn poll_next_event(iface: &Ident, iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
+    let buffer = quote! { [0u8; super::#iface::EVENT_SOURCE_BUFFER_SIZE] };
+    let arms = events.iter().map(|(member, payload)| {
+        let ordinal = &member.ordinal;
+        let variant = ident(member.camel);
+        let path = ty(payload);
+        quote! {
+            #ordinal => Ok(Some(Event::#variant(::ridl_rt::sample::Occurrence {
+                payload: match ::ridl_rt::payload::Ref::<
+                    #path,
+                    super::Wire,
+                >::verify(&buf[..occurrence.len]) {
+                    Ok(checked) => Ok(checked.decode()),
+                    Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                        Err(::ridl_rt::sample::Detection::InvalidValue(violation))
+                    }
+                    Err(_) => Err(::ridl_rt::sample::Detection::Corrupt),
+                },
+                envelope: occurrence.envelope,
+            })))
+        }
+    });
+    let doc = format!(
+        "Reads the next occurrence of any subscribed event of interface \
+         `{iface_name}`, routed to its variant by ordinal: `Ok(None)` when \
+         none is waiting. It does not wait; `NextEvent` polls it. An \
+         occurrence of another interface is reported as \
+         `Contract::UnknownInteraction`, for the reason `Client::next_event` \
+         gives."
+    );
+    quote! {
+        #[doc = #doc]
+        pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
+            port: &mut P,
+        ) -> ::core::result::Result<
+            ::core::option::Option<Event>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = #buffer;
+            let Some(occurrence) = port.next(&mut buf)? else {
+                return Ok(None);
+            };
+            if occurrence.iface
+                != <super::#iface as ::ridl_rt::contract::Interface>::NUMBER
+            {
+                return Err(::ridl_rt::port::ReadError::Contract(
+                    ::ridl_rt::error::Contract::UnknownInteraction,
+                ));
+            }
+            match occurrence.ord {
+                #(#arms,)*
+                _ => Err(::ridl_rt::port::ReadError::Contract(
+                    ::ridl_rt::error::Contract::UnknownInteraction,
+                )),
+            }
         }
     }
 }
@@ -702,7 +1136,7 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
         let reply_path = ty(call.reply_type.unwrap_or(call.arg_type));
         let doc = format!(
             "Serves query `{}`. A reply that breaks an `ensure` clause is \
-             discarded by `dispatch`, which settles `ContractBroken` instead.",
+             discarded by `serve`, which settles `ContractBroken` instead.",
             member.declared
         );
         quote! {
@@ -712,7 +1146,7 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
     });
     let doc = format!(
         "What an application implements to serve interface `{iface_name}`'s \
-         calls.\n\nAn argument is taken by reference because `dispatch` reads \
+         calls.\n\nAn argument is taken by reference because `serve` reads \
          it again when it evaluates a query's `ensure` clauses, and the \
          generated payload types implement neither `Copy` nor `Clone`."
     );
@@ -822,15 +1256,17 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
 
     let doc = format!(
         "Settles every claim of interface `{iface_name}` that is waiting, and \
-         returns how many were settled.\n\nIt does not wait: it makes one pass \
-         over the claims the handler already has and returns. The loop that \
-         calls it belongs to the application or to the runtime.\n\n`buf` is \
-         caller-owned and must be at least `{iface_name}::MAX_BUFFER_SIZE` \
-         bytes, because a reply is encoded into the same buffer as the \
-         arguments. A shorter buffer returns `0` without consuming a claim, so \
-         the caller can retry with a correctly sized one.\n\nEvery claim that \
-         is taken is settled, including one whose interface number or ordinal \
-         this interface does not recognise, which settles \
+         returns how many were settled, or the handler port's failure. It is \
+         the one-pass step `serve` drains through on each poll.\n\nIt does not \
+         wait: it makes one pass over the claims the handler already has and \
+         returns. `Ok` means the handler has no claim waiting; `Err` means \
+         `Handler::next_claim` failed, and every claim settled before the \
+         failure stays settled.\n\n`buf` must be at least \
+         `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is encoded \
+         into the same buffer as the arguments. A shorter buffer returns \
+         `Ok(0)` without consuming a claim.\n\nEvery claim that is taken is \
+         settled, including one whose interface number or ordinal this \
+         interface does not recognise, which settles \
          `Contract::UnknownInteraction`. A claim is counted only once \
          `Handler::settle` has accepted it; a `SettleError` is left to the \
          handler, which already owns that claim's settlement, and the pass \
@@ -844,18 +1280,22 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
 
     quote! {
         #[doc = #doc]
-        pub fn dispatch<H, P>(h: &mut H, p: &mut P, buf: &mut [u8]) -> usize
+        pub(crate) fn dispatch<H, P>(
+            h: &mut H,
+            p: &mut P,
+            buf: &mut [u8],
+        ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
         where
             H: ::ridl_rt::port::Handler,
             P: Provider,
         {
             if buf.len() < super::#iface::MAX_BUFFER_SIZE {
-                return 0;
+                return Ok(0);
             }
             let mut settled = 0usize;
             loop {
-                let Ok(Some(claim)) = h.next_claim(buf) else {
-                    return settled;
+                let Some(claim) = h.next_claim(buf)? else {
+                    return Ok(settled);
                 };
                 let settlement = if claim.iface != #number {
                     h.settle(
@@ -878,6 +1318,124 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
                 };
                 if settlement.is_ok() {
                     settled += 1;
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `serve`.
+// ---------------------------------------------------------------------------
+
+/// `serve` and its future (the async face design, note F-7): the served set
+/// is registered when the function is called; each poll registers
+/// `Interest::Claim`, then drains the handler through `dispatch`; the
+/// handler port's failure is the value the future resolves to, and the
+/// future never resolves to `Ok`.
+fn serve(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStream {
+    let number = interface_number(iface);
+    let ordinals = commands
+        .iter()
+        .chain(queries.iter())
+        .map(|call| &call.member.ordinal);
+    let bounds = quote! { H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable, P: Provider };
+
+    let serve_doc = format!(
+        "Serves interface `{iface_name}`'s commands and queries with `p`, over \
+         the handler port `h`, and returns the future that does the serving. \
+         `Handler::serve` is called with the interface's command and query \
+         ordinals when this function runs; a refusal is a future that is ready \
+         with `ProviderError::Serve`. Each poll of the future registers its \
+         interest in the interface's claims, then settles every claim the \
+         handler has, and is `Pending` once none is left. The future resolves \
+         only when the handler port fails, to `ProviderError::Claim`; every \
+         claim settled before the failure stays settled. `h` is held by value \
+         and `p` by `&mut` until the future is dropped."
+    );
+    let future_doc = format!(
+        "The future `serve` returns over interface `{iface_name}`. It holds \
+         the handler, the provider, and the claim buffer of \
+         `{iface_name}::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and \
+         polling it again after it resolved panics."
+    );
+
+    quote! {
+        #[doc = #serve_doc]
+        pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
+        where
+            #bounds,
+        {
+            let state = match h.serve(#number, &[#(#ordinals),*]) {
+                Ok(()) => ServeState::Serving,
+                Err(error) => ServeState::Refused(error),
+            };
+            Serve {
+                handler: h,
+                provider: p,
+                buf: [0u8; super::#iface::MAX_BUFFER_SIZE],
+                state,
+            }
+        }
+
+        #[doc = #future_doc]
+        #[must_use = "claims are served only while the future is polled"]
+        pub struct Serve<'a, #bounds> {
+            handler: H,
+            provider: &'a mut P,
+            buf: [u8; super::#iface::MAX_BUFFER_SIZE],
+            state: ServeState,
+        }
+
+        /// Where `serve` is, as its future's `poll` moves it.
+        #[derive(Clone, Copy)]
+        enum ServeState {
+            /// `Handler::serve` refused the members; the first poll reports
+            /// it.
+            Refused(::ridl_rt::port::ServeError),
+            /// Each poll registers the claim interest and drains the handler.
+            Serving,
+            /// The failure was reported.
+            Done,
+        }
+
+        /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
+        /// frame loop that stores it in its own state polls it through
+        /// `Pin::new`.
+        impl<#bounds> ::core::marker::Unpin for Serve<'_, H, P> {}
+
+        impl<#bounds> ::core::future::Future for Serve<'_, H, P> {
+            type Output = ::core::result::Result<
+                ::core::convert::Infallible,
+                ::ridl_rt::error::ProviderError,
+            >;
+
+            fn poll(
+                self: ::core::pin::Pin<&mut Self>,
+                cx: &mut ::core::task::Context<'_>,
+            ) -> ::core::task::Poll<Self::Output> {
+                let this = self.get_mut();
+                match this.state {
+                    ServeState::Done => panic!("`Serve` polled after completion"),
+                    ServeState::Refused(error) => {
+                        this.state = ServeState::Done;
+                        ::core::task::Poll::Ready(Err(::ridl_rt::error::ProviderError::Serve(error)))
+                    }
+                    ServeState::Serving => {
+                        this.handler.wake_on(
+                            ::ridl_rt::port::Interest::Claim(#number),
+                            cx.waker(),
+                        );
+                        match dispatch(&mut this.handler, &mut *this.provider, &mut this.buf) {
+                            Ok(_) => ::core::task::Poll::Pending,
+                            Err(error) => {
+                                this.state = ServeState::Done;
+                                ::core::task::Poll::Ready(Err(
+                                    ::ridl_rt::error::ProviderError::Claim(error),
+                                ))
+                            }
+                        }
+                    }
                 }
             }
         }

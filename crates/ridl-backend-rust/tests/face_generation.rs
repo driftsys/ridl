@@ -4,13 +4,13 @@
 //! over the writer ports, and a `Provider` trait with the settled method
 //! signatures.
 //!
-//! These assertions read the generated source. The face is not compiled here
-//! because nothing in the crate can compile it yet: the checked-in generated
-//! file and its `include!` are Task 5's, and `ridl-rt` is not yet a
-//! dev-dependency of this crate. Task 5 adds the compiled proof, including the
+//! These assertions read the generated source and pin its text. The face is
+//! compiled and run elsewhere: `interaction_face.rs` `include!`s the checked-in
+//! generated file and runs the round trips over `ridl-loopback`, including the
 //! minimal `Attached + SignalReader` port that constructs the signal-only
-//! interface's `Client` (design §6, RA-19). What this file can pin today is
-//! the bound list itself, which is the text that proof would exercise.
+//! interface's `Client` (design §6, RA-19), and `face_compile.rs` compiles the
+//! face of inline sources with a bare `rustc`. What this file pins is the
+//! shape of the text those proofs exercise.
 
 use ridl_backend_rust::{generate, generate_face};
 
@@ -50,6 +50,14 @@ fn between(source: &str, from: &str, to: &str) -> String {
     rest[..end].to_string()
 }
 
+/// The byte offset of `needle`, or a failure naming it, so two generated
+/// statements can be checked for their order.
+fn at(source: &str, needle: &str) -> usize {
+    source
+        .find(needle)
+        .unwrap_or_else(|| panic!("generated source has no `{needle}`"))
+}
+
 fn face() -> String {
     let package = ir::compile_fixture("interaction_face.ridl");
     generate_face(&package).expect("generate_face").rust_source
@@ -77,11 +85,13 @@ fn the_client_is_bound_by_every_port_its_interface_needs() {
     let d = dense(&module(&face(), "cabin"));
 
     // A signal needs SignalReader, an event needs EventSource, a command and
-    // a query need Caller.
+    // a query need Caller; a command or a query also needs Clock for the
+    // call's deadline and Wakeable for the wait, and an event needs Wakeable
+    // for the wait on the queue (the async face design, note F-10).
     assert!(
         d.contains(
             "pubstructClient<P:::ridl_rt::port::SignalReader+::ridl_rt::port::EventSource\
-             +::ridl_rt::port::Caller"
+             +::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable,>"
         ),
         "Cabin client port bounds",
     );
@@ -121,18 +131,80 @@ fn a_signal_only_interface_gets_a_client_bound_only_by_signal_reader() {
         !d.contains("EventSink"),
         "no EventSink bound on a signal-only publisher",
     );
+    // A signal read returns at once, so nothing on this client waits: no
+    // deadline to read a clock for, and no interest to register.
+    assert!(
+        !d.contains("Clock"),
+        "no Clock bound on a signal-only client"
+    );
+    assert!(
+        !d.contains("Wakeable"),
+        "no Wakeable bound on a signal-only client"
+    );
     assert!(
         d.contains("pubstructPublisher<W:::ridl_rt::port::SignalWriter>"),
         "a signal-only interface still gets a publisher, bound by SignalWriter alone",
     );
     assert!(
         !d.contains("Handler"),
-        "a signal-only interface gets no dispatch",
+        "a signal-only interface gets no dispatch and no serve",
     );
     assert!(
         !d.contains("pubtraitProvider"),
         "a signal-only interface gets no Provider trait",
     );
+}
+
+#[test]
+fn an_event_only_interface_gets_a_client_bound_by_event_source_and_wakeable() {
+    // The third bound set of note F-10: an event needs `Wakeable`, because
+    // `next_event` returns a future that waits on the queue, and not `Clock`,
+    // because an event has no response bound; its time to live is applied by
+    // the runtime inside `EventSource::next`.
+    let d = dense(&module(&face(), "siren"));
+
+    assert!(
+        d.contains("pubstructClient<P:::ridl_rt::port::EventSource+::ridl_rt::port::Wakeable>"),
+        "Siren client port bounds",
+    );
+    assert!(
+        !d.contains("Clock"),
+        "no Clock bound on an event-only client"
+    );
+    assert!(
+        !d.contains("Caller"),
+        "no Caller bound on an event-only client"
+    );
+    assert!(
+        d.contains(
+            "pubstructNextEvent<'a,P:::ridl_rt::port::EventSource+::ridl_rt::port::Wakeable,>"
+        ),
+        "the event future carries the same two bounds",
+    );
+}
+
+#[test]
+fn a_calls_only_interface_gets_a_client_bound_by_caller_clock_and_wakeable() {
+    // The second bound set of note F-10 on its own: `Caller` for the send,
+    // `Clock` for the deadline, `Wakeable` for the wait, and nothing for a
+    // signal or an event the interface does not declare.
+    let d = dense(&module(&face(), "valve"));
+
+    assert!(
+        d.contains(
+            "pubstructClient<P:::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable"
+        ),
+        "Valve client port bounds",
+    );
+    assert!(
+        !d.contains("SignalReader"),
+        "no SignalReader bound on a calls-only client"
+    );
+    assert!(
+        !d.contains("EventSource"),
+        "no EventSource bound on a calls-only client"
+    );
+    assert!(!d.contains("NextEvent"), "no event future without an event");
 }
 
 #[test]
@@ -199,9 +271,29 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
         d.contains("self.port.subscribe(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,&[::ridl_rt::contract::Ordinal(2u32)],)"),
         "subscribe calls EventSource::subscribe"
     );
+    // `next_event` returns a named future; the read itself is the internal
+    // `poll_next_event`, which the future's `poll` calls after it registers
+    // `Interest::Event` (the async face design, notes F-5 and F-10).
     assert!(
-        d.contains("self.port.next("),
-        "polling calls EventSource::next"
+        d.contains("pubfnnext_event(&mutself)->NextEvent<'_,P>"),
+        "next_event returns the named event future",
+    );
+    assert!(
+        d.contains("pub(crate)fnpoll_next_event<P:::ridl_rt::port::EventSource>(port:&mutP"),
+        "the event read is internal plumbing over a bare port",
+    );
+    assert!(d.contains("port.next("), "polling calls EventSource::next");
+    let future = between(&d, "pubstructNextEvent<'a,", "pub(crate)fnsend_set_level");
+    assert!(
+        future.contains("typeOutput=::core::result::Result<Event,::ridl_rt::port::ReadError>;"),
+        "the event future resolves to one occurrence, or the read's failure",
+    );
+    assert!(
+        at(
+            &future,
+            "this.port.wake_on(::ridl_rt::port::Interest::Event("
+        ) < at(&future, "poll_next_event(&mut*this.port)"),
+        "the event future registers its interest before it reads the port",
     );
     assert!(d.contains("pubenumEvent{"), "an occurrence enum");
     assert!(
@@ -230,54 +322,110 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
 fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     let d = dense(&module(&face(), "cabin"));
 
+    // The public method sends when it is called and returns the call's named
+    // future (the async face design, note F-4). The send, the acknowledgment
+    // and the reply are internal plumbing over a bare port, so the future,
+    // which holds `&mut P` and not the client, can call them (notes F-10 and
+    // F-12).
+    assert!(
+        d.contains("pubfnset_level(&mutself,level:super::Level)->SetLevelCall<'_,P>"),
+        "the command method returns its own future",
+    );
+    let set_level = between(&d, "pubfnset_level(&mutself", "pubfnaverage(&mutself");
+    assert!(
+        set_level.contains(
+            "<super::CabinSetLevelas::ridl_rt::contract::Interaction>::MEMBER.call_deadline()"
+        ),
+        "the deadline is the member's call deadline",
+    );
+    assert!(
+        set_level.contains("self.port.now().0.saturating_add(max.0)"),
+        "the deadline is measured from the port's clock when the method is called",
+    );
+    assert!(
+        set_level.contains("matchsend_set_level(&mutself.port,&__arg){"),
+        "the method sends through the internal send",
+    );
+    assert!(
+        set_level.contains("Err(::ridl_rt::port::SendError::Busy)=>SetLevelPhase::Unsent(__arg),"),
+        "a busy port keeps the argument for the retry",
+    );
+    assert!(
+        set_level.contains("Err(error)=>SetLevelPhase::Failed(error),"),
+        "any other send failure is a future ready with that error",
+    );
     assert!(
         d.contains(
-            "pubfnset_level(&mutself,level:super::Level,)\
-             ->::core::result::Result<SetLevelCorrelation,::ridl_rt::port::SendError>"
+            "pub(crate)fnsend_set_level<P:::ridl_rt::port::Caller>(__port:&mutP,level:&super::Level"
         ),
-        "the command method returns its own correlation newtype",
+        "the command's send is internal and takes the argument by reference",
     );
     assert!(
-        d.contains("self.port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),bytes,)"),
+        d.contains("->::core::result::Result<SetLevelCorrelation,::ridl_rt::port::SendError>{"),
+        "the internal send returns the command's own correlation newtype",
+    );
+    assert!(
+        d.contains("__port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),bytes,)"),
         "the command calls Caller::command"
     );
-    // Scoped to the client's own method body: `dispatch` evaluates the same
+    // Scoped to the internal send's body: `dispatch` evaluates the same
     // clause, so an unscoped assertion would be satisfied by the provider
     // side and would not see a consumer that skipped it.
-    let send_command = between(&d, "pubfnset_level(&mutself", "pubfnaverage(&mutself");
+    let send_command = between(
+        &d,
+        "pub(crate)fnsend_set_level",
+        "pub(crate)fnpoll_set_level_ack",
+    );
     assert!(
         send_command
-            .contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(&level)"),
+            .contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(__arg)"),
         "the consumer evaluates the command's require, through the Command trait",
     );
     assert!(
-        d.contains(
-            "pubfnaverage(&mutself,window:super::Window,)\
-             ->::core::result::Result<AverageCorrelation,::ridl_rt::port::SendError>"
-        ),
-        "the query method returns its own correlation newtype",
+        d.contains("pubfnaverage(&mutself,window:super::Window)->AverageCall<'_,P>"),
+        "the query method returns its own future",
     );
     assert!(
-        d.contains("self.port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),bytes,)"),
+        d.contains(
+            "pub(crate)fnsend_average<P:::ridl_rt::port::Caller>(__port:&mutP,window:&super::Window"
+        ),
+        "the query's send is internal and takes the argument by reference",
+    );
+    assert!(
+        d.contains("->::core::result::Result<AverageCorrelation,::ridl_rt::port::SendError>{"),
+        "the internal send returns the query's own correlation newtype",
+    );
+    assert!(
+        d.contains("__port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),bytes,)"),
         "the query calls Caller::query"
     );
     assert!(
-        d.contains("pubfnaverage_reply(&mutself,correlation:AverageCorrelation,)"),
-        "a separate reply method polls the correlation, typed by its query",
+        d.contains(
+            "pub(crate)fnpoll_average_reply<P:::ridl_rt::port::Caller>(port:&mutP,correlation:AverageCorrelation"
+        ),
+        "the reply read is internal, typed by its query",
     );
     assert!(
-        d.contains("self.port.reply("),
-        "the reply method calls Caller::reply"
+        d.contains("port.reply("),
+        "the reply read calls Caller::reply"
     );
-    let send_query = between(&d, "pubfnaverage(&mutself", "pubfnaverage_reply");
+    let send_query = between(
+        &d,
+        "pub(crate)fnsend_average",
+        "pub(crate)fnpoll_average_reply",
+    );
     assert!(
-        send_query.contains("<super::CabinAverageas::ridl_rt::contract::Query>::require(&window)"),
+        send_query.contains("<super::CabinAverageas::ridl_rt::contract::Query>::require(__arg)"),
         "the consumer evaluates the query's require, through the Query trait",
     );
 
     // The reply's own check failures map to the two call errors, in the same
     // split the dispatch side uses.
-    let reply = between(&d, "pubfnaverage_reply", "pubfnset_level_ack");
+    let reply = between(
+        &d,
+        "pub(crate)fnpoll_average_reply",
+        "pub(crate)fnpoll_next_event",
+    );
     assert!(
         reply.contains("::ridl_rt::error::Contract::InvalidValue(violation)"),
         "a reply that breaks a typl constraint is an InvalidValue contract error",
@@ -287,12 +435,199 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "malformed reply bytes are a transport corruption",
     );
     assert!(
-        d.contains("pubfnset_level_ack(&mutself,correlation:SetLevelCorrelation,)"),
-        "the acknowledgment method is per command and takes that command's newtype",
+        d.contains(
+            "pub(crate)fnpoll_set_level_ack<P:::ridl_rt::port::Caller>(port:&mutP,correlation:SetLevelCorrelation"
+        ),
+        "the acknowledgment read is internal, per command, and takes that command's newtype",
     );
     assert!(
-        d.contains("self.port.ack(correlation.0)"),
-        "the acknowledgment method calls Caller::ack through the newtype"
+        d.contains("port.ack(correlation.0)"),
+        "the acknowledgment read calls Caller::ack through the newtype"
+    );
+}
+
+/// The state machine of note F-4, as the emitter writes it for a command and
+/// for a query: the phases, the register-then-read order of every poll, the
+/// two deadline outcomes of note F-3, and the `forget` on drop.
+#[test]
+fn each_call_returns_a_named_future_that_forgets_its_call_on_drop() {
+    let d = dense(&module(&face(), "cabin"));
+    let bounds = "::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable";
+
+    assert!(
+        d.contains(&format!(
+            "pubstructSetLevelCall<'a,P:{bounds},>{{port:&'amutP,phase:SetLevelPhase,\
+             deadline:::core::option::Option<::ridl_rt::sample::Timestamp>,}}"
+        )),
+        "the command future holds the port, its phase and its deadline, and nothing else",
+    );
+    // The variants one by one, because each carries a doc comment that the
+    // whitespace-stripped source keeps between them.
+    let phases = between(&d, "enumSetLevelPhase{", "impl<");
+    for variant in [
+        "Unsent(super::Level),",
+        "Waiting(SetLevelCorrelation),",
+        "Failed(::ridl_rt::port::SendError),",
+        "Done,}",
+    ] {
+        assert!(
+            phases.contains(variant),
+            "the phases are unsent with the argument, waiting with the correlation, \
+             failed at the send, and done; `{variant}` is missing"
+        );
+    }
+    let set_level = between(&d, "pubstructSetLevelCall<'a,", "pubstructAverageCall<'a,");
+    assert!(
+        set_level.contains(&format!(
+            "impl<P:{bounds},>::core::future::FutureforSetLevelCall<'_,P>{{\
+             typeOutput=::core::result::Result<(),::ridl_rt::error::ClientError>;"
+        )),
+        "a command's future resolves to the delivery result under ClientError",
+    );
+    // Register, then read (note F-5): the slot interest before the retry of
+    // the send, and the outcome interest before the acknowledgment is read.
+    assert!(
+        at(
+            &set_level,
+            "this.port.wake_on(::ridl_rt::port::Interest::Slot,cx.waker());"
+        ) < at(&set_level, "send_set_level(&mut*this.port,&__arg)"),
+        "the unsent phase registers Interest::Slot before it retries the send",
+    );
+    assert!(
+        at(
+            &set_level,
+            "this.port.wake_on(::ridl_rt::port::Interest::Outcome(correlation.0),cx.waker(),);"
+        ) < at(
+            &set_level,
+            "poll_set_level_ack(&mut*this.port,correlation,)"
+        ),
+        "the waiting phase registers Interest::Outcome before it reads the acknowledgment",
+    );
+    // Note F-3's two deadline outcomes: unsent is `Send(Busy)`; sent is the
+    // port's own expired variant for the kind, after a `forget`.
+    assert!(
+        set_level
+            .contains("::ridl_rt::error::ClientError::Send(::ridl_rt::port::SendError::Busy,)"),
+        "a call still unsent at its deadline resolves to Send(Busy)",
+    );
+    assert!(
+        set_level.contains("::ridl_rt::error::Transport::Undelivered"),
+        "a sent command resolves to Undelivered at its deadline",
+    );
+    assert!(
+        !set_level.contains("::ridl_rt::error::Transport::Timeout"),
+        "a command never resolves to Timeout",
+    );
+    assert!(
+        set_level.contains(&format!(
+            "impl<P:{bounds},>::core::ops::DropforSetLevelCall<'_,P>{{fndrop(&mutself){{\
+             ifletSetLevelPhase::Waiting(correlation)=&self.phase{{\
+             self.port.forget(correlation.0);}}}}}}"
+        )),
+        "dropping the future while it waits forgets the call, and only then",
+    );
+    assert!(
+        at(&set_level, "this.port.forget(correlation.0);")
+            < at(&set_level, "::core::ops::DropforSetLevelCall"),
+        "a future that leaves the waiting phase in poll forgets the call there, so drop has nothing to forget",
+    );
+
+    let average = between(&d, "pubstructAverageCall<'a,", "pubstructNextEvent<'a,");
+    assert!(
+        average.contains(
+            "typeOutput=::core::result::Result<super::Average,::ridl_rt::error::ClientError"
+        ),
+        "a query's future resolves to the decoded reply under ClientError",
+    );
+    assert!(
+        average.contains("::ridl_rt::error::Transport::Timeout"),
+        "a sent query resolves to Timeout at its deadline",
+    );
+    assert!(
+        !average.contains("::ridl_rt::error::Transport::Undelivered"),
+        "a query never resolves to Undelivered",
+    );
+    assert!(
+        average.contains("Err(error)=>Err(::ridl_rt::error::ClientError::Read(error)),"),
+        "a port failure while the reply is read is ClientError::Read",
+    );
+    assert!(
+        !set_level.contains("ClientError::Read"),
+        "an acknowledgment read cannot fail, so a command's future has no Read arm",
+    );
+    assert!(
+        average.contains("::core::ops::DropforAverageCall<'_,P>"),
+        "the query future forgets on drop too",
+    );
+}
+
+/// `serve` of note F-7: the handler by value, the provider by `&mut`, the
+/// served set registered when the function is called, the claim interest
+/// registered before every drain, and the handler's failure as the value the
+/// future resolves to.
+#[test]
+fn serve_returns_a_future_over_the_internal_dispatch_step() {
+    let d = dense(&module(&face(), "cabin"));
+    let bounds = "H:::ridl_rt::port::Handler+::ridl_rt::port::Wakeable,P:Provider";
+
+    assert!(
+        d.contains(&format!(
+            "pubfnserve<H,P>(muth:H,p:&mutP)->Serve<'_,H,P>where{bounds},{{"
+        )),
+        "serve's signature",
+    );
+    let serve = between(&d, "pubfnserve<H,P>", "pubstructServe<'a,");
+    assert!(
+        serve.contains("&[::ridl_rt::contract::Ordinal(3u32),::ridl_rt::contract::Ordinal(4u32)]"),
+        "serve registers the interface's command and query ordinals, and nothing else",
+    );
+    assert!(
+        serve.contains("Err(error)=>ServeState::Refused(error),"),
+        "a refused Handler::serve is a future ready with the refusal",
+    );
+    assert!(
+        d.contains(&format!(
+            "pubstructServe<'a,{bounds},>{{handler:H,provider:&'amutP,\
+             buf:[u8;super::Cabin::MAX_BUFFER_SIZE],state:ServeState,}}"
+        )),
+        "the serve future holds the handler by value, the provider by &mut, and the claim buffer inline",
+    );
+    assert!(
+        d.contains(&format!(
+            "impl<{bounds},>::core::marker::UnpinforServe<'_,H,P>{{}}"
+        )),
+        "the serve future is Unpin whatever the handler type, because nothing in it is pinned",
+    );
+    let future = between(&d, "::core::future::FutureforServe<'_,H,P>", "fnpoll(");
+    assert!(
+        future.contains(
+            "typeOutput=::core::result::Result<::core::convert::Infallible,::ridl_rt::error::ProviderError"
+        ),
+        "serve never resolves to Ok",
+    );
+    let poll = d[at(&d, "::core::future::FutureforServe<'_,H,P>")..].to_string();
+    assert!(
+        at(
+            &poll,
+            "this.handler.wake_on(::ridl_rt::port::Interest::Claim(\
+             <super::Cabinas::ridl_rt::contract::Interface>::NUMBER,),cx.waker(),);"
+        ) < at(
+            &poll,
+            "dispatch(&mutthis.handler,&mut*this.provider,&mutthis.buf,)"
+        ),
+        "each poll registers Interest::Claim before it drains the claims",
+    );
+    assert!(
+        poll.contains("Ok(_)=>::core::task::Poll::Pending,"),
+        "a drained handler is Pending, whatever the count",
+    );
+    assert!(
+        poll.contains("::ridl_rt::error::ProviderError::Claim(error)"),
+        "the handler port's failure is the value the future resolves to",
+    );
+    assert!(
+        poll.contains("::ridl_rt::error::ProviderError::Serve(error)"),
+        "the refusal is the value the future resolves to",
     );
 }
 

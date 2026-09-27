@@ -43,8 +43,8 @@
 //! | Publish a signal                 | `Publisher::<name>`, `commit` | [`port::SignalWriter`]                        |
 //! | Receive an event                 | `Client::subscribe_<name>`, `Client::next_event` | [`port::EventSource`]     |
 //! | Raise an event                   | `Publisher::<name>`          | [`port::EventSink`]                           |
-//! | Call a command or a query        | `Client::<name>`, returning a [`port::Correlation`] | [`port::Caller`]       |
-//! | Serve a command or a query       | `Provider`, driven by the generated `dispatch` | [`port::Handler`]           |
+//! | Call a command or a query        | `Client::<name>`, returning the call's future | [`port::Caller`]             |
+//! | Serve a command or a query       | `Provider`, driven by the generated `serve` | [`port::Handler`]              |
 //! | Read a provisioned constant      | nothing yet — call the port  | [`port::FixedReader`]                         |
 //!
 //! `docs/technotes/ridl-rt-by-example.md` in this repository walks that table
@@ -62,22 +62,16 @@
 //! type** — ports carry interface numbers, ordinals and bytes, and the
 //! generated binding is what encodes and decodes, through [`payload::Ref`].
 //!
-//! A call made through the poll face returns a newtype over a
-//! [`port::Correlation`], and the runtime keeps the call's outcome until the
-//! caller releases it. Until the generated async client lands (story E11.21),
-//! whose future forgets its call when it is dropped, a caller that uses the
-//! poll face must call [`port::Caller::forget`] on a correlation once it has
-//! read the outcome. Otherwise a runtime that bounds how many calls it holds
-//! at once refuses every call with [`port::SendError::Busy`] once that bound
-//! is reached. Two cases:
-//!
-//! - **A `Client` built over `&mut port` for the call can forget.** Make the
-//!   call, read the outcome, and once the `Client`'s borrow has ended call
-//!   `port.forget(c.0)`: the newtype's field is public, and
-//!   [`port::Caller::forget`] forwards through `&mut P`.
-//! - **A `Client` that owns its port by value cannot forget**, because it has
-//!   no accessor for the port, so the runtime's bound limits how many calls it
-//!   can make until the async client lands.
+//! A call made through the generated async client returns a named future,
+//! and the runtime keeps the call's outcome until the caller releases it. The
+//! future releases it: it calls [`port::Caller::forget`] when it leaves the
+//! waiting phase — in the poll that takes the outcome, at the call's deadline,
+//! and on drop while the call is still waiting — so a program over the
+//! generated face holds one slot per call in flight and forgets nothing by
+//! hand. A program that sends through [`port::Caller`] directly must call
+//! [`port::Caller::forget`] on a correlation once it has read the outcome;
+//! otherwise a runtime that bounds how many calls it holds at once refuses
+//! every call with [`port::SendError::Busy`] once that bound is reached.
 //!
 //! # How a runtime presents its ports
 //!

@@ -123,8 +123,8 @@ generated async `Client` over an interface with a call is bound on `Caller`,
 `Clock` and `Wakeable` together
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6),
 and a role handle that cannot build one is not a handle for that role. The Rust
-backend does not emit that client yet (story E11.21); the roles are here first
-so that it can be built over this handle when it is. Both handles read the one
+backend emits that client since story E11.21's first half; the roles were here
+first, so that it could be built over this handle. Both handles read the one
 clock in the store.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
@@ -304,8 +304,8 @@ answer:
 waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
-wait is the generated async client's deadline, which story E11.21 builds
-(ADR-0023 decision 6). This is the one way a call is presented again, and a call
+wait is the deadline the generated async client's future measures (story E11.21,
+ADR-0023 decision 6). This is the one way a call is presented again, and a call
 is presented once more for each holder dropped. A claim whose call the caller
 forgot is not returned: it is withdrawn, its slot is reclaimed, and no handler
 is woken for it (see "`Caller::forget` releases the caller's interest" below).
@@ -637,33 +637,25 @@ on. Either way the check is the face's and not the runtime's.
 Three more that are the runtime's own shape rather than the descriptor's:
 
 - **A settled outcome is kept until the caller releases it.** A call holds its
-  slot of the call table until it is forgotten or its caller handle is dropped,
-  and nothing the Rust backend emits today calls `Caller::forget`. **A program
-  that makes calls through the generated face over one `Loopback` therefore
-  finds every send `SendError::Busy` from its seventeenth call on**, where every
-  call succeeded before story E11.18. Nothing in this repository holds more than
-  sixteen unforgotten calls over one runtime at once — the tests, `just demo`
-  and `examples/cabin` all pass — and plan Task 4 (story E11.21) closes the
-  limit: its future forgets the call once it has taken the outcome, and on drop.
-  No release of the crates happens before Task 4 (ADR-0021 decision 18). This
-  runtime holds the outcome because nothing else can know the caller has read
-  it.
+  slot of the call table until it is forgotten or its caller handle is dropped.
+  The generated async client's future (story E11.21, first half) forgets its
+  call when it leaves the waiting phase: in the poll that takes the outcome, at
+  the call's deadline, and on drop while the call is still waiting. So a program
+  that calls through the generated face holds one slot per call in flight, and a
+  call future that is neither polled to its outcome nor dropped is the one way
+  such a program keeps a slot. Before that story nothing the Rust backend
+  emitted called `Caller::forget`, and a program over one `Loopback` found every
+  send `SendError::Busy` from its seventeenth call on. This runtime holds the
+  outcome because nothing else can know the caller has read it.
 
-  Until then, a caller that uses the poll face must forget a correlation once it
-  has read the outcome, or this runtime's sixteen slots fill and it refuses the
-  seventeenth call with `SendError::Busy` (decision 2 of the
+  A program that sends through the raw `Caller` port, as some tests do, is the
+  one caller that must forget a correlation itself once it has read the outcome,
+  or this runtime's sixteen slots fill and it refuses the seventeenth call with
+  `SendError::Busy` (decision 2 of the
   [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640)).
-  Two cases:
-
-  - **A `Client` built over `&mut port` for the call can forget.** The program
-    makes the call, reads the outcome, and once the `Client`'s borrow has ended
-    calls `port.forget(c.0)`: the correlation newtype's field is public, and
-    `Caller::forget` forwards through `&mut P`.
-  - **A `Client` that owns its port by value cannot forget**, because it has no
-    accessor for the port. The sixteen-call limit applies to it until Task 4.
-
-  The rule lasts until the generated async client lands, whose future forgets
-  its call when it has taken the outcome and when it is dropped.
+  The generated face's poll methods are `pub(crate)` since story E11.21's first
+  half, so a program that calls through the generated face never holds a
+  correlation.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when
@@ -678,13 +670,18 @@ absences:
   from `Handler::serve`, which says delivery starts at the members listed. A
   handler that has served nothing is presented every waiting call; once it has
   served anything, it is presented only the members it served, and another
-  handler's calls stay waiting for that handler. The deviation is taken with its
-  eyes open: the generated `dispatch` never calls `serve`
-  (`crates/ridl-backend-rust/src/face.rs`), so a handler that always filtered
-  would be presented nothing at all by it, and a handler that never filtered
-  would take a second component's calls and settle them `UnknownInteraction` —
-  two components providing different interfaces in one process is the plainest
-  use of an in-process runtime.
+  handler's calls stay waiting for that handler. The deviation was taken with
+  its eyes open: until story E11.21's first half nothing the Rust backend
+  emitted called `serve`, so a handler that always filtered would have been
+  presented nothing at all by the generated `dispatch`, and a handler that never
+  filtered would take a second component's calls and settle them
+  `UnknownInteraction` — two components providing different interfaces in one
+  process is the plainest use of an in-process runtime. The generated `serve`
+  now calls `Handler::serve` with the interface's command and query ordinals
+  when it is called (`crates/ridl-backend-rust/src/face.rs`), so a handler under
+  it is filtered from its first poll; the rule for an empty set still holds for
+  a handler driven through the port directly, and whether the deviation should
+  be retired is not decided here.
   `two_handlers_each_receive_only_what_they_served`, in the
   `ridl-rt-conformance` suite this runtime runs, is that case, and
   `a_handler_that_served_nothing_is_presented_every_call`, in
@@ -733,13 +730,14 @@ runtime's alone, and its module documentation names each test with its reason.
 whose own module documentation said to read it out rather than build on it. It
 is deleted. In its place:
 
-- `ridl-backend-rust` gains `ridl-loopback` as a dev-dependency, and every
-  `round_trip_*` test in `crates/ridl-backend-rust/tests/interaction_face.rs`
-  builds its face over the aggregate handle. The tests' shape is unchanged and
-  `dispatch` is unchanged; what changed is the `use` line, the constructor —
-  `Loopback::new` takes a `CatalogRef` rather than a package name, because a
-  runtime is attached to a catalog and not to a string — and the deletion of the
-  `support_*` tests.
+- `ridl-backend-rust` gains `ridl-loopback` as a dev-dependency, and the
+  `round_trip_*` tests in `crates/ridl-backend-rust/tests/interaction_face.rs`
+  build their faces over the aggregate handle or, since story E11.21's first
+  half, over the role handles `tests/support/doubles.rs` groups. At E11.15 the
+  tests' shape and `dispatch` were unchanged; what changed was the `use` line,
+  the constructor — `Loopback::new` takes a `CatalogRef` rather than a package
+  name, because a runtime is attached to a catalog and not to a string — and the
+  deletion of the `support_*` tests.
 - Those `support_*` tests moved to `crates/ridl-loopback/tests/ports.rs`, where
   they are tests of the runtime rather than of the Rust backend, alongside the
   tests of what the double did not implement. Story E11.20 later moved the ones
