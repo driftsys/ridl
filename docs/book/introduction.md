@@ -52,7 +52,7 @@ interfaces and wiring, scheduled in step 2.
 
 **There is no runtime you can run a contract over.** The transport bindings and
 the delivery semantics are specified and not implemented. Provider-side contract
-enforcement is: the generated `dispatch` evaluates a `require` and an `ensure`
+enforcement is: the generated `serve` evaluates a `require` and an `ensure`
 clause and settles the contract error, and the Rust backend's tests run that
 over the in-process runtime below. Nothing the compiler emits links a runtime,
 so none of it is reachable from a command in this book. `ridl-rt` (above) is the

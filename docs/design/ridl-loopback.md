@@ -654,7 +654,8 @@ Three more that are the runtime's own shape rather than the descriptor's:
   `SendError::Busy` (decision 2 of the
   [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640)).
   The generated face's poll methods are `pub(crate)` since story E11.21's first
-  half, so no program outside a generated crate reaches a correlation.
+  half, so a program that calls through the generated face never holds a
+  correlation.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when
@@ -729,13 +730,14 @@ runtime's alone, and its module documentation names each test with its reason.
 whose own module documentation said to read it out rather than build on it. It
 is deleted. In its place:
 
-- `ridl-backend-rust` gains `ridl-loopback` as a dev-dependency, and every
-  `round_trip_*` test in `crates/ridl-backend-rust/tests/interaction_face.rs`
-  builds its face over the aggregate handle. The tests' shape is unchanged and
-  `dispatch` is unchanged; what changed is the `use` line, the constructor —
-  `Loopback::new` takes a `CatalogRef` rather than a package name, because a
-  runtime is attached to a catalog and not to a string — and the deletion of the
-  `support_*` tests.
+- `ridl-backend-rust` gains `ridl-loopback` as a dev-dependency, and the
+  `round_trip_*` tests in `crates/ridl-backend-rust/tests/interaction_face.rs`
+  build their faces over the aggregate handle or, since story E11.21's first
+  half, over the role handles `tests/support/doubles.rs` groups. At E11.15 the
+  tests' shape and `dispatch` were unchanged; what changed was the `use` line,
+  the constructor — `Loopback::new` takes a `CatalogRef` rather than a package
+  name, because a runtime is attached to a catalog and not to a string — and the
+  deletion of the `support_*` tests.
 - Those `support_*` tests moved to `crates/ridl-loopback/tests/ports.rs`, where
   they are tests of the runtime rather than of the Rust backend, alongside the
   tests of what the double did not implement. Story E11.20 later moved the ones

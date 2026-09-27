@@ -765,7 +765,9 @@ is the reply read's port failure; only `ReadError::Detached` reaches it, because
 the reply buffer is sized from `MAX_SIZE`, and it is kept as what it is rather
 than mapped onto a `Transport` variant, which would give a local failure a
 frame-level meaning. Both are `#[non_exhaustive]` under decision 9 and `Copy`.
-No generated code returns either yet: the async face that does is story E11.21.
+Generated code returns both since story E11.21's first half: a call future's
+output is `Result<T, ClientError>`, and `serve`'s future resolves to
+`Result<Infallible, ProviderError>`.
 
 ## What 0.1 leaves out
 

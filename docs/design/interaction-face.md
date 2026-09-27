@@ -493,8 +493,12 @@ F-15) changed what `src/face.rs` emits. This section records the face the
 fixture `tests/generated/interaction_face.rs` contains from that change on, so
 that the record never describes a face the fixture does not hold. The sections
 above — the `Client` bullet of "The consumer and provider faces", the paragraph
-on the send call's `Result<<Name>Correlation, SendError>`, "Nothing here waits
-(RA-20)", and "`dispatch` and the settlement table" — describe the poll face,
+on the send call's `Result<<Name>Correlation, SendError>`, the `fn dispatch`
+bullet and its signature, the paragraph "A face holds its port by value" where
+it says a runtime is held by no face while `dispatch` runs and that the round
+trips build a face inside a block, "Nothing here waits (RA-20)", "`dispatch` and
+the settlement table", and "The fixture and the round trip" where it counts two
+interfaces and runs `dispatch` against a `Provider` — describe the poll face,
 which is now internal; their rewrite is the story's second half (Task 5), which
 also adds the `blocking` module.
 
@@ -529,8 +533,15 @@ its outcome forgets nothing on drop. A resolved call future panics when it is
 polled again. `next_event(&mut self) -> NextEvent<'_, P>`, with
 `P: EventSource + Wakeable` and `Output = Result<Event, ReadError>`, registers
 `Interest::Event`, reads the queue once, and returns; it has no deadline and no
-`Drop`, and it can be polled again for the next occurrence. The futures are
-`Unpin`; `Serve` declares it, whatever its handler type.
+`Drop`, and it can be polled again for the next occurrence. The call futures and
+`NextEvent` are `Unpin` by their fields — `&'a mut P`, the phase and the
+deadline — and declare nothing; `Serve` declares it, because it holds the
+handler by value. A resolved call future or `Serve` panics when it is polled
+again. Every body that binds a ridl-named argument rebinds it to the
+emitter-owned `__arg` first, and the internal send names its port parameter
+`__port`, because a ridl identifier cannot start with an underscore and the
+locals that follow would otherwise shadow a parameter named `port`, `deadline`,
+`this` or `cx`; `tests/face_compile.rs` compiles such an interface.
 
 **`serve` replaces the public `dispatch`.**
 `serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`
@@ -548,7 +559,7 @@ settlement table is unchanged.
 `send_<name>(port: &mut P, arg: &T) -> Result<<Name>Correlation, SendError>`,
 `poll_<name>_ack`, `poll_<name>_reply` and `poll_next_event`; and `dispatch`,
 which returns `Result<usize, ReadError>` — the count, or the failure `serve`
-resolves to — and `Ok(0)` on a short buffer. The four reads and the sends are
+resolves to — and `Ok(0)` on a short buffer. The three reads and the sends are
 module-level functions over a bare port rather than methods of `Client<P>`,
 because a future holds `&'a mut P` under the narrower bound note F-10 fixes, and
 an inherent method of `Client<P>`, whose struct bounds also name `SignalReader`
