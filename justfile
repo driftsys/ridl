@@ -208,13 +208,25 @@ wasm-check:
 # channel line itself. The minimum lives in crates/ridl-rt/Cargo.toml's
 # rust-version line, which this recipe still reads and validates on its own.
 #
+# The crate `ridl build --emit rust` writes for examples/cabin is checked
+# here too, as edition 2021 with the minimum toolchain, against the packaged
+# ridl-rt built the same way: the first of the three cells ADR-0021 decision
+# 10 sets for generated code (edition 2021 at the minimum, edition 2021 at the
+# pin, edition 2024 at the pin — the other two follow from the first, and
+# `just demo` and `crates/ridlc/tests/cabin_example.rs` build the crate at the
+# pin). A bare `rustc` with `--emit=metadata`, the way the compile proofs in
+# crates/ridl-backend-rust build generated code, because the emitted crate has
+# a manifest that names a registry version of ridl-rt and this check must
+# link the packaged source instead.
+#
 # Fails on: a missing or malformed rust-version line; rustup missing; a
 # packaged manifest the minimum toolchain cannot read (for instance, a
 # workspace resolver it cannot parse); a packaged LICENSE that differs from
 # the root LICENSE (crates/ridl-rt/LICENSE is a symlink to it — this catches a
-# checkout where the symlink became a text file); or ridl-rt's library,
-# tests, doctests, or examples failing to build or pass as edition 2021 with
-# the minimum toolchain, or as edition 2024 with the pin.
+# checkout where the symlink became a text file); the emitted cabin crate
+# failing to check as edition 2021 with the minimum toolchain; or ridl-rt's
+# library, tests, doctests, or examples failing to build or pass as edition
+# 2021 with the minimum toolchain, or as edition 2024 with the pin.
 compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
@@ -272,6 +284,20 @@ compat-check: toolchain-check
     # without this table cargo reports that it believes the package is part
     # of that workspace and refuses to build it standalone.
     printf '\n[workspace]\n' >> "$pkg/Cargo.toml"
+
+    # The emitted cabin crate as edition 2021 at the minimum. The CLI is
+    # built with the pin, in the workspace's own target directory, before
+    # CARGO_TARGET_DIR is pointed at the compat build below.
+    cargo build --locked -p ridl-cli
+    cabin="$PWD/target/compat-check/cabin"
+    mkdir -p "$cabin"
+    "${CARGO_TARGET_DIR:-target}/debug/ridl" build examples/cabin --emit rust --out-dir "$cabin/generated"
+    echo "compat-check: $minimum, edition 2021 (the emitted cabin crate)"
+    rustup run "$minimum" rustc --edition 2021 --crate-type rlib --crate-name ridl_rt \
+        --cfg 'feature="flatbuffers"' "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
+    rustup run "$minimum" rustc --edition 2021 --crate-type lib --crate-name veh_cabin \
+        --emit=metadata -D warnings --extern "ridl_rt=$cabin/libridl_rt.rlib" \
+        "$cabin/generated/lib.rs" -o "$cabin/libveh_cabin.rmeta"
 
     export CARGO_TARGET_DIR="$PWD/target/compat-check/build"
 
