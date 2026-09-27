@@ -1746,21 +1746,21 @@ The call's bound is the member's `max`, measured from the port's clock when this
                         );
                     }
                     SetLevelPhase::Unsent(level) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
                         this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
                         match send_set_level(&mut *this.port, &level) {
                             Ok(correlation) => {
                                 this.phase = SetLevelPhase::Waiting(correlation);
                             }
                             Err(::ridl_rt::port::SendError::Busy) => {
-                                if this.expired() {
-                                    return ::core::task::Poll::Ready(
-                                        Err(
-                                            ::ridl_rt::error::ClientError::Send(
-                                                ::ridl_rt::port::SendError::Busy,
-                                            ),
-                                        ),
-                                    );
-                                }
                                 this.phase = SetLevelPhase::Unsent(level);
                                 return ::core::task::Poll::Pending;
                             }
@@ -1867,21 +1867,21 @@ The call's bound is the member's `max`, measured from the port's clock when this
                         );
                     }
                     AveragePhase::Unsent(window) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
                         this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
                         match send_average(&mut *this.port, &window) {
                             Ok(correlation) => {
                                 this.phase = AveragePhase::Waiting(correlation);
                             }
                             Err(::ridl_rt::port::SendError::Busy) => {
-                                if this.expired() {
-                                    return ::core::task::Poll::Ready(
-                                        Err(
-                                            ::ridl_rt::error::ClientError::Send(
-                                                ::ridl_rt::port::SendError::Busy,
-                                            ),
-                                        ),
-                                    );
-                                }
                                 this.phase = AveragePhase::Unsent(window);
                                 return ::core::task::Poll::Pending;
                             }

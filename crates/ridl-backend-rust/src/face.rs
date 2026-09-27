@@ -642,17 +642,20 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
                             ));
                         }
                         #phase::Unsent(#arg) => {
+                            // The bound covers the wait for a slot: a call
+                            // still unsent when it passes is not sent, even
+                            // when a slot is free now.
+                            if this.expired() {
+                                return ::core::task::Poll::Ready(Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ));
+                            }
                             this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
                             match #send(&mut *this.port, &#arg) {
                                 Ok(correlation) => this.phase = #phase::Waiting(correlation),
                                 Err(::ridl_rt::port::SendError::Busy) => {
-                                    if this.expired() {
-                                        return ::core::task::Poll::Ready(Err(
-                                            ::ridl_rt::error::ClientError::Send(
-                                                ::ridl_rt::port::SendError::Busy,
-                                            ),
-                                        ));
-                                    }
                                     this.phase = #phase::Unsent(#arg);
                                     return ::core::task::Poll::Pending;
                                 }

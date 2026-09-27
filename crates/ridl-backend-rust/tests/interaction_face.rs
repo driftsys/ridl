@@ -1178,6 +1178,44 @@ fn a_call_still_unsent_at_its_deadline_resolves_to_send_busy() {
     );
 }
 
+/// Note F-3: a call still unsent when its deadline passes resolves to
+/// `Send(Busy)` and is not sent, even when a slot frees after the deadline. A
+/// send past the bound would be reported as `Undelivered`, which says "sent"
+/// of a call the bound already refused.
+#[test]
+fn a_call_still_unsent_at_its_deadline_is_not_sent_when_a_slot_frees_later() {
+    let mut rt = loopback();
+    let mut filler = rt.caller();
+    let held = fill_the_call_table(&mut filler);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    assert!(poll_once(&mut call).is_pending());
+    rt.advance(SET_LEVEL_MAX);
+    rt.advance(Duration(1));
+    filler.forget(held[0]);
+    doubles::take(&log);
+
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Send(SendError::Busy)))
+    );
+    let after_the_deadline = doubles::take(&log);
+    assert!(
+        !after_the_deadline
+            .iter()
+            .any(|op| matches!(op, Op::Command(Ok(_)))),
+        "the freed slot must not be taken past the deadline, but the log holds \
+         {after_the_deadline:?}"
+    );
+    assert!(
+        doubles::forgets(&log).is_empty(),
+        "nothing was sent, so nothing is forgotten"
+    );
+}
+
 /// Note F-3: a sent command whose clock passes `max` resolves to
 /// `Undelivered` and forgets, once.
 #[test]
