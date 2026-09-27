@@ -521,11 +521,16 @@ interaction face. Each interface gets the parts its own interactions need: a
 `Publisher` for the producer side when it carries a signal or an event; and a
 `Provider` trait the application implements plus a `serve` function whose
 future settles the claims waiting on a port, when it carries a command or a
-query. So a signal-only interface gets a `Client` and a `Publisher` and nothing
-to settle with, a command-only interface gets a `Client`, a `Provider` and a
-`serve` and no `Publisher`, and an interface carrying only `fixed` declarations
-gets no face module at all. Beside the per-package files it writes a `lib.rs`
-crate root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
+query; and, when it carries an event, a command or a query, a `blocking`
+module under the crate's `std` feature, on by default, holding the same
+`Client` and `serve` as blocking calls with a timeout, each one
+`ridl_rt::task::block_on` over the async form. So a signal-only interface gets
+a `Client` and a `Publisher` and nothing to settle with and nothing to block
+on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
+`blocking` module and no `Publisher`, and an interface carrying only `fixed`
+declarations gets no face module at all. Beside the per-package files it
+writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
+encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
 
 **Two things it may leave out, each with a note in the source it writes.** A
 type whose size the compiler cannot bound — one that reaches itself, or a

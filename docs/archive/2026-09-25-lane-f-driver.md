@@ -36,12 +36,12 @@ listed in §4 are not taken yet, and F2 takes them.
   `tests/dispatch_generation.rs` pin the public face by exact text; all of them
   run in the gate.
 - Review before merge, per the lanes plan §7
-  ([`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md)): open the
-  pull request, run `/review <PR>` (the docs-only lane when no executable line
-  changes), post the ledger as a comment, fix what is kept, run pass 2, run
-  `just verify`. After that the driver may squash-merge; Sebastien has given
-  that permission for reviewed and verified work. One pull request open at a
-  time, except where §3 says a stage's pull requests are independent.
+  ([`2026-09-13-step1-lanes-plan.md`](../wip/2026-09-13-step1-lanes-plan.md)):
+  open the pull request, run `/review <PR>` (the docs-only lane when no
+  executable line changes), post the ledger as a comment, fix what is kept, run
+  pass 2, run `just verify`. After that the driver may squash-merge; Sebastien
+  has given that permission for reviewed and verified work. One pull request
+  open at a time, except where §3 says a stage's pull requests are independent.
 - Never push a tag, publish to a registry, add a secret, or push to `main`.
 - A new crate adds its own scope to `.git-std.toml`, which is an explicit list.
 
@@ -116,9 +116,10 @@ names before that stage:
 - ADR-0021 open question 6, the wake hook (driftsys/ridl#350 item 17): whether a
   port gains a way to register interest in the arrival of a reply, an occurrence
   or a claim. E11.16 answers it, and the ADR-0021 amendment closes the question.
-- RA-19 and RA-20 of [the `ridl-rt` design note](2026-09-08-ridl-rt-design.md),
-  repeated in `docs/design/interaction-face.md` and in the module documentation
-  of `crates/ridl-backend-rust/src/face.rs`: "generated code contains no thread,
+- RA-19 and RA-20 of
+  [the `ridl-rt` design note](../wip/2026-09-08-ridl-rt-design.md), repeated in
+  `docs/design/interaction-face.md` and in the module documentation of
+  `crates/ridl-backend-rust/src/face.rs`: "generated code contains no thread,
   future, socket or timer". An async client returns a future, so the amendment
   restates the rule rather than leaving it contradicted (F-15).
 - [The frame specification](../specification/frame-specification.md) — §5 (what
@@ -130,9 +131,9 @@ names before that stage:
 - The design records [`ridl-rt.md`](../design/ridl-rt.md),
   [`interaction-face.md`](../design/interaction-face.md) and
   [`ridl-loopback.md`](../design/ridl-loopback.md).
-- [The lane P driver](2026-09-22-lane-p-driver.md) §3, decisions D-P4 and D-P5,
-  and driftsys/ridlc-gen-kotlin#3, the Kotlin pull request whose sections K3b
-  and K5 the Binder statement and the `Wakeable` design answer.
+- [The lane P driver](../wip/2026-09-22-lane-p-driver.md) §3, decisions D-P4 and
+  D-P5, and driftsys/ridlc-gen-kotlin#3, the Kotlin pull request whose sections
+  K3b and K5 the Binder statement and the `Wakeable` design answer.
 
 **Code the lane has to fit.** `crates/ridl-rt/src/port.rs` (the port traits,
 `Correlation`, `SendError`, `ScannableSignals` — the shape a port extension
@@ -237,13 +238,13 @@ reviewed pull request and not a side effect of a planning one.
   backend's AIDL over Binder") and "The Kotlin backend owns its IPC binding"
   under "After step 2". Leave the platform ladder row and Appendix B's target
   list alone: they name the platform, not a layout. Add a dated note under D-P5
-  in [the lane P driver](2026-09-22-lane-p-driver.md), naming the issue and this
-  driver, because D-P5 was taken by Sebastien on 2026-09-22 and a reader of that
-  driver must see it was reversed and where. State the reasons in the pull
-  request: a generated binding per interface ties the AIDL version to every
-  interface change, reads signals over IPC, gives a command no path to report
-  "busy", and its fixed codes collide with the control methods (K3b's finding).
-  D-P4, the lowered model's content, is unchanged. O-P3 is unchanged.
+  in [the lane P driver](../wip/2026-09-22-lane-p-driver.md), naming the issue
+  and this driver, because D-P5 was taken by Sebastien on 2026-09-22 and a
+  reader of that driver must see it was reversed and where. State the reasons in
+  the pull request: a generated binding per interface ties the AIDL version to
+  every interface change, reads signals over IPC, gives a command no path to
+  report "busy", and its fixed codes collide with the control methods (K3b's
+  finding). D-P4, the lowered model's content, is unchanged. O-P3 is unchanged.
 - **F1d — E11.17.** A `std` cargo feature, off by default, adding
   `block_on(fut, deadline: Option<Instant>) -> Option<F::Output>` — a waker that
   unparks the current thread through `std::task::Wake` on an `Arc`,

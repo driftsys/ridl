@@ -317,3 +317,30 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0016's 2026-09-26 amendment](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
   [ADR-0017 decision 5's 2026-09-26 amendment](../decisions/ADR-0017-proto3-projection-rules.md),
   and the ridl reference's §16.4 RIDL-149 row.
+- **2026-09-25-async-face-design.md** — the design note for story E11.21, the
+  async and blocking generated clients and `serve` over the `ridl-rt` substrate.
+  Fifteen decisions, F-1 to F-15, disposed of by Sebastien on driftsys/ridl#530
+  on 2026-09-26, decision by decision. The gardened records are
+  [the interaction-face design record](../design/interaction-face.md) (rewritten
+  from the note),
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6
+  and its 2026-09-26 amendment,
+  [ADR-0021's 2026-09-26 amendment](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
+  (decisions 13 to 18), [the `ridl-rt` design record](../design/ridl-rt.md),
+  [the `ridl-loopback` design record](../design/ridl-loopback.md),
+  [the frame specification](../specification/frame-specification.md) (`busy`
+  crosses, §5.3, §5.4, §5.6, §8 and §9.6), and the RA-20 restatement in
+  `crates/ridl-backend-rust/src/face.rs`. Read the note for the reasoning behind
+  a decision, cited by decision number (F-n) from the design record it became,
+  not as a second description of the as-built face.
+- **2026-09-25-async-face-plan.md** — the five-task implementation plan for
+  stages F3 to F5 of lane F, over the fifteen decisions the design note above
+  disposed. Read it as a plan: its tasks are the sequence the implementation
+  followed, not a description of the result.
+- **2026-09-25-lane-f-driver.md** — the driver prompt lane F ran under, stages
+  F0 to F5, one lane of the same coordination as lane K and lane M
+  (driftsys/ridl#328). Read its §6 for what each stage owes the Kotlin side —
+  the parallel port in driftsys/ridlc-gen-kotlin, tracked as its own issues per
+  stage. Read the rest for how the lane was run, not for the state of the code:
+  its `THIS SESSION RUNS` line and its stage list record what was still to do
+  when it was written.

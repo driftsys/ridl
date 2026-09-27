@@ -70,8 +70,9 @@ package needs the codec whether or not it ever dispatches, and `generate`
 already names `ridl-rt`. `ridlc::run_build` calls `generate_pipeline`, whose
 output is `generate`'s plus the descriptors and the face (E11.14), so
 `ridl build --emit rust` carries the codec, and `crates/ridlc/src/lib.rs`
-renders `ridl-rt = { version = "0.1", features = ["flatbuffers"] }` in the
-manifest it writes.
+renders `ridl-rt = { version = "0.3", features = ["flatbuffers"] }` in the
+manifest it writes (the version is a literal there, and moves with each
+release).
 
 Per table: three free functions — `__ridl_fb_{encode,verify,decode}_<snake>` —
 and one view struct `<T>FbView<'a>`, at the generated package's module scope

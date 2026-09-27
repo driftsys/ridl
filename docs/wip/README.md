@@ -178,16 +178,6 @@ design note, from the archive.
   fact-level drift test — every fact it compared is a function of the model by
   construction now — and closed §9 item 2 (the private `snake_case` of
   driftsys/ridl#450) by construction. The other three backends keep theirs.
-- **2026-09-25-lane-f-driver.md** — the driver for lane F, the async face and
-  the runtime substrate: two clients per interface (async under `no_std`,
-  blocking behind a `std` feature) with the poll face made private, the
-  `ridl-rt` substrate underneath them (a keyed `Wakeable`, `Transport::Busy`,
-  `block_on`, a correlation table, the freshness and budget helpers — stories
-  E11.16 to E11.21), a `ridl-rt-conformance` crate, three findings from the
-  Kotlin port, and the statement that ridl specifies no Binder layout, which
-  reverses the lane P driver's D-P5. Written for a session with no prior
-  context. Six stages; one design note inside it stops for Sebastien's
-  disposition of fifteen decisions. Coordination issue: #328.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
@@ -197,4 +187,7 @@ ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is
 2026-09-20-lane-k-driver.md, the lane K driver, which was the one document here
 held back while its own note and plan were archived, because a stage was left to
-run; lane K closed on 2026-09-21 and it was archived with them.
+run; lane K closed on 2026-09-21 and it was archived with them. The lane F
+driver, its async-face design note, and its plan were archived on 2026-09-28,
+when story E11.21 landed and their material was gardened into the durable
+records the design note and driver name.

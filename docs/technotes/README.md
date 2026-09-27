@@ -22,7 +22,7 @@ it — for decisions that bind downstream work, see
 - **ridl-rt-by-example.md** — an introduction to the `ridl-rt` traits, built one
   interaction at a time from the code the Rust backend generates: reading a
   signal, publishing one, the payload proof type, an event, a call, the
-  generated `dispatch`, and the descriptors that make the port bounds exact. For
+  generated `serve`, and the descriptors that make the port bounds exact. For
   the crate as built see [`../design/ridl-rt.md`](../design/ridl-rt.md); for the
   generated face see
   [`../design/interaction-face.md`](../design/interaction-face.md).

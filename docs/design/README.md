@@ -41,9 +41,14 @@ choices, see [`../decisions/`](../decisions/).
   are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 8 to 12, with decision 11 as amended 2026-09-22.
-- **interaction-face.md** — the generated `Client`/`Publisher`/`Provider`/
-  `dispatch` face over `ridl-rt`, story E11.13's in-process MVP: the two emitter
-  entry points, the descriptors, the clause translator, the settlement table,
-  and every placeholder the story carries with the story that replaces it. The
-  decisions behind its choices are
-  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md).
+- **interaction-face.md** — the generated interaction face over `ridl-rt`: per
+  interface, an async `Client` whose commands and queries return named futures,
+  a `Publisher`, a `Provider` trait, and `serve`; and, under the emitted crate's
+  `std` feature, a `blocking` module with the same client and `serve` as
+  blocking calls with a timeout. The poll face underneath (`send_*`,
+  `poll_*_ack`, `poll_*_reply`, `dispatch`) is `pub(crate)`. Built by stories
+  E11.13, E11.14 and E11.21: the two emitter entry points, the descriptors, the
+  clause translator, the settlement table, and every remaining placeholder with
+  the story that replaces it. The decisions behind its choices are
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), decision 6
+  for the call surface.

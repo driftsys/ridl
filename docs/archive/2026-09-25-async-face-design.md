@@ -873,8 +873,8 @@ error types, which a runtime never constructs but a consumer over it matches.
 - Design records: [`ridl-rt.md`](../design/ridl-rt.md),
   [`interaction-face.md`](../design/interaction-face.md),
   [`ridl-loopback.md`](../design/ridl-loopback.md); the working note
-  [`2026-09-08-ridl-rt-design.md`](2026-09-08-ridl-rt-design.md) §8 (RA-19,
-  RA-20).
+  [`2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md) §8
+  (RA-19, RA-20).
 - Issues: driftsys/ridl#509 (the amendments; its two comments list what the F1
   reviews left for them), #485, #510, #512, #514, #515, #526 (the F1 review
   debt), driftsys/ridl#350 item 17 (the wake hook), driftsys/ridlc-gen-kotlin#3

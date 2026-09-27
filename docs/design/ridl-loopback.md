@@ -679,11 +679,14 @@ absences:
   process is the plainest use of an in-process runtime. The generated `serve`
   now calls `Handler::serve` with the interface's command and query ordinals
   when it is called (`crates/ridl-backend-rust/src/face/serve.rs`), so a handler
-  under it is filtered from its first poll; the rule for an empty set still
-  holds for a handler driven through the port directly, and whether the
-  deviation should be retired is not decided here.
-  `two_handlers_each_receive_only_what_they_served`, in the
-  `ridl-rt-conformance` suite this runtime runs, is that case, and
+  under it is filtered from its first poll, and `blocking::serve` is `block_on`
+  over it (story E11.21, second half). **The deviation is kept**, decided with
+  that second half: a handler under either `serve` never has an empty served
+  set, so the rule reaches only a handler driven through the port directly,
+  which is what the tests of the settlement table's unknown-route rows do;
+  retiring it would make those tests register a set first and change nothing a
+  generated program observes. `two_handlers_each_receive_only_what_they_served`,
+  in the `ridl-rt-conformance` suite this runtime runs, is that case, and
   `a_handler_that_served_nothing_is_presented_every_call`, in
   `crates/ridl-loopback/tests/ports.rs`, is the other side of the rule. The
   alternative rejected is recording the set without acting on it, which loses a

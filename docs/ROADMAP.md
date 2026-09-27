@@ -498,10 +498,11 @@ puts the `Payload<FlatBuffers>` implementations in `generate`'s own output
 rather than behind a third entry point, and `ridlc::run_build` calls `generate`
 — so `ridl build --emit rust` has carried the codec since stage K5
 (driftsys/ridl#465), and `crates/ridlc/src/lib.rs` has rendered
-`ridl-rt = { version = "0.1", features = ["flatbuffers"] }` since the same
-stage. What remained to E11.14 was the descriptors and the face, which
-`generate_face` emitted and which `run_build` did not call — and which it now
-calls `generate_pipeline` for.
+`ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` since
+the same stage, where the version is the crate's own at the time — `"0.3"` since
+the 0.3.0 release. What remained to E11.14 was the descriptors and the face,
+which `generate_face` emitted and which `run_build` did not call — and which it
+now calls `generate_pipeline` for.
 
 **E11.14 landed** (driftsys/ridl#479). `ridlc::run_build` calls
 `generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the
@@ -553,7 +554,7 @@ ADR-0023 decision that a `Client` call returns `Result<Correlation, SendError>`
 an amendment that also closes driftsys/ridl#485; the `ridl-rt` additions are an
 ADR-0021 amendment, and E11.16 to E11.19 ship as one 0.x minor of the crate
 under that record's decision 10. The lane is driven by
-[the lane F driver](wip/2026-09-25-lane-f-driver.md), which carries the
+[the lane F driver](archive/2026-09-25-lane-f-driver.md), which carries the
 sequencing, the fifteen decisions its design note takes, and what each stage
 owes the Kotlin runtime, which mirrors every item one wave behind.
 
