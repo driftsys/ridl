@@ -23,4 +23,4 @@ ridl-loopback = { path = "../../../crates/ridl-loopback" }
 # polls the generated async client's futures by hand, the way a frame loop
 # does. The `[patch.crates-io]` block in `examples/cabin/Cargo.toml` resolves
 # this to `crates/ridl-rt`.
-ridl-rt = { version = "0.2", features = ["std"] }
+ridl-rt = { version = "0.3", features = ["std"] }

@@ -1,5 +1,174 @@
 # Changelog
 
+## [0.3.0] (2026-09-27)
+
+### Documentation
+
+- **docs:** archive the bug lanes driver and close the lanes ([#559])
+  ([75e7c28])
+- **docs:** plan the PascalCase enum variant change ([#556]) ([9841cdf])
+- **docs:** design PascalCase enum variants and amend ADR-0016 ([#555])
+  ([2eb0e29])
+- **docs:** route AGENTS.md reading by task and keep one ADR index ([#547])
+  ([adc7bd3])
+- **ridl:** align the call sequence scope and the invalid event with the frame
+  specification ([#544]) ([2b8b904]), closes [#308], [#309]
+- **adr:** amend ADR-0023 and ADR-0021 for the async face, and add the F3 to F5
+  plan ([#541]) ([26f590a])
+- **docs:** add the async face design note for lane F stage F2 ([#530])
+  ([e4507db])
+- **docs:** rename the bug lane from F to D ([#524]) ([479f13e])
+- **ridl:** state that ridl specifies no Binder layout ([#521]) ([ddd56fd]),
+  refs [#516], [#516], [#516], [#516]
+- **docs:** add the driver prompt for bug lanes F and Q ([#508]) ([2202639])
+- **roadmap:** add lane F, the async face and the runtime substrate ([#505])
+  ([f846f4f])
+
+### Bug Fixes
+
+- **ridl-sem:** refuse an enum value name declared twice (TYPL-216) ([#563])
+  ([44d4b28]), closes [#554]
+- **ridl-sem:** give an unresolved type path a diagnostic code (TYPL-011)
+  ([#564]) ([8231aaa]), closes [#543]
+- **ridl-backend-rust:** spell enum variants through pascal_case ([#560])
+  ([a32f72c])
+- **ridl-loopback:** withdraw a forgotten call no handler has claimed ([#557])
+  ([5ac7082])
+- **ridl-loopback:** store one waker per kind of key and return a dropped
+  handler's claims (E11.16) ([#551]) ([c2543c2])
+- **repo:** fail book-check when SUMMARY.md names a chapter file that does not
+  exist ([#540]) ([cf7dca5]), closes [#201], [#201], [#201], [#201]
+- **editors:** retry a failed language client start and restart safely ([#539])
+  ([997a770]), closes [#344], refs [#344]
+- **ridl-syntax:** bound the depth of an operator chain in an expression
+  ([#536]) ([0a7aecb])
+- **ridl-sem:** reject a negative default timing bound and code a primitive
+  query return ([#537]) ([aaa4010])
+- **ridl:** stop the empty --baseline refusal from suggesting a publish into the
+  source tree ([#535]) ([a12e9fc]), closes [#340]
+- **ridlc:** run the service catalog in ridl_check and the language server
+  ([#532]) ([d54da37]), closes [#345], [#386]
+- **ridl:** warn at the desk when a struct field or union arm moves ([#527])
+  ([2af7cc9]), closes [#335]
+- **ridl:** refuse to publish when the RIDL-408 gate cannot resolve the
+  published side ([#528]) ([ae0301a])
+- **ridl-lsp:** show the workspace load error and load from the opened file
+  ([#525]) ([fd0008a]), closes [#384]
+- **ridl-backend-rust:** read a never-published signal as Init, not Corrupt
+  ([#519]) ([a5e6e1b]), fixes 517., refs [#517]
+- **ridl-backend-rust:** compile the FlatBuffers codec for a vector of booleans
+  ([#520]) ([7342dc2]), fixes [#518]
+- **repo:** make main green again after the 0.2.1 release ([#504]) ([a2a8fbd])
+
+### Features
+
+- **ridl-backend-rust:** emit the async client, the named futures and serve
+  (E11.21, first half) ([#566]) ([1604b5c])
+- **ridl-rt:** add the correlation table and the composed errors, and move the
+  loopback onto them (E11.18) ([#553]) ([eb41a7a])
+- **ridl-rt:** add the Wakeable port extension and Transport::Busy (E11.16)
+  ([#545]) ([c0fa57c])
+- **ridl-rt-conformance:** add the port contract suite as a crate (E11.20)
+  ([#531]) ([83214a1])
+- **ridl-rt:** add freshness, event loss, budget and deadline helpers (E11.19)
+  ([#523]) ([87de8c6]), refs [#513], [#513], [#513], [#513], [#513], [#513],
+  [#513]
+- **ridl-rt:** add the std feature with block_on and noop_waker (E11.17)
+  ([#522]) ([3f2cfb3]), refs [#511]
+
+### BREAKING CHANGES
+
+- Client::<command>, Client::<query> and
+- every generated enum variant whose pascal_case differs
+from its typl spelling is renamed (A and X2 keep theirs). Code that
+names a variant, as in Health::WARN, must use the new spelling,
+
+[0.3.0]: https://github.com/driftsys/ridl/compare/v0.2.1...v0.3.0
+[75e7c28]: https://github.com/driftsys/ridl/commit/75e7c28
+[#559]: https://github.com/driftsys/ridl/issues/559
+[9841cdf]: https://github.com/driftsys/ridl/commit/9841cdf
+[#556]: https://github.com/driftsys/ridl/issues/556
+[2eb0e29]: https://github.com/driftsys/ridl/commit/2eb0e29
+[#555]: https://github.com/driftsys/ridl/issues/555
+[adc7bd3]: https://github.com/driftsys/ridl/commit/adc7bd3
+[#547]: https://github.com/driftsys/ridl/issues/547
+[2b8b904]: https://github.com/driftsys/ridl/commit/2b8b904
+[#544]: https://github.com/driftsys/ridl/issues/544
+[#308]: https://github.com/driftsys/ridl/issues/308
+[#309]: https://github.com/driftsys/ridl/issues/309
+[26f590a]: https://github.com/driftsys/ridl/commit/26f590a
+[#541]: https://github.com/driftsys/ridl/issues/541
+[e4507db]: https://github.com/driftsys/ridl/commit/e4507db
+[#530]: https://github.com/driftsys/ridl/issues/530
+[479f13e]: https://github.com/driftsys/ridl/commit/479f13e
+[#524]: https://github.com/driftsys/ridl/issues/524
+[ddd56fd]: https://github.com/driftsys/ridl/commit/ddd56fd
+[#521]: https://github.com/driftsys/ridl/issues/521
+[#516]: https://github.com/driftsys/ridl/issues/516
+[2202639]: https://github.com/driftsys/ridl/commit/2202639
+[#508]: https://github.com/driftsys/ridl/issues/508
+[f846f4f]: https://github.com/driftsys/ridl/commit/f846f4f
+[#505]: https://github.com/driftsys/ridl/issues/505
+[44d4b28]: https://github.com/driftsys/ridl/commit/44d4b28
+[#563]: https://github.com/driftsys/ridl/issues/563
+[#554]: https://github.com/driftsys/ridl/issues/554
+[8231aaa]: https://github.com/driftsys/ridl/commit/8231aaa
+[#564]: https://github.com/driftsys/ridl/issues/564
+[#543]: https://github.com/driftsys/ridl/issues/543
+[a32f72c]: https://github.com/driftsys/ridl/commit/a32f72c
+[#560]: https://github.com/driftsys/ridl/issues/560
+[5ac7082]: https://github.com/driftsys/ridl/commit/5ac7082
+[#557]: https://github.com/driftsys/ridl/issues/557
+[c2543c2]: https://github.com/driftsys/ridl/commit/c2543c2
+[#551]: https://github.com/driftsys/ridl/issues/551
+[cf7dca5]: https://github.com/driftsys/ridl/commit/cf7dca5
+[#540]: https://github.com/driftsys/ridl/issues/540
+[#201]: https://github.com/driftsys/ridl/issues/201
+[997a770]: https://github.com/driftsys/ridl/commit/997a770
+[#539]: https://github.com/driftsys/ridl/issues/539
+[#344]: https://github.com/driftsys/ridl/issues/344
+[0a7aecb]: https://github.com/driftsys/ridl/commit/0a7aecb
+[#536]: https://github.com/driftsys/ridl/issues/536
+[aaa4010]: https://github.com/driftsys/ridl/commit/aaa4010
+[#537]: https://github.com/driftsys/ridl/issues/537
+[a12e9fc]: https://github.com/driftsys/ridl/commit/a12e9fc
+[#535]: https://github.com/driftsys/ridl/issues/535
+[#340]: https://github.com/driftsys/ridl/issues/340
+[d54da37]: https://github.com/driftsys/ridl/commit/d54da37
+[#532]: https://github.com/driftsys/ridl/issues/532
+[#345]: https://github.com/driftsys/ridl/issues/345
+[#386]: https://github.com/driftsys/ridl/issues/386
+[2af7cc9]: https://github.com/driftsys/ridl/commit/2af7cc9
+[#527]: https://github.com/driftsys/ridl/issues/527
+[#335]: https://github.com/driftsys/ridl/issues/335
+[ae0301a]: https://github.com/driftsys/ridl/commit/ae0301a
+[#528]: https://github.com/driftsys/ridl/issues/528
+[fd0008a]: https://github.com/driftsys/ridl/commit/fd0008a
+[#525]: https://github.com/driftsys/ridl/issues/525
+[#384]: https://github.com/driftsys/ridl/issues/384
+[a5e6e1b]: https://github.com/driftsys/ridl/commit/a5e6e1b
+[#519]: https://github.com/driftsys/ridl/issues/519
+[#517]: https://github.com/driftsys/ridl/issues/517
+[7342dc2]: https://github.com/driftsys/ridl/commit/7342dc2
+[#520]: https://github.com/driftsys/ridl/issues/520
+[#518]: https://github.com/driftsys/ridl/issues/518
+[a2a8fbd]: https://github.com/driftsys/ridl/commit/a2a8fbd
+[#504]: https://github.com/driftsys/ridl/issues/504
+[1604b5c]: https://github.com/driftsys/ridl/commit/1604b5c
+[#566]: https://github.com/driftsys/ridl/issues/566
+[eb41a7a]: https://github.com/driftsys/ridl/commit/eb41a7a
+[#553]: https://github.com/driftsys/ridl/issues/553
+[c0fa57c]: https://github.com/driftsys/ridl/commit/c0fa57c
+[#545]: https://github.com/driftsys/ridl/issues/545
+[83214a1]: https://github.com/driftsys/ridl/commit/83214a1
+[#531]: https://github.com/driftsys/ridl/issues/531
+[87de8c6]: https://github.com/driftsys/ridl/commit/87de8c6
+[#523]: https://github.com/driftsys/ridl/issues/523
+[#513]: https://github.com/driftsys/ridl/issues/513
+[3f2cfb3]: https://github.com/driftsys/ridl/commit/3f2cfb3
+[#522]: https://github.com/driftsys/ridl/issues/522
+[#511]: https://github.com/driftsys/ridl/issues/511
+
 ## [0.2.1] (2026-09-23)
 
 ### Bug Fixes
