@@ -2643,9 +2643,10 @@ impl Checker<'_> {
         let mut values = Vec::new();
         let mut reserved = Vec::new();
         let mut seen: HashSet<i64> = HashSet::new();
+        // TYPL-216, keyed on the raw source name.
+        let mut declared_values: HashMap<String, TextRange> = HashMap::new();
         // RIDL-149 over the values' Rust spelling; see
         // `check_enum_value_projection`.
-        let mut declared_values: HashSet<String> = HashSet::new();
         let mut pascal_values: HashMap<String, (String, TextRange)> = HashMap::new();
         // Values and tombstones interleave in source order; the typed
         // iterators are per-kind, so walk the children directly.
@@ -2681,6 +2682,21 @@ impl Checker<'_> {
                     ),
                 );
             }
+            // TYPL-216 runs before the integer checks, because a name is
+            // declared whether or not its integer is valid, and before
+            // RIDL-149, because an exact duplicate collides trivially under
+            // any name transform (issue #554).
+            let name_range = member_name_range(value_node.name(), value_node.syntax());
+            let duplicate_name = match declared_values.get(&name).copied() {
+                Some(first) => {
+                    self.duplicate_enum_value(&name, name_range, first);
+                    true
+                }
+                None => {
+                    declared_values.insert(name.clone(), name_range);
+                    false
+                }
+            };
             let literal = value_node.value();
             let value = literal
                 .as_ref()
@@ -2693,7 +2709,7 @@ impl Checker<'_> {
                 // value cannot carry a wire identity, so the entry is skipped.
                 self.error(
                     DiagCode::TYPL_203,
-                    member_name_range(value_node.name(), value_node.syntax()),
+                    name_range,
                     format!("enum value `{name}` has no explicit integer value"),
                 );
                 continue;
@@ -2716,17 +2732,10 @@ impl Checker<'_> {
                     format!("duplicate enum value {value}"),
                 );
             }
-            // A value name repeated verbatim is not a collision after a
-            // transform, so it is held out of the projection map, as a
-            // union arm's is. The exact-duplicate rule for an enum's values
-            // is driftsys/ridl#554. A value skipped above for a missing
-            // integer is not emitted, so it is not checked either.
-            if declared_values.insert(name.clone()) {
-                self.check_enum_value_projection(
-                    &name,
-                    member_name_range(value_node.name(), value_node.syntax()),
-                    &mut pascal_values,
-                );
+            // A value skipped above for a missing integer is not emitted, so
+            // it is not in RIDL-149's namespace.
+            if !duplicate_name {
+                self.check_enum_value_projection(&name, name_range, &mut pascal_values);
             }
             values.push(v2::EnumValue {
                 name,
@@ -3108,6 +3117,24 @@ impl Checker<'_> {
             format!(
                 "`{name}` is already declared in this struct — a name identifies one field. \
                  Rename or remove one of them (typl §7)"
+            ),
+            first,
+            format!("`{name}` is declared here"),
+        );
+    }
+
+    /// TYPL-216: an enum value name declared twice in one `enum` — the same
+    /// source name, not merely a collision after the projection (that is
+    /// RIDL-149). Unlike RIDL-402, neither declaration is dropped: both
+    /// values still lower, so the message states the rule and points at the
+    /// first declaration without claiming a winner.
+    fn duplicate_enum_value(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::TYPL_216,
+            range,
+            format!(
+                "`{name}` is already declared in this enum — a name identifies one value. \
+                 Rename or remove one of them (typl §8)"
             ),
             first,
             format!("`{name}` is declared here"),
@@ -5581,6 +5608,13 @@ mod tests {
         def
     }
 
+    fn enum_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::EnumDef {
+        let Some(v2::decl::Kind::EnumDef(def)) = &decl(checked, name).kind else {
+            panic!("`{name}` is not an enum def");
+        };
+        def
+    }
+
     fn union_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::UnionDef {
         let Some(v2::decl::Kind::UnionDef(def)) = &decl(checked, name).kind else {
             panic!("`{name}` is not a union def");
@@ -6661,8 +6695,8 @@ mod tests {
     }
 
     /// A value name repeated verbatim is not a transform collision; the
-    /// exact-duplicate rule is driftsys/ridl#554. This pins that RIDL-149
-    /// does not claim it.
+    /// exact-duplicate rule is TYPL-216 (driftsys/ridl#554), pinned in its
+    /// own section below. This pins that RIDL-149 does not also claim it.
     #[test]
     fn ridl_149_does_not_report_an_enum_value_repeated_verbatim() {
         let checked = check_source("app", &enum_source("A", "A"));
@@ -6758,6 +6792,132 @@ mod tests {
             "got: {:?}",
             checked.diagnostics
         );
+    }
+
+    // --- TYPL-216: exact duplicate enum value name (issue #554) -----------
+
+    /// An exact duplicate value name is a different mistake from a collision
+    /// under the transform: the two names are already the same in source, so
+    /// the transform did nothing, and RIDL-149's message ("both become …
+    /// under the name transform") would be false of this input. TYPL-216
+    /// covers it instead, and RIDL-149 must not also fire.
+    #[test]
+    fn typl_216_two_enum_values_with_the_same_name_are_refused() {
+        let source = enum_source("A", "A");
+        let checked = check_source("app", &source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-216"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(
+            diagnostic.message,
+            "`A` is already declared in this enum — a name identifies one value. \
+             Rename or remove one of them (typl §8)"
+        );
+        assert_eq!(only_label(diagnostic), "`A` is declared here");
+        assert_eq!(
+            usize::from(diagnostic.primary.range.start()),
+            source
+                .rfind('A')
+                .expect("the second value is in the source"),
+            "the primary span is the repeat"
+        );
+        assert_eq!(
+            usize::from(diagnostic.labels[0].span.range.start()),
+            source.find('A').expect("the first value is in the source"),
+            "the label points at the first declaration"
+        );
+    }
+
+    /// Every repeat is reported against the first declaration, so the map
+    /// keeps the first span and a later repeat does not replace it.
+    #[test]
+    fn typl_216_reports_every_repeat_against_the_first_declaration() {
+        let source = enum_source_3("A", "A", "A");
+        let checked = check_source("app", &source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-216", "TYPL-216"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source.find('A').expect("the first value is in the source");
+        let mut primaries = Vec::new();
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                usize::from(diagnostic.labels[0].span.range.start()),
+                first,
+                "every repeat points at the first declaration"
+            );
+            primaries.push(usize::from(diagnostic.primary.range.start()));
+        }
+        assert!(
+            first < primaries[0] && primaries[0] < primaries[1],
+            "each report is on its own repeat, in order: {primaries:?}"
+        );
+    }
+
+    /// The name check does not depend on the integers: a repeat whose integer
+    /// is also a repeat, or is missing, draws TYPL-216 beside TYPL-203, so
+    /// one edit pass sees both errors.
+    #[test]
+    fn typl_216_is_reported_beside_typl_203() {
+        for source in [
+            "package app\nenum E { A = 0, A = 0 }\n",
+            "package app\nenum E { A = 0, A }\n",
+        ] {
+            let checked = check_source("app", source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-216", "TYPL-203"],
+                "source: {source:?}, got: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    /// Three values, `A`, `A`, `a`, in that order: the second `A` is an
+    /// exact duplicate of the first (TYPL-216), and `a` is a transform-only
+    /// collision against the first `A` under `pascal_case`. The code list
+    /// pins that the second `A` never reaches the projection map: if it did,
+    /// it would draw a RIDL-149 of its own. The label pins that `a` is
+    /// compared against the first `A`. `a` is lower case, so searching for
+    /// `A` cannot match it.
+    #[test]
+    fn typl_216_and_ridl_149_both_report_in_declaration_order() {
+        let source = enum_source_3("A", "A", "a");
+        let checked = check_source("app", &source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-216", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source.find('A').expect("the first value is in the source");
+        let label = &checked.diagnostics[1].labels[0];
+        assert_eq!(
+            usize::from(label.span.range.start()),
+            first,
+            "`a` must be compared against the first `A`, not the second"
+        );
+    }
+
+    /// The duplicate is reported, not dropped: both values still lower, so
+    /// the message claims no winner. Asserted over the IR, because no
+    /// diagnostic can show it.
+    #[test]
+    fn typl_216_reports_the_duplicate_without_dropping_it() {
+        let checked = check_source("app", &enum_source("A", "A"));
+        assert_eq!(codes(&checked), vec!["TYPL-216"]);
+        let values: Vec<(&str, i64)> = enum_def(&checked, "E")
+            .values
+            .iter()
+            .map(|value| (value.name.as_str(), value.value))
+            .collect();
+        assert_eq!(values, vec![("A", 0), ("A", 1)]);
     }
 
     /// The member, parameter and struct-field namespaces are checked under
