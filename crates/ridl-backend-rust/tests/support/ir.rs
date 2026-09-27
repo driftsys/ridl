@@ -21,11 +21,18 @@ pub fn compile_fixture(file_name: &str) -> ridl_ir::v2::Package {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
+    // Errors only: `interaction_face.ridl`'s `Valve` declares calls with no
+    // response bound on purpose (the async face design, note F-2), and the
+    // language warns on each (RIDL-112) while it accepts them.
+    let errors: Vec<_> = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .collect();
     assert!(
-        output.diagnostics.is_empty(),
-        "{} must compile with no diagnostic, got: {:?}",
+        errors.is_empty(),
+        "{} must compile with no error, got: {errors:?}",
         path.display(),
-        output.diagnostics,
     );
     output.package
 }

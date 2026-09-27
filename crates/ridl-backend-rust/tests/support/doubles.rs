@@ -17,7 +17,7 @@
 //! never does: `next_claim` answers `ReadError::Detached` once a set number of
 //! claims were presented, or `serve` refuses the members.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::task::Waker;
 
@@ -63,6 +63,17 @@ pub fn forgets(log: &Log) -> Vec<Correlation> {
         .collect()
 }
 
+/// Failures the loopback never produces, injected into the next port call of
+/// their kind and then cleared. Shared with the test, which sets them while a
+/// future holds the ports.
+#[derive(Default)]
+pub struct Faults {
+    /// The next `command` or `query` answers this instead of sending.
+    pub send: Cell<Option<SendError>>,
+    /// The next `EventSource::next` answers this instead of reading.
+    pub next: Cell<Option<ReadError>>,
+}
+
 /// The consumer-side ports of one `Loopback`, as its role handles, with a
 /// log of every `Caller` and `Wakeable` call.
 pub struct RecordingPorts {
@@ -70,6 +81,7 @@ pub struct RecordingPorts {
     source: SourceHandle,
     caller: CallerHandle,
     log: Log,
+    faults: Rc<Faults>,
 }
 
 impl RecordingPorts {
@@ -79,12 +91,19 @@ impl RecordingPorts {
             source: rt.source(),
             caller: rt.caller(),
             log: Log::default(),
+            faults: Rc::default(),
         }
     }
 
     /// A handle on the log, taken before the ports move into a `Client`.
     pub fn log(&self) -> Log {
         Rc::clone(&self.log)
+    }
+
+    /// A handle on the injected failures, taken before the ports move into a
+    /// `Client`.
+    pub fn faults(&self) -> Rc<Faults> {
+        Rc::clone(&self.faults)
     }
 
     fn record(&self, op: Op) {
@@ -125,6 +144,9 @@ impl EventSource for RecordingPorts {
     }
 
     fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
+        if let Some(failure) = self.faults.next.take() {
+            return Err(failure);
+        }
         self.source.next(out)
     }
 }
@@ -136,7 +158,10 @@ impl Caller for RecordingPorts {
         ord: Ordinal,
         args: &[u8],
     ) -> Result<Correlation, SendError> {
-        let sent = self.caller.command(iface, ord, args);
+        let sent = match self.faults.send.take() {
+            Some(failure) => Err(failure),
+            None => self.caller.command(iface, ord, args),
+        };
         self.record(Op::Command(sent));
         sent
     }
@@ -147,7 +172,10 @@ impl Caller for RecordingPorts {
         ord: Ordinal,
         args: &[u8],
     ) -> Result<Correlation, SendError> {
-        let sent = self.caller.query(iface, ord, args);
+        let sent = match self.faults.send.take() {
+            Some(failure) => Err(failure),
+            None => self.caller.query(iface, ord, args),
+        };
         self.record(Op::Query(sent));
         sent
     }

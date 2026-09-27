@@ -4,13 +4,13 @@
 //! over the writer ports, and a `Provider` trait with the settled method
 //! signatures.
 //!
-//! These assertions read the generated source. The face is not compiled here
-//! because nothing in the crate can compile it yet: the checked-in generated
-//! file and its `include!` are Task 5's, and `ridl-rt` is not yet a
-//! dev-dependency of this crate. Task 5 adds the compiled proof, including the
+//! These assertions read the generated source and pin its text. The face is
+//! compiled and run elsewhere: `interaction_face.rs` `include!`s the checked-in
+//! generated file and runs the round trips over `ridl-loopback`, including the
 //! minimal `Attached + SignalReader` port that constructs the signal-only
-//! interface's `Client` (design §6, RA-19). What this file can pin today is
-//! the bound list itself, which is the text that proof would exercise.
+//! interface's `Client` (design §6, RA-19), and `face_compile.rs` compiles the
+//! face of inline sources with a bare `rustc`. What this file pins is the
+//! shape of the text those proofs exercise.
 
 use ridl_backend_rust::{generate, generate_face};
 
@@ -184,6 +184,30 @@ fn an_event_only_interface_gets_a_client_bound_by_event_source_and_wakeable() {
 }
 
 #[test]
+fn a_calls_only_interface_gets_a_client_bound_by_caller_clock_and_wakeable() {
+    // The second bound set of note F-10 on its own: `Caller` for the send,
+    // `Clock` for the deadline, `Wakeable` for the wait, and nothing for a
+    // signal or an event the interface does not declare.
+    let d = dense(&module(&face(), "valve"));
+
+    assert!(
+        d.contains(
+            "pubstructClient<P:::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable"
+        ),
+        "Valve client port bounds",
+    );
+    assert!(
+        !d.contains("SignalReader"),
+        "no SignalReader bound on a calls-only client"
+    );
+    assert!(
+        !d.contains("EventSource"),
+        "no EventSource bound on a calls-only client"
+    );
+    assert!(!d.contains("NextEvent"), "no event future without an event");
+}
+
+#[test]
 fn the_client_reads_a_signal_through_the_signal_reader_port() {
     let d = dense(&module(&face(), "cabin"));
 
@@ -319,11 +343,11 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the deadline is measured from the port's clock when the method is called",
     );
     assert!(
-        set_level.contains("matchsend_set_level(&mutself.port,&level){"),
+        set_level.contains("matchsend_set_level(&mutself.port,&__arg){"),
         "the method sends through the internal send",
     );
     assert!(
-        set_level.contains("Err(::ridl_rt::port::SendError::Busy)=>SetLevelPhase::Unsent(level),"),
+        set_level.contains("Err(::ridl_rt::port::SendError::Busy)=>SetLevelPhase::Unsent(__arg),"),
         "a busy port keeps the argument for the retry",
     );
     assert!(
@@ -332,7 +356,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         d.contains(
-            "pub(crate)fnsend_set_level<P:::ridl_rt::port::Caller>(port:&mutP,level:&super::Level"
+            "pub(crate)fnsend_set_level<P:::ridl_rt::port::Caller>(__port:&mutP,level:&super::Level"
         ),
         "the command's send is internal and takes the argument by reference",
     );
@@ -341,7 +365,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the internal send returns the command's own correlation newtype",
     );
     assert!(
-        d.contains("port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),bytes,)"),
+        d.contains("__port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),bytes,)"),
         "the command calls Caller::command"
     );
     // Scoped to the internal send's body: `dispatch` evaluates the same
@@ -354,7 +378,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         send_command
-            .contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(level)"),
+            .contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(__arg)"),
         "the consumer evaluates the command's require, through the Command trait",
     );
     assert!(
@@ -363,7 +387,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         d.contains(
-            "pub(crate)fnsend_average<P:::ridl_rt::port::Caller>(port:&mutP,window:&super::Window"
+            "pub(crate)fnsend_average<P:::ridl_rt::port::Caller>(__port:&mutP,window:&super::Window"
         ),
         "the query's send is internal and takes the argument by reference",
     );
@@ -372,7 +396,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the internal send returns the query's own correlation newtype",
     );
     assert!(
-        d.contains("port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),bytes,)"),
+        d.contains("__port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),bytes,)"),
         "the query calls Caller::query"
     );
     assert!(
@@ -391,7 +415,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "pub(crate)fnpoll_average_reply",
     );
     assert!(
-        send_query.contains("<super::CabinAverageas::ridl_rt::contract::Query>::require(window)"),
+        send_query.contains("<super::CabinAverageas::ridl_rt::contract::Query>::require(__arg)"),
         "the consumer evaluates the query's require, through the Query trait",
     );
 
@@ -466,7 +490,7 @@ fn each_call_returns_a_named_future_that_forgets_its_call_on_drop() {
         at(
             &set_level,
             "this.port.wake_on(::ridl_rt::port::Interest::Slot,cx.waker());"
-        ) < at(&set_level, "send_set_level(&mut*this.port,&level)"),
+        ) < at(&set_level, "send_set_level(&mut*this.port,&__arg)"),
         "the unsent phase registers Interest::Slot before it retries the send",
     );
     assert!(
@@ -548,7 +572,7 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
 
     assert!(
         d.contains(&format!(
-            "pubfnserve<H,P>(h:H,p:&mutP)->Serve<'_,H,P>where{bounds},{{"
+            "pubfnserve<H,P>(muth:H,p:&mutP)->Serve<'_,H,P>where{bounds},{{"
         )),
         "serve's signature",
     );

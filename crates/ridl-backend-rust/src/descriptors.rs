@@ -151,8 +151,8 @@ fn one_interface(
     });
 
     let max_buffer_doc = "The largest argument or reply payload of this \
-        interface, over `<T as Payload<Wire>>::MAX_SIZE`. A dispatch buffer \
-        must be at least this large, because a reply is encoded into the same \
+        interface, over `<T as Payload<Wire>>::MAX_SIZE`. The claim buffer \
+        `serve` holds is this large, because a reply is encoded into the same \
         buffer as the arguments. `0` when the interface declares no call.";
     let event_buffer_doc = "The largest event payload of this interface, over \
         `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no \
