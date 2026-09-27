@@ -1548,10 +1548,11 @@ fn a_union_arm_named_view_compiles() {
     );
 }
 
-/// The lexer admits any identifier as a bit name, so a bit can carry the name
-/// of an item the backend emits, or once emitted, near the bits: the mask, the
-/// old `get` accessor, and the `Error` type `TryFrom` declares. The generated
-/// crate must still compile (driftsys/ridl#562).
+/// The lexer admits any identifier as a bit name, so a bit can have the same
+/// name as a generated item: the mask, the `get` accessor the backend used to
+/// emit, or the `Error` type that `TryFrom` declares. The inherent impl block
+/// holds only the bit constants, so the generated crate still compiles
+/// (driftsys/ridl#562).
 #[test]
 fn an_enumset_bit_named_like_a_generated_item_compiles() {
     let rust_source = rust_for(vec![public_decl(
@@ -1566,6 +1567,24 @@ fn an_enumset_bit_named_like_a_generated_item_compiles() {
             width: v2::IntWidth::U8 as i32,
         }),
     )]);
+
+    // The compile alone would pass with another item whose name no bit here
+    // happens to use, so the block's contents are asserted too.
+    let block_start = rust_source
+        .find("impl Features {")
+        .expect("the inherent impl block is emitted");
+    let block = &rust_source[block_start..];
+    let block = &block[..block.find("\n}").expect("the block is closed")];
+    let items: Vec<&str> = block.lines().skip(1).map(str::trim).collect();
+    assert_eq!(
+        items,
+        [
+            "pub const DECLARED_MASK: Features = Features(1 << 0);",
+            "pub const get: Features = Features(1 << 1);",
+            "pub const Error: Features = Features(1 << 2);",
+        ],
+        "the inherent impl block holds the bit constants and nothing else, got:\n{rust_source}"
+    );
 
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("enumset_item_names.rs");
@@ -1722,7 +1741,7 @@ fn a_deprecated_enum_and_enum_set_allow_deprecated_on_their_impls() {
 #[test]
 fn an_internal_enum_set_keeps_its_visibility_on_every_generated_item() {
     // The bit constants carry the declaration's visibility. They are the only
-    // associated items the enum set emits (driftsys/ridl#562).
+    // items in the enum set's inherent impl block (driftsys/ridl#562).
     //
     // No lint catches a literal `pub` here. An associated item's effective
     // visibility is capped by the impl's self type, so `pub const` inside an
@@ -1744,10 +1763,6 @@ fn an_internal_enum_set_keeps_its_visibility_on_every_generated_item() {
             "the bit `{name}` carries the declaration's visibility, got:\n{source}"
         );
     }
-    assert!(
-        !source.contains("pub const"),
-        "no generated item widens the declaration's visibility, got:\n{source}"
-    );
     assert!(
         !source.contains("pub const "),
         "no generated item of an internal enum set is public, got:\n{source}"
