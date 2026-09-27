@@ -6999,6 +6999,37 @@ mod tests {
         );
     }
 
+    /// Three arms, `fooBar`, `fooBar`, `foo_bar`, in that order: the second
+    /// `fooBar` is an exact duplicate of the first (TYPL-217), and `foo_bar`
+    /// is a transform-only collision against the first `fooBar` (RIDL-149) —
+    /// the second `fooBar` never reaches the projection maps, so `foo_bar` is
+    /// compared against the first `fooBar`, not the second.
+    #[test]
+    fn typl_217_and_ridl_149_both_report_in_declaration_order() {
+        let source = union_source_3("fooBar", "fooBar", "foo_bar");
+        let checked = check_source("app", &source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-217", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        // Which `fooBar` RIDL-149 points at is the ordering guarantee, and the
+        // code set alone does not pin it: inserting the exact duplicate into
+        // the projection maps would leave the set unchanged and move this
+        // label to the second `fooBar`. `foo_bar` has an underscore, so
+        // searching for `fooBar` cannot match it.
+        let first = source
+            .find("fooBar")
+            .expect("the first arm is in the source");
+        let label = &checked.diagnostics[1].labels[0];
+        assert_eq!(
+            usize::from(label.span.range.start()),
+            first,
+            "`foo_bar` must be compared against the first `fooBar`, not the second"
+        );
+    }
+
     /// The same name three times reports twice, and every report points back
     /// at the first declaration: the map records the first and is never
     /// overwritten by a later duplicate.
