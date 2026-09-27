@@ -881,6 +881,8 @@ union SensorResult {
 
 - Arms reference **named types** only — primitives not permitted directly
   (TYPL-204)
+- An arm name is unique within its union (TYPL-217): a name identifies one arm,
+  so a union cannot declare two
 - Untagged unions and intersections (JSON Schema `anyOf`/`allOf`) are
   deliberately not supported — see Appendix G
 - Maps to `oneof` in proto3, `union` in FlatBuffers, `sealed class` in Kotlin,
@@ -1159,6 +1161,7 @@ the family overview §7 and are not restated here.
 | TYPL-214 | `error union` containing a non-error-typed arm                                                             | error    |
 | TYPL-215 | field name declared twice in one struct                                                                    | error    |
 | TYPL-216 | enum value name declared twice in one enum                                                                 | error    |
+| TYPL-217 | union arm name declared twice in one union                                                                 | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 

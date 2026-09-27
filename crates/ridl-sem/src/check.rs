@@ -2861,11 +2861,12 @@ impl Checker<'_> {
             self.record_reserved(&entry, &mut reserved_names, &mut reserved_values);
         }
 
+        // TYPL-217, keyed on the raw source name.
+        let mut declared_arms: HashMap<String, TextRange> = HashMap::new();
         // RIDL-149 over one union's arms, keyed on both pinned transforms
         // (ADR-0016 decision 3 as amended). A `reserved` arm is not in the
         // namespace — it emits no variant, which is why `emit_union` skips
         // it — so only the arms below are recorded.
-        let mut declared_arms: HashSet<String> = HashSet::new();
         let mut snake_arms: HashMap<String, (String, TextRange)> = HashMap::new();
         let mut camel_arms: HashMap<String, (String, TextRange)> = HashMap::new();
 
@@ -2897,20 +2898,17 @@ impl Checker<'_> {
                     format!("union arm `{name}` re-declares a `reserved` name"),
                 );
             }
-            // An arm name repeated verbatim is not a collision after a
-            // transform — the transform did nothing — so it is held out of
-            // the projection maps rather than greeted with a message that
-            // would describe one. It draws nothing today and still does; the
-            // exact-duplicate rule for a union's arms is the sibling of
-            // TYPL-215 and RIDL-413, is not minted here, and is tracked on
-            // driftsys/ridl#452.
-            if declared_arms.insert(name.clone()) {
-                self.check_arm_projection(
-                    &name,
-                    member_name_range(arm.name(), arm.syntax()),
-                    &mut snake_arms,
-                    &mut camel_arms,
-                );
+            // TYPL-217: an arm name repeated verbatim is not a collision
+            // after a transform — the transform did nothing — so it is
+            // reported here and held out of the projection maps rather than
+            // greeted with a RIDL-149 message that would describe one
+            // (issue #452).
+            let arm_range = member_name_range(arm.name(), arm.syntax());
+            if let Some(first) = declared_arms.get(&name).copied() {
+                self.duplicate_union_arm(&name, arm_range, first);
+            } else {
+                declared_arms.insert(name.clone(), arm_range);
+                self.check_arm_projection(&name, arm_range, &mut snake_arms, &mut camel_arms);
             }
             let (type_ref, arm_is_error) = match arm.type_ref() {
                 Some(path) => {
@@ -3135,6 +3133,24 @@ impl Checker<'_> {
             format!(
                 "`{name}` is already declared in this enum — a name identifies one value. \
                  Rename or remove one of them (typl §8)"
+            ),
+            first,
+            format!("`{name}` is declared here"),
+        );
+    }
+
+    /// TYPL-217: a union arm name declared twice in one `union` — the same
+    /// source name, not merely a collision after the projection (that is
+    /// RIDL-149). Unlike RIDL-402, neither declaration is dropped: both arms
+    /// still lower, so the message states the rule and points at the first
+    /// declaration without claiming a winner.
+    fn duplicate_union_arm(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::TYPL_217,
+            range,
+            format!(
+                "`{name}` is already declared in this union — a name identifies one arm. \
+                 Rename or remove one of them (typl §10)"
             ),
             first,
             format!("`{name}` is declared here"),
@@ -6612,13 +6628,23 @@ mod tests {
     /// An arm name repeated verbatim is not a collision after a transform —
     /// the transform did nothing — so it is held out of the projection maps
     /// and draws no RIDL-149, whose message would read "`foo` and `foo` both
-    /// become `foo`". A union has no exact-duplicate rule of its own today:
-    /// that rule is the sibling of TYPL-215 (struct fields) and RIDL-413
-    /// (parameters), and it is tracked on driftsys/ridl#452, not minted here.
+    /// become `foo`". The exact-duplicate rule is TYPL-217 (driftsys/ridl#452),
+    /// pinned in its own section below; this pins that RIDL-149 does not also
+    /// claim the repeat.
     #[test]
     fn a_union_arm_repeated_verbatim_draws_no_ridl_149() {
         let checked = check_source("app", &union_source("foo", "foo"));
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-217"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            !checked.diagnostics[0].message.contains("become"),
+            "no message describes a transform collision: {:?}",
+            checked.diagnostics
+        );
     }
 
     // --- RIDL-149 over an enum's values (ADR-0016, 2026-09-26 amendment) ---
@@ -6918,6 +6944,127 @@ mod tests {
             .map(|value| (value.name.as_str(), value.value))
             .collect();
         assert_eq!(values, vec![("A", 0), ("A", 1)]);
+    }
+
+    // --- TYPL-217: exact duplicate union arm name (issue #452) ------------
+
+    /// The reproduction from driftsys/ridl#452: two arms named `fooBar`,
+    /// spelled identically, passed the checker and the Rust backend emitted
+    /// the variant `FooBar` twice (rustc E0428). The two names are already
+    /// the same in source, so the transform did nothing and RIDL-149's
+    /// message would be false of this input. TYPL-217 covers it instead, and
+    /// RIDL-149 must not also fire.
+    #[test]
+    fn typl_217_two_union_arms_with_the_same_name_are_refused() {
+        let checked = check_source("app", &union_source("fooBar", "fooBar"));
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-217"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("fooBar"));
+    }
+
+    /// The primary span is the repeated name, and the label points at the
+    /// first declaration, as TYPL-215 and TYPL-216 report.
+    #[test]
+    fn typl_217_reports_the_repeat_against_the_first_declaration() {
+        let source = union_source("fooBar", "fooBar");
+        let checked = check_source("app", &source);
+        assert_eq!(codes(&checked), vec!["TYPL-217"]);
+        let first = source
+            .find("fooBar")
+            .expect("the first arm is in the source");
+        let second = first
+            + 1
+            + source[first + 1..]
+                .find("fooBar")
+                .expect("the second arm is in the source");
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(
+            usize::from(diagnostic.primary.range.start()),
+            second,
+            "the primary span is the repeat"
+        );
+        assert_eq!(
+            usize::from(diagnostic.primary.range.end()),
+            second + "fooBar".len(),
+            "the primary span is the repeated name alone"
+        );
+        assert_eq!(
+            usize::from(diagnostic.labels[0].span.range.start()),
+            first,
+            "the label points at the first declaration"
+        );
+    }
+
+    /// The same name three times reports twice, and every report points back
+    /// at the first declaration: the map records the first and is never
+    /// overwritten by a later duplicate.
+    #[test]
+    fn typl_217_reports_every_repeat_against_the_first_declaration() {
+        let source = union_source_3("fooBar", "fooBar", "fooBar");
+        let checked = check_source("app", &source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-217", "TYPL-217"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source
+            .find("fooBar")
+            .expect("the first arm is in the source");
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                usize::from(diagnostic.labels[0].span.range.start()),
+                first,
+                "every repeat points at the first declaration"
+            );
+        }
+    }
+
+    /// Two arms whose names are distinct in source, and distinct under both
+    /// transforms, draw nothing.
+    #[test]
+    fn typl_217_does_not_fire_for_two_distinct_arm_names() {
+        let checked = check_source("app", &union_source("foo", "bar"));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// An `error union` declared in a `.ridl` file lowers through the same
+    /// arm list, so the rule holds there too.
+    #[test]
+    fn typl_217_refuses_a_repeated_arm_in_a_ridl_error_union() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             error struct A { code : Counter }\n\
+             error struct B { code : Counter }\n\
+             type Counter : integer [0..255]\n\
+             error union Fault { lost : A, lost : B }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-217"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// The duplicate is reported, not dropped: both arms still lower, each
+    /// with its own ordinal, so the message claims no winner.
+    #[test]
+    fn typl_217_reports_the_duplicate_without_dropping_it() {
+        let checked = check_source("app", &union_source("fooBar", "fooBar"));
+        assert_eq!(codes(&checked), vec!["TYPL-217"]);
+        let arms = &union_def(&checked, "U").arms;
+        assert_eq!(
+            arms.iter()
+                .map(|arm| (arm.name.as_str(), arm.ordinal))
+                .collect::<Vec<_>>(),
+            vec![("fooBar", 1), ("fooBar", 2)],
+        );
     }
 
     /// The member, parameter and struct-field namespaces are checked under
