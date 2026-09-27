@@ -25,7 +25,8 @@ binds against, and the
   named interface, one `Interaction` implementation per member, and the
   generated buffer-size constants.
 - `src/face.rs`, with its submodules under `src/face/` — `Client`, `Publisher`,
-  `Provider` and `dispatch`.
+  `Provider` and `dispatch`, and since E11.21's first half the named futures,
+  the internal poll face and `serve`.
 - `src/clauses.rs` — the contract-clause translator. Only `src/descriptors.rs`
   calls it, when it emits a `Command`'s or a `Query`'s `require` and `ensure`
   bodies. `src/face/dispatch.rs` names those generated methods from the
@@ -643,8 +644,9 @@ transport, and nothing in E11.13 changes that gate. It is story E11.14
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),
   [`2026-09-17-interaction-face-v0-plan.md`](../archive/2026-09-17-interaction-face-v0-plan.md)
-- `crates/ridl-backend-rust/src/descriptors.rs`, `src/face.rs`,
-  `src/clauses.rs`, `src/lib.rs` (`generate_face`) — the emitter as built
+- `crates/ridl-backend-rust/src/descriptors.rs`, `src/face.rs` and its
+  submodules under `src/face/`, `src/clauses.rs`, `src/lib.rs` (`generate_face`)
+  — the emitter as built
 - `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`,
   `tests/generated/interaction_face.rs`, `tests/interaction_face.rs`,
   `tests/interaction_face_regeneration.rs` — the fixture, the checked-in output,

@@ -519,7 +519,7 @@ impl Caller for CallerHandle {
 /// The empty set meaning no filter is a deliberate deviation from
 /// [`Handler::serve`], which says delivery starts at the members listed. The
 /// generated `dispatch` never calls `serve`
-/// (`crates/ridl-backend-rust/src/face.rs`), so a handler that always filtered
+/// (`crates/ridl-backend-rust/src/face/dispatch.rs`), so a handler that always filtered
 /// would be presented nothing at all by it. `serve` with an empty slice
 /// records nothing and so leaves the handler unfiltered, the same as never
 /// having called it. [`served`](HandlerHandle::served) reads the set back.

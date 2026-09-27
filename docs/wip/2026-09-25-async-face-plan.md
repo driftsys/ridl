@@ -19,7 +19,7 @@ nothing the note did not decide: it names the files, the tests and the order.
 **Tech stack:** Rust, `ridl-rt` (`no_std`, 1.83, edition 2021, no `unsafe`),
 `proc-macro2`/`quote`/`prettyplease` in the Rust backend, the checked-in fixture
 `crates/ridl-backend-rust/tests/generated/interaction_face.rs` regenerated with
-`RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test interaction_face`.
+`RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test interaction_face_regeneration`.
 
 **Stages:** F3 is Tasks 1 and 2, F4's second half is Task 3, F5a is Task 4, the
 release is between, F5b is Task 5, as the driver's §3 table has them, with one
@@ -56,7 +56,7 @@ things to know:
 - **E11.16 to E11.19 ship as one 0.x minor**, tagged by Sebastien after Task 4
   merges. No task pushes a tag or publishes.
 - **The generated face is pinned by exact text.**
-  `tests/interaction_face.rs::generated_interaction_face_matches_the_emitter`
+  `tests/interaction_face_regeneration.rs::generated_interaction_face_matches_the_emitter`
   compares the emitter's output with the checked-in fixture byte for byte;
   `face_generation.rs`, `dispatch_generation.rs` and `descriptor_generation.rs`
   assert whitespace-stripped substrings. A face change regenerates the fixture

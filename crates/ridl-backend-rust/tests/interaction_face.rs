@@ -487,7 +487,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
 
     // 100 is a legal `Level` value ([0, 100] inclusive) but fails the
     // command's own `require level < 100` clause. The generated `Client`
-    // evaluates `require` itself before sending (face.rs's `send`), so
+    // evaluates `require` itself before sending (face/poll.rs's `send`), so
     // sending through the raw port bypasses that and exercises `dispatch`'s
     // own check instead.
     let level = generated::Level::new_unchecked(100);
@@ -532,7 +532,7 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     // command's own `require level < 100` clause. Unlike
     // `round_trip_failing_require_settles_precondition_failed` above, this
     // sends through the generated `Client::set_level` itself, which is the
-    // internal send's own short circuit (face.rs), not `dispatch`'s: nothing
+    // internal send's own short circuit (face/poll.rs), not `dispatch`'s: nothing
     // must reach the port, and the future is ready with the send's error on
     // its first poll (the async face design, note F-4).
     let mut port = loopback();
@@ -566,7 +566,7 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
     // 0 is a legal `Window` value ([0, 100000] inclusive) but fails the
     // query's own `require window > 0` clause. Sent through the generated
     // `Client::average` itself, so this pins the internal send's own short
-    // circuit (face.rs), not `dispatch`'s.
+    // circuit (face/poll.rs), not `dispatch`'s.
     let mut port = loopback();
     {
         let mut client = generated::cabin::Client::new(&mut port);
