@@ -426,9 +426,11 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
         vec!["dep:regex".to_string()],
         "the feature must actually enable the optional regex dependency"
     );
-    assert!(
-        features["std"].is_empty(),
-        "`std` gates generated code only, it enables no dependency"
+    assert_eq!(
+        features["std"],
+        vec!["ridl-rt/std".to_string()],
+        "`std` gates the generated `blocking` module, which is `block_on` over the async \
+         face, and `block_on` is what `ridl-rt`'s `std` feature carries (story E11.21)"
     );
 
     let dependencies = manifest.dependencies;

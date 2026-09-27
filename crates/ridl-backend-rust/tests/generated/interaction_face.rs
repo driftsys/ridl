@@ -1837,6 +1837,15 @@ The call's bound is the member's `max`, measured from the port's clock when this
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
         }
+        /// Whether the call was sent and waits for its outcome. The
+        /// blocking client asks this when `block_on` gives up, to answer
+        /// as the future would at its own deadline; it is under `std`
+        /// with that client, so a build without the feature has no
+        /// unused item.
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, SetLevelPhase::Waiting(_))
+        }
     }
     impl<
         P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
@@ -1956,6 +1965,15 @@ The call's bound is the member's `max`, measured from the port's clock when this
         /// call with no bound never expires here.
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        /// Whether the call was sent and waits for its outcome. The
+        /// blocking client asks this when `block_on` gives up, to answer
+        /// as the future would at its own deadline; it is under `std`
+        /// with that client, so a build without the feature has no
+        /// unused item.
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, AveragePhase::Waiting(_))
         }
     }
     impl<
@@ -2637,6 +2655,161 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             }
         }
     }
+    ///The blocking face of interface `Cabin`, under the crate's `std` feature: `Client` and `serve` as `ridl_rt::task::block_on` over the async face's futures, each bounded by a timeout. What a call does is the future's; this module adds the thread's wait and the timeout.
+    #[cfg(feature = "std")]
+    pub mod blocking {
+        ///The blocking consumer face of interface `Cabin`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome, the member's bound on the port's clock, or this client's timeout, whichever comes first. The timeout is `None` until `with_timeout` or `set_timeout` sets it: a member with a `max` is then bounded by the future alone, and one with none waits without a bound.
+        pub struct Client<
+            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > {
+            inner: super::Client<P>,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        }
+        impl<
+            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > Client<P> {
+            /// Binds the face to a port, with no timeout. The port is held
+            /// by value: pass a handle, or a `&mut` borrow of one.
+            pub fn new(port: P) -> Self {
+                Client {
+                    inner: super::Client::new(port),
+                    timeout: None,
+                }
+            }
+            /// Sets the timeout every waiting method of this client is
+            /// bounded by, and returns the client. A timeout shorter than a
+            /// member's `max` is accepted: the earlier of the two ends the
+            /// call.
+            pub fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
+                self.timeout = Some(timeout);
+                self
+            }
+            /// Sets or clears the timeout every waiting method of this
+            /// client is bounded by.
+            pub fn set_timeout(
+                &mut self,
+                timeout: ::core::option::Option<::std::time::Duration>,
+            ) {
+                self.timeout = timeout;
+            }
+            ///Reads signal `temperature`, as `Client::temperature` does: a read never waits.
+            pub fn temperature(
+                &self,
+            ) -> ::core::result::Result<
+                ::ridl_rt::sample::Sample<super::super::Temperature>,
+                ::ridl_rt::port::ReadError,
+            > {
+                self.inner.temperature()
+            }
+            ///Starts delivery of event `warning`, as `Client::subscribe_warning` does.
+            pub fn subscribe_warning(
+                &mut self,
+            ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
+                self.inner.subscribe_warning()
+            }
+            ///Waits for the next occurrence of any subscribed event of interface `Cabin` and returns it, routed to its variant by ordinal, or `Ok(None)` when this client's timeout passes first. With no timeout it returns only with an occurrence or a read failure. It is `block_on` over `Client::next_event`.
+            pub fn next_event(
+                &mut self,
+            ) -> ::core::result::Result<
+                ::core::option::Option<super::Event>,
+                ::ridl_rt::port::ReadError,
+            > {
+                let __deadline = self
+                    .timeout
+                    .map(|timeout| ::std::time::Instant::now() + timeout);
+                let mut __next = self.inner.next_event();
+                match ::ridl_rt::task::block_on(&mut __next, __deadline) {
+                    Some(Ok(event)) => Ok(Some(event)),
+                    Some(Err(error)) => Err(error),
+                    None => Ok(None),
+                }
+            }
+            ///Sends command `setLevel` and waits for its outcome, as `block_on` over `Client::set_level`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            pub fn set_level(
+                &mut self,
+                level: super::super::Level,
+            ) -> ::core::result::Result<(), ::ridl_rt::error::ClientError> {
+                let __deadline = self
+                    .timeout
+                    .map(|timeout| ::std::time::Instant::now() + timeout);
+                let mut __call = self.inner.set_level(level);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Undelivered,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+            ///Sends query `average` and waits for its outcome, as `block_on` over `Client::average`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            pub fn average(
+                &mut self,
+                window: super::super::Window,
+            ) -> ::core::result::Result<
+                super::super::Average,
+                ::ridl_rt::error::ClientError,
+            > {
+                let __deadline = self
+                    .timeout
+                    .map(|timeout| ::std::time::Instant::now() + timeout);
+                let mut __call = self.inner.average(window);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Timeout,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        ///Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+        pub fn serve<H, P>(
+            h: H,
+            p: &mut P,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
+        where
+            H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+            P: super::Provider,
+        {
+            let __deadline = timeout
+                .map(|timeout| ::std::time::Instant::now() + timeout);
+            let mut __serve = super::serve(h, p);
+            match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
+                Some(Ok(never)) => match never {}
+                Some(Err(error)) => Err(error),
+                None => Ok(()),
+            }
+        }
+    }
 }
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
@@ -2916,6 +3089,64 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 )
         }
     }
+    ///The blocking face of interface `Siren`, under the crate's `std` feature: `Client` and `serve` as `ridl_rt::task::block_on` over the async face's futures, each bounded by a timeout. What a call does is the future's; this module adds the thread's wait and the timeout.
+    #[cfg(feature = "std")]
+    pub mod blocking {
+        ///The blocking consumer face of interface `Siren`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome, the member's bound on the port's clock, or this client's timeout, whichever comes first. The timeout is `None` until `with_timeout` or `set_timeout` sets it: a member with a `max` is then bounded by the future alone, and one with none waits without a bound.
+        pub struct Client<P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable> {
+            inner: super::Client<P>,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        }
+        impl<P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable> Client<P> {
+            /// Binds the face to a port, with no timeout. The port is held
+            /// by value: pass a handle, or a `&mut` borrow of one.
+            pub fn new(port: P) -> Self {
+                Client {
+                    inner: super::Client::new(port),
+                    timeout: None,
+                }
+            }
+            /// Sets the timeout every waiting method of this client is
+            /// bounded by, and returns the client. A timeout shorter than a
+            /// member's `max` is accepted: the earlier of the two ends the
+            /// call.
+            pub fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
+                self.timeout = Some(timeout);
+                self
+            }
+            /// Sets or clears the timeout every waiting method of this
+            /// client is bounded by.
+            pub fn set_timeout(
+                &mut self,
+                timeout: ::core::option::Option<::std::time::Duration>,
+            ) {
+                self.timeout = timeout;
+            }
+            ///Starts delivery of event `tripped`, as `Client::subscribe_tripped` does.
+            pub fn subscribe_tripped(
+                &mut self,
+            ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
+                self.inner.subscribe_tripped()
+            }
+            ///Waits for the next occurrence of any subscribed event of interface `Siren` and returns it, routed to its variant by ordinal, or `Ok(None)` when this client's timeout passes first. With no timeout it returns only with an occurrence or a read failure. It is `block_on` over `Client::next_event`.
+            pub fn next_event(
+                &mut self,
+            ) -> ::core::result::Result<
+                ::core::option::Option<super::Event>,
+                ::ridl_rt::port::ReadError,
+            > {
+                let __deadline = self
+                    .timeout
+                    .map(|timeout| ::std::time::Instant::now() + timeout);
+                let mut __next = self.inner.next_event();
+                match ::ridl_rt::task::block_on(&mut __next, __deadline) {
+                    Some(Ok(event)) => Ok(Some(event)),
+                    Some(Err(error)) => Err(error),
+                    None => Ok(None),
+                }
+            }
+        }
+    }
 }
 ///The generated interaction face of interface `Valve`.
 pub mod valve {
@@ -3012,6 +3243,15 @@ The call's bound is the member's `max`, measured from the port's clock when this
         /// call with no bound never expires here.
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        /// Whether the call was sent and waits for its outcome. The
+        /// blocking client asks this when `block_on` gives up, to answer
+        /// as the future would at its own deadline; it is under `std`
+        /// with that client, so a build without the feature has no
+        /// unused item.
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, OpenPhase::Waiting(_))
         }
     }
     impl<
@@ -3127,6 +3367,15 @@ The call's bound is the member's `max`, measured from the port's clock when this
         /// call with no bound never expires here.
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        /// Whether the call was sent and waits for its outcome. The
+        /// blocking client asks this when `block_on` gives up, to answer
+        /// as the future would at its own deadline; it is under `std`
+        /// with that client, so a build without the feature has no
+        /// unused item.
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, PressurePhase::Waiting(_))
         }
     }
     impl<
@@ -3646,6 +3895,127 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                         }
                     }
                 }
+            }
+        }
+    }
+    ///The blocking face of interface `Valve`, under the crate's `std` feature: `Client` and `serve` as `ridl_rt::task::block_on` over the async face's futures, each bounded by a timeout. What a call does is the future's; this module adds the thread's wait and the timeout.
+    #[cfg(feature = "std")]
+    pub mod blocking {
+        ///The blocking consumer face of interface `Valve`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome, the member's bound on the port's clock, or this client's timeout, whichever comes first. The timeout is `None` until `with_timeout` or `set_timeout` sets it: a member with a `max` is then bounded by the future alone, and one with none waits without a bound.
+        pub struct Client<
+            P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > {
+            inner: super::Client<P>,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        }
+        impl<
+            P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > Client<P> {
+            /// Binds the face to a port, with no timeout. The port is held
+            /// by value: pass a handle, or a `&mut` borrow of one.
+            pub fn new(port: P) -> Self {
+                Client {
+                    inner: super::Client::new(port),
+                    timeout: None,
+                }
+            }
+            /// Sets the timeout every waiting method of this client is
+            /// bounded by, and returns the client. A timeout shorter than a
+            /// member's `max` is accepted: the earlier of the two ends the
+            /// call.
+            pub fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
+                self.timeout = Some(timeout);
+                self
+            }
+            /// Sets or clears the timeout every waiting method of this
+            /// client is bounded by.
+            pub fn set_timeout(
+                &mut self,
+                timeout: ::core::option::Option<::std::time::Duration>,
+            ) {
+                self.timeout = timeout;
+            }
+            ///Sends command `open` and waits for its outcome, as `block_on` over `Client::open`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            pub fn open(
+                &mut self,
+                level: super::super::Level,
+            ) -> ::core::result::Result<(), ::ridl_rt::error::ClientError> {
+                let __deadline = self
+                    .timeout
+                    .map(|timeout| ::std::time::Instant::now() + timeout);
+                let mut __call = self.inner.open(level);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Undelivered,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+            ///Sends query `pressure` and waits for its outcome, as `block_on` over `Client::pressure`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            pub fn pressure(
+                &mut self,
+                window: super::super::Window,
+            ) -> ::core::result::Result<
+                super::super::Average,
+                ::ridl_rt::error::ClientError,
+            > {
+                let __deadline = self
+                    .timeout
+                    .map(|timeout| ::std::time::Instant::now() + timeout);
+                let mut __call = self.inner.pressure(window);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Timeout,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        ///Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+        pub fn serve<H, P>(
+            h: H,
+            p: &mut P,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
+        where
+            H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+            P: super::Provider,
+        {
+            let __deadline = timeout
+                .map(|timeout| ::std::time::Instant::now() + timeout);
+            let mut __serve = super::serve(h, p);
+            match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
+                Some(Ok(never)) => match never {}
+                Some(Err(error)) => Err(error),
+                None => Ok(()),
             }
         }
     }

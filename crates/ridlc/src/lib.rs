@@ -942,6 +942,13 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// which is the release coupling design note D-12 records and E11.14's
 /// manifest work settles; nothing here can test it, because a `rustc` proof
 /// links `ridl-rt`'s source rather than a release.
+///
+/// The `std` feature, on by default, forwards to `ridl-rt/std`: the generated
+/// face's `blocking` module is under it and is `block_on` over the async
+/// face (story E11.21, second half), and `block_on` is what `ridl-rt`'s `std`
+/// feature gates. A build with default features off has no `blocking` module
+/// and links `ridl-rt` as `no_std`.
+///
 /// The `ridl-rt = "0.3"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
@@ -960,7 +967,7 @@ default = ["validate-pattern", "std"]
 # that cannot carry the regex dependency; range and length checks are
 # unaffected.
 validate-pattern = ["dep:regex"]
-std = []
+std = ["ridl-rt/std"]
 
 [dependencies]
 ridl-rt = {{ version = "0.3", features = ["flatbuffers"] }}

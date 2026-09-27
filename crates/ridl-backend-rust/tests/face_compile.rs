@@ -12,7 +12,8 @@ use ridl_backend_rust::generate_face;
 
 /// Emits the face of `source` and checks it as a library crate
 /// (`--emit=metadata -D warnings`), panicking with rustc's diagnostics when it
-/// does not compile.
+/// does not compile. The `std` cfg is on, so the `blocking` module the face
+/// emits under it is part of what is checked.
 fn face_compiles(name: &str, source: &str) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
@@ -44,6 +45,8 @@ fn face_compiles(name: &str, source: &str) {
             "-D",
             "warnings",
         ])
+        .arg("--cfg")
+        .arg(r#"feature="std""#)
         .arg("-o")
         .arg(dir.path().join(format!("lib{name}.rmeta")))
         .arg("--extern")

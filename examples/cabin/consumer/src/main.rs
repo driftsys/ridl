@@ -23,15 +23,22 @@
 //! `rustc` for the test. The crate name is `veh_cabin` in both, because that
 //! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
-//! The consumer side is the generated async client (story E11.21): a command,
-//! a query and `next_event` return a named future, polled here by hand with
-//! `ridl_rt::task::noop_waker`, the way a frame loop polls. The provider side
-//! is the generated `serve`, polled once per step. No executor is involved:
-//! each round trip is a fixed sequence of polls, and the result of each poll
-//! is asserted, so a future that resolved on the wrong poll fails the proof
-//! the way a wrong value does.
+//! The consumer side is the generated client, in both of its forms (story
+//! E11.21). Round trips 3 and 4 use the async `Client`: a command, a query
+//! and `next_event` return a named future, polled here by hand with
+//! `ridl_rt::task::noop_waker`, the way a frame loop polls, and the provider
+//! side is the generated `serve`, polled once per step. No executor is
+//! involved: each round trip is a fixed sequence of polls, and the result of
+//! each poll is asserted, so a future that resolved on the wrong poll fails
+//! the proof the way a wrong value does. Round trips 5 and 6 make the same
+//! command and query through `blocking::Client`, which is
+//! `ridl_rt::task::block_on` over the async client and parks this thread
+//! until the outcome or its timeout; the provider side is `blocking::serve`
+//! on a second thread, called in a loop with a timeout, the way a thread that
+//! also does other work serves. The generated crate's `std` feature, on by
+//! default, is what carries the `blocking` module.
 //!
-//! One `Loopback` per round trip, rather than one for all four: the loopback
+//! One `Loopback` per round trip, rather than one for all six: the loopback
 //! holds every value in one map, and a fresh port is what keeps each round
 //! trip's assertions about what is waiting true independently of the order
 //! they run in. The handler `serve` runs over is taken from the runtime
@@ -40,7 +47,9 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use api::cabin;
 use ridl_loopback::Loopback;
@@ -70,6 +79,29 @@ impl cabin::Provider for Cabin {
 /// Polls `future` once, the way a frame loop does.
 fn poll_once<F: Future + Unpin>(future: &mut F, cx: &mut Context<'_>) -> Poll<F::Output> {
     Pin::new(future).poll(cx)
+}
+
+/// How long a blocking call may wait for the serving thread. It is reached
+/// only when the round trip is broken, so it is long enough that a loaded
+/// machine cannot reach it by delay alone.
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Each pass of the serving loop returns after this long with nothing
+/// served, so the loop reads its `done` flag between passes.
+const SERVE_PASS: Duration = Duration::from_millis(50);
+
+/// Serves `provider` over `handler` on the calling thread until `done` is
+/// set: `blocking::serve` returns `Ok(())` at each pass's timeout, and the
+/// loop calls it again. A failure of the handler port ends the loop with it.
+fn serve_until_done(
+    handler: &mut ridl_loopback::HandlerHandle,
+    provider: &mut Cabin,
+    done: &AtomicBool,
+) -> Result<(), ridl_rt::error::ProviderError> {
+    while !done.load(Ordering::Acquire) {
+        cabin::blocking::serve(&mut *handler, &mut *provider, Some(SERVE_PASS))?;
+    }
+    Ok(())
 }
 
 fn main() {
@@ -157,4 +189,47 @@ fn main() {
     };
     assert_eq!(reply.get(), 7);
     println!("query ok {}", reply.get());
+
+    // 5 — command, through the blocking client. `set_level` parks this
+    // thread until the serving thread settles the call; `done` then ends
+    // that thread's loop, and the scope joins it.
+    let mut port = Loopback::new(CATALOG);
+    let mut handler = port.handler();
+    let mut provider = Cabin {
+        levels: Vec::new(),
+        average: 0,
+    };
+    let done = AtomicBool::new(false);
+    let served = std::thread::scope(|scope| {
+        let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
+        let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
+        let acknowledged = client.set_level(api::Level::new_unchecked(42));
+        done.store(true, Ordering::Release);
+        assert_eq!(acknowledged, Ok(()));
+        serving.join().expect("the serving thread does not panic")
+    });
+    assert_eq!(served, Ok(()));
+    assert_eq!(provider.levels, vec![42]);
+    println!("blocking command ok {}", provider.levels[0]);
+
+    // 6 — query, through the blocking client.
+    let mut port = Loopback::new(CATALOG);
+    let mut handler = port.handler();
+    let mut provider = Cabin {
+        levels: Vec::new(),
+        average: 7,
+    };
+    let done = AtomicBool::new(false);
+    let (reply, served) = std::thread::scope(|scope| {
+        let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
+        let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
+        let reply = client.average(api::Window::new_unchecked(10));
+        done.store(true, Ordering::Release);
+        let served = serving.join().expect("the serving thread does not panic");
+        (reply, served)
+    });
+    assert_eq!(served, Ok(()));
+    let reply = reply.expect("the query is served within the timeout");
+    assert_eq!(reply.get(), 7);
+    println!("blocking query ok {}", reply.get());
 }

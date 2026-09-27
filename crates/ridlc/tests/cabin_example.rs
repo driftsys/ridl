@@ -44,14 +44,17 @@
 //! bare `rustc` against an `ridl-rt` rlib it builds itself, so it needs no
 //! manifest, no lock and no registry, and it is what runs under `just test`.
 //!
-//! That is also why the emitted crate is built here with no feature, and not
-//! with the `std` and `validate-pattern` defaults its `Cargo.toml` declares: a
-//! generated item gated behind either of those two is outside this proof, and
-//! inside `just demo`'s, which builds the generated crate with its default
-//! features through cargo. The `ridl-rt` this links is built with the three
-//! encoding features and with `std`, because the consumer polls the generated
-//! async client's futures by hand with `ridl_rt::task::noop_waker`, which the
-//! `std` feature gates.
+//! That is also why the emitted crate is built here with the `std` cfg and
+//! nothing else, not with the `validate-pattern` default its `Cargo.toml`
+//! declares as well: a generated item gated behind `validate-pattern` is
+//! outside this proof, and inside `just demo`'s, which builds the generated
+//! crate with its default features through cargo. `std` is on because the
+//! consumer's command and query round trips go through the generated
+//! `blocking` client, which that feature gates (story E11.21, second half).
+//! The `ridl-rt` this links is built with the three encoding features and
+//! with `std`, because the `blocking` client is `ridl_rt::task::block_on` over
+//! the async one, and the consumer polls the async client's futures by hand
+//! with `ridl_rt::task::noop_waker`; both are under `ridl-rt`'s `std`.
 
 use std::path::Path;
 
@@ -125,6 +128,8 @@ fn the_emitted_cabin_crate_runs_four_round_trips_against_a_consumer() {
             "rlib".as_ref(),
             "--crate-name".as_ref(),
             "veh_cabin".as_ref(),
+            "--cfg".as_ref(),
+            r#"feature="std""#.as_ref(),
             "--extern".as_ref(),
             format!("ridl_rt={}", ridl_rt.display()).as_ref(),
             "-L".as_ref(),
@@ -174,7 +179,14 @@ fn the_emitted_cabin_crate_runs_four_round_trips_against_a_consumer() {
         "the consumer must complete every round trip, it said:\n{stdout}{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    for round_trip in ["signal ok", "event ok", "command ok", "query ok"] {
+    for round_trip in [
+        "signal ok",
+        "event ok",
+        "command ok",
+        "query ok",
+        "blocking command ok",
+        "blocking query ok",
+    ] {
         assert!(
             stdout.contains(round_trip),
             "the consumer must report `{round_trip}`, it said:\n{stdout}"

@@ -14,7 +14,9 @@
 //! with the encoding features and has no dependency in any feature combination
 //! (ADR-0021 decision 8). It is built with the same `rustc` the proof itself
 //! spawns; an rlib built by
-//! another toolchain is rejected with E0514.
+//! another toolchain is rejected with E0514. The `std` feature is on as well,
+//! because the face proof in `face_compile.rs` compiles the emitted `blocking`
+//! module, which names `ridl_rt::task::block_on`.
 
 // Three integration test targets pull this module in with `#[path]`, and
 // each uses the helpers it needs: `flatbuffers_roundtrip.rs` and
@@ -49,6 +51,8 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
         .arg(r#"feature="proto3""#)
         .arg("--cfg")
         .arg(r#"feature="repr-c""#)
+        .arg("--cfg")
+        .arg(r#"feature="std""#)
         .arg(&source)
         .arg("-o")
         .arg(&rlib)
