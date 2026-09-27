@@ -648,21 +648,13 @@ Three more that are the runtime's own shape rather than the descriptor's:
   send `SendError::Busy` from its seventeenth call on. This runtime holds the
   outcome because nothing else can know the caller has read it.
 
-  Until then, a caller that uses the poll face must forget a correlation once it
-  has read the outcome, or this runtime's sixteen slots fill and it refuses the
-  seventeenth call with `SendError::Busy` (decision 2 of the
+  A program that sends through the raw `Caller` port, as some tests do, is the
+  one caller that must forget a correlation itself once it has read the outcome,
+  or this runtime's sixteen slots fill and it refuses the seventeenth call with
+  `SendError::Busy` (decision 2 of the
   [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640)).
-  Two cases:
-
-  - **A `Client` built over `&mut port` for the call can forget.** The program
-    makes the call, reads the outcome, and once the `Client`'s borrow has ended
-    calls `port.forget(c.0)`: the correlation newtype's field is public, and
-    `Caller::forget` forwards through `&mut P`.
-  - **A `Client` that owns its port by value cannot forget**, because it has no
-    accessor for the port. The sixteen-call limit applies to it until Task 4.
-
-  The rule lasts until the generated async client lands, whose future forgets
-  its call when it has taken the outcome and when it is dropped.
+  The generated face's poll methods are `pub(crate)` since story E11.21's first
+  half, so no program outside a generated crate reaches a correlation.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when
@@ -677,13 +669,18 @@ absences:
   from `Handler::serve`, which says delivery starts at the members listed. A
   handler that has served nothing is presented every waiting call; once it has
   served anything, it is presented only the members it served, and another
-  handler's calls stay waiting for that handler. The deviation is taken with its
-  eyes open: the generated `dispatch` never calls `serve`
-  (`crates/ridl-backend-rust/src/face.rs`), so a handler that always filtered
-  would be presented nothing at all by it, and a handler that never filtered
-  would take a second component's calls and settle them `UnknownInteraction` —
-  two components providing different interfaces in one process is the plainest
-  use of an in-process runtime.
+  handler's calls stay waiting for that handler. The deviation was taken with
+  its eyes open: until story E11.21's first half nothing the Rust backend
+  emitted called `serve`, so a handler that always filtered would have been
+  presented nothing at all by the generated `dispatch`, and a handler that never
+  filtered would take a second component's calls and settle them
+  `UnknownInteraction` — two components providing different interfaces in one
+  process is the plainest use of an in-process runtime. The generated `serve`
+  now calls `Handler::serve` with the interface's command and query ordinals
+  when it is called (`crates/ridl-backend-rust/src/face.rs`), so a handler under
+  it is filtered from its first poll; the rule for an empty set still holds for
+  a handler driven through the port directly, and whether the deviation should
+  be retired is not decided here.
   `two_handlers_each_receive_only_what_they_served`, in the
   `ridl-rt-conformance` suite this runtime runs, is that case, and
   `a_handler_that_served_nothing_is_presented_every_call`, in
