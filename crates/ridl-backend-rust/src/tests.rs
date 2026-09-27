@@ -1548,6 +1548,71 @@ fn a_union_arm_named_view_compiles() {
     );
 }
 
+/// The lexer admits any identifier as a bit name, so a bit can have the same
+/// name as a generated item: the mask, the `get` accessor the backend used to
+/// emit, or the `Error` type that `TryFrom` declares. The inherent impl block
+/// holds only the bit constants, so the generated crate still compiles
+/// (driftsys/ridl#562).
+#[test]
+fn an_enumset_bit_named_like_a_generated_item_compiles() {
+    let rust_source = rust_for(vec![public_decl(
+        "Features",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![
+                enum_value("DECLARED_MASK", 0),
+                enum_value("get", 1),
+                enum_value("Error", 2),
+            ],
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )]);
+
+    // The compile alone would pass with another item whose name no bit here
+    // happens to use, so the block's contents are asserted too.
+    let block_start = rust_source
+        .find("impl Features {")
+        .expect("the inherent impl block is emitted");
+    let block = &rust_source[block_start..];
+    let block = &block[..block.find("\n}").expect("the block is closed")];
+    let items: Vec<&str> = block.lines().skip(1).map(str::trim).collect();
+    assert_eq!(
+        items,
+        [
+            "pub const DECLARED_MASK: Features = Features(1 << 0);",
+            "pub const get: Features = Features(1 << 1);",
+            "pub const Error: Features = Features(1 << 2);",
+        ],
+        "the inherent impl block holds the bit constants and nothing else, got:\n{rust_source}"
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("enumset_item_names.rs");
+    let meta_path = dir.path().join("enumset_item_names.rmeta");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "generated Rust must compile:\n{rust_source}"
+    );
+}
+
 #[test]
 fn enumset_standalone_form() {
     let decls = vec![public_decl(
@@ -1675,8 +1740,8 @@ fn a_deprecated_enum_and_enum_set_allow_deprecated_on_their_impls() {
 
 #[test]
 fn an_internal_enum_set_keeps_its_visibility_on_every_generated_item() {
-    // The mask and the accessor carry the declaration's visibility, as the
-    // bit constants do.
+    // The bit constants carry the declaration's visibility. They are the only
+    // items in the enum set's inherent impl block (driftsys/ridl#562).
     //
     // No lint catches a literal `pub` here. An associated item's effective
     // visibility is capped by the impl's self type, so `pub const` inside an
@@ -1691,14 +1756,13 @@ fn an_internal_enum_set_keeps_its_visibility_on_every_generated_item() {
         visibility: v2::Visibility::Internal as i32,
         ..features_decl()
     }]);
-    assert!(
-        source.contains("pub(crate) const DECLARED_MASK"),
-        "the mask carries the declaration's visibility, got:\n{source}"
-    );
-    assert!(
-        source.contains("pub(crate) const fn get"),
-        "the accessor carries the declaration's visibility, got:\n{source}"
-    );
+    for bit in warning_bits() {
+        let name = &bit.name;
+        assert!(
+            source.contains(&format!("pub(crate) const {name}: Features")),
+            "the bit `{name}` carries the declaration's visibility, got:\n{source}"
+        );
+    }
     assert!(
         !source.contains("pub const "),
         "no generated item of an internal enum set is public, got:\n{source}"
@@ -3069,7 +3133,7 @@ pub mod ridl {
 /// task's own workflow blesses a snapshot with `--accept`, so a wrong
 /// emission introduced alongside a right one is written into the `.snap` in
 /// the same command and never fails again. Inverting the enum set's mask test
-/// to `value & Self::DECLARED_MASK != 0` type-checks, so only an executed
+/// to `value & DECLARED_MASK != 0` type-checks, so only an executed
 /// assertion catches it.
 #[test]
 fn the_generated_conversions_run() {
@@ -3091,11 +3155,15 @@ fn main() {
     }
     assert_eq!(i64::from(GearPosition::Neutral), 9);
 
-    // Bits 0 to 3 are declared, so the mask is 0b1111.
-    assert_eq!(Features::DECLARED_MASK, 15);
+    // Bits 0 to 3 are declared, so the mask is 0b1111 and all four together
+    // are accepted.
+    match Features::try_from(15) {
+        Ok(f) => assert_eq!(i64::from(f), 15),
+        Err(_) => panic!("15 carries only declared bits"),
+    }
     // Bits 0 and 2, both declared.
     match Features::try_from(5) {
-        Ok(f) => assert_eq!(f.get(), 5),
+        Ok(f) => assert_eq!(i64::from(f), 5),
         Err(_) => panic!("5 carries only declared bits"),
     }
     // Bit 4 is not declared. This is the assertion that fails if the mask
@@ -3107,7 +3175,7 @@ fn main() {
     // A declared bit on its own is accepted, so the test above is not passing
     // because everything is refused.
     match Features::try_from(8) {
-        Ok(f) => assert_eq!(f.get(), 8),
+        Ok(f) => assert_eq!(i64::from(f), 8),
         Err(_) => panic!("8 is the declared bit 3"),
     }
     assert_eq!(i64::from(Features::LOW_FUEL), 1);
@@ -4469,8 +4537,9 @@ fn an_induced_tuple_struct_carries_its_derives() {
 /// An enum set is `Copy`, and that is what lets a struct field holding one be
 /// read through a shared reference.
 ///
-/// `get` takes `self` by value (driftsys/ridl#433), so `warnings.flags.get()`
-/// behind a `&Warnings` moves out of the borrow and rustc reports E0507
+/// `i64::from` takes the enum set by value, as the removed `get` did
+/// (driftsys/ridl#433, #562), so `i64::from(warnings.flags)` behind a
+/// `&Warnings` moves out of the borrow and rustc reports E0507
 /// unless the enum set is `Copy`. #433 declined to fix that and recorded it as
 /// this task's to cover, so the proof is a `rustc` run rather than a string
 /// assertion: the string says `Copy` is in the list, the compile says the list
@@ -4502,7 +4571,7 @@ fn an_enum_set_in_a_struct_field_is_readable_through_a_shared_reference() {
         "{generated}\n{}",
         r#"
 pub fn read_through_a_shared_reference(warnings: &Warnings) -> i64 {
-    warnings.flags.get()
+    i64::from(warnings.flags)
 }
 "#
     );

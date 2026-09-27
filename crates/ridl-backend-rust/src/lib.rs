@@ -1605,15 +1605,19 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
 ///
 /// The inner value is private, as a named scalar's is and for the same reason
 /// ([`emit_type_def`]): a raw bit pattern enters through `TryFrom<i64>`, which
-/// refuses a value carrying an undeclared bit. `get` reads it back.
+/// refuses a value carrying an undeclared bit. `From<_> for i64` reads it back.
 ///
-/// The bit constants, `DECLARED_MASK` and `get` share one inherent impl block
-/// so that a deprecated declaration carries `#[allow(deprecated)]` over all
-/// three. The `impl` header itself names the deprecated type, as do the bit
-/// constants and `get`; `DECLARED_MASK` names only `i64`, and is covered
-/// because it shares the block. Without the allow the consumer's build draws
-/// the `deprecated` lint on code the consumer did not write — which is what
-/// driftsys/ridl#420 settled for a named scalar's impl blocks.
+/// The inherent impl block holds the bit constants and nothing else. A bit
+/// name can be any identifier the lexer admits, so any other item in that
+/// block could carry the same name as a bit, and rustc refuses two associated
+/// items with one name (E0592, driftsys/ridl#562). The mask is therefore a
+/// local constant of `try_from`, and there is no `get` accessor.
+///
+/// A deprecated declaration carries `#[allow(deprecated)]` over every impl
+/// block, because each one names the deprecated type. Without the allow the
+/// consumer's build draws the `deprecated` lint on code the consumer did not
+/// write — which is what driftsys/ridl#420 settled for a named scalar's impl
+/// blocks.
 fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStream) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(decl, derived);
@@ -1669,19 +1673,15 @@ fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStrea
         #allow_deprecated
         impl #name {
             #(#bits)*
-
-            /// The union of every declared bit. `TryFrom` refuses a value
-            /// that carries any other bit.
-            #vis const DECLARED_MASK: i64 = #mask_lit;
-
-            #vis const fn get(self) -> i64 { self.0 }
         }
 
         #allow_deprecated
         impl ::core::convert::TryFrom<i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
             fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
-                if value & !Self::DECLARED_MASK != 0 {
+                // The union of every declared bit.
+                const DECLARED_MASK: i64 = #mask_lit;
+                if value & !DECLARED_MASK != 0 {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
                         rule: ::ridl_rt::payload::Rule::Variant,
