@@ -309,25 +309,33 @@ error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_
    │   ^^^^^^^^^^^^^^^^^
 
 error[TYPL-215]: `value` is already declared in this struct — a name identifies one field. Rename or remove one of them (typl §7)
-   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:51:3
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:52:3
    │
-50 │   value : Ratio
-   │   ----- `value` is declared here
 51 │   value : Ratio
+   │   ----- `value` is declared here
+52 │   value : Ratio
    │   ^^^^^
 
 error[TYPL-216]: `LOW` is already declared in this enum — a name identifies one value. Rename or remove one of them (typl §8)
-   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:57:3
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:58:3
    │
-56 │   LOW = 0
+57 │   LOW = 0
    │   --- `LOW` is declared here
-57 │   LOW = 1
+58 │   LOW = 1
    │   ^^^
 
-error[RIDL-413]: `value` is already declared in this parameter list — a name identifies one parameter. Rename or remove one of them (ridl §6.1, §7.1)
-   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:62:34
+error[TYPL-217]: `value` is already declared in this union — a name identifies one arm. Rename or remove one of them (typl §10)
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:64:3
    │
-62 │   command setBoth(value : Ratio, value : Ratio) @[..500ms]
+63 │   value : DuplicateField
+   │   ----- `value` is declared here
+64 │   value : ProjectionFields
+   │   ^^^^^
+
+error[RIDL-413]: `value` is already declared in this parameter list — a name identifies one parameter. Rename or remove one of them (ridl §6.1, §7.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:69:34
+   │
+69 │   command setBoth(value : Ratio, value : Ratio) @[..500ms]
    │                   -----          ^^^^^
    │                   │               
    │                   `value` is declared here

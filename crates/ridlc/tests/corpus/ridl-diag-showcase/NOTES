@@ -80,7 +80,9 @@ review caught and no single-clause fixture could have. Keep both clauses.
 - MANI: 009.
 - TYPL: 005 (the visibility rule, reaching the interaction layer), 215 (a
   struct field name declared twice, exactly, from `main/projection.ridl`),
-  301, 303, 304 (the profile boundary, folded in from the E1 debt list).
+  216 (an enum value name declared twice, exactly, from the same file), 217
+  (a union arm name declared twice, exactly, from the same file), 301, 303,
+  304 (the profile boundary, folded in from the E1 debt list).
 
 The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
 `RIDL_PROFILE_CODES` and asserts the showcase emits **exactly** that set —

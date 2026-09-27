@@ -133,8 +133,8 @@ message names `pascal_case`. A `reserved` value emits no variant and is not in
 the namespace. A value name repeated verbatim is not a transform collision and
 is held out of the check, as a union arm's is; the exact-duplicate rule is
 TYPL-216 (driftsys/ridl#554), the sibling of TYPL-215 for struct fields and
-RIDL-413 for parameters. A union's arms have no such rule yet; that gap is still
-open, on driftsys/ridl#452.
+RIDL-413 for parameters. A union's arms have their own exact-duplicate rule,
+TYPL-217 (driftsys/ridl#452).
 
 The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
 has the defect, and a wire schema's value names are read by peers in other
@@ -396,16 +396,17 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   arm names distinct in source whose projections collide are now refused at
   check time. Recorded on driftsys/ridl#237.
 
-  It does not make "the backend never emits non-compiling output on a name
-  collision" true, even for a union's arms. `union U { fooBar : A, fooBar : B }`
-  — the **same name spelled identically twice** — still passes `ridlc check`
-  with exit 0 and still emits the variant `FooBar` twice. That is outside
-  RIDL-149's remedy by design: the rule is about names distinct in source, and
-  `lower_union` deliberately holds a verbatim repeat out of the projection maps
-  rather than report a collision the transform did not cause. What is missing is
-  the exact-duplicate rule for a union's arms, the sibling of TYPL-215 for
-  struct fields and RIDL-413 for parameters. It remains open, on
-  driftsys/ridl#452.
+  The amendment alone did not make "the backend never emits non-compiling output
+  on a name collision" true, even for a union's arms.
+  `union U { fooBar : A, fooBar : B }` — the **same name spelled identically
+  twice** — passed `ridlc check` with exit 0 and emitted the variant `FooBar`
+  twice. That is outside RIDL-149's remedy by design: the rule is about names
+  distinct in source, and `lower_union` deliberately holds a verbatim repeat out
+  of the projection maps rather than report a collision the transform did not
+  cause. The exact-duplicate rule for a union's arms is TYPL-217, the sibling of
+  TYPL-215 for struct fields, TYPL-216 for enum values and RIDL-413 for
+  parameters; it refuses that input at check time, which closes the residual.
+  Recorded on driftsys/ridl#452.
 - **Negative — a tuple field name is projected through the pinned transform but
   is in no checked namespace.** typl §15.1 makes a tuple field name camelCase
   exactly as it makes a struct field name one, and the Rust backend writes it as

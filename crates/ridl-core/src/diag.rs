@@ -443,6 +443,14 @@ diag_codes! {
         TYPL_216 = "TYPL-216", Error,
             "enum value name declared twice in one enum";
 
+        /// A union arm name declared twice in one `union` (typl §10, §16.3).
+        /// Distinct from RIDL-149: that code fires when two distinct source
+        /// names collide only after a pinned name transform, and this one
+        /// fires when the two source names are already the same, before any
+        /// transform runs.
+        TYPL_217 = "TYPL-217", Error,
+            "union arm name declared twice in one union";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
         /// the checker for struct fields and collections in a `.ridl` file
