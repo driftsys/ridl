@@ -26,13 +26,34 @@
 //! ahead of the face by a set of `support_*` tests; both the double and those
 //! tests are gone, the tests having moved to `crates/ridl-loopback/tests/`
 //! as tests of the runtime itself.
+//!
+//! **Since story E11.21 (first half) the consumer side is the async client.**
+//! A command, a query and `next_event` return a named future, polled here by
+//! hand with `ridl_rt::task::noop_waker`, the way a frame loop polls; the
+//! provider side is `serve`, polled once per step. The poll face those futures
+//! are built over is `pub(crate)` in the generated module, and this file is
+//! inside the crate that `include!`s it, so the tests of the internal one-pass
+//! step `dispatch` — its count, its short-buffer rule, and the settlement
+//! rows a `serve` over the loopback can never be presented, because the
+//! handler serves only the interface's own members — call it directly. The
+//! face tests of the async face design's note F-14 are in their own section
+//! below.
 
 mod support;
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::task::{Context, Poll, Wake, Waker};
+
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
-use ridl_rt::port::Caller;
-use ridl_rt::sample::Provenance;
+use ridl_rt::error::{CallError, ClientError, Contract, ProviderError, Transport};
+use ridl_rt::port::{Caller, Correlation, Interest, ReadError, SendError, ServeError};
+use ridl_rt::sample::{Duration, Provenance};
+
+use support::doubles::{self, FailingHandler, Op, RecordingPorts};
 
 /// The catalog the fixture's package declares, with the all-zero placeholder
 /// hash the descriptor emitter writes until story E16.2 (driftsys/ridl#378)
@@ -45,6 +66,43 @@ const CATALOG: CatalogRef = CatalogRef {
 
 fn loopback() -> Loopback {
     Loopback::new(CATALOG)
+}
+
+/// Polls `future` once with the no-op waker, the way a frame loop does: the
+/// future makes progress only when it is polled again.
+fn poll_once<F: Future + Unpin>(future: &mut F) -> Poll<F::Output> {
+    let waker = ridl_rt::task::noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    Pin::new(future).poll(&mut cx)
+}
+
+/// The fixture's `Cabin` interface number, as its descriptor declares it.
+const CABIN: InterfaceNo = <generated::Cabin as ridl_rt::contract::Interface>::NUMBER;
+
+/// Sends `setLevel(level)` through the raw port, bypassing the generated
+/// client, for a test of the provider side alone. The client's future holds
+/// the port for as long as it lives, and dropping it forgets the call, which
+/// the loopback then withdraws, so a claim meant to wait for `dispatch` is
+/// sent this way.
+fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::payload::Ref;
+
+    let level = generated::Level::new_unchecked(level);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
+    // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
+    // encoder builds at the tail, so the bytes to send are the ones the
+    // encoder returned and never `&buf[..len]`.
+    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut buf)
+        .expect("encode")
+        .bytes();
+    port.command(
+        CABIN,
+        <generated::CabinSetLevel as Interaction>::MEMBER.ordinal,
+        bytes,
+    )
+    .expect("send")
 }
 
 /// The checked-in output of `generate_face` over `tests/fixtures/interaction_face.ridl`.
@@ -373,11 +431,11 @@ fn round_trip_event_raise_and_receive() {
     }
 
     let mut client = generated::cabin::Client::new(&mut port);
-    let event = client
-        .next_event()
-        .expect("next_event")
-        .expect("an occurrence is waiting");
-    match event {
+    let mut next = client.next_event();
+    let Poll::Ready(event) = poll_once(&mut next) else {
+        panic!("an occurrence is waiting, so the future is ready on its first poll");
+    };
+    match event.expect("next_event") {
         generated::cabin::Event::Warning(occurrence) => {
             let warning = occurrence.payload.expect("payload verifies");
             assert_eq!(warning.code.get(), 5);
@@ -386,48 +444,53 @@ fn round_trip_event_raise_and_receive() {
     }
 }
 
+/// The command round trip through the async client and `serve`, as a frame
+/// loop drives them: the call is sent when the method runs, one poll of the
+/// provider side settles it, and the next poll of the call takes the
+/// acknowledgment. The handler is taken from the runtime before the client
+/// borrows it, because the call's future holds the client's port for as long
+/// as it lives (the async face design, note F-4).
 #[test]
 fn round_trip_command_is_acknowledged() {
-    let mut port = loopback();
-    let correlation = {
-        let mut client = generated::cabin::Client::new(&mut port);
-        client
-            .set_level(generated::Level::new_unchecked(42))
-            .expect("send")
-    };
-
+    let mut rt = loopback();
+    let handler = rt.handler();
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1);
-    assert_eq!(provider.set_level_calls, vec![42]);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
 
-    let mut client = generated::cabin::Client::new(&mut port);
-    assert_eq!(client.set_level_ack(correlation), Some(Ok(())));
+    let mut client = generated::cabin::Client::new(&mut rt);
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    assert!(
+        poll_once(&mut call).is_pending(),
+        "the call was sent, and nothing has served it"
+    );
+    assert!(
+        poll_once(&mut serve).is_pending(),
+        "serve settles the claim and keeps serving"
+    );
+    assert_eq!(poll_once(&mut call), Poll::Ready(Ok(())));
+
+    drop(serve);
+    assert_eq!(provider.set_level_calls, vec![42]);
 }
 
 #[test]
 fn round_trip_query_reply_is_delivered() {
-    let mut port = loopback();
-    let correlation = {
-        let mut client = generated::cabin::Client::new(&mut port);
-        client
-            .average(generated::Window::new_unchecked(10))
-            .expect("send")
-    };
-
+    let mut rt = loopback();
+    let handler = rt.handler();
     let mut provider = TestProvider::new(7);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
 
-    let mut client = generated::cabin::Client::new(&mut port);
-    let reply = client
-        .average_reply(correlation)
-        .expect("reply read")
-        .expect("reply is known")
-        .expect("no call error");
-    assert_eq!(reply.get(), 7);
+    let mut client = generated::cabin::Client::new(&mut rt);
+    let mut call = client.average(generated::Window::new_unchecked(10));
+    assert!(
+        poll_once(&mut call).is_pending(),
+        "the query was sent, and nothing has served it"
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Ok(generated::Average::new_unchecked(7)))
+    );
 }
 
 #[test]
@@ -463,7 +526,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1, "an outcome was still settled");
+    assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
         "the provider must not be called when require fails"
@@ -483,21 +546,22 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     // 100 is a legal `Level` value ([0, 100] inclusive) but fails the
     // command's own `require level < 100` clause. Unlike
     // `round_trip_failing_require_settles_precondition_failed` above, this
-    // sends through the generated `Client::set_level` itself, which is
-    // `send()`'s own short circuit (face.rs), not `dispatch`'s: nothing must
-    // reach the port.
+    // sends through the generated `Client::set_level` itself, which is the
+    // internal send's own short circuit (face.rs), not `dispatch`'s: nothing
+    // must reach the port, and the future is ready with the send's error on
+    // its first poll (the async face design, note F-4).
     let mut port = loopback();
-    let result = {
+    {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level::new_unchecked(100))
-    };
-    assert_eq!(
-        result,
-        Err(ridl_rt::port::SendError::Contract(
-            ridl_rt::error::Contract::PreconditionFailed
-        )),
-        "a failing require is reported before anything is sent",
-    );
+        let mut call = client.set_level(generated::Level::new_unchecked(100));
+        assert_eq!(
+            poll_once(&mut call),
+            Poll::Ready(Err(ClientError::Send(SendError::Contract(
+                Contract::PreconditionFailed
+            )))),
+            "a failing require is reported before anything is sent",
+        );
+    }
 
     // Nothing was sent: an otherwise-empty port has no claim for dispatch to
     // find.
@@ -505,7 +569,8 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(
-        settled, 0,
+        settled,
+        Ok(0),
         "nothing was sent to the port, so dispatch settles nothing"
     );
     assert!(provider.set_level_calls.is_empty());
@@ -515,20 +580,20 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
 fn round_trip_client_average_short_circuits_on_failing_require() {
     // 0 is a legal `Window` value ([0, 100000] inclusive) but fails the
     // query's own `require window > 0` clause. Sent through the generated
-    // `Client::average` itself, so this pins `send()`'s own short circuit
-    // (face.rs), not `dispatch`'s.
+    // `Client::average` itself, so this pins the internal send's own short
+    // circuit (face.rs), not `dispatch`'s.
     let mut port = loopback();
-    let result = {
+    {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.average(generated::Window::new_unchecked(0))
-    };
-    assert_eq!(
-        result,
-        Err(ridl_rt::port::SendError::Contract(
-            ridl_rt::error::Contract::PreconditionFailed
-        )),
-        "a failing require is reported before anything is sent",
-    );
+        let mut call = client.average(generated::Window::new_unchecked(0));
+        assert_eq!(
+            poll_once(&mut call),
+            Poll::Ready(Err(ClientError::Send(SendError::Contract(
+                Contract::PreconditionFailed
+            )))),
+            "a failing require is reported before anything is sent",
+        );
+    }
 
     // Nothing was sent: an otherwise-empty port has no claim for dispatch to
     // find.
@@ -536,42 +601,35 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(
-        settled, 0,
+        settled,
+        Ok(0),
         "nothing was sent to the port, so dispatch settles nothing"
     );
 }
 
 #[test]
 fn round_trip_failing_ensure_settles_contract_broken() {
-    let mut port = loopback();
-    let correlation = {
-        let mut client = generated::cabin::Client::new(&mut port);
-        client
-            .average(generated::Window::new_unchecked(1))
-            .expect("send")
-    };
-
+    let mut rt = loopback();
+    let handler = rt.handler();
     // The provider misbehaves: it returns a reply whose declared
     // `ensure result >= 0` clause is false. `Average`'s own declared range
     // [0, 1000] would never let a legally constructed value violate this —
     // Rust's newtype does not enforce it at construction — so this proves
-    // `dispatch` checks `ensure` independently of the reply type's own range.
+    // the provider side checks `ensure` independently of the reply type's
+    // own range.
     let mut provider = TestProvider::new(-1);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1, "an outcome was still settled");
+    let mut serve = generated::cabin::serve(handler, &mut provider);
 
-    let mut client = generated::cabin::Client::new(&mut port);
-    let reply = client
-        .average_reply(correlation)
-        .expect("reply read")
-        .expect("reply is known");
-    assert!(matches!(
-        reply,
-        Err(ridl_rt::error::CallError::Contract(
-            ridl_rt::error::Contract::ContractBroken
-        ))
-    ));
+    let mut client = generated::cabin::Client::new(&mut rt);
+    let mut call = client.average(generated::Window::new_unchecked(1));
+    assert!(poll_once(&mut call).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Contract(
+            Contract::ContractBroken
+        ))))
+    );
 }
 
 #[test]
@@ -587,47 +645,36 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     // claim's settlement succeeds), which a polarity flip in `dispatch`'s
     // counting condition cannot pass unnoticed.
     let mut port = loopback();
-    let first = {
-        let mut client = generated::cabin::Client::new(&mut port);
-        client
-            .set_level(generated::Level::new_unchecked(1))
-            .expect("send first")
-    };
+    let first = send_level_raw(&mut port, 1);
     port.fail_next_settle();
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled_first = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(
-        settled_first, 0,
+        settled_first,
+        Ok(0),
         "the first claim's settlement fails and dispatch does not count it"
     );
     assert_eq!(
-        port.ack(first.0),
+        port.ack(first),
         None,
         "a failed settle records no outcome for the first claim's correlation"
     );
 
-    let second = {
-        let mut client = generated::cabin::Client::new(&mut port);
-        client
-            .set_level(generated::Level::new_unchecked(2))
-            .expect("send second")
-    };
+    let second = send_level_raw(&mut port, 2);
     let settled_second = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(
-        settled_second, 1,
+        settled_second,
+        Ok(1),
         "the second claim's settlement succeeds and dispatch counts it"
     );
     assert_eq!(
-        port.ack(second.0),
+        port.ack(second),
         Some(Ok(())),
         "the successful settlement is observable as accepted through ack"
     );
 
-    // The original claim's shape: exactly one of the two settlements is
-    // counted, across both dispatch calls.
-    assert_eq!(settled_first + settled_second, 1);
     // The provider still runs for both claims: `dispatch` settles a command
     // before calling the provider, unconditionally of whether the handler
     // accepted that settlement.
@@ -637,26 +684,21 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
 #[test]
 fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
     let mut port = loopback();
-    {
-        let mut client = generated::cabin::Client::new(&mut port);
-        client
-            .set_level(generated::Level::new_unchecked(1))
-            .expect("send");
-    }
+    send_level_raw(&mut port, 1);
 
     let mut provider = TestProvider::new(0);
 
     // Too small: dispatch must return 0 and must not consume the claim.
     let mut short = [0u8; 1];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut short);
-    assert_eq!(settled, 0, "a short buffer settles nothing");
+    assert_eq!(settled, Ok(0), "a short buffer settles nothing");
     assert!(provider.set_level_calls.is_empty());
 
     // Retrying with a correctly sized buffer still finds the claim the short
     // buffer left untouched.
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1);
+    assert_eq!(settled, Ok(1));
     assert_eq!(provider.set_level_calls, vec![1]);
 }
 
@@ -729,7 +771,7 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1, "an outcome was still settled");
+    assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
         "the provider must not be called for an unrecognized ordinal"
@@ -784,7 +826,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1, "an outcome was still settled");
+    assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
         "the provider must not be called for a foreign interface number"
@@ -821,7 +863,7 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1, "an outcome was still settled");
+    assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
         "the provider must not be called when the argument bytes fail to verify"
@@ -868,7 +910,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-    assert_eq!(settled, 1, "an outcome was still settled");
+    assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
         "the provider must not be called when the argument value breaks its typl constraints"
@@ -883,6 +925,411 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
                 rule: ridl_rt::payload::Rule::Range,
             })
         )),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The async client and `serve` (story E11.21, first half; the async face
+// design, notes F-3 to F-7 and F-14). The port is `RecordingPorts`: the
+// loopback's consumer-side role handles with a log of every `Caller` and
+// `Wakeable` call, so the `Loopback` stays free for `advance`, for the
+// handler `serve` runs over, and for a second caller that fills the call
+// table. Each test names the sentence of the design it fails without.
+// ---------------------------------------------------------------------------
+
+/// `setLevel`'s response bound is `@[..50ms]`, in microseconds.
+const SET_LEVEL_MAX: Duration = Duration(50_000);
+/// `average`'s response bound is `@[..200ms]`.
+const AVERAGE_MAX: Duration = Duration(200_000);
+
+/// Fills every slot of the call table with a call no `serve` over `Cabin` is
+/// presented — ordinal 99 names no member, and a handler is presented only
+/// the members it serves — and returns the correlations, so a test can
+/// reclaim one slot with `forget`.
+fn fill_the_call_table(filler: &mut ridl_loopback::CallerHandle) -> Vec<Correlation> {
+    (0..Loopback::SLOTS)
+        .map(|_| {
+            filler
+                .command(CABIN, Ordinal(99), &[])
+                .expect("a free slot")
+        })
+        .collect()
+}
+
+/// The correlation of the one send the log holds, which is what the method
+/// did when it was called.
+fn the_one_send(log: &doubles::Log) -> Correlation {
+    match doubles::take(log).as_slice() {
+        [Op::Command(Ok(c))] | [Op::Query(Ok(c))] => *c,
+        ops => panic!("the method sends once when it is called, not {ops:?}"),
+    }
+}
+
+/// A waker that counts its wakes, for the test that asserts a wake happened
+/// rather than polling on a schedule.
+struct CountWakes(AtomicUsize);
+
+impl CountWakes {
+    fn new() -> Arc<Self> {
+        Arc::new(CountWakes(AtomicUsize::new(0)))
+    }
+
+    fn count(&self) -> usize {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+impl Wake for CountWakes {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Note F-4: dropping the future while it waits calls `forget` once with its
+/// correlation. Note F-5: a poll registers its interest, then reads.
+#[test]
+fn a_future_dropped_while_waiting_forgets_its_call_once() {
+    let rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    let c = the_one_send(&log);
+    assert!(
+        poll_once(&mut call).is_pending(),
+        "no provider has served the call"
+    );
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::WakeOn(Interest::Outcome(c)), Op::Ack(c)],
+        "one poll registers its interest, then reads the outcome, and returns"
+    );
+
+    drop(call);
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::Forget(c)],
+        "dropping the future while it waits forgets the call, once"
+    );
+    drop(client);
+    assert!(doubles::take(&log).is_empty(), "nothing else forgets it");
+}
+
+/// Note F-4: a future that has taken its outcome calls `forget` at once, in
+/// the poll that took it, and nothing on drop.
+#[test]
+fn a_future_that_took_its_outcome_forgets_at_once_and_nothing_more_on_drop() {
+    let rt = loopback();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    let c = the_one_send(&log);
+    assert!(
+        poll_once(&mut serve).is_pending(),
+        "serve settles the claim"
+    );
+    assert_eq!(poll_once(&mut call), Poll::Ready(Ok(())));
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::WakeOn(Interest::Outcome(c)), Op::Ack(c), Op::Forget(c)],
+        "the outcome is taken and the call forgotten in the same poll"
+    );
+
+    drop(call);
+    assert!(
+        doubles::take(&log).is_empty(),
+        "a future that already forgot its call forgets nothing on drop"
+    );
+}
+
+/// Note F-4: a future dropped in the slot-waiting phase sends nothing, so
+/// there is nothing to forget. Note F-3: each poll retries the send, after
+/// registering `Interest::Slot`.
+#[test]
+fn a_future_dropped_while_waiting_for_a_slot_forgets_nothing() {
+    let rt = loopback();
+    let mut filler = rt.caller();
+    let _held = fill_the_call_table(&mut filler);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::Command(Err(SendError::Busy))],
+        "the send is attempted once when the method runs"
+    );
+    assert!(poll_once(&mut call).is_pending());
+    assert_eq!(
+        doubles::take(&log),
+        vec![
+            Op::WakeOn(Interest::Slot),
+            Op::Command(Err(SendError::Busy))
+        ],
+        "a poll registers the slot interest, then retries the send"
+    );
+
+    drop(call);
+    assert!(
+        doubles::take(&log).is_empty(),
+        "nothing was sent, so nothing is forgotten"
+    );
+}
+
+/// Note F-3: a call over a runtime with every slot taken is `Pending`, is
+/// woken by a reclaimed slot, sends on the poll that follows, and resolves.
+#[test]
+fn a_call_with_every_slot_taken_waits_and_is_woken_by_a_reclaim() {
+    let rt = loopback();
+    let mut filler = rt.caller();
+    let held = fill_the_call_table(&mut filler);
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    assert!(Pin::new(&mut call).poll(&mut cx).is_pending());
+    assert_eq!(
+        wakes.count(),
+        0,
+        "no slot is free, so the registration is stored and not woken"
+    );
+
+    filler.forget(held[0]);
+    assert_eq!(
+        wakes.count(),
+        1,
+        "the reclaimed slot wakes the waiting call"
+    );
+
+    assert!(
+        Pin::new(&mut call).poll(&mut cx).is_pending(),
+        "the retry sends; no provider has served the call yet"
+    );
+    match doubles::take(&log).as_slice() {
+        [
+            Op::Command(Err(SendError::Busy)),
+            Op::WakeOn(Interest::Slot),
+            Op::Command(Err(SendError::Busy)),
+            Op::WakeOn(Interest::Slot),
+            Op::Command(Ok(sent)),
+            Op::WakeOn(Interest::Outcome(registered)),
+            Op::Ack(read),
+        ] if sent == registered && registered == read => {}
+        ops => panic!("the send, the two polls and the wait on the outcome, not {ops:?}"),
+    }
+    assert_eq!(
+        wakes.count(),
+        2,
+        "the loopback wakes a slot registration at once while a slot is free (a \
+         spurious wake, which the contract allows); the retry then takes the slot, \
+         and the outcome registration is stored, not woken"
+    );
+
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(wakes.count(), 3, "the settlement wakes the waiting call");
+    assert_eq!(Pin::new(&mut call).poll(&mut cx), Poll::Ready(Ok(())));
+}
+
+/// Note F-3: when the deadline passes with the call still unsent, the future
+/// resolves to `Send(Busy)`, and nothing is forgotten because nothing was
+/// sent. Note F-2: the bound is `max` from the port's clock at the call, and a
+/// call at exactly `max` is still within it.
+#[test]
+fn a_call_still_unsent_at_its_deadline_resolves_to_send_busy() {
+    let mut rt = loopback();
+    let mut filler = rt.caller();
+    let _held = fill_the_call_table(&mut filler);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    assert!(poll_once(&mut call).is_pending());
+    rt.advance(SET_LEVEL_MAX);
+    assert!(
+        poll_once(&mut call).is_pending(),
+        "at exactly the bound the call is still within it"
+    );
+    rt.advance(Duration(1));
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Send(SendError::Busy)))
+    );
+    assert!(
+        doubles::forgets(&log).is_empty(),
+        "nothing was sent, so nothing is forgotten"
+    );
+}
+
+/// Note F-3: a sent command whose clock passes `max` resolves to
+/// `Undelivered` and forgets, once.
+#[test]
+fn a_sent_command_resolves_to_undelivered_at_its_deadline_and_forgets() {
+    let mut rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.set_level(generated::Level::new_unchecked(42));
+    let c = the_one_send(&log);
+    assert!(poll_once(&mut call).is_pending());
+    rt.advance(SET_LEVEL_MAX);
+    rt.advance(Duration(1));
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Undelivered
+        ))))
+    );
+    assert_eq!(doubles::forgets(&log), vec![c]);
+
+    drop(call);
+    assert_eq!(doubles::forgets(&log), vec![c], "and not again on drop");
+}
+
+/// Note F-3: a sent query whose clock passes `max` resolves to `Timeout` and
+/// forgets, once.
+#[test]
+fn a_sent_query_resolves_to_timeout_at_its_deadline_and_forgets() {
+    let mut rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.average(generated::Window::new_unchecked(10));
+    let c = the_one_send(&log);
+    assert!(poll_once(&mut call).is_pending());
+    rt.advance(AVERAGE_MAX);
+    rt.advance(Duration(1));
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Timeout
+        ))))
+    );
+    assert_eq!(doubles::forgets(&log), vec![c]);
+
+    drop(call);
+    assert_eq!(doubles::forgets(&log), vec![c], "and not again on drop");
+}
+
+/// Note F-10: `next_event` waits on the event queue and takes the occurrence
+/// a raise delivers on the poll that follows it.
+#[test]
+fn round_trip_next_event_waits_for_a_raise() {
+    let mut rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::cabin::Client::new(ports);
+    client.subscribe_warning().expect("subscribe");
+
+    let mut next = client.next_event();
+    assert!(poll_once(&mut next).is_pending(), "nothing was raised");
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::WakeOn(Interest::Event(CABIN))],
+        "the poll registers the event interest before it reads the queue"
+    );
+
+    generated::cabin::Publisher::new(&mut rt)
+        .warning(generated::Warning {
+            code: generated::Level::new_unchecked(5),
+            health: generated::Health::Warn,
+        })
+        .expect("raise");
+    let Poll::Ready(Ok(generated::cabin::Event::Warning(occurrence))) = poll_once(&mut next) else {
+        panic!("the raise is delivered on the next poll");
+    };
+    assert_eq!(occurrence.payload.expect("payload verifies").code.get(), 5);
+}
+
+/// Note F-7: `serve` calls `Handler::serve` with the interface's command and
+/// query ordinals when the function is called.
+#[test]
+fn serve_registers_the_interfaces_commands_and_queries_with_the_handler() {
+    use ridl_rt::contract::Interaction;
+
+    let rt = loopback();
+    let mut handler = rt.handler();
+    let mut provider = TestProvider::new(0);
+    {
+        let mut serve = generated::cabin::serve(&mut handler, &mut provider);
+        assert!(poll_once(&mut serve).is_pending(), "no claim is waiting");
+    }
+    assert_eq!(
+        handler.served(),
+        &[
+            (
+                CABIN,
+                <generated::CabinSetLevel as Interaction>::MEMBER.ordinal
+            ),
+            (
+                CABIN,
+                <generated::CabinAverage as Interaction>::MEMBER.ordinal
+            ),
+        ]
+    );
+}
+
+/// Note F-7: `serve` over a handler whose `next_claim` fails resolves to
+/// `ProviderError::Claim`, and every claim settled before the failure stays
+/// settled.
+#[test]
+fn serve_resolves_to_the_handler_ports_failure_after_settling_the_claims_before_it() {
+    let mut rt = loopback();
+    let first = send_level_raw(&mut rt, 1);
+    let second = send_level_raw(&mut rt, 2);
+    let handler = FailingHandler::failing_after(rt.handler(), 1);
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    assert_eq!(
+        poll_once(&mut serve),
+        Poll::Ready(Err(ProviderError::Claim(ReadError::Detached)))
+    );
+
+    drop(serve);
+    assert_eq!(
+        provider.set_level_calls,
+        vec![1],
+        "the claim presented before the failure was served"
+    );
+    assert_eq!(rt.ack(first), Some(Ok(())), "and settled");
+    assert_eq!(
+        rt.ack(second),
+        None,
+        "the claim behind the failure is still waiting"
+    );
+}
+
+/// Note F-7: a refused `Handler::serve` is a future ready with the refusal.
+#[test]
+fn serve_is_ready_with_the_refusal_when_the_handler_refuses_the_members() {
+    let rt = loopback();
+    let handler = FailingHandler::refusing(rt.handler(), ServeError::NotOwner);
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    assert_eq!(
+        poll_once(&mut serve),
+        Poll::Ready(Err(ProviderError::Serve(ServeError::NotOwner)))
     );
 }
 

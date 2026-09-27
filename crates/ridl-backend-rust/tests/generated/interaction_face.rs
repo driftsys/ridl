@@ -1486,24 +1486,88 @@ impl ::ridl_rt::contract::Signal for HornActive {
         Health::default()
     }
 }
+/**Descriptor for interface `Siren`.
+
+`CATALOG.hash` is the placeholder `CatalogHash([0u8; 32])` until E16.2 (driftsys/ridl#378) computes the real catalog hash.
+
+Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
+pub struct Siren;
+impl ::ridl_rt::contract::Interface for Siren {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "face.demo",
+        hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
+    const PROVISIONAL: bool = true;
+    const NAME: &'static str = "Siren";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Event,
+            name: "tripped",
+            timing: Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: Some(::ridl_rt::sample::Duration(100000)),
+                max: Some(::ridl_rt::sample::Duration(1000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Warning",
+                    max_size: ::ridl_rt::contract::EncodedSizes {
+                        proto3: None,
+                        flatbuffers: None,
+                        repr_c: None,
+                    },
+                },
+            ],
+        },
+    ];
+}
+impl Siren {
+    ///The largest argument or reply payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. A dispatch buffer must be at least this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: usize = 0usize;
+    ///The largest event payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: usize = {
+        let sizes = [<Warning as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+}
+pub struct SirenTripped;
+impl ::ridl_rt::contract::Interaction for SirenTripped {
+    type Iface = Siren;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Siren as ::ridl_rt::contract::Interface>::MEMBERS[0];
+}
+impl ::ridl_rt::contract::Event for SirenTripped {
+    type Payload = Warning;
+}
 ///The generated interaction face of interface `Cabin`.
 pub mod cabin {
-    ///Identifies one sent command `setLevel` to its caller. It is returned by the send method and accepted by that call's own outcome method, and by no other.
+    ///Identifies one sent command `setLevel` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub struct SetLevelCorrelation(pub ::ridl_rt::port::Correlation);
-    ///Identifies one sent query `average` to its caller. It is returned by the send method and accepted by that call's own outcome method, and by no other.
+    pub(crate) struct SetLevelCorrelation(pub ::ridl_rt::port::Correlation);
+    ///Identifies one sent query `average` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-    pub struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
+    pub(crate) struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
     ///The consumer face of interface `Cabin`, generic over exactly the ports the interface's interactions need.
     pub struct Client<
         P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller,
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > {
         port: P,
     }
     impl<
         P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller,
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > Client<P> {
         /// Binds the face to a port. The port is held by value: pass a
         /// handle, or a `&mut` borrow of one.
@@ -1578,189 +1642,500 @@ pub mod cabin {
                     &[::ridl_rt::contract::Ordinal(2u32)],
                 )
         }
-        /**Takes the next occurrence of any subscribed event of interface `Cabin`, routed to its variant by ordinal. `Ok(None)` when none is waiting. One method serves every event, because the payload type is not known until the occurrence's ordinal is read.
+        /**Takes the next occurrence of any subscribed event of interface `Cabin`, routed to its variant by ordinal, as a future: it resolves when an occurrence is waiting and is `Pending` while none is. One method serves every event, because the payload type is not known until the occurrence's ordinal is read. The future holds this client's port until it is dropped.
 
-The interface number is checked before the ordinal, for the reason `dispatch` checks it: a port is attached to a whole catalog, ordinals restart at 1 in each interface, and an occurrence of a sibling interface at the same ordinal would otherwise be decoded as this interface's payload. Such an occurrence is reported as `Contract::UnknownInteraction`; `EventSource::next` has already consumed it, so this face cannot hand it back to the interface it belongs to. Subscribe on a port this interface owns.*/
-        pub fn next_event(
-            &mut self,
-        ) -> ::core::result::Result<
-            ::core::option::Option<Event>,
-            ::ridl_rt::port::ReadError,
-        > {
-            let mut buf = [0u8; super::Cabin::EVENT_SOURCE_BUFFER_SIZE];
-            let Some(occurrence) = self.port.next(&mut buf)? else {
-                return Ok(None);
+The interface number is checked before the ordinal, for the reason `serve` checks it: a port is attached to a whole catalog, ordinals restart at 1 in each interface, and an occurrence of a sibling interface at the same ordinal would otherwise be decoded as this interface's payload. Such an occurrence is reported as `Contract::UnknownInteraction`; `EventSource::next` has already consumed it, so this face cannot hand it back to the interface it belongs to. Subscribe on a port this interface owns.*/
+        pub fn next_event(&mut self) -> NextEvent<'_, P> {
+            NextEvent { port: &mut self.port }
+        }
+        /**Sends command `setLevel` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        pub fn set_level(&mut self, level: super::Level) -> SetLevelCall<'_, P> {
+            let deadline = <super::CabinSetLevel as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_set_level(&mut self.port, &level) {
+                Ok(correlation) => SetLevelPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => SetLevelPhase::Unsent(level),
+                Err(error) => SetLevelPhase::Failed(error),
             };
-            if occurrence.iface
-                != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER
-            {
-                return Err(
-                    ::ridl_rt::port::ReadError::Contract(
-                        ::ridl_rt::error::Contract::UnknownInteraction,
-                    ),
-                );
-            }
-            match occurrence.ord {
-                ::ridl_rt::contract::Ordinal(2u32) => {
-                    Ok(
-                        Some(
-                            Event::Warning(::ridl_rt::sample::Occurrence {
-                                payload: match ::ridl_rt::payload::Ref::<
-                                    super::Warning,
-                                    super::Wire,
-                                >::verify(&buf[..occurrence.len]) {
-                                    Ok(checked) => Ok(checked.decode()),
-                                    Err(
-                                        ::ridl_rt::payload::VerifyError::Contract(violation),
-                                    ) => {
-                                        Err(::ridl_rt::sample::Detection::InvalidValue(violation))
-                                    }
-                                    Err(_) => Err(::ridl_rt::sample::Detection::Corrupt),
-                                },
-                                envelope: occurrence.envelope,
-                            }),
-                        ),
-                    )
-                }
-                _ => {
-                    Err(
-                        ::ridl_rt::port::ReadError::Contract(
-                            ::ridl_rt::error::Contract::UnknownInteraction,
-                        ),
-                    )
-                }
+            SetLevelCall {
+                port: &mut self.port,
+                phase,
+                deadline,
             }
         }
-        ///Sends command `setLevel` and returns the correlation of its outcome. A `require` clause that fails is reported as `SendError::Contract(Contract::PreconditionFailed)` and nothing is sent.
-        pub fn set_level(
-            &mut self,
-            level: super::Level,
-        ) -> ::core::result::Result<SetLevelCorrelation, ::ridl_rt::port::SendError> {
-            <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(&level)
-                .map_err(|()| {
-                    ::ridl_rt::port::SendError::Contract(
-                        ::ridl_rt::error::Contract::PreconditionFailed,
-                    )
-                })?;
-            let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
-                super::Wire,
-            >>::MAX_SIZE];
-            let bytes = match ::ridl_rt::payload::Ref::<
-                super::Level,
-                super::Wire,
-            >::encode(&level, &mut buf) {
-                Ok(encoded) => encoded.bytes(),
-                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
-                    unreachable!(
-                        "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
-                        needed, available
-                    )
-                }
-                Err(_) => unreachable!("encoding `Level` failed"),
+        /**Sends query `average` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        pub fn average(&mut self, window: super::Window) -> AverageCall<'_, P> {
+            let deadline = <super::CabinAverage as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_average(&mut self.port, &window) {
+                Ok(correlation) => AveragePhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => AveragePhase::Unsent(window),
+                Err(error) => AveragePhase::Failed(error),
             };
-            self.port
-                .command(
-                    <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
-                    ::ridl_rt::contract::Ordinal(3u32),
-                    bytes,
-                )
-                .map(SetLevelCorrelation)
-        }
-        ///Sends query `average` and returns the correlation of its outcome. A `require` clause that fails is reported as `SendError::Contract(Contract::PreconditionFailed)` and nothing is sent.
-        pub fn average(
-            &mut self,
-            window: super::Window,
-        ) -> ::core::result::Result<AverageCorrelation, ::ridl_rt::port::SendError> {
-            <super::CabinAverage as ::ridl_rt::contract::Query>::require(&window)
-                .map_err(|()| {
-                    ::ridl_rt::port::SendError::Contract(
-                        ::ridl_rt::error::Contract::PreconditionFailed,
-                    )
-                })?;
-            let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
-                super::Wire,
-            >>::MAX_SIZE];
-            let bytes = match ::ridl_rt::payload::Ref::<
-                super::Window,
-                super::Wire,
-            >::encode(&window, &mut buf) {
-                Ok(encoded) => encoded.bytes(),
-                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
-                    unreachable!(
-                        "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
-                        needed, available
-                    )
-                }
-                Err(_) => unreachable!("encoding `Window` failed"),
-            };
-            self.port
-                .query(
-                    <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
-                    ::ridl_rt::contract::Ordinal(4u32),
-                    bytes,
-                )
-                .map(AverageCorrelation)
-        }
-        ///Takes query `average`'s reply once it is known, or `Ok(None)` while it is not. It does not wait.
-        pub fn average_reply(
-            &mut self,
-            correlation: AverageCorrelation,
-        ) -> ::core::result::Result<
-            ::core::option::Option<
-                ::core::result::Result<super::Average, ::ridl_rt::error::CallError>,
-            >,
-            ::ridl_rt::port::ReadError,
-        > {
-            let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
-                super::Wire,
-            >>::MAX_SIZE];
-            match self.port.reply(correlation.0, &mut buf)? {
-                None => Ok(None),
-                Some(Err(error)) => Ok(Some(Err(error))),
-                Some(Ok(len)) => {
-                    Ok(
-                        Some(
-                            match ::ridl_rt::payload::Ref::<
-                                super::Average,
-                                super::Wire,
-                            >::verify(&buf[..len]) {
-                                Ok(checked) => Ok(checked.decode()),
-                                Err(
-                                    ::ridl_rt::payload::VerifyError::Contract(violation),
-                                ) => {
-                                    Err(
-                                        ::ridl_rt::error::CallError::Contract(
-                                            ::ridl_rt::error::Contract::InvalidValue(violation),
-                                        ),
-                                    )
-                                }
-                                Err(_) => {
-                                    Err(
-                                        ::ridl_rt::error::CallError::Transport(
-                                            ::ridl_rt::error::Transport::Corrupt,
-                                        ),
-                                    )
-                                }
-                            },
-                        ),
-                    )
-                }
+            AverageCall {
+                port: &mut self.port,
+                phase,
+                deadline,
             }
-        }
-        ///Takes command `setLevel`'s delivery acknowledgment once it is known, or `None` while it is not. It does not wait.
-        pub fn set_level_ack(
-            &mut self,
-            correlation: SetLevelCorrelation,
-        ) -> ::core::option::Option<
-            ::core::result::Result<(), ::ridl_rt::error::CallError>,
-        > {
-            self.port.ack(correlation.0)
         }
     }
     ///One occurrence of an event of interface `Cabin`.
     pub enum Event {
         ///An occurrence of event `warning`.
         Warning(::ridl_rt::sample::Occurrence<super::Warning>),
+    }
+    ///The future of command `setLevel`, returned by `Client::set_level`. It resolves to the delivery acknowledgment: `Ok(())`, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so.
+    #[must_use = "the command was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct SetLevelCall<
+        'a,
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: SetLevelPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    ///Where command `setLevel` is, as its future's `poll` moves it.
+    enum SetLevelPhase {
+        /// The port answered `SendError::Busy`; the argument is kept for
+        /// the retry.
+        Unsent(super::Level),
+        /// Sent, and waiting for the outcome under this correlation.
+        Waiting(SetLevelCorrelation),
+        /// The send failed before anything was sent; the first poll
+        /// reports it.
+        Failed(::ridl_rt::port::SendError),
+        /// The output was taken.
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > SetLevelCall<'_, P> {
+        /// Whether the call's bound has passed on the port's clock. A
+        /// call with no bound never expires here.
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for SetLevelCall<'_, P> {
+        type Output = ::core::result::Result<(), ::ridl_rt::error::ClientError>;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, SetLevelPhase::Done) {
+                    SetLevelPhase::Done => {
+                        panic!("`SetLevelCall` polled after completion")
+                    }
+                    SetLevelPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    SetLevelPhase::Unsent(level) => {
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_set_level(&mut *this.port, &level) {
+                            Ok(correlation) => {
+                                this.phase = SetLevelPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                if this.expired() {
+                                    return ::core::task::Poll::Ready(
+                                        Err(
+                                            ::ridl_rt::error::ClientError::Send(
+                                                ::ridl_rt::port::SendError::Busy,
+                                            ),
+                                        ),
+                                    );
+                                }
+                                this.phase = SetLevelPhase::Unsent(level);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    SetLevelPhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_set_level_ack(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Some(outcome) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            None => {
+                                if !this.expired() {
+                                    this.phase = SetLevelPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Undelivered,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for SetLevelCall<'_, P> {
+        fn drop(&mut self) {
+            if let SetLevelPhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
+    ///The future of query `average`, returned by `Client::average`. It resolves to the decoded reply, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so.
+    #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct AverageCall<
+        'a,
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: AveragePhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    ///Where query `average` is, as its future's `poll` moves it.
+    enum AveragePhase {
+        /// The port answered `SendError::Busy`; the argument is kept for
+        /// the retry.
+        Unsent(super::Window),
+        /// Sent, and waiting for the outcome under this correlation.
+        Waiting(AverageCorrelation),
+        /// The send failed before anything was sent; the first poll
+        /// reports it.
+        Failed(::ridl_rt::port::SendError),
+        /// The output was taken.
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > AverageCall<'_, P> {
+        /// Whether the call's bound has passed on the port's clock. A
+        /// call with no bound never expires here.
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for AverageCall<'_, P> {
+        type Output = ::core::result::Result<
+            super::Average,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, AveragePhase::Done) {
+                    AveragePhase::Done => panic!("`AverageCall` polled after completion"),
+                    AveragePhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    AveragePhase::Unsent(window) => {
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_average(&mut *this.port, &window) {
+                            Ok(correlation) => {
+                                this.phase = AveragePhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                if this.expired() {
+                                    return ::core::task::Poll::Ready(
+                                        Err(
+                                            ::ridl_rt::error::ClientError::Send(
+                                                ::ridl_rt::port::SendError::Busy,
+                                            ),
+                                        ),
+                                    );
+                                }
+                                this.phase = AveragePhase::Unsent(window);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    AveragePhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_average_reply(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Ok(Some(outcome)) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            Err(error) => Err(::ridl_rt::error::ClientError::Read(error)),
+                            Ok(None) => {
+                                if !this.expired() {
+                                    this.phase = AveragePhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Timeout,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for AverageCall<'_, P> {
+        fn drop(&mut self) {
+            if let AveragePhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
+    ///The future of `Client::next_event` over interface `Cabin`. Each poll registers its interest in the interface's events, reads the queue once, and returns: an occurrence resolves it, and a read failure resolves it with that failure. It can be polled again after it resolved, for the next occurrence.
+    #[must_use = "an occurrence is taken only when the future is polled"]
+    pub struct NextEvent<
+        'a,
+        P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+    }
+    impl<
+        P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for NextEvent<'_, P> {
+        type Output = ::core::result::Result<Event, ::ridl_rt::port::ReadError>;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            this.port
+                .wake_on(
+                    ::ridl_rt::port::Interest::Event(
+                        <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
+                    ),
+                    cx.waker(),
+                );
+            match poll_next_event(&mut *this.port) {
+                Ok(Some(event)) => ::core::task::Poll::Ready(Ok(event)),
+                Ok(None) => ::core::task::Poll::Pending,
+                Err(error) => ::core::task::Poll::Ready(Err(error)),
+            }
+        }
+    }
+    ///Sends command `setLevel` once and returns the correlation of its outcome, or the send's failure. A `require` clause that fails is `SendError::Contract(Contract::PreconditionFailed)` and nothing is sent. `Client::set_level` calls it when the method runs, and `SetLevelCall` calls it again on each poll while the port answers `SendError::Busy`.
+    pub(crate) fn send_set_level<P: ::ridl_rt::port::Caller>(
+        port: &mut P,
+        level: &super::Level,
+    ) -> ::core::result::Result<SetLevelCorrelation, ::ridl_rt::port::SendError> {
+        <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(level)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+            super::Wire,
+        >>::MAX_SIZE];
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::Level,
+            super::Wire,
+        >::encode(level, &mut buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `Level` failed"),
+        };
+        port.command(
+                <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(3u32),
+                bytes,
+            )
+            .map(SetLevelCorrelation)
+    }
+    ///Reads command `setLevel`'s delivery acknowledgment: `Some` once it is known, `None` while it is not. It does not wait; `SetLevelCall` polls it.
+    pub(crate) fn poll_set_level_ack<P: ::ridl_rt::port::Caller>(
+        port: &mut P,
+        correlation: SetLevelCorrelation,
+    ) -> ::core::option::Option<
+        ::core::result::Result<(), ::ridl_rt::error::CallError>,
+    > {
+        port.ack(correlation.0)
+    }
+    ///Sends query `average` once and returns the correlation of its outcome, or the send's failure. A `require` clause that fails is `SendError::Contract(Contract::PreconditionFailed)` and nothing is sent. `Client::average` calls it when the method runs, and `AverageCall` calls it again on each poll while the port answers `SendError::Busy`.
+    pub(crate) fn send_average<P: ::ridl_rt::port::Caller>(
+        port: &mut P,
+        window: &super::Window,
+    ) -> ::core::result::Result<AverageCorrelation, ::ridl_rt::port::SendError> {
+        <super::CabinAverage as ::ridl_rt::contract::Query>::require(window)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
+            super::Wire,
+        >>::MAX_SIZE];
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::Window,
+            super::Wire,
+        >::encode(window, &mut buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `Window` failed"),
+        };
+        port.query(
+                <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(4u32),
+                bytes,
+            )
+            .map(AverageCorrelation)
+    }
+    ///Reads query `average`'s reply: `Ok(Some)` once it is known, `Ok(None)` while it is not, and the port's own failure when the read itself fails. It does not wait; `AverageCall` polls it.
+    pub(crate) fn poll_average_reply<P: ::ridl_rt::port::Caller>(
+        port: &mut P,
+        correlation: AverageCorrelation,
+    ) -> ::core::result::Result<
+        ::core::option::Option<
+            ::core::result::Result<super::Average, ::ridl_rt::error::CallError>,
+        >,
+        ::ridl_rt::port::ReadError,
+    > {
+        let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
+            super::Wire,
+        >>::MAX_SIZE];
+        match port.reply(correlation.0, &mut buf)? {
+            None => Ok(None),
+            Some(Err(error)) => Ok(Some(Err(error))),
+            Some(Ok(len)) => {
+                Ok(
+                    Some(
+                        match ::ridl_rt::payload::Ref::<
+                            super::Average,
+                            super::Wire,
+                        >::verify(&buf[..len]) {
+                            Ok(checked) => Ok(checked.decode()),
+                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                                    ),
+                                )
+                            }
+                            Err(_) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                )
+            }
+        }
+    }
+    ///Reads the next occurrence of any subscribed event of interface `Cabin`, routed to its variant by ordinal: `Ok(None)` when none is waiting. It does not wait; `NextEvent` polls it. An occurrence of another interface is reported as `Contract::UnknownInteraction`, for the reason `Client::next_event` gives.
+    pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
+        port: &mut P,
+    ) -> ::core::result::Result<
+        ::core::option::Option<Event>,
+        ::ridl_rt::port::ReadError,
+    > {
+        let mut buf = [0u8; super::Cabin::EVENT_SOURCE_BUFFER_SIZE];
+        let Some(occurrence) = port.next(&mut buf)? else {
+            return Ok(None);
+        };
+        if occurrence.iface != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER {
+            return Err(
+                ::ridl_rt::port::ReadError::Contract(
+                    ::ridl_rt::error::Contract::UnknownInteraction,
+                ),
+            );
+        }
+        match occurrence.ord {
+            ::ridl_rt::contract::Ordinal(2u32) => {
+                Ok(
+                    Some(
+                        Event::Warning(::ridl_rt::sample::Occurrence {
+                            payload: match ::ridl_rt::payload::Ref::<
+                                super::Warning,
+                                super::Wire,
+                            >::verify(&buf[..occurrence.len]) {
+                                Ok(checked) => Ok(checked.decode()),
+                                Err(
+                                    ::ridl_rt::payload::VerifyError::Contract(violation),
+                                ) => {
+                                    Err(::ridl_rt::sample::Detection::InvalidValue(violation))
+                                }
+                                Err(_) => Err(::ridl_rt::sample::Detection::Corrupt),
+                            },
+                            envelope: occurrence.envelope,
+                        }),
+                    ),
+                )
+            }
+            _ => {
+                Err(
+                    ::ridl_rt::port::ReadError::Contract(
+                        ::ridl_rt::error::Contract::UnknownInteraction,
+                    ),
+                )
+            }
+        }
     }
     ///The provider face of interface `Cabin`'s signals and events.
     pub struct Publisher<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> {
@@ -1852,27 +2227,31 @@ An argument is taken by reference because `dispatch` reads it again when it eval
         ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `dispatch`, which settles `ContractBroken` instead.
         fn average(&mut self, window: &super::Window) -> super::Average;
     }
-    /**Settles every claim of interface `Cabin` that is waiting, and returns how many were settled.
+    /**Settles every claim of interface `Cabin` that is waiting, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` drains through on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. The loop that calls it belongs to the application or to the runtime.
+It does not wait: it makes one pass over the claims the handler already has and returns. `Ok` means the handler has no claim waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
 
-`buf` is caller-owned and must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `0` without consuming a claim, so the caller can retry with a correctly sized one.
+`buf` must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim.
 
 Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim.
 
 A command is settled `Ok(&[])` once its arguments and its `require` clauses pass and **before** the application's method runs, because a command's acknowledgment is a delivery acknowledgment and not a completion one (ridl §6.1, and `Handler`'s own contract). A query is settled after the application returns, because its settlement carries the reply.*/
-    pub fn dispatch<H, P>(h: &mut H, p: &mut P, buf: &mut [u8]) -> usize
+    pub(crate) fn dispatch<H, P>(
+        h: &mut H,
+        p: &mut P,
+        buf: &mut [u8],
+    ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
     where
         H: ::ridl_rt::port::Handler,
         P: Provider,
     {
         if buf.len() < super::Cabin::MAX_BUFFER_SIZE {
-            return 0;
+            return Ok(0);
         }
         let mut settled = 0usize;
         loop {
-            let Ok(Some(claim)) = h.next_claim(buf) else {
-                return settled;
+            let Some(claim) = h.next_claim(buf)? else {
+                return Ok(settled);
             };
             let settlement = if claim.iface
                 != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER
@@ -2044,6 +2423,105 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             }
         }
     }
+    ///Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then settles every claim the handler has, and is `Pending` once none is left. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    pub fn serve<H, P>(h: H, p: &mut P) -> Serve<'_, H, P>
+    where
+        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    {
+        let mut handler = h;
+        let state = match handler
+            .serve(
+                <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
+                &[::ridl_rt::contract::Ordinal(3u32), ::ridl_rt::contract::Ordinal(4u32)],
+            )
+        {
+            Ok(()) => ServeState::Serving,
+            Err(error) => ServeState::Refused(error),
+        };
+        Serve {
+            handler,
+            provider: p,
+            buf: [0u8; super::Cabin::MAX_BUFFER_SIZE],
+            state,
+        }
+    }
+    ///The future `serve` returns over interface `Cabin`. It holds the handler, the provider, and the claim buffer of `Cabin::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`.
+    #[must_use = "claims are served only while the future is polled"]
+    pub struct Serve<
+        'a,
+        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > {
+        handler: H,
+        provider: &'a mut P,
+        buf: [u8; super::Cabin::MAX_BUFFER_SIZE],
+        state: ServeState,
+    }
+    /// Where `serve` is, as its future's `poll` moves it.
+    #[derive(Clone, Copy)]
+    enum ServeState {
+        /// `Handler::serve` refused the members; the first poll reports
+        /// it.
+        Refused(::ridl_rt::port::ServeError),
+        /// Each poll registers the claim interest and drains the handler.
+        Serving,
+        /// The failure was reported.
+        Done,
+    }
+    /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
+    /// frame loop that stores it in its own state polls it through
+    /// `Pin::new`.
+    impl<
+        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > ::core::marker::Unpin for Serve<'_, H, P> {}
+    impl<
+        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > ::core::future::Future for Serve<'_, H, P> {
+        type Output = ::core::result::Result<
+            ::core::convert::Infallible,
+            ::ridl_rt::error::ProviderError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            match this.state {
+                ServeState::Done => panic!("`Serve` polled after completion"),
+                ServeState::Refused(error) => {
+                    this.state = ServeState::Done;
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ProviderError::Serve(error)),
+                    )
+                }
+                ServeState::Serving => {
+                    this.handler
+                        .wake_on(
+                            ::ridl_rt::port::Interest::Claim(
+                                <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
+                            ),
+                            cx.waker(),
+                        );
+                    match dispatch(
+                        &mut this.handler,
+                        &mut *this.provider,
+                        &mut this.buf,
+                    ) {
+                        Ok(_) => ::core::task::Poll::Pending,
+                        Err(error) => {
+                            this.state = ServeState::Done;
+                            ::core::task::Poll::Ready(
+                                Err(::ridl_rt::error::ProviderError::Claim(error)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
@@ -2167,6 +2645,160 @@ pub mod horn {
         /// Publishes every staged signal change.
         pub fn commit(&mut self) {
             self.port.commit()
+        }
+    }
+}
+///The generated interaction face of interface `Siren`.
+pub mod siren {
+    ///The consumer face of interface `Siren`, generic over exactly the ports the interface's interactions need.
+    pub struct Client<P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable> {
+        port: P,
+    }
+    impl<P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable> Client<P> {
+        /// Binds the face to a port. The port is held by value: pass a
+        /// handle, or a `&mut` borrow of one.
+        pub fn new(port: P) -> Self {
+            Client { port }
+        }
+        ///Starts delivery of event `tripped`.
+        pub fn subscribe_tripped(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
+            self.port
+                .subscribe(
+                    <super::Siren as ::ridl_rt::contract::Interface>::NUMBER,
+                    &[::ridl_rt::contract::Ordinal(1u32)],
+                )
+        }
+        /**Takes the next occurrence of any subscribed event of interface `Siren`, routed to its variant by ordinal, as a future: it resolves when an occurrence is waiting and is `Pending` while none is. One method serves every event, because the payload type is not known until the occurrence's ordinal is read. The future holds this client's port until it is dropped.
+
+The interface number is checked before the ordinal, for the reason `serve` checks it: a port is attached to a whole catalog, ordinals restart at 1 in each interface, and an occurrence of a sibling interface at the same ordinal would otherwise be decoded as this interface's payload. Such an occurrence is reported as `Contract::UnknownInteraction`; `EventSource::next` has already consumed it, so this face cannot hand it back to the interface it belongs to. Subscribe on a port this interface owns.*/
+        pub fn next_event(&mut self) -> NextEvent<'_, P> {
+            NextEvent { port: &mut self.port }
+        }
+    }
+    ///One occurrence of an event of interface `Siren`.
+    pub enum Event {
+        ///An occurrence of event `tripped`.
+        Tripped(::ridl_rt::sample::Occurrence<super::Warning>),
+    }
+    ///The future of `Client::next_event` over interface `Siren`. Each poll registers its interest in the interface's events, reads the queue once, and returns: an occurrence resolves it, and a read failure resolves it with that failure. It can be polled again after it resolved, for the next occurrence.
+    #[must_use = "an occurrence is taken only when the future is polled"]
+    pub struct NextEvent<
+        'a,
+        P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+    }
+    impl<
+        P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for NextEvent<'_, P> {
+        type Output = ::core::result::Result<Event, ::ridl_rt::port::ReadError>;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            this.port
+                .wake_on(
+                    ::ridl_rt::port::Interest::Event(
+                        <super::Siren as ::ridl_rt::contract::Interface>::NUMBER,
+                    ),
+                    cx.waker(),
+                );
+            match poll_next_event(&mut *this.port) {
+                Ok(Some(event)) => ::core::task::Poll::Ready(Ok(event)),
+                Ok(None) => ::core::task::Poll::Pending,
+                Err(error) => ::core::task::Poll::Ready(Err(error)),
+            }
+        }
+    }
+    ///Reads the next occurrence of any subscribed event of interface `Siren`, routed to its variant by ordinal: `Ok(None)` when none is waiting. It does not wait; `NextEvent` polls it. An occurrence of another interface is reported as `Contract::UnknownInteraction`, for the reason `Client::next_event` gives.
+    pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
+        port: &mut P,
+    ) -> ::core::result::Result<
+        ::core::option::Option<Event>,
+        ::ridl_rt::port::ReadError,
+    > {
+        let mut buf = [0u8; super::Siren::EVENT_SOURCE_BUFFER_SIZE];
+        let Some(occurrence) = port.next(&mut buf)? else {
+            return Ok(None);
+        };
+        if occurrence.iface != <super::Siren as ::ridl_rt::contract::Interface>::NUMBER {
+            return Err(
+                ::ridl_rt::port::ReadError::Contract(
+                    ::ridl_rt::error::Contract::UnknownInteraction,
+                ),
+            );
+        }
+        match occurrence.ord {
+            ::ridl_rt::contract::Ordinal(1u32) => {
+                Ok(
+                    Some(
+                        Event::Tripped(::ridl_rt::sample::Occurrence {
+                            payload: match ::ridl_rt::payload::Ref::<
+                                super::Warning,
+                                super::Wire,
+                            >::verify(&buf[..occurrence.len]) {
+                                Ok(checked) => Ok(checked.decode()),
+                                Err(
+                                    ::ridl_rt::payload::VerifyError::Contract(violation),
+                                ) => {
+                                    Err(::ridl_rt::sample::Detection::InvalidValue(violation))
+                                }
+                                Err(_) => Err(::ridl_rt::sample::Detection::Corrupt),
+                            },
+                            envelope: occurrence.envelope,
+                        }),
+                    ),
+                )
+            }
+            _ => {
+                Err(
+                    ::ridl_rt::port::ReadError::Contract(
+                        ::ridl_rt::error::Contract::UnknownInteraction,
+                    ),
+                )
+            }
+        }
+    }
+    ///The provider face of interface `Siren`'s signals and events.
+    pub struct Publisher<W: ::ridl_rt::port::EventSink> {
+        port: W,
+    }
+    impl<W: ::ridl_rt::port::EventSink> Publisher<W> {
+        /// Binds the face to a port. The port is held by value: pass a
+        /// handle, or a `&mut` borrow of one.
+        pub fn new(port: W) -> Self {
+            Publisher { port }
+        }
+        ///Raises one occurrence of event `tripped`.
+        pub fn tripped(
+            &mut self,
+            value: super::Warning,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
+            let mut buf = [0u8; <super::Warning as ::ridl_rt::payload::Payload<
+                super::Wire,
+            >>::MAX_SIZE];
+            let bytes = match ::ridl_rt::payload::Ref::<
+                super::Warning,
+                super::Wire,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `Warning` failed"),
+            };
+            self.port
+                .raise(
+                    <super::Siren as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    bytes,
+                )
         }
     }
 }

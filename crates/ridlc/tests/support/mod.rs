@@ -30,6 +30,11 @@ use std::path::{Path, PathBuf};
 /// only `flatbuffers` is so that E11.8 and E11.12 inherit a working proof
 /// without editing this helper again.
 ///
+/// **The `std` feature is enabled too**, for one consumer: the cabin
+/// example's program (`cabin_example.rs`) polls the generated async client's
+/// futures by hand with `ridl_rt::task::noop_waker`, and `ridl_rt::task` is
+/// what that feature gates. Nothing generated names an item behind it.
+///
 /// Edition 2021 is the edition `crates/ridl-rt/Cargo.toml` declares. The
 /// generated code keeps compiling as edition 2024; the two are independent.
 pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
@@ -54,6 +59,8 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
         .arg(r#"feature="proto3""#)
         .arg("--cfg")
         .arg(r#"feature="repr-c""#)
+        .arg("--cfg")
+        .arg(r#"feature="std""#)
         .arg(&source)
         .arg("-o")
         .arg(&rlib)

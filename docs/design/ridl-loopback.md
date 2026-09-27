@@ -123,8 +123,8 @@ generated async `Client` over an interface with a call is bound on `Caller`,
 `Clock` and `Wakeable` together
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6),
 and a role handle that cannot build one is not a handle for that role. The Rust
-backend does not emit that client yet (story E11.21); the roles are here first
-so that it can be built over this handle when it is. Both handles read the one
+backend emits that client since story E11.21's first half; the roles were here
+first, so that it could be built over this handle. Both handles read the one
 clock in the store.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
@@ -304,8 +304,8 @@ answer:
 waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
-wait is the generated async client's deadline, which story E11.21 builds
-(ADR-0023 decision 6). This is the one way a call is presented again, and a call
+wait is the deadline the generated async client's future measures (story E11.21,
+ADR-0023 decision 6). This is the one way a call is presented again, and a call
 is presented once more for each holder dropped. A claim whose call the caller
 forgot is not returned: it is withdrawn, its slot is reclaimed, and no handler
 is woken for it (see "`Caller::forget` releases the caller's interest" below).
@@ -637,17 +637,16 @@ on. Either way the check is the face's and not the runtime's.
 Three more that are the runtime's own shape rather than the descriptor's:
 
 - **A settled outcome is kept until the caller releases it.** A call holds its
-  slot of the call table until it is forgotten or its caller handle is dropped,
-  and nothing the Rust backend emits today calls `Caller::forget`. **A program
-  that makes calls through the generated face over one `Loopback` therefore
-  finds every send `SendError::Busy` from its seventeenth call on**, where every
-  call succeeded before story E11.18. Nothing in this repository holds more than
-  sixteen unforgotten calls over one runtime at once — the tests, `just demo`
-  and `examples/cabin` all pass — and plan Task 4 (story E11.21) closes the
-  limit: its future forgets the call once it has taken the outcome, and on drop.
-  No release of the crates happens before Task 4 (ADR-0021 decision 18). This
-  runtime holds the outcome because nothing else can know the caller has read
-  it.
+  slot of the call table until it is forgotten or its caller handle is dropped.
+  The generated async client's future (story E11.21, first half) forgets its
+  call when it leaves the waiting phase: in the poll that takes the outcome, at
+  the call's deadline, and on drop while the call is still waiting. So a program
+  that calls through the generated face holds one slot per call in flight, and a
+  call future that is neither polled to its outcome nor dropped is the one way
+  such a program keeps a slot. Before that story nothing the Rust backend
+  emitted called `Caller::forget`, and a program over one `Loopback` found every
+  send `SendError::Busy` from its seventeenth call on. This runtime holds the
+  outcome because nothing else can know the caller has read it.
 
   Until then, a caller that uses the poll face must forget a correlation once it
   has read the outcome, or this runtime's sixteen slots fill and it refuses the

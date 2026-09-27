@@ -62,3 +62,16 @@ interface Cabin {
 interface Horn {
   signal active : Health @10ms
 }
+
+// ---------- An event-only interface, for the port-bound test ----------
+//
+// Its `Client` is bound on `EventSource` and `Wakeable` and on nothing else:
+// `Wakeable` because `next_event` returns a future that waits on the event
+// queue, and no `Clock`, because an event has no response bound (the async
+// face design, note F-10). Named to sort after `Horn`: provisional interface
+// numbers follow the sorted names, and the descriptor tests pin `Cabin` as 1
+// and `Horn` as 2.
+
+interface Siren {
+  event tripped : Warning @[100ms..1s]
+}

@@ -23,10 +23,24 @@
 //! `rustc` for the test. The crate name is `veh_cabin` in both, because that
 //! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
+//! The consumer side is the generated async client (story E11.21): a command,
+//! a query and `next_event` return a named future, polled here by hand with
+//! `ridl_rt::task::noop_waker`, the way a frame loop polls. The provider side
+//! is the generated `serve`, polled once per step. No executor is involved:
+//! each round trip is a fixed sequence of polls, and the result of each poll
+//! is asserted, so a future that resolved on the wrong poll fails the proof
+//! the way a wrong value does.
+//!
 //! One `Loopback` per round trip, rather than one for all four: the loopback
 //! holds every value in one map, and a fresh port is what keeps each round
 //! trip's assertions about what is waiting true independently of the order
-//! they run in.
+//! they run in. The handler `serve` runs over is taken from the runtime
+//! before the client borrows it, because a call's future holds the client's
+//! port for as long as it lives.
+
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use api::cabin;
 use ridl_loopback::Loopback;
@@ -53,7 +67,15 @@ impl cabin::Provider for Cabin {
     }
 }
 
+/// Polls `future` once, the way a frame loop does.
+fn poll_once<F: Future + Unpin>(future: &mut F, cx: &mut Context<'_>) -> Poll<F::Output> {
+    Pin::new(future).poll(cx)
+}
+
 fn main() {
+    let waker = ridl_rt::task::noop_waker();
+    let mut cx = Context::from_waker(&waker);
+
     // 1 — signal
     let mut port = Loopback::new(CATALOG);
     {
@@ -81,11 +103,12 @@ fn main() {
             health: api::Health::Warn,
         })
         .expect("raise warning");
-    let event = cabin::Client::new(&mut port)
-        .next_event()
-        .expect("next_event")
-        .expect("an occurrence is waiting");
-    let code = match event {
+    let mut client = cabin::Client::new(&mut port);
+    let mut next = client.next_event();
+    let Poll::Ready(event) = poll_once(&mut next, &mut cx) else {
+        panic!("an occurrence is waiting, so next_event is ready on its first poll");
+    };
+    let code = match event.expect("next_event") {
         cabin::Event::Warning(occurrence) => {
             let warning = occurrence.payload.expect("payload verifies");
             assert_eq!(warning.code.get(), 5);
@@ -97,38 +120,41 @@ fn main() {
 
     // 3 — command
     let mut port = Loopback::new(CATALOG);
-    let correlation = cabin::Client::new(&mut port)
-        .set_level(api::Level::new_unchecked(42))
-        .expect("send setLevel");
+    let handler = port.handler();
     let mut provider = Cabin {
         levels: Vec::new(),
         average: 0,
     };
-    let mut buf = [0u8; api::Cabin::MAX_BUFFER_SIZE];
-    assert_eq!(cabin::dispatch(&mut port, &mut provider, &mut buf), 1);
+    let mut serve = cabin::serve(handler, &mut provider);
+    let mut client = cabin::Client::new(&mut port);
+    let mut call = client.set_level(api::Level::new_unchecked(42));
+    // Step 1: the call was sent when `set_level` ran, and nothing has served
+    // it yet.
+    assert!(poll_once(&mut call, &mut cx).is_pending());
+    // Step 2: one pass of the provider side settles it.
+    assert!(poll_once(&mut serve, &mut cx).is_pending());
+    // Step 3: the acknowledgment is taken.
+    assert_eq!(poll_once(&mut call, &mut cx), Poll::Ready(Ok(())));
+    drop(serve);
     assert_eq!(provider.levels, vec![42]);
-    assert_eq!(
-        cabin::Client::new(&mut port).set_level_ack(correlation),
-        Some(Ok(()))
-    );
     println!("command ok {}", provider.levels[0]);
 
     // 4 — query
     let mut port = Loopback::new(CATALOG);
-    let correlation = cabin::Client::new(&mut port)
-        .average(api::Window::new_unchecked(10))
-        .expect("send average");
+    let handler = port.handler();
     let mut provider = Cabin {
         levels: Vec::new(),
         average: 7,
     };
-    let mut buf = [0u8; api::Cabin::MAX_BUFFER_SIZE];
-    assert_eq!(cabin::dispatch(&mut port, &mut provider, &mut buf), 1);
-    let reply = cabin::Client::new(&mut port)
-        .average_reply(correlation)
-        .expect("reply read")
-        .expect("reply is known")
-        .expect("no call error");
+    let mut serve = cabin::serve(handler, &mut provider);
+    let mut client = cabin::Client::new(&mut port);
+    let mut call = client.average(api::Window::new_unchecked(10));
+    assert!(poll_once(&mut call, &mut cx).is_pending());
+    assert!(poll_once(&mut serve, &mut cx).is_pending());
+    let reply = match poll_once(&mut call, &mut cx) {
+        Poll::Ready(Ok(average)) => average,
+        other => panic!("the reply is known after one pass of serve, not {other:?}"),
+    };
     assert_eq!(reply.get(), 7);
     println!("query ok {}", reply.get());
 }

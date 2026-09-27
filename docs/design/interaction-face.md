@@ -484,6 +484,103 @@ written as prose.
    wrong `InterfaceNo`, ordinal or catalog hash would be written and read back
    consistently; `descriptor_generation.rs` pins those.
 
+## E11.21, first half: the async client, the named futures and `serve` (2026-09-27)
+
+Story E11.21's first half (plan Task 4 of
+`docs/wip/2026-09-25-async-face-plan.md`; the design is
+`docs/wip/2026-09-25-async-face-design.md`, notes F-2 to F-7, F-10, F-12 and
+F-15) changed what `src/face.rs` emits. This section records the face the
+fixture `tests/generated/interaction_face.rs` contains from that change on, so
+that the record never describes a face the fixture does not hold. The sections
+above — the `Client` bullet of "The consumer and provider faces", the paragraph
+on the send call's `Result<<Name>Correlation, SendError>`, "Nothing here waits
+(RA-20)", and "`dispatch` and the settlement table" — describe the poll face,
+which is now internal; their rewrite is the story's second half (Task 5), which
+also adds the `blocking` module.
+
+**The bounds of `Client<P>`.** RA-19 still holds, with two ports more: `Clock`
+and `Wakeable` are added when the interface declares a command or a query
+(`Clock` for the call's deadline, `Wakeable` for the wait), and `Wakeable` alone
+when it declares an event; a signal-only interface's `Client` is unchanged. The
+fixture gained an event-only interface, `Siren`, so that all three bound sets
+are pinned by `tests/face_generation.rs`.
+
+**A command and a query return a named future.**
+`set_level(&mut self, level: Level) -> SetLevelCall<'_, P>` and
+`average(&mut self, window: Window) -> AverageCall<'_, P>`, with
+`P: Caller + Clock + Wakeable`, `Output = Result<(), ClientError>` for the
+command and `Result<Average, ClientError>` for the query. The call is sent when
+the method runs, not when the future is first polled (note F-4). The future
+holds `&'a mut P`, its phase — `Unsent(arg)` while the port answers
+`SendError::Busy`, `Waiting(c)`, `Failed(SendError)` for a `require` failure or
+a send failure other than `Busy`, which the first poll reports, and `Done` — and
+the deadline, `Option<Timestamp>`, computed as the port's `now` plus
+`Member::call_deadline()` when the method runs (note F-2); a member with no
+`max` has no deadline. Every poll registers its phase's interest —
+`Interest::Slot` in `Unsent`, `Interest::Outcome(c)` in `Waiting` — then reads
+the port once, then returns (note F-5). At the deadline, an unsent call resolves
+to `Err(ClientError::Send(SendError::Busy))`; a sent call calls `Caller::forget`
+and resolves to `Transport::Undelivered` for a command and `Transport::Timeout`
+for a query (note F-3). A call at exactly `max` is still within its bound: the
+deadline has passed when `now > deadline`, as `Freshness::of` counts an age
+equal to `max` as fresh. Leaving `Waiting` inside `poll` forgets the call there,
+so `Drop` forgets only a future that is still waiting, and a future that took
+its outcome forgets nothing on drop. A resolved call future panics when it is
+polled again. `next_event(&mut self) -> NextEvent<'_, P>`, with
+`P: EventSource + Wakeable` and `Output = Result<Event, ReadError>`, registers
+`Interest::Event`, reads the queue once, and returns; it has no deadline and no
+`Drop`, and it can be polled again for the next occurrence. The futures are
+`Unpin`; `Serve` declares it, whatever its handler type.
+
+**`serve` replaces the public `dispatch`.**
+`serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`
+calls `Handler::serve` with the interface's command and query ordinals when the
+function runs; a refusal is a future ready with `ProviderError::Serve`. Each
+poll registers `Interest::Claim`, then drains the handler through the internal
+one-pass step, and is `Pending` once no claim is left; the handler port's
+failure resolves the future to `ProviderError::Claim`, with every claim settled
+before it staying settled. `Output` is `Result<Infallible, ProviderError>`: the
+future never resolves to `Ok`. It holds the handler by value, the provider by
+`&mut`, and the claim buffer of `MAX_BUFFER_SIZE` bytes inline (note F-7). The
+settlement table is unchanged.
+
+**The poll face is `pub(crate)`** (note F-12): the correlation newtypes;
+`send_<name>(port: &mut P, arg: &T) -> Result<<Name>Correlation, SendError>`,
+`poll_<name>_ack`, `poll_<name>_reply` and `poll_next_event`; and `dispatch`,
+which returns `Result<usize, ReadError>` — the count, or the failure `serve`
+resolves to — and `Ok(0)` on a short buffer. The four reads and the sends are
+module-level functions over a bare port rather than methods of `Client<P>`,
+because a future holds `&'a mut P` under the narrower bound note F-10 fixes, and
+an inherent method of `Client<P>`, whose struct bounds also name `SignalReader`
+and `EventSource`, cannot be called on it. That closes both items of
+driftsys/ridl#485: no public method returns the three-deep reply shape, and a
+handler failure is the value `serve` resolves to.
+
+**Over `ridl-loopback`.** `serve` registers the served set, so a handler under
+`serve` is presented only the interface's own members; the settlement table's
+unknown-route rows are reachable only through `dispatch` directly, which is how
+`tests/interaction_face.rs` still exercises them — the test file is inside the
+crate that `include!`s the fixture, so `pub(crate)` reaches it. A `Client` over
+`&mut Loopback` holds the runtime for as long as a future lives, so the provider
+side runs over a `Loopback::handler()` taken before the client is built, and
+`tests/support/doubles.rs` builds the consumer ports from the loopback's role
+handles — with a log of every `Caller` and `Wakeable` call — so that a test can
+`advance` the clock and fill the call table while a future is alive.
+
+**What proves it.** Note F-14's face tests in `tests/interaction_face.rs`: the
+dropped future forgets once and a poll registers before it reads; a future that
+took its outcome forgot in that poll and forgets nothing on drop; a future
+dropped while waiting for a slot forgets nothing; a call with every slot taken
+is `Pending`, is woken by a reclaim, sends on the next poll, and resolves; an
+unsent call at its deadline is `Send(Busy)`; a sent command and a sent query at
+their deadline are `Undelivered` and `Timeout` and forget once; `next_event`
+waits for a raise; `serve` registers the served set, resolves to
+`ProviderError::Claim` after settling the claims before the failure, and is
+ready with a refusal. The round trips run through the async client and `serve`,
+polled with `ridl_rt::task::noop_waker`. `examples/cabin/consumer` polls the
+same way, and `just compat-check` builds the emitted cabin crate at Rust 1.83 as
+edition 2021, the first cell of the codegen build matrix (note F-10).
+
 ## What is provisional
 
 | Placeholder                                                                                    | Replaced by                                  |

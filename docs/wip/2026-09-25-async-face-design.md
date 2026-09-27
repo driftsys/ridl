@@ -250,6 +250,19 @@ layer. Taking the port by value into the future: moves the port out of the
 client for the length of the call. Cancelling a sent command on drop: the port
 has no such operation, and ridl §6.1 says a delivered command is the provider's.
 
+> **Built (Task 4, 2026-09-27).** The phases gained a fourth,
+> `Failed(SendError)`, which is how "a `require` failure, or a send error other
+> than `Busy`, is a future that is ready with `Err`" is represented: the first
+> poll reports it and moves to `Done`. The internal send, acknowledgment, reply
+> and event reads (F-10, F-12) are module-level `pub(crate)` functions over a
+> bare `&mut P` rather than methods of `Client<P>`, because the future holds
+> `&'a mut P` under the bound F-10 fixes, and an inherent method of `Client<P>`,
+> whose struct bounds also name `SignalReader` and `EventSource`, cannot be
+> called on it. A resolved call future panics when polled again. A bound has
+> passed when `now > deadline`, as `Freshness::of` counts an age equal to `max`
+> as fresh. `Serve` declares `Unpin` whatever its handler type, because it holds
+> the handler by value and nothing in it is pinned.
+
 ### F-5 — one waiter per kind of key per port handle; a displaced waiter is woken
 
 > **Amended on driftsys/ridl#546 (Sebastien, 2026-09-26).** "One waker per key"

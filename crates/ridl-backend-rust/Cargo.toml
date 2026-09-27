@@ -52,7 +52,10 @@ ridl-loopback = { path = "../ridl-loopback" }
 # the generated codec the face is compiled over names it at every read and
 # every write. It is enabled here, on the dev-dependency, and nowhere else:
 # this crate's library links no runtime at all.
-ridl-rt = { path = "../ridl-rt", features = ["flatbuffers"] }
+# The `std` feature is what makes `::ridl_rt::task` exist: the round trips
+# through the generated async client poll its futures by hand with
+# `ridl_rt::task::noop_waker`, the way a frame loop does (story E11.21).
+ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "std"] }
 # The independent FlatBuffers implementation the conformance test round trips
 # against (E11.7 design note D-8), and the code generator that turns the
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
