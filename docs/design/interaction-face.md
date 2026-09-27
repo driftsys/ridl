@@ -24,11 +24,12 @@ binds against, and the
 - `src/descriptors.rs` — one `ridl_rt::contract::Interface` implementation per
   named interface, one `Interaction` implementation per member, and the
   generated buffer-size constants.
-- `src/face.rs` — `Client`, `Publisher`, `Provider` and `dispatch`.
+- `src/face.rs`, with its submodules under `src/face/` — `Client`, `Publisher`,
+  `Provider` and `dispatch`.
 - `src/clauses.rs` — the contract-clause translator. Only `src/descriptors.rs`
   calls it, when it emits a `Command`'s or a `Query`'s `require` and `ensure`
-  bodies. `src/face.rs` names those generated methods from the `dispatch` body
-  it writes, but does not translate a clause itself.
+  bodies. `src/face/dispatch.rs` names those generated methods from the
+  `dispatch` body it writes, but does not translate a clause itself.
 
 `generate(package)` — the existing pipeline entry point `ridl --emit rust` calls
 — keeps its pre-E11.13 output exactly: the domain types, naming no runtime.
