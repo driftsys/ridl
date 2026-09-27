@@ -418,6 +418,15 @@ diag_codes! {
         TYPL_215 = "TYPL-215", Error,
             "field name declared twice in one struct";
 
+        /// An enum value name declared twice in one `enum` (typl §8, §16.3).
+        /// Distinct from RIDL-149: that code fires when two distinct source
+        /// names collide only after a pinned name transform, and this one
+        /// fires when the two source names are already the same, before any
+        /// transform runs. TYPL-203 checks the values' integers, not their
+        /// names, so it does not cover this case.
+        TYPL_216 = "TYPL-216", Error,
+            "enum value name declared twice in one enum";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
         /// the checker for struct fields and collections in a `.ridl` file

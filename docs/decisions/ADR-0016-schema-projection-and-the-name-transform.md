@@ -131,8 +131,10 @@ which is not a declared value. Those collisions stay with the proto backend's
 refusal under [ADR-0017](ADR-0017-proto3-projection-rules.md) decision 4. The
 message names `pascal_case`. A `reserved` value emits no variant and is not in
 the namespace. A value name repeated verbatim is not a transform collision and
-is held out of the check, as a union arm's is; the missing exact-duplicate rule
-is driftsys/ridl#554.
+is held out of the check, as a union arm's is; the exact-duplicate rule is
+TYPL-216 (driftsys/ridl#554), the sibling of TYPL-215 for struct fields and
+RIDL-413 for parameters. A union's arms have no such rule yet; that gap is still
+open, on driftsys/ridl#452.
 
 The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
 has the defect, and a wire schema's value names are read by peers in other

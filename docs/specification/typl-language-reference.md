@@ -798,6 +798,8 @@ enum GearPosition {
 
 - Backing type is `integer`, implicit; all values explicitly assigned; values
   unique (TYPL-203)
+- A value name is unique within its enum (TYPL-216): a name identifies one
+  value, so an enum cannot declare two
 - First value conventionally `= 0` for proto3 compatibility
 - String-backed enums are not supported in v0.1; planned for v0.2 (§17.1)
 
@@ -1150,6 +1152,7 @@ the family overview §7 and are not restated here.
 | TYPL-213 | union mixing error and non-error arms without the result-union shape (exactly one success + one error arm) | error    |
 | TYPL-214 | `error union` containing a non-error-typed arm                                                             | error    |
 | TYPL-215 | field name declared twice in one struct                                                                    | error    |
+| TYPL-216 | enum value name declared twice in one enum                                                                 | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
