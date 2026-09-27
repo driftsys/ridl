@@ -2901,7 +2901,7 @@ impl Checker<'_> {
             // TYPL-217: an arm name repeated verbatim is not a collision
             // after a transform — the transform did nothing — so it is
             // reported here and held out of the projection maps rather than
-            // greeted with a RIDL-149 message that would describe one
+            // reported with a RIDL-149 message that would describe one
             // (issue #452).
             let arm_range = member_name_range(arm.name(), arm.syntax());
             if let Some(first) = declared_arms.get(&name).copied() {
@@ -6999,35 +6999,42 @@ mod tests {
         );
     }
 
-    /// Three arms, `fooBar`, `fooBar`, `foo_bar`, in that order: the second
-    /// `fooBar` is an exact duplicate of the first (TYPL-217), and `foo_bar`
-    /// is a transform-only collision against the first `fooBar` (RIDL-149) —
-    /// the second `fooBar` never reaches the projection maps, so `foo_bar` is
-    /// compared against the first `fooBar`, not the second.
+    /// Three arms in which the second is an exact duplicate of the first
+    /// (TYPL-217) and the third is a transform-only collision against the
+    /// first (RIDL-149). The second arm never reaches the projection maps,
+    /// so the third is compared against the first, not the second.
+    ///
+    /// Two cases, because RIDL-149 takes its label from one map only:
+    /// `fooBar`, `fooBar`, `foo_bar` collides under both transforms, and the
+    /// label then comes from the `snake_case` map; `XY`, `XY`, `x_y` collides
+    /// under `camel_case` only, so its label comes from the `camel_case` map.
     #[test]
     fn typl_217_and_ridl_149_both_report_in_declaration_order() {
-        let source = union_source_3("fooBar", "fooBar", "foo_bar");
-        let checked = check_source("app", &source);
-        assert_eq!(
-            codes(&checked),
-            vec!["TYPL-217", "RIDL-149"],
-            "got: {:?}",
-            checked.diagnostics
-        );
-        // Which `fooBar` RIDL-149 points at is the ordering guarantee, and the
-        // code set alone does not pin it: inserting the exact duplicate into
-        // the projection maps would leave the set unchanged and move this
-        // label to the second `fooBar`. `foo_bar` has an underscore, so
-        // searching for `fooBar` cannot match it.
-        let first = source
-            .find("fooBar")
-            .expect("the first arm is in the source");
-        let label = &checked.diagnostics[1].labels[0];
-        assert_eq!(
-            usize::from(label.span.range.start()),
-            first,
-            "`foo_bar` must be compared against the first `fooBar`, not the second"
-        );
+        for (repeated, colliding) in [("fooBar", "foo_bar"), ("XY", "x_y")] {
+            let source = union_source_3(repeated, repeated, colliding);
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-217", "RIDL-149"],
+                "{repeated}: got: {:?}",
+                checked.diagnostics
+            );
+            // The code set alone does not pin which arm the RIDL-149 label
+            // names. If the repeat overwrote the first arm's entry in a
+            // projection map, the set would be the same and the label would
+            // name the second arm. The colliding name has an underscore, so
+            // searching for the repeated name cannot match it.
+            let first = source
+                .find(&format!("{{ {repeated} :"))
+                .expect("the first arm is in the source")
+                + 2;
+            let label = &checked.diagnostics[1].labels[0];
+            assert_eq!(
+                usize::from(label.span.range.start()),
+                first,
+                "`{colliding}` must be compared against the first `{repeated}`, not the second"
+            );
+        }
     }
 
     /// The same name three times reports twice, and every report points back
