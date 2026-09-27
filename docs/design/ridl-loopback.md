@@ -678,10 +678,10 @@ absences:
   `UnknownInteraction` — two components providing different interfaces in one
   process is the plainest use of an in-process runtime. The generated `serve`
   now calls `Handler::serve` with the interface's command and query ordinals
-  when it is called (`crates/ridl-backend-rust/src/face.rs`), so a handler under
-  it is filtered from its first poll; the rule for an empty set still holds for
-  a handler driven through the port directly, and whether the deviation should
-  be retired is not decided here.
+  when it is called (`crates/ridl-backend-rust/src/face/serve.rs`), so a handler
+  under it is filtered from its first poll; the rule for an empty set still
+  holds for a handler driven through the port directly, and whether the
+  deviation should be retired is not decided here.
   `two_handlers_each_receive_only_what_they_served`, in the
   `ridl-rt-conformance` suite this runtime runs, is that case, and
   `a_handler_that_served_nothing_is_presented_every_call`, in
