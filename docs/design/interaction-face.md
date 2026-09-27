@@ -537,11 +537,14 @@ polled again. `next_event(&mut self) -> NextEvent<'_, P>`, with
 `NextEvent` are `Unpin` by their fields — `&'a mut P`, the phase and the
 deadline — and declare nothing; `Serve` declares it, because it holds the
 handler by value. A resolved call future or `Serve` panics when it is polled
-again. Every body that binds a ridl-named argument rebinds it to the
-emitter-owned `__arg` first, and the internal send names its port parameter
-`__port`, because a ridl identifier cannot start with an underscore and the
-locals that follow would otherwise shadow a parameter named `port`, `deadline`,
-`this` or `cx`; `tests/face_compile.rs` compiles such an interface.
+again. The call method, its future's `poll` and the internal send rebind the
+ridl-named argument to the emitter-owned `__arg` first, and the internal send
+names its port parameter `__port`, because a ridl identifier cannot start with
+an underscore and the locals that follow would otherwise shadow a parameter
+named `port`, `deadline`, `this` or `cx`; `tests/face_compile.rs` compiles such
+an interface. `dispatch` still binds the ridl name directly beside its own
+locals, so a parameter named `claim`, `h`, `accepted`, or `buf` on a query, does
+not compile; that predates this change and is not covered here.
 
 **`serve` replaces the public `dispatch`.**
 `serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`

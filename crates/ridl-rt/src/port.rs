@@ -245,8 +245,9 @@ pub struct Correlation(pub u64);
 /// implements the generated `Provider` trait and polls the future the
 /// generated `serve` returns, which on each poll makes one pass over the
 /// claims already waiting, routes each by ordinal, decodes, evaluates
-/// `require`, calls the provider, evaluates a query's `ensure`, and settles,
-/// and which resolves only when this port fails.
+/// `require`, calls the provider, evaluates a query's `ensure`, and settles.
+/// That future resolves in two cases only: at once, when this port's `serve`
+/// refused the members, and later, when this port fails.
 pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;

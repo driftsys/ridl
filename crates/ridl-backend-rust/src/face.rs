@@ -445,7 +445,8 @@ fn read_fn(call: &Call) -> Ident {
 /// `phase`, `correlation`, `error` — cannot shadow the argument whatever it is
 /// called. The futures' `poll` binds the same `__arg` in place of the ridl
 /// name, for the same reason, and the internal send names its port parameter
-/// `__port`.
+/// `__port`. `dispatch` still binds the ridl name directly beside its own
+/// locals; that collision predates the async face and is not covered here.
 fn call_method(call: &Call, kind: &str) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
@@ -817,8 +818,9 @@ fn send(
         member.declared
     );
     // The port parameter and the rebinding carry emitter-owned names, so a
-    // ridl parameter named `port`, `buf` or `bytes` collides with nothing
-    // (see `call_method`).
+    // ridl parameter named `port`, `buf` or `bytes` collides with nothing in
+    // this body (see `call_method`). `dispatch` binds the ridl name directly
+    // and is not covered.
     quote! {
         #[doc = #doc]
         pub(crate) fn #name<P: ::ridl_rt::port::Caller>(

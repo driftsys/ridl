@@ -523,9 +523,9 @@ interaction face. Each interface gets the parts its own interactions need: a
 future settles the claims waiting on a port, when it carries a command or a
 query. So a signal-only interface gets a `Client` and a `Publisher` and nothing
 to settle with, a command-only interface gets a `Client`, a `Provider` and a
-`serve` and no `Publisher`, and an interface carrying only `fixed` declarations gets no
-face module at all. Beside the per-package files it writes a `lib.rs` crate
-root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
+`serve` and no `Publisher`, and an interface carrying only `fixed` declarations
+gets no face module at all. Beside the per-package files it writes a `lib.rs`
+crate root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
 
 **Two things it may leave out, each with a note in the source it writes.** A
 type whose size the compiler cannot bound — one that reaches itself, or a

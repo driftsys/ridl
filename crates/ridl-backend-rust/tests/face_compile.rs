@@ -60,13 +60,16 @@ fn face_compiles(name: &str, source: &str) {
 
 /// A ridl member or parameter may carry a name the emitter uses for a local
 /// of its own. Story E11.21's first half put `port`, `deadline`, `this` and
-/// `cx` beside a binding that carries the ridl parameter's name; each of the
-/// four compiled before it. The emitter now rebinds the ridl-named argument
-/// to an emitter-owned name at the start of every body that also declares
-/// locals, and names the internal send's port parameter the same way, with
-/// the `__` prefix the codec's own locals use (`__p`, `__v`).
+/// `cx` beside a binding that carries the ridl parameter's name, in the call
+/// method, the call future's `poll` and the internal send; each of the four
+/// compiled before it. Those three bodies now rebind the ridl-named argument
+/// to an emitter-owned name first, and the internal send names its port
+/// parameter the same way, with the `__` prefix the codec's own locals use
+/// (`__p`, `__v`). The generated `dispatch` still binds the ridl name directly
+/// beside its own locals (`claim`, `h`, `accepted`, and `buf` for a query);
+/// that collision predates the story and is not covered here.
 #[test]
-fn a_member_or_parameter_named_like_an_emitter_local_compiles() {
+fn a_call_parameter_named_like_a_future_local_compiles() {
     face_compiles(
         "names",
         r#"
