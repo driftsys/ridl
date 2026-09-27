@@ -69,8 +69,9 @@ impl DiagCode {
     /// The sentinel for a diagnostic that carries no catalogue code yet, such
     /// as the checker's "expected a type, but `X` names a constant / an
     /// interface" errors (typl §16 defines no code for either) or the Rust
-    /// backend's codegen error. A diagnostic carrying it renders as a bare
-    /// `error:` with no code, and the book harness can never allow one.
+    /// backend's codegen error. A diagnostic carrying it renders with no code
+    /// after its severity word (`error:`, `warning:`), and the book harness
+    /// can never allow one.
     pub const NONE: DiagCode = DiagCode("");
 }
 
@@ -305,9 +306,9 @@ diag_codes! {
         /// in `ridl.std`, nor through an import, nor as a qualified
         /// `pkg.Name` — a qualified reference to another package's `internal`
         /// declaration included. Emitted by the checker on the written path,
-        /// in every position that takes a type reference — a field, a
-        /// parameter, a query return, a stream element, a payload, a
-        /// constant's type. A reference that resolves to a declaration of the
+        /// in every position that takes a type reference — for example a
+        /// field, a parameter, a query return, a stream element, a payload,
+        /// a union arm, a map key or a constant's type. A reference that resolves to a declaration of the
         /// wrong kind (a constant, an interface) is a different error and
         /// still carries no code (driftsys/ridl#543).
         TYPL_011 = "TYPL-011", Error,
