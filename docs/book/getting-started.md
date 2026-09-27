@@ -191,8 +191,9 @@ Most diagnostics carry a stable code. `TYPL-` codes come from the vocabulary
 layer, `RIDL-` codes from the interaction layer, `FORM-` codes from the shared
 surface syntax, and `MANI-` codes from the manifest. Those codes are listed in
 the language references and are never renumbered or reused. A few diagnostics
-are still uncoded and print as a bare `error:` — an unresolved type name is
-one — so do not assume a code is always there to search for.
+are still uncoded and print as a bare `error:` — a constant written where a
+type is expected is one — so do not assume a code is always there to search
+for.
 
 ## Primitives and named types
 

@@ -6,7 +6,7 @@ expression: "to_json(&[diagnostic], &sources)"
   {
     "code": "",
     "severity": "error",
-    "message": "unknown type name `Frob`",
+    "message": "expected a type, but `FROB` names a constant",
     "span": {
       "path": "",
       "start": {

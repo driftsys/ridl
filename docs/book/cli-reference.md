@@ -381,7 +381,7 @@ ridl baseline
 ```
 
 ```text
-error: unknown type name `Nope`
+error[TYPL-011]: unknown type name `Nope`
   ┌─ ./demo.ridl:4:22
   │
 4 │   event doorClosed : Nope @[100ms..1s]
@@ -686,7 +686,7 @@ ridl build --out-dir out
 ```
 
 ```text
-error: unknown type name `Bogus`
+error[TYPL-011]: unknown type name `Bogus`
   ┌─ ./demo.ridl:4:25
   │
 4 │   signal currentSpeed : Bogus @10ms
@@ -1162,7 +1162,7 @@ ridl diff old.ridl broken.ridl
 ```
 
 ```text
-error: unknown type name `NoSuchType`
+error[TYPL-011]: unknown type name `NoSuchType`
   ┌─ broken.ridl:4:25
   │
 4 │   signal currentSpeed : NoSuchType @10ms
