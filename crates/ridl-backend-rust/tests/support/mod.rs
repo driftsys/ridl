@@ -7,4 +7,3 @@
 //! `tests/interaction_face.rs`.
 
 pub mod doubles;
-pub mod ir;

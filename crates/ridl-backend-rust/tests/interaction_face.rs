@@ -107,8 +107,9 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
 }
 
 /// The checked-in output of `generate_face` over `tests/fixtures/interaction_face.ridl`.
-/// It is `include!`d, never hand-edited; the regeneration guard below compares
-/// it byte-for-byte against a fresh `generate_face` call. Lint allows live on
+/// It is `include!`d, never hand-edited; the regeneration guard in
+/// `tests/interaction_face_regeneration.rs` compares it byte-for-byte against a
+/// fresh `generate_face` call. Lint allows live on
 /// this wrapper module, as outer attributes, because the generated file itself
 /// carries no inner attribute (design §7): an inner attribute inside an
 /// `include!`d file is a hard error.
@@ -165,35 +166,6 @@ impl generated::valve::Provider for TestProvider {
     fn pressure(&mut self, _window: &generated::Window) -> generated::Average {
         generated::Average::new_unchecked(self.next_average)
     }
-}
-
-/// Regenerates the fixture through `generate_face`, using the crate's own
-/// compile helper rather than a new cargo subprocess, and compares it
-/// byte-for-byte against the checked-in file. `RIDL_UPDATE_GENERATED=1`
-/// writes the fresh output instead of comparing.
-#[test]
-fn generated_interaction_face_matches_the_emitter() {
-    let package = support::ir::compile_fixture("interaction_face.ridl");
-    let face = ridl_backend_rust::generate_face(&package)
-        .expect("generate_face")
-        .rust_source;
-
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/generated/interaction_face.rs");
-
-    if std::env::var_os("RIDL_UPDATE_GENERATED").is_some() {
-        std::fs::write(&path, &face)
-            .unwrap_or_else(|error| panic!("write {}: {error}", path.display()));
-        return;
-    }
-
-    let checked_in = std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
-    assert_eq!(
-        face, checked_in,
-        "generated interaction_face.rs is stale; regenerate it with \
-         RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test interaction_face"
-    );
 }
 
 #[test]

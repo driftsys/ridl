@@ -357,21 +357,24 @@ fixture, brought into `tests/interaction_face.rs` with `include!` under a
 handwritten module carrying only outer `#[allow(...)]` lint attributes — the
 emitter itself must never emit an inner attribute, because one inside an
 `include!`d file is a hard compile error, and this constraint is unchanged by
-E11.13. A second test in the same file regenerates the fixture and compares the
-result byte-for-byte against the checked-in file, failing with the instruction
-to regenerate
+E11.13. A test in its own target, `tests/interaction_face_regeneration.rs`,
+regenerates the fixture and compares the result byte-for-byte against the
+checked-in file, failing with the instruction to regenerate
 (`RIDL_UPDATE_GENERATED=1 cargo test -p
-ridl-backend-rust --test interaction_face`)
+ridl-backend-rust --test interaction_face_regeneration`)
 when it drifts. This is what makes the generated face genuinely compiled and
 linked by `cargo test`, rather than only snapshotted — the defect ADR-0018's
 Alternatives-considered table records against the retracted interaction layer
-("it cannot be connected to a runtime at all, and has never been compiled").
+("it cannot be connected to a runtime at all, and has never been compiled"). The
+regeneration test is kept apart from the tests that consume the fixture, so that
+it still compiles, and can rewrite the fixture, when a change to the face's
+shape leaves those tests unable to compile against the old fixture.
 
 Four test files exercise the layers separately before the round trip:
 `tests/descriptor_generation.rs`, `tests/face_generation.rs`,
 `tests/dispatch_generation.rs` (source-text assertions on the generated code),
-and `tests/interaction_face.rs` (the compiled round trip over `ridl-loopback`,
-and the byte-equality guard).
+and `tests/interaction_face.rs` (the compiled round trip over `ridl-loopback`);
+the byte-equality guard is `tests/interaction_face_regeneration.rs`.
 
 ## Coupling with Lane C's Epic 10
 
@@ -643,6 +646,7 @@ transport, and nothing in E11.13 changes that gate. It is story E11.14
 - `crates/ridl-backend-rust/src/descriptors.rs`, `src/face.rs`,
   `src/clauses.rs`, `src/lib.rs` (`generate_face`) — the emitter as built
 - `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`,
-  `tests/generated/interaction_face.rs`, `tests/interaction_face.rs` — the
-  fixture, the checked-in output, and the round trip; the ports it runs over are
-  `crates/ridl-loopback/`
+  `tests/generated/interaction_face.rs`, `tests/interaction_face.rs`,
+  `tests/interaction_face_regeneration.rs` — the fixture, the checked-in output,
+  the round trip, and the regeneration guard; the ports the round trip runs over
+  are `crates/ridl-loopback/`

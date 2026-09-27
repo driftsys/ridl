@@ -113,7 +113,7 @@ fn planus_reader_source() -> String {
 /// a version bump that changes the generated reader fails here rather than
 /// silently changing what conformance means. `RIDL_UPDATE_GENERATED=1`
 /// writes the fresh output instead of comparing, the same switch
-/// `tests/interaction_face.rs` uses.
+/// `tests/interaction_face_regeneration.rs` uses.
 #[test]
 fn the_checked_in_planus_reader_is_what_planus_codegen_writes() {
     let fresh = planus_reader_source();
