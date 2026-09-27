@@ -6,7 +6,7 @@
 //! generated code: `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`
 //! runs a program built from the codec's output, and
 //! `crates/ridl-backend-rust/tests/interaction_face.rs` already runs these
-//! same four round trips over `ridl-loopback`. Each of those runs the
+//! same six round trips over `ridl-loopback`. Each of those runs the
 //! backend's own output, in this workspace's own test crate.
 //!
 //! This one runs what **the CLI wrote**, linked as a separate crate into a
@@ -88,7 +88,7 @@ fn rustc(what: &str, args: &[&std::ffi::OsStr]) {
 }
 
 #[test]
-fn the_emitted_cabin_crate_runs_four_round_trips_against_a_consumer() {
+fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
     let out = tempfile::tempdir().expect("a temp dir is created");
     let libs = tempfile::tempdir().expect("a temp dir is created");
     let out = out.path();
