@@ -1365,8 +1365,12 @@ fn an_uncoded_diagnostic_cannot_be_allowed() {
     let (_, unnamed) = report
         .split_once("diagnostic(s) no block named:")
         .expect("the report lists the diagnostics no block named");
+    // The bare `error:` headline, with no `[CODE]` after the severity, is the
+    // assertion that the fixture's diagnostic is still uncoded: the day that
+    // error gets a code, this fixture stops exercising the uncoded arm and
+    // must be replaced.
     assert!(
-        unnamed.contains("expected a type, but `K` names a constant"),
+        unnamed.contains("error: expected a type, but `K` names a constant"),
         "the uncoded diagnostic must reach the `no block named` list, not merely appear in the \
          raw report — that list is what the allow-check reasons over; got:\n{report}"
     );

@@ -9575,6 +9575,10 @@ interface I {\n\
             messages(&checked),
             vec!["expected a type, but `I` names an interface"],
         );
+        // Still uncoded: ADR-0008 decision 21 allocates RIDL-111 for this
+        // error, and no pass emits it yet. TYPL-011 is the unknown-name arm
+        // only (driftsys/ridl#543).
+        assert_eq!(codes(&checked), vec![""]);
     }
 
     #[test]
@@ -9604,16 +9608,28 @@ interface I {\n\
             "package app\ninterface I {\n  signal s : NoSuchType @10ms\n}\n",
         );
         assert_eq!(messages(&broken), vec!["unknown type name `NoSuchType`"]);
+        assert_eq!(codes(&broken), vec!["TYPL-011"]);
     }
 
-    /// A type path that names no declaration draws TYPL-011 on the path, in
-    /// every position that takes a type reference (driftsys/ridl#543): a
-    /// struct field, a parameter, a query return, and a stream element. The
-    /// span covers the written path, a bare name and a qualified one alike.
+    /// A type path that names no visible declaration draws TYPL-011 on the
+    /// path (driftsys/ridl#543), in six positions that take a type reference:
+    /// a struct field, a parameter, a query return, a stream element, a
+    /// signal payload, and an event payload. The span covers the written
+    /// path, a bare name and a qualified one alike.
     #[test]
-    fn typl_011_unresolved_type_path_in_every_type_reference_position() {
+    fn typl_011_unresolved_type_path_in_six_type_reference_positions() {
         let positions = [
             ("field", "struct S {\n  x: Missing\n}\n", "Missing"),
+            (
+                "signal payload",
+                "interface I {\n  signal s : Missing @10ms\n}\n",
+                "Missing",
+            ),
+            (
+                "event payload",
+                "interface I {\n  event e : Missing @[100ms..1s]\n}\n",
+                "Missing",
+            ),
             (
                 "parameter",
                 "interface I {\n  command c(x: app.Missing) @[..50ms]\n}\n",
@@ -9646,6 +9662,33 @@ interface I {\n\
                 "{position}: the span must cover exactly the written path",
             );
         }
+    }
+
+    /// A qualified reference to another package's `internal` declaration is
+    /// not visible from here (typl §3.3), so it draws the same TYPL-011 as a
+    /// name no package declares: the code covers "no visible declaration",
+    /// not only "no declaration".
+    #[test]
+    fn typl_011_on_a_qualified_reference_to_a_foreign_internal_type() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\ninternal type Hidden: km/h [0.0..300.0 step 0.5]\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\ninterface I {\n  signal s : veh.common.Hidden @10ms\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert_eq!(codes(&checked), vec!["TYPL-011"]);
+        assert_eq!(
+            messages(&checked),
+            vec!["unknown type name `veh.common.Hidden`"],
+        );
     }
 
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
