@@ -160,11 +160,12 @@ pub trait EventSink: Attached {
 /// (ridl §6, §7).
 ///
 /// A generated `Client` has one method per command and query over this port,
-/// each returning a [`Correlation`] rather than an outcome, because nothing
-/// here waits. The outcome is retrieved separately: [`ack`](Caller::ack) for a
-/// command, a generated `<name>_reply` over [`reply`](Caller::reply) for a
-/// query. A `require` clause is evaluated before sending, so a failing
-/// precondition costs no round trip and is reported as
+/// each returning a named future rather than an outcome, because nothing
+/// here waits. The method sends when it is called; the future's `poll` reads
+/// the outcome — [`ack`](Caller::ack) for a command, [`reply`](Caller::reply)
+/// for a query — and calls [`forget`](Caller::forget) when it leaves the
+/// waiting phase. A `require` clause is evaluated before sending, so a
+/// failing precondition costs no round trip and is reported as
 /// [`SendError::Contract`].
 pub trait Caller: Attached {
     /// Sends a command and returns the correlation of its outcome.
@@ -241,11 +242,11 @@ pub struct Correlation(pub u64);
 /// caller sees.
 ///
 /// An application implements neither this trait nor a claim loop. It
-/// implements the generated `Provider` trait and calls the generated
-/// `dispatch`, which makes one pass over the claims already waiting, routes
-/// each by ordinal, decodes, evaluates `require`, calls the provider,
-/// evaluates a query's `ensure`, settles, and returns how many settlements
-/// this port accepted.
+/// implements the generated `Provider` trait and polls the future the
+/// generated `serve` returns, which on each poll makes one pass over the
+/// claims already waiting, routes each by ordinal, decodes, evaluates
+/// `require`, calls the provider, evaluates a query's `ensure`, and settles,
+/// and which resolves only when this port fails.
 pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
