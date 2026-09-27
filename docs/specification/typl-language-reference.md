@@ -308,6 +308,10 @@ qualified name without an import:
 limit : veh.regulatory.SpeedLimit
 ```
 
+A type reference that resolves through none of these — not the same package, not
+`ridl.std`, not an import, not a qualified name — is a compile error (TYPL-011),
+reported on the written path in every position that takes a type reference.
+
 ### 3.3 Visibility
 
 Two levels. Public is the default; `internal` is package-private:
@@ -1112,6 +1116,7 @@ the family overview §7 and are not restated here.
 | TYPL-008 | alias without an actual collision                            | warning  |
 | TYPL-009 | duplicate definition of the same name in a package           | error    |
 | TYPL-010 | package name is reserved for a package the compiler provides | error    |
+| TYPL-011 | type reference names no declaration (§3.2)                   | error    |
 
 ### 16.2 Scalars and Constants (TYPL-1xx)
 

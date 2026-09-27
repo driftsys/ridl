@@ -1352,13 +1352,13 @@ fn a_stale_allowance_is_rejected() {
 
 /// An uncoded diagnostic can never be allowed.
 ///
-/// The end-to-end half: an unresolved type name prints as a bare `error:` with
-/// no code, and no marker can name it.
+/// The end-to-end half: a constant in type position prints as a bare `error:`
+/// with no code, and no marker can name it.
 #[test]
 fn an_uncoded_diagnostic_cannot_be_allowed() {
     let book = book_of(
         "uncoded",
-        "```ridl\npackage zz.uncoded\n\ninterface I {\n  signal s : NoSuchType @10ms\n}\n```\n",
+        "```ridl\npackage zz.uncoded\n\ntype N : integer [0..9]\nconst K : N = 1\n\ninterface I {\n  signal s : K @10ms\n}\n```\n",
     );
 
     let report = verify_book(book.path()).expect_err("an uncoded diagnostic must be rejected");
@@ -1366,7 +1366,7 @@ fn an_uncoded_diagnostic_cannot_be_allowed() {
         .split_once("diagnostic(s) no block named:")
         .expect("the report lists the diagnostics no block named");
     assert!(
-        unnamed.contains("unknown type name"),
+        unnamed.contains("expected a type, but `K` names a constant"),
         "the uncoded diagnostic must reach the `no block named` list, not merely appear in the \
          raw report — that list is what the allow-check reasons over; got:\n{report}"
     );
@@ -1380,7 +1380,7 @@ fn an_uncoded_diagnostic_cannot_be_allowed() {
 /// that arm makes them vanish from the reasoning silently.
 #[test]
 fn parse_report_detects_an_uncoded_diagnostic() {
-    let report = "error: unknown type name `Speed`\n   ┌─ /staging/veh/common/a.ridl:4:20\n   │\n";
+    let report = "error: expected a type, but `MAX_SPEED` names a constant\n   ┌─ /staging/veh/common/a.ridl:4:20\n   │\n";
 
     let found = parse_report(report);
     assert_eq!(found.len(), 1, "one diagnostic is parsed");

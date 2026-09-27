@@ -765,9 +765,9 @@ impl Checker<'_> {
         }
     }
 
-    /// Resolves a type path, emitting the T6 description-first messages
-    /// (unknown name / non-type-where-type-expected) — no §16 code exists for
-    /// either.
+    /// Resolves a type path, emitting the T6 description-first messages: an
+    /// unknown name draws TYPL-011 (typl §16.1); a non-type where a type is
+    /// expected still has no §16 code.
     fn resolve_type_path(&mut self, path: &ast::PathType) -> PathTarget {
         let written = significant_text(path.syntax());
         let range = path.syntax().text_range();
@@ -793,7 +793,7 @@ impl Checker<'_> {
             Some(symbol) => PathTarget::Symbol(symbol),
             None => {
                 self.error(
-                    DiagCode::NONE,
+                    DiagCode::TYPL_011,
                     range,
                     format!("unknown type name `{written}`"),
                 );
@@ -5983,13 +5983,13 @@ mod tests {
         );
     }
 
-    // --- unknown type references (T6 description-first shape, no code) ----
+    // --- unknown type references (T6 description-first shape) ----
 
     #[test]
     fn unknown_type_reference_keeps_the_description_first_shape() {
         let checked = check_source("app", "package app\nconst X: Missing = 1.0\n");
         assert_eq!(checked.diagnostics.len(), 1);
-        assert!(checked.diagnostics[0].code.is_empty(), "no §16 code exists");
+        assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(
             checked.diagnostics[0].message,
             "unknown type name `Missing`",
@@ -9606,6 +9606,48 @@ interface I {\n\
         assert_eq!(messages(&broken), vec!["unknown type name `NoSuchType`"]);
     }
 
+    /// A type path that names no declaration draws TYPL-011 on the path, in
+    /// every position that takes a type reference (driftsys/ridl#543): a
+    /// struct field, a parameter, a query return, and a stream element. The
+    /// span covers the written path, a bare name and a qualified one alike.
+    #[test]
+    fn typl_011_unresolved_type_path_in_every_type_reference_position() {
+        let positions = [
+            ("field", "struct S {\n  x: Missing\n}\n", "Missing"),
+            (
+                "parameter",
+                "interface I {\n  command c(x: app.Missing) @[..50ms]\n}\n",
+                "app.Missing",
+            ),
+            (
+                "query return",
+                "interface I {\n  query q(): Missing @[..50ms]\n}\n",
+                "Missing",
+            ),
+            (
+                "stream element",
+                "interface I {\n  query q(): <Missing> @[..50ms]\n}\n",
+                "Missing",
+            ),
+        ];
+        for (position, body, written) in positions {
+            let source = format!("{PRELUDE}{body}");
+            let checked = check_ridl("app", &source);
+            assert_eq!(codes(&checked), vec!["TYPL-011"], "{position}");
+            assert_eq!(
+                messages(&checked),
+                vec![format!("unknown type name `{written}`").as_str()],
+                "{position}",
+            );
+            let range = checked.diagnostics[0].primary.range;
+            assert_eq!(
+                &source[usize::from(range.start())..usize::from(range.end())],
+                written,
+                "{position}: the span must cover exactly the written path",
+            );
+        }
+    }
+
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
     // declaration order, one sequence across all kinds, the reserved tombstone
     // counted at #6 — is asserted on the lowered IR by
@@ -10471,7 +10513,7 @@ interface VehicleStatus {
         // driftsys/ridl#356: `return_type` admits a `type_ref`, and a primitive
         // keyword is not one (ridl Appendix C). The return position draws the
         // code its parameter sibling draws, FORM-102, naming the keyword — not
-        // an uncoded "unknown type name". It still lowers the written keyword
+        // TYPL-011 "unknown type name". It still lowers the written keyword
         // as a named value (honest lowering).
         for keyword in ["boolean", "integer", "float", "string", "bytes"] {
             let source = format!(

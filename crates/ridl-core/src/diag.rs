@@ -67,8 +67,9 @@ impl DiagCode {
     }
 
     /// The sentinel for a diagnostic that carries no catalogue code yet. The
-    /// unknown-type-name check uses it until a later task rehomes it (typl §16
-    /// defines no code for it); the Rust backend's codegen error uses it too.
+    /// checker's "expected a type, but `X` names a constant / an interface"
+    /// errors use it until a later task rehomes them (typl §16 defines no code
+    /// for either); the Rust backend's codegen error uses it too.
     pub const NONE: DiagCode = DiagCode("");
 }
 
@@ -297,6 +298,17 @@ diag_codes! {
         /// in single-file mode alike.
         TYPL_010 = "TYPL-010", Error,
             "package name is reserved for a package the compiler provides";
+
+        /// A type reference names no declaration (typl §3.2, §16.1): the path
+        /// resolves neither in the package's own scope, nor in `ridl.std`, nor
+        /// through an import, nor as a qualified `pkg.Name`. Emitted by the
+        /// checker on the written path, in every position that takes a type
+        /// reference — a field, a parameter, a query return, a stream element,
+        /// a constant's type. A reference that resolves to a declaration of
+        /// the wrong kind (a constant, an interface) is a different error and
+        /// still carries no code (driftsys/ridl#543).
+        TYPL_011 = "TYPL-011", Error,
+            "type reference names no declaration";
 
         /// `integer` without a range constraint (typl §16.2). Warning.
         TYPL_101 = "TYPL-101", Warning,
@@ -2427,7 +2439,7 @@ mod json_tests {
         let diagnostic = Diagnostic {
             code: DiagCode::NONE,
             severity: Severity::Error,
-            message: "unknown type name `Frob`".to_string(),
+            message: "expected a type, but `FROB` names a constant".to_string(),
             primary: Span {
                 file: FileId::DETACHED,
                 range: TextRange::new(TextSize::from(0), TextSize::from(0)),
