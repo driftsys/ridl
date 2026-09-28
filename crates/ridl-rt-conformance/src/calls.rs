@@ -482,6 +482,34 @@ pub fn forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid<F
     );
 }
 
+/// A `forget` between the offer of a claim through `ShortClaim` and its
+/// settlement does not revoke the settlement either: the offered claim is the
+/// provider's, and settling it by the id `ShortClaim` carried frees the slot
+/// (driftsys/ridl#569).
+pub fn forget_between_the_offer_and_the_settlement_leaves_the_settlement_valid<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let mut short = [0u8; 1];
+    let Err(ReadError::ShortClaim { claim, .. }) = rt.next_claim(&mut short) else {
+        panic!("a buffer shorter than the arguments reports ShortClaim");
+    };
+    rt.forget(correlation);
+
+    rt.settle(claim, Ok(&[]))
+        .expect("the provider's settlement is not the caller's to revoke");
+    assert_eq!(
+        rt.ack(correlation),
+        None,
+        "nothing is readable for a forgotten call"
+    );
+    assert_eq!(
+        sends_until_busy::<F>(&mut rt),
+        F::SLOTS,
+        "the settlement freed the slot"
+    );
+}
+
 /// A correlation is not a claim. Before this call is presented there is no
 /// claim to settle, and a settlement accepted here would acknowledge a call
 /// the provider has not seen.

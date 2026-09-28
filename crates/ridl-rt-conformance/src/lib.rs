@@ -238,6 +238,7 @@ macro_rules! suite {
             calls::a_send_with_every_slot_taken_is_busy_for_every_caller,
             calls::a_reclaimed_slots_old_correlation_answers_none,
             calls::forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid,
+            calls::forget_between_the_offer_and_the_settlement_leaves_the_settlement_valid,
             calls::a_claim_that_was_never_presented_cannot_be_settled,
             calls::an_injected_settle_failure_is_not_spent_on_an_unknown_claim,
             calls::a_handler_cannot_settle_another_handlers_claim,
