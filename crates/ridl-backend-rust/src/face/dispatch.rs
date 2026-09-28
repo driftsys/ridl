@@ -115,12 +115,28 @@ pub(super) fn dispatch(
          each poll.\n\nIt does not wait: it makes one pass over the claims \
          the handler already has and returns. `budget` is decreased by one \
          for each claim taken from `Handler::next_claim`, whether or not its \
-         settlement is accepted, and the pass stops when it reaches 0 without \
-         asking for another claim. With a buffer of at least \
+         settlement is accepted — except an oversized claim whose settlement \
+         the handler refused, below — and the pass stops when it reaches 0 \
+         without asking for another claim. With a buffer of at least \
          `{iface_name}::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
-         means the handler has no claim waiting; `Ok` with `budget` at 0 means claims \
+         means the handler has no claim waiting, or refused the settlement \
+         of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims \
          may still be waiting; `Err` means `Handler::next_claim` failed, and \
-         every claim settled before the failure stays settled.\n\n`buf` must \
+         every claim settled before the failure stays settled. \
+         `ReadError::ShortClaim` is not a failure: the claim's arguments do \
+         not fit `{iface_name}::MAX_BUFFER_SIZE`, the interface's largest \
+         argument or reply payload, so they are larger than any valid \
+         encoding of this interface's members, and the claim is settled \
+         `Transport::Corrupt` by its id without being read, whichever \
+         interface or member it names — a claim naming another interface may \
+         be validly larger, and is settled `Corrupt` too, because this step \
+         cannot read it; it counts toward `budget`, and the pass continues. \
+         When the handler \
+         refuses that settlement the pass ends at once, returning the count \
+         so far with the budget unspent, as if no claim were waiting, because \
+         the runtime keeps the unsettled claim the next one; the claims \
+         behind it wait until the handler can settle it \
+         (driftsys/ridl#569).\n\n`buf` must \
          be at least `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is \
          encoded into the same buffer as the arguments. A shorter buffer \
          returns `Ok(0)` without consuming a claim or changing \
@@ -130,7 +146,8 @@ pub(super) fn dispatch(
          `Contract::UnknownInteraction`. A claim is counted only once \
          `Handler::settle` has accepted it; a `SettleError` is left to the \
          handler, which already owns that claim's settlement, and the pass \
-         continues with the next claim.\n\nA command is settled `Ok(&[])` \
+         continues with the next claim, except for an oversized claim, whose \
+         refused settlement ends the pass as stated above.\n\nA command is settled `Ok(&[])` \
          once its arguments and its `require` clauses pass and **before** the \
          application's method runs, because a command's acknowledgment is a \
          delivery acknowledgment and not a completion one (ridl §6.1, and \
@@ -155,29 +172,59 @@ pub(super) fn dispatch(
             }
             let mut settled = 0usize;
             while *budget > 0 {
-                let Some(claim) = h.next_claim(buf)? else {
-                    break;
-                };
-                *budget -= 1;
-                let settlement = if claim.iface != #number {
-                    h.settle(
-                        claim.id,
-                        Err(::ridl_rt::error::CallError::Contract(
-                            ::ridl_rt::error::Contract::UnknownInteraction,
-                        )),
-                    )
-                } else {
-                    match claim.ord {
-                        #(#command_arms)*
-                        #(#query_arms)*
-                        _ => h.settle(
-                            claim.id,
-                            Err(::ridl_rt::error::CallError::Contract(
-                                ::ridl_rt::error::Contract::UnknownInteraction,
+                let settlement = match h.next_claim(buf) {
+                    Ok(None) => break,
+                    // The claim's arguments do not fit `MAX_BUFFER_SIZE`, the
+                    // interface's largest argument or reply payload, so they
+                    // are larger than any valid encoding of this interface's
+                    // members and not a well-formed one: the claim is settled
+                    // `Transport::Corrupt` without being read, as argument
+                    // bytes that fail the structure check are, whichever
+                    // interface or member it names — a claim naming another
+                    // interface may be validly larger, and is settled the
+                    // same, because this step cannot read it
+                    // (driftsys/ridl#569). A
+                    // refused settlement ends the pass with the budget
+                    // unspent, as if no claim were waiting: the runtime
+                    // keeps the unsettled claim the next one, so taking it
+                    // again would spend the whole budget on it, and `serve`
+                    // waits for the next claim wake instead.
+                    Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                        let settlement = h.settle(
+                            claim,
+                            Err(::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Corrupt,
                             )),
-                        ),
+                        );
+                        if settlement.is_err() {
+                            return Ok(settled);
+                        }
+                        settlement
+                    }
+                    Err(error) => return Err(error),
+                    Ok(Some(claim)) => {
+                        if claim.iface != #number {
+                            h.settle(
+                                claim.id,
+                                Err(::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::UnknownInteraction,
+                                )),
+                            )
+                        } else {
+                            match claim.ord {
+                                #(#command_arms)*
+                                #(#query_arms)*
+                                _ => h.settle(
+                                    claim.id,
+                                    Err(::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::UnknownInteraction,
+                                    )),
+                                ),
+                            }
+                        }
                     }
                 };
+                *budget -= 1;
                 if settlement.is_ok() {
                     settled += 1;
                 }

@@ -2363,11 +2363,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     }
     /**Settles the claims of interface `Cabin` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Cabin::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Cabin::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `Cabin::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
 
 `buf` must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
-Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim.
+Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim, except for an oversized claim, whose refused settlement ends the pass as stated above.
 
 A command is settled `Ok(&[])` once its arguments and its `require` clauses pass and **before** the application's method runs, because a command's acknowledgment is a delivery acknowledgment and not a completion one (ridl §6.1, and `Handler`'s own contract). A query is settled after the application returns, because its settlement carries the reply.*/
     pub(crate) fn dispatch<H, P>(
@@ -2385,164 +2385,28 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         }
         let mut settled = 0usize;
         while *budget > 0 {
-            let Some(claim) = h.next_claim(buf)? else {
-                break;
-            };
-            *budget -= 1;
-            let settlement = if claim.iface
-                != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER
-            {
-                h.settle(
-                    claim.id,
-                    Err(
-                        ::ridl_rt::error::CallError::Contract(
-                            ::ridl_rt::error::Contract::UnknownInteraction,
-                        ),
-                    ),
-                )
-            } else {
-                match claim.ord {
-                    ::ridl_rt::contract::Ordinal(3u32) => {
-                        let decoded = match ::ridl_rt::payload::Ref::<
-                            super::Level,
-                            super::Wire,
-                        >::verify(&buf[..claim.len]) {
-                            Ok(checked) => Ok(checked.decode()),
-                            Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Contract(
-                                        ::ridl_rt::error::Contract::InvalidValue(violation),
-                                    ),
-                                )
-                            }
-                            Err(_) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                        };
-                        match decoded {
-                            Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(__arg) => {
-                                match <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(
-                                    &__arg,
-                                ) {
-                                    Err(()) => {
-                                        h.settle(
-                                            claim.id,
-                                            Err(
-                                                ::ridl_rt::error::CallError::Contract(
-                                                    ::ridl_rt::error::Contract::PreconditionFailed,
-                                                ),
-                                            ),
-                                        )
-                                    }
-                                    Ok(()) => {
-                                        let accepted = h.settle(claim.id, Ok(&[]));
-                                        p.set_level(&__arg);
-                                        accepted
-                                    }
-                                }
-                            }
-                        }
+            let settlement = match h.next_claim(buf) {
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_err() {
+                        return Ok(settled);
                     }
-                    ::ridl_rt::contract::Ordinal(4u32) => {
-                        let decoded = match ::ridl_rt::payload::Ref::<
-                            super::Window,
-                            super::Wire,
-                        >::verify(&buf[..claim.len]) {
-                            Ok(checked) => Ok(checked.decode()),
-                            Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Contract(
-                                        ::ridl_rt::error::Contract::InvalidValue(violation),
-                                    ),
-                                )
-                            }
-                            Err(_) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                        };
-                        match decoded {
-                            Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(__arg) => {
-                                match <super::CabinAverage as ::ridl_rt::contract::Query>::require(
-                                    &__arg,
-                                ) {
-                                    Err(()) => {
-                                        h.settle(
-                                            claim.id,
-                                            Err(
-                                                ::ridl_rt::error::CallError::Contract(
-                                                    ::ridl_rt::error::Contract::PreconditionFailed,
-                                                ),
-                                            ),
-                                        )
-                                    }
-                                    Ok(()) => {
-                                        let reply = p.average(&__arg);
-                                        match <super::CabinAverage as ::ridl_rt::contract::Query>::ensure(
-                                            &__arg,
-                                            &reply,
-                                        ) {
-                                            Err(()) => {
-                                                h.settle(
-                                                    claim.id,
-                                                    Err(
-                                                        ::ridl_rt::error::CallError::Contract(
-                                                            ::ridl_rt::error::Contract::ContractBroken,
-                                                        ),
-                                                    ),
-                                                )
-                                            }
-                                            Ok(()) => {
-                                                let bytes = match ::ridl_rt::payload::Ref::<
-                                                    super::Average,
-                                                    super::Wire,
-                                                >::encode(&reply, buf) {
-                                                    Ok(encoded) => encoded.bytes(),
-                                                    Err(
-                                                        ::ridl_rt::payload::EncodeError::Capacity {
-                                                            needed,
-                                                            available,
-                                                        },
-                                                    ) => {
-                                                        unreachable!(
-                                                            "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
-                                                            needed, available
-                                                        )
-                                                    }
-                                                    Err(_) => unreachable!("encoding `Average` failed"),
-                                                };
-                                                h.settle(claim.id, Ok(bytes))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {
+                    settlement
+                }
+                Err(error) => return Err(error),
+                Ok(Some(claim)) => {
+                    if claim.iface
+                        != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER
+                    {
                         h.settle(
                             claim.id,
                             Err(
@@ -2551,9 +2415,167 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                 ),
                             ),
                         )
+                    } else {
+                        match claim.ord {
+                            ::ridl_rt::contract::Ordinal(3u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Level,
+                                    super::Wire,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let accepted = h.settle(claim.id, Ok(&[]));
+                                                p.set_level(&__arg);
+                                                accepted
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            ::ridl_rt::contract::Ordinal(4u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Window,
+                                    super::Wire,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::CabinAverage as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let reply = p.average(&__arg);
+                                                match <super::CabinAverage as ::ridl_rt::contract::Query>::ensure(
+                                                    &__arg,
+                                                    &reply,
+                                                ) {
+                                                    Err(()) => {
+                                                        h.settle(
+                                                            claim.id,
+                                                            Err(
+                                                                ::ridl_rt::error::CallError::Contract(
+                                                                    ::ridl_rt::error::Contract::ContractBroken,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }
+                                                    Ok(()) => {
+                                                        let bytes = match ::ridl_rt::payload::Ref::<
+                                                            super::Average,
+                                                            super::Wire,
+                                                        >::encode(&reply, buf) {
+                                                            Ok(encoded) => encoded.bytes(),
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Capacity {
+                                                                    needed,
+                                                                    available,
+                                                                },
+                                                            ) => {
+                                                                unreachable!(
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    needed, available
+                                                                )
+                                                            }
+                                                            Err(_) => unreachable!("encoding `Average` failed"),
+                                                        };
+                                                        h.settle(claim.id, Ok(bytes))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                h.settle(
+                                    claim.id,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::UnknownInteraction,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             };
+            *budget -= 1;
             if settlement.is_ok() {
                 settled += 1;
             }
@@ -3628,11 +3650,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     }
     /**Settles the claims of interface `Valve` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Valve::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Valve::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `Valve::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
 
 `buf` must be at least `Valve::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
-Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim.
+Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim, except for an oversized claim, whose refused settlement ends the pass as stated above.
 
 A command is settled `Ok(&[])` once its arguments and its `require` clauses pass and **before** the application's method runs, because a command's acknowledgment is a delivery acknowledgment and not a completion one (ridl §6.1, and `Handler`'s own contract). A query is settled after the application returns, because its settlement carries the reply.*/
     pub(crate) fn dispatch<H, P>(
@@ -3650,164 +3672,28 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         }
         let mut settled = 0usize;
         while *budget > 0 {
-            let Some(claim) = h.next_claim(buf)? else {
-                break;
-            };
-            *budget -= 1;
-            let settlement = if claim.iface
-                != <super::Valve as ::ridl_rt::contract::Interface>::NUMBER
-            {
-                h.settle(
-                    claim.id,
-                    Err(
-                        ::ridl_rt::error::CallError::Contract(
-                            ::ridl_rt::error::Contract::UnknownInteraction,
-                        ),
-                    ),
-                )
-            } else {
-                match claim.ord {
-                    ::ridl_rt::contract::Ordinal(1u32) => {
-                        let decoded = match ::ridl_rt::payload::Ref::<
-                            super::Level,
-                            super::Wire,
-                        >::verify(&buf[..claim.len]) {
-                            Ok(checked) => Ok(checked.decode()),
-                            Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Contract(
-                                        ::ridl_rt::error::Contract::InvalidValue(violation),
-                                    ),
-                                )
-                            }
-                            Err(_) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                        };
-                        match decoded {
-                            Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(__arg) => {
-                                match <super::ValveOpen as ::ridl_rt::contract::Command>::require(
-                                    &__arg,
-                                ) {
-                                    Err(()) => {
-                                        h.settle(
-                                            claim.id,
-                                            Err(
-                                                ::ridl_rt::error::CallError::Contract(
-                                                    ::ridl_rt::error::Contract::PreconditionFailed,
-                                                ),
-                                            ),
-                                        )
-                                    }
-                                    Ok(()) => {
-                                        let accepted = h.settle(claim.id, Ok(&[]));
-                                        p.open(&__arg);
-                                        accepted
-                                    }
-                                }
-                            }
-                        }
+            let settlement = match h.next_claim(buf) {
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_err() {
+                        return Ok(settled);
                     }
-                    ::ridl_rt::contract::Ordinal(2u32) => {
-                        let decoded = match ::ridl_rt::payload::Ref::<
-                            super::Window,
-                            super::Wire,
-                        >::verify(&buf[..claim.len]) {
-                            Ok(checked) => Ok(checked.decode()),
-                            Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Contract(
-                                        ::ridl_rt::error::Contract::InvalidValue(violation),
-                                    ),
-                                )
-                            }
-                            Err(_) => {
-                                Err(
-                                    ::ridl_rt::error::CallError::Transport(
-                                        ::ridl_rt::error::Transport::Corrupt,
-                                    ),
-                                )
-                            }
-                        };
-                        match decoded {
-                            Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(__arg) => {
-                                match <super::ValvePressure as ::ridl_rt::contract::Query>::require(
-                                    &__arg,
-                                ) {
-                                    Err(()) => {
-                                        h.settle(
-                                            claim.id,
-                                            Err(
-                                                ::ridl_rt::error::CallError::Contract(
-                                                    ::ridl_rt::error::Contract::PreconditionFailed,
-                                                ),
-                                            ),
-                                        )
-                                    }
-                                    Ok(()) => {
-                                        let reply = p.pressure(&__arg);
-                                        match <super::ValvePressure as ::ridl_rt::contract::Query>::ensure(
-                                            &__arg,
-                                            &reply,
-                                        ) {
-                                            Err(()) => {
-                                                h.settle(
-                                                    claim.id,
-                                                    Err(
-                                                        ::ridl_rt::error::CallError::Contract(
-                                                            ::ridl_rt::error::Contract::ContractBroken,
-                                                        ),
-                                                    ),
-                                                )
-                                            }
-                                            Ok(()) => {
-                                                let bytes = match ::ridl_rt::payload::Ref::<
-                                                    super::Average,
-                                                    super::Wire,
-                                                >::encode(&reply, buf) {
-                                                    Ok(encoded) => encoded.bytes(),
-                                                    Err(
-                                                        ::ridl_rt::payload::EncodeError::Capacity {
-                                                            needed,
-                                                            available,
-                                                        },
-                                                    ) => {
-                                                        unreachable!(
-                                                            "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
-                                                            needed, available
-                                                        )
-                                                    }
-                                                    Err(_) => unreachable!("encoding `Average` failed"),
-                                                };
-                                                h.settle(claim.id, Ok(bytes))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {
+                    settlement
+                }
+                Err(error) => return Err(error),
+                Ok(Some(claim)) => {
+                    if claim.iface
+                        != <super::Valve as ::ridl_rt::contract::Interface>::NUMBER
+                    {
                         h.settle(
                             claim.id,
                             Err(
@@ -3816,9 +3702,167 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                 ),
                             ),
                         )
+                    } else {
+                        match claim.ord {
+                            ::ridl_rt::contract::Ordinal(1u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Level,
+                                    super::Wire,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::ValveOpen as ::ridl_rt::contract::Command>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let accepted = h.settle(claim.id, Ok(&[]));
+                                                p.open(&__arg);
+                                                accepted
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            ::ridl_rt::contract::Ordinal(2u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Window,
+                                    super::Wire,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::ValvePressure as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let reply = p.pressure(&__arg);
+                                                match <super::ValvePressure as ::ridl_rt::contract::Query>::ensure(
+                                                    &__arg,
+                                                    &reply,
+                                                ) {
+                                                    Err(()) => {
+                                                        h.settle(
+                                                            claim.id,
+                                                            Err(
+                                                                ::ridl_rt::error::CallError::Contract(
+                                                                    ::ridl_rt::error::Contract::ContractBroken,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }
+                                                    Ok(()) => {
+                                                        let bytes = match ::ridl_rt::payload::Ref::<
+                                                            super::Average,
+                                                            super::Wire,
+                                                        >::encode(&reply, buf) {
+                                                            Ok(encoded) => encoded.bytes(),
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Capacity {
+                                                                    needed,
+                                                                    available,
+                                                                },
+                                                            ) => {
+                                                                unreachable!(
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    needed, available
+                                                                )
+                                                            }
+                                                            Err(_) => unreachable!("encoding `Average` failed"),
+                                                        };
+                                                        h.settle(claim.id, Ok(bytes))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                h.settle(
+                                    claim.id,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::UnknownInteraction,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             };
+            *budget -= 1;
             if settlement.is_ok() {
                 settled += 1;
             }

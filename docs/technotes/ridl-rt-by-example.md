@@ -654,21 +654,29 @@ The generated match is total over the claims that can arrive, because the
 `Handler` contract requires it. The rows are in the order `serve` evaluates
 them:
 
-| Cause                                       | Settled as                     |
-| ------------------------------------------- | ------------------------------ |
-| `claim.iface` or `claim.ord` matches no arm | `Contract::UnknownInteraction` |
-| `VerifyError::Structure(m)`                 | `Transport::Corrupt`           |
-| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`    |
-| `require` returns `Err(())`                 | `Contract::PreconditionFailed` |
-| `ensure` returns `Err(())`, a query only    | `Contract::ContractBroken`     |
+| Cause                                       | Settled as                              |
+| ------------------------------------------- | --------------------------------------- |
+| `ReadError::ShortClaim` from `next_claim`   | `Transport::Corrupt`, by the claim's id |
+| `claim.iface` or `claim.ord` matches no arm | `Contract::UnknownInteraction`          |
+| `VerifyError::Structure(m)`                 | `Transport::Corrupt`                    |
+| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`             |
+| `require` returns `Err(())`                 | `Contract::PreconditionFailed`          |
+| `ensure` returns `Err(())`, a query only    | `Contract::ContractBroken`              |
 
-Reading it top to bottom: route the claim, check the bytes, check the
-precondition, call the provider, check the postcondition, settle.
+Reading it top to bottom: settle a claim that did not fit before routing it,
+then route the claim, check the bytes, check the precondition, call the
+provider, check the postcondition, settle.
 
-The first row is the fallback arm. Without it an unroutable claim would never be
-settled, which breaks the `Handler` contract. `UnknownInteraction` is exactly
-the category the language defines for peers disagreeing on an interface number
-or an ordinal.
+The first row settles a claim `serve` never read: its argument bytes exceed
+`MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so the
+runtime reported the claim's id and the bytes it needs instead of copying them,
+and an encoding larger than any valid one of this interface's members is not
+well-formed (driftsys/ridl#569). The claim is settled whichever interface or
+member it names — one naming another interface may be validly larger, but
+`serve` cannot read it — so it never reaches the fallback arm. The second row is
+the fallback arm. Without it an unroutable claim would never be settled, which
+breaks the `Handler` contract. `UnknownInteraction` is exactly the category the
+language defines for peers disagreeing on an interface number or an ordinal.
 
 The two `VerifyError` rows are separate for the reason step 3 gave: collapsing
 them would settle a range violation as a transport corruption, which reaches the

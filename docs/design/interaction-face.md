@@ -253,8 +253,9 @@ two are recorded on driftsys/ridl#580 with the rest.
 thread, socket or timer, and no port waits; a face may return a future, and that
 future never blocks. Each future's `poll` registers its interest with the port,
 then reads the port — a call or event future once, `Serve` until the handler has
-no claim waiting or it has taken 32 claims in that poll — and returns. What
-waits is the executor or the frame loop that polls the future, or
+no claim waiting, it has taken 32 claims in that poll, or it refused the
+settlement of an oversized claim (driftsys/ridl#569) — and returns. What waits
+is the executor or the frame loop that polls the future, or
 `ridl_rt::task::block_on` under the `blocking` module, which is the library's
 and not generated. ADR-0018's two rejections — `async fn` at the platform layer,
 blocking calls at the platform layer — are about the engine's layers and bind
@@ -290,22 +291,23 @@ poll that took 32 claims wakes its own waker and is `Pending`, so the executor
 polls it again after other tasks have run, because a future that holds one poll
 for an unbounded time blocks every other task on a single-threaded executor; a
 poll that found no claim left before 32 is `Pending` without waking itself. The
-32 are counted as claims are taken, not as their settlements are accepted. The
-self-wake is discarded under `ridl_rt::task::noop_waker`, so a frame loop that
-polls `Serve` once per frame with it settles at most 32 claims per frame; a loop
-that polls with `ridl_rt::task::flag_waker` polls again while the flag was set,
-up to its own limit of polls per frame. The handler port's failure resolves the
-future to `ProviderError::Claim`, with every claim settled before it staying
-settled. `Output` is `Result<Infallible, ProviderError>`: the future never
-resolves to `Ok` (F-7). It holds the handler by value, the provider by `&mut`,
-and the claim buffer of `MAX_BUFFER_SIZE` bytes inline, so the application
-supplies no buffer and reads no count. A resolved `Serve` panics when it is
-polled again. Over `ridl-loopback`, registering the served set means a handler
-under `serve` is presented only the interface's own members; the settlement
-table's unknown-route rows are reachable only through the internal step
-directly, which is how `tests/interaction_face.rs` still exercises them — the
-test file is inside the crate that `include!`s the fixture, so `pub(crate)`
-reaches it.
+32 are counted as claims are taken, not as their settlements are accepted; the
+one exception is a refused settlement of an oversized claim, which ends the poll
+with the budget unspent and no self-wake (below). The self-wake is discarded
+under `ridl_rt::task::noop_waker`, so a frame loop that polls `Serve` once per
+frame with it settles at most 32 claims per frame; a loop that polls with
+`ridl_rt::task::flag_waker` polls again while the flag was set, up to its own
+limit of polls per frame. The handler port's failure resolves the future to
+`ProviderError::Claim`, with every claim settled before it staying settled.
+`Output` is `Result<Infallible, ProviderError>`: the future never resolves to
+`Ok` (F-7). It holds the handler by value, the provider by `&mut`, and the claim
+buffer of `MAX_BUFFER_SIZE` bytes inline, so the application supplies no buffer
+and reads no count. A resolved `Serve` panics when it is polled again. Over
+`ridl-loopback`, registering the served set means a handler under `serve` is
+presented only the interface's own members; the settlement table's unknown-route
+rows are reachable only through the internal step directly, which is how
+`tests/interaction_face.rs` still exercises them — the test file is inside the
+crate that `include!`s the fixture, so `pub(crate)` reaches it.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
@@ -317,19 +319,44 @@ the pass stopped at the bound. It loops over `Handler::next_claim`, routing and
 settling every claim it takes — including one this interface does not recognise,
 because `Handler`'s own contract requires every claim to be settled:
 
-| Cause                                       | Settled as                     |
-| ------------------------------------------- | ------------------------------ |
-| `claim.ord` or `claim.iface` matches no arm | `Contract::UnknownInteraction` |
-| `VerifyError::Structure(_)`                 | `Transport::Corrupt`           |
-| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`    |
-| `require` returns `Err(())`                 | `Contract::PreconditionFailed` |
-| `ensure` returns `Err(())` (query only)     | `Contract::ContractBroken`     |
+| Cause                                       | Settled as                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| `claim.ord` or `claim.iface` matches no arm | `Contract::UnknownInteraction`                                      |
+| `VerifyError::Structure(_)`                 | `Transport::Corrupt`                                                |
+| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`                                         |
+| `require` returns `Err(())`                 | `Contract::PreconditionFailed`                                      |
+| `ensure` returns `Err(())` (query only)     | `Contract::ContractBroken`                                          |
+| `ReadError::ShortClaim` from `next_claim`   | `Transport::Corrupt`, by the claim's id, unread (driftsys/ridl#569) |
 
 The two `VerifyError` rows are kept separate rather than both settled as
 `Transport::Corrupt`, because `Payload::verify` reports a structural failure and
 a typl-constraint violation as two distinct variants, and collapsing them would
 report a range or enum-variant violation in the wrong error stratum (ridl §10.2
 vs §10.3).
+
+**An oversized claim is settled, not fatal (2026-09-28, driftsys/ridl#569).**
+`Handler::next_claim` reports a claim whose argument bytes do not fit `buf` as
+`ReadError::ShortClaim { claim, needed }` and does not consume it
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 5,
+amended the same day). The step settles `claim` `Transport::Corrupt` without
+reading it — an argument that does not fit `MAX_BUFFER_SIZE`, the interface's
+largest argument or reply payload, is larger than any valid encoding of this
+interface's members and so not a well-formed encoding of one, the rule the
+`VerifyError::Structure` row already applies; a claim naming another interface
+may be validly larger, and is settled `Corrupt` too, because the step cannot
+read it — counts it toward the budget like a claim taken, and continues with the
+next claim. When the handler refuses that settlement, the step ends the pass at
+once and returns the count so far with the budget unspent, as if no claim were
+waiting: the runtime keeps the unsettled claim the next one, so taking it again
+would spend the whole budget on it on every poll and wake `serve` forever.
+`serve` therefore does not wake itself, and waits for the next claim wake; the
+claims behind such a claim wait until the handler can settle it. Every other
+`ReadError` from `next_claim`, including a `Short` from a runtime older than the
+variant, still resolves `serve` to `ProviderError::Claim`. Only a raw `Caller`
+or a network runtime can send such a claim; a generated client sizes its
+arguments from the same descriptor. Before this change the step resolved to
+`ProviderError::Claim(Short)`, and every claim queued behind the oversized one
+stayed unserved.
 
 **A command settles before the provider method runs; a query settles after.** A
 command's acknowledgment is a delivery acknowledgment, not a completion one

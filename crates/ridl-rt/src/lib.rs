@@ -136,6 +136,7 @@ pub mod task;
 /// fn f(x: ridl_rt::port::ReadError) {
 ///     match x {
 ///         ridl_rt::port::ReadError::Short { .. } => {}
+///         ridl_rt::port::ReadError::ShortClaim { .. } => {}
 ///         ridl_rt::port::ReadError::TooFewSamples { .. } => {}
 ///         ridl_rt::port::ReadError::Contract(_) => {}
 ///         ridl_rt::port::ReadError::Detached => {}
@@ -233,6 +234,7 @@ pub mod task;
 /// fn read_error(x: ridl_rt::port::ReadError) {
 ///     match x {
 ///         ridl_rt::port::ReadError::Short { .. } => {}
+///         ridl_rt::port::ReadError::ShortClaim { .. } => {}
 ///         ridl_rt::port::ReadError::TooFewSamples { .. } => {}
 ///         ridl_rt::port::ReadError::Contract(_) => {}
 ///         ridl_rt::port::ReadError::Detached => {}

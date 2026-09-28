@@ -227,10 +227,13 @@ pub struct Correlation(pub u64);
 ///
 /// `next_claim` presents each delivered call once. A retransmission of a call
 /// already presented is not presented again and receives the cached
-/// acknowledgment. The one call presented again is a claim a dropped handler
-/// held and did not settle: the runtime returns it to the waiting calls, so
-/// another handler that serves the member can take it, as many times as a
-/// holder is dropped (ADR-0021 decision 5). Calls from two callers are never
+/// acknowledgment. Two calls are presented again. One is a claim a dropped
+/// handler held and did not settle: the runtime returns it to the waiting
+/// calls, so another handler that serves the member can take it, as many
+/// times as a holder is dropped (ADR-0021 decision 5). The other is a claim
+/// offered through [`ReadError::ShortClaim`], which stays the next call, under
+/// the same id, until it is read with a large enough buffer or settled by
+/// that id (decision 5, amended 2026-09-28). Calls from two callers are never
 /// merged, even when they carry the same `seq`. A call lost in transport is never presented. The
 /// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
 /// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
@@ -252,7 +255,14 @@ pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
     /// Copies the next call's arguments into the front of `out`. `Ok(None)`
-    /// when no call is waiting. `ReadError::Short` does not consume the call.
+    /// when no call is waiting. When `out` is shorter than the next call's
+    /// arguments, returns [`ReadError::ShortClaim`] with that call's
+    /// `ClaimId` and the bytes it needs, and does not consume the call: a
+    /// later `next_claim` with a buffer of at least `needed` bytes presents
+    /// the same call under the same id. The id is assigned when the call is
+    /// first presented, whether through `ShortClaim` or through `Ok(Some)`,
+    /// and is unique in its channel. `next_claim` never returns
+    /// `ReadError::Short`.
     fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError>;
     /// Settles a claim with the reply bytes (empty for a command) or the
     /// outcome the caller sees. A provider settles
@@ -260,6 +270,12 @@ pub trait Handler: Attached {
     /// constraints, a `require` clause fails, or an `ensure` clause fails,
     /// and `CallError::Transport(Transport::Corrupt)` when the argument
     /// bytes fail the structure check.
+    ///
+    /// A claim presented through [`ReadError::ShortClaim`] is settled the
+    /// same way, with any outcome, although its arguments were never read:
+    /// `settle` does not distinguish a read claim from an unread one. The
+    /// settlement takes the call out of the waiting calls, so a later
+    /// `next_claim` does not present it.
     fn settle(
         &mut self,
         claim: ClaimId,
@@ -462,6 +478,25 @@ pub enum Interest {
 pub enum ReadError {
     /// The output buffer is too short. Nothing was consumed.
     Short {
+        /// The bytes the read needs.
+        needed: usize,
+    },
+    /// The output buffer is too short for the next claim's arguments
+    /// ([`Handler::next_claim`] alone). Nothing was consumed: the claim stays
+    /// the next one, and a later `next_claim` with a buffer of at least
+    /// `needed` bytes presents it under the same `claim`. The id is reported
+    /// so that a provider can settle the claim without reading its
+    /// arguments; the generated `serve` settles it
+    /// `CallError::Transport(Transport::Corrupt)`, because an argument that
+    /// does not fit the serving interface's `MAX_BUFFER_SIZE` — its largest
+    /// argument or reply payload, larger than any valid encoding of its
+    /// members — is not a well-formed encoding of one; a claim naming another
+    /// interface may be validly larger, and is settled the same, because the
+    /// serving step cannot read it (ADR-0021 decision 5, amended
+    /// 2026-09-28).
+    ShortClaim {
+        /// The claim whose arguments did not fit.
+        claim: ClaimId,
         /// The bytes the read needs.
         needed: usize,
     },

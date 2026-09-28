@@ -305,12 +305,16 @@ waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
 wait is the deadline the generated async client's future measures (story E11.21,
-ADR-0023 decision 6). This is the one way a call is presented again, and a call
-is presented once more for each holder dropped. A claim whose call the caller
-forgot is not returned: it is withdrawn, its slot is reclaimed, and no handler
-is woken for it (see "`Caller::forget` releases the caller's interest" below).
-The same `Drop` removes the handler's state from the store, its stored `Claim`
-waker with it, so no later send reaches a waker of a handler that is gone.
+ADR-0023 decision 6). This and the offered claim ("An offered claim", below) are
+the two ways a call is presented again, and a call is presented once more for
+each holder dropped. A returned claim keeps the id it was first presented under,
+because the id lives on the call's entry (driftsys/ridl#569). A dropped
+handler's offered claim is not returned, because it never left the waiting
+calls, and no handler is woken for it. A claim whose call the caller forgot is
+not returned: it is withdrawn, its slot is reclaimed, and no handler is woken
+for it (see "`Caller::forget` releases the caller's interest" below). The same
+`Drop` removes the handler's state from the store, its stored `Claim` waker with
+it, so no later send reaches a waker of a handler that is gone.
 
 **The limit, stated.** This runtime measures no bound: its clock moves only
 under `Loopback::advance`, and nothing here settles a call as `Undelivered` or
@@ -386,14 +390,45 @@ presentation recorded an outcome the caller could read as an acknowledgment.
 `Loopback::fail_next_settle` is not scoped this way: it is the runtime's, so it
 fails whichever handler settles next.
 
+**An offered claim (2026-09-28, driftsys/ridl#569).** A call whose argument
+bytes do not fit the buffer passed to `next_claim` is offered rather than taken:
+the claim id is minted, stored on the call's entry and recorded as the
+handler's, the call stays among the waiting calls, and the answer is
+`ReadError::ShortClaim { claim, needed }`
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 5,
+amended the same day). The id lives on the entry, so every later presentation of
+the call — by the same handler with a larger buffer, or by another handler that
+serves the member, which moves the claim to that handler — carries the same id,
+and a claim id names one call for the life of its slot. `settle` accepts the id
+whether or not the call was read, and takes the call out of the waiting calls,
+so no handler is presented it afterwards. A dropped handler's offered claim is
+not re-inserted, because it never left the waiting calls; its id stays on the
+entry for the next presentation. A forgotten offered call is treated as a
+claimed one, not withdrawn: `forget` marks it and leaves it among the waiting
+calls, so the provider's retry with a larger buffer still presents it under the
+same id, and its settlement by the handler that holds it, or that handler's
+drop, reclaims the slot; the table below has a row for it. Each `ClaimOwner`
+records whether its call was taken or only offered, which is what `forget`,
+`settle` and the handler's drop read. The conformance suite's
+`an_oversized_claim_is_reported_with_its_id_and_is_not_consumed`,
+`an_unread_claim_is_settled_by_its_id`,
+`the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled` and
+`forget_between_the_offer_and_the_settlement_leaves_the_settlement_valid` pin
+the port contract; this runtime's `tests/ports.rs` pins the rest:
+`a_forgotten_offered_call_is_presented_again_under_the_same_id_and_its_settlement_frees_the_slot`,
+`a_dropped_handlers_offered_claim_is_taken_once_by_another_handler_under_the_same_id`,
+`a_forgotten_offered_call_is_withdrawn_when_its_handler_drops` and
+`an_offered_call_taken_by_another_handler_moves_the_claim_to_it`.
+
 **`Caller::forget` releases the caller's interest, and withdraws only a call no
 handler has claimed.** What it does depends on where the call is:
 
-| Call at `forget`                  | What happens                                                              |
-| --------------------------------- | ------------------------------------------------------------------------- |
-| settled                           | its slot is reclaimed now                                                 |
-| claimed by a handler, not settled | marked forgotten; its settlement reclaims the slot (ADR-0021 decision 15) |
-| waiting, claimed by no handler    | withdrawn: it leaves the waiting calls, and its slot is reclaimed now     |
+| Call at `forget`                                   | What happens                                                                                                                                                                                                  |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| settled                                            | its slot is reclaimed now                                                                                                                                                                                     |
+| claimed by a handler, not settled                  | marked forgotten; its settlement reclaims the slot (ADR-0021 decision 15)                                                                                                                                     |
+| waiting, claimed by no handler                     | withdrawn: it leaves the waiting calls, and its slot is reclaimed now                                                                                                                                         |
+| waiting, offered to a handler through `ShortClaim` | marked forgotten and left among the waiting calls, so a retry still presents it under the same id; its settlement by the handler that holds it, or that handler's drop, reclaims the slot (driftsys/ridl#569) |
 
 A claimed call that the caller forgot, and whose handler is then dropped without
 settling it, is withdrawn at that drop instead of being returned to the waiting
@@ -537,10 +572,12 @@ the same reason.
 
 **The loopback deduplicates nothing.** It presents each call once because it
 delivers each call once, not because it recognises a retransmission — nothing
-retransmits in a process. The one call presented again is a claim a dropped
+retransmits in a process. Two calls are presented again: a claim a dropped
 handler held and did not settle, which returns to the waiting calls for another
-serving handler to take ("Waking", above), unless its caller forgot it: that
-claim is withdrawn at the drop and is not presented again.
+serving handler to take ("Waking", above), unless its caller forgot it — that
+claim is withdrawn at the drop and is not presented again — and a claim offered
+through `ReadError::ShortClaim`, which stays among the waiting calls under the
+same id until it is read or settled ("An offered claim", above).
 
 A sink's counters are per channel for a reason a single counter per handle would
 break: a consumer subscribed to some of a sink's events would see the numbers of
