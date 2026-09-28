@@ -110,7 +110,10 @@ impl HandlerState {
     }
 }
 
-/// A presented claim: the call it presented, and the handler holding it.
+/// A presented claim: the call it presented, and the handler holding it. The
+/// call is taken when it has left the waiting calls, and offered when it is
+/// still among them: `next_claim` offered it through `ReadError::ShortClaim`
+/// and has not yet copied its arguments (driftsys/ridl#569).
 struct ClaimOwner {
     call: Correlation,
     handler: usize,
@@ -152,6 +155,12 @@ struct CallEntry {
     /// table keeps the same mark, but has no query for it; a dropped
     /// handler's claim is withdrawn rather than returned by this one.
     forgotten: bool,
+    /// The claim id minted when the call was first presented, through
+    /// `ReadError::ShortClaim` or through `Ok(Some)`, and reused by every
+    /// later presentation of the same call, so a provider that received
+    /// `ShortClaim` reads or settles the call under the id it was given.
+    /// `None` until then.
+    claim: Option<u64>,
 }
 
 /// Everything two handles must agree on.
@@ -181,7 +190,8 @@ pub(crate) struct Store {
     /// minted by `next_claim`, to the call it presented and the handler it was
     /// presented to. A `ClaimId` is therefore never a correlation that was
     /// never presented, never one already settled, and never one another
-    /// handler holds.
+    /// handler holds. A call offered through `ReadError::ShortClaim` is here
+    /// and still among the waiting calls; a taken call is here alone.
     claims: BTreeMap<u64, ClaimOwner>,
     next_claim_id: u64,
     handlers: BTreeMap<usize, HandlerState>,
@@ -555,6 +565,7 @@ impl Store {
                 sent,
                 reply: Vec::new(),
                 forgotten: false,
+                claim: None,
             },
         );
         self.pending.push_back(c);
@@ -640,8 +651,14 @@ impl Store {
     pub(crate) fn forget(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
         if let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
             self.pending.remove(at);
-            self.withdraw(c, wake);
-            return;
+            // A call offered through `ReadError::ShortClaim` is a handler's
+            // claim although it is still waiting: it is marked forgotten
+            // below and settled by that handler, as a taken claim is, and
+            // no other handler is presented it.
+            if !self.offered(c) {
+                self.withdraw(c, wake);
+                return;
+            }
         }
         match self.table.forget(c) {
             Forgotten::Reclaimed => self.reclaimed(c, wake),
@@ -779,6 +796,11 @@ impl Store {
                 self.withdraw(owner.call, wake);
                 continue;
             }
+            // An offered call never left the waiting calls; its id stays on
+            // its entry for the next presentation.
+            if self.pending.contains(&owner.call) {
+                continue;
+            }
             let (sent, key) = (entry.sent, (entry.iface, entry.ord));
             let at = self
                 .pending
@@ -864,6 +886,15 @@ impl Store {
     /// Presents the next waiting call this handler serves: every waiting call
     /// when it has served nothing. The claim carries an identity of its own,
     /// minted here, so a `ClaimId` names a call that was actually presented.
+    ///
+    /// A call whose arguments do not fit `out` is offered rather than taken
+    /// (driftsys/ridl#569): the id is minted, the claim is recorded as this
+    /// handler's, the call stays among the waiting calls, and the answer is
+    /// `ReadError::ShortClaim`. A later `next_claim`, by this handler or by
+    /// another that serves the member, presents the same call under the same
+    /// id, because the id lives on the call's entry; a take by another handler
+    /// moves the claim to that handler. `settle` accepts the id whether or not
+    /// the call was read.
     pub(crate) fn next_claim(
         &mut self,
         handler: usize,
@@ -880,15 +911,29 @@ impl Store {
             return Ok(None);
         };
         let c = self.pending[position];
+        let claim_id = match self.calls[&Calls::slot(c)].claim {
+            Some(id) => id,
+            None => {
+                let id = self.next_claim_id;
+                self.next_claim_id += 1;
+                self.calls
+                    .get_mut(&Calls::slot(c))
+                    .expect("a waiting call has its entry")
+                    .claim = Some(id);
+                id
+            }
+        };
         let entry = &self.calls[&Calls::slot(c)];
         if out.len() < entry.args.len() {
-            return Err(ReadError::Short {
-                needed: entry.args.len(),
+            let needed = entry.args.len();
+            self.claims
+                .insert(claim_id, ClaimOwner { call: c, handler });
+            return Err(ReadError::ShortClaim {
+                claim: ClaimId(claim_id),
+                needed,
             });
         }
         out[..entry.args.len()].copy_from_slice(&entry.args);
-        let claim_id = self.next_claim_id;
-        self.next_claim_id += 1;
         let claim = Claim {
             id: ClaimId(claim_id),
             iface: entry.iface,
@@ -934,6 +979,11 @@ impl Store {
             return Err(SettleError::TooLarge { cap: 0 });
         }
         self.claims.remove(&claim.0);
+        // An offered call is still among the waiting calls: its settlement
+        // takes it out, so no handler is presented it afterwards.
+        if let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
+            self.pending.remove(at);
+        }
         match self.table.settle(c, outcome.map(|_| ())) {
             Settled::Recorded(waker) => {
                 if let Ok(bytes) = outcome {
@@ -955,6 +1005,14 @@ impl Store {
 
     pub(crate) fn fail_next_settle(&mut self) {
         self.fail_next_settle = true;
+    }
+
+    /// Whether a handler holds a claim on `c` that it has not yet taken: the
+    /// call was offered through `ReadError::ShortClaim`.
+    fn offered(&self, c: Correlation) -> bool {
+        self.calls[&Calls::slot(c)]
+            .claim
+            .is_some_and(|id| self.claims.contains_key(&id))
     }
 }
 
