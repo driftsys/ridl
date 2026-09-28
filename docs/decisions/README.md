@@ -209,14 +209,16 @@ other entry below is Accepted.
   and its `Interest` keys, `Transport::Busy` crossing the frame, the `correlate`
   module, `ClientError` and `ProviderError`, the E11.19 helpers ratified in
   place, and the one 0.x minor that carries E11.16 to E11.19; it also folds
-  decision 8, corrects decision 11, and records open questions 5 and 6. Story
-  E11.16's re-land (driftsys/ridl#551) amended decision 5 in place (a dropped
-  handler's unsettled claim is returned and presented again) and decision 13 in
-  place (one waker per kind of key; a same-task registration is a refresh).
-  Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the
-  ridl reference finalization pass (story E14.2). The two reference sentences it
-  gave that pass for #308 and #309 are in the reference since driftsys/ridl#544,
-  which aligned it with the frame specification.
+  decision 8, corrects decision 11, and records open questions 5 and 6. Its
+  2026-09-28 amendment adds `task::flag_waker` to decision 8, for a frame loop
+  that polls again when the future woke itself. Story E11.16's re-land
+  (driftsys/ridl#551) amended decision 5 in place (a dropped handler's unsettled
+  claim is returned and presented again) and decision 13 in place (one waker per
+  kind of key; a same-task registration is a refresh). Binds every consumer of
+  `ridl-rt`: the Rust codegen, the two runtimes, and the ridl reference
+  finalization pass (story E14.2). The two reference sentences it gave that pass
+  for #308 and #309 are in the reference since driftsys/ridl#544, which aligned
+  it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
@@ -250,10 +252,11 @@ other entry below is Accepted.
   per query, so a query's correlation cannot be passed to an `ack`; and its
   decision 5 has a face hold its port by value, with no lifetime parameter. The
   2026-09-28 amendment bounds one poll of `serve` to 32 claims, after which the
-  future wakes itself and is `Pending`. Binds every later story that extends the
-  Rust backend's interaction face, until superseded: E5.1, Epic 10, and any
-  later language backend that follows this precedent. The as-built face this
-  record's decisions produced is
+  future wakes itself and is `Pending`; a frame loop polls with
+  `ridl_rt::task::flag_waker` to poll again in the same frame. Binds every later
+  story that extends the Rust backend's interaction face, until superseded:
+  E5.1, Epic 10, and any later language backend that follows this precedent. The
+  as-built face this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family

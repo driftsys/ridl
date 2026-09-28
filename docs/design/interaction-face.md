@@ -459,11 +459,13 @@ on wasm, where `Instant::now()` panics, and a frame loop there polls with
 `noop_waker` or `flag_waker` instead: poll, then, under `flag_waker`, poll again
 while the flag was set, up to the loop's own limit of polls per frame, so that
 `Serve`'s self-wake at 32 claims is not lost until the next frame. A `no_std`
-frame loop writes the same small waker over its own atomic flag. Inside this
-repository the fixture is `include!`d by the backend crate's own tests, and
-`cfg(feature = "std")` is evaluated against the including crate, so
-`crates/ridl-backend-rust` declares a `std` feature of its own, on by default
-and read by nothing in the library, for that purpose alone.
+frame loop with an allocator writes the same small waker over
+`alloc::task::Wake` on an `Arc`; one without an allocator needs a hand-written
+`RawWaker`, which needs `unsafe`. Inside this repository the fixture is
+`include!`d by the backend crate's own tests, and `cfg(feature = "std")` is
+evaluated against the including crate, so `crates/ridl-backend-rust` declares a
+`std` feature of its own, on by default and read by nothing in the library, for
+that purpose alone.
 
 ## The encoding and the ports
 

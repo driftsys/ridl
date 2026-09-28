@@ -1639,9 +1639,10 @@ fn the_serve_poll_bound_counts_claims_taken_not_settlements_accepted() {
     assert_eq!(wakes, 1);
 }
 
-/// A claim for another interface is settled `Contract::UnknownInteraction`
-/// and spends the budget like any other claim taken: with 40 waiting, one
-/// poll takes 32 and wakes itself.
+/// A claim for another interface is settled and spends the budget like any
+/// other claim taken: with 40 waiting, one poll takes and settles 32 and wakes
+/// itself. That such a claim settles `Contract::UnknownInteraction` is pinned
+/// by the settlement-table tests above.
 #[test]
 fn a_claim_for_another_interface_counts_toward_the_serve_poll_bound() {
     let other = InterfaceNo(CABIN.0.wrapping_add(1000));
@@ -1653,6 +1654,7 @@ fn a_claim_for_another_interface_counts_toward_the_serve_poll_bound() {
     let (poll, wakes) = poll_counting_wakes(&mut serve);
     assert!(poll.is_pending());
     assert_eq!(counts.taken.get(), 32);
+    assert_eq!(counts.settles.get(), 32);
     assert_eq!(wakes, 1);
 }
 

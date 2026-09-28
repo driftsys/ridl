@@ -80,8 +80,9 @@ polls `Serve` once per frame with it settles at most 32 claims per frame.
 Sebastien decided, during the review of driftsys/ridl#584, that `ridl-rt` adds
 `task::flag_waker` (ADR-0021 decision 8, amended the same day), whose wake sets
 a flag the loop reads: the loop polls, then polls again while the flag was set,
-up to its own limit of polls per frame. A `no_std` frame loop writes the same
-small waker over its own atomic flag.
+up to its own limit of polls per frame. A `no_std` frame loop with an allocator
+writes the same small waker over `alloc::task::Wake` on an `Arc`; one without an
+allocator needs a hand-written `RawWaker`, which needs `unsafe`.
 
 ## Context
 

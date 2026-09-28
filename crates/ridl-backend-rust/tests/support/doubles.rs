@@ -373,8 +373,7 @@ impl QueuedClaims {
         }
     }
 
-    /// The counts, for the test to read and change while `serve` holds the
-    /// handler.
+    /// The counts, for the test to read while `serve` holds the handler.
     pub fn counts(&self) -> Rc<ClaimCounts> {
         Rc::clone(&self.counts)
     }

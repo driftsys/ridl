@@ -394,7 +394,9 @@ claims per frame. The pattern with `flag_waker` is: poll, then poll again while
 that arrived between frames leaves the flag set and costs one extra poll. It
 adds no dependency and no `unsafe`, and is additive under ADR-0021 decision 10.
 A `no_std` frame loop, where the module does not exist, writes the same small
-waker over its own atomic flag. ADR-0021 decision 8 carries the dated note.
+waker over `alloc::task::Wake` on an `Arc` when it has an allocator; one without
+an allocator needs a hand-written `RawWaker`, which needs `unsafe`. ADR-0021
+decision 8 carries the dated note.
 
 **Stage K5 added one helper and corrected one sentence.**
 `Builder::push_offset_vector` writes a vector of `uoffset_t`s naming objects

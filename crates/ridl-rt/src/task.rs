@@ -32,7 +32,9 @@
 //! `Instant::now()` panics there, and a park does not block the thread. A
 //! frame loop on wasm polls with [`noop_waker`] or [`flag_waker`] and never
 //! calls [`block_on`]. A `no_std` frame loop, where this module does not
-//! exist, writes the same small waker over its own atomic flag.
+//! exist, writes the same small waker over `alloc::task::Wake` on an `Arc`
+//! when it has an allocator; one without an allocator needs a hand-written
+//! `RawWaker`, which needs `unsafe`, as the paragraph above explains.
 //!
 //! Nothing here names a port, an interface or a generated type; the module
 //! knows only `core::future::Future`.
