@@ -662,25 +662,35 @@ fn assert_underlines(block: &str, declaration: &str, location: &str, stderr: &st
     );
 }
 
-/// A field or arm added above the existing ones shifts their ordinals, a wire
-/// break under typl §7.4. `ridl diff` reports the addition alone, as
+/// A field or arm added above an existing one shifts the ordinals after it,
+/// a wire break under typl §7.4. `ridl diff` reports the addition alone, as
 /// `decl_added`, and classifies it breaking; the desk check reads that
 /// verdict and warns once, for the added member, without moving the exit
-/// code.
+/// code. The third case inserts between two members, so the ordinal the
+/// message states is the inserted member's own and not the body's first.
 #[test]
 fn check_flags_a_struct_field_or_union_arm_insertion_as_the_gate_does() {
-    for (label, container, edit, location) in [
+    for (label, container, edit, ordinal, location) in [
         (
             "struct-insert",
             "Report",
             "struct Report {\n",
+            1,
             "cluster.ridl:5:3",
         ),
         (
             "union-insert",
             "Reading",
             "union Reading {\n",
+            1,
             "cluster.ridl:9:3",
+        ),
+        (
+            "struct-insert-middle",
+            "Report",
+            "struct Report {\n  door: DoorState\n",
+            2,
+            "cluster.ridl:6:3",
         ),
     ] {
         let dir = TempDir::new(label);
@@ -713,7 +723,7 @@ fn check_flags_a_struct_field_or_union_arm_insertion_as_the_gate_does() {
         let block = ridl_407_block(&stderr, "hinge");
         assert!(
             block.starts_with(&format!(
-                "warning[RIDL-407]: `hinge` takes ordinal 1 in `{container}`"
+                "warning[RIDL-407]: `hinge` takes ordinal {ordinal} in `{container}`"
             )),
             "{label}: the message names the member, its ordinal and the body:\n{stderr}",
         );
