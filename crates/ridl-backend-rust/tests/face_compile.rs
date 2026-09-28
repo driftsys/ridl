@@ -108,59 +108,40 @@ interface Names {
     );
 }
 
-/// Emits and checks a face whose one command and one query both take a
-/// parameter named `param`. The generated `dispatch` binds a claim's decoded
-/// argument next to its own parameters (`h`, `p`, `buf`) and locals (`claim`,
-/// `accepted`, `reply`). Before issue #570 it bound the argument under the
-/// ridl parameter's own name, so a parameter named like one of those failed
+/// The generated `dispatch` binds a claim's decoded argument next to its own
+/// parameters and locals. Before issue #570 it bound the argument under the
+/// ridl parameter's own name, so a parameter named like one of them failed
 /// to compile; it now binds the argument as `__arg`, which no ridl identifier
-/// can be.
-fn dispatch_parameter_compiles(param: &str) {
+/// can be. These six are the names that collided: the parameters `h`, `p`
+/// and `buf`, and the locals `claim`, `accepted` and `reply`. Each name is a
+/// parameter of one command and of one query, and the member names say which
+/// arm and which parameter, so a failing compile names both. One face holds
+/// every case, because each `face_compiles` call builds ridl-rt twice.
+#[test]
+fn a_call_parameter_named_like_a_dispatch_local_compiles() {
+    let members: String = ["claim", "h", "accepted", "buf", "p", "reply"]
+        .iter()
+        .map(|param| {
+            let suffix = format!("{}{}", param[..1].to_uppercase(), &param[1..]);
+            format!(
+                "  command set{suffix}({param}: Level) @[..50ms]\n  \
+                 query read{suffix}({param}: Window): Average @[..50ms]\n"
+            )
+        })
+        .collect();
     face_compiles(
-        &format!("dispatch_{param}"),
+        "dispatch_locals",
         &format!(
             r#"
-package face.dispatch{param}
+package face.dispatchlocals
 
 type Level : integer [0..100]
 type Window : integer [0..100000]
 type Average : integer [0..1000]
 
 interface Dispatch {{
-  command setLevel({param}: Level) @[..50ms]
-  query average({param}: Window): Average @[..50ms]
-}}
+{members}}}
 "#
         ),
     );
-}
-
-#[test]
-fn a_call_parameter_named_claim_compiles_in_dispatch() {
-    dispatch_parameter_compiles("claim");
-}
-
-#[test]
-fn a_call_parameter_named_h_compiles_in_dispatch() {
-    dispatch_parameter_compiles("h");
-}
-
-#[test]
-fn a_call_parameter_named_accepted_compiles_in_dispatch() {
-    dispatch_parameter_compiles("accepted");
-}
-
-#[test]
-fn a_call_parameter_named_buf_compiles_in_dispatch() {
-    dispatch_parameter_compiles("buf");
-}
-
-#[test]
-fn a_call_parameter_named_p_compiles_in_dispatch() {
-    dispatch_parameter_compiles("p");
-}
-
-#[test]
-fn a_call_parameter_named_reply_compiles_in_dispatch() {
-    dispatch_parameter_compiles("reply");
 }

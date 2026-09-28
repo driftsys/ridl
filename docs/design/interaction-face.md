@@ -236,16 +236,18 @@ send names its port parameter `__port`; the blocking methods' locals are
 function `__deadline_after`, because a parameter is bound under its own snake
 case in the method body and would shadow a function of that name. A ridl
 identifier cannot start with an underscore, so no parameter can be shadowed by,
-or shadow, a local or a function the emitter owns; `tests/face_compile.rs`
-compiles an interface whose members are named `port`, `deadline`,
-`deadlineAfter`, `this` and `cx`, and, for `dispatch`, a command and a query
-whose parameter is named `claim`, `h`, `p`, `buf`, `accepted` or `reply`, the
-names of `dispatch`'s own parameters and locals. A member whose snake case is a
-fixed method name of the face collides the same way, and is not refused: `new`
-and `next_event` on both clients, `with_timeout` and `set_timeout` on the
-blocking one, `new` and `commit` on `Publisher`, and the derived names
-`subscribe_<event>` and `invalidate_<signal>` against a member spelled that way;
-the blocking client's two are recorded on driftsys/ridl#580 with the rest.
+or shadow, a local or a function the emitter owns. `dispatch`'s own parameters
+and locals keep unprefixed names, and are safe because no ridl name appears in
+its body. `tests/face_compile.rs` compiles an interface whose members are named
+`port`, `deadline`, `deadlineAfter`, `this` and `cx`, and, for `dispatch`,
+commands and queries whose parameter is named `claim`, `h`, `p`, `buf`,
+`accepted` or `reply`, the names in `dispatch`'s body that collided before
+driftsys/ridl#570. A member whose snake case is a fixed method name of the face
+collides the same way, and is not refused: `new` and `next_event` on both
+clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
+`commit` on `Publisher`, and the derived names `subscribe_<event>` and
+`invalidate_<signal>` against a member spelled that way; the blocking client's
+two are recorded on driftsys/ridl#580 with the rest.
 
 **Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no
 thread, socket or timer, and no port waits; a face may return a future, and that
@@ -710,8 +712,9 @@ step for a consumer of generated code. The second (2026-09-28) emitted the
 `blocking` module, made the emitted manifest's `std` feature forward to
 `ridl-rt/std`, added the blocking round trips to the consumer, rewrote this
 record from the design note, and archived the note, the plan and the lane
-driver. The sections above describe the face as both left it; nothing in them
-describes a face the fixture does not hold.
+driver. The sections above describe the face as both left it, with the later
+fixes that cite their own issues; nothing in them describes a face the fixture
+does not hold.
 
 ## What is provisional
 
