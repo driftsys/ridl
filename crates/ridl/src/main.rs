@@ -1446,12 +1446,14 @@ enum MemberDrift {
         tombstone: Option<u32>,
         shifted: Vec<String>,
     },
-    /// A member the baseline declares that the body retires with `reserved`
-    /// under its name at its ordinal. `ridl diff` still reports it as a
+    /// A member the baseline declares whose ordinal a `reserved` entry now
+    /// holds. `name_kept` says the entry carries the member's name; a bare
+    /// `reserved N`, or an entry under another name, holds the slot but
+    /// leaves the name free to redeclare. `ridl diff` still reports it as a
     /// breaking removal: its composite comparison matches by name and does
     /// not read the `reserved` list (the limit `diff_composite` records), and
     /// the desk repeats the gate rather than disagree with it.
-    Retired,
+    Retired { name_kept: bool },
     /// A surviving member whose ordinal changed while it kept its place
     /// among the live members: a `reserved` entry above it was added, moved
     /// or removed. Decided per member, so a swap and a tombstone in one
@@ -1625,22 +1627,32 @@ fn member_drift(
             let before = composite_body(baseline, package, container)?;
             let ordinal = before.ordinal_of(member)?;
             let after = composite_body(current, package, container);
-            let tombstone = after.as_ref().and_then(|after| {
+            let holder = after.as_ref().and_then(|after| {
                 after
                     .reserved
                     .iter()
-                    .find(|(name, _)| name.as_deref() == Some(member))
-                    .map(|(_, held)| *held)
+                    .find(|(_, held)| *held == ordinal)
+                    .map(|(name, _)| name.clone())
             });
-            Some(if tombstone == Some(ordinal) {
-                MemberDrift::Retired
-            } else {
-                MemberDrift::Removed {
-                    ordinal,
-                    tombstone,
-                    shifted: after
-                        .map(|after| after.moved_since(&before))
-                        .unwrap_or_default(),
+            Some(match holder {
+                Some(name) => MemberDrift::Retired {
+                    name_kept: name.as_deref() == Some(member),
+                },
+                None => {
+                    let tombstone = after.as_ref().and_then(|after| {
+                        after
+                            .reserved
+                            .iter()
+                            .find(|(name, _)| name.as_deref() == Some(member))
+                            .map(|(_, held)| *held)
+                    });
+                    MemberDrift::Removed {
+                        ordinal,
+                        tombstone,
+                        shifted: after
+                            .map(|after| after.moved_since(&before))
+                            .unwrap_or_default(),
+                    }
                 }
             })
         }
@@ -1766,11 +1778,19 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
                  which holds the slot for ever",
             )
         }
-        MemberDrift::Retired => format!(
+        MemberDrift::Retired { name_kept: true } => format!(
             "`{name}` is retired{in_shape} with `reserved`, which keeps its ordinal \
              (typl §7.4), and `ridl diff` still reports the retirement as breaking: it \
              matches a struct field or union arm by name and does not yet read the body's \
              `reserved` entries, so it gates a tombstoned removal like a bare one. This \
+             warning repeats the gate rather than disagree with it",
+        ),
+        MemberDrift::Retired { name_kept: false } => format!(
+            "`{name}` is gone{in_shape}, and a `reserved` entry holds its ordinal without its \
+             name: the slot is kept (typl §7.4), but the name is not retired and could be \
+             redeclared with a new meaning — write `reserved {name}` instead. `ridl diff` \
+             still reports the removal as breaking, because it matches a struct field or \
+             union arm by name and does not yet read the body's `reserved` entries; this \
              warning repeats the gate rather than disagree with it",
         ),
         MemberDrift::Shifted => format!(

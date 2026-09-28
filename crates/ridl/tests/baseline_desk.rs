@@ -1242,9 +1242,8 @@ fn check_explains_an_append_the_gate_reports_as_breaking() {
 
 /// A removal is told from a retirement by the tombstone's ordinal, not its
 /// name alone: `reserved door` at another ordinal does not hold `door`'s
-/// slot, and a `reserved` entry under another name holds nothing for the
-/// removed member. The message names the member that slid into the freed
-/// ordinal, or says none did when the last member went.
+/// slot. The message names the member that slid into the freed ordinal, or
+/// says none did when the last member went.
 #[test]
 fn check_tells_a_misplaced_tombstone_and_a_last_member_from_a_retirement() {
     for (label, body, member, opening, consequence, declaration, location) in [
@@ -1261,15 +1260,6 @@ fn check_tells_a_misplaced_tombstone_and_a_last_member_from_a_retirement() {
         (
             "last-member",
             "struct Report {\n  door: DoorState\n}",
-            "latch",
-            "`latch` is gone in `Report` but the published baseline declares it at ordinal 2.",
-            "which a later member could take",
-            "Report",
-            "cluster.ridl:4:8",
-        ),
-        (
-            "tombstone-for-another-name",
-            "struct Report {\n  door: DoorState\n  reserved other\n}",
             "latch",
             "`latch` is gone in `Report` but the published baseline declares it at ordinal 2.",
             "which a later member could take",
@@ -1418,6 +1408,72 @@ fn check_repeats_the_gate_on_an_arm_added_to_a_result_union() {
         &stderr,
     );
     assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// A `reserved` entry at the removed member's ordinal without its name — a
+/// bare `reserved 2`, or an entry under another name — keeps the slot but
+/// not the name (typl §7.4). The desk check says so, asks for the member's
+/// own name, and points at the container, since no entry carries the name
+/// the index would find.
+#[test]
+fn check_tells_a_tombstone_that_keeps_the_slot_but_not_the_name() {
+    for (label, body) in [
+        (
+            "bare-tombstone",
+            "struct Report {\n  door: DoorState\n  reserved 2\n}",
+        ),
+        (
+            "tombstone-for-another-name",
+            "struct Report {\n  door: DoorState\n  reserved other\n}",
+        ),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replace(
+                "struct Report {\n  door: DoorState\n  latch: LatchState\n}",
+                body,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(
+            code, 1,
+            "{label}: `ridl diff` gates on the removal:\n{diff}"
+        );
+        assert!(
+            diff.contains("[breaking] decl_removed veh.cluster/Report/latch"),
+            "{label}: the diff reports the removal as breaking:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(
+            stderr.matches("warning[RIDL-407]").count(),
+            1,
+            "{label}: one warning, for the removed member:\n{stderr}",
+        );
+        let block = ridl_407_block(&stderr, "latch");
+        assert!(
+            block.starts_with(
+                "warning[RIDL-407]: `latch` is gone in `Report`, and a `reserved` entry holds \
+                 its ordinal without its name"
+            ) && block.contains("write `reserved latch` instead")
+                && block.contains("repeats the gate"),
+            "{label}: the message says the slot is kept and the name is not:\n{stderr}",
+        );
+        assert!(
+            !block.contains("could take") && !block.contains("is retired"),
+            "{label}: the slot is neither free nor retired under the name:\n{stderr}",
+        );
+        assert_underlines(block, "Report", "cluster.ridl:4:8", &stderr);
+        assert_eq!(
+            code, 0,
+            "{label}: the warning leaves the exit code alone:\n{stderr}",
+        );
+    }
 }
 
 /// An enum value or enum-set bit takes its identity from its explicit number,
