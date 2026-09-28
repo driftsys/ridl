@@ -245,7 +245,7 @@ fixed method name of the face collides the same way, and is not refused: `new`
 and `next_event` on both clients, `with_timeout` and `set_timeout` on the
 blocking one, `new` and `commit` on `Publisher`, and the derived names
 `subscribe_<event>` and `invalidate_<signal>` against a member spelled that way;
-the blocking client's two are recorded on driftsys/ridl#570 with the rest.
+the blocking client's two are recorded on driftsys/ridl#580 with the rest.
 
 **Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no
 thread, socket or timer, and no port waits; a face may return a future, and that
