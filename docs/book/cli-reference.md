@@ -256,11 +256,12 @@ follows the verdict the gate reads, so the two agree: a member inserted, one
 removed, one moved in an edit that added or removed no member, and one
 appended beside such a change each draw one warning, and an append alone
 draws none, except an arm added to a result union, whose arms are its
-transport identity (ADR-0008 decision 4). A removal draws one whether or not a `reserved` tombstone keeps
-the slot, because the diff does not yet read a composite body's `reserved`
-entries. The diff reports no reorder beside an addition or a removal, so the
-warning for the added or removed member names the siblings whose ordinal
-changed. Reordering two events in a published interface:
+transport identity (ADR-0008 decision 4). A removal draws one whether or not
+a `reserved` tombstone keeps the slot, because the diff does not yet read a
+composite body's `reserved` entries. The diff reports no reorder beside an
+addition or a removal, so the warning for the added or removed member names
+the siblings whose ordinal changed. Reordering two events in a published
+interface:
 
 ```sh
 ridl check
