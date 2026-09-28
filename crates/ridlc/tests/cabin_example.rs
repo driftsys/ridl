@@ -179,17 +179,21 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
         "the consumer must complete every round trip, it said:\n{stdout}{}",
         String::from_utf8_lossy(&run.stderr)
     );
+    // Whole lines, with the value each round trip carried, as `just demo`
+    // matches them: a substring match on "command ok" would be satisfied by
+    // the blocking round trip's "blocking command ok" line, and the async
+    // round trip would then be proven by nothing.
     for round_trip in [
-        "signal ok",
-        "event ok",
-        "command ok",
-        "query ok",
-        "blocking command ok",
-        "blocking query ok",
+        "signal ok 21",
+        "event ok 5",
+        "command ok 42",
+        "query ok 7",
+        "blocking command ok 42",
+        "blocking query ok 7",
     ] {
         assert!(
-            stdout.contains(round_trip),
-            "the consumer must report `{round_trip}`, it said:\n{stdout}"
+            stdout.lines().any(|line| line == round_trip),
+            "the consumer must report the line `{round_trip}`, it said:\n{stdout}"
         );
     }
 }

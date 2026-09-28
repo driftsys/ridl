@@ -4,11 +4,22 @@
 //! documentation of the parent module, `face.rs`.
 //!
 //! Every waiting method here — a command, a query, `next_event` and `serve` —
-//! is `ridl_rt::task::block_on` over the async face's future, pinned locally,
-//! so the two clients cannot diverge: the future is the one source of a call's
-//! behaviour, and this module adds the thread's wait and one timeout per
-//! client. A signal read and a `subscribe_*` never wait, and delegate to the
-//! async client unchanged. The module is emitted only when the
+//! is `ridl_rt::task::block_on` over the async face's future, polled through
+//! `&mut` because every face future is `Unpin`, so the two clients cannot
+//! diverge: the future is the one source of a call's behaviour, and this
+//! module adds the thread's wait and one timeout per client. A signal read
+//! and a `subscribe_*` never wait, and delegate to the async client
+//! unchanged. `serve` is emitted only when the interface declares a command
+//! or a query; an event-only interface gets the client alone.
+//!
+//! What the timeout does and does not bound: the member's `max` is measured
+//! by the future on the port's clock, and the future reads that clock only
+//! when it is polled, which under `block_on` is when the port wakes it. A
+//! runtime that measures the bound and wakes the waiter when it passes ends
+//! the call at `max`; `ridl-loopback` measures no bound and wakes nobody
+//! when its clock is advanced, so over it a call whose provider never serves
+//! returns only at the client's timeout (the async face design, F-3 "The
+//! limit, stated" and F-11). The emitted rustdoc says so in the same words. The module is emitted only when the
 //! interface declares something that waits — an event, a command or a query;
 //! a signal-only interface's `Client` never blocks, so it gets no `blocking`
 //! module.
@@ -43,18 +54,20 @@ pub(super) fn blocking(
         return None;
     }
     let bounds = client_bounds(signals, events, commands, queries);
-    let mut items = vec![client(
-        iface_name, &bounds, signals, events, commands, queries,
-    )];
+    let mut items = vec![
+        deadline_after(),
+        client(iface_name, &bounds, signals, events, commands, queries),
+    ];
     if has_calls {
         items.push(serve(iface_name));
     }
 
     let doc = format!(
         "The blocking face of interface `{iface_name}`, under the crate's `std` \
-         feature: `Client` and `serve` as `ridl_rt::task::block_on` over the \
-         async face's futures, each bounded by a timeout. What a call does is \
-         the future's; this module adds the thread's wait and the timeout."
+         feature: `Client`, and `serve` when the interface declares a command \
+         or a query, as `ridl_rt::task::block_on` over the async face's \
+         futures, each bounded by a timeout. What a call does is the future's; \
+         this module adds the thread's wait and the timeout."
     );
     Some(quote! {
         #[doc = #doc]
@@ -63,6 +76,23 @@ pub(super) fn blocking(
             #(#items)*
         }
     })
+}
+
+/// The one place a timeout becomes a `block_on` deadline. `checked_add`
+/// rather than `+`: `Instant + Duration` panics when the sum cannot be
+/// represented, and the call future's own deadline saturates for the same
+/// reason; a timeout that large is a wait with no bound.
+fn deadline_after() -> TokenStream {
+    quote! {
+        /// The instant `timeout` ends for a wait that starts now. `None`
+        /// with no timeout, and with a timeout so large that the instant
+        /// cannot be represented, which is then a wait with no bound.
+        fn deadline_after(
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::option::Option<::std::time::Instant> {
+            timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
+        }
+    }
 }
 
 fn client(
@@ -127,7 +157,7 @@ fn client(
                 ::core::option::Option<super::Event>,
                 ::ridl_rt::port::ReadError,
             > {
-                let __deadline = self.timeout.map(|timeout| ::std::time::Instant::now() + timeout);
+                let __deadline = deadline_after(self.timeout);
                 let mut __next = self.inner.next_event();
                 match ::ridl_rt::task::block_on(&mut __next, __deadline) {
                     Some(Ok(event)) => Ok(Some(event)),
@@ -155,11 +185,14 @@ fn client(
         "The blocking consumer face of interface `{iface_name}`: the async \
          `Client` with a timeout, over the same ports. Every call is \
          `ridl_rt::task::block_on` over the async call's future, so a call \
-         parks the calling thread until its outcome, the member's bound on \
-         the port's clock, or this client's timeout, whichever comes first. \
-         The timeout is `None` until `with_timeout` or `set_timeout` sets it: \
-         a member with a `max` is then bounded by the future alone, and one \
-         with none waits without a bound."
+         parks the calling thread until its outcome or this client's timeout. \
+         The member's `max` is measured by the future on the port's clock, and \
+         read only when the port wakes the call: a runtime that measures the \
+         bound and wakes the waiter when it passes ends the call at `max`; one \
+         that does not, `ridl-loopback` among them, leaves an unserved call \
+         waiting until this client's timeout. The timeout is `None` until \
+         `with_timeout` or `set_timeout` sets it, and with none a call returns \
+         only with its outcome, or at `max` on a runtime that wakes at it."
     );
     quote! {
         #[doc = #doc]
@@ -180,8 +213,9 @@ fn client(
 
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a
-            /// member's `max` is accepted: the earlier of the two ends the
-            /// call.
+            /// member's `max` is accepted, and ends the call first; a longer
+            /// one ends an unserved call at `max` only on a runtime that
+            /// wakes the call when its bound passes.
             pub fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
                 self.timeout = Some(timeout);
                 self
@@ -207,9 +241,10 @@ fn client(
 ///
 /// The parameter keeps the ridl name, as `Client`'s does, and the locals are
 /// `__deadline` and `__call`, which no ridl identifier can be. The deadline
-/// is computed inline rather than by a helper method, because a method of
-/// `blocking::Client` with a name of the emitter's own would collide with a
-/// member of that name: `face_compile.rs` declares a command `deadline`.
+/// comes from the module-level `deadline_after` rather than from a method of
+/// `blocking::Client`, because a method with a name of the emitter's own
+/// would collide with a member of that name: `face_compile.rs` declares a
+/// command `deadline`, and a member never becomes a module-level function.
 fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
@@ -231,7 +266,7 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
             &mut self,
             #arg: #path,
         ) -> ::core::result::Result<#output, ::ridl_rt::error::ClientError> {
-            let __deadline = self.timeout.map(|timeout| ::std::time::Instant::now() + timeout);
+            let __deadline = deadline_after(self.timeout);
             let mut __call = self.inner.#method(#arg);
             match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                 Some(outcome) => outcome,
@@ -269,7 +304,7 @@ fn serve(iface_name: &str) -> TokenStream {
             H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
             P: super::Provider,
         {
-            let __deadline = timeout.map(|timeout| ::std::time::Instant::now() + timeout);
+            let __deadline = deadline_after(timeout);
             let mut __serve = super::serve(h, p);
             match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
                 Some(Ok(never)) => match never {},

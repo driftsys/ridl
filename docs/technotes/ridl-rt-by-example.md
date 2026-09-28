@@ -564,8 +564,12 @@ client, and `set_timeout` changes it afterward. At the timeout, a call that was
 never sent because no slot was free is `ClientError::Send(SendError::Busy)`, and
 a call that was sent answers as the future would at its own deadline:
 `Transport::Undelivered` for a command, `Transport::Timeout` for a query. A
-timeout shorter than a member's `max` is accepted — the earlier bound ends the
-call.
+timeout shorter than a member's `max` is accepted and ends the call first. A
+longer one, or none, leaves `max` to the future, which reads the port's clock
+only when the port wakes it: a runtime that measures the bound and wakes the
+call when it passes ends the call at `max`, and `ridl-loopback`, which measures
+no bound, does not — over it an unserved call returns only at the client's
+timeout.
 
 ## Step 6 — the provider side, and `serve`
 

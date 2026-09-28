@@ -523,8 +523,9 @@ interaction face. Each interface gets the parts its own interactions need: a
 future settles the claims waiting on a port, when it carries a command or a
 query; and, when it carries an event, a command or a query, a `blocking`
 module under the crate's `std` feature, on by default, holding the same
-`Client` and `serve` as blocking calls with a timeout, each one
-`ridl_rt::task::block_on` over the async form. So a signal-only interface gets
+`Client`, and the same `serve` when there is one, as blocking calls with a
+timeout, each waiting call `ridl_rt::task::block_on` over the async form. So a
+signal-only interface gets
 a `Client` and a `Publisher` and nothing to settle with and nothing to block
 on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
 `blocking` module and no `Publisher`, and an interface carrying only `fixed`
@@ -548,7 +549,8 @@ runtime and opens no socket, so an application supplies the ports. The one
 runtime in this workspace is `ridl-loopback`, which runs in process.
 `examples/cabin/` is a worked example — a schema, and a consumer program
 against the crate built from it — and `just demo` generates that crate and runs
-the program, which prints one round trip per interaction kind.
+the program, which prints one round trip per interaction kind through the
+async client and the command and the query again through the blocking one.
 
 There is **no flag for the payload encoding**. A package emits the FlatBuffers
 codec, which is the only one built; the emitted `pub type Wire` names it in one

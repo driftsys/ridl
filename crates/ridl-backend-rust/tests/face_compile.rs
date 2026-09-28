@@ -12,8 +12,13 @@ use ridl_backend_rust::generate_face;
 
 /// Emits the face of `source` and checks it as a library crate
 /// (`--emit=metadata -D warnings`), panicking with rustc's diagnostics when it
-/// does not compile. The `std` cfg is on, so the `blocking` module the face
-/// emits under it is part of what is checked.
+/// does not compile. It is checked twice: with the `std` cfg on, against a
+/// `ridl-rt` built with `std`, so the `blocking` module is part of what is
+/// checked; and with the cfg off, against a `ridl-rt` built without `std`,
+/// so an item the emitter leaves outside `cfg(feature = "std")` — the
+/// `blocking` module, which names `ridl_rt::task::block_on`, or the call
+/// future's `sent()`, which only that module calls and which is dead code
+/// without it — fails the build.
 fn face_compiles(name: &str, source: &str) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
@@ -34,9 +39,14 @@ fn face_compiles(name: &str, source: &str) {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join(format!("{name}.rs"));
     std::fs::write(&source_path, &face).expect("the generated source is written");
-    let ridl_rt = rustc::ridl_rt_rlib(dir.path());
-    let compiled = std::process::Command::new("rustc")
-        .args([
+    for std in [true, false] {
+        let ridl_rt = if std {
+            rustc::ridl_rt_rlib(dir.path())
+        } else {
+            rustc::ridl_rt_rlib_without_std(dir.path())
+        };
+        let mut command = std::process::Command::new("rustc");
+        command.args([
             "--edition",
             "2024",
             "--crate-type",
@@ -44,21 +54,25 @@ fn face_compiles(name: &str, source: &str) {
             "--emit=metadata",
             "-D",
             "warnings",
-        ])
-        .arg("--cfg")
-        .arg(r#"feature="std""#)
-        .arg("-o")
-        .arg(dir.path().join(format!("lib{name}.rmeta")))
-        .arg("--extern")
-        .arg(format!("ridl_rt={}", ridl_rt.display()))
-        .arg(&source_path)
-        .output()
-        .expect("rustc must be installed and runnable for this test to be meaningful");
-    assert!(
-        compiled.status.success(),
-        "the emitted face must compile, rustc said:\n{}\nsource:\n{face}",
-        String::from_utf8_lossy(&compiled.stderr)
-    );
+        ]);
+        if std {
+            command.arg("--cfg").arg(r#"feature="std""#);
+        }
+        let compiled = command
+            .arg("-o")
+            .arg(dir.path().join(format!("lib{name}_std_{std}.rmeta")))
+            .arg("--extern")
+            .arg(format!("ridl_rt={}", ridl_rt.display()))
+            .arg(&source_path)
+            .output()
+            .expect("rustc must be installed and runnable for this test to be meaningful");
+        assert!(
+            compiled.status.success(),
+            "the emitted face must compile with the std cfg {}, rustc said:\n{}\nsource:\n{face}",
+            if std { "on" } else { "off" },
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
 }
 
 /// A ridl member or parameter may carry a name the emitter uses for a local

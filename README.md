@@ -130,12 +130,12 @@ docs/
 `ridl build --emit rust`, then builds and runs
 [`examples/cabin/consumer`](examples/cabin/consumer), a small program that links
 the crate that came out. It prints one line per round trip — a signal, an event,
-a command and a query through the generated async `Client`, then the command and
-the query again through the generated `blocking::Client` — each travelling
-through the generated `Client`, `Publisher`, `Provider` and `serve` over the
-in-process `ridl-loopback` runtime. The consumer names the generated face and
-the runtime and nothing of the compiler that produced them, so it shows what a
-RIDL interface becomes for the application that uses one.
+a command and a query through the generated async `Client`, `Publisher`,
+`Provider` and `serve`, then the command and the query again through the
+generated `blocking::Client` and `blocking::serve` — over the in-process
+`ridl-loopback` runtime. The consumer names the generated face and the runtime
+and nothing of the compiler that produced them, so it shows what a RIDL
+interface becomes for the application that uses one.
 
 ## Development
 

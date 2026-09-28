@@ -24,10 +24,11 @@
 //! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
 //! The consumer side is the generated client, in both of its forms (story
-//! E11.21). Round trips 3 and 4 use the async `Client`: a command, a query
-//! and `next_event` return a named future, polled here by hand with
-//! `ridl_rt::task::noop_waker`, the way a frame loop polls, and the provider
-//! side is the generated `serve`, polled once per step. No executor is
+//! E11.21). Round trips 1 to 4 use the async `Client`: the signal read of
+//! round trip 1 returns at once, and `next_event` (round trip 2), the command
+//! (3) and the query (4) return a named future, polled here by hand with
+//! `ridl_rt::task::noop_waker`, the way a frame loop polls; the provider
+//! side of 3 and 4 is the generated `serve`, polled once per step. No executor is
 //! involved: each round trip is a fixed sequence of polls, and the result of
 //! each poll is asserted, so a future that resolved on the wrong poll fails
 //! the proof the way a wrong value does. Round trips 5 and 6 make the same
@@ -89,6 +90,18 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Each pass of the serving loop returns after this long with nothing
 /// served, so the loop reads its `done` flag between passes.
 const SERVE_PASS: Duration = Duration::from_millis(50);
+
+/// Sets `done` when it is dropped, so the serving loop ends when the round
+/// trip on the other thread panics before it sets the flag itself; without
+/// it `thread::scope` would wait on a loop that never ends, and the panic
+/// would never be reported.
+struct DoneOnDrop<'a>(&'a AtomicBool);
+
+impl Drop for DoneOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
 
 /// Serves `provider` over `handler` on the calling thread until `done` is
 /// set: `blocking::serve` returns `Ok(())` at each pass's timeout, and the
@@ -202,6 +215,7 @@ fn main() {
     let done = AtomicBool::new(false);
     let served = std::thread::scope(|scope| {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
+        let _ends_the_loop = DoneOnDrop(&done);
         let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
         let acknowledged = client.set_level(api::Level::new_unchecked(42));
         done.store(true, Ordering::Release);
@@ -222,6 +236,7 @@ fn main() {
     let done = AtomicBool::new(false);
     let (reply, served) = std::thread::scope(|scope| {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
+        let _ends_the_loop = DoneOnDrop(&done);
         let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
         let reply = client.average(api::Window::new_unchecked(10));
         done.store(true, Ordering::Release);

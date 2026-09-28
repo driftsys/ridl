@@ -29,8 +29,9 @@
 //! - `blocking`, under the emitted crate's `std` feature, when the interface
 //!   declares an event, a command or a query: a `Client` that is the async
 //!   one with a timeout per client, each waiting method `block_on` over the
-//!   async method's future, and a `serve` that is `block_on` over `serve`
-//!   and returns `Ok(())` at its timeout;
+//!   async method's future, and, when the interface declares a command or a
+//!   query, a `serve` that is `block_on` over `serve` and returns `Ok(())`
+//!   at its timeout;
 //! - the internal poll face those futures are built over, `pub(crate)`: one
 //!   `Copy` correlation newtype per command and per query,
 //!   `<Name>Correlation`; `send_<name>`, `poll_<name>_ack`,

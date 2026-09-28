@@ -631,6 +631,54 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
     );
 }
 
+/// The `blocking` module of the async face design's notes F-10 and F-11:
+/// under the crate's `std` feature, for an interface that declares an event,
+/// a command or a query; its `Client` repeats the async client's bounds; its
+/// `serve` exists only with a command or a query.
+#[test]
+fn the_blocking_module_follows_the_interface() {
+    let source = face();
+    let bounds = "::ridl_rt::port::SignalReader+::ridl_rt::port::EventSource\
+                  +::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable";
+
+    let cabin = dense(&module(&source, "cabin"));
+    assert!(
+        cabin.contains(r#"#[cfg(feature="std")]pubmodblocking{"#),
+        "cabin's blocking module is under the std feature",
+    );
+    // The blocking module is the last item of the interface's module, so
+    // the text from its header to the end of the module is its own.
+    let blocking = &cabin[at(&cabin, "pubmodblocking{")..];
+    assert!(
+        blocking.contains(&format!(
+            "pubstructClient<P:{bounds},>{{inner:super::Client<P>,\
+             timeout:::core::option::Option<::std::time::Duration>,}}"
+        )),
+        "the blocking client repeats the async client's bounds and holds it with the timeout",
+    );
+    assert!(
+        blocking.contains("pubfnserve<H,P>(h:H,p:&mutP,timeout:"),
+        "cabin declares calls, so its blocking module has a serve",
+    );
+
+    let siren = dense(&module(&source, "siren"));
+    let blocking = &siren[at(&siren, "pubmodblocking{")..];
+    assert!(
+        blocking.contains("pubfnnext_event(&mutself,)"),
+        "an event-only interface has a blocking client",
+    );
+    assert!(
+        !blocking.contains("pubfnserve"),
+        "and no blocking serve, because it declares no call",
+    );
+
+    let horn = dense(&module(&source, "horn"));
+    assert!(
+        !horn.contains("pubmodblocking"),
+        "a signal-only interface has no blocking module: nothing in its client waits",
+    );
+}
+
 #[test]
 fn the_publisher_writes_signals_and_raises_events() {
     let d = dense(&module(&face(), "cabin"));

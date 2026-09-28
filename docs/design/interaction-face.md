@@ -2,13 +2,13 @@
 
 The Rust backend's generated face over `ridl-rt`: per interface, an async
 `Client`, a `Publisher`, a `Provider` trait, `serve`, and a `blocking` module
-holding the same client and `serve` as blocking calls. Roadmap story E11.13
-built the first form of it — an in-process-only MVP, ahead of the frame
-specification (E11.1) and the transport (E11.9), so the team had a face to write
-against; ADR-0018 decision 15 restores the face as the runtime layer's "phase
-2". Story E11.14 made `ridl build --emit rust` emit it, and story E11.21
-reshaped its call surface: the poll face the MVP made public — a send that
-returns a correlation, a poll per outcome, a one-pass `dispatch` — became
+holding the same client, and `serve` where there is one, as blocking calls.
+Roadmap story E11.13 built the first form of it — an in-process-only MVP, ahead
+of the frame specification (E11.1) and the transport (E11.9), so the team had a
+face to write against; ADR-0018 decision 15 restores the face as the runtime
+layer's "phase 2". Story E11.14 made `ridl build --emit rust` emit it, and story
+E11.21 reshaped its call surface: the poll face the MVP made public — a send
+that returns a correlation, a poll per outcome, a one-pass `dispatch` — became
 internal, and the two clients and `serve` took its place. This is the
 architecture as built. The generation decisions that bind future work on it are
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), whose decision
@@ -237,8 +237,12 @@ emitter owns; `tests/face_compile.rs` compiles an interface whose members are
 named `port`, `deadline`, `this` and `cx`. `dispatch` still binds the ridl name
 directly beside its own locals, so a parameter named `claim`, `h`, `accepted`,
 or `buf` on a query, does not compile (driftsys/ridl#570). A member whose snake
-case is a fixed method name of the face — `new`, `next_event`, `with_timeout`,
-`set_timeout` — collides the same way, and is not refused.
+case is a fixed method name of the face collides the same way, and is not
+refused: `new` and `next_event` on both clients, `with_timeout` and
+`set_timeout` on the blocking one, `new` and `commit` on `Publisher`, and the
+derived names `subscribe_<event>` and `invalidate_<signal>` against a member
+spelled that way; the blocking client's two are recorded on driftsys/ridl#570
+with the rest.
 
 **Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no
 thread, socket or timer, and no port waits; a face may return a future, and that
@@ -385,36 +389,47 @@ impl<P: ...> Client<P> {
     pub fn average(&mut self, window: Window) -> Result<Average, ClientError>;
 }
 pub fn serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P, timeout: Option<Duration>)
-    -> Result<(), ProviderError>;
+    -> Result<(), ProviderError>;   // only when the interface declares a command or a query
 ```
 
-**Every method is `ridl_rt::task::block_on` over the async method's future**,
-pinned locally, so the two clients cannot diverge: what a call does is the
-future's, and the blocking module adds the thread's wait and the timeout (F-10,
-F-11). The timeout is per client, `None` by default, and a timeout shorter than
-a member's `max` is accepted: the member's `max` bounds the call inside the
-future on the port's clock, the timeout bounds it on the thread's clock, and the
-earlier one ends the call. When `block_on` returns `None`, the client asks the
-future whether the call was sent — a private `sent()` on each call future,
-itself under `std` — and answers as the future would at its own deadline: unsent
-is `Err(ClientError::Send(SendError::Busy))`, sent is `Transport::Undelivered`
-for a command and `Transport::Timeout` for a query; dropping the future then
-forgets a sent call. `next_event` returns `Ok(None)` at the timeout, and `serve`
-returns `Ok(())` at it, so a loop that also does other work can call either
-repeatedly; with no timeout neither returns except on a failure.
-`blocking::serve` holds `h` by value, as `serve` does, and drops it when it
-returns; a loop passes `&mut handler`, under the forwarding impls of ADR-0021
-decision 11, so the handle outlives each pass.
+**Every waiting method is `ridl_rt::task::block_on` over the async method's
+future**, polled through `&mut` because every face future is `Unpin`, so the two
+clients cannot diverge: what a call does is the future's, and the blocking
+module adds the thread's wait and the timeout (F-10, F-11); a signal read and a
+`subscribe_*` delegate unchanged. The deadline is the timeout added to
+`Instant::now()` with `checked_add`; a timeout so large that the instant cannot
+be represented is a wait with no bound, as the call future's own deadline
+saturates rather than panics. The timeout is per client, `None` by default, and
+a timeout shorter than a member's `max` is accepted and ends the call first.
+**What `max` bounds under `block_on`, stated.** The member's `max` is measured
+by the future on the port's clock, and the future reads that clock only when it
+is polled, which under `block_on` is when the port wakes it. On a runtime that
+measures the bound and wakes the `Outcome` waiter when it passes, the woken poll
+finds the bound passed and the call ends at `max`; `ridl-loopback` measures no
+bound and `advance` wakes nobody, so over it an unserved call returns only at
+the client's timeout (F-3 "The limit, stated", F-11's reason). The face is not
+what would change that: it is the runtime's clock and wake. When `block_on`
+returns `None`, the client asks the future whether the call was sent — a private
+`sent()` on each call future, itself under `std` — and answers as the future
+would at its own deadline: unsent is `Err(ClientError::Send(SendError::Busy))`,
+sent is `Transport::Undelivered` for a command and `Transport::Timeout` for a
+query; dropping the future then forgets a sent call. `next_event` returns
+`Ok(None)` at the timeout, and `serve` returns `Ok(())` at it, so a loop that
+also does other work can call either repeatedly; with no timeout, a call returns
+only with its outcome, `next_event` only with an occurrence or a read failure,
+and `serve` only with a failure. `blocking::serve` holds `h` by value, as
+`serve` does, and drops it when it returns; a loop passes `&mut handler`, under
+the forwarding impls of ADR-0021 decision 11, so the handle outlives each pass.
 
 **Why per client and not per call.** A timeout parameter on every call would
 make the two clients' signatures differ in more than the future, and an absolute
 `Instant` is computed from a duration by every caller anyway; a caller that
 wants one call bounded differently sets the timeout before it. `None` by default
-because, on a runtime whose clock advances, a member with a `max` is bounded by
-the future, and the reference says an untimed member waits. Over
-`ridl-loopback`, whose clock moves only under `advance`, a blocking call whose
-provider never serves returns only at a timeout the caller set, so a test over
-the loopback sets one (F-11).
+because, on a runtime that measures the bound and wakes at it, a member with a
+`max` is bounded by the future, and the reference says an untimed member waits.
+Over `ridl-loopback`, whose clock moves only under `advance`, a blocking call
+whose provider never serves returns only at a timeout the caller set, so a test
+over the loopback sets one (F-11).
 
 **The feature.** The manifest `ridl build` emits declares
 `std = ["ridl-rt/std"]`, on by default, and the `blocking` module is under the
@@ -729,9 +744,9 @@ over the generated codec and `ridl-loopback`.
   to 18 for the items the futures poll;
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) — the
   generation decisions specific to this face, decision 6 for the call surface
-- Depends on: `crates/ridl-rt` 0.3.0 (`Wakeable`, `Interest`, `correlate`,
-  `ClientError`, `ProviderError`, the `std` feature's `block_on`); the IR's
-  provisional interface numbering (the lock design's L4, driftsys/ridl#391)
+- Depends on: `crates/ridl-rt` 0.3.0 (`Wakeable`, `Interest`, `ClientError`,
+  `ProviderError`, the `std` feature's `block_on`); the IR's provisional
+  interface numbering (the lock design's L4, driftsys/ridl#391)
 - Replaced later by: E16.2 (the catalog hash and the encoded sizes), E5.1 (the
   clause translator). E11.7 replaced the payload stand-in and E11.15 the
   test-only ports; both have landed
