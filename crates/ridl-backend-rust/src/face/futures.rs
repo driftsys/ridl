@@ -233,7 +233,8 @@ fn next_event_future(iface: &Ident, iface_name: &str) -> TokenStream {
     let number = interface_number(iface);
     let bounds = quote! { ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable };
     let doc = format!(
-        "The future of `Client::next_event` over interface `{iface_name}`. Each \
+        "The future of `ridl_rt::face::Events::next_event` on the `Client` of \
+         interface `{iface_name}`. Each \
          poll registers its interest in the interface's events, reads the \
          queue once, and returns: an occurrence resolves it, and a read \
          failure resolves it with that failure. It can be polled again after \

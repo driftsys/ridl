@@ -133,12 +133,16 @@ covers, one `pub mod` named after the interface. Its consumer side is:
   `Result<Sample<T>, ReadError>` at once; a `subscribe_<event>` per event and
   one `next_event` per interface, returning the `NextEvent` future; and one
   method per command and per query, returning that call's own named future. The
-  trait bounds on `P` are computed from the interface's interaction kinds and no
-  others: `SignalReader` when it declares a signal, `EventSource` when it
-  declares an event, `Caller` and `Clock` when it declares a command or a query
-  (`Clock` for the call's deadline), and `Wakeable` when it declares an event, a
-  command or a query (for the wait). This is RA-19: a `Client` never carries a
-  bound its own interface does not need. It is proven, not merely asserted, by
+  reads and the calls are inherent methods; `new` is `ridl_rt::face::Bind`'s,
+  `next_event` is `ridl_rt::face::Events`'s, and `subscribe_<event>` is a method
+  of the module's generated `Subscribe` trait (the paragraph "The fixed methods
+  are trait methods" below). The trait bounds on `P` are computed from the
+  interface's interaction kinds and no others: `SignalReader` when it declares a
+  signal, `EventSource` when it declares an event, `Caller` and `Clock` when it
+  declares a command or a query (`Clock` for the call's deadline), and
+  `Wakeable` when it declares an event, a command or a query (for the wait).
+  This is RA-19: a `Client` never carries a bound its own interface does not
+  need. It is proven, not merely asserted, by
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` in
   `tests/interaction_face.rs`, which constructs the fixture's signal-only `Horn`
   interface's `Client` with a port implementing only `SignalReader` and
@@ -153,14 +157,23 @@ covers, one `pub mod` named after the interface. Its consumer side is:
   **`NextEvent<'a, P>`** when the interface declares an event.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
   section "The blocking module" below.
+- **`prelude`** — the module a consumer glob-imports,
+  `use <crate>::<iface>::prelude::*;`, for each interface whose face it uses
+  (rustc reports a prelude as an unused import when the other imported preludes
+  already bring every item it would add): it re-exports by name the
+  `ridl_rt::face` traits the module's types implement (`Bind`; `Events` with an
+  event; `Publish` with a signal; `Timeout` under `cfg(feature = "std")` where
+  the `blocking` module is emitted) and the module's own `Subscribe` and
+  `Invalidate` as `_`, so two interfaces' preludes share one scope without
+  conflict.
 
 **A face holds its port by value and has no lifetime parameter.** `Client<P>`
 and `Publisher<W>` hold `P` and `W`, and `new` takes the port by value. A
-borrowed port still works — `Client::new(&mut port)` infers `P` as `&mut Port`,
-under the forwarding impls of
-[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11 —
-and so does an owned handle, a `Clone` handle, or any wrapper that forwards the
-port traits. A face built over a borrow holds that borrow for as long as the
+borrowed port still works — `Client::new(&mut port)` infers `P` as `&mut Port`
+(with the prelude in scope, since `new` is `Bind`'s), under the forwarding impls
+of [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
+— and so does an owned handle, a `Clone` handle, or any wrapper that forwards
+the port traits. A face built over a borrow holds that borrow for as long as the
 face lives, and a call's future holds the client's port for as long as the
 future lives; so the provider side runs over a handler handle taken from the
 runtime before the client is built, which is what `examples/cabin/consumer` and
@@ -204,16 +217,17 @@ the `SendError` the internal send returns, carried up unchanged, with no
 conversion between the two sides' vocabularies (F-12; ADR-0023 decision 4 as
 amended).
 
-**`next_event(&mut self) -> NextEvent<'_, P>`**, with
-`P: EventSource + Wakeable` and `Output = Result<Event, ReadError>`, registers
-`Interest::Event`, reads the queue once, and returns; it has no deadline — an
-event has no response bound, and its `max` is the time to live the runtime
-applies inside `EventSource::next` — and no `Drop`, and it can be polled again
-for the next occurrence. The interface number is checked before the ordinal, for
-the reason `serve` checks it: a port is attached to a whole catalog, ordinals
-restart at 1 in each interface, and an occurrence of a sibling interface at the
-same ordinal would otherwise be decoded as this interface's payload; such an
-occurrence is `Contract::UnknownInteraction`.
+**`next_event(&mut self) -> NextEvent<'_, P>`** (`ridl_rt::face::Events`, with
+`Next<'a> = NextEvent<'a, P>`), with `P: EventSource + Wakeable` and
+`Output = Result<Event, ReadError>`, registers `Interest::Event`, reads the
+queue once, and returns; it has no deadline — an event has no response bound,
+and its `max` is the time to live the runtime applies inside `EventSource::next`
+— and no `Drop`, and it can be polled again for the next occurrence. The
+interface number is checked before the ordinal, for the reason `serve` checks
+it: a port is attached to a whole catalog, ordinals restart at 1 in each
+interface, and an occurrence of a sibling interface at the same ordinal would
+otherwise be decoded as this interface's payload; such an occurrence is
+`Contract::UnknownInteraction`.
 
 **The futures are named, `Unpin`, and store nothing they cannot forget.** A
 named type is what a `no_std` frame loop needs: a value it can store in its own
@@ -242,12 +256,53 @@ bound in its body. `tests/face_compile.rs` compiles an interface whose members
 are named `port`, `deadline`, `deadlineAfter`, `this` and `cx`, and, for
 `dispatch`, commands and queries whose parameter is named `claim`, `h`, `p`,
 `buf`, `accepted` or `reply`, the names in `dispatch`'s body that collided
-before driftsys/ridl#570. A member whose snake case is a fixed method name of
-the face collides the same way, and is not refused: `new` and `next_event` on
-both clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
+before driftsys/ridl#570.
+
+**The fixed methods are trait methods, and the member methods are inherent
+(ADR-0023 decision 7, driftsys/ridl#580).** Until 2026-09-28 a member whose
+snake case was a fixed method name of the face was rustc E0592 in the emitted
+crate, and `ridl check` accepted the source: `new` and `next_event` on both
+clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
 `commit` on `Publisher`, and the derived names `subscribe_<event>` and
-`invalidate_<signal>` against a member spelled that way; the blocking client's
-two are recorded on driftsys/ridl#580 with the rest.
+`invalidate_<signal>` against a member spelled that way. Rust gives one type one
+inherent namespace and a trait its own, and a trait method stays reachable
+through the trait's path; so the fixed methods are now methods of the four
+traits of `ridl_rt::face` — `Bind::new` on all three faces, `Events::next_event`
+on both clients, `Timeout::{with_timeout, set_timeout}` on the blocking client,
+`Publish::commit` on `Publisher` — and the derived ones are methods of two
+traits generated inside the interface module, `Subscribe` (both clients) and
+`Invalidate` (`Publisher`), while every member method stays inherent. The
+`prelude` module puts them in scope; the emitter's own calls into the async
+client are written through the traits' paths
+(`<super::Client<P> as ::ridl_rt::face::Bind>::new(port)`,
+`::ridl_rt::face::Events::next_event(&mut self.inner)`,
+`super::Subscribe::subscribe_<event>(&mut self.inner)`), so a member of that
+name cannot capture them. On a real collision nothing is refused and nothing is
+renamed: with a member named `new`, `Client::new(port)` is the member, because a
+path call finds an inherent item first, and the consumer writes
+`<Client<_> as Bind>::new(port)` or `let c: Client<_> = Bind::new(port)`. A dot
+call follows Rust's method probe — the receiver by value, then by `&`, then by
+`&mut`, an inherent method before a trait method at each step — and a member
+takes `&self` (a signal read) or `&mut self`; `Bind::new` takes no receiver and
+is reached by a path call, and every other trait method takes `&mut self` except
+`Timeout::with_timeout`, which takes `self` by value. So the member keeps the
+dot call for every fixed and derived method but `with_timeout`: with a member
+named `commit`, `publisher.commit()` is the member and
+`Publish::commit(&mut publisher)` the face's; with a member named `withTimeout`,
+`client.with_timeout(x)` on a blocking client held by value is
+`Timeout::with_timeout`, found at the by-value step, and the member is reached
+through the inherent path `blocking::Client::with_timeout(&mut client, x)`
+(`&client` for a signal read). `tests/face_compile.rs` compiles one interface
+per colliding name, with the `std` cfg on and off, each with a consumer that
+dot-calls the member and reaches the face's method through the trait's path
+(and, for `withTimeout`, the reverse), one consumer of two interfaces' preludes
+that calls both interfaces' `subscribe_<event>` and `invalidate_<signal>` and
+writes the qualified forms, and a proof that `Timeout` is under `ridl-rt`'s
+`std` feature; `tests/face_generation.rs` pins the trait impls, the preludes,
+and that no `Subscribe` is emitted without an event and no `Invalidate` without
+a signal. The `ridl-rt` side is ADR-0021 decision 19, and the design note with
+the inventory of every generated item and the compile experiments is
+[`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
 
 **Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no
 thread, socket or timer, and no port waits; a face may return a future, and that
@@ -268,7 +323,11 @@ runtime's finding, and carries no acceptance value.
 - **`Publisher<W: ...>`** — over `SignalWriter` when the interface declares a
   signal and `EventSink` when it declares an event, with one `set` and one
   `invalidate_*` per signal, `commit`, and one `raise` per event. Unchanged by
-  E11.21.
+  E11.21. The sets and the raises are inherent; `new` is
+  `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s, and
+  `invalidate_<signal>` is a method of the module's generated `Invalidate`
+  trait, emitted with `Publish`'s impl only when the interface declares a signal
+  (ADR-0023 decision 7).
 - **`trait Provider`** — one method per command and query, generated only when
   the interface declares one. **A method takes its argument by reference**
   (`fn set_level(&mut self, level: &Level)`), because the internal step reads
@@ -423,13 +482,23 @@ pub struct Client<P: /* the async Client's bounds */> {
     inner: super::Client<P>,
     timeout: Option<std::time::Duration>,
 }
+impl<P: ...> ridl_rt::face::Bind for Client<P> {
+    type Port = P;
+    fn new(port: P) -> Self;                                          // timeout None
+}
+impl<P: ...> ridl_rt::face::Timeout for Client<P> {
+    fn with_timeout(self, timeout: Duration) -> Self;
+    fn set_timeout(&mut self, timeout: Option<Duration>);
+}
+impl<P: ...> ridl_rt::face::Events for Client<P> {
+    type Next<'a> = Result<Option<Event>, ReadError> where Self: 'a;
+    fn next_event(&mut self) -> Result<Option<Event>, ReadError>;     // None at the timeout
+}
+impl<P: ...> super::Subscribe for Client<P> {
+    fn subscribe_warning(&mut self) -> Result<(), SubscribeError>;    // unchanged
+}
 impl<P: ...> Client<P> {
-    pub fn new(port: P) -> Self;                                      // timeout None
-    pub fn with_timeout(self, timeout: Duration) -> Self;
-    pub fn set_timeout(&mut self, timeout: Option<Duration>);
     pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError>;  // unchanged
-    pub fn subscribe_warning(&mut self) -> Result<(), SubscribeError>;    // unchanged
-    pub fn next_event(&mut self) -> Result<Option<Event>, ReadError>;     // None at the timeout
     pub fn set_level(&mut self, level: Level) -> Result<(), ClientError>;
     pub fn average(&mut self, window: Window) -> Result<Average, ClientError>;
 }
@@ -762,6 +831,24 @@ driver. The sections above describe the face as both left it, with the later
 fixes that cite their own issues; nothing in them describes a face the fixture
 does not hold.
 
+## driftsys/ridl#580: the fixed methods behind traits (2026-09-28)
+
+One change to `src/face.rs` and `src/face/blocking.rs`, with `ridl-rt`'s `face`
+module in the same pull request, before the 0.4.0 release that carries both: the
+fixed methods of the three faces became methods of
+`ridl_rt::face::{Bind, Events, Timeout, Publish}`, the derived
+`subscribe_<event>` and `invalidate_<signal>` became methods of a `Subscribe`
+and an `Invalidate` trait generated inside each interface module, each interface
+module gained a `prelude`, and the blocking client's calls into the async one
+were rewritten through the traits' paths. `tests/face_compile.rs` gained one
+case per colliding name and one consumer of two preludes;
+`tests/face_generation.rs` moved its exact-text assertions onto the trait impls;
+`tests/interaction_face.rs` and `examples/cabin/consumer` gained their `use`
+line. It is the one breaking step for a consumer of generated code since E11.21:
+a consumer with no `use` of a prelude gets E0599 on every fixed method. ADR-0023
+decision 7 and ADR-0021 decision 19 record it; the design note is archived as
+[`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
+
 ## What is provisional
 
 | Placeholder                                                                                    | Replaced by                                  |
@@ -785,6 +872,14 @@ over the generated codec and `ridl-loopback`.
 It read "`dispatch` binding the ridl parameter name beside its own locals";
 `dispatch` now binds a claim's decoded argument as `__arg`.
 
+**A member named like a fixed method of the face was never a row here**, and
+compiled to rustc E0592 until 2026-09-28, when driftsys/ridl#580 moved the fixed
+and derived methods behind traits (ADR-0023 decision 7, the section "The
+consumer face" above). Two collisions of the same class outside the face remain
+open: `<Struct>FbView::bytes` against a field named `bytes` (driftsys/ridl#587)
+and the package module's `Wire` against a type or an interface named `Wire`
+(driftsys/ridl#588).
+
 ## Trace
 
 - Roadmap: `docs/ROADMAP.md` — E11.13, E11.14, E11.21
@@ -799,9 +894,10 @@ It read "`dispatch` binding the ridl parameter name beside its own locals";
   to 18 for the items the futures poll;
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) — the
   generation decisions specific to this face, decision 6 for the call surface
-- Depends on: `crates/ridl-rt` 0.3.0 (`Wakeable`, `Interest`, `ClientError`,
-  `ProviderError`, the `std` feature's `block_on`); the IR's provisional
-  interface numbering (the lock design's L4, driftsys/ridl#391)
+- Depends on: `crates/ridl-rt` 0.4.0 (`Wakeable`, `Interest`, `ClientError`,
+  `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
+  traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
+  lock design's L4, driftsys/ridl#391)
 - Replaced later by: E16.2 (the catalog hash and the encoded sizes), E5.1 (the
   clause translator). E11.7 replaced the payload stand-in and E11.15 the
   test-only ports; both have landed

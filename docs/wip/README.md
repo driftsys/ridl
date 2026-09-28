@@ -190,4 +190,8 @@ held back while its own note and plan were archived, because a stage was left to
 run; lane K closed on 2026-09-21 and it was archived with them. The lane F
 driver, its async-face design note, and its plan were archived on 2026-09-28,
 when story E11.21 landed and their material was gardened into the durable
-records the design note and driver name.
+records the design note and driver name. The face-fixed-methods design note
+(`2026-09-28-face-fixed-methods-traits-design.md`, driftsys/ridl#580) was
+archived the same day, when its implementation landed and it was gardened into
+ADR-0023 decision 7 and ADR-0021 decision 19 — see
+[`../archive/README.md`](../archive/README.md).

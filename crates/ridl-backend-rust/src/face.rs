@@ -21,6 +21,16 @@
 //!   the event future;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
+//! - the two per-interface traits, `Subscribe` (one `subscribe_<event>` per
+//!   event) and `Invalidate` (one `invalidate_<signal>` per signal), and a
+//!   `prelude` module that re-exports them as `_` beside the `ridl_rt::face`
+//!   traits the module's types implement. The face's fixed methods — `new`,
+//!   `next_event`, `commit`, and the blocking client's `with_timeout` and
+//!   `set_timeout` — are those traits' methods, and only the member methods
+//!   are inherent, so a member may carry any of those names (ADR-0023
+//!   decision 7, driftsys/ridl#580). The emitter's own calls to a fixed or a
+//!   derived method are written through the trait's path, so a member of
+//!   that name cannot capture them;
 //! - `Provider`, the trait the application implements, with one method per
 //!   command and query;
 //! - `serve`, which registers the interface's calls with the handler and
@@ -200,6 +210,9 @@ pub(crate) fn one_interface(
     let mut body: Vec<TokenStream> = Vec::new();
     body.extend(correlations(&commands, &queries));
     if !signals.is_empty() || !events.is_empty() || !commands.is_empty() || !queries.is_empty() {
+        if !events.is_empty() {
+            body.push(subscribe_trait(iface_name, &events));
+        }
         body.push(client(
             &iface, iface_name, &signals, &events, &commands, &queries,
         ));
@@ -210,6 +223,9 @@ pub(crate) fn one_interface(
     body.extend(futures(&iface, iface_name, &events, &commands, &queries));
     body.extend(plumbing(&iface, iface_name, &events, &commands, &queries));
     if !signals.is_empty() || !events.is_empty() {
+        if !signals.is_empty() {
+            body.push(invalidate_trait(iface_name, &signals));
+        }
         body.push(publisher(&iface, iface_name, &signals, &events));
     }
     if !commands.is_empty() || !queries.is_empty() {
@@ -217,11 +233,16 @@ pub(crate) fn one_interface(
         body.push(dispatch(&iface, iface_name, &commands, &queries));
         body.push(serve(&iface, iface_name, &commands, &queries));
     }
-    body.extend(blocking(iface_name, &signals, &events, &commands, &queries));
 
     if body.is_empty() {
         return Ok(None);
     }
+
+    // The prelude follows every trait it re-exports, and the blocking module
+    // stays the module's last item.
+    let blocking = blocking(iface_name, &signals, &events, &commands, &queries);
+    body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
+    body.extend(blocking);
 
     let module_doc = format!("The generated interaction face of interface `{iface_name}`.");
     Ok(Some(quote! {
@@ -381,21 +402,31 @@ fn client(
         });
     }
 
-    for (member, _) in events {
-        let method = ident(&format!("subscribe_{}", member.method));
-        let ordinal = &member.ordinal;
-        let doc = format!("Starts delivery of event `{}`.", member.declared);
-        methods.push(quote! {
-            #[doc = #doc]
-            pub fn #method(
-                &mut self,
-            ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
-                self.port.subscribe(#number, &[#ordinal])
-            }
-        });
+    for call in commands {
+        methods.push(call_method(call, "command"));
     }
 
+    for call in queries {
+        methods.push(call_method(call, "query"));
+    }
+
+    // The member methods above are inherent; the fixed methods `new` and
+    // `next_event` and the derived `subscribe_<event>` are trait methods
+    // (ADR-0023 decision 7), so a member of one of those names compiles.
+    let mut fixed: Vec<TokenStream> = Vec::new();
+
     if !events.is_empty() {
+        let subscribes = events.iter().map(|(member, _)| {
+            let method = ident(&format!("subscribe_{}", member.method));
+            let ordinal = &member.ordinal;
+            quote! {
+                fn #method(
+                    &mut self,
+                ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
+                    self.port.subscribe(#number, &[#ordinal])
+                }
+            }
+        });
         let doc = format!(
             "Takes the next occurrence of any subscribed event of interface \
              `{iface_name}`, routed to its variant by ordinal, as a future: it \
@@ -412,25 +443,44 @@ fn client(
              consumed it, so this face cannot hand it back to the interface it \
              belongs to. Subscribe on a port this interface owns."
         );
-        methods.push(quote! {
-            #[doc = #doc]
-            pub fn next_event(&mut self) -> NextEvent<'_, P> {
-                NextEvent { port: &mut self.port }
+        fixed.push(quote! {
+            impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P> {
+                type Next<'a> = NextEvent<'a, P> where Self: 'a;
+
+                #[doc = #doc]
+                fn next_event(&mut self) -> NextEvent<'_, P> {
+                    NextEvent { port: &mut self.port }
+                }
+            }
+
+            impl<P: #(#bounds)+*> Subscribe for Client<P> {
+                #(#subscribes)*
             }
         });
     }
 
-    for call in commands {
-        methods.push(call_method(call, "command"));
-    }
+    let inherent = (!methods.is_empty()).then(|| {
+        quote! {
+            impl<P: #(#bounds)+*> Client<P> {
+                #(#methods)*
+            }
+        }
+    });
 
-    for call in queries {
-        methods.push(call_method(call, "query"));
-    }
-
+    // The rustdoc names only the traits this interface's client implements:
+    // `Events` and `Subscribe` exist on it only when the interface declares
+    // an event.
+    let traits = if events.is_empty() {
+        "`new` is `ridl_rt::face::Bind`'s, in scope through `prelude`."
+    } else {
+        "`new` is `ridl_rt::face::Bind`'s, `next_event` is \
+         `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's \
+         `Subscribe`'s, all in scope through `prelude`."
+    };
     let doc = format!(
         "The consumer face of interface `{iface_name}`, generic over exactly \
-         the ports the interface's interactions need."
+         the ports the interface's interactions need. Its member methods are \
+         inherent; {traits}"
     );
     quote! {
         #[doc = #doc]
@@ -438,14 +488,143 @@ fn client(
             port: P,
         }
 
-        impl<P: #(#bounds)+*> Client<P> {
+        #inherent
+
+        impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P> {
+            type Port = P;
+
             /// Binds the face to a port. The port is held by value: pass a
             /// handle, or a `&mut` borrow of one.
-            pub fn new(port: P) -> Self {
+            fn new(port: P) -> Self {
                 Client { port }
             }
+        }
 
+        #(#fixed)*
+    }
+}
+
+/// The per-interface `Subscribe` trait, one `subscribe_<event>` per event,
+/// for an interface that declares one. It lives in the interface module,
+/// where every derived type carries a fixed suffix, so its fixed name meets
+/// no derived one; both clients implement it. The blocking client's
+/// delegation names it by path, `super::Subscribe::subscribe_<event>`, so a
+/// member named `subscribe<Event>` cannot capture that call.
+fn subscribe_trait(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
+    let methods = events.iter().map(|(member, _)| {
+        let method = ident(&format!("subscribe_{}", member.method));
+        let doc = format!("Starts delivery of event `{}`.", member.declared);
+        quote! {
+            #[doc = #doc]
+            fn #method(
+                &mut self,
+            ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError>;
+        }
+    });
+    let doc = format!(
+        "Starts delivery of one event of interface `{iface_name}`: one method \
+         per event, implemented by `Client` and by `blocking::Client`. A trait \
+         rather than inherent methods so that a member of the interface may be \
+         named `subscribe<Event>` (ADR-0023 decision 7); `prelude` brings it \
+         into scope anonymously."
+    );
+    quote! {
+        #[doc = #doc]
+        pub trait Subscribe {
             #(#methods)*
+        }
+    }
+}
+
+/// The per-interface `Invalidate` trait, one `invalidate_<signal>` per
+/// signal, for an interface that declares one; `Publisher` implements it.
+/// The same reasoning as [`subscribe_trait`].
+fn invalidate_trait(iface_name: &str, signals: &[(Member, &str)]) -> TokenStream {
+    let methods = signals.iter().map(|(member, _)| {
+        let method = ident(&format!("invalidate_{}", member.method));
+        let doc = format!(
+            "Stages the invalid state for signal `{}`, with \
+             `Cause::Declared`. It is published by `commit`.",
+            member.declared
+        );
+        quote! {
+            #[doc = #doc]
+            fn #method(
+                &mut self,
+            ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+        }
+    });
+    let doc = format!(
+        "Stages the invalid state of one signal of interface `{iface_name}`: \
+         one method per signal, implemented by `Publisher`. A trait rather \
+         than inherent methods so that a member of the interface may be named \
+         `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into \
+         scope anonymously."
+    );
+    quote! {
+        #[doc = #doc]
+        pub trait Invalidate {
+            #(#methods)*
+        }
+    }
+}
+
+/// The `prelude` module of one interface: the `ridl-rt` face traits the
+/// module's types implement, re-exported by name so that a consumer can
+/// write `<Client<_> as Bind>::new(port)` from the prelude alone, and the
+/// module's own `Subscribe` and `Invalidate` re-exported as `_`, so that two
+/// interfaces' preludes glob-imported into one scope do not conflict. Nothing
+/// is re-exported that no type of the module implements: no `Events` with no
+/// event, no `Publish` and no `Invalidate` with no signal, no `Subscribe`
+/// with no event, and `Timeout` only where the `blocking` module is emitted.
+fn prelude(
+    iface_name: &str,
+    signals: &[(Member, &str)],
+    events: &[(Member, &str)],
+    has_blocking: bool,
+) -> TokenStream {
+    let mut uses: Vec<TokenStream> = vec![quote! { pub use ::ridl_rt::face::Bind; }];
+    if !events.is_empty() {
+        uses.push(quote! { pub use ::ridl_rt::face::Events; });
+        uses.push(quote! { pub use super::Subscribe as _; });
+    }
+    if !signals.is_empty() {
+        uses.push(quote! { pub use ::ridl_rt::face::Publish; });
+        uses.push(quote! { pub use super::Invalidate as _; });
+    }
+    if has_blocking {
+        uses.push(quote! {
+            #[cfg(feature = "std")]
+            pub use ::ridl_rt::face::Timeout;
+        });
+    }
+    // The rustdoc names only the methods the re-exported traits carry, so
+    // an interface without an event, a signal or a blocking module is not
+    // documented with a method its face lacks.
+    let mut methods = vec!["`new`"];
+    if !events.is_empty() {
+        methods.extend(["`next_event`", "`subscribe_<event>`"]);
+    }
+    if !signals.is_empty() {
+        methods.extend(["`commit`", "`invalidate_<signal>`"]);
+    }
+    if has_blocking {
+        methods.extend(["`with_timeout`", "`set_timeout`"]);
+    }
+    let methods = methods.join(", ");
+    let doc = format!(
+        "The traits a consumer of interface `{iface_name}`'s face needs in \
+         scope. Glob-import this module, `use <this interface's \
+         module>::prelude::*;`, and every method of those traits — \
+         {methods} — is called as an inherent method would be. Only \
+         the `ridl-rt` traits are re-exported by name; this module's own \
+         traits are re-exported as `_`, so the preludes of two interfaces can \
+         share one scope."
+    );
+    quote! {
+        #[doc = #doc]
+        pub mod prelude {
+            #(#uses)*
         }
     }
 }
@@ -589,12 +768,6 @@ fn publisher(
             "Stages a new value for signal `{}`. It is published by `commit`.",
             member.declared
         );
-        let invalidate_doc = format!(
-            "Stages the invalid state for signal `{}`, with \
-             `Cause::Declared`. It is published by `commit`.",
-            member.declared
-        );
-        let invalidate = ident(&format!("invalidate_{}", member.method));
         methods.push(quote! {
             #[doc = #set_doc]
             pub fn #method(
@@ -604,13 +777,6 @@ fn publisher(
                 let mut buf = #buffer;
                 let bytes = #encode;
                 self.port.set(#number, #ordinal, bytes)
-            }
-
-            #[doc = #invalidate_doc]
-            pub fn #invalidate(
-                &mut self,
-            ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-                self.port.invalidate(#number, #ordinal)
             }
         });
     }
@@ -640,16 +806,48 @@ fn publisher(
         });
     }
 
-    if !signals.is_empty() {
-        methods.push(quote! {
-            /// Publishes every staged signal change.
-            pub fn commit(&mut self) {
-                self.port.commit()
+    // The member methods above are inherent; `new` and `commit` and the
+    // derived `invalidate_<signal>` are trait methods (ADR-0023 decision 7).
+    let fixed = (!signals.is_empty()).then(|| {
+        let invalidates = signals.iter().map(|(member, _)| {
+            let invalidate = ident(&format!("invalidate_{}", member.method));
+            let ordinal = &member.ordinal;
+            quote! {
+                fn #invalidate(
+                    &mut self,
+                ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+                    self.port.invalidate(#number, #ordinal)
+                }
             }
         });
-    }
+        quote! {
+            impl<W: #(#bounds)+*> ::ridl_rt::face::Publish for Publisher<W> {
+                /// Publishes every staged signal change.
+                fn commit(&mut self) {
+                    self.port.commit()
+                }
+            }
 
-    let doc = format!("The provider face of interface `{iface_name}`'s signals and events.");
+            impl<W: #(#bounds)+*> Invalidate for Publisher<W> {
+                #(#invalidates)*
+            }
+        }
+    });
+
+    // The rustdoc names only the traits this interface's publisher
+    // implements: `Publish` and `Invalidate` exist on it only when the
+    // interface declares a signal.
+    let traits = if signals.is_empty() {
+        "`new` is `ridl_rt::face::Bind`'s, in scope through `prelude`."
+    } else {
+        "`new` is `ridl_rt::face::Bind`'s, `commit` is \
+         `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this \
+         module's `Invalidate`'s, all in scope through `prelude`."
+    };
+    let doc = format!(
+        "The provider face of interface `{iface_name}`'s signals and events. \
+         Its member methods are inherent; {traits}"
+    );
     quote! {
         #[doc = #doc]
         pub struct Publisher<W: #(#bounds)+*> {
@@ -657,14 +855,20 @@ fn publisher(
         }
 
         impl<W: #(#bounds)+*> Publisher<W> {
-            /// Binds the face to a port. The port is held by value: pass a
-            /// handle, or a `&mut` borrow of one.
-            pub fn new(port: W) -> Self {
-                Publisher { port }
-            }
-
             #(#methods)*
         }
+
+        impl<W: #(#bounds)+*> ::ridl_rt::face::Bind for Publisher<W> {
+            type Port = W;
+
+            /// Binds the face to a port. The port is held by value: pass a
+            /// handle, or a `&mut` borrow of one.
+            fn new(port: W) -> Self {
+                Publisher { port }
+            }
+        }
+
+        #fixed
     }
 }
 

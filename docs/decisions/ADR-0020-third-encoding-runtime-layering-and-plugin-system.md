@@ -220,6 +220,15 @@ as its public contract.
    `sample`, `payload`, `port`, `error`, `encoding` and `correlate`, with
    `flatbuffers` and `task` behind their features.
 
+   **Amendment (2026-09-28) — an eighth unconditional module, `face`.**
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19 adds `face`,
+   the four traits a generated face implements for its fixed methods (`Bind`,
+   `Events`, `Publish`, and `Timeout` under the `std` feature), behind no
+   feature. It is the one module whose items generated code implements rather
+   than calls; no runtime implements them, so decision 6 is unchanged. The
+   unconditional module list is therefore `contract`, `sample`, `payload`,
+   `port`, `error`, `encoding`, `correlate` and `face`.
+
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.

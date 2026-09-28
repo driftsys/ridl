@@ -22,10 +22,10 @@ every section below cites for the contract it implements.
 
 ## Module layout
 
-Seven modules, each public item living in exactly one (ADR-0020 decision 5;
+Eight modules, each public item living in exactly one (ADR-0020 decision 5;
 `error` renamed from that decision's original `strata`, amended in place
-2026-09-13; `correlate` added by ADR-0021 decision 15), plus two that a cargo
-feature adds:
+2026-09-13; `correlate` added by ADR-0021 decision 15; `face` by ADR-0021
+decision 19), plus two that a cargo feature adds:
 
 | Module        | Contents                                                                                                                                                                                                                                                             |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -36,6 +36,7 @@ feature adds:
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
 | `correlate`   | since story E11.18: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                       |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
 | `task`        | under the `std` feature, since 2026-09-25 (story E11.17): `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                 |
 
@@ -44,6 +45,55 @@ several names here — `Duration`, `Handler`, `Kind` — are also names in `core
 in application code. A type with more than one codec qualifies its constant too:
 `<T as Payload<E>>::MAX_SIZE`, because `Self::MAX_SIZE` is ambiguous once a type
 implements `Payload` for two encodings.
+
+## The face traits
+
+`face` is the one module whose items generated code implements rather than calls
+(ADR-0021 decision 19; ADR-0023 decision 7). A generated `Client` or `Publisher`
+has member methods, one per signal, event, command and query, named after the
+member, and fixed methods the emitter owns. Rust gives one type one inherent
+namespace, so a member whose snake case was `new`, `commit` or `next_event`
+could not sit beside a fixed inherent method of that name (rustc E0592). The
+fixed methods are therefore methods of these traits, and the member methods stay
+inherent, and the trait method stays reachable through the trait's path. A dot
+call follows Rust's method probe — the receiver by value, then by `&`, then by
+`&mut`, an inherent method before a trait method at each step — so the member
+keeps the dot call for every fixed and derived method but `with_timeout`, whose
+trait method takes `self` by value and is found at the first step: beside a
+member named `withTimeout`, `client.with_timeout(x)` on a blocking client held
+by value is the trait method, and the member is reached through the inherent
+path `blocking::Client::with_timeout(&mut client, x)`.
+
+```rust,ignore
+pub trait Bind { type Port; fn new(port: Self::Port) -> Self; }
+pub trait Events { type Next<'a> where Self: 'a; fn next_event(&mut self) -> Self::Next<'_>; }
+#[cfg(feature = "std")]
+pub trait Timeout: Sized {
+    fn with_timeout(self, timeout: core::time::Duration) -> Self;
+    fn set_timeout(&mut self, timeout: Option<core::time::Duration>);
+}
+pub trait Publish { fn commit(&mut self); }
+```
+
+`Bind` is implemented by the async `Client<P>`, `blocking::Client<P>` and
+`Publisher<W>`, with `Port` the port type the face is generic over; `Events` by
+both clients of an interface that declares an event, with `Next<'a>` the async
+client's event future and the blocking client's owned
+`Result<Option<Event>, ReadError>` — one trait serves both because the
+associated type is generic over the borrow, and it gives `next_event` a
+namespace and nothing more, since `Next` carries no bound; `Timeout` by
+`blocking::Client<P>` alone, which is why it is under `std` although
+`core::time::Duration` would let it compile without; `Publish` by `Publisher<W>`
+of an interface that declares a signal. The two derived methods a face adds
+beside a member, `subscribe_<event>` and `invalidate_<signal>`, are methods of
+two traits the emitter generates inside each interface module, `Subscribe` and
+`Invalidate`, and each interface module carries a `prelude` that re-exports the
+traits here its types implement by name and its own two as `_`; a consumer
+writes `use <crate>::<iface>::prelude::*;` for each interface whose face it
+uses, and rustc reports a prelude as an unused import when the other imported
+preludes already bring every item it would add. No runtime implements anything
+here, so `ridl-rt-conformance` does not test it; the generated face's own tests
+do (`crates/ridl-backend-rust/tests/face_compile.rs` and `face_generation.rs`).
 
 ## Identity
 

@@ -125,6 +125,13 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
               the byte-equality guard is what pins the emitter's output"
 )]
 #[allow(
+    unused_imports,
+    reason = "each interface module's `prelude` is a set of `pub use` re-exports, which \
+              rustc reports as unused inside this private module when this file's tests \
+              glob-import no prelude of that interface; in the emitted crate the module \
+              is reachable from the crate root and draws no such lint"
+)]
+#[allow(
     clippy::derivable_impls,
     reason = "the domain-type Default emission (crate::defaults, predating M3) writes a manual \
               impl rather than #[derive(Default)]; this is the first place that output is \
@@ -135,6 +142,15 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
 mod generated {
     include!("generated/interaction_face.rs");
 }
+
+// The fixed methods of the face are trait methods (ADR-0023 decision 7), in
+// scope through a generated prelude. One prelude is enough here: the tests
+// call `new` on `horn`'s and `valve`'s faces too, but `Bind` is one item
+// whichever prelude re-exports it, and a second glob whose every used item
+// the first already provides is what rustc reports as an unused import. A
+// consumer imports the prelude of each interface whose own `Subscribe` or
+// `Invalidate` it calls.
+use generated::cabin::prelude::*;
 
 /// A `Provider` whose `average` reply is test-controlled, so a test can make
 /// it return a value that breaks the query's `ensure` clause.

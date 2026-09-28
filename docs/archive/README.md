@@ -344,3 +344,20 @@ provenance. Nothing here is normative — the current references live in
   stage. Read the rest for how the lane was run, not for the state of the code:
   its `THIS SESSION RUNS` line and its stage list record what was still to do
   when it was written.
+- **2026-09-28-face-fixed-methods-traits-design.md** — the design note for
+  driftsys/ridl#580 (split from driftsys/ridl#570): the generated face's fixed
+  methods behind traits. Its §2 inventories every generated item for a collision
+  between a fixed name and a member's, its §4 and appendix prove each Rust
+  resolution fact the design depends on by a compile experiment at Rust 1.83 and
+  at the pin, its §7 records the alternatives, and its §8 the nine choices
+  Sebastien confirmed on 2026-09-28. The gardened records are
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 7,
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19,
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 5's 2026-09-28 amendment,
+  [the interaction-face design record](../design/interaction-face.md),
+  [the `ridl-rt` design record](../design/ridl-rt.md) ("The face traits") and
+  [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md). Its
+  §5 line numbers and its §6 pin literal record what was true when it was
+  written. Read it for the reasoning and the experiments, cited from the records
+  it became, not as a second description of the as-built face.
