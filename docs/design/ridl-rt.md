@@ -37,7 +37,7 @@ feature adds:
 | `correlate`   | since story E11.18: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                       |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
-| `task`        | under the `std` feature, since 2026-09-25 (story E11.17): `block_on`, `noop_waker`                                                                                                                                                                                   |
+| `task`        | under the `std` feature, since 2026-09-25 (story E11.17): `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                 |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -379,6 +379,23 @@ the feature compiles for `wasm32-unknown-unknown`, which `just wasm-check`'s
 `--all-features` line requires, but `block_on` is not usable on that target:
 `Instant::now()` panics there and a park does not block the thread, so a frame
 loop on wasm polls with `noop_waker` and never calls `block_on`. ADR-0021
+decision 8 carries the dated note.
+
+**Since 2026-09-28 (driftsys/ridl#568) the `task` module has a third function,**
+`flag_waker() -> (Waker, WakeFlag)`. The waker is `Waker::from(Arc<Flag>)` over
+an `AtomicBool`; a wake of it or of a clone, by value or by reference, from any
+thread, sets the flag, and `WakeFlag::take(&self) -> bool` reads and clears it.
+It is for a frame loop that polls a future which does a bounded amount of work
+per poll and wakes itself when work is left — the generated `Serve` takes at
+most 32 claims per poll and then wakes its own waker (ADR-0023 decision 6).
+Under `noop_waker` that wake is discarded, so such a loop settles at most 32
+claims per frame. The pattern with `flag_waker` is: poll, then poll again while
+`take` returns `true`, up to the loop's own limit of polls per frame. A wake
+that arrived between frames leaves the flag set and costs one extra poll. It
+adds no dependency and no `unsafe`, and is additive under ADR-0021 decision 10.
+A `no_std` frame loop, where the module does not exist, writes the same small
+waker over `alloc::task::Wake` on an `Arc` when it has an allocator; one without
+an allocator needs a hand-written `RawWaker`, which needs `unsafe`. ADR-0021
 decision 8 carries the dated note.
 
 **Stage K5 added one helper and corrected one sentence.**

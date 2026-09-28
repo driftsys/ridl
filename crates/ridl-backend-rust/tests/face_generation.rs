@@ -563,8 +563,8 @@ fn each_call_returns_a_named_future_that_forgets_its_call_on_drop() {
 
 /// `serve` of note F-7: the handler by value, the provider by `&mut`, the
 /// served set registered when the function is called, the claim interest
-/// registered before every drain, and the handler's failure as the value the
-/// future resolves to.
+/// registered before every pass, at most 32 claims taken in one poll, and the
+/// handler's failure as the value the future resolves to.
 #[test]
 fn serve_returns_a_future_over_the_internal_dispatch_step() {
     let d = dense(&module(&face(), "cabin"));
@@ -613,13 +613,22 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
              <super::Cabinas::ridl_rt::contract::Interface>::NUMBER,),cx.waker(),);"
         ) < at(
             &poll,
-            "dispatch(&mutthis.handler,&mut*this.provider,&mutthis.buf,)"
+            "dispatch(&mutthis.handler,&mut*this.provider,&mutthis.buf,&mutbudget,)"
         ),
-        "each poll registers Interest::Claim before it drains the claims",
+        "each poll registers Interest::Claim before it settles claims",
     );
     assert!(
-        poll.contains("Ok(_)=>::core::task::Poll::Pending,"),
-        "a drained handler is Pending, whatever the count",
+        d.contains("constSERVE_BUDGET:usize=32;"),
+        "one poll takes at most 32 claims (driftsys/ridl#568)",
+    );
+    assert!(
+        poll.contains(
+            "letmutbudget=SERVE_BUDGET;matchdispatch(&mutthis.handler,&mut*this.provider,\
+             &mutthis.buf,&mutbudget,){Ok(_)=>{ifbudget==0{cx.waker().wake_by_ref();}\
+             ::core::task::Poll::Pending}"
+        ),
+        "a poll that spent its budget wakes itself and is Pending; one that found no \
+         claim left is Pending without waking, whatever the count",
     );
     assert!(
         poll.contains("::ridl_rt::error::ProviderError::Claim(error)"),

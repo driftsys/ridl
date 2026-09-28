@@ -58,6 +58,32 @@ E11.21's first half emits the async client and `serve` and makes the poll face
 blocking client. Until the first lands this record describes a face the fixture
 does not yet emit.
 
+**Amendment (2026-09-28) — decision 6 amended: one poll of `serve` takes at most
+32 claims.** Decision 6 had each poll of `Serve` take claims until
+`Handler::next_claim` returned `None`. The review of the change that emitted it
+(driftsys/ridl#566) measured one poll of 38 ms with 8 callers on other threads
+sending over `ridl-loopback`, and of 930 ms with 16 callers: while callers keep
+sending, the poll does not return. A future that holds one poll for an unbounded
+time blocks every other task on a single-threaded executor. Each poll now takes
+at most 32 claims, counted as they are taken and not as their settlements are
+accepted, so that a run of rejected settlements is bounded too. A poll that
+stopped at 32 wakes its own waker and is `Pending`, so the executor polls it
+again after other tasks have run; a poll that found no claim left before 32 is
+`Pending` without waking itself, as before. 32 bounds one poll and keeps the
+cost of registering the claim interest, paid once per poll, small beside the
+claims the poll settles. The bound is a private constant of each generated
+interface module that emits `serve`, not a setting and not a `ridl-rt` item. The
+`Serve` type and its output are unchanged, so the change is not breaking. Taken
+on delegated authority while fixing driftsys/ridl#568, which it closes. The
+self-wake is discarded under `ridl_rt::task::noop_waker`, so a frame loop that
+polls `Serve` once per frame with it settles at most 32 claims per frame.
+Sebastien decided, during the review of driftsys/ridl#584, that `ridl-rt` adds
+`task::flag_waker` (ADR-0021 decision 8, amended the same day), whose wake sets
+a flag the loop reads: the loop polls, then polls again while the flag was set,
+up to its own limit of polls per frame. A `no_std` frame loop with an allocator
+writes the same small waker over `alloc::task::Wake` on an `Arc`; one without an
+allocator needs a hand-written `RawWaker`, which needs `unsafe`.
+
 ## Context
 
 The approved M1 design (archived at
@@ -313,11 +339,13 @@ argument for it in the command case.
      `Result<core::convert::Infallible, ProviderError>`. When called it
      registers the interface's command and query ordinals with `Handler::serve`,
      and a refusal is a future ready with `Err(ProviderError::Serve(_))`. Each
-     poll registers `Interest::Claim`, then drains `Handler::next_claim`,
-     routing and settling every claim as the settlement table of the
+     poll registers `Interest::Claim`, then takes claims from
+     `Handler::next_claim`, at most 32 in one poll (the 2026-09-28 amendment),
+     routing and settling each claim it takes as the settlement table of the
      interaction-face design record states, unchanged; `Ok(None)` is `Pending`,
-     and a `ReadError` resolves the future to `Err(ProviderError::Claim(_))`
-     with every claim settled before it staying settled.
+     a poll that took 32 claims wakes its own waker and is `Pending`, and a
+     `ReadError` resolves the future to `Err(ProviderError::Claim(_))` with
+     every claim settled before it staying settled.
      `blocking::serve(h, &mut provider, timeout)` returns `Ok(())` at the
      timeout and the error otherwise. `dispatch` becomes the `pub(crate)`
      one-pass step `serve` calls and returns the `ReadError` it met. Note F-7.

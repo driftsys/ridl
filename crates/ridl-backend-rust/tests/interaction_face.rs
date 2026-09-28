@@ -54,7 +54,7 @@ use ridl_rt::error::{CallError, ClientError, Contract, ProviderError, Transport}
 use ridl_rt::port::{Caller, Correlation, Interest, ReadError, SendError, ServeError};
 use ridl_rt::sample::{Duration, Provenance};
 
-use support::doubles::{self, FailingHandler, Op, RecordingPorts};
+use support::doubles::{self, FailingHandler, Op, QueuedClaims, RecordingPorts};
 
 /// The catalog the fixture's package declares, with the all-zero placeholder
 /// hash the descriptor emitter writes until story E16.2 (driftsys/ridl#378)
@@ -75,6 +75,12 @@ fn poll_once<F: Future + Unpin>(future: &mut F) -> Poll<F::Output> {
     let waker = ridl_rt::task::noop_waker();
     let mut cx = Context::from_waker(&waker);
     Pin::new(future).poll(&mut cx)
+}
+
+/// A `dispatch` budget no test here reaches, for a test of what one pass
+/// settles rather than of the bound on the claims it takes.
+fn no_bound() -> usize {
+    usize::MAX
 }
 
 /// The fixture's `Cabin` interface number, as its descriptor declares it.
@@ -510,7 +516,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
@@ -552,7 +558,7 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     // find.
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
         settled,
         Ok(0),
@@ -584,7 +590,7 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
     // find.
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
         settled,
         Ok(0),
@@ -635,7 +641,8 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled_first = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled_first =
+        generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
         settled_first,
         Ok(0),
@@ -648,7 +655,8 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     );
 
     let second = send_level_raw(&mut port, 2);
-    let settled_second = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled_second =
+        generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
         settled_second,
         Ok(1),
@@ -675,15 +683,21 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
 
     // Too small: dispatch must return 0 and must not consume the claim.
     let mut short = [0u8; 1];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut short);
+    let mut budget = 5;
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut short, &mut budget);
     assert_eq!(settled, Ok(0), "a short buffer settles nothing");
+    assert_eq!(budget, 5, "and spends none of the budget");
     assert!(provider.set_level_calls.is_empty());
 
     // Retrying with a correctly sized buffer still finds the claim the short
     // buffer left untouched.
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut budget);
     assert_eq!(settled, Ok(1));
+    assert_eq!(
+        budget, 4,
+        "the one claim taken spends one unit of the budget"
+    );
     assert_eq!(provider.set_level_calls, vec![1]);
 }
 
@@ -755,7 +769,7 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
@@ -810,7 +824,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
@@ -847,7 +861,7 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
@@ -894,7 +908,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
         provider.set_level_calls.is_empty(),
@@ -1505,8 +1519,8 @@ fn a_resolved_serve_future_panics_when_polled_again() {
     let _ = poll_once(&mut serve);
 }
 
-/// Note F-7: each poll of `Serve` registers `Interest::Claim` before it drains
-/// the handler, so a call sent while it is pending wakes it.
+/// Note F-7: each poll of `Serve` registers `Interest::Claim` before it takes
+/// claims from the handler, so a call sent while it is pending wakes it.
 #[test]
 fn a_send_wakes_a_pending_serve() {
     let mut rt = loopback();
@@ -1531,6 +1545,178 @@ fn a_send_wakes_a_pending_serve() {
     assert!(Pin::new(&mut serve).poll(&mut cx).is_pending());
     drop(serve);
     assert_eq!(provider.set_level_calls, vec![1]);
+}
+
+/// Polls `serve` once with a waker that counts its wakes, and returns the
+/// poll's result with the number of wakes the poll made.
+fn poll_counting_wakes<F: Future + Unpin>(future: &mut F) -> (Poll<F::Output>, usize) {
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+    let poll = Pin::new(future).poll(&mut cx);
+    (poll, wakes.count())
+}
+
+/// driftsys/ridl#568: one poll of `Serve` takes at most 32 claims. With 40
+/// waiting, the first poll settles 32, wakes its own waker once so that the
+/// executor polls it again after other tasks ran, and is `Pending`; the
+/// second settles the other 8 and, having found no claim left, is `Pending`
+/// without waking itself.
+#[test]
+fn one_serve_poll_takes_at_most_32_claims_and_wakes_itself_when_it_stops_there() {
+    let handler = QueuedClaims::new(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 32, "the first poll takes 32 claims");
+    assert_eq!(counts.settles.get(), 32, "and settles each claim it takes");
+    assert_eq!(wakes, 1, "it stopped at the bound, so it wakes itself once");
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 40, "the second poll takes the other 8");
+    assert_eq!(counts.settles.get(), 40);
+    assert_eq!(wakes, 0, "no claim is left, so it does not wake itself");
+}
+
+/// With exactly 32 claims waiting, the first poll takes all 32 and stops at
+/// the bound without asking for a 33rd, so it cannot tell that none is left
+/// and wakes itself once. The poll that follows finds no claim and does not
+/// wake itself.
+#[test]
+fn a_serve_poll_that_takes_exactly_32_claims_wakes_itself_once() {
+    let handler = QueuedClaims::new(CABIN, 32);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 32);
+    assert_eq!(
+        wakes, 1,
+        "the poll stopped at the bound, so it wakes itself"
+    );
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 32, "no claim was left");
+    assert_eq!(wakes, 0);
+}
+
+/// With 31 claims waiting, one poll takes all of them, finds none left
+/// before the bound, and does not wake itself.
+#[test]
+fn a_serve_poll_that_runs_out_of_claims_before_the_bound_does_not_wake_itself() {
+    let handler = QueuedClaims::new(CABIN, 31);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 31);
+    assert_eq!(wakes, 0);
+}
+
+/// The bound counts the claims a poll takes, not the settlements the handler
+/// accepts: a handler that rejects every settlement still stops the poll at
+/// 32 claims. Counted on accepted settlements, the poll would take all 40.
+#[test]
+fn the_serve_poll_bound_counts_claims_taken_not_settlements_accepted() {
+    let handler = QueuedClaims::rejecting(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 32);
+    assert_eq!(counts.settles.get(), 32, "every claim taken was settled");
+    assert_eq!(wakes, 1);
+}
+
+/// A claim for another interface is settled and spends the budget like any
+/// other claim taken: with 40 waiting, one poll takes and settles 32 and wakes
+/// itself. That such a claim settles `Contract::UnknownInteraction` is pinned
+/// by the settlement-table tests above.
+#[test]
+fn a_claim_for_another_interface_counts_toward_the_serve_poll_bound() {
+    let other = InterfaceNo(CABIN.0.wrapping_add(1000));
+    let handler = QueuedClaims::new(other, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 32);
+    assert_eq!(counts.settles.get(), 32);
+    assert_eq!(wakes, 1);
+}
+
+/// A frame loop that polls `Serve` with `ridl_rt::task::flag_waker` polls
+/// again while the flag was set, up to its own limit of polls per frame, so
+/// one frame settles all 40 waiting claims. One poll with the no-op waker
+/// settles 32, because its self-wake is discarded.
+#[test]
+fn a_frame_loop_over_a_flag_waker_settles_past_the_serve_poll_bound_in_one_frame() {
+    const POLLS_PER_FRAME: usize = 4;
+
+    let handler = QueuedClaims::new(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counts.taken.get(), 32, "one poll with the no-op waker");
+
+    let handler = QueuedClaims::new(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+    let (waker, woken) = ridl_rt::task::flag_waker();
+    let mut cx = Context::from_waker(&waker);
+    let mut polls = 0;
+    for _ in 0..POLLS_PER_FRAME {
+        polls += 1;
+        assert!(Pin::new(&mut serve).poll(&mut cx).is_pending());
+        if !woken.take() {
+            break;
+        }
+    }
+    assert_eq!(counts.taken.get(), 40, "one frame settles every claim");
+    assert_eq!(counts.settles.get(), 40);
+    assert_eq!(
+        polls, 2,
+        "the second poll found no claim left and did not wake"
+    );
+}
+
+/// `blocking::serve` is `block_on` over `serve`, and the self-wake at the
+/// bound makes `block_on` poll again at once instead of parking until the
+/// timeout. The handler fails once its 40 claims were taken, so the call
+/// returns that failure; without the self-wake it would park for the whole
+/// generous timeout after the first 32.
+#[test]
+fn blocking_serve_takes_claims_past_the_serve_poll_bound_without_waiting_for_its_timeout() {
+    let handler = QueuedClaims::new(CABIN, 40).failing_when_empty();
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        generated::cabin::blocking::serve(handler, &mut provider, Some(GENEROUS)),
+        Err(ProviderError::Claim(ReadError::Detached))
+    );
+    assert!(
+        started.elapsed() < GENEROUS,
+        "the call parked until its timeout after the first 32 claims"
+    );
+    assert_eq!(counts.taken.get(), 40);
+    assert_eq!(counts.settles.get(), 40);
 }
 
 /// The same for a query: a send failure other than `Busy` on the slot-wait

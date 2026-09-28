@@ -48,13 +48,14 @@ fn at(source: &str, needle: &str) -> usize {
 #[test]
 fn dispatch_has_the_settled_signature() {
     let d = dispatch_source();
-    // The internal one-pass step `serve` drains through (the async face
+    // The internal one-pass step `serve` calls on each poll (the async face
     // design, note F-7): `pub(crate)`, and the handler port's failure is
     // returned rather than swallowed, because it is the value `serve`
-    // resolves to.
+    // resolves to. `budget` bounds the claims one pass takes
+    // (driftsys/ridl#568).
     assert!(
         d.contains(
-            "pub(crate)fndispatch<H,P>(h:&mutH,p:&mutP,buf:&mut[u8],)\
+            "pub(crate)fndispatch<H,P>(h:&mutH,p:&mutP,buf:&mut[u8],budget:&mutusize,)\
              ->::core::result::Result<usize,::ridl_rt::port::ReadError>"
         ),
         "dispatch signature",
@@ -62,8 +63,9 @@ fn dispatch_has_the_settled_signature() {
     assert!(d.contains("H:::ridl_rt::port::Handler"), "handler bound");
     assert!(d.contains("P:Provider"), "provider bound");
     assert!(
-        d.contains("letSome(claim)=h.next_claim(buf)?else{returnOk(settled);};"),
-        "a failing next_claim leaves the pass with its error; an empty handler ends it with the count",
+        d.contains("while*budget>0{letSome(claim)=h.next_claim(buf)?else{break;};*budget-=1;"),
+        "a failing next_claim leaves the pass with its error; an empty handler or a spent \
+         budget ends it, and each claim taken spends one unit of the budget",
     );
 }
 

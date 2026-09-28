@@ -2361,11 +2361,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
         fn average(&mut self, window: &super::Window) -> super::Average;
     }
-    /**Settles every claim of interface `Cabin` that is waiting, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` drains through on each poll.
+    /**Settles the claims of interface `Cabin` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `Ok` means the handler has no claim waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Cabin::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
 
-`buf` must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim.
+`buf` must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
 Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim.
 
@@ -2374,6 +2374,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         h: &mut H,
         p: &mut P,
         buf: &mut [u8],
+        budget: &mut usize,
     ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
     where
         H: ::ridl_rt::port::Handler,
@@ -2383,10 +2384,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             return Ok(0);
         }
         let mut settled = 0usize;
-        loop {
+        while *budget > 0 {
             let Some(claim) = h.next_claim(buf)? else {
-                return Ok(settled);
+                break;
             };
+            *budget -= 1;
             let settlement = if claim.iface
                 != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER
             {
@@ -2556,8 +2558,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 settled += 1;
             }
         }
+        Ok(settled)
     }
-    ///Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then settles every claim the handler has, and is `Pending` once none is left. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    ///The most claims one poll of `Serve` takes (driftsys/ridl#568). A future that holds one poll for an unbounded time blocks every other task on a single-threaded executor; 32 bounds one poll and keeps the cost of registering the claim interest, paid once per poll, small beside the claims the poll settles.
+    const SERVE_BUDGET: usize = 32;
+    ///Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
@@ -2597,7 +2602,8 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         /// `Handler::serve` refused the members; the first poll reports
         /// it.
         Refused(::ridl_rt::port::ServeError),
-        /// Each poll registers the claim interest and drains the handler.
+        /// Each poll registers the claim interest and settles at most
+        /// `SERVE_BUDGET` claims.
         Serving,
         /// The failure was reported.
         Done,
@@ -2638,12 +2644,19 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                             ),
                             cx.waker(),
                         );
+                    let mut budget = SERVE_BUDGET;
                     match dispatch(
                         &mut this.handler,
                         &mut *this.provider,
                         &mut this.buf,
+                        &mut budget,
                     ) {
-                        Ok(_) => ::core::task::Poll::Pending,
+                        Ok(_) => {
+                            if budget == 0 {
+                                cx.waker().wake_by_ref();
+                            }
+                            ::core::task::Poll::Pending
+                        }
                         Err(error) => {
                             this.state = ServeState::Done;
                             ::core::task::Poll::Ready(
@@ -3613,11 +3626,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         ///Serves query `pressure`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
         fn pressure(&mut self, window: &super::Window) -> super::Average;
     }
-    /**Settles every claim of interface `Valve` that is waiting, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` drains through on each poll.
+    /**Settles the claims of interface `Valve` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `Ok` means the handler has no claim waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Valve::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
 
-`buf` must be at least `Valve::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim.
+`buf` must be at least `Valve::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
 Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim.
 
@@ -3626,6 +3639,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         h: &mut H,
         p: &mut P,
         buf: &mut [u8],
+        budget: &mut usize,
     ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
     where
         H: ::ridl_rt::port::Handler,
@@ -3635,10 +3649,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             return Ok(0);
         }
         let mut settled = 0usize;
-        loop {
+        while *budget > 0 {
             let Some(claim) = h.next_claim(buf)? else {
-                return Ok(settled);
+                break;
             };
+            *budget -= 1;
             let settlement = if claim.iface
                 != <super::Valve as ::ridl_rt::contract::Interface>::NUMBER
             {
@@ -3808,8 +3823,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 settled += 1;
             }
         }
+        Ok(settled)
     }
-    ///Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then settles every claim the handler has, and is `Pending` once none is left. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    ///The most claims one poll of `Serve` takes (driftsys/ridl#568). A future that holds one poll for an unbounded time blocks every other task on a single-threaded executor; 32 bounds one poll and keeps the cost of registering the claim interest, paid once per poll, small beside the claims the poll settles.
+    const SERVE_BUDGET: usize = 32;
+    ///Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
@@ -3849,7 +3867,8 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         /// `Handler::serve` refused the members; the first poll reports
         /// it.
         Refused(::ridl_rt::port::ServeError),
-        /// Each poll registers the claim interest and drains the handler.
+        /// Each poll registers the claim interest and settles at most
+        /// `SERVE_BUDGET` claims.
         Serving,
         /// The failure was reported.
         Done,
@@ -3890,12 +3909,19 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                             ),
                             cx.waker(),
                         );
+                    let mut budget = SERVE_BUDGET;
                     match dispatch(
                         &mut this.handler,
                         &mut *this.provider,
                         &mut this.buf,
+                        &mut budget,
                     ) {
-                        Ok(_) => ::core::task::Poll::Pending,
+                        Ok(_) => {
+                            if budget == 0 {
+                                cx.waker().wake_by_ref();
+                            }
+                            ::core::task::Poll::Pending
+                        }
                         Err(error) => {
                             this.state = ServeState::Done;
                             ::core::task::Poll::Ready(

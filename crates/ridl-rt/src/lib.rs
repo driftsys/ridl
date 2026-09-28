@@ -18,10 +18,12 @@
 //! nothing in this version. A fourth feature, `std`, off by default, is not an
 //! encoding: it links the standard library and enables the [`task`] module —
 //! `block_on`, which waits on a future by parking the thread until a deadline,
-//! and `noop_waker` — for a blocking client built over an async one and for a
-//! frame loop that polls a future once per frame. `task` is the one module
-//! that links the standard library and allocates — one `Arc` per call of either
-//! function. Every other module stays `no_std` with the feature on.
+//! `noop_waker`, and `flag_waker`, whose wake sets a flag the caller reads —
+//! for a blocking client built over an async one and for a frame loop that
+//! polls a future once per frame, or again in the same frame when the future
+//! woke itself. `task` is the one module that links the standard library and
+//! allocates — one `Arc` per call of any of the three functions. Every other
+//! module stays `no_std` with the feature on.
 //!
 //! Every public item lives in one of seven modules, or in one of the two that
 //! the `flatbuffers` and `std` features add. Generated code names each

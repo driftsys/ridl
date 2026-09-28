@@ -109,16 +109,22 @@ pub(super) fn dispatch(
     });
 
     let doc = format!(
-        "Settles every claim of interface `{iface_name}` that is waiting, and \
-         returns how many were settled, or the handler port's failure. It is \
-         the one-pass step `serve` drains through on each poll.\n\nIt does not \
-         wait: it makes one pass over the claims the handler already has and \
-         returns. `Ok` means the handler has no claim waiting; `Err` means \
-         `Handler::next_claim` failed, and every claim settled before the \
-         failure stays settled.\n\n`buf` must be at least \
-         `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is encoded \
-         into the same buffer as the arguments. A shorter buffer returns \
-         `Ok(0)` without consuming a claim.\n\nEvery claim that is taken is \
+        "Settles the claims of interface `{iface_name}` that are waiting, up \
+         to `budget` of them, and returns how many were settled, or the \
+         handler port's failure. It is the one-pass step `serve` calls on \
+         each poll.\n\nIt does not wait: it makes one pass over the claims \
+         the handler already has and returns. `budget` is decreased by one \
+         for each claim taken from `Handler::next_claim`, whether or not its \
+         settlement is accepted, and the pass stops when it reaches 0 without \
+         asking for another claim. With a buffer of at least \
+         `{iface_name}::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
+         means the handler has no claim waiting; `Ok` with `budget` at 0 means claims \
+         may still be waiting; `Err` means `Handler::next_claim` failed, and \
+         every claim settled before the failure stays settled.\n\n`buf` must \
+         be at least `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is \
+         encoded into the same buffer as the arguments. A shorter buffer \
+         returns `Ok(0)` without consuming a claim or changing \
+         `budget`.\n\nEvery claim that is taken is \
          settled, including one whose interface number or ordinal this \
          interface does not recognise, which settles \
          `Contract::UnknownInteraction`. A claim is counted only once \
@@ -138,6 +144,7 @@ pub(super) fn dispatch(
             h: &mut H,
             p: &mut P,
             buf: &mut [u8],
+            budget: &mut usize,
         ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
         where
             H: ::ridl_rt::port::Handler,
@@ -147,10 +154,11 @@ pub(super) fn dispatch(
                 return Ok(0);
             }
             let mut settled = 0usize;
-            loop {
+            while *budget > 0 {
                 let Some(claim) = h.next_claim(buf)? else {
-                    return Ok(settled);
+                    break;
                 };
+                *budget -= 1;
                 let settlement = if claim.iface != #number {
                     h.settle(
                         claim.id,
@@ -174,6 +182,7 @@ pub(super) fn dispatch(
                     settled += 1;
                 }
             }
+            Ok(settled)
         }
     }
 }

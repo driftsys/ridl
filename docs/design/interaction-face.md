@@ -253,13 +253,14 @@ two are recorded on driftsys/ridl#580 with the rest.
 thread, socket or timer, and no port waits; a face may return a future, and that
 future never blocks. Each future's `poll` registers its interest with the port,
 then reads the port — a call or event future once, `Serve` until the handler has
-no claim waiting — and returns. What waits is the executor or the frame loop
-that polls the future, or `ridl_rt::task::block_on` under the `blocking` module,
-which is the library's and not generated. ADR-0018's two rejections — `async fn`
-at the platform layer, blocking calls at the platform layer — are about the
-engine's layers and bind neither the ports library nor generated code; its open
-question 5 is answered for the face: a command's future resolves on the delivery
-acknowledgment, the runtime's finding, and carries no acceptance value.
+no claim waiting or it has taken 32 claims in that poll — and returns. What
+waits is the executor or the frame loop that polls the future, or
+`ridl_rt::task::block_on` under the `blocking` module, which is the library's
+and not generated. ADR-0018's two rejections — `async fn` at the platform layer,
+blocking calls at the platform layer — are about the engine's layers and bind
+neither the ports library nor generated code; its open question 5 is answered
+for the face: a command's future resolves on the delivery acknowledgment, the
+runtime's finding, and carries no acceptance value.
 
 ## The provider face
 
@@ -282,27 +283,39 @@ acknowledgment, the runtime's finding, and carries no acceptance value.
 **`serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`**
 calls `Handler::serve` with the interface's command and query ordinals when the
 function runs; a refusal is a future ready with `ProviderError::Serve`. Each
-poll registers `Interest::Claim`, then drains the handler through the internal
-one-pass step, and is `Pending` once no claim is left; the handler port's
-failure resolves the future to `ProviderError::Claim`, with every claim settled
-before it staying settled. `Output` is `Result<Infallible, ProviderError>`: the
-future never resolves to `Ok` (F-7). It holds the handler by value, the provider
-by `&mut`, and the claim buffer of `MAX_BUFFER_SIZE` bytes inline, so the
-application supplies no buffer and reads no count. A resolved `Serve` panics
-when it is polled again. Over `ridl-loopback`, registering the served set means
-a handler under `serve` is presented only the interface's own members; the
-settlement table's unknown-route rows are reachable only through the internal
-step directly, which is how `tests/interaction_face.rs` still exercises them —
-the test file is inside the crate that `include!`s the fixture, so `pub(crate)`
+poll registers `Interest::Claim`, then settles claims through the internal
+one-pass step, at most 32 in one poll (`SERVE_BUDGET`, a private constant of
+each interface module that emits `serve`; ADR-0023's 2026-09-28 amendment). A
+poll that took 32 claims wakes its own waker and is `Pending`, so the executor
+polls it again after other tasks have run, because a future that holds one poll
+for an unbounded time blocks every other task on a single-threaded executor; a
+poll that found no claim left before 32 is `Pending` without waking itself. The
+32 are counted as claims are taken, not as their settlements are accepted. The
+self-wake is discarded under `ridl_rt::task::noop_waker`, so a frame loop that
+polls `Serve` once per frame with it settles at most 32 claims per frame; a loop
+that polls with `ridl_rt::task::flag_waker` polls again while the flag was set,
+up to its own limit of polls per frame. The handler port's failure resolves the
+future to `ProviderError::Claim`, with every claim settled before it staying
+settled. `Output` is `Result<Infallible, ProviderError>`: the future never
+resolves to `Ok` (F-7). It holds the handler by value, the provider by `&mut`,
+and the claim buffer of `MAX_BUFFER_SIZE` bytes inline, so the application
+supplies no buffer and reads no count. A resolved `Serve` panics when it is
+polled again. Over `ridl-loopback`, registering the served set means a handler
+under `serve` is presented only the interface's own members; the settlement
+table's unknown-route rows are reachable only through the internal step
+directly, which is how `tests/interaction_face.rs` still exercises them — the
+test file is inside the crate that `include!`s the fixture, so `pub(crate)`
 reaches it.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
 the failure `serve` resolves to — and `Ok(0)` on a buffer shorter than
-`MAX_BUFFER_SIZE`, without consuming a claim. It loops over
-`Handler::next_claim`, routing and settling every claim it takes — including one
-this interface does not recognise, because `Handler`'s own contract requires
-every claim to be settled:
+`MAX_BUFFER_SIZE`, without consuming a claim. It takes a `budget: &mut usize`,
+which it decreases by one for each claim it takes and at 0 stops without asking
+for another claim; `serve` passes 32 and reads the budget left to know whether
+the pass stopped at the bound. It loops over `Handler::next_claim`, routing and
+settling every claim it takes — including one this interface does not recognise,
+because `Handler`'s own contract requires every claim to be settled:
 
 | Cause                                       | Settled as                     |
 | ------------------------------------------- | ------------------------------ |
@@ -443,10 +456,16 @@ emitted crate's own `std`, so a build with default features off has no
 `wasm32-unknown-unknown`. `block_on` is what `ridl-rt`'s `std` feature carries
 ([the `ridl-rt` design record](ridl-rt.md), the `task` module); it is not usable
 on wasm, where `Instant::now()` panics, and a frame loop there polls with
-`noop_waker` instead. Inside this repository the fixture is `include!`d by the
-backend crate's own tests, and `cfg(feature = "std")` is evaluated against the
-including crate, so `crates/ridl-backend-rust` declares a `std` feature of its
-own, on by default and read by nothing in the library, for that purpose alone.
+`noop_waker` or `flag_waker` instead: poll, then, under `flag_waker`, poll again
+while the flag was set, up to the loop's own limit of polls per frame, so that
+`Serve`'s self-wake at 32 claims is not lost until the next frame. A `no_std`
+frame loop with an allocator writes the same small waker over
+`alloc::task::Wake` on an `Arc`; one without an allocator needs a hand-written
+`RawWaker`, which needs `unsafe`. Inside this repository the fixture is
+`include!`d by the backend crate's own tests, and `cfg(feature = "std")` is
+evaluated against the including crate, so `crates/ridl-backend-rust` declares a
+`std` feature of its own, on by default and read by nothing in the library, for
+that purpose alone.
 
 ## The encoding and the ports
 
