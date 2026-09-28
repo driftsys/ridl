@@ -790,14 +790,26 @@ diag_codes! {
         /// (ridl §11, general form §6.3). Warning. Emitted by the `ridl check`
         /// desk check (E2 task 18), never by the compiler: the comparison
         /// reads a workspace-local baseline, which is outside `ridlc`'s
-        /// source→IR function (ADR-0008 decisions 9 and 13). A field or arm
-        /// added or removed draws no warning here, and neither does any
-        /// ordinal change in the same edit as an addition or a removal —
-        /// `ridl diff` reports both in CI. A reorder, or a `reserved`
-        /// tombstone added or moved, with the same live fields or arms on both
-        /// sides, does draw it.
-        /// An enum value's or enum-set bit's reorder is not a change (typl
-        /// §8, §9) and does not draw this warning either (driftsys/ridl#335).
+        /// source→IR function (ADR-0008 decisions 9 and 13). For a struct
+        /// field or union arm the desk reads the verdict `ridl diff` gates
+        /// on, so the two agree by construction (driftsys/ridl#533): one
+        /// warning per change the diff reports as breaking. That is a member
+        /// inserted above a live one or into a retired slot; a member
+        /// removed, with or without a tombstone, because `ridl diff` matches
+        /// a composite member by name and does not yet read the body's
+        /// `reserved` entries; a member whose ordinal moved in an edit that
+        /// added or removed none, by a reorder or by a `reserved` entry
+        /// added, moved or removed above it; and a member appended beside
+        /// any of those, which the diff reports as breaking although the
+        /// append is compatible on its own. An append alone draws nothing,
+        /// except an arm added to a result union, whose arms are its
+        /// transport identity (ADR-0008 decision 4).
+        /// The diff reports no reorder beside an addition or a removal, so
+        /// the warning for an added or removed member names the siblings
+        /// whose ordinal changed. An enum value's or enum-set bit's reorder
+        /// is not a change (typl §8, §9) and does not draw this warning
+        /// (driftsys/ridl#335); an enum value added or removed is `ridl
+        /// diff`'s alone.
         RIDL_407 = "RIDL-407", Warning,
             "interaction, struct field, or union arm ordinal changed against the published \
              baseline";

@@ -104,7 +104,7 @@ Arguments:
 
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
-      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm whose ordinal moved while no field or arm was added or removed. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
+      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm change `ridl diff` gates on: a member inserted, one removed, one moved in an edit that added or removed no member, and one appended beside such a change or to a result union. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
       --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema [default: text] [possible values: text, json]
   -h, --help                 Print help
 ```
@@ -250,8 +250,17 @@ silent skip the two paragraphs above do not touch.
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
 the workspace against it and warns (RIDL-407) on every interaction whose
-declaration order moved, and every struct field or union arm whose ordinal
-moved while no field or arm was added or removed, without moving the exit code. Reordering two events in a published
+declaration order moved, and every struct field or union arm change `ridl
+diff` gates on, without moving the exit code. The warning for a field or arm
+follows the verdict the gate reads, so the two agree: a member inserted, one
+removed, one moved in an edit that added or removed no member, and one
+appended beside such a change each draw one warning, and an append alone
+draws none, except an arm added to a result union, whose arms are its
+transport identity (ADR-0008 decision 4). A removal draws one whether or not
+a `reserved` tombstone keeps the slot, because the diff does not yet read a
+composite body's `reserved` entries. The diff reports no reorder beside an
+addition or a removal, so the warning for the added or removed member names
+the siblings whose ordinal changed. Reordering two events in a published
 interface:
 
 ```sh
