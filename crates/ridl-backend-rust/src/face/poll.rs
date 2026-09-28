@@ -85,8 +85,7 @@ fn send(
     );
     // The port parameter and the rebinding carry emitter-owned names, so a
     // ridl parameter named `port`, `buf` or `bytes` collides with nothing in
-    // this body (see `call_method`). `dispatch` binds the ridl name directly
-    // and is not covered.
+    // this body (see `call_method`).
     quote! {
         #[doc = #doc]
         pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
