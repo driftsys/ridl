@@ -80,8 +80,9 @@ enum Command {
         /// Compare the checked workspace against a published baseline — a
         /// directory of `.ir.json` snapshots or one snapshot file — and warn
         /// (RIDL-407) on every interaction whose ordinal moved and every
-        /// struct field or union arm whose ordinal moved while no field or arm was added or removed. Without the flag,
-        /// `.ridl/baseline/` at the workspace root is used when it exists.
+        /// struct field or union arm whose ordinal moved, or that was
+        /// inserted or removed. Without the flag, `.ridl/baseline/` at the
+        /// workspace root is used when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -610,9 +611,11 @@ fn is_source_dir(dir: &Path) -> bool {
 // The baseline-aware desk check (E2.9, general form §6.3, ADR-0008 decision 9)
 // ==========================================================================
 
-/// The change categories the desk check reports: the four that move a live
-/// interaction's ordinal, plus a struct field's or union arm's ordinal
-/// reorder (typl §7.4) — and no others.
+/// The interaction change categories the desk check reports: the four that
+/// move a live interaction's ordinal (ridl §11) — and no others. A struct
+/// field's or union arm's change is read through [`MEMBER_CATEGORIES`]
+/// instead, because its category alone does not say whether an ordinal
+/// moved.
 ///
 /// General form §6.3 asks for one thing at the desk — a reorder or an insertion
 /// caught before CI, because declaration order is wire identity and a reorder
@@ -623,24 +626,40 @@ fn is_source_dir(dir: &Path) -> bool {
 /// 2026-09-15): its order is not an identity, so no service-level category
 /// belongs here.
 ///
-/// [`MemberReordered`](ridl_diff::Category::MemberReordered) also covers an
-/// enum value's or enum-set bit's textual reorder, which typl §8 and §9 make
-/// *not* a change: the value or bit takes its identity from its explicit
-/// number, not from declaration order. `ridl-diff` still reports that case,
-/// conservatively (driftsys/ridl#397), so `desk_check` reads the change's own
-/// detail to tell the two apart and stays silent for the enum/enum-set case
-/// rather than warning about a wire identity that never moved
-/// (driftsys/ridl#335).
-///
 /// Every category listed here classifies
 /// [`Breaking`](ridl_diff::Verdict::Breaking) in every direction, so the
-/// category — plus, for `MemberReordered`, the detail check `desk_check`
-/// applies — selects them.
-const ORDINAL_CATEGORIES: [ridl_diff::Category; 5] = [
+/// category alone selects them.
+const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
     ridl_diff::Category::InteractionInserted,
     ridl_diff::Category::InteractionReordered,
     ridl_diff::Category::InteractionRemoved,
     ridl_diff::Category::ReservedNameRedeclared,
+];
+
+/// The change categories a struct field or union arm can arrive under
+/// (typl §7.4). `ridl_diff`'s composite comparison has no member-level
+/// insertion or removal category: a member present on one side only is a
+/// `DeclAdded` or `DeclRemoved` under the container's path, and the
+/// classifier reads the two bodies to decide its direction — an append is
+/// compatible, an insertion breaking, a removal always breaking. So the
+/// category does not say whether an ordinal moved; the change's verdict
+/// does, and it is the verdict `ridl diff` gates on. `desk_check` warns on
+/// one of these exactly when the verdict is
+/// [`Breaking`](ridl_diff::Verdict::Breaking) and the container is a struct
+/// or union, so the desk and the gate cannot disagree about a member change
+/// (driftsys/ridl#533).
+///
+/// The container check is what keeps an enum value's or enum-set bit's
+/// change out: `MemberReordered` also covers their textual reorder, which
+/// typl §8 and §9 make *not* a change — the value or bit takes its identity
+/// from its explicit number — and `ridl-diff` still reports it,
+/// conservatively (driftsys/ridl#397). The desk stays silent for it rather
+/// than warn about a wire identity that never moved (driftsys/ridl#335); an
+/// enum value added or removed stays `ridl diff`'s alone for the same
+/// reason.
+const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [
+    ridl_diff::Category::DeclAdded,
+    ridl_diff::Category::DeclRemoved,
     ridl_diff::Category::MemberReordered,
 ];
 
@@ -1239,16 +1258,22 @@ fn desk_check(
     let index = DeclIndex::build(entry);
     let mut warnings = Vec::new();
     for change in &report.changes {
-        if !ORDINAL_CATEGORIES.contains(&change.category) {
+        let message = if ORDINAL_CATEGORIES.contains(&change.category) {
+            drift_message(change)
+        } else if MEMBER_CATEGORIES.contains(&change.category)
+            && change.verdict == ridl_diff::Verdict::Breaking
+        {
+            let Some(drift) = member_drift(change, &baseline, &current) else {
+                continue;
+            };
+            member_message(change, drift)
+        } else {
             continue;
-        }
-        if change.category == ridl_diff::Category::MemberReordered && !is_ordinal_reorder(change) {
-            continue;
-        }
+        };
         warnings.push(Diagnostic {
             code: DiagCode::RIDL_407,
             severity: Severity::Warning,
-            message: drift_message(change),
+            message,
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
@@ -1374,20 +1399,182 @@ fn directory_of(path: &str) -> String {
     }
 }
 
-/// Whether a `MemberReordered` change names a struct field's or union arm's
-/// ordinal rather than an enum value's or enum-set bit's position.
-/// `diff_composite` renders the former's slot as `"ordinal N"` and the
-/// latter's as `"position N"` (typl §7.4 vs typl §8, §9) — the word is the
-/// only place the two are told apart once they reach `desk_check`, which
-/// warns on the first and stays silent on the second (driftsys/ridl#335).
-fn is_ordinal_reorder(change: &ridl_diff::Change) -> bool {
-    change
-        .before
-        .as_deref()
-        .is_some_and(|detail| detail.starts_with("ordinal "))
+/// What a struct field's or union arm's change is, once the two bodies are
+/// read: the words a [`MemberReordered`](ridl_diff::Category::MemberReordered),
+/// [`DeclAdded`](ridl_diff::Category::DeclAdded) or
+/// [`DeclRemoved`](ridl_diff::Category::DeclRemoved) change does not carry
+/// on its own, and the RIDL-407 message needs (driftsys/ridl#533).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MemberDrift {
+    /// A member the baseline does not declare, at an ordinal the baseline
+    /// already assigns or retires — the classifier's breaking `DeclAdded`.
+    Inserted { ordinal: u32 },
+    /// A member the baseline declares that the body no longer holds, under a
+    /// name no `reserved` entry retires.
+    Removed,
+    /// A member the baseline declares that the body retires with `reserved`
+    /// under its name. `ridl diff` still reports it as a breaking removal:
+    /// its composite comparison matches by name and does not read the
+    /// `reserved` list (the limit `diff_composite` records), and the desk
+    /// repeats the gate rather than disagree with it.
+    Retired,
+    /// A surviving member whose ordinal changed while the live members kept
+    /// their order: a `reserved` entry above it was added, moved or removed.
+    Shifted,
+    /// A surviving member whose ordinal changed because the live members
+    /// changed order.
+    Moved,
 }
 
-/// The RIDL-407 message for one ordinal-affecting change.
+/// A struct or union body as the desk check reads it (typl §7.4).
+struct CompositeBody {
+    /// Each live member with its ordinal, in declaration order.
+    live: Vec<(String, u32)>,
+    /// The names the body's `reserved` entries retire.
+    reserved: Vec<String>,
+}
+
+/// The body of the struct or union `container` in `package`, or `None` for
+/// any other declaration kind — an enum, an enum set, a type or a constant
+/// — which is what keeps them out of the desk check.
+fn composite_body(
+    packages: &[ridl_ir::v2::Package],
+    package: &str,
+    container: &str,
+) -> Option<CompositeBody> {
+    use ridl_ir::v2::decl::Kind;
+    use ridl_ir::v2::struct_member::Member;
+    let decl = packages
+        .iter()
+        .find(|candidate| candidate.name == package)?
+        .decls
+        .iter()
+        .find(|decl| decl.name == container)?;
+    match decl.kind.as_ref()? {
+        Kind::StructDef(def) => {
+            let mut live = Vec::new();
+            let mut reserved = Vec::new();
+            for member in &def.members {
+                match &member.member {
+                    Some(Member::Field(field)) => live.push((field.name.clone(), field.ordinal)),
+                    Some(Member::Reserved(entry)) => reserved.extend(entry.name.clone()),
+                    None => {}
+                }
+            }
+            Some(CompositeBody { live, reserved })
+        }
+        Kind::UnionDef(def) => Some(CompositeBody {
+            live: def
+                .arms
+                .iter()
+                .map(|arm| (arm.name.clone(), arm.ordinal))
+                .collect(),
+            reserved: def
+                .reserved
+                .iter()
+                .filter_map(|entry| entry.name.clone())
+                .collect(),
+        }),
+        _ => None,
+    }
+}
+
+/// Reads the two bodies a member-level change names and says what the
+/// change is, or `None` when the path is not `<package>/<container>/<member>`
+/// with a struct or union at `<container>` on the side that holds the
+/// member — the current workspace for an addition or a reorder, the
+/// baseline for a removal.
+fn member_drift(
+    change: &ridl_diff::Change,
+    baseline: &[ridl_ir::v2::Package],
+    current: &[ridl_ir::v2::Package],
+) -> Option<MemberDrift> {
+    let mut parts = change.path.split('/');
+    let (Some(package), Some(container), Some(member), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    match change.category {
+        ridl_diff::Category::DeclAdded => {
+            let body = composite_body(current, package, container)?;
+            let (_, ordinal) = body.live.iter().find(|(name, _)| name == member)?;
+            Some(MemberDrift::Inserted { ordinal: *ordinal })
+        }
+        ridl_diff::Category::DeclRemoved => {
+            composite_body(baseline, package, container)?;
+            let retired = composite_body(current, package, container)
+                .is_some_and(|body| body.reserved.iter().any(|name| name == member));
+            Some(if retired {
+                MemberDrift::Retired
+            } else {
+                MemberDrift::Removed
+            })
+        }
+        ridl_diff::Category::MemberReordered => {
+            let before = composite_body(baseline, package, container)?;
+            let after = composite_body(current, package, container)?;
+            fn names(body: &CompositeBody) -> Vec<&str> {
+                body.live.iter().map(|(name, _)| name.as_str()).collect()
+            }
+            Some(if names(&before) == names(&after) {
+                MemberDrift::Shifted
+            } else {
+                MemberDrift::Moved
+            })
+        }
+        _ => None,
+    }
+}
+
+/// The RIDL-407 message for a struct field's or union arm's change, in the
+/// register [`drift_message`] sets: the member and the body it is declared
+/// in, the consequence under typl §7.4, and the edit that keeps the baseline
+/// intact.
+fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
+    let (shape, name) = shape_and_name(&change.path);
+    let in_shape = shape.map_or(String::new(), |shape| format!(" in `{shape}`"));
+    match drift {
+        MemberDrift::Inserted { ordinal } => format!(
+            "`{name}` takes ordinal {ordinal}{in_shape}, an ordinal the published baseline \
+             already assigns or retires. A struct field or union arm keeps its ordinal for \
+             ever (typl §7.4): a member inserted above an existing one shifts every later wire \
+             identity, and one placed in a retired slot revives it — declare it at the end of \
+             the body instead",
+        ),
+        MemberDrift::Removed => format!(
+            "`{name}` is gone{in_shape} but the published baseline still declares it. Deleting \
+             the line frees its ordinal and every later member slides into a wire identity \
+             that is not its own (typl §7.4) — retire it in place with `reserved {name}`, \
+             which holds the slot for ever",
+        ),
+        MemberDrift::Retired => format!(
+            "`{name}` is retired{in_shape} with `reserved`, which keeps its ordinal \
+             (typl §7.4), and `ridl diff` still reports the retirement as breaking: it \
+             matches a struct field or union arm by name and does not yet read the body's \
+             `reserved` entries, so it gates a tombstoned removal like a bare one. This \
+             warning repeats the gate rather than disagree with it",
+        ),
+        MemberDrift::Shifted => format!(
+            "`{name}` has not moved{in_shape}, but its ordinal has changed since the published \
+             baseline{}: a `reserved` entry above it was added, moved or removed. A tombstone \
+             holds an ordinal exactly as a live member does (typl §7.4), so a consumer built \
+             against the baseline would read this slot as a different member — put the \
+             `reserved` entries back where the baseline has them and add new ones at the end",
+            baseline_position(change, "ordinal"),
+        ),
+        MemberDrift::Moved => format!(
+            "`{name}` has moved{in_shape} since the published baseline{}. Declaration order is \
+             the wire identity of a struct field or union arm (typl §7.4), so a consumer built \
+             against the baseline would read this slot as a different member — put the members \
+             back in the baseline's order and add new ones at the end",
+            baseline_position(change, "ordinal"),
+        ),
+    }
+}
+
+/// The RIDL-407 message for one ordinal-affecting interaction change; a
+/// struct field's or union arm's is [`member_message`].
 ///
 /// Written for the reader of a `.ridl` file, not for a reader of the diff
 /// report. It names the member and the shape it is declared in — the words
@@ -1411,13 +1598,6 @@ fn drift_message(change: &ridl_diff::Change) -> String {
              baseline would now bind this slot to a different interaction — put the declarations \
              back in the baseline's order and add new ones at the end",
             baseline_position(change, "position"),
-        ),
-        ridl_diff::Category::MemberReordered => format!(
-            "`{name}` has moved{in_shape} since the published baseline{}. Declaration order is \
-             the wire identity of a struct field or union arm (typl §7.4), so a consumer built \
-             against the baseline would read this slot as a different member — put the members \
-             back in the baseline's order and add new ones at the end",
-            baseline_position(change, "ordinal"),
         ),
         ridl_diff::Category::InteractionInserted => format!(
             "`{name}` is declared{in_shape} ahead of interactions the published baseline already \
@@ -1954,38 +2134,62 @@ impl DeclIndex {
             // same three-part path `span_of` already reads for an
             // interaction. `SourceFile::shapes` does not reach these bodies;
             // it walks interface bodies only, so they are indexed here, from
-            // `SourceFile::definitions`. A `reserved` tombstone carries no
-            // ordinal a `MemberReordered` diff addresses, so only the live
-            // fields and arms are indexed — and, unlike an interface shape,
-            // the struct's or union's own name is not recorded into `shapes`:
-            // a `MemberReordered` diff path always names a member that still
-            // exists in the current source, so `span_of` never falls back to
-            // the container for this category, and an entry here would go
-            // unread.
+            // `SourceFile::definitions`. A `reserved` tombstone is indexed
+            // under the name it retires, so a member retired in place points
+            // at its tombstone; the container's own name goes into `shapes`
+            // as the fallback for a member deleted outright, as an interface
+            // shape's does.
             for definition in source.definitions() {
                 match definition {
                     ridl_syntax::ast::Definition::Struct(def) => {
-                        let Some(name) = def.name().and_then(|n| name_text(&n)) else {
+                        let Some(name_node) = def.name() else {
                             continue;
                         };
-                        let fields = def.members().filter_map(|member| {
-                            let ridl_syntax::ast::StructMember::Field(field) = member else {
-                                return None;
-                            };
-                            let field_name = field.name().and_then(|n| name_text(&n))?;
-                            Some((field_name, field.syntax().text_range()))
+                        let Some(name) = name_text(&name_node) else {
+                            continue;
+                        };
+                        index.shapes.insert(
+                            (package.clone(), name.clone()),
+                            (path.clone(), name_node.syntax().text_range()),
+                        );
+                        let members = def.members().filter_map(|member| match member {
+                            ridl_syntax::ast::StructMember::Field(field) => {
+                                let field_name = field.name().and_then(|n| name_text(&n))?;
+                                Some((field_name, field.syntax().text_range()))
+                            }
+                            ridl_syntax::ast::StructMember::Reserved(entry) => {
+                                let retired = entry.name().and_then(|n| name_text(&n))?;
+                                Some((retired, entry.syntax().text_range()))
+                            }
                         });
-                        index.record_composite_members(&package, &name, &path, &text, fields);
+                        index.record_composite_members(&package, &name, &path, &text, members);
                     }
                     ridl_syntax::ast::Definition::Union(def) => {
-                        let Some(name) = def.name().and_then(|n| name_text(&n)) else {
+                        let Some(name_node) = def.name() else {
                             continue;
                         };
+                        let Some(name) = name_text(&name_node) else {
+                            continue;
+                        };
+                        index.shapes.insert(
+                            (package.clone(), name.clone()),
+                            (path.clone(), name_node.syntax().text_range()),
+                        );
                         let arms = def.arms().filter_map(|arm| {
                             let arm_name = arm.name().and_then(|n| name_text(&n))?;
                             Some((arm_name, arm.syntax().text_range()))
                         });
-                        index.record_composite_members(&package, &name, &path, &text, arms);
+                        let tombstones = def.reserved().filter_map(|entry| {
+                            let retired = entry.name().and_then(|n| name_text(&n))?;
+                            Some((retired, entry.syntax().text_range()))
+                        });
+                        index.record_composite_members(
+                            &package,
+                            &name,
+                            &path,
+                            &text,
+                            arms.chain(tombstones),
+                        );
                     }
                     _ => {}
                 }
@@ -2042,11 +2246,11 @@ impl DeclIndex {
 
     /// The span a `<package>/<shape>/<interaction>` or
     /// `<package>/<struct or union>/<member>` diff path points at: the
-    /// member's declaration, the shape's name when the member itself is gone
-    /// (a removal — reachable for an interaction only, since a struct field's
-    /// or union arm's `MemberReordered` never accompanies one), and a
-    /// detached span when neither is in the source — a detached diagnostic
-    /// renders as the coded message alone.
+    /// member's declaration — or its `reserved` tombstone, for a struct
+    /// field or union arm retired under its name — the container's name when
+    /// the member itself is gone (a removal), and a detached span when
+    /// neither is in the source — a detached diagnostic renders as the coded
+    /// message alone.
     fn span_of(&self, diff_path: &str, sources: &mut SourceMap) -> Span {
         let mut parts = diff_path.split('/');
         let (Some(package), Some(shape), Some(member)) = (parts.next(), parts.next(), parts.next())

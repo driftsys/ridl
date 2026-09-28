@@ -104,7 +104,7 @@ Arguments:
 
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
-      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm whose ordinal moved while no field or arm was added or removed. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
+      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm whose ordinal moved, or that was inserted or removed. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
       --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema [default: text] [possible values: text, json]
   -h, --help                 Print help
 ```
@@ -251,8 +251,12 @@ silent skip the two paragraphs above do not touch.
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
 the workspace against it and warns (RIDL-407) on every interaction whose
 declaration order moved, and every struct field or union arm whose ordinal
-moved while no field or arm was added or removed, without moving the exit code. Reordering two events in a published
-interface:
+moved or that was inserted or removed, without moving the exit code. The
+warning for a field or arm follows the verdict `ridl diff` gates on, so the
+desk and the gate agree: an append draws none, and a removal draws one
+whether or not a `reserved` tombstone keeps the slot, because the diff does
+not yet read a composite body's `reserved` entries. Reordering two events in
+a published interface:
 
 ```sh
 ridl check

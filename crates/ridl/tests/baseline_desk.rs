@@ -539,15 +539,9 @@ fn assert_member_moved(
         "a reorder never comes with a removal, so the message offers no \
          tombstone:\n{stderr}",
     );
-    assert!(
-        block.contains(declaration),
-        "the span underlines the member's declaration:\n{stderr}",
-    );
-    assert!(
-        block.contains(location),
-        "the span is on {container}'s own copy of the declaration, not the other \
-         composite's identical member text:\n{stderr}",
-    );
+    // `location` pins the span to {container}'s own copy of the declaration,
+    // not the other composite's identical member text.
+    assert_underlines(block, declaration, location, stderr);
 }
 
 /// A struct field swap moves two ordinals, which are wire identity (typl
@@ -630,41 +624,373 @@ fn check_flags_a_union_arm_reorder_against_the_baseline() {
     assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
 }
 
-/// A field added above the existing ones shifts their ordinals, but the diff
-/// reports the addition and no `member_reordered`, so the desk check stays
-/// silent and `ridl diff` gates it in CI. RIDL-407's catalogue entry states
-/// this limit; the test pins it.
-#[test]
-fn check_is_silent_for_a_struct_field_insertion() {
-    let dir = TempDir::new("struct-insert");
-    let root = package_workspace(&dir, COMPOSITES);
-    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
-    assert_eq!(code, 0, "the baseline is written: {stderr}");
-
-    dir.write(
-        "cluster.ridl",
-        &COMPOSITES.replace("struct Report {\n", "struct Report {\n  hinge: DoorState\n"),
-    );
-    let (code, diff, _) = ridl(&[
+/// Runs `ridl diff` from the published baseline to the workspace, returning
+/// its exit code and report. Every test below that asserts a RIDL-407
+/// warning, or its absence, reads this first: the desk warning and the gate
+/// must never disagree about whether a change is a wire break.
+fn diff_against_baseline(root: &Path) -> (i32, String) {
+    let (code, stdout, _) = ridl(&[
         "diff".as_ref(),
         root.join(".ridl/baseline").as_os_str(),
         root.as_os_str(),
     ]);
-    assert_eq!(code, 1, "`ridl diff` gates on the insertion:\n{diff}");
-    assert!(
-        diff.contains("veh.cluster/Report/hinge") && !diff.contains("member_reordered"),
-        "the diff reports the added field and no reorder:\n{diff}",
-    );
+    (code, stdout)
+}
 
-    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+/// Asserts that a RIDL-407 block's span underlines exactly `declaration`, at
+/// `location`: the snippet line carries the declaration's text, the location
+/// line carries `file:line:column`, and the underline holds one caret per
+/// byte of the declaration and no more — a node's range can run to the start
+/// of the next line, and `declaration_range` trims that off.
+fn assert_underlines(block: &str, declaration: &str, location: &str, stderr: &str) {
     assert!(
-        !stderr.contains("RIDL-407"),
-        "an inserted field draws no desk warning:\n{stderr}",
+        block.contains(declaration),
+        "the span underlines `{declaration}`:\n{stderr}",
     );
+    assert!(
+        block.contains(location),
+        "the span is at {location}:\n{stderr}",
+    );
+    let underline = block
+        .lines()
+        .find(|line| line.contains('^'))
+        .unwrap_or_else(|| panic!("no underline in the block:\n{stderr}"));
     assert_eq!(
-        code, 0,
-        "the insertion leaves a clean check clean:\n{stderr}"
+        underline.chars().filter(|c| *c == '^').count(),
+        declaration.len(),
+        "the underline is exactly as wide as `{declaration}`:\n{stderr}",
     );
+}
+
+/// A field or arm added above the existing ones shifts their ordinals, a wire
+/// break under typl §7.4. `ridl diff` reports the addition alone, as
+/// `decl_added`, and classifies it breaking; the desk check reads that
+/// verdict and warns once, for the added member, without moving the exit
+/// code.
+#[test]
+fn check_flags_a_struct_field_or_union_arm_insertion_as_the_gate_does() {
+    for (label, container, edit, location) in [
+        (
+            "struct-insert",
+            "Report",
+            "struct Report {\n",
+            "cluster.ridl:5:3",
+        ),
+        (
+            "union-insert",
+            "Reading",
+            "union Reading {\n",
+            "cluster.ridl:9:3",
+        ),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(edit, &format!("{edit}  hinge: DoorState\n"), 1),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(
+            code, 1,
+            "{label}: `ridl diff` gates on the insertion:\n{diff}"
+        );
+        assert!(
+            diff.contains(&format!(
+                "[breaking] decl_added veh.cluster/{container}/hinge"
+            )) && !diff.contains("member_reordered"),
+            "{label}: the diff reports the added member as breaking and no reorder:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(
+            stderr.matches("warning[RIDL-407]").count(),
+            1,
+            "{label}: one warning, for the inserted member:\n{stderr}",
+        );
+        let block = ridl_407_block(&stderr, "hinge");
+        assert!(
+            block.starts_with(&format!(
+                "warning[RIDL-407]: `hinge` takes ordinal 1 in `{container}`"
+            )),
+            "{label}: the message names the member, its ordinal and the body:\n{stderr}",
+        );
+        assert!(
+            block.contains("typl §7.4") && block.contains("declare it at the end of the body"),
+            "{label}: the message cites the rule and names the remedy:\n{stderr}",
+        );
+        assert!(
+            !block.contains("interaction") && !block.contains("has moved"),
+            "{label}: an inserted member is neither an interaction nor a reorder:\n{stderr}",
+        );
+        assert_underlines(block, "hinge: DoorState", location, &stderr);
+        assert_eq!(
+            code, 0,
+            "{label}: the warning leaves the exit code alone:\n{stderr}",
+        );
+    }
+}
+
+/// A field or arm deleted without a `reserved` tombstone frees its ordinal,
+/// and every later member slides into a wire identity that is not its own
+/// (typl §7.4). `ridl diff` reports `decl_removed`, breaking; the desk check
+/// warns once, names the tombstone that keeps the slot, and points at the
+/// container's name, since the member's own declaration is gone.
+#[test]
+fn check_flags_a_struct_field_or_union_arm_removal_as_the_gate_does() {
+    for (label, container, keyword, edit, location) in [
+        (
+            "struct-remove",
+            "Report",
+            "struct",
+            "struct Report {\n  door: DoorState\n",
+            "cluster.ridl:4:8",
+        ),
+        (
+            "union-remove",
+            "Reading",
+            "union",
+            "union Reading {\n  door: DoorState\n",
+            "cluster.ridl:8:7",
+        ),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(edit, &format!("{keyword} {container} {{\n"), 1),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(
+            code, 1,
+            "{label}: `ridl diff` gates on the removal:\n{diff}"
+        );
+        assert!(
+            diff.contains(&format!(
+                "[breaking] decl_removed veh.cluster/{container}/door"
+            )),
+            "{label}: the diff reports the removed member as breaking:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(
+            stderr.matches("warning[RIDL-407]").count(),
+            1,
+            "{label}: one warning, for the removed member:\n{stderr}",
+        );
+        let block = ridl_407_block(&stderr, "door");
+        assert!(
+            block.starts_with(&format!(
+                "warning[RIDL-407]: `door` is gone in `{container}`"
+            )),
+            "{label}: the message names the member and the body:\n{stderr}",
+        );
+        assert!(
+            block.contains("typl §7.4") && block.contains("`reserved door`"),
+            "{label}: the message cites the rule and names the tombstone:\n{stderr}",
+        );
+        assert!(
+            !block.contains("interaction"),
+            "{label}: a composite member is not an interaction:\n{stderr}",
+        );
+        assert_underlines(block, container, location, &stderr);
+        assert_eq!(
+            code, 0,
+            "{label}: the warning leaves the exit code alone:\n{stderr}",
+        );
+    }
+}
+
+/// A field or arm retired in place with `reserved` keeps its slot, the typl
+/// §7.4 discipline — but `ridl diff` matches a removal by name and does not
+/// read the body's `reserved` entries (the limit `diff_composite` records),
+/// so it gates the retirement as breaking like a bare deletion. The desk
+/// check repeats the gate rather than disagree with it, says so, and points
+/// at the tombstone.
+#[test]
+fn check_repeats_the_gate_on_a_tombstoned_struct_field_or_union_arm_removal() {
+    for (label, container, location) in [
+        ("struct-tombstone", "Report", "cluster.ridl:5:3"),
+        ("union-tombstone", "Reading", "cluster.ridl:9:3"),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        let opening = if container == "Report" {
+            "struct Report {\n"
+        } else {
+            "union Reading {\n"
+        };
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(
+                &format!("{opening}  door: DoorState\n"),
+                &format!("{opening}  reserved door\n"),
+                1,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(
+            code, 1,
+            "{label}: `ridl diff` still gates a tombstoned removal:\n{diff}",
+        );
+        assert!(
+            diff.contains(&format!(
+                "[breaking] decl_removed veh.cluster/{container}/door"
+            )),
+            "{label}: the diff reports the retired member as removed:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(
+            stderr.matches("warning[RIDL-407]").count(),
+            1,
+            "{label}: one warning, agreeing with the gate:\n{stderr}",
+        );
+        let block = ridl_407_block(&stderr, "door");
+        assert!(
+            block.starts_with(&format!(
+                "warning[RIDL-407]: `door` is retired in `{container}`"
+            )) && block.contains("`ridl diff`"),
+            "{label}: the message says the member is retired and that the gate still \
+             reports it:\n{stderr}",
+        );
+        assert!(
+            !block.contains("retire it in place"),
+            "{label}: a retired member is not told to retire itself:\n{stderr}",
+        );
+        assert_underlines(block, "reserved door", location, &stderr);
+        assert_eq!(
+            code, 0,
+            "{label}: the warning leaves the exit code alone:\n{stderr}",
+        );
+    }
+}
+
+/// A field or arm appended at the end takes a fresh ordinal and moves no
+/// other: `ridl diff` classifies it compatible, and the desk check stays
+/// silent — the same verdict, read from the same change.
+#[test]
+fn check_is_silent_for_a_struct_field_or_union_arm_append() {
+    for (label, container, edit) in [
+        ("struct-append", "Report", "  latch: LatchState\n}\nunion"),
+        ("union-append", "Reading", "  latch: LatchState\n}\nenum"),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(edit, &edit.replacen("\n}", "\n  hinge: DoorState\n}", 1), 1),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(code, 0, "{label}: `ridl diff` passes an append:\n{diff}");
+        assert!(
+            diff.contains(&format!(
+                "[compatible] decl_added veh.cluster/{container}/hinge"
+            )),
+            "{label}: the diff reports the appended member as compatible:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert!(
+            !stderr.contains("RIDL-407"),
+            "{label}: an appended member draws no desk warning:\n{stderr}",
+        );
+        assert_eq!(
+            code, 0,
+            "{label}: a compatible change stays clean:\n{stderr}"
+        );
+    }
+}
+
+/// A `reserved` entry added above the live members shifts every ordinal
+/// after it while no declaration moves. `ridl diff` reports one
+/// `member_reordered` per shifted member; the desk check warns once for each
+/// and says the ordinal changed because of a tombstone, not that the member
+/// moved — the member's own line is where it was (driftsys/ridl#533).
+#[test]
+fn check_names_the_tombstone_that_shifted_a_struct_field_or_union_arm() {
+    for (label, container, edit, door_at, latch_at) in [
+        (
+            "struct-shift",
+            "Report",
+            "struct Report {\n",
+            "cluster.ridl:6:3",
+            "cluster.ridl:7:3",
+        ),
+        (
+            "union-shift",
+            "Reading",
+            "union Reading {\n",
+            "cluster.ridl:10:3",
+            "cluster.ridl:11:3",
+        ),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(edit, &format!("{edit}  reserved gone\n"), 1),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(code, 1, "{label}: `ridl diff` gates on the shift:\n{diff}");
+        assert_eq!(
+            diff.matches("member_reordered").count(),
+            2,
+            "{label}: one reorder per shifted member:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(
+            stderr.matches("warning[RIDL-407]").count(),
+            2,
+            "{label}: one warning per shifted member:\n{stderr}",
+        );
+        for (member, was, now, declaration, location) in [
+            ("door", 1, 2, "door: DoorState", door_at),
+            ("latch", 2, 3, "latch: LatchState", latch_at),
+        ] {
+            let block = ridl_407_block(&stderr, member);
+            assert!(
+                block.starts_with(&format!(
+                    "warning[RIDL-407]: `{member}` has not moved in `{container}`"
+                )),
+                "{label}: the message says the member's own declaration did not \
+                 move:\n{stderr}",
+            );
+            assert!(
+                block.contains(&format!("(ordinal {was} there, ordinal {now} here)")),
+                "{label}: the message states both ordinals:\n{stderr}",
+            );
+            assert!(
+                block.contains("`reserved`") && block.contains("typl §7.4"),
+                "{label}: the message names the tombstone as the cause and cites the \
+                 rule:\n{stderr}",
+            );
+            assert!(
+                !block.contains("has moved in"),
+                "{label}: a shifted member is not reported as moved:\n{stderr}",
+            );
+            assert_underlines(block, declaration, location, &stderr);
+        }
+        assert_eq!(
+            code, 0,
+            "{label}: the warning leaves the exit code alone:\n{stderr}",
+        );
+    }
 }
 
 /// An enum value or enum-set bit takes its identity from its explicit number,
