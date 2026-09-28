@@ -96,6 +96,30 @@ refuses that settlement, the poll ends at once with the budget unspent and is
 handler can settle it. Neither case resolves `serve`. The variant is ADR-0021
 decision 5's 2026-09-28 amendment; decision 6 itself is unchanged.
 
+**Amendment (2026-09-28) — a seventh decision, and decision 6 superseded on the
+fixed methods.** Every fixed method of the face — `new` and `next_event` on the
+async `Client`, those two with `with_timeout` and `set_timeout` on
+`blocking::Client`, `new` and `commit` on `Publisher` — and the two derived
+methods `subscribe_<event>` and `invalidate_<signal>` were inherent methods of
+the same types as the member methods, so a member whose snake case was one of
+those names — `new`, `commit`, `nextEvent`, or `subscribeWarning` beside an
+event `warning` — was rustc E0592 in the emitted crate although `ridl check`
+accepted the source (driftsys/ridl#570, split as driftsys/ridl#580). Decision 7
+moves the fixed methods onto four traits in a new `ridl_rt::face` module and the
+derived methods onto two traits generated inside each interface module, keeps
+the member methods inherent, and gives each interface module a `prelude`. The
+design note,
+[`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md),
+inventories every generated item for such a collision (§2), proves each Rust
+resolution fact the design depends on by a compile experiment (§4 and the
+appendix), and records the alternatives (§7); Sebastien confirmed each of its
+choices on 2026-09-28 (its §8). The `ridl-rt` side is
+[ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19. Decision 6's
+bullets for `<iface>::Client<P>` and `<iface>::blocking::Client<P>` are
+superseded where they name `new`, `next_event`, `with_timeout`, `set_timeout`
+and `subscribe_*` as methods of the type; their signatures and behaviour are
+unchanged.
+
 ## Context
 
 The approved M1 design (archived at
@@ -314,6 +338,10 @@ argument for it in the command case.
      The bounds follow RA-19: `Clock` and `Wakeable` join `Caller` when the
      interface declares a command or a query, `Wakeable` joins `EventSource`
      when it declares an event, and a signal-only `Client` is unchanged.
+     _Superseded on 2026-09-28 by decision 7 on one point: `new`, `next_event`
+     and `subscribe_<event>` are trait methods of `ridl_rt::face::Bind`,
+     `ridl_rt::face::Events` and the module's `Subscribe`, not inherent methods;
+     the call methods and the signal reads stay inherent._
    - **The future.** It holds `&'a mut P`, the argument value until the send
      succeeds, its phase and its deadline; it is `Unpin`, `Send` when `P` and
      the argument type are, and needs no `Sync`. Each `poll` registers its
@@ -345,7 +373,11 @@ argument for it in the command case.
      client reports `Send(Busy)` if the call was not sent and `Undelivered` or
      `Timeout` if it was, then drops the future. A caller's timeout shorter than
      `max` is accepted. `blocking::next_event` returns `Ok(None)` at the
-     timeout. Note F-11.
+     timeout. Note F-11. _Superseded on 2026-09-28 by decision 7 on one point:
+     `new`, `with_timeout`, `set_timeout`, `next_event` and `subscribe_<event>`
+     are trait methods of `ridl_rt::face::Bind`, `ridl_rt::face::Timeout`,
+     `ridl_rt::face::Events` and the parent module's `Subscribe`, not inherent
+     methods._
    - **`serve(h, &mut provider)`**, over `H: Handler + Wakeable`, returns a
      named future `Serve<'_, H, P>` with output
      `Result<core::convert::Infallible, ProviderError>`. When called it
@@ -392,6 +424,104 @@ argument for it in the command case.
    [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640);
    decision 1 of the
    [pass-1 dispositions on driftsys/ridl#557](https://github.com/driftsys/ridl/pull/557#issuecomment-5848835004)).
+
+7. **Amendment (2026-09-28) — the fixed methods of the face are trait methods;
+   the member methods stay inherent.** Rust gives one type one inherent
+   namespace, and a trait its own; an inherent method wins a dot call over a
+   trait method of the same name, and the trait method stays reachable through
+   the trait's path. So:
+
+   - **The four `ridl-rt` traits, in `ridl_rt::face`**
+     ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19):
+     `Bind { type Port; fn new(port: Self::Port) -> Self }`, implemented by
+     `Client<P>`, `blocking::Client<P>` and `Publisher<W>` with `Port = P` or
+     `W`;
+     `Events { type Next<'a> where Self: 'a; fn next_event(&mut self) -> Self::Next<'_> }`,
+     implemented by both clients of an interface that declares an event, with
+     `Next<'a> = NextEvent<'a, P>` on the async client and
+     `Result<Option<Event>, ReadError>` on the blocking one; `Timeout: Sized`
+     with `with_timeout(self, Duration) -> Self` and
+     `set_timeout(&mut self, Option<Duration>)`, under `ridl-rt`'s `std`
+     feature, implemented by `blocking::Client<P>`; and
+     `Publish { fn commit(&mut self) }`, implemented by `Publisher<W>` of an
+     interface that declares a signal. `Bind` takes an associated type, not a
+     type parameter; `Events` is one trait for both clients because its
+     associated type is generic over the borrow, and it gives `next_event` a
+     namespace and nothing more: `Next` carries no bound, so generic code cannot
+     use the result.
+   - **The two generated traits, inside each interface module:** `Subscribe`,
+     one `subscribe_<event>` per event, implemented by both clients, emitted
+     when the interface declares an event; `Invalidate`, one
+     `invalidate_<signal>` per signal, implemented by `Publisher`, emitted when
+     it declares a signal. They live in the interface module because every
+     derived type there carries a fixed suffix (`<Member>Call`,
+     `<Member>Correlation`), so a fixed name meets no derived one; at the
+     package module, a trait named `<Iface>Events` would collide with the
+     descriptor of a member named `events` (E0428).
+   - **The member methods stay inherent:** one read per signal and one call per
+     command and query on both clients, one set per signal and one raise per
+     event on `Publisher`.
+   - **A `prelude` module per interface module**, which re-exports by name the
+     `ridl-rt` traits the module's types implement — `Bind` always, `Events`
+     with an event, `Publish` with a signal, `Timeout` under
+     `cfg(feature = "std")` where the `blocking` module is emitted — and the
+     module's own `Subscribe` and `Invalidate` as `_`, so that two interfaces'
+     preludes glob-imported into one scope do not conflict (importing two
+     `Subscribe` traits by name is E0252). A consumer writes
+     `use <crate>::<iface>::prelude::*;` once per interface whose `Subscribe` or
+     `Invalidate` it calls, and every call site is the one an inherent method
+     had: `Client::new(&mut port)`, `client.subscribe_warning()`,
+     `client.next_event()`, `publisher.commit()`,
+     `blocking::Client::new(&mut port).with_timeout(t)`. The `ridl-rt` traits
+     are one item whichever prelude re-exports them; a second prelude whose
+     every used item the first already provides is reported by rustc as an
+     unused import, which is why the round-trip tests import one prelude. There
+     is no `ridl_rt::prelude`: it could not carry the generated traits, and one
+     line per interface was the target.
+   - **The rule on a collision:** nothing is refused and nothing is renamed.
+     With a member named `new`, `Client::new(port)` resolves to the member
+     (E0061), and the consumer writes `<Client<_> as Bind>::new(port)` or
+     `let c: Client<_> = Bind::new(port)`; with a member named `commit` or
+     `subscribeWarning`, `publisher.commit()` and `client.subscribe_warning()`
+     reach the member, and `Publish::commit(&mut publisher)` and
+     `Subscribe::subscribe_warning(&mut client)` reach the face's. A member name
+     is never restricted by this backend (the rule of driftsys/ridl#570).
+   - **The emitter's own calls go through the traits' paths**, so a member of
+     the name cannot capture them: the blocking client builds the async one as
+     `<super::Client<P> as ::ridl_rt::face::Bind>::new(port)`, and delegates as
+     `::ridl_rt::face::Events::next_event(&mut self.inner)` and
+     `super::Subscribe::subscribe_<event>(&mut self.inner)`.
+   - **What it breaks, and the release.** A consumer with no `use` of the
+     prelude gets E0599 on every fixed method ("items from traits can only be
+     used if the trait is in scope"), so the backend change is
+     `feat(ridl-backend-rust)!`; at 0.x a breaking commit is a minor bump, and
+     the release that carries it is 0.4.0, with `ridl-rt` 0.4.0 published to
+     crates.io at the tag, because the emitted manifest's caret requirement must
+     move from `"0.3"` to `"0.4"`, the first line with `face` (ADR-0021 decision
+     19). Inside the workspace the emitter change and the `ridl-rt` change land
+     as one pull request before the release, because `examples/cabin` and
+     `just compat-check` link `ridl-rt` by path.
+
+   The permanent tests are `tests/face_compile.rs`: one case per colliding name
+   — a signal `new`, a signal `commit`, a command `nextEvent`, a command
+   `withTimeout`, a command `setTimeout`, a command `subscribeWarning` beside
+   the event `warning`, and a signal `invalidateTemperature` beside the signal
+   `temperature` — each compiled with the `std` cfg on and off, and one case
+   that compiles a consumer of two interfaces' preludes with the qualified forms
+   above; `tests/face_generation.rs` pins the trait impls, the trait paths of
+   the emitter's own calls, and the prelude of each fixture interface; the round
+   trips in `tests/interaction_face.rs` prove the trait methods behave as the
+   inherent ones did. Two collisions of the same class outside the face —
+   `<Struct>FbView::bytes` against a field named `bytes` (E0592), and the
+   package module's fixed `Wire` against a type or an interface named `Wire`
+   (E0428) — are driftsys/ridl#587 and driftsys/ridl#588, not this decision's.
+   Traces: driftsys/ridl#580 (the change), driftsys/ridl#570 (the origin, and
+   the rule that a backend restricts no member name),
+   [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decisions 1
+   and 4 (the `snake_case` a method name is projected through, and the
+   namespaces RIDL-149 checks — a member `subscribeWarning` beside an event
+   `warning` is not refused, because `subscribe_warning` and `warning` are
+   distinct).
 
 ## Alternatives considered
 
@@ -510,3 +640,12 @@ argument for it in the command case.
   decision 6 and the 2026-09-26 amendment of decision 4
 - driftsys/ridl#485 — the two call-shape findings decision 6 closes;
   driftsys/ridl#509 — the amendments issue
+- [`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md)
+  — the design note behind decision 7: the inventory of every generated item
+  (§2), the resolution facts and their compile experiments (§4, appendix), the
+  alternatives (§7) and the maintainer's confirmed choices (§8);
+  driftsys/ridl#580 and driftsys/ridl#570 — the change and its origin;
+  [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decisions 1
+  and 4 — the name transform and the namespaces RIDL-149 checks;
+  [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19 — the
+  `ridl_rt::face` module and the 0.4.0 release

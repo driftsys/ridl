@@ -42,6 +42,26 @@ tree are test doubles, not runtimes: `MinimalSignalOnlyPort` in
 `crates/ridl-backend-rust/tests/interaction_face.rs`, and `Stub` and `Memory`
 inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`.
 
+**One `use` line per interface.** The fixed methods of a generated face — `new`,
+`next_event`, `commit`, and the blocking client's `with_timeout` and
+`set_timeout` — are methods of the four traits of `ridl_rt::face` (`Bind`,
+`Events`, `Publish`, `Timeout`), and the derived `subscribe_<event>` and
+`invalidate_<signal>` are methods of a `Subscribe` and an `Invalidate` trait
+generated inside each interface module; only the member methods are inherent, so
+a member of the interface may be named `new` or `commit` (ADR-0023 decision 7).
+Every example below assumes the interface's generated `prelude` is in scope:
+
+```rust
+use api::cabin;
+use api::cabin::prelude::*;
+```
+
+With it, every call site is the one an inherent method would have. Without it,
+`cabin::Client::new(&mut port)` is E0599 with the help "items from traits can
+only be used if the trait is in scope". When a member of the interface is itself
+named `new`, `Client::new(port)` is that member, and the face is bound as
+`<cabin::Client<_> as Bind>::new(port)`.
+
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.
 
@@ -260,12 +280,13 @@ interface, taken from the runtime's clock. So a provider that updates four
 signals of one interface and then commits produces one coherent publication, not
 four.
 
-The generated `Publisher` gives each of those a named method:
+The generated `Publisher` gives each of those a named method — the member's
+inherent, the other two through the traits the prelude brings in:
 
 ```rust
-pub fn temperature(&mut self, value: Temperature) -> Result<(), WriteError>;
-pub fn invalidate_temperature(&mut self) -> Result<(), WriteError>;
-pub fn commit(&mut self);
+impl Publisher<W> { pub fn temperature(&mut self, value: Temperature) -> Result<(), WriteError>; }
+impl cabin::Invalidate for Publisher<W> { fn invalidate_temperature(&mut self) -> Result<(), WriteError>; }
+impl ridl_rt::face::Publish for Publisher<W> { fn commit(&mut self); }
 ```
 
 `invalidate_temperature` stages the invalid state with `Cause::Declared` — this
@@ -358,7 +379,9 @@ publisher.warning(Warning { code: Level(5), health: Health::Warn })?;
 There is no `commit`. `EventSink::raise` publishes one occurrence immediately —
 an event is not staged, because there is no coherent set to assemble.
 
-Receiving takes two calls. `next_event` returns a future, `NextEvent`, which
+Receiving takes two calls. `subscribe_warning` is a method of the generated
+`cabin::Subscribe` trait and `next_event` of `ridl_rt::face::Events`, both in
+scope through the prelude. `next_event` returns a future, `NextEvent`, which
 resolves to the next occurrence and is `Pending` while none is waiting; the
 blocking client's `next_event` waits on it and returns `Ok(None)` at the
 client's timeout:
@@ -560,16 +583,17 @@ let reply = client.average(Window(10));
 
 Each call is `ridl_rt::task::block_on` over the async call's future. The timeout
 is per client, `None` by default; `with_timeout` sets it when constructing the
-client, and `set_timeout` changes it afterward. At the timeout, a call that was
-never sent because no slot was free is `ClientError::Send(SendError::Busy)`, and
-a call that was sent answers as the future would at its own deadline:
-`Transport::Undelivered` for a command, `Transport::Timeout` for a query. A
-timeout shorter than a member's `max` is accepted and ends the call first. A
-longer one, or none, leaves `max` to the future, which reads the port's clock
-only when the port wakes it: a runtime that measures the bound and wakes the
-call when it passes ends the call at `max`, and `ridl-loopback`, which measures
-no bound, does not — over it an unserved call returns only at the client's
-timeout.
+client, and `set_timeout` changes it afterward — both are
+`ridl_rt::face::Timeout`'s, which the prelude re-exports under the crate's `std`
+feature. At the timeout, a call that was never sent because no slot was free is
+`ClientError::Send(SendError::Busy)`, and a call that was sent answers as the
+future would at its own deadline: `Transport::Undelivered` for a command,
+`Transport::Timeout` for a query. A timeout shorter than a member's `max` is
+accepted and ends the call first. A longer one, or none, leaves `max` to the
+future, which reads the port's clock only when the port wakes it: a runtime that
+measures the bound and wakes the call when it passes ends the call at `max`, and
+`ridl-loopback`, which measures no bound, does not — over it an unserved call
+returns only at the client's timeout.
 
 ## Step 6 — the provider side, and `serve`
 
@@ -782,16 +806,17 @@ type: an application links exactly the port capabilities its interfaces use, and
 a runtime that offers only some of them still serves the interfaces that fit.
 
 A face holds its port by value and carries no lifetime parameter, so `P` is
-whatever you hand `new`. `Client::new(&mut port)` infers `P` as `&mut Port`,
-because `ridl-rt` implements every port trait for `&mut P`; an owned handle, a
-`Clone` handle and a wrapper that forwards the port traits are accepted just as
-well. A face built over a borrow holds that borrow for as long as the face
-lives, so a runtime that implements every port on one value can be held by one
-face at a time. A call's future goes further: it holds the client's port for as
-long as the future itself lives, not just for as long as the client does, so the
-port is unavailable to any other future or method until that one is dropped.
-That is why the examples above build a client, use it, and let its futures and
-the client itself go before the next step.
+whatever you hand `new`, which is `ridl_rt::face::Bind`'s `new` with `Port = P`.
+`Client::new(&mut port)` infers `P` as `&mut Port`, because `ridl-rt` implements
+every port trait for `&mut P`; an owned handle, a `Clone` handle and a wrapper
+that forwards the port traits are accepted just as well. A face built over a
+borrow holds that borrow for as long as the face lives, so a runtime that
+implements every port on one value can be held by one face at a time. A call's
+future goes further: it holds the client's port for as long as the future itself
+lives, not just for as long as the client does, so the port is unavailable to
+any other future or method until that one is dropped. That is why the examples
+above build a client, use it, and let its futures and the client itself go
+before the next step.
 
 ## The ports that did not appear
 

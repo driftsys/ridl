@@ -194,13 +194,14 @@ that.
   the standard library) that defines what a generated ridl package will link and
   a runtime will implement: identity, time and the envelope, samples, the
   payload traits, the interaction descriptors, the ports, the contract and
-  transport errors and the two errors a generated face returns, and the
-  caller-side call table and waker registry a runtime keeps (`correlate`, story
-  E11.18) (epic E11 story E11.0, ADR-0020 decision 5). It has no dependency in
-  any feature combination and links no runtime: the store and the sans-IO
-  session are `ridl-engine`'s, parked outside this repository, and the three
-  payload codecs (FlatBuffers, proto3, `repr(C)`) are later Epic 11 stories. See
-  [the design record](../design/ridl-rt.md) and
+  transport errors and the two errors a generated face returns, the caller-side
+  call table and waker registry a runtime keeps (`correlate`, story E11.18), and
+  the traits a generated face implements for its fixed methods (`face`,
+  driftsys/ridl#580, ADR-0021 decision 19) (epic E11 story E11.0, ADR-0020
+  decision 5). It has no dependency in any feature combination and links no
+  runtime: the store and the sans-IO session are `ridl-engine`'s, parked outside
+  this repository, and the three payload codecs (FlatBuffers, proto3, `repr(C)`)
+  are later Epic 11 stories. See [the design record](../design/ridl-rt.md) and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
 
 - **`crates/ridl-loopback`** — the in-process reference runtime, and the one

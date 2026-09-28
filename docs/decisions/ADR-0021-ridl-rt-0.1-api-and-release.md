@@ -94,6 +94,17 @@ matched `Short` from `next_claim` to resize and read again now receives
 `ShortClaim` in its `_` arm and must match the new variant instead, which is the
 one behaviour change. Sebastien took the decision on 2026-09-28.
 
+**Amendment (2026-09-28) — decision 19: the `face` module, and the 0.4.0
+release.** The generated face's fixed methods move from inherent impls onto
+traits ([ADR-0023](ADR-0023-interaction-face-generation.md) decision 7,
+driftsys/ridl#580), and the traits live here, in an eighth unconditional module
+`face`, so that the two clients and the publisher of every interface implement
+one vocabulary and a generic consumer can name `new` and `commit`. An addition
+under decision 10, released as 0.4.0 with the workspace because the backend
+change that needs it is breaking; Sebastien confirmed the release and its
+publication on 2026-09-28. The design note is
+[`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -710,6 +721,47 @@ trusted with no `unsafe` and no second verification pass.
     a face has exercised the API before the tag; the second half follows the
     release and links the released crate.
 
+19. **Amendment (2026-09-28) — the `face` module: the traits a generated face
+    implements, and the 0.4.0 release that carries them.** `ridl_rt::face` is
+    the eighth unconditional module, `no_std` with no dependency like the rest,
+    and the one module whose items generated code implements rather than calls;
+    no runtime implements them, and `ridl-rt-conformance` is unchanged. It holds
+    four traits: `Bind { type Port; fn new(port: Self::Port) -> Self }`,
+    `Events { type Next<'a> where Self: 'a; fn next_event(&mut self) -> Self::Next<'_> }`,
+    `Publish { fn commit(&mut self) }`, and under the `std` feature
+    `Timeout: Sized { fn with_timeout(self, Duration) -> Self; fn set_timeout(&mut self, Option<Duration>) }`
+    over `core::time::Duration`. `Timeout` compiles without `std` — the type is
+    `core`'s — but is gated all the same, because its only implementor is the
+    generated `blocking` module, which the emitted crate's `std` feature enables
+    together with this crate's, and a trait with no possible implementor in a
+    `no_std` build is surface without a use. `Events`'s generic associated type
+    is stable since Rust 1.65, below `rust-version` 1.83. Which generated type
+    implements which trait, the two per-interface traits the emitter generates
+    beside them, and the generated `prelude` that puts them in scope are
+    [ADR-0023](ADR-0023-interaction-face-generation.md) decision 7. The names
+    were checked against every export of the crate — `contract::Event`,
+    `sample::Duration`, `port::Attached` and the port traits,
+    `error::Transport::Timeout` — and none is reused; `Bind` follows the crate's
+    own vocabulary, in which the generated face is the consumer's binding and
+    `new` binds the face to a port.
+
+    **The release.** Four traits and a module are an addition, not a breaking
+    change under decision 10. The crate is released as 0.4.0 with the workspace
+    all the same, because the backend change that needs it breaks the generated
+    API (a consumer adds one `use` line per interface), which at 0.x is a minor
+    bump, and because the emitted manifest's caret requirement on `ridl-rt`
+    accepts any published line of one minor: under a patch, `"0.3"` would still
+    accept the published 0.3.0, which has no `face`. The release commit moves
+    the workspace version to 0.4.0 and the literal in `crates/ridlc/src/lib.rs`
+    to `"0.4"`, whose guard in `crates/ridlc/tests/rust_crate_emit.rs` derives
+    the expected `major.minor` from the workspace version; `cargo publish` of
+    `ridl-rt` follows the tag at once, the order decision 18 used. Inside the
+    workspace the two changes land as one pull request before the release,
+    because `examples/cabin` patches `ridl-rt` to its path and
+    `just compat-check` links the packaged crate by path; a consumer outside it
+    resolves the emitted crate once 0.4.0 is on crates.io. Sebastien confirmed
+    the release and its publication on 2026-09-28.
+
 ## Alternatives considered
 
 | Question                   | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
@@ -825,6 +877,12 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-loopback` design record](../design/ridl-loopback.md)                                  | the claim section and the `forget` table state the offered claim (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                                             |
 | [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | the settlement table gains the `ShortClaim` row (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                                                              |
 | `crates/ridl-rt/src/port.rs`                                                                     | `ReadError::ShortClaim`, its doc, and the `Handler::next_claim` and `Handler::settle` docs state decision 5's 2026-09-28 amendment                                                                                                                                                                                               |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-09-28 amendment records `face` as the eighth unconditional module (decision 19)                                                                                                                                                                                                                                           |
+| [ADR-0023](ADR-0023-interaction-face-generation.md)                                              | its second 2026-09-28 amendment, decision 7, is the face built over decision 19's traits; the two records were amended together                                                                                                                                                                                                  |
+| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table and a `face` section state decision 19                                                                                                                                                                                                                                                                          |
+| [the interaction-face design record](../design/interaction-face.md)                              | the consumer face, the provider face and the blocking module state which methods are trait methods, and the collision paragraph states the rule a consumer follows (ADR-0023 decision 7)                                                                                                                                         |
+| [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | its examples carry the `use ...::prelude::*;` line and name the traits (ADR-0023 decision 7)                                                                                                                                                                                                                                     |
+| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `face` module (decision 19)                                                                                                                                                                                                                                                      |
 
 ## References
 

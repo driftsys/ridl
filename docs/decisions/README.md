@@ -217,11 +217,15 @@ other entry below is Accepted.
   `Transport::Corrupt` instead of ending (driftsys/ridl#569). Story E11.16's
   re-land (driftsys/ridl#551) amended decision 5 in place (a dropped handler's
   unsettled claim is returned and presented again) and decision 13 in place (one
-  waker per kind of key; a same-task registration is a refresh). Binds every
-  consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
-  reference finalization pass (story E14.2). The two reference sentences it gave
-  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
-  which aligned it with the frame specification.
+  waker per kind of key; a same-task registration is a refresh). A third
+  2026-09-28 amendment adds decision 19: the `face` module, the four traits a
+  generated face implements for its fixed methods (`Bind`, `Events`, `Publish`,
+  and `Timeout` under `std`), released as 0.4.0 because the backend change that
+  needs them breaks the generated API. Binds every consumer of `ridl-rt`: the
+  Rust codegen, the two runtimes, and the ridl reference finalization pass
+  (story E14.2). The two reference sentences it gave that pass for #308 and #309
+  are in the reference since driftsys/ridl#544, which aligned it with the frame
+  specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
@@ -256,10 +260,19 @@ other entry below is Accepted.
   decision 5 has a face hold its port by value, with no lifetime parameter. The
   2026-09-28 amendment bounds one poll of `serve` to 32 claims, after which the
   future wakes itself and is `Pending`; a frame loop polls with
-  `ridl_rt::task::flag_waker` to poll again in the same frame. Binds every later
-  story that extends the Rust backend's interaction face, until superseded:
-  E5.1, Epic 10, and any later language backend that follows this precedent. The
-  as-built face this record's decisions produced is
+  `ridl_rt::task::flag_waker` to poll again in the same frame. A second
+  2026-09-28 amendment adds decision 7: the face's fixed methods — `new`,
+  `next_event`, `commit`, `with_timeout`, `set_timeout` — are methods of the
+  four `ridl_rt::face` traits (`Bind`, `Events`, `Publish`, `Timeout`), the
+  derived `subscribe_<event>` and `invalidate_<signal>` are methods of two
+  traits generated inside each interface module (`Subscribe`, `Invalidate`), and
+  the member methods stay inherent, so a member may carry any of those names; a
+  generated `prelude` per interface puts the traits in scope with one `use`
+  line, and on a real collision the consumer writes the trait's path
+  (`<Client<_> as Bind>::new(port)`). Binds every later story that extends the
+  Rust backend's interaction face, until superseded: E5.1, Epic 10, and any
+  later language backend that follows this precedent. The as-built face this
+  record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
