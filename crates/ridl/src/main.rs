@@ -1481,9 +1481,9 @@ fn composite_body(
 
 /// Reads the two bodies a member-level change names and says what the
 /// change is, or `None` when the path is not `<package>/<container>/<member>`
-/// with a struct or union at `<container>` on the side that holds the
-/// member — the current workspace for an addition or a reorder, the
-/// baseline for a removal.
+/// with a struct or union at `<container>` on the side the change reads
+/// — the current workspace for an addition, the baseline for a removal,
+/// and both for a reorder.
 fn member_drift(
     change: &ridl_diff::Change,
     baseline: &[ridl_ir::v2::Package],
