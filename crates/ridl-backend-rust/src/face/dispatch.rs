@@ -8,8 +8,8 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
 /// Emits `dispatch`. Each arm binds the claim's decoded argument as `__arg`
-/// and never under the ridl parameter's name, so no ridl name appears in the
-/// body. Before issue #570 a parameter named like one of the body's own
+/// and never under the ridl parameter's name, so no ridl parameter name is
+/// bound in the body. Before issue #570 a parameter named like one of the body's own
 /// parameters (`h`, `p`, `buf`) or locals (`claim`, `accepted`, `reply`)
 /// shadowed them or was shadowed by them. A ridl identifier cannot start with an
 /// underscore (`ridl check` refuses one), so `__arg` cannot be a parameter's

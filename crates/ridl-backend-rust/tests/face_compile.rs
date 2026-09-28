@@ -113,10 +113,12 @@ interface Names {
 /// ridl parameter's own name, so a parameter named like one of them failed
 /// to compile; it now binds the argument as `__arg`, which no ridl identifier
 /// can be. These six are the names that collided: the parameters `h`, `p`
-/// and `buf`, and the locals `claim`, `accepted` and `reply`. Each name is a
-/// parameter of one command and of one query, and the member names say which
-/// arm and which parameter, so a failing compile names both. One face holds
-/// every case, because each `face_compiles` call builds ridl-rt twice.
+/// and `buf`, and the locals `claim`, `accepted` and `reply`. `h`, `p` and
+/// `claim` collided in both arms, `accepted` in the command arm only, and
+/// `buf` and `reply` in the query arm only. Each name is a parameter of one
+/// command (`set<Name>`) and of one query (`read<Name>`), so the generated
+/// source that the failure message prints shows which arm failed. One face
+/// holds every case, because each `face_compiles` call builds ridl-rt twice.
 #[test]
 fn a_call_parameter_named_like_a_dispatch_local_compiles() {
     let members: String = ["claim", "h", "accepted", "buf", "p", "reply"]

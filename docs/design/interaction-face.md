@@ -237,14 +237,14 @@ function `__deadline_after`, because a parameter is bound under its own snake
 case in the method body and would shadow a function of that name. A ridl
 identifier cannot start with an underscore, so no parameter can be shadowed by,
 or shadow, a local or a function the emitter owns. `dispatch`'s own parameters
-and locals keep unprefixed names, and are safe because no ridl name appears in
-its body. `tests/face_compile.rs` compiles an interface whose members are named
-`port`, `deadline`, `deadlineAfter`, `this` and `cx`, and, for `dispatch`,
-commands and queries whose parameter is named `claim`, `h`, `p`, `buf`,
-`accepted` or `reply`, the names in `dispatch`'s body that collided before
-driftsys/ridl#570. A member whose snake case is a fixed method name of the face
-collides the same way, and is not refused: `new` and `next_event` on both
-clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
+and locals keep unprefixed names, and are safe because no ridl parameter name is
+bound in its body. `tests/face_compile.rs` compiles an interface whose members
+are named `port`, `deadline`, `deadlineAfter`, `this` and `cx`, and, for
+`dispatch`, commands and queries whose parameter is named `claim`, `h`, `p`,
+`buf`, `accepted` or `reply`, the names in `dispatch`'s body that collided
+before driftsys/ridl#570. A member whose snake case is a fixed method name of
+the face collides the same way, and is not refused: `new` and `next_event` on
+both clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
 `commit` on `Publisher`, and the derived names `subscribe_<event>` and
 `invalidate_<signal>` against a member spelled that way; the blocking client's
 two are recorded on driftsys/ridl#580 with the rest.
