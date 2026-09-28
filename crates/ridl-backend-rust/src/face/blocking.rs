@@ -19,10 +19,11 @@
 //! the call at `max`; `ridl-loopback` measures no bound and wakes nobody
 //! when its clock is advanced, so over it a call whose provider never serves
 //! returns only at the client's timeout (the async face design, F-3 "A
-//! limit, stated" and F-11). The emitted rustdoc says the same. The module is emitted only when the
-//! interface declares something that waits — an event, a command or a query;
-//! a signal-only interface's `Client` never blocks, so it gets no `blocking`
-//! module.
+//! limit, stated" and F-11). The emitted rustdoc says the same.
+//!
+//! The module is emitted only when the interface declares something that
+//! waits — an event, a command or a query; a signal-only interface's `Client`
+//! never blocks, so it gets no `blocking` module.
 
 use super::{Call, Member, client_bounds, ident, type_path};
 use proc_macro2::TokenStream;
