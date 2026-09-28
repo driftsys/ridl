@@ -42,8 +42,8 @@ tree are test doubles, not runtimes: `MinimalSignalOnlyPort` in
 `crates/ridl-backend-rust/tests/interaction_face.rs`, and `Stub` and `Memory`
 inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`.
 
-**One `use` line per interface.** The fixed methods of a generated face — `new`,
-`next_event`, `commit`, and the blocking client's `with_timeout` and
+**One `use` line for the prelude.** The fixed methods of a generated face —
+`new`, `next_event`, `commit`, and the blocking client's `with_timeout` and
 `set_timeout` — are methods of the four traits of `ridl_rt::face` (`Bind`,
 `Events`, `Publish`, `Timeout`), and the derived `subscribe_<event>` and
 `invalidate_<signal>` are methods of a `Subscribe` and an `Invalidate` trait
@@ -58,9 +58,16 @@ use api::cabin::prelude::*;
 
 With it, every call site is the one an inherent method would have. Without it,
 `cabin::Client::new(&mut port)` is E0599 with the help "items from traits can
-only be used if the trait is in scope". When a member of the interface is itself
-named `new`, `Client::new(port)` is that member, and the face is bound as
-`<cabin::Client<_> as Bind>::new(port)`.
+only be used if the trait is in scope". One prelude puts the `ridl_rt::face`
+traits in scope for every interface of the crate; a second interface's prelude
+is needed only when its own `subscribe_<event>` or `invalidate_<signal>` is
+called, and a prelude that adds nothing is an unused import. When a member of
+the interface is itself named `new`, `Client::new(port)` is that member, and the
+face is bound as `<cabin::Client<_> as Bind>::new(port)`; a member named
+`withTimeout` is the one name whose dot call on a blocking client held by value
+reaches the trait method instead, because `Timeout::with_timeout` takes `self`
+by value, and the member is then reached as
+`blocking::Client::with_timeout(&mut client, x)`.
 
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.

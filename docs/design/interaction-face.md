@@ -157,12 +157,15 @@ covers, one `pub mod` named after the interface. Its consumer side is:
   **`NextEvent<'a, P>`** when the interface declares an event.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
   section "The blocking module" below.
-- **`prelude`** — the module a consumer glob-imports once per interface,
-  `use <crate>::<iface>::prelude::*;`: it re-exports by name the `ridl_rt::face`
-  traits the module's types implement (`Bind`; `Events` with an event; `Publish`
-  with a signal; `Timeout` under `cfg(feature = "std")` where the `blocking`
-  module is emitted) and the module's own `Subscribe` and `Invalidate` as `_`,
-  so two interfaces' preludes share one scope without conflict.
+- **`prelude`** — the module a consumer glob-imports,
+  `use <crate>::<iface>::prelude::*;`, once and again for each further interface
+  whose `Subscribe` or `Invalidate` it calls (a second prelude that adds nothing
+  beyond the `ridl_rt::face` traits is an unused import): it re-exports by name
+  the `ridl_rt::face` traits the module's types implement (`Bind`; `Events` with
+  an event; `Publish` with a signal; `Timeout` under `cfg(feature = "std")`
+  where the `blocking` module is emitted) and the module's own `Subscribe` and
+  `Invalidate` as `_`, so two interfaces' preludes share one scope without
+  conflict.
 
 **A face holds its port by value and has no lifetime parameter.** `Client<P>`
 and `Publisher<W>` hold `P` and `W`, and `new` takes the port by value. A
@@ -262,11 +265,10 @@ crate, and `ridl check` accepted the source: `new` and `next_event` on both
 clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
 `commit` on `Publisher`, and the derived names `subscribe_<event>` and
 `invalidate_<signal>` against a member spelled that way. Rust gives one type one
-inherent namespace and a trait its own, an inherent method wins a dot call over
-a trait method of the same name, and the trait method stays reachable through
-the trait's path; so the fixed methods are now methods of the four traits of
-`ridl_rt::face` — `Bind::new` on all three faces, `Events::next_event` on both
-clients, `Timeout::{with_timeout, set_timeout}` on the blocking client,
+inherent namespace and a trait its own, and a trait method stays reachable
+through the trait's path; so the fixed methods are now methods of the four
+traits of `ridl_rt::face` — `Bind::new` on all three faces, `Events::next_event`
+on both clients, `Timeout::{with_timeout, set_timeout}` on the blocking client,
 `Publish::commit` on `Publisher` — and the derived ones are methods of two
 traits generated inside the interface module, `Subscribe` (both clients) and
 `Invalidate` (`Publisher`), while every member method stays inherent. The
@@ -276,15 +278,29 @@ client are written through the traits' paths
 `::ridl_rt::face::Events::next_event(&mut self.inner)`,
 `super::Subscribe::subscribe_<event>(&mut self.inner)`), so a member of that
 name cannot capture them. On a real collision nothing is refused and nothing is
-renamed: with a member named `new`, `Client::new(port)` is the member and the
-consumer writes `<Client<_> as Bind>::new(port)` or
-`let c: Client<_> = Bind::new(port)`; with a member named `commit`,
-`publisher.commit()` is the member and `Publish::commit(&mut publisher)` the
-face's. `tests/face_compile.rs` compiles one interface per colliding name, with
-the `std` cfg on and off, and one consumer of two interfaces' preludes that
-writes the qualified forms; `tests/face_generation.rs` pins the trait impls and
-the preludes. The `ridl-rt` side is ADR-0021 decision 19, and the design note
-with the inventory of every generated item and the compile experiments is
+renamed: with a member named `new`, `Client::new(port)` is the member, because a
+path call finds an inherent item first, and the consumer writes
+`<Client<_> as Bind>::new(port)` or `let c: Client<_> = Bind::new(port)`. A dot
+call follows Rust's method probe — the receiver by value, then by `&`, then by
+`&mut`, an inherent method before a trait method at each step — and a member
+takes `&self` (a signal read) or `&mut self`, as every trait method does except
+`Timeout::with_timeout`, which takes `self` by value. So the member keeps the
+dot call for every fixed and derived method but `with_timeout`: with a member
+named `commit`, `publisher.commit()` is the member and
+`Publish::commit(&mut publisher)` the face's; with a member named `withTimeout`,
+`client.with_timeout(x)` on a blocking client held by value is
+`Timeout::with_timeout`, found at the by-value step, and the member is reached
+through the inherent path `blocking::Client::with_timeout(&mut client, x)`
+(`&client` for a signal read). `tests/face_compile.rs` compiles one interface
+per colliding name, with the `std` cfg on and off, each with a consumer that
+dot-calls the member and reaches the face's method through the trait's path
+(and, for `withTimeout`, the reverse), one consumer of two interfaces' preludes
+that calls both interfaces' `subscribe_<event>` and `invalidate_<signal>` and
+writes the qualified forms, and a proof that `Timeout` is under `ridl-rt`'s
+`std` feature; `tests/face_generation.rs` pins the trait impls, the preludes,
+and that no `Subscribe` is emitted without an event and no `Invalidate` without
+a signal. The `ridl-rt` side is ADR-0021 decision 19, and the design note with
+the inventory of every generated item and the compile experiments is
 [`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
 
 **Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no

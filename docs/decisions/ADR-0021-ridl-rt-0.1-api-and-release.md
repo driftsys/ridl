@@ -748,7 +748,7 @@ trusted with no `unsafe` and no second verification pass.
     **The release.** Four traits and a module are an addition, not a breaking
     change under decision 10. The crate is released as 0.4.0 with the workspace
     all the same, because the backend change that needs it breaks the generated
-    API (a consumer adds one `use` line per interface), which at 0.x is a minor
+    API (a consumer adds a `use` line for the prelude), which at 0.x is a minor
     bump, and because the emitted manifest's caret requirement on `ridl-rt`
     accepts any published line of one minor: under a patch, `"0.3"` would still
     accept the published 0.3.0, which has no `face`. The release commit moves

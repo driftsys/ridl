@@ -55,8 +55,14 @@ member, and fixed methods the emitter owns. Rust gives one type one inherent
 namespace, so a member whose snake case was `new`, `commit` or `next_event`
 could not sit beside a fixed inherent method of that name (rustc E0592). The
 fixed methods are therefore methods of these traits, and the member methods stay
-inherent: an inherent method wins a dot call over a trait method of the same
-name, and the trait method stays reachable through the trait's path.
+inherent, and the trait method stays reachable through the trait's path. A dot
+call follows Rust's method probe — the receiver by value, then by `&`, then by
+`&mut`, an inherent method before a trait method at each step — so the member
+keeps the dot call for every fixed and derived method but `with_timeout`, whose
+trait method takes `self` by value and is found at the first step: beside a
+member named `withTimeout`, `client.with_timeout(x)` on a blocking client held
+by value is the trait method, and the member is reached through the inherent
+path `blocking::Client::with_timeout(&mut client, x)`.
 
 ```rust,ignore
 pub trait Bind { type Port; fn new(port: Self::Port) -> Self; }
@@ -83,10 +89,12 @@ beside a member, `subscribe_<event>` and `invalidate_<signal>`, are methods of
 two traits the emitter generates inside each interface module, `Subscribe` and
 `Invalidate`, and each interface module carries a `prelude` that re-exports the
 traits here its types implement by name and its own two as `_`; a consumer
-writes `use <crate>::<iface>::prelude::*;` once per interface. No runtime
-implements anything here, so `ridl-rt-conformance` does not test it; the
-generated face's own tests do (`crates/ridl-backend-rust/tests/face_compile.rs`
-and `face_generation.rs`).
+writes `use <crate>::<iface>::prelude::*;` once, and again for each further
+interface whose `Subscribe` or `Invalidate` it calls — a second prelude that
+adds nothing beyond the traits here is an unused import. No runtime implements
+anything here, so `ridl-rt-conformance` does not test it; the generated face's
+own tests do (`crates/ridl-backend-rust/tests/face_compile.rs` and
+`face_generation.rs`).
 
 ## Identity
 

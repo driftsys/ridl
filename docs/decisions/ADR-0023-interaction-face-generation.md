@@ -427,9 +427,10 @@ argument for it in the command case.
 
 7. **Amendment (2026-09-28) — the fixed methods of the face are trait methods;
    the member methods stay inherent.** Rust gives one type one inherent
-   namespace, and a trait its own; an inherent method wins a dot call over a
-   trait method of the same name, and the trait method stays reachable through
-   the trait's path. So:
+   namespace, and a trait its own; a member and a fixed method of one name
+   coexist, and the trait method stays reachable through the trait's path. Which
+   of the two a dot call reaches follows Rust's method probe, stated under "the
+   rule on a collision" below. So:
 
    - **The four `ridl-rt` traits, in `ridl_rt::face`**
      ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19):
@@ -468,24 +469,44 @@ argument for it in the command case.
      module's own `Subscribe` and `Invalidate` as `_`, so that two interfaces'
      preludes glob-imported into one scope do not conflict (importing two
      `Subscribe` traits by name is E0252). A consumer writes
-     `use <crate>::<iface>::prelude::*;` once per interface whose `Subscribe` or
-     `Invalidate` it calls, and every call site is the one an inherent method
-     had: `Client::new(&mut port)`, `client.subscribe_warning()`,
-     `client.next_event()`, `publisher.commit()`,
+     `use <crate>::<iface>::prelude::*;` once, and again for each further
+     interface whose `Subscribe` or `Invalidate` it calls, and every call site
+     is the one an inherent method had: `Client::new(&mut port)`,
+     `client.subscribe_warning()`, `client.next_event()`, `publisher.commit()`,
      `blocking::Client::new(&mut port).with_timeout(t)`. The `ridl-rt` traits
      are one item whichever prelude re-exports them; a second prelude whose
      every used item the first already provides is reported by rustc as an
      unused import, which is why the round-trip tests import one prelude. There
      is no `ridl_rt::prelude`: it could not carry the generated traits, and one
      line per interface was the target.
-   - **The rule on a collision:** nothing is refused and nothing is renamed.
-     With a member named `new`, `Client::new(port)` resolves to the member
-     (E0061), and the consumer writes `<Client<_> as Bind>::new(port)` or
-     `let c: Client<_> = Bind::new(port)`; with a member named `commit` or
-     `subscribeWarning`, `publisher.commit()` and `client.subscribe_warning()`
-     reach the member, and `Publish::commit(&mut publisher)` and
-     `Subscribe::subscribe_warning(&mut client)` reach the face's. A member name
-     is never restricted by this backend (the rule of driftsys/ridl#570).
+   - **The rule on a collision:** nothing is refused and nothing is renamed. A
+     path call finds an inherent item before a trait's: with a member named
+     `new`, `Client::new(port)` resolves to the member and does not compile
+     (E0061 for a command or a query, whose member takes a second argument;
+     E0308 for a signal, whose read takes `&self`), and the consumer writes
+     `<Client<_> as Bind>::new(port)` or `let c: Client<_> = Bind::new(port)`. A
+     dot call follows Rust's method probe, which tries the receiver by value,
+     then by `&`, then by `&mut`, and at each step an inherent method before a
+     trait method. A member takes `&self` (a signal read) or `&mut self` (every
+     other member), and so does every fixed and derived trait method except
+     `Timeout::with_timeout`, which takes `self` by value so that
+     `Client::new(port).with_timeout(t)` stays one expression. So the member
+     keeps the dot call for every fixed and derived method but `with_timeout`:
+     with a member named `commit` or `subscribeWarning`, `publisher.commit()`
+     and `client.subscribe_warning()` reach the member, and
+     `Publish::commit(&mut publisher)` and
+     `Subscribe::subscribe_warning(&mut client)` reach the face's; with a member
+     named `withTimeout`, `client.with_timeout(x)` on a blocking client held by
+     value reaches `Timeout::with_timeout`, because the by-value step comes
+     first (E0308 when `x` is not a `Duration`), and the consumer reaches the
+     member through the inherent path
+     `blocking::Client::with_timeout(&mut client, x)` — `&client` for a signal
+     read — or through a `&mut` borrow of the client, whose own type is the
+     probe's first candidate. `with_timeout` stays by value because a consumer's
+     call sites do not change; the exception is the one documented cost (pass-1
+     review of driftsys/ridl#582). On the async `Client`, which implements no
+     `Timeout`, the dot call is the member. A member name is never restricted by
+     this backend (the rule of driftsys/ridl#570).
    - **The emitter's own calls go through the traits' paths**, so a member of
      the name cannot capture them: the blocking client builds the async one as
      `<super::Client<P> as ::ridl_rt::face::Bind>::new(port)`, and delegates as
@@ -506,17 +527,25 @@ argument for it in the command case.
    — a signal `new`, a signal `commit`, a command `nextEvent`, a command
    `withTimeout`, a command `setTimeout`, a command `subscribeWarning` beside
    the event `warning`, and a signal `invalidateTemperature` beside the signal
-   `temperature` — each compiled with the `std` cfg on and off, and one case
-   that compiles a consumer of two interfaces' preludes with the qualified forms
-   above; `tests/face_generation.rs` pins the trait impls, the trait paths of
-   the emitter's own calls, and the prelude of each fixture interface; the round
-   trips in `tests/interaction_face.rs` prove the trait methods behave as the
-   inherent ones did. Two collisions of the same class outside the face —
-   `<Struct>FbView::bytes` against a field named `bytes` (E0592), and the
-   package module's fixed `Wire` against a type or an interface named `Wire`
-   (E0428) — are driftsys/ridl#587 and driftsys/ridl#588, not this decision's.
-   Traces: driftsys/ridl#580 (the change), driftsys/ridl#570 (the origin, and
-   the rule that a backend restricts no member name),
+   `temperature` — each compiled with the `std` cfg on and off together with a
+   consumer that, with the prelude in scope, dot-calls the member and reaches
+   the face's method through the trait's path (for `withTimeout`, the dot call
+   reaches the trait method and the inherent path the member); one case that
+   compiles a consumer of two interfaces that each declare a signal and an
+   event, dot-calling both interfaces' `subscribe_<event>` and
+   `invalidate_<signal>` with the qualified forms above; and one that proves
+   `Timeout` is under `ridl-rt`'s `std` feature (E0432 against a `ridl-rt` built
+   without it). `tests/face_generation.rs` pins the trait impls, the trait paths
+   of the emitter's own calls, the prelude of each fixture interface, and that
+   no `Subscribe` is emitted without an event and no `Invalidate` without a
+   signal, in code or in rustdoc; the round trips in `tests/interaction_face.rs`
+   prove the trait methods behave as the inherent ones did. Two collisions of
+   the same class outside the face — `<Struct>FbView::bytes` against a field
+   named `bytes` (E0592), and the package module's fixed `Wire` against a type
+   or an interface named `Wire` (E0428) — are driftsys/ridl#587 and
+   driftsys/ridl#588, not this decision's. Traces: driftsys/ridl#580 (the
+   change), driftsys/ridl#570 (the origin, and the rule that a backend restricts
+   no member name),
    [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decisions 1
    and 4 (the `snake_case` a method name is projected through, and the
    namespaces RIDL-149 checks — a member `subscribeWarning` beside an event
