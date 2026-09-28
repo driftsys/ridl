@@ -121,10 +121,16 @@ pub(super) fn dispatch(
          means the handler has no claim waiting; `Ok` with `budget` at 0 means claims \
          may still be waiting; `Err` means `Handler::next_claim` failed, and \
          every claim settled before the failure stays settled. \
-         `ReadError::ShortClaim` is not a failure: the claim's arguments \
-         exceed `{iface_name}::MAX_BUFFER_SIZE`, the member's largest valid \
-         encoding, so the claim is settled `Transport::Corrupt` by its id \
-         without being read, counts toward `budget`, and the pass continues \
+         `ReadError::ShortClaim` is not a failure: the claim's arguments do \
+         not fit `{iface_name}::MAX_BUFFER_SIZE`, the interface's largest \
+         argument or reply payload, so they are larger than any member's \
+         valid encoding, and the claim is settled `Transport::Corrupt` by its \
+         id without being read, whichever interface or member it names; it \
+         counts toward `budget`, and the pass continues. When the handler \
+         refuses that settlement the pass ends at once, returning the count \
+         so far with the budget unspent, as if no claim were waiting, because \
+         the runtime keeps the unsettled claim the next one; the claims \
+         behind it wait until the handler can settle it \
          (driftsys/ridl#569).\n\n`buf` must \
          be at least `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is \
          encoded into the same buffer as the arguments. A shorter buffer \
@@ -160,51 +166,56 @@ pub(super) fn dispatch(
             }
             let mut settled = 0usize;
             while *budget > 0 {
-                let claim = match h.next_claim(buf) {
-                    Ok(Some(claim)) => claim,
+                let settlement = match h.next_claim(buf) {
                     Ok(None) => break,
-                    // The claim's arguments exceed `MAX_BUFFER_SIZE`, which
-                    // is the member's largest valid encoding, so they are
-                    // not a well-formed encoding: the claim is settled
-                    // `Transport::Corrupt` without being read, as argument
-                    // bytes that fail the structure check are, and counts
-                    // toward `budget` like any claim taken
-                    // (driftsys/ridl#569).
+                    // The claim's arguments do not fit `MAX_BUFFER_SIZE`, the
+                    // interface's largest argument or reply payload, so they
+                    // are larger than any member's valid encoding and not a
+                    // well-formed one: the claim is settled
+                    // `Transport::Corrupt` without being read, whichever
+                    // interface or member it names, as argument bytes that
+                    // fail the structure check are (driftsys/ridl#569). A
+                    // refused settlement ends the pass with the budget
+                    // unspent, as if no claim were waiting: the runtime
+                    // keeps the unsettled claim the next one, so taking it
+                    // again would spend the whole budget on it, and `serve`
+                    // waits for the next claim wake instead.
                     Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
-                        *budget -= 1;
                         let settlement = h.settle(
                             claim,
                             Err(::ridl_rt::error::CallError::Transport(
                                 ::ridl_rt::error::Transport::Corrupt,
                             )),
                         );
-                        if settlement.is_ok() {
-                            settled += 1;
+                        if settlement.is_err() {
+                            return Ok(settled);
                         }
-                        continue;
+                        settlement
                     }
                     Err(error) => return Err(error),
-                };
-                *budget -= 1;
-                let settlement = if claim.iface != #number {
-                    h.settle(
-                        claim.id,
-                        Err(::ridl_rt::error::CallError::Contract(
-                            ::ridl_rt::error::Contract::UnknownInteraction,
-                        )),
-                    )
-                } else {
-                    match claim.ord {
-                        #(#command_arms)*
-                        #(#query_arms)*
-                        _ => h.settle(
-                            claim.id,
-                            Err(::ridl_rt::error::CallError::Contract(
-                                ::ridl_rt::error::Contract::UnknownInteraction,
-                            )),
-                        ),
+                    Ok(Some(claim)) => {
+                        if claim.iface != #number {
+                            h.settle(
+                                claim.id,
+                                Err(::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::UnknownInteraction,
+                                )),
+                            )
+                        } else {
+                            match claim.ord {
+                                #(#command_arms)*
+                                #(#query_arms)*
+                                _ => h.settle(
+                                    claim.id,
+                                    Err(::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::UnknownInteraction,
+                                    )),
+                                ),
+                            }
+                        }
                     }
                 };
+                *budget -= 1;
                 if settlement.is_ok() {
                     settled += 1;
                 }

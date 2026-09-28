@@ -240,7 +240,8 @@ impl Wakeable for RecordingPorts {
 /// A handler port that fails where `ridl-loopback` never does.
 pub struct FailingHandler {
     inner: HandlerHandle,
-    /// Claims presented so far, counted from `next_claim`'s `Ok(Some)`.
+    /// Claims presented so far, counted from `next_claim`'s `Ok(Some)` and
+    /// its `ShortClaim`.
     presented: usize,
     /// `next_claim` answers `ReadError::Detached` once this many claims were
     /// presented. `None` never fails.
@@ -291,7 +292,7 @@ impl Handler for FailingHandler {
             return Err(ReadError::Detached);
         }
         let claim = self.inner.next_claim(out);
-        if let Ok(Some(_)) = claim {
+        if matches!(claim, Ok(Some(_)) | Err(ReadError::ShortClaim { .. })) {
             self.presented += 1;
         }
         claim
@@ -329,11 +330,13 @@ pub struct QueuedClaims {
     /// instead of answering `None`, so that `serve` resolves.
     fail_when_empty: bool,
     /// Every claim is presented as `ReadError::ShortClaim`, with arguments
-    /// that fit no buffer, and never as `Ok(Some)`. The double takes the
-    /// claim at that presentation, where a runtime keeps it until it is
-    /// settled, because every test over it settles the claim before the next
-    /// `next_claim`.
+    /// that fit no buffer, and never as `Ok(Some)`. As a runtime does, the
+    /// double keeps the offered claim the next one until an accepted
+    /// settlement takes it: a `next_claim` before that presents the same id
+    /// again.
     oversized: bool,
+    /// The id of the oversized claim offered and not yet settled.
+    offered: Option<u64>,
 }
 
 /// What a [`QueuedClaims`] did, shared with the test while `serve` holds
@@ -342,8 +345,8 @@ pub struct QueuedClaims {
 pub struct ClaimCounts {
     /// Claims not yet presented.
     pub waiting: Cell<usize>,
-    /// Claims presented so far, counted from `next_claim`'s `Ok(Some)` and
-    /// its `ShortClaim`.
+    /// Presentations so far, counted from `next_claim`'s `Ok(Some)` and its
+    /// `ShortClaim`; an offered claim presented again counts again.
     pub taken: Cell<usize>,
     /// `settle` calls so far, accepted or not.
     pub settles: Cell<usize>,
@@ -361,6 +364,7 @@ impl QueuedClaims {
             reject: false,
             fail_when_empty: false,
             oversized: false,
+            offered: None,
         }
     }
 
@@ -370,6 +374,15 @@ impl QueuedClaims {
         QueuedClaims {
             oversized: true,
             ..QueuedClaims::new(iface, waiting)
+        }
+    }
+
+    /// The same as [`QueuedClaims::oversized`], but `settle` rejects every
+    /// settlement, so the offered claim stays the next one.
+    pub fn oversized_rejecting(iface: InterfaceNo, waiting: usize) -> Self {
+        QueuedClaims {
+            reject: true,
+            ..QueuedClaims::oversized(iface, waiting)
         }
     }
 
@@ -414,6 +427,13 @@ impl Handler for QueuedClaims {
     }
 
     fn next_claim(&mut self, _out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
+        if let Some(id) = self.offered {
+            self.counts.taken.set(self.counts.taken.get() + 1);
+            return Err(ReadError::ShortClaim {
+                claim: ClaimId(id),
+                needed: usize::MAX,
+            });
+        }
         let waiting = self.counts.waiting.get();
         if waiting == 0 {
             return if self.fail_when_empty {
@@ -426,6 +446,7 @@ impl Handler for QueuedClaims {
         let taken = self.counts.taken.get() + 1;
         self.counts.taken.set(taken);
         if self.oversized {
+            self.offered = Some(taken as u64);
             return Err(ReadError::ShortClaim {
                 claim: ClaimId(taken as u64),
                 needed: usize::MAX,
@@ -446,15 +467,22 @@ impl Handler for QueuedClaims {
 
     fn settle(
         &mut self,
-        _claim: ClaimId,
+        claim: ClaimId,
         _outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
         self.counts.settles.set(self.counts.settles.get() + 1);
         if self.reject {
-            Err(SettleError::UnknownClaim)
-        } else {
-            Ok(())
+            return Err(SettleError::UnknownClaim);
         }
+        if self.oversized {
+            // An accepted settlement of the offered claim takes it; any
+            // other id names no claim this double holds.
+            if self.offered != Some(claim.0) {
+                return Err(SettleError::UnknownClaim);
+            }
+            self.offered = None;
+        }
+        Ok(())
     }
 }
 

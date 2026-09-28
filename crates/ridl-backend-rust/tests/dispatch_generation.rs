@@ -63,25 +63,27 @@ fn dispatch_has_the_settled_signature() {
     assert!(d.contains("H:::ridl_rt::port::Handler"), "handler bound");
     assert!(d.contains("P:Provider"), "provider bound");
     assert!(
-        d.contains(
-            "while*budget>0{letclaim=matchh.next_claim(buf){Ok(Some(claim))=>claim,\
-             Ok(None)=>break,"
-        ),
-        "an empty handler or a spent budget ends the pass",
+        d.contains("while*budget>0{letsettlement=matchh.next_claim(buf){Ok(None)=>break,"),
+        "an empty handler or a spent budget ends the pass; one match produces the settlement",
     );
-    // driftsys/ridl#569: an oversized claim is settled Corrupt by its id,
-    // spends one unit of the budget, and the pass continues; every other
-    // failure leaves the pass with its error.
+    // driftsys/ridl#569: an oversized claim is settled Corrupt by its id; a
+    // refused settlement ends the pass with the budget unspent, because the
+    // runtime keeps that claim the next one; every other failure leaves the
+    // pass with its error.
     assert!(
         d.contains(
-            "Err(::ridl_rt::port::ReadError::ShortClaim{claim,..})=>{*budget-=1;\
+            "Err(::ridl_rt::port::ReadError::ShortClaim{claim,..})=>{\
              letsettlement=h.settle(claim,Err(::ridl_rt::error::CallError::Transport(\
-             ::ridl_rt::error::Transport::Corrupt,),),);ifsettlement.is_ok(){settled+=1;}\
-             continue;}Err(error)=>returnErr(error),};*budget-=1;"
+             ::ridl_rt::error::Transport::Corrupt,),),);ifsettlement.is_err(){\
+             returnOk(settled);}settlement}Err(error)=>returnErr(error),"
         ),
-        "an oversized claim is settled Corrupt without being read and spends one unit of \
-         the budget; a failing next_claim leaves the pass with its error; each claim \
-         taken spends one unit of the budget",
+        "an oversized claim is settled Corrupt without being read; a refused settlement \
+         ends the pass with the budget unspent; a failing next_claim leaves the pass with \
+         its error",
+    );
+    assert!(
+        d.contains("};*budget-=1;ifsettlement.is_ok(){settled+=1;}}Ok(settled)}"),
+        "one budget decrement and one count increment follow the settlement",
     );
 }
 
@@ -126,13 +128,16 @@ fn dispatch_settles_an_unknown_route_rather_than_leaving_it_open() {
 
 #[test]
 fn dispatch_maps_both_verify_error_variants() {
-    let d = dispatch_source();
+    // The arms sit one level deeper since driftsys/ridl#569, and prettyplease
+    // breaks a long pattern across lines with a trailing comma, so the
+    // trailing commas are dropped before the two arms are matched.
+    let d = dispatch_source().replace(",)", ")");
 
     assert!(
         d.contains(
             "Err(::ridl_rt::payload::VerifyError::Structure(_))=>{\
              Err(::ridl_rt::error::CallError::Transport(\
-             ::ridl_rt::error::Transport::Corrupt,),)}"
+             ::ridl_rt::error::Transport::Corrupt))}"
         ),
         "malformed argument bytes settle Transport::Corrupt",
     );
@@ -140,7 +145,7 @@ fn dispatch_maps_both_verify_error_variants() {
         d.contains(
             "Err(::ridl_rt::payload::VerifyError::Contract(violation))=>{\
              Err(::ridl_rt::error::CallError::Contract(\
-             ::ridl_rt::error::Contract::InvalidValue(violation),),)}"
+             ::ridl_rt::error::Contract::InvalidValue(violation)))}"
         ),
         "a broken typl constraint settles Contract::InvalidValue carrying the violation",
     );
@@ -250,18 +255,14 @@ fn dispatch_counts_only_a_settlement_the_handler_accepted() {
         d.contains("ifsettlement.is_ok(){settled+=1;}"),
         "the count only advances after a successful settlement",
     );
-    // Two increments, each after its settlement: the oversized claim's
-    // (driftsys/ridl#569), settled by its id before the routed arms, and the
-    // routed claim's.
-    let unread = at(&d, "settled+=1;");
     assert!(
-        at(&d, "h.settle(claim,") < unread,
-        "the oversized claim's increment follows its settlement",
+        at(&d, "h.settle(claim.id") < at(&d, "settled+=1;"),
+        "the increment follows the settlement",
     );
-    let routed = unread + 1 + at(&d[unread + 1..], "settled+=1;");
-    assert!(
-        at(&d, "h.settle(claim.id") < routed,
-        "the routed claim's increment follows the settlement",
+    assert_eq!(
+        d.matches("settled+=1;").count(),
+        1,
+        "one increment site serves the oversized and the routed claims (driftsys/ridl#569)",
     );
     // A SettleError does not abort the pass: the loop is not left on it.
     assert!(

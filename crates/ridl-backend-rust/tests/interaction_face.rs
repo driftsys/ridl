@@ -1691,6 +1691,73 @@ fn an_oversized_claim_spends_one_unit_of_the_serve_poll_bound() {
     assert_eq!(wakes, 0, "no claim is left, so it does not wake itself");
 }
 
+/// driftsys/ridl#569: the count `dispatch` returns includes an oversized
+/// claim whose settlement the handler accepted, and each one spends one unit
+/// of the budget.
+#[test]
+fn dispatch_counts_an_oversized_claims_accepted_settlement() {
+    let mut handler = QueuedClaims::oversized(CABIN, 5);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut budget = 3;
+    let settled = generated::cabin::dispatch(&mut handler, &mut provider, &mut buf, &mut budget);
+    assert_eq!(settled, Ok(3), "each accepted settlement is counted");
+    assert_eq!(budget, 0, "and each claim spent one unit of the budget");
+    assert_eq!(counts.taken.get(), 3);
+    assert_eq!(counts.settles.get(), 3);
+}
+
+/// driftsys/ridl#569: when the handler refuses the settlement of an oversized
+/// claim, the runtime keeps that claim the next one, so the pass ends at once
+/// with the budget unspent, as if no claim were waiting, rather than taking
+/// the same claim again for the rest of the budget.
+#[test]
+fn dispatch_ends_the_pass_when_an_oversized_claims_settlement_is_refused() {
+    let mut handler = QueuedClaims::oversized_rejecting(CABIN, 5);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut budget = 3;
+    let settled = generated::cabin::dispatch(&mut handler, &mut provider, &mut buf, &mut budget);
+    assert_eq!(settled, Ok(0), "no settlement was accepted");
+    assert_eq!(budget, 3, "the budget is unspent");
+    assert_eq!(counts.taken.get(), 1, "the claim was presented once");
+    assert_eq!(counts.settles.get(), 1, "and its settlement attempted once");
+}
+
+/// driftsys/ridl#569: a poll of `serve` whose oversized claim's settlement is
+/// refused presents that claim once, is `Pending`, and does not wake itself:
+/// it waits for the next claim wake instead of taking the same claim again.
+/// The claims behind it wait until the handler can settle it.
+#[test]
+fn a_serve_poll_does_not_retake_an_oversized_claim_whose_settlement_was_refused() {
+    let handler = QueuedClaims::oversized_rejecting(CABIN, 1);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(
+        counts.taken.get(),
+        1,
+        "the claim was presented once in this poll"
+    );
+    assert_eq!(counts.settles.get(), 1);
+    assert_eq!(wakes, 0, "the poll does not wake itself");
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(
+        counts.taken.get(),
+        2,
+        "a later poll presents the same claim once more"
+    );
+    assert_eq!(counts.settles.get(), 2);
+    assert_eq!(wakes, 0);
+}
+
 /// The bound counts the claims a poll takes, not the settlements the handler
 /// accepts: a handler that rejects every settlement still stops the poll at
 /// 32 claims. Counted on accepted settlements, the poll would take all 40.
