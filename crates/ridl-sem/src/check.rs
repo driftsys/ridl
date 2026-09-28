@@ -2796,27 +2796,34 @@ impl Checker<'_> {
             }
         } else {
             // The standalone form (§9.1).
+            // TYPL-218, keyed on the raw source name.
+            let mut declared_bits: HashMap<String, TextRange> = HashMap::new();
             for bit in decl.bits() {
                 let Some(name) = member_name(bit.name()) else {
                     continue;
                 };
-                let Some(value) = bit
-                    .value()
-                    .and_then(|literal| match literal_kind(&literal) {
-                        LitKind::Number { value } => exact_to_i64(&value),
-                        _ => None,
-                    })
-                else {
+                // TYPL-218 runs before the position checks, because a name is
+                // declared whether or not its position is valid (issue #565).
+                let name_range = member_name_range(bit.name(), bit.syntax());
+                match declared_bits.get(&name).copied() {
+                    Some(first) => self.duplicate_enum_set_bit(&name, name_range, first),
+                    None => {
+                        declared_bits.insert(name.clone(), name_range);
+                    }
+                }
+                let Some(literal) = bit.value() else {
                     continue;
                 };
-                let range = bit
-                    .value()
-                    .map(|literal| literal.syntax().text_range())
-                    .unwrap_or_else(|| member_name_range(bit.name(), bit.syntax()));
+                let Some(value) = (match literal_kind(&literal) {
+                    LitKind::Number { value } => exact_to_i64(&value),
+                    _ => None,
+                }) else {
+                    continue;
+                };
                 if bits.iter().any(|existing| existing.value == value) {
                     self.error(
                         DiagCode::TYPL_207,
-                        range,
+                        literal.syntax().text_range(),
                         format!("duplicate enumset bit position {value}"),
                     );
                 }
@@ -3151,6 +3158,23 @@ impl Checker<'_> {
             format!(
                 "`{name}` is already declared in this union — a name identifies one arm. \
                  Rename or remove one of them (typl §10)"
+            ),
+            first,
+            format!("`{name}` is declared here"),
+        );
+    }
+
+    /// TYPL-218: a bit name declared twice in one standalone `enumset`.
+    /// Neither declaration is dropped: both bits still lower, so the message
+    /// states the rule and points at the first declaration without claiming
+    /// a winner.
+    fn duplicate_enum_set_bit(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::TYPL_218,
+            range,
+            format!(
+                "`{name}` is already declared in this enumset — a name identifies one bit. \
+                 Rename or remove one of them (typl §9.1)"
             ),
             first,
             format!("`{name}` is declared here"),
@@ -6149,6 +6173,127 @@ mod tests {
     fn typl_207_duplicate_enumset_bits() {
         let checked = check_source("app", "package app\nenumset W { A = 0, B = 0 }\n");
         assert_eq!(codes(&checked), vec!["TYPL-207"]);
+    }
+
+    // --- TYPL-218: exact duplicate enumset bit name (issue #565) ----------
+
+    /// The reproduction from driftsys/ridl#565: two bits named `A` with
+    /// distinct positions passed the checker, because TYPL-207 compares the
+    /// positions only, and the Rust backend emitted two associated consts
+    /// named `A`. The primary span is the repeat, and the label points at
+    /// the first declaration, as TYPL-215, TYPL-216 and TYPL-217 report.
+    #[test]
+    fn typl_218_two_enumset_bits_with_the_same_name_are_refused() {
+        let source = "package app\nenumset W { A = 0, A = 1 }\n";
+        let checked = check_source("app", source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-218"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source.find("A =").expect("the first bit is in the source");
+        let second = source
+            .rfind("A =")
+            .expect("the second bit is in the source");
+        let diagnostic = &checked.diagnostics[0];
+        assert!(diagnostic.message.contains("`A`"));
+        assert_eq!(usize::from(diagnostic.primary.range.start()), second);
+        assert_eq!(usize::from(diagnostic.primary.range.end()), second + 1);
+        assert_eq!(usize::from(diagnostic.labels[0].span.range.start()), first);
+        assert_eq!(
+            usize::from(diagnostic.labels[0].span.range.end()),
+            first + 1
+        );
+    }
+
+    /// Every repeat is reported against the first declaration, so the map
+    /// keeps the first span and a later repeat does not replace it.
+    #[test]
+    fn typl_218_reports_every_repeat_against_the_first_declaration() {
+        let source = "package app\nenumset W { A = 0, A = 1, A = 2 }\n";
+        let checked = check_source("app", source);
+        assert_eq!(codes(&checked), vec!["TYPL-218", "TYPL-218"]);
+        let first = source.find("A =").expect("the first bit is in the source");
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(usize::from(diagnostic.labels[0].span.range.start()), first);
+        }
+    }
+
+    /// The name check does not depend on the positions: a repeat whose
+    /// position is also a repeat draws TYPL-218 beside TYPL-207, so one edit
+    /// pass sees both errors.
+    #[test]
+    fn typl_218_is_reported_beside_typl_207() {
+        let checked = check_source("app", "package app\nenumset W { A = 0, A = 0 }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-218", "TYPL-207"]);
+    }
+
+    /// A bit whose position is not an integer is skipped before it lowers,
+    /// but its name is still declared, so a later bit with the same name
+    /// draws TYPL-218. Only TYPL-218's presence is asserted: what the
+    /// non-integer position itself draws is not this rule's concern.
+    #[test]
+    fn typl_218_counts_a_bit_whose_position_is_not_an_integer() {
+        for position in ["\"x\"", "1.5"] {
+            let source = format!("package app\nenumset W {{ A = {position}, A = 1 }}\n");
+            let checked = check_source("app", &source);
+            assert!(
+                codes(&checked).contains(&"TYPL-218"),
+                "{position}: got: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    /// The duplicate is reported, not dropped: both bits still lower, so the
+    /// message claims no winner. Asserted over the IR, because no diagnostic
+    /// can show it.
+    #[test]
+    fn typl_218_reports_the_duplicate_without_dropping_it() {
+        let checked = check_source("app", "package app\nenumset W { A = 0, A = 1 }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-218"]);
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "W").kind else {
+            panic!("W is an enumset def");
+        };
+        let bits: Vec<(&str, i64)> = def
+            .bits
+            .iter()
+            .map(|bit| (bit.name.as_str(), bit.value))
+            .collect();
+        assert_eq!(bits, vec![("A", 0), ("A", 1)]);
+    }
+
+    /// Bits whose names differ only in case are distinct names: the Rust
+    /// backend emits a bit's const under its source spelling, changing only
+    /// a name that is a Rust path keyword (`self`, `Self`, `super`, `crate`),
+    /// so `a` and `A` do not collide and draw nothing.
+    #[test]
+    fn typl_218_does_not_fire_for_names_that_differ_in_case() {
+        let checked = check_source("app", "package app\nenumset W { a = 0, A = 1 }\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// The rule is per enumset: two enumsets in one package may each declare
+    /// a bit with the same name.
+    #[test]
+    fn typl_218_does_not_fire_across_two_enumsets() {
+        let checked = check_source(
+            "app",
+            "package app\nenumset V { A = 0 }\nenumset W { A = 0 }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// The derived form copies its bits from the backing enum, where a
+    /// repeated name is TYPL-216's. The enumset draws no second report.
+    #[test]
+    fn typl_218_does_not_fire_for_a_derived_enumset() {
+        let checked = check_source(
+            "app",
+            "package app\nenum E { A = 0, A = 1 }\nenumset W : E\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-216"]);
     }
 
     /// `enumset_width` saturates past bit 63 with no error (the T10 review

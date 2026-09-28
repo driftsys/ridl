@@ -451,6 +451,13 @@ diag_codes! {
         TYPL_217 = "TYPL-217", Error,
             "union arm name declared twice in one union";
 
+        /// A bit name declared twice in one standalone `enumset` (typl §9.1,
+        /// §16.3). TYPL-207 checks the bits' positions, not their names, so
+        /// it does not cover this case. A derived `enumset` copies its bits
+        /// from the backing enum, where a repeated name is TYPL-216.
+        TYPL_218 = "TYPL-218", Error,
+            "enumset bit name declared twice in one enumset";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
         /// the checker for struct fields and collections in a `.ridl` file
