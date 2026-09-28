@@ -1,11 +1,11 @@
 # The face's fixed methods behind traits — design note
 
-**Status:** a design note for driftsys/ridl#580, awaiting the maintainer's
-review. driftsys/ridl#580 was split from driftsys/ridl#570, where the direction
-was decided. It settles the shape of the generated API; it does not implement
-it. The `dispatch` locals, the other half of driftsys/ridl#570, merged
-separately as driftsys/ridl#581. driftsys/ridl#568, driftsys/ridl#569 and the
-rest of driftsys/ridl#571 are out of scope.
+**Status:** a design note for driftsys/ridl#580, approved by the maintainer on
+2026-09-28 with every choice in §8 confirmed. driftsys/ridl#580 was split from
+driftsys/ridl#570, where the direction was decided. It settles the shape of the
+generated API; it does not implement it. The `dispatch` locals, the other half
+of driftsys/ridl#570, merged separately as driftsys/ridl#581. driftsys/ridl#568,
+driftsys/ridl#569 and the rest of driftsys/ridl#571 are out of scope.
 
 **Date:** 2026-09-28.
 
@@ -356,27 +356,29 @@ over `docs/`, `README.md`, `CONTRIBUTING.md`, `crates/` and `examples/`.
 
 ## 7. Alternatives considered
 
-| Alternative                                                                                     | Verdict  | Reason                                                                                                                                                                                                                                                                     |
-| ----------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| (a) The Rust backend refuses a colliding member at `ridl build`                                 | rejected | A package that builds for TypeScript or proto would fail on Rust, and every future fixed method becomes a new refusal.                                                                                                                                                     |
-| (b) A `ridl check` rule like RIDL-149                                                           | rejected | It puts one backend's API into the language, against the rule that an asymmetry between backends justifies a backend strategy, not a language rule.                                                                                                                        |
-| A builder, or a separate type for the member methods                                            | rejected | An extra step at every call site.                                                                                                                                                                                                                                          |
-| Renaming a colliding member with a suffix (`new_`), as prost does for keywords                  | rejected | A silent rename that depends on a list that grows with each release.                                                                                                                                                                                                       |
-| Per-interface traits at the package module (`CabinEvents`, `CabinSignals`)                      | rejected | The package module holds the bare derived names `<Iface><Member>`; a member named `events` collides (appendix, `e7`). Inside the interface module every derived type carries a suffix, so no fixed name can collide there.                                                 |
-| A `ridl_rt::prelude` instead of, or beside, a generated prelude                                 | rejected | It cannot carry the generated traits, so a consumer needs a second `use` line per interface anyway; one generated prelude per interface carries both, and the fixed traits are still nameable through it.                                                                  |
-| The fixed methods on the per-interface trait too (one trait per interface, no `ridl-rt` change) | rejected | It works, but each interface would restate `new`, `next_event` and `commit` under its own trait, and a generic consumer (a test double, a harness over any `Client`) could not name the operation. The `ridl-rt` traits cost one release, which the pin bump needs anyway. |
-| `Events` and `Timeout` as one trait, or `Timeout` ungated                                       | rejected | A signal-only or async client has no timeout, so one trait would force an implementation with no meaning; an ungated `Timeout` compiles (`core::time::Duration`) but has no implementor in a `no_std` build.                                                               |
+| Alternative                                                                                     | Verdict  | Reason                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (a) The Rust backend refuses a colliding member at `ridl build`                                 | rejected | A package that builds for TypeScript or proto would fail on Rust, and every future fixed method becomes a new refusal.                                                                                                                                                                                                                                                                                                             |
+| (b) A `ridl check` rule like RIDL-149                                                           | rejected | It puts one backend's API into the language, against the rule that an asymmetry between backends justifies a backend strategy, not a language rule.                                                                                                                                                                                                                                                                                |
+| A builder, or a separate type for the member methods                                            | rejected | An extra step at every call site.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Renaming a colliding member with a suffix (`new_`), as prost does for keywords                  | rejected | A silent rename that depends on a list that grows with each release.                                                                                                                                                                                                                                                                                                                                                               |
+| Per-interface traits at the package module (`CabinEvents`, `CabinSignals`)                      | rejected | The package module holds the bare derived names `<Iface><Member>`; a member named `events` collides (appendix, `e7`). Inside the interface module every derived type carries a suffix, so no fixed name can collide there.                                                                                                                                                                                                         |
+| A `ridl_rt::prelude` instead of, or beside, a generated prelude                                 | rejected | It cannot carry the generated traits, so a consumer needs a second `use` line per interface anyway; one generated prelude per interface carries both, and the fixed traits are still nameable through it.                                                                                                                                                                                                                          |
+| The fixed methods on the per-interface trait too (one trait per interface, no `ridl-rt` change) | rejected | It works, but each interface would restate `new`, `next_event` and `commit` under its own trait, and a generic consumer (a test double, a harness over any `Client`) could not name `new` or `commit`. `Events` gives a shared name only: its `Next` type has no bound and the two clients return different things, so generic code cannot use the result. The `ridl-rt` traits cost one release, which the pin bump needs anyway. |
+| `Events` and `Timeout` as one trait, or `Timeout` ungated                                       | rejected | A signal-only or async client has no timeout, so one trait would force an implementation with no meaning; an ungated `Timeout` compiles (`core::time::Duration`) but has no implementor in a `no_std` build.                                                                                                                                                                                                                       |
 
-## 8. Open questions for the maintainer
+## 8. Choices confirmed by the maintainer
 
-Every choice below was taken here and should be confirmed or changed.
+Every choice below was taken here and confirmed by the maintainer on 2026-09-28.
 
 1. The `ridl-rt` trait names: `Bind`, `Events`, `Timeout`, `Publish`, in a new
    module `ridl_rt::face`. (`Connect` was the example given; `Bind` follows
    `ridl-rt`'s "binding" vocabulary, and no existing export is reused.)
 2. `Bind` with an associated type `Port` rather than a type parameter `Bind<P>`.
 3. `Events` with a generic associated type `Next<'a>`, one trait for the async
-   and the blocking client, rather than two traits.
+   and the blocking client, rather than two traits. Its purpose is to keep
+   `next_event` out of the inherent namespace; it does not let generic code use
+   the result, because `Next` has no bound.
 4. The per-interface trait names `Subscribe` and `Invalidate`, inside the
    interface module.
 5. The scope mechanism: a generated `prelude` module per interface, and no
@@ -388,11 +390,11 @@ Every choice below was taken here and should be confirmed or changed.
    refused or renamed.
 8. The `ridl-rt` change and the emitter change as one pull request before the
    release; the release is 0.4.0 (a minor, not a patch, §6), and `ridl-rt` 0.4.0
-   is published to crates.io at the tag.
+   is published to crates.io at the tag (confirmed).
 9. Two findings outside this note's scope: `<Struct>FbView::bytes` against a
    field named `bytes` (E0592, codec side), and the package module's fixed
-   `Wire` against a type or interface named `Wire` (E0428). Neither is recorded
-   on an issue that I found; the implementation PR could file both.
+   `Wire` against a type or interface named `Wire` (E0428). Filed as
+   driftsys/ridl#587 and driftsys/ridl#588.
 
 ## 9. Implementation outline
 
