@@ -949,7 +949,7 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// feature gates. A build with default features off has no `blocking` module
 /// and links `ridl-rt` as `no_std`.
 ///
-/// The `ridl-rt = "0.3"` requirement is a literal, not read from
+/// The `ridl-rt = "0.4"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
@@ -970,7 +970,7 @@ validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
-ridl-rt = {{ version = "0.3", features = ["flatbuffers"] }}
+ridl-rt = {{ version = "0.4", features = ["flatbuffers"] }}
 regex = {{ version = "1", optional = true }}
 
 [lib]

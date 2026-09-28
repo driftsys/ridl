@@ -1,5 +1,82 @@
 # Changelog
 
+## [0.4.0] (2026-09-28)
+
+### Refactoring
+
+- **ridl-backend-rust:** split face.rs into submodules and move the fixture's
+  regeneration guard ([#574]) ([6f3f446])
+
+### Features
+
+- **ridl-backend-rust:** move the face's fixed and derived methods behind traits
+  ([#582]) ([46df3cf])
+- **ridl-backend-rust:** emit the blocking client and blocking::serve (E11.21,
+  second half) ([#577]) ([1eb0fba])
+
+### Bug Fixes
+
+- **ridl:** warn RIDL-407 on a struct field or union arm inserted or removed
+  ([#589]) ([99adfe7]), closes [#533]
+- **ridl-sem:** refuse an enumset bit name declared twice (TYPL-218) ([#578])
+  ([82b1e43]), closes [#565]
+- **ridl-rt:** report an oversized claim with its id so serve can settle it
+  ([#585]) ([14a487a]), closes [#569]
+- **ridl-backend-rust:** bound the claims one serve poll takes ([#584])
+  ([9b98a6a]), closes [#568]
+- **ridl-backend-rust:** bind dispatch's decoded argument as __arg ([#581])
+  ([b1fae74])
+- **ridl-sem:** refuse a union arm name declared twice (TYPL-217) ([#573])
+  ([93da335]), closes [#452]
+- **ridl-backend-rust:** emit only the bit constants in an enum set's impl
+  ([#572]) ([fced988]), closes [#562]
+
+### BREAKING CHANGES
+
+- a consumer of a generated crate adds
+`use <crate>::<iface>::prelude::*;` for each interface whose face it uses;
+without it every fixed method is E0599. When a member of the interface
+shares a fixed name, the consumer writes the trait's path for the face's
+method, `<Client<_> as Bind>::new(port)`. The emitted crate needs
+`ridl-rt` with the `face` module, which the 0.4.0 release carries.
+- the manifest ridl build emits declares
+std = ["ridl-rt/std"] in place of std = [], so a consumer that builds
+the emitted crate with its default features now links ridl-rt with its
+std feature, and one that disables the emitted crate's std has no
+blocking module. The generated face gains items and changes none.
+- generated enum sets no longer have the associated
+const `DECLARED_MASK` or the method `get`. Use `i64::from(set)` to
+read the bits. `i64::from` is not a `const fn`, so the bits can no
+longer be read in a const context.
+
+[0.4.0]: https://github.com/driftsys/ridl/compare/v0.3.0...v0.4.0
+[6f3f446]: https://github.com/driftsys/ridl/commit/6f3f446
+[#574]: https://github.com/driftsys/ridl/issues/574
+[46df3cf]: https://github.com/driftsys/ridl/commit/46df3cf
+[#582]: https://github.com/driftsys/ridl/issues/582
+[1eb0fba]: https://github.com/driftsys/ridl/commit/1eb0fba
+[#577]: https://github.com/driftsys/ridl/issues/577
+[99adfe7]: https://github.com/driftsys/ridl/commit/99adfe7
+[#589]: https://github.com/driftsys/ridl/issues/589
+[#533]: https://github.com/driftsys/ridl/issues/533
+[82b1e43]: https://github.com/driftsys/ridl/commit/82b1e43
+[#578]: https://github.com/driftsys/ridl/issues/578
+[#565]: https://github.com/driftsys/ridl/issues/565
+[14a487a]: https://github.com/driftsys/ridl/commit/14a487a
+[#585]: https://github.com/driftsys/ridl/issues/585
+[#569]: https://github.com/driftsys/ridl/issues/569
+[9b98a6a]: https://github.com/driftsys/ridl/commit/9b98a6a
+[#584]: https://github.com/driftsys/ridl/issues/584
+[#568]: https://github.com/driftsys/ridl/issues/568
+[b1fae74]: https://github.com/driftsys/ridl/commit/b1fae74
+[#581]: https://github.com/driftsys/ridl/issues/581
+[93da335]: https://github.com/driftsys/ridl/commit/93da335
+[#573]: https://github.com/driftsys/ridl/issues/573
+[#452]: https://github.com/driftsys/ridl/issues/452
+[fced988]: https://github.com/driftsys/ridl/commit/fced988
+[#572]: https://github.com/driftsys/ridl/issues/572
+[#562]: https://github.com/driftsys/ridl/issues/562
+
 ## [0.3.0] (2026-09-27)
 
 ### Documentation
