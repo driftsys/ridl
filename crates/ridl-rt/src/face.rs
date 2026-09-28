@@ -9,21 +9,38 @@
 //! `set_timeout`, `commit` — and is a method of one of the four traits here.
 //! Rust gives one type one inherent namespace, so a member whose snake case
 //! is `new` or `commit` could not sit beside a fixed inherent method of that
-//! name (rustc E0592); a trait method lives in the trait's namespace, and an
-//! inherent method wins a dot call over a trait method of the same name, so
-//! the member always resolves as the member and the fixed method stays
-//! reachable through the trait's path. The two derived methods a face adds
-//! beside a member — `subscribe_<event>` and `invalidate_<signal>` — are
-//! methods of two traits the emitter generates inside each interface module,
+//! name (rustc E0592); a trait method lives in the trait's namespace, so the
+//! member and the fixed method coexist, and the fixed method stays reachable
+//! through the trait's path. The two derived methods a face adds beside a
+//! member — `subscribe_<event>` and `invalidate_<signal>` — are methods of
+//! two traits the emitter generates inside each interface module,
 //! `Subscribe` and `Invalidate`, for the same reason.
 //!
-//! A consumer of a generated face writes `use <crate>::<iface>::prelude::*;`
-//! once per interface: the generated `prelude` re-exports the traits here
-//! that the module's types implement, and the two generated traits as `_`.
-//! With the prelude in scope every call site is the one an inherent method
-//! had — `Client::new(port)`, `client.next_event()`, `publisher.commit()`.
-//! Only when a member of the interface is itself named `new` does
-//! `Client::new(port)` resolve to the member; the consumer then writes
+//! Which of the two a dot call reaches follows Rust's method probe: it tries
+//! the receiver by value, then by `&`, then by `&mut`, and at each step an
+//! inherent method before a trait method. A member takes `&self` (a signal
+//! read) or `&mut self` (every other member), and so does every trait method
+//! here except [`Timeout::with_timeout`], which takes `self` by value. So the
+//! member keeps the dot call for every fixed and derived method but
+//! `with_timeout`: beside a member named `withTimeout`,
+//! `client.with_timeout(x)` on a blocking client held by value reaches the
+//! trait method, because the by-value step comes first, and the consumer
+//! reaches the member through the inherent path
+//! `blocking::Client::with_timeout(&mut client, x)` (`&client` for a signal
+//! read). `with_timeout` takes `self` so that
+//! `Client::new(port).with_timeout(t)` stays one expression.
+//!
+//! A consumer of a generated face writes `use <crate>::<iface>::prelude::*;`:
+//! the generated `prelude` re-exports the traits here that the module's
+//! types implement, and the two generated traits as `_`. One prelude puts the
+//! traits here in scope for every interface of the crate; a further
+//! interface's prelude is needed only for that interface's own `Subscribe`
+//! and `Invalidate`, and one that adds nothing is an unused import. With the
+//! prelude in scope every call site is the one an inherent method had —
+//! `Client::new(port)`, `client.next_event()`, `publisher.commit()`. Only
+//! when a member of the interface is itself named `new` does
+//! `Client::new(port)` resolve to the member, because a path call finds an
+//! inherent item first; the consumer then writes
 //! `<Client<_> as Bind>::new(port)` or `let c: Client<_> = Bind::new(port)`.
 //!
 //! [`Timeout`] is under the `std` feature, because its only implementor is

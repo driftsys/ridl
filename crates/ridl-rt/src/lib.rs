@@ -35,7 +35,9 @@
 //! `new`, `next_event`, `commit`, and under `std` `with_timeout` and
 //! `set_timeout` — so that a member of an interface may carry one of those
 //! names. A consumer of a generated face brings them into scope with
-//! `use <crate>::<iface>::prelude::*;`, once per interface.
+//! `use <crate>::<iface>::prelude::*;`; one prelude covers these traits for
+//! every interface of the crate, and a further interface's prelude is needed
+//! only for that interface's own generated traits.
 //!
 //! # Where to start
 //!
