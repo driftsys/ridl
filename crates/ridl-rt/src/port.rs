@@ -227,10 +227,13 @@ pub struct Correlation(pub u64);
 ///
 /// `next_claim` presents each delivered call once. A retransmission of a call
 /// already presented is not presented again and receives the cached
-/// acknowledgment. The one call presented again is a claim a dropped handler
-/// held and did not settle: the runtime returns it to the waiting calls, so
-/// another handler that serves the member can take it, as many times as a
-/// holder is dropped (ADR-0021 decision 5). Calls from two callers are never
+/// acknowledgment. Two calls are presented again. One is a claim a dropped
+/// handler held and did not settle: the runtime returns it to the waiting
+/// calls, so another handler that serves the member can take it, as many
+/// times as a holder is dropped (ADR-0021 decision 5). The other is a claim
+/// offered through [`ReadError::ShortClaim`], which stays the next call, under
+/// the same id, until it is read with a large enough buffer or settled by
+/// that id (decision 5, amended 2026-09-28). Calls from two callers are never
 /// merged, even when they carry the same `seq`. A call lost in transport is never presented. The
 /// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
 /// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
@@ -484,9 +487,11 @@ pub enum ReadError {
     /// `needed` bytes presents it under the same `claim`. The id is reported
     /// so that a provider can settle the claim without reading its
     /// arguments; the generated `serve` settles it
-    /// `CallError::Transport(Transport::Corrupt)`, because an argument larger
-    /// than the member's largest valid encoding is not a well-formed encoding
-    /// (ADR-0021 decision 5, amended 2026-09-28).
+    /// `CallError::Transport(Transport::Corrupt)`, whichever interface or
+    /// member the claim names, because an argument that does not fit the
+    /// interface's `MAX_BUFFER_SIZE` — its largest argument or reply payload,
+    /// larger than any member's valid encoding — is not a well-formed
+    /// encoding (ADR-0021 decision 5, amended 2026-09-28).
     ShortClaim {
         /// The claim whose arguments did not fit.
         claim: ClaimId,
