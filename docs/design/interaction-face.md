@@ -337,12 +337,17 @@ vs §10.3).
 `ReadError::ShortClaim { claim, needed }` and does not consume it
 ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 5,
 amended the same day). The step settles `claim` `Transport::Corrupt` without
-reading it — an argument larger than `MAX_BUFFER_SIZE`, the member's largest
-valid encoding, is not a well-formed encoding, the rule the
-`VerifyError::Structure` row already applies — counts it toward the budget like
-a claim taken, and continues with the next claim. A `SettleError` there is left
-to the handler, as for any other claim; over a runtime that presents the
-unsettled claim again, the budget bounds the pass. Every other `ReadError` from
+reading it, whichever interface or member the claim names — an argument that
+does not fit `MAX_BUFFER_SIZE`, the interface's largest argument or reply
+payload, is larger than any member's valid encoding and so not a well-formed
+encoding, the rule the `VerifyError::Structure` row already applies — counts it
+toward the budget like a claim taken, and continues with the next claim. When
+the handler refuses that settlement, the step ends the pass at once and returns
+the count so far with the budget unspent, as if no claim were waiting: the
+runtime keeps the unsettled claim the next one, so taking it again would spend
+the whole budget on it on every poll and wake `serve` forever. `serve` therefore
+does not wake itself, and waits for the next claim wake; the claims behind such
+a claim wait until the handler can settle it. Every other `ReadError` from
 `next_claim`, including a `Short` from a runtime older than the variant, still
 resolves `serve` to `ProviderError::Claim`. Only a raw `Caller` or a network
 runtime can send such a claim; a generated client sizes its arguments from the

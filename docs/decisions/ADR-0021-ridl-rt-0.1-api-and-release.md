@@ -89,8 +89,10 @@ unserved (driftsys/ridl#569, found in the review of driftsys/ridl#566).
 `next_claim` returns in place of `Short` and which does not consume the claim;
 `Handler::settle` accepts that id, with any outcome, although the claim's
 arguments were never read. An added variant of a `#[non_exhaustive]` enum
-(decision 9), so not a breaking change. Sebastien took the decision on
-2026-09-28.
+(decision 9), so every consumer still compiles; a hand-written provider that
+matched `Short` from `next_claim` to resize and read again now receives
+`ShortClaim` in its `_` arm and must match the new variant instead, which is the
+one behaviour change. Sebastien took the decision on 2026-09-28.
 
 ## Context
 
@@ -179,7 +181,8 @@ trusted with no `unsafe` and no second verification pass.
    call receives the cached acknowledgment rather than being presented again,
    two callers are never merged even under the same `seq`, and `ClaimId` is the
    key unique per channel. **Amended (2026-09-26, story E11.16).** The one call
-   presented again is a claim a dropped handler held and did not settle: the
+   presented again (one of two since the 2026-09-28 amendment below, which adds
+   the offered claim) is a claim a dropped handler held and did not settle: the
    runtime returns it to the waiting calls, in its place by send order, so
    another handler that serves the member can take it and a call does not wait
    on a handler that is gone; the call's deadline still bounds the caller's wait
@@ -208,12 +211,20 @@ trusted with no `unsafe` and no second verification pass.
    whichever form that takes. `Handler::settle` accepts that id with any outcome
    although the arguments were never read; the port does not distinguish a read
    claim from an unread one, which is the simplest rule the loopback and the
-   conformance suite can state. The generated `serve` settles such a claim
-   `CallError::Transport(Transport::Corrupt)` — an argument larger than the
-   member's largest valid encoding is not a well-formed encoding, the rule
-   already applied to argument bytes that fail the structure check — counts it
-   toward its per-poll bound, and continues with the next claim (ADR-0023
-   decision 6). `Short` keeps its meaning for every other read, and `next_claim`
+   conformance suite can state. An offered claim is the second call `next_claim`
+   presents again: it stays the next call, under the same id, until it is read
+   or settled. The generated `serve` settles such a claim
+   `CallError::Transport(Transport::Corrupt)`, whichever interface or member it
+   names — an argument that does not fit the interface's `MAX_BUFFER_SIZE`, the
+   largest argument or reply payload of any of its members, is larger than any
+   member's valid encoding and so not a well-formed encoding, the rule already
+   applied to argument bytes that fail the structure check — counts it toward
+   its per-poll bound, and continues with the next claim (ADR-0023 decision 6).
+   When the handler refuses that settlement, the pass ends at once with the
+   budget unspent, as if no claim were waiting, because the runtime keeps the
+   unsettled claim the next one: `serve` does not wake itself, and waits for the
+   next claim wake; the claims behind such a claim wait until the handler can
+   settle it. `Short` keeps its meaning for every other read, and `next_claim`
    no longer returns it; a `Short` from a runtime older than the variant still
    ends `serve` with `ProviderError::Claim`. Only a raw `Caller` or a network
    runtime can send such a claim; a generated client sizes its arguments from

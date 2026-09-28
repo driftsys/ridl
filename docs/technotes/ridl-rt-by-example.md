@@ -663,17 +663,19 @@ them:
 | `require` returns `Err(())`                 | `Contract::PreconditionFailed`          |
 | `ensure` returns `Err(())`, a query only    | `Contract::ContractBroken`              |
 
-Reading it top to bottom: route the claim, check the bytes, check the
-precondition, call the provider, check the postcondition, settle.
+Reading it top to bottom: settle a claim that did not fit before routing it,
+then route the claim, check the bytes, check the precondition, call the
+provider, check the postcondition, settle.
 
 The first row settles a claim `serve` never read: its argument bytes exceed
-`MAX_BUFFER_SIZE`, the member's largest valid encoding, so the runtime reported
-the claim's id and the bytes it needs instead of copying them, and an encoding
-larger than the largest valid one is not well-formed (driftsys/ridl#569). The
-second row is the fallback arm. Without it an unroutable claim would never be
-settled, which breaks the `Handler` contract. `UnknownInteraction` is exactly
-the category the language defines for peers disagreeing on an interface number
-or an ordinal.
+`MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so the
+runtime reported the claim's id and the bytes it needs instead of copying them,
+and an encoding larger than any member's valid one is not well-formed
+(driftsys/ridl#569). The claim is settled whichever interface or member it
+names, so it never reaches the fallback arm. The second row is the fallback arm.
+Without it an unroutable claim would never be settled, which breaks the
+`Handler` contract. `UnknownInteraction` is exactly the category the language
+defines for peers disagreeing on an interface number or an ordinal.
 
 The two `VerifyError` rows are separate for the reason step 3 gave: collapsing
 them would settle a range violation as a transport corruption, which reaches the

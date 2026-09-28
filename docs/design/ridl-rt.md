@@ -528,14 +528,16 @@ Semantics each implementation presents:
 - **`Handler`** presents each delivered call once through `next_claim`: a
   retransmission of an already-presented call is not presented again and
   receives the cached acknowledgment, and two callers are never merged even
-  under the same `seq`. The one call presented again is a claim a dropped
-  handler held and did not settle, which the runtime returns to the waiting
-  calls so that another handler serving the member can take it; the call's
-  deadline still bounds the caller's wait (ADR-0021 decision 5, amended
-  2026-09-26). Every claim is settled by the handler holding it, or returned by
-  that handler's drop — a command settles `Ok(&[])` after its arguments and
-  `require` pass and before application code runs; a query settles with the
-  reply bytes or the `CallError` outcome. A provider settles
+  under the same `seq`. Two calls are presented again: a claim a dropped handler
+  held and did not settle, which the runtime returns to the waiting calls so
+  that another handler serving the member can take it, the call's deadline still
+  bounding the caller's wait (ADR-0021 decision 5, amended 2026-09-26); and a
+  claim offered through `ReadError::ShortClaim`, which stays the next call under
+  the same id until it is read or settled (decision 5, amended 2026-09-28).
+  Every claim is settled by the handler holding it, or returned by that
+  handler's drop — a command settles `Ok(&[])` after its arguments and `require`
+  pass and before application code runs; a query settles with the reply bytes or
+  the `CallError` outcome. A provider settles
   `CallError::Transport(Transport::Corrupt)` when the argument bytes fail the
   structure check. A claim whose argument bytes do not fit the buffer passed to
   `next_claim` is reported as `ReadError::ShortClaim { claim, needed }` and not
