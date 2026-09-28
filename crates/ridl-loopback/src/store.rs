@@ -645,8 +645,8 @@ impl Store {
     ///   it is a handler's claim although it is still waiting, so it is
     ///   marked forgotten as a taken claim is, and it stays among the waiting
     ///   calls, so the provider's retry with a larger buffer still presents
-    ///   it under the same id. That handler's settlement, by either id, or
-    ///   its drop reclaims the slot (driftsys/ridl#569).
+    ///   it under the same id. Its settlement by the handler that holds it,
+    ///   or that handler's drop, reclaims the slot (driftsys/ridl#569).
     ///
     /// `forget` and the handler side — `serve` and `next_claim` — run under
     /// the store's one lock, so a call is either claimed first, and held

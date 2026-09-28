@@ -670,12 +670,13 @@ provider, check the postcondition, settle.
 The first row settles a claim `serve` never read: its argument bytes exceed
 `MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so the
 runtime reported the claim's id and the bytes it needs instead of copying them,
-and an encoding larger than any member's valid one is not well-formed
-(driftsys/ridl#569). The claim is settled whichever interface or member it
-names, so it never reaches the fallback arm. The second row is the fallback arm.
-Without it an unroutable claim would never be settled, which breaks the
-`Handler` contract. `UnknownInteraction` is exactly the category the language
-defines for peers disagreeing on an interface number or an ordinal.
+and an encoding larger than any valid one of this interface's members is not
+well-formed (driftsys/ridl#569). The claim is settled whichever interface or
+member it names — one naming another interface may be validly larger, but
+`serve` cannot read it — so it never reaches the fallback arm. The second row is
+the fallback arm. Without it an unroutable claim would never be settled, which
+breaks the `Handler` contract. `UnknownInteraction` is exactly the category the
+language defines for peers disagreeing on an interface number or an ordinal.
 
 The two `VerifyError` rows are separate for the reason step 3 gave: collapsing
 them would settle a range violation as a transport corruption, which reaches the

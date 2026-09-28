@@ -66,31 +66,35 @@ sending over `ridl-loopback`, and of 930 ms with 16 callers: while callers keep
 sending, the poll does not return. A future that holds one poll for an unbounded
 time blocks every other task on a single-threaded executor. Each poll now takes
 at most 32 claims, counted as they are taken and not as their settlements are
-accepted, so that a run of rejected settlements is bounded too. A poll that
-stopped at 32 wakes its own waker and is `Pending`, so the executor polls it
-again after other tasks have run; a poll that found no claim left before 32 is
-`Pending` without waking itself, as before. 32 bounds one poll and keeps the
-cost of registering the claim interest, paid once per poll, small beside the
-claims the poll settles. The bound is a private constant of each generated
-interface module that emits `serve`, not a setting and not a `ridl-rt` item. The
-`Serve` type and its output are unchanged, so the change is not breaking. Taken
-on delegated authority while fixing driftsys/ridl#568, which it closes. The
-self-wake is discarded under `ridl_rt::task::noop_waker`, so a frame loop that
-polls `Serve` once per frame with it settles at most 32 claims per frame.
-Sebastien decided, during the review of driftsys/ridl#584, that `ridl-rt` adds
-`task::flag_waker` (ADR-0021 decision 8, amended the same day), whose wake sets
-a flag the loop reads: the loop polls, then polls again while the flag was set,
-up to its own limit of polls per frame. A `no_std` frame loop with an allocator
-writes the same small waker over `alloc::task::Wake` on an `Arc`; one without an
-allocator needs a hand-written `RawWaker`, which needs `unsafe`.
+accepted, so that a run of rejected settlements is bounded too (the one claim
+not counted is an oversized claim whose settlement the handler refused, which
+ends the poll at once with the budget unspent; the driftsys/ridl#569 note
+below). A poll that stopped at 32 wakes its own waker and is `Pending`, so the
+executor polls it again after other tasks have run; a poll that found no claim
+left before 32 is `Pending` without waking itself, as before. 32 bounds one poll
+and keeps the cost of registering the claim interest, paid once per poll, small
+beside the claims the poll settles. The bound is a private constant of each
+generated interface module that emits `serve`, not a setting and not a `ridl-rt`
+item. The `Serve` type and its output are unchanged, so the change is not
+breaking. Taken on delegated authority while fixing driftsys/ridl#568, which it
+closes. The self-wake is discarded under `ridl_rt::task::noop_waker`, so a frame
+loop that polls `Serve` once per frame with it settles at most 32 claims per
+frame. Sebastien decided, during the review of driftsys/ridl#584, that `ridl-rt`
+adds `task::flag_waker` (ADR-0021 decision 8, amended the same day), whose wake
+sets a flag the loop reads: the loop polls, then polls again while the flag was
+set, up to its own limit of polls per frame. A `no_std` frame loop with an
+allocator writes the same small waker over `alloc::task::Wake` on an `Arc`; one
+without an allocator needs a hand-written `RawWaker`, which needs `unsafe`.
 
 **Note (2026-09-28, driftsys/ridl#569).** Decision 6 settles each claim as the
 settlement table of the interaction-face design record states. That table gains
 a row: a claim `Handler::next_claim` reports as `ReadError::ShortClaim`, because
 its argument bytes exceed `MAX_BUFFER_SIZE`, is settled `Transport::Corrupt` by
-its id without being read, counts toward the per-poll bound, and does not
-resolve `serve`. The variant is ADR-0021 decision 5's 2026-09-28 amendment;
-decision 6 itself is unchanged.
+its id without being read and counts toward the per-poll bound; when the handler
+refuses that settlement, the poll ends at once with the budget unspent and is
+`Pending` without waking itself, so the claims behind that claim wait until the
+handler can settle it. Neither case resolves `serve`. The variant is ADR-0021
+decision 5's 2026-09-28 amendment; decision 6 itself is unchanged.
 
 ## Context
 

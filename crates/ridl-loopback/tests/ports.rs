@@ -824,9 +824,9 @@ fn a_forgotten_offered_call_is_presented_again_under_the_same_id_and_its_settlem
 }
 
 /// driftsys/ridl#569: a dropped handler's offered claim never left the
-/// waiting calls, so it is not re-inserted; another handler that serves the
-/// member takes it exactly once, under the same id, and its settlement reaches
-/// the caller.
+/// waiting calls, so it is not re-inserted and no serving handler is woken for
+/// it; another handler that serves the member takes it exactly once, under the
+/// same id, and its settlement reaches the caller.
 #[test]
 fn a_dropped_handlers_offered_claim_is_taken_once_by_another_handler_under_the_same_id() {
     let rt = runtime();
@@ -837,8 +837,18 @@ fn a_dropped_handlers_offered_claim_is_taken_once_by_another_handler_under_the_s
     second.serve(IFACE, &[ORD]).expect("serve");
     let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
     let claim = offer(&mut first);
+    // Registered while the offered call is already waiting, so the registration
+    // is woken at once; the count is read before the drop and compared after.
+    let (count, waker) = counting();
+    second.wake_on(Interest::Claim(IFACE), &waker);
+    let before = wakes(&count);
 
     drop(first);
+    assert_eq!(
+        wakes(&count),
+        before,
+        "the drop wakes no handler for an offered claim: the call never left the waiting calls"
+    );
     let mut buf = [0u8; 8];
     let taken = second
         .next_claim(&mut buf)

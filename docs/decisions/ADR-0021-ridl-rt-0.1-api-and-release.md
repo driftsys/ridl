@@ -217,21 +217,24 @@ trusted with no `unsafe` and no second verification pass.
    `CallError::Transport(Transport::Corrupt)`, whichever interface or member it
    names — an argument that does not fit the interface's `MAX_BUFFER_SIZE`, the
    largest argument or reply payload of any of its members, is larger than any
-   member's valid encoding and so not a well-formed encoding, the rule already
-   applied to argument bytes that fail the structure check — counts it toward
-   its per-poll bound, and continues with the next claim (ADR-0023 decision 6).
-   When the handler refuses that settlement, the pass ends at once with the
-   budget unspent, as if no claim were waiting, because the runtime keeps the
-   unsettled claim the next one: `serve` does not wake itself, and waits for the
-   next claim wake; the claims behind such a claim wait until the handler can
-   settle it. `Short` keeps its meaning for every other read, and `next_claim`
-   no longer returns it; a `Short` from a runtime older than the variant still
-   ends `serve` with `ProviderError::Claim`. Only a raw `Caller` or a network
-   runtime can send such a claim; a generated client sizes its arguments from
-   the same descriptor as the provider's `MAX_BUFFER_SIZE`. The conformance
-   suite gains `an_oversized_claim_is_reported_with_its_id_and_is_not_consumed`,
-   `an_unread_claim_is_settled_by_its_id` and
-   `the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled`.
+   valid encoding of those members and so not a well-formed encoding of one, the
+   rule already applied to argument bytes that fail the structure check; a claim
+   naming another interface may be validly larger, and is settled `Corrupt` too,
+   because the serving step cannot read it — counts it toward its per-poll
+   bound, and continues with the next claim (ADR-0023 decision 6). When the
+   handler refuses that settlement, the pass ends at once with the budget
+   unspent, as if no claim were waiting, because the runtime keeps the unsettled
+   claim the next one: `serve` does not wake itself, and waits for the next
+   claim wake; the claims behind such a claim wait until the handler can settle
+   it. `Short` keeps its meaning for every other read, and `next_claim` no
+   longer returns it; a `Short` from a runtime older than the variant still ends
+   `serve` with `ProviderError::Claim`. Only a raw `Caller` or a network runtime
+   can send such a claim; a generated client sizes its arguments from the same
+   descriptor as the provider's `MAX_BUFFER_SIZE`. The conformance suite gains
+   `an_oversized_claim_is_reported_with_its_id_and_is_not_consumed`,
+   `an_unread_claim_is_settled_by_its_id`,
+   `the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled` and
+   `forget_between_the_offer_and_the_settlement_leaves_the_settlement_valid`.
 
 6. **driftsys/ridl#309: an event that fails its check is delivered with an
    invalid marker, not withheld.** `EventSource::next` stays unvalidated — it

@@ -554,8 +554,10 @@ impl HandlerHandle {
     }
 }
 
-/// A claim this handler holds and has not settled returns to the waiting
-/// calls, and every handler that serves its member is woken. A claim whose
+/// A claim this handler has taken and not settled returns to the waiting
+/// calls, and every handler that serves its member is woken. A claim it was
+/// only offered, through `ReadError::ShortClaim`, never left the waiting calls,
+/// so it is neither re-inserted nor woken for (driftsys/ridl#569). A claim whose
 /// call the caller forgot is withdrawn instead: its slot is reclaimed, and no
 /// handler is presented it again or woken for it. The handler's waker is
 /// dropped after the lock is released, as the source's is.

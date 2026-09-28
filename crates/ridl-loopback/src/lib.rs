@@ -163,8 +163,11 @@ impl Loopback {
     /// from its send until one of these reclaims it:
     ///
     /// - [`Caller::forget`], or the drop of the caller handle that sent it,
-    ///   while it is settled or still waiting for a handler;
-    /// - its settlement, when it was forgotten while a handler held it;
+    ///   while it is settled or still waiting for a handler and offered to
+    ///   none;
+    /// - its settlement, when it was forgotten while a handler held it —
+    ///   taken, or offered through `ReadError::ShortClaim` and still waiting
+    ///   (driftsys/ridl#569);
     /// - the drop of the handler that held it unsettled, when it was
     ///   forgotten.
     ///

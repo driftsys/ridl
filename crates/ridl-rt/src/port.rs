@@ -487,11 +487,13 @@ pub enum ReadError {
     /// `needed` bytes presents it under the same `claim`. The id is reported
     /// so that a provider can settle the claim without reading its
     /// arguments; the generated `serve` settles it
-    /// `CallError::Transport(Transport::Corrupt)`, whichever interface or
-    /// member the claim names, because an argument that does not fit the
-    /// interface's `MAX_BUFFER_SIZE` — its largest argument or reply payload,
-    /// larger than any member's valid encoding — is not a well-formed
-    /// encoding (ADR-0021 decision 5, amended 2026-09-28).
+    /// `CallError::Transport(Transport::Corrupt)`, because an argument that
+    /// does not fit the serving interface's `MAX_BUFFER_SIZE` — its largest
+    /// argument or reply payload, larger than any valid encoding of its
+    /// members — is not a well-formed encoding of one; a claim naming another
+    /// interface may be validly larger, and is settled the same, because the
+    /// serving step cannot read it (ADR-0021 decision 5, amended
+    /// 2026-09-28).
     ShortClaim {
         /// The claim whose arguments did not fit.
         claim: ClaimId,

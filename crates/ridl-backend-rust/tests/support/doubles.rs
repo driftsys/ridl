@@ -324,8 +324,8 @@ impl Wakeable for FailingHandler {
 pub struct QueuedClaims {
     iface: InterfaceNo,
     counts: Rc<ClaimCounts>,
-    /// `settle` answers `SettleError::UnknownClaim` instead of accepting.
-    reject: bool,
+    /// `settle` answers this error instead of accepting.
+    refusal: Option<SettleError>,
     /// Once no claim is left, `next_claim` fails with `ReadError::Detached`
     /// instead of answering `None`, so that `serve` resolves.
     fail_when_empty: bool,
@@ -361,7 +361,7 @@ impl QueuedClaims {
         QueuedClaims {
             iface,
             counts: Rc::new(counts),
-            reject: false,
+            refusal: None,
             fail_when_empty: false,
             oversized: false,
             offered: None,
@@ -377,19 +377,20 @@ impl QueuedClaims {
         }
     }
 
-    /// The same as [`QueuedClaims::oversized`], but `settle` rejects every
-    /// settlement, so the offered claim stays the next one.
-    pub fn oversized_rejecting(iface: InterfaceNo, waiting: usize) -> Self {
+    /// The same as [`QueuedClaims::oversized`], but `settle` refuses every
+    /// settlement with `refusal`, so the offered claim stays the next one.
+    pub fn oversized_rejecting(iface: InterfaceNo, waiting: usize, refusal: SettleError) -> Self {
         QueuedClaims {
-            reject: true,
+            refusal: Some(refusal),
             ..QueuedClaims::oversized(iface, waiting)
         }
     }
 
-    /// The same, but `settle` rejects every settlement.
+    /// The same, but `settle` rejects every settlement with
+    /// `SettleError::UnknownClaim`.
     pub fn rejecting(iface: InterfaceNo, waiting: usize) -> Self {
         QueuedClaims {
-            reject: true,
+            refusal: Some(SettleError::UnknownClaim),
             ..QueuedClaims::new(iface, waiting)
         }
     }
@@ -471,8 +472,8 @@ impl Handler for QueuedClaims {
         _outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
         self.counts.settles.set(self.counts.settles.get() + 1);
-        if self.reject {
-            return Err(SettleError::UnknownClaim);
+        if let Some(refusal) = self.refusal {
+            return Err(refusal);
         }
         if self.oversized {
             // An accepted settlement of the offered claim takes it; any
