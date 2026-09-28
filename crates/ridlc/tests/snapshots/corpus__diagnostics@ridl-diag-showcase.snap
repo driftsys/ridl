@@ -332,10 +332,18 @@ error[TYPL-217]: `value` is already declared in this union — a name identifies
 64 │   value : ProjectionFields
    │   ^^^^^
 
-error[RIDL-413]: `value` is already declared in this parameter list — a name identifies one parameter. Rename or remove one of them (ridl §6.1, §7.1)
-   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:69:34
+error[TYPL-218]: `HIGH` is already declared in this enumset — a name identifies one bit. Rename or remove one of them (typl §9.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:70:3
    │
-69 │   command setBoth(value : Ratio, value : Ratio) @[..500ms]
+69 │   HIGH = 0
+   │   ---- `HIGH` is declared here
+70 │   HIGH = 1
+   │   ^^^^
+
+error[RIDL-413]: `value` is already declared in this parameter list — a name identifies one parameter. Rename or remove one of them (ridl §6.1, §7.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:75:34
+   │
+75 │   command setBoth(value : Ratio, value : Ratio) @[..500ms]
    │                   -----          ^^^^^
    │                   │               
    │                   `value` is declared here

@@ -843,6 +843,10 @@ enumset WarningFlags {
 }
 ```
 
+- Bit positions unique (TYPL-207)
+- A bit name is unique within its enumset (TYPL-218): a name identifies one bit,
+  so an enumset cannot declare two
+
 ### 9.2 Derived Form
 
 Derives bit positions from an existing `enum` — preferred when both single-value
@@ -1162,6 +1166,7 @@ the family overview §7 and are not restated here.
 | TYPL-215 | field name declared twice in one struct                                                                    | error    |
 | TYPL-216 | enum value name declared twice in one enum                                                                 | error    |
 | TYPL-217 | union arm name declared twice in one union                                                                 | error    |
+| TYPL-218 | enumset bit name declared twice in one enumset                                                             | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
