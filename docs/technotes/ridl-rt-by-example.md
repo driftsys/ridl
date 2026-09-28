@@ -58,16 +58,19 @@ use api::cabin::prelude::*;
 
 With it, every call site is the one an inherent method would have. Without it,
 `cabin::Client::new(&mut port)` is E0599 with the help "items from traits can
-only be used if the trait is in scope". One prelude puts the `ridl_rt::face`
-traits in scope for every interface of the crate; a second interface's prelude
-is needed only when its own `subscribe_<event>` or `invalidate_<signal>` is
-called, and a prelude that adds nothing is an unused import. When a member of
-the interface is itself named `new`, `Client::new(port)` is that member, and the
-face is bound as `<cabin::Client<_> as Bind>::new(port)`; a member named
-`withTimeout` is the one name whose dot call on a blocking client held by value
-reaches the trait method instead, because `Timeout::with_timeout` takes `self`
-by value, and the member is then reached as
-`blocking::Client::with_timeout(&mut client, x)`.
+only be used if the trait is in scope". A consumer imports the prelude of each
+interface whose face it uses: each prelude brings the `ridl_rt::face` traits
+that interface's types implement and that interface's own `Subscribe` and
+`Invalidate`, so `horn::prelude` (signals only) brings no `Timeout`, and the
+`with_timeout` of another interface's `blocking::Client` is E0599 with only
+`horn::prelude` in scope. rustc reports a prelude as an unused import when the
+other imported preludes already bring every item it would add, and that import
+can then be dropped. When a member of the interface is itself named `new`,
+`Client::new(port)` is that member, and the face is bound as
+`<cabin::Client<_> as Bind>::new(port)`; a member named `withTimeout` is the one
+name whose dot call on a blocking client held by value reaches the trait method
+instead, because `Timeout::with_timeout` takes `self` by value, and the member
+is then reached as `blocking::Client::with_timeout(&mut client, x)`.
 
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.

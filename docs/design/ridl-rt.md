@@ -89,12 +89,11 @@ beside a member, `subscribe_<event>` and `invalidate_<signal>`, are methods of
 two traits the emitter generates inside each interface module, `Subscribe` and
 `Invalidate`, and each interface module carries a `prelude` that re-exports the
 traits here its types implement by name and its own two as `_`; a consumer
-writes `use <crate>::<iface>::prelude::*;` once, and again for each further
-interface whose `Subscribe` or `Invalidate` it calls — a second prelude that
-adds nothing beyond the traits here is an unused import. No runtime implements
-anything here, so `ridl-rt-conformance` does not test it; the generated face's
-own tests do (`crates/ridl-backend-rust/tests/face_compile.rs` and
-`face_generation.rs`).
+writes `use <crate>::<iface>::prelude::*;` for each interface whose face it
+uses, and rustc reports a prelude as an unused import when the other imported
+preludes already bring every item it would add. No runtime implements anything
+here, so `ridl-rt-conformance` does not test it; the generated face's own tests
+do (`crates/ridl-backend-rust/tests/face_compile.rs` and `face_generation.rs`).
 
 ## Identity
 

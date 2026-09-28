@@ -748,19 +748,20 @@ trusted with no `unsafe` and no second verification pass.
     **The release.** Four traits and a module are an addition, not a breaking
     change under decision 10. The crate is released as 0.4.0 with the workspace
     all the same, because the backend change that needs it breaks the generated
-    API (a consumer adds a `use` line for the prelude), which at 0.x is a minor
-    bump, and because the emitted manifest's caret requirement on `ridl-rt`
-    accepts any published line of one minor: under a patch, `"0.3"` would still
-    accept the published 0.3.0, which has no `face`. The release commit moves
-    the workspace version to 0.4.0 and the literal in `crates/ridlc/src/lib.rs`
-    to `"0.4"`, whose guard in `crates/ridlc/tests/rust_crate_emit.rs` derives
-    the expected `major.minor` from the workspace version; `cargo publish` of
-    `ridl-rt` follows the tag at once, the order decision 18 used. Inside the
-    workspace the two changes land as one pull request before the release,
-    because `examples/cabin` patches `ridl-rt` to its path and
-    `just compat-check` links the packaged crate by path; a consumer outside it
-    resolves the emitted crate once 0.4.0 is on crates.io. Sebastien confirmed
-    the release and its publication on 2026-09-28.
+    API (a consumer adds a `use` line per interface prelude), which at 0.x is a
+    minor bump, and because the emitted manifest's caret requirement on
+    `ridl-rt` accepts any published line of one minor: under a patch, `"0.3"`
+    would still accept the published 0.3.0, which has no `face`. The release
+    commit moves the workspace version to 0.4.0 and the literal in
+    `crates/ridlc/src/lib.rs` to `"0.4"`, whose guard in
+    `crates/ridlc/tests/rust_crate_emit.rs` derives the expected `major.minor`
+    from the workspace version; `cargo publish` of `ridl-rt` follows the tag at
+    once, the order decision 18 used. Inside the workspace the two changes land
+    as one pull request before the release, because `examples/cabin` patches
+    `ridl-rt` to its path and `just compat-check` links the packaged crate by
+    path; a consumer outside it resolves the emitted crate once 0.4.0 is on
+    crates.io. Sebastien confirmed the release and its publication on
+    2026-09-28.
 
 ## Alternatives considered
 

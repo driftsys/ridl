@@ -469,9 +469,12 @@ argument for it in the command case.
      module's own `Subscribe` and `Invalidate` as `_`, so that two interfaces'
      preludes glob-imported into one scope do not conflict (importing two
      `Subscribe` traits by name is E0252). A consumer writes
-     `use <crate>::<iface>::prelude::*;` once, and again for each further
-     interface whose `Subscribe` or `Invalidate` it calls, and every call site
-     is the one an inherent method had: `Client::new(&mut port)`,
+     `use <crate>::<iface>::prelude::*;` for each interface whose face it uses —
+     each prelude brings the `ridl-rt` traits that interface's types implement
+     and that interface's own `Subscribe` and `Invalidate`, so a signal-only
+     interface's prelude brings no `Timeout` and another interface's
+     `with_timeout` is E0599 under it alone — and every call site is the one an
+     inherent method had: `Client::new(&mut port)`,
      `client.subscribe_warning()`, `client.next_event()`, `publisher.commit()`,
      `blocking::Client::new(&mut port).with_timeout(t)`. The `ridl-rt` traits
      are one item whichever prelude re-exports them; a second prelude whose
@@ -488,7 +491,8 @@ argument for it in the command case.
      dot call follows Rust's method probe, which tries the receiver by value,
      then by `&`, then by `&mut`, and at each step an inherent method before a
      trait method. A member takes `&self` (a signal read) or `&mut self` (every
-     other member), and so does every fixed and derived trait method except
+     other member); `Bind::new` takes no receiver and is reached by a path call,
+     and every other fixed and derived trait method takes `&mut self` except
      `Timeout::with_timeout`, which takes `self` by value so that
      `Client::new(port).with_timeout(t)` stays one expression. So the member
      keeps the dot call for every fixed and derived method but `with_timeout`:
@@ -501,12 +505,15 @@ argument for it in the command case.
      first (E0308 when `x` is not a `Duration`), and the consumer reaches the
      member through the inherent path
      `blocking::Client::with_timeout(&mut client, x)` — `&client` for a signal
-     read — or through a `&mut` borrow of the client, whose own type is the
-     probe's first candidate. `with_timeout` stays by value because a consumer's
-     call sites do not change; the exception is the one documented cost (pass-1
-     review of driftsys/ridl#582). On the async `Client`, which implements no
-     `Timeout`, the dot call is the member. A member name is never restricted by
-     this backend (the rule of driftsys/ridl#570).
+     read. A `&mut self` member (a command or a query) is reached by dot call
+     through a `&mut` borrow of the client as well, whose own type is the
+     probe's first candidate; a signal read is not, because the probe reaches
+     the by-value trait method at the dereferenced step before `&Client`, so the
+     inherent path is its one route. `with_timeout` stays by value because a
+     consumer's call sites do not change; the exception is the one documented
+     cost (pass-1 review of driftsys/ridl#582). On the async `Client`, which
+     implements no `Timeout`, the dot call is the member. A member name is never
+     restricted by this backend (the rule of driftsys/ridl#570).
    - **The emitter's own calls go through the traits' paths**, so a member of
      the name cannot capture them: the blocking client builds the async one as
      `<super::Client<P> as ::ridl_rt::face::Bind>::new(port)`, and delegates as

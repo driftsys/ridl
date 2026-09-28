@@ -19,9 +19,10 @@
 //! Which of the two a dot call reaches follows Rust's method probe: it tries
 //! the receiver by value, then by `&`, then by `&mut`, and at each step an
 //! inherent method before a trait method. A member takes `&self` (a signal
-//! read) or `&mut self` (every other member), and so does every trait method
-//! here except [`Timeout::with_timeout`], which takes `self` by value. So the
-//! member keeps the dot call for every fixed and derived method but
+//! read) or `&mut self` (every other member); [`Bind::new`] takes no receiver
+//! and is reached by a path call, and every other trait method here takes
+//! `&mut self` except [`Timeout::with_timeout`], which takes `self` by value.
+//! So the member keeps the dot call for every fixed and derived method but
 //! `with_timeout`: beside a member named `withTimeout`,
 //! `client.with_timeout(x)` on a blocking client held by value reaches the
 //! trait method, because the by-value step comes first, and the consumer
@@ -30,12 +31,12 @@
 //! read). `with_timeout` takes `self` so that
 //! `Client::new(port).with_timeout(t)` stays one expression.
 //!
-//! A consumer of a generated face writes `use <crate>::<iface>::prelude::*;`:
-//! the generated `prelude` re-exports the traits here that the module's
-//! types implement, and the two generated traits as `_`. One prelude puts the
-//! traits here in scope for every interface of the crate; a further
-//! interface's prelude is needed only for that interface's own `Subscribe`
-//! and `Invalidate`, and one that adds nothing is an unused import. With the
+//! A consumer of a generated face writes `use <crate>::<iface>::prelude::*;`
+//! for each interface whose face it uses: the generated `prelude` re-exports
+//! the traits here that the interface's types implement, and the interface's
+//! two generated traits as `_`. rustc reports a prelude as an unused import
+//! when the other imported preludes already bring every item it would add,
+//! and that import can then be dropped. With the
 //! prelude in scope every call site is the one an inherent method had —
 //! `Client::new(port)`, `client.next_event()`, `publisher.commit()`. Only
 //! when a member of the interface is itself named `new` does

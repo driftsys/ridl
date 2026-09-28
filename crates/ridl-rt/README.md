@@ -14,7 +14,8 @@ module's traits. It also carries the caller-side call table and the waker
 registry every runtime would otherwise write alone (`correlate`), and the traits
 a generated face implements for its fixed methods — `Bind::new`,
 `Events::next_event`, `Publish::commit`, and under `std` `Timeout` — which a
-consumer brings into scope with an interface's generated `prelude` (`face`).
+consumer brings into scope with the generated `prelude` of each interface whose
+face it uses (`face`).
 
 With its default features the crate is `no_std` and allocates nothing; it
 contains no `unsafe` code and has no dependency in any feature combination. It

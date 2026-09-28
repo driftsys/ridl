@@ -158,12 +158,12 @@ covers, one `pub mod` named after the interface. Its consumer side is:
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
   section "The blocking module" below.
 - **`prelude`** — the module a consumer glob-imports,
-  `use <crate>::<iface>::prelude::*;`, once and again for each further interface
-  whose `Subscribe` or `Invalidate` it calls (a second prelude that adds nothing
-  beyond the `ridl_rt::face` traits is an unused import): it re-exports by name
-  the `ridl_rt::face` traits the module's types implement (`Bind`; `Events` with
-  an event; `Publish` with a signal; `Timeout` under `cfg(feature = "std")`
-  where the `blocking` module is emitted) and the module's own `Subscribe` and
+  `use <crate>::<iface>::prelude::*;`, for each interface whose face it uses
+  (rustc reports a prelude as an unused import when the other imported preludes
+  already bring every item it would add): it re-exports by name the
+  `ridl_rt::face` traits the module's types implement (`Bind`; `Events` with an
+  event; `Publish` with a signal; `Timeout` under `cfg(feature = "std")` where
+  the `blocking` module is emitted) and the module's own `Subscribe` and
   `Invalidate` as `_`, so two interfaces' preludes share one scope without
   conflict.
 
@@ -283,7 +283,8 @@ path call finds an inherent item first, and the consumer writes
 `<Client<_> as Bind>::new(port)` or `let c: Client<_> = Bind::new(port)`. A dot
 call follows Rust's method probe — the receiver by value, then by `&`, then by
 `&mut`, an inherent method before a trait method at each step — and a member
-takes `&self` (a signal read) or `&mut self`, as every trait method does except
+takes `&self` (a signal read) or `&mut self`; `Bind::new` takes no receiver and
+is reached by a path call, and every other trait method takes `&mut self` except
 `Timeout::with_timeout`, which takes `self` by value. So the member keeps the
 dot call for every fixed and derived method but `with_timeout`: with a member
 named `commit`, `publisher.commit()` is the member and
