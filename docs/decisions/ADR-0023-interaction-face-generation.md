@@ -84,6 +84,14 @@ up to its own limit of polls per frame. A `no_std` frame loop with an allocator
 writes the same small waker over `alloc::task::Wake` on an `Arc`; one without an
 allocator needs a hand-written `RawWaker`, which needs `unsafe`.
 
+**Note (2026-09-28, driftsys/ridl#569).** Decision 6 settles each claim as the
+settlement table of the interaction-face design record states. That table gains
+a row: a claim `Handler::next_claim` reports as `ReadError::ShortClaim`, because
+its argument bytes exceed `MAX_BUFFER_SIZE`, is settled `Transport::Corrupt` by
+its id without being read, counts toward the per-poll bound, and does not
+resolve `serve`. The variant is ADR-0021 decision 5's 2026-09-28 amendment;
+decision 6 itself is unchanged.
+
 ## Context
 
 The approved M1 design (archived at

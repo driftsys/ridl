@@ -654,18 +654,23 @@ The generated match is total over the claims that can arrive, because the
 `Handler` contract requires it. The rows are in the order `serve` evaluates
 them:
 
-| Cause                                       | Settled as                     |
-| ------------------------------------------- | ------------------------------ |
-| `claim.iface` or `claim.ord` matches no arm | `Contract::UnknownInteraction` |
-| `VerifyError::Structure(m)`                 | `Transport::Corrupt`           |
-| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`    |
-| `require` returns `Err(())`                 | `Contract::PreconditionFailed` |
-| `ensure` returns `Err(())`, a query only    | `Contract::ContractBroken`     |
+| Cause                                       | Settled as                              |
+| ------------------------------------------- | --------------------------------------- |
+| `ReadError::ShortClaim` from `next_claim`   | `Transport::Corrupt`, by the claim's id |
+| `claim.iface` or `claim.ord` matches no arm | `Contract::UnknownInteraction`          |
+| `VerifyError::Structure(m)`                 | `Transport::Corrupt`                    |
+| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`             |
+| `require` returns `Err(())`                 | `Contract::PreconditionFailed`          |
+| `ensure` returns `Err(())`, a query only    | `Contract::ContractBroken`              |
 
 Reading it top to bottom: route the claim, check the bytes, check the
 precondition, call the provider, check the postcondition, settle.
 
-The first row is the fallback arm. Without it an unroutable claim would never be
+The first row settles a claim `serve` never read: its argument bytes exceed
+`MAX_BUFFER_SIZE`, the member's largest valid encoding, so the runtime reported
+the claim's id and the bytes it needs instead of copying them, and an encoding
+larger than the largest valid one is not well-formed (driftsys/ridl#569). The
+second row is the fallback arm. Without it an unroutable claim would never be
 settled, which breaks the `Handler` contract. `UnknownInteraction` is exactly
 the category the language defines for peers disagreeing on an interface number
 or an ordinal.

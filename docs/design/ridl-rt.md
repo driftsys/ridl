@@ -537,14 +537,22 @@ Semantics each implementation presents:
   `require` pass and before application code runs; a query settles with the
   reply bytes or the `CallError` outcome. A provider settles
   `CallError::Transport(Transport::Corrupt)` when the argument bytes fail the
-  structure check.
+  structure check. A claim whose argument bytes do not fit the buffer passed to
+  `next_claim` is reported as `ReadError::ShortClaim { claim, needed }` and not
+  consumed; `settle` accepts that id with any outcome although the arguments
+  were never read, and the generated `serve` settles it `Transport::Corrupt`
+  (ADR-0021 decision 5, amended 2026-09-28; driftsys/ridl#569).
 - **`ScannableSignals::scan`** writes each interface's changes into `out` all
   together or not at all: when an interface's changes do not fit in the rest of
   `out`, none of them is written, that interface's mark is not updated, and
   `scan` returns the number of entries written so far.
 - **A `Short` error does not consume.** `next`, `next_claim` and `reply` return
   `Result<Option<_>, ReadError>`, so a caller that receives
-  `ReadError::Short { needed }` resizes and reads the same item again.
+  `ReadError::Short { needed }` — or, from `next_claim`,
+  `ReadError::ShortClaim { claim, needed }`, the form that also carries the
+  claim's id so that the provider can settle the claim unread — resizes and
+  reads the same item again. `next_claim` never returns `Short` (amended
+  2026-09-28, driftsys/ridl#569).
 
 `ScannableSignals`, `CoherentSignals` and `Wakeable` are extensions: they
 describe mechanisms some runtimes have, not interaction semantics every runtime
@@ -750,7 +758,7 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum ProviderError { Serve(ServeError), Claim(ReadError) }
 
 // port::
-#[non_exhaustive] pub enum ReadError      { Short { needed: usize }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
+#[non_exhaustive] pub enum ReadError      { Short { needed: usize }, ShortClaim { claim: ClaimId, needed: usize }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
 #[non_exhaustive] pub enum WriteError     { TooLarge { cap: usize }, NotOwner, Contract(Contract), Detached }
 #[non_exhaustive] pub enum RaiseError     { Busy, TooLarge { cap: usize }, NotOwner, Contract(Contract), Detached }
 #[non_exhaustive] pub enum SendError      { Busy, TooLarge { cap: usize }, Contract(Contract), Detached }

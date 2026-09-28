@@ -79,6 +79,19 @@ loop that polls with `noop_waker` loses that wake, so decision 8 gains a third
 `task` function, `flag_waker`, whose wake the loop can read. Sebastien took the
 decision during the review of driftsys/ridl#584.
 
+**Amendment (2026-09-28) — decision 5 amended: `ReadError::ShortClaim`.** A
+claim whose argument bytes exceed the buffer a provider passes to
+`Handler::next_claim` was reported as `ReadError::Short`, which carries no
+`ClaimId`, so the generated `serve` could not settle it: it resolved to
+`ProviderError::Claim`, and every claim queued behind the oversized one stayed
+unserved (driftsys/ridl#569, found in the review of driftsys/ridl#566).
+`ReadError` gains `ShortClaim { claim: ClaimId, needed: usize }`, which
+`next_claim` returns in place of `Short` and which does not consume the claim;
+`Handler::settle` accepts that id, with any outcome, although the claim's
+arguments were never read. An added variant of a `#[non_exhaustive]` enum
+(decision 9), so not a breaking change. Sebastien took the decision on
+2026-09-28.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -185,6 +198,29 @@ trusted with no `unsafe` and no second verification pass.
    suppression on the caller's identity plus the request's `seq`. A counter
    unique per caller is also unique per (caller instance, channel). The `seq` 0
    convention is stated in frame specification §7 and not yet in the reference.
+
+   **Amended (2026-09-28, driftsys/ridl#569) — `ReadError::ShortClaim`.** When
+   the buffer passed to `Handler::next_claim` is shorter than the next claim's
+   argument bytes, the runtime returns `ReadError::ShortClaim { claim, needed }`
+   and not `ReadError::Short`. The claim is not consumed: a later `next_claim`
+   with a buffer of at least `needed` bytes presents the same claim under the
+   same `ClaimId`, and the id is assigned at the claim's first presentation,
+   whichever form that takes. `Handler::settle` accepts that id with any outcome
+   although the arguments were never read; the port does not distinguish a read
+   claim from an unread one, which is the simplest rule the loopback and the
+   conformance suite can state. The generated `serve` settles such a claim
+   `CallError::Transport(Transport::Corrupt)` — an argument larger than the
+   member's largest valid encoding is not a well-formed encoding, the rule
+   already applied to argument bytes that fail the structure check — counts it
+   toward its per-poll bound, and continues with the next claim (ADR-0023
+   decision 6). `Short` keeps its meaning for every other read, and `next_claim`
+   no longer returns it; a `Short` from a runtime older than the variant still
+   ends `serve` with `ProviderError::Claim`. Only a raw `Caller` or a network
+   runtime can send such a claim; a generated client sizes its arguments from
+   the same descriptor as the provider's `MAX_BUFFER_SIZE`. The conformance
+   suite gains `an_oversized_claim_is_reported_with_its_id_and_is_not_consumed`,
+   `an_unread_claim_is_settled_by_its_id` and
+   `the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled`.
 
 6. **driftsys/ridl#309: an event that fails its check is delivered with an
    invalid marker, not withheld.** `EventSource::next` stays unvalidated — it
@@ -662,28 +698,31 @@ trusted with no `unsafe` and no second verification pass.
 
 ## Alternatives considered
 
-| Question                   | Alternative                                                | Why it was not chosen                                                                                                                                                                                                                      |
-| -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Identity (decision 1)      | keep `ServiceId`                                           | the identity studies give a service no number; nothing would produce the type                                                                                                                                                              |
-| Identity (decision 1)      | a provisional bit inside `InterfaceNo`                     | a provisional number routes identically to a frozen one, and the bit would take width decision 2 fixes                                                                                                                                     |
-| Widths (decision 2)        | keep the note's `u16`                                      | the IR already carries an ordinal as `uint32`, and the catalog descriptor plan writes `uint32` for both                                                                                                                                    |
-| Port binding (decision 3)  | the full `(catalog, interface, ordinal)` key on every call | a lookup and a pointer on every call, and a catalog field on every result struct                                                                                                                                                           |
-| Port binding (decision 3)  | an address handle resolved once                            | a table per binding in the runtime; a handle is not `const`, so generated dispatch cannot `match` on it, and a handle from one port means nothing to another                                                                               |
-| Clause result (decision 4) | `require`/`ensure` return `Result<(), Violation>`          | typl v0.1 has no invariant constraint, so the `Violation` would name one that does not exist, and `Handler::settle` reads neither variant's payload                                                                                        |
-| Clause result (decision 4) | the index of the failing clause as the error               | neither `Contract` variant carries a payload, so reading the index needs one on both plus a wire form for it                                                                                                                               |
-| #308 (decision 5)          | a caller field added to `Envelope`                         | ridl §3.1 defines exactly two fields; the field would expose transport identity above the port and decide E14.2's question in advance                                                                                                      |
-| #309 (decision 6)          | a ninth port that records withheld occurrences             | a port every runtime must implement, for a reading the reference has not chosen, and it decides E14.2's question in advance                                                                                                                |
-| Proof type (decision 7)    | a `#[doc(hidden)]` public `Ref` constructor                | a convention, not visibility — any crate could still forge a proof                                                                                                                                                                         |
-| Proof type (decision 7)    | `Ref` over bytes only, with a required separate `check`    | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                                                                                                        |
-| Features (decision 8)      | let `flatbuffers` pull the dependency in 0.1               | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet                                                                               |
-| Error enums (decision 9)   | `#[non_exhaustive]` on `Contract` and `CallError` too      | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                                                                                                    |
-| Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin      | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
-| Rust version (decision 10) | no `rust-version` at all                                   | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
-| Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only        | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
-| Forwarding (decision 11)   | no forwarding impls; runtimes hand out short-lived ports   | moves the cost into every runtime rather than removing it, and still admits no face over a reference to a port                                                                                                                             |
-| Forwarding (decision 11)   | `impl<P: T + ?Sized> T for Box<P>` in 0.1                  | needs `alloc`, which only the `std` feature brings in since 2026-09-25 (decision 8), and nothing needs a boxed port; deferred rather than rejected                                                                                         |
-| Threading (decision 12)    | one runtime struct implementing every port, behind a mutex | serialises every signal read behind every publication commit, removing the property a signal read is specified to have                                                                                                                     |
-| Threading (decision 12)    | `Send + Sync` as supertraits on the port traits            | excludes a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell` internally, a supported target on the platform ladder                                                                                                    |
+| Question                   | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Identity (decision 1)      | keep `ServiceId`                                                      | the identity studies give a service no number; nothing would produce the type                                                                                                                                                              |
+| Identity (decision 1)      | a provisional bit inside `InterfaceNo`                                | a provisional number routes identically to a frozen one, and the bit would take width decision 2 fixes                                                                                                                                     |
+| Widths (decision 2)        | keep the note's `u16`                                                 | the IR already carries an ordinal as `uint32`, and the catalog descriptor plan writes `uint32` for both                                                                                                                                    |
+| Port binding (decision 3)  | the full `(catalog, interface, ordinal)` key on every call            | a lookup and a pointer on every call, and a catalog field on every result struct                                                                                                                                                           |
+| Port binding (decision 3)  | an address handle resolved once                                       | a table per binding in the runtime; a handle is not `const`, so generated dispatch cannot `match` on it, and a handle from one port means nothing to another                                                                               |
+| Clause result (decision 4) | `require`/`ensure` return `Result<(), Violation>`                     | typl v0.1 has no invariant constraint, so the `Violation` would name one that does not exist, and `Handler::settle` reads neither variant's payload                                                                                        |
+| Clause result (decision 4) | the index of the failing clause as the error                          | neither `Contract` variant carries a payload, so reading the index needs one on both plus a wire form for it                                                                                                                               |
+| #308 (decision 5)          | a caller field added to `Envelope`                                    | ridl §3.1 defines exactly two fields; the field would expose transport identity above the port and decide E14.2's question in advance                                                                                                      |
+| #569 (decision 5)          | a `ReadError` variant that consumes the claim and drops its arguments | `next_claim` would be the one read where a short buffer consumes, which breaks the rule that a `Short` error does not consume and the resize-and-read-again pattern a hand-written provider relies on                                      |
+| #569 (decision 5)          | the runtime settles an oversized claim itself and presents the next   | removes resize-and-read-again from `next_claim`, a behaviour change for every `Handler` user, and treats the provider's buffer size as the type's maximum                                                                                  |
+| #569 (decision 5)          | defer until a network runtime exists                                  | the defect is reachable today through a raw `Caller` over `ridl-loopback`, and every claim behind the oversized one stays unserved                                                                                                         |
+| #309 (decision 6)          | a ninth port that records withheld occurrences                        | a port every runtime must implement, for a reading the reference has not chosen, and it decides E14.2's question in advance                                                                                                                |
+| Proof type (decision 7)    | a `#[doc(hidden)]` public `Ref` constructor                           | a convention, not visibility — any crate could still forge a proof                                                                                                                                                                         |
+| Proof type (decision 7)    | `Ref` over bytes only, with a required separate `check`               | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                                                                                                        |
+| Features (decision 8)      | let `flatbuffers` pull the dependency in 0.1                          | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet                                                                               |
+| Error enums (decision 9)   | `#[non_exhaustive]` on `Contract` and `CallError` too                 | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                                                                                                    |
+| Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin                 | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
+| Rust version (decision 10) | no `rust-version` at all                                              | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
+| Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only                   | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
+| Forwarding (decision 11)   | no forwarding impls; runtimes hand out short-lived ports              | moves the cost into every runtime rather than removing it, and still admits no face over a reference to a port                                                                                                                             |
+| Forwarding (decision 11)   | `impl<P: T + ?Sized> T for Box<P>` in 0.1                             | needs `alloc`, which only the `std` feature brings in since 2026-09-25 (decision 8), and nothing needs a boxed port; deferred rather than rejected                                                                                         |
+| Threading (decision 12)    | one runtime struct implementing every port, behind a mutex            | serialises every signal read behind every publication commit, removing the property a signal read is specified to have                                                                                                                     |
+| Threading (decision 12)    | `Send + Sync` as supertraits on the port traits                       | excludes a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell` internally, a supported target on the platform ladder                                                                                                    |
 
 ## Consequences
 
@@ -766,6 +805,12 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table, the ports, the errors and the helpers sections follow decisions 13 to 17 as each story lands; its "seven unconditional modules" sentence lands with E11.18; the `Handler` bullet states decision 5's 2026-09-26 amendment                                                                                      |
 | [the roadmap](../ROADMAP.md), stories E11.16 and E11.18                                          | `Wake` is `Interest`, and "FIFO slot waiters" is "every `Slot` waiter woken on a reclaim" (decisions 13 and 15)                                                                                                                                                                                                                  |
 | `crates/ridl-rt/src/port.rs`                                                                     | `SignalReader::read`'s zero-bytes rule (decision 17) and the `Box<P>` comment (decision 11) are doc-comment changes made with this amendment; the `Handler` docs state decision 5's 2026-09-26 amendment, the returned claim                                                                                                     |
+| [ADR-0023](ADR-0023-interaction-face-generation.md) decision 6                                   | a 2026-09-28 note records that the settlement table gains the `ReadError::ShortClaim` row (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                    |
+| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the `Handler` bullet, the `Short` rule and the `ReadError` listing state decision 5's 2026-09-28 amendment                                                                                                                                                                                                                       |
+| [the interaction-face design record](../design/interaction-face.md)                              | the settlement table and the internal step's text state how `serve` settles a `ShortClaim` (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                   |
+| [the `ridl-loopback` design record](../design/ridl-loopback.md)                                  | the claim section and the `forget` table state the offered claim (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                                             |
+| [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | the settlement table gains the `ShortClaim` row (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                                                              |
+| `crates/ridl-rt/src/port.rs`                                                                     | `ReadError::ShortClaim`, its doc, and the `Handler::next_claim` and `Handler::settle` docs state decision 5's 2026-09-28 amendment                                                                                                                                                                                               |
 
 ## References
 

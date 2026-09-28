@@ -317,19 +317,38 @@ the pass stopped at the bound. It loops over `Handler::next_claim`, routing and
 settling every claim it takes — including one this interface does not recognise,
 because `Handler`'s own contract requires every claim to be settled:
 
-| Cause                                       | Settled as                     |
-| ------------------------------------------- | ------------------------------ |
-| `claim.ord` or `claim.iface` matches no arm | `Contract::UnknownInteraction` |
-| `VerifyError::Structure(_)`                 | `Transport::Corrupt`           |
-| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`    |
-| `require` returns `Err(())`                 | `Contract::PreconditionFailed` |
-| `ensure` returns `Err(())` (query only)     | `Contract::ContractBroken`     |
+| Cause                                       | Settled as                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| `claim.ord` or `claim.iface` matches no arm | `Contract::UnknownInteraction`                                      |
+| `VerifyError::Structure(_)`                 | `Transport::Corrupt`                                                |
+| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`                                         |
+| `require` returns `Err(())`                 | `Contract::PreconditionFailed`                                      |
+| `ensure` returns `Err(())` (query only)     | `Contract::ContractBroken`                                          |
+| `ReadError::ShortClaim` from `next_claim`   | `Transport::Corrupt`, by the claim's id, unread (driftsys/ridl#569) |
 
 The two `VerifyError` rows are kept separate rather than both settled as
 `Transport::Corrupt`, because `Payload::verify` reports a structural failure and
 a typl-constraint violation as two distinct variants, and collapsing them would
 report a range or enum-variant violation in the wrong error stratum (ridl §10.2
 vs §10.3).
+
+**An oversized claim is settled, not fatal (2026-09-28, driftsys/ridl#569).**
+`Handler::next_claim` reports a claim whose argument bytes do not fit `buf` as
+`ReadError::ShortClaim { claim, needed }` and does not consume it
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 5,
+amended the same day). The step settles `claim` `Transport::Corrupt` without
+reading it — an argument larger than `MAX_BUFFER_SIZE`, the member's largest
+valid encoding, is not a well-formed encoding, the rule the
+`VerifyError::Structure` row already applies — counts it toward the budget like
+a claim taken, and continues with the next claim. A `SettleError` there is left
+to the handler, as for any other claim; over a runtime that presents the
+unsettled claim again, the budget bounds the pass. Every other `ReadError` from
+`next_claim`, including a `Short` from a runtime older than the variant, still
+resolves `serve` to `ProviderError::Claim`. Only a raw `Caller` or a network
+runtime can send such a claim; a generated client sizes its arguments from the
+same descriptor. Before this change the step resolved to
+`ProviderError::Claim(Short)`, and every claim queued behind the oversized one
+stayed unserved.
 
 **A command settles before the provider method runs; a query settles after.** A
 command's acknowledgment is a delivery acknowledgment, not a completion one

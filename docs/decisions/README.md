@@ -211,14 +211,17 @@ other entry below is Accepted.
   place, and the one 0.x minor that carries E11.16 to E11.19; it also folds
   decision 8, corrects decision 11, and records open questions 5 and 6. Its
   2026-09-28 amendment adds `task::flag_waker` to decision 8, for a frame loop
-  that polls again when the future woke itself. Story E11.16's re-land
-  (driftsys/ridl#551) amended decision 5 in place (a dropped handler's unsettled
-  claim is returned and presented again) and decision 13 in place (one waker per
-  kind of key; a same-task registration is a refresh). Binds every consumer of
-  `ridl-rt`: the Rust codegen, the two runtimes, and the ridl reference
-  finalization pass (story E14.2). The two reference sentences it gave that pass
-  for #308 and #309 are in the reference since driftsys/ridl#544, which aligned
-  it with the frame specification.
+  that polls again when the future woke itself; a second amendment the same day
+  amends decision 5 in place: `ReadError::ShortClaim` reports the id of a claim
+  whose arguments do not fit the buffer, so the generated `serve` settles it
+  `Transport::Corrupt` instead of ending (driftsys/ridl#569). Story E11.16's
+  re-land (driftsys/ridl#551) amended decision 5 in place (a dropped handler's
+  unsettled claim is returned and presented again) and decision 13 in place (one
+  waker per kind of key; a same-task registration is a refresh). Binds every
+  consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
+  reference finalization pass (story E14.2). The two reference sentences it gave
+  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
