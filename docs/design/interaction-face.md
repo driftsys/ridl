@@ -231,14 +231,17 @@ on.
 **The ridl-named argument is rebound to an emitter-owned name.** The call
 method, its future's `poll` and the internal send rebind the argument to `__arg`
 first, and the internal send names its port parameter `__port`; the blocking
-methods' locals are `__deadline` and `__call`. A ridl identifier cannot start
-with an underscore, so no parameter can be shadowed by, or shadow, a local the
-emitter owns; `tests/face_compile.rs` compiles an interface whose members are
-named `port`, `deadline`, `this` and `cx`. `dispatch` still binds the ridl name
-directly beside its own locals, so a parameter named `claim`, `h`, `accepted`,
-or `buf` on a query, does not compile (driftsys/ridl#570). A member whose snake
-case is a fixed method name of the face collides the same way, and is not
-refused: `new` and `next_event` on both clients, `with_timeout` and
+methods' locals are `__deadline` and `__call`, and the blocking module's
+deadline helper is the function `__deadline_after`, because a parameter is bound
+under its own snake case in the method body and would shadow a function of that
+name. A ridl identifier cannot start with an underscore, so no parameter can be
+shadowed by, or shadow, a local or a function the emitter owns;
+`tests/face_compile.rs` compiles an interface whose members are named `port`,
+`deadline`, `deadlineAfter`, `this` and `cx`. `dispatch` still binds the ridl
+name directly beside its own locals, so a parameter named `claim`, `h`,
+`accepted`, or `buf` on a query, does not compile (driftsys/ridl#570). A member
+whose snake case is a fixed method name of the face collides the same way, and
+is not refused: `new` and `next_event` on both clients, `with_timeout` and
 `set_timeout` on the blocking one, `new` and `commit` on `Publisher`, and the
 derived names `subscribe_<event>` and `invalidate_<signal>` against a member
 spelled that way; the blocking client's two are recorded on driftsys/ridl#570
@@ -407,7 +410,7 @@ is polled, which under `block_on` is when the port wakes it. On a runtime that
 measures the bound and wakes the `Outcome` waiter when it passes, the woken poll
 finds the bound passed and the call ends at `max`; `ridl-loopback` measures no
 bound and `advance` wakes nobody, so over it an unserved call returns only at
-the client's timeout (F-3 "The limit, stated", F-11's reason). The face is not
+the client's timeout (F-3 "A limit, stated", F-11's reason). The face is not
 what would change that: it is the runtime's clock and wake. When `block_on`
 returns `None`, the client asks the future whether the call was sent — a private
 `sent()` on each call future, itself under `std` — and answers as the future

@@ -82,9 +82,12 @@ fn face_compiles(name: &str, source: &str) {
 /// compiled before it. Those three bodies now rebind the ridl-named argument
 /// to an emitter-owned name first, and the internal send names its port
 /// parameter the same way, with the `__` prefix the codec's own locals use
-/// (`__p`, `__v`). The generated `dispatch` still binds the ridl name directly
-/// beside its own locals (`claim`, `h`, `accepted`, and `buf` for a query);
-/// that collision predates the story and is not covered here.
+/// (`__p`, `__v`). The blocking module's deadline helper is a module-level
+/// function, and a parameter named `deadlineAfter` is bound as `deadline_after`
+/// in the method body, so the function is `__deadline_after` for the same
+/// reason. The generated `dispatch` still binds the ridl name directly beside
+/// its own locals (`claim`, `h`, `accepted`, and `buf` for a query); that
+/// collision predates the story and is not covered here.
 #[test]
 fn a_call_parameter_named_like_a_future_local_compiles() {
     face_compiles(
@@ -101,6 +104,7 @@ interface Names {
   command deadline(deadline: Level)
   query this(this: Window): Average @[..50ms]
   query cx(cx: Window): Average
+  command deadlineAfter(deadlineAfter: Level)
 }
 "#,
     );

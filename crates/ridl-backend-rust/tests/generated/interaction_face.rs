@@ -2661,7 +2661,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         /// The instant `timeout` ends for a wait that starts now. `None`
         /// with no timeout, and with a timeout so large that the instant
         /// cannot be represented, which is then a wait with no bound.
-        fn deadline_after(
+        fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {
             timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
@@ -2727,7 +2727,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 ::core::option::Option<super::Event>,
                 ::ridl_rt::port::ReadError,
             > {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __next = self.inner.next_event();
                 match ::ridl_rt::task::block_on(&mut __next, __deadline) {
                     Some(Ok(event)) => Ok(Some(event)),
@@ -2740,7 +2740,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 &mut self,
                 level: super::super::Level,
             ) -> ::core::result::Result<(), ::ridl_rt::error::ClientError> {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __call = self.inner.set_level(level);
                 match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                     Some(outcome) => outcome,
@@ -2770,7 +2770,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 super::super::Average,
                 ::ridl_rt::error::ClientError,
             > {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __call = self.inner.average(window);
                 match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                     Some(outcome) => outcome,
@@ -2803,7 +2803,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
             P: super::Provider,
         {
-            let __deadline = deadline_after(timeout);
+            let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);
             match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
                 Some(Ok(never)) => match never {}
@@ -3097,7 +3097,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         /// The instant `timeout` ends for a wait that starts now. `None`
         /// with no timeout, and with a timeout so large that the instant
         /// cannot be represented, which is then a wait with no bound.
-        fn deadline_after(
+        fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {
             timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
@@ -3146,7 +3146,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 ::core::option::Option<super::Event>,
                 ::ridl_rt::port::ReadError,
             > {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __next = self.inner.next_event();
                 match ::ridl_rt::task::block_on(&mut __next, __deadline) {
                     Some(Ok(event)) => Ok(Some(event)),
@@ -3913,7 +3913,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         /// The instant `timeout` ends for a wait that starts now. `None`
         /// with no timeout, and with a timeout so large that the instant
         /// cannot be represented, which is then a wait with no bound.
-        fn deadline_after(
+        fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {
             timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
@@ -3960,7 +3960,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 &mut self,
                 level: super::super::Level,
             ) -> ::core::result::Result<(), ::ridl_rt::error::ClientError> {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __call = self.inner.open(level);
                 match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                     Some(outcome) => outcome,
@@ -3990,7 +3990,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 super::super::Average,
                 ::ridl_rt::error::ClientError,
             > {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __call = self.inner.pressure(window);
                 match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                     Some(outcome) => outcome,
@@ -4023,7 +4023,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
             P: super::Provider,
         {
-            let __deadline = deadline_after(timeout);
+            let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);
             match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
                 Some(Ok(never)) => match never {}

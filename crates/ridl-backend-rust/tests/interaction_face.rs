@@ -1764,13 +1764,19 @@ fn the_members_max_ends_a_blocking_call_before_the_clients_timeout_when_the_runt
             rt.advance(SET_LEVEL_MAX);
             rt.advance(Duration(1));
             // The call registers its waiter on its first poll; wake it once
-            // it has, whichever thread got there first.
-            loop {
+            // it has, whichever thread got there first. Bounded, so a call
+            // that never registers fails the test rather than hanging it.
+            for attempt in 0.. {
                 let woken = waiter.lock().expect("no poisoned waker slot").take();
-                match woken {
-                    Some(waker) => break waker.wake(),
-                    None => std::thread::sleep(std::time::Duration::from_millis(1)),
+                if let Some(waker) = woken {
+                    waker.wake();
+                    break;
                 }
+                assert!(
+                    attempt < 2_000,
+                    "the call registered no Outcome waiter within two seconds"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
             }
         });
         client.set_level(generated::Level::new_unchecked(42))
@@ -1860,7 +1866,7 @@ fn a_blocking_timeout_shorter_than_the_members_max_is_accepted() {
 /// Note F-11: the timeout is `None` until one is set, and with none an
 /// untimed member waits for its provider: `Valve::open` has no `max`, the
 /// client sets no timeout, and the call resolves when the provider serves it
-/// after `LATE`, rather than at any default bound.
+/// after `LATE`, rather than at a default bound shorter than that.
 #[test]
 fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
     let rt = loopback();
@@ -1869,6 +1875,20 @@ fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
     let (answer, waited) = open_served_late(&rt, &mut client);
     assert_eq!(answer, Ok(()), "the call was served, not cut off");
     assert!(waited >= LATE, "the client waited for the provider");
+}
+
+/// The deadline is `Instant::now().checked_add(timeout)`: a timeout so large
+/// that the instant cannot be represented is a wait with no bound, and the
+/// call is served rather than the client panicking on the addition.
+#[test]
+fn a_timeout_too_large_to_represent_is_a_wait_with_no_bound() {
+    let rt = loopback();
+    let mut client = generated::valve::blocking::Client::new(RecordingPorts::new(&rt))
+        .with_timeout(std::time::Duration::MAX);
+
+    let (answer, waited) = open_served_late(&rt, &mut client);
+    assert_eq!(answer, Ok(()), "the call was served, and nothing panicked");
+    assert!(waited >= LATE);
 }
 
 /// Note F-11: `set_timeout(None)` clears a timeout that was set. With
@@ -1920,6 +1940,10 @@ fn the_timeout_waited_is_the_one_set() {
     );
     let short = started.elapsed();
     assert!(short >= SHORT);
+    assert!(
+        short < LONG,
+        "the short timeout ended the call before the long one would have ({short:?})"
+    );
     assert!(
         short < long,
         "the short timeout waits less than the long one did ({short:?} against {long:?})"

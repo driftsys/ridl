@@ -18,8 +18,8 @@
 //! runtime that measures the bound and wakes the waiter when it passes ends
 //! the call at `max`; `ridl-loopback` measures no bound and wakes nobody
 //! when its clock is advanced, so over it a call whose provider never serves
-//! returns only at the client's timeout (the async face design, F-3 "The
-//! limit, stated" and F-11). The emitted rustdoc says so in the same words. The module is emitted only when the
+//! returns only at the client's timeout (the async face design, F-3 "A
+//! limit, stated" and F-11). The emitted rustdoc says the same. The module is emitted only when the
 //! interface declares something that waits — an event, a command or a query;
 //! a signal-only interface's `Client` never blocks, so it gets no `blocking`
 //! module.
@@ -87,7 +87,7 @@ fn deadline_after() -> TokenStream {
         /// The instant `timeout` ends for a wait that starts now. `None`
         /// with no timeout, and with a timeout so large that the instant
         /// cannot be represented, which is then a wait with no bound.
-        fn deadline_after(
+        fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {
             timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
@@ -157,7 +157,7 @@ fn client(
                 ::core::option::Option<super::Event>,
                 ::ridl_rt::port::ReadError,
             > {
-                let __deadline = deadline_after(self.timeout);
+                let __deadline = __deadline_after(self.timeout);
                 let mut __next = self.inner.next_event();
                 match ::ridl_rt::task::block_on(&mut __next, __deadline) {
                     Some(Ok(event)) => Ok(Some(event)),
@@ -241,10 +241,13 @@ fn client(
 ///
 /// The parameter keeps the ridl name, as `Client`'s does, and the locals are
 /// `__deadline` and `__call`, which no ridl identifier can be. The deadline
-/// comes from the module-level `deadline_after` rather than from a method of
-/// `blocking::Client`, because a method with a name of the emitter's own
+/// comes from the module-level `__deadline_after` rather than from a method
+/// of `blocking::Client`, because a method with a name of the emitter's own
 /// would collide with a member of that name: `face_compile.rs` declares a
-/// command `deadline`, and a member never becomes a module-level function.
+/// command `deadline`. The function carries the `__` prefix for the same
+/// reason: a parameter named `deadlineAfter` is bound as the local
+/// `deadline_after` in the method body, which would shadow a function of
+/// that name (rustc E0618); `face_compile.rs` declares that parameter too.
 fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
@@ -266,7 +269,7 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
             &mut self,
             #arg: #path,
         ) -> ::core::result::Result<#output, ::ridl_rt::error::ClientError> {
-            let __deadline = deadline_after(self.timeout);
+            let __deadline = __deadline_after(self.timeout);
             let mut __call = self.inner.#method(#arg);
             match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                 Some(outcome) => outcome,
@@ -304,7 +307,7 @@ fn serve(iface_name: &str) -> TokenStream {
             H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
             P: super::Provider,
         {
-            let __deadline = deadline_after(timeout);
+            let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);
             match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
                 Some(Ok(never)) => match never {},

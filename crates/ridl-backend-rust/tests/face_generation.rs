@@ -664,6 +664,13 @@ fn the_blocking_module_follows_the_interface() {
     let siren = dense(&module(&source, "siren"));
     let blocking = &siren[at(&siren, "pubmodblocking{")..];
     assert!(
+        blocking.contains(
+            "pubstructClient<P:::ridl_rt::port::EventSource+::ridl_rt::port::Wakeable>\
+             {inner:super::Client<P>,"
+        ),
+        "an event-only interface's blocking client repeats its async client's two bounds",
+    );
+    assert!(
         blocking.contains("pubfnnext_event(&mutself,)"),
         "an event-only interface has a blocking client",
     );
