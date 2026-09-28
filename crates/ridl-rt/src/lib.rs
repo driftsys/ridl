@@ -25,11 +25,17 @@
 //! allocates — one `Arc` per call of any of the three functions. Every other
 //! module stays `no_std` with the feature on.
 //!
-//! Every public item lives in one of seven modules, or in one of the two that
+//! Every public item lives in one of eight modules, or in one of the two that
 //! the `flatbuffers` and `std` features add. Generated code names each
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
 //! none, because several names here — `Duration`, `Handler`, `Kind` — are also
-//! names in `core` or in application code.
+//! names in `core` or in application code. The eighth module, [`face`], is the
+//! one whose items generated code implements rather than calls: the traits
+//! that carry the fixed methods of a generated `Client` and `Publisher` —
+//! `new`, `next_event`, `commit`, and under `std` `with_timeout` and
+//! `set_timeout` — so that a member of an interface may carry one of those
+//! names. A consumer of a generated face brings them into scope with
+//! `use <crate>::<iface>::prelude::*;`, once per interface.
 //!
 //! # Where to start
 //!
@@ -103,6 +109,7 @@ pub mod contract;
 pub mod correlate;
 pub mod encoding;
 pub mod error;
+pub mod face;
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers;
 pub mod payload;
