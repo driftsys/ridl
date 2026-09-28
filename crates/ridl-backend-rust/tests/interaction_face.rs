@@ -877,6 +877,51 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
     );
 }
 
+/// driftsys/ridl#569: a claim whose argument bytes exceed
+/// `MAX_BUFFER_SIZE` is presented to `serve` as `ReadError::ShortClaim`.
+/// `serve` settles it `Transport::Corrupt` without ending, and serves the
+/// valid claim queued behind it. Only a raw `Caller` can send such a claim; a
+/// generated client sizes its arguments from the same descriptor.
+#[test]
+fn round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_served() {
+    use ridl_rt::contract::Interaction;
+
+    let mut rt = loopback();
+    let oversized = vec![0u8; generated::Cabin::MAX_BUFFER_SIZE + 1];
+    let first = rt
+        .command(
+            CABIN,
+            <generated::CabinSetLevel as Interaction>::MEMBER.ordinal,
+            &oversized,
+        )
+        .expect("the loopback bounds no argument size");
+    let second = send_level_raw(&mut rt, 3);
+
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(rt.handler(), &mut provider);
+    assert!(
+        poll_once(&mut serve).is_pending(),
+        "an oversized claim does not end serve"
+    );
+    drop(serve);
+
+    assert_eq!(
+        rt.ack(first),
+        Some(Err(CallError::Transport(Transport::Corrupt))),
+        "the oversized claim is settled Corrupt, and the caller sees it"
+    );
+    assert_eq!(
+        rt.ack(second),
+        Some(Ok(())),
+        "the claim behind it is served"
+    );
+    assert_eq!(
+        provider.set_level_calls,
+        vec![3],
+        "the provider is called for the valid claim only"
+    );
+}
+
 #[test]
 fn round_trip_out_of_range_argument_settles_invalid_value() {
     use ridl_rt::contract::Interaction;
@@ -1620,6 +1665,30 @@ fn a_serve_poll_that_runs_out_of_claims_before_the_bound_does_not_wake_itself() 
     assert!(poll.is_pending());
     assert_eq!(counts.taken.get(), 31);
     assert_eq!(wakes, 0);
+}
+
+/// driftsys/ridl#569: a claim presented through `ReadError::ShortClaim` is
+/// taken and settled like any other, so it spends one unit of the bound. With
+/// 40 oversized claims waiting, the first poll settles 32 and wakes itself;
+/// not counted, the poll would settle all 40 and not wake itself.
+#[test]
+fn an_oversized_claim_spends_one_unit_of_the_serve_poll_bound() {
+    let handler = QueuedClaims::oversized(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending(), "an oversized claim does not end serve");
+    assert_eq!(counts.taken.get(), 32, "the first poll takes 32 claims");
+    assert_eq!(counts.settles.get(), 32, "and settles each one it takes");
+    assert_eq!(wakes, 1, "it stopped at the bound, so it wakes itself once");
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 40, "the second poll takes the other 8");
+    assert_eq!(counts.settles.get(), 40);
+    assert_eq!(wakes, 0, "no claim is left, so it does not wake itself");
 }
 
 /// The bound counts the claims a poll takes, not the settlements the handler

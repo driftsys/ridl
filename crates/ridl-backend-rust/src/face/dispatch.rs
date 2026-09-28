@@ -120,7 +120,12 @@ pub(super) fn dispatch(
          `{iface_name}::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
          means the handler has no claim waiting; `Ok` with `budget` at 0 means claims \
          may still be waiting; `Err` means `Handler::next_claim` failed, and \
-         every claim settled before the failure stays settled.\n\n`buf` must \
+         every claim settled before the failure stays settled. \
+         `ReadError::ShortClaim` is not a failure: the claim's arguments \
+         exceed `{iface_name}::MAX_BUFFER_SIZE`, the member's largest valid \
+         encoding, so the claim is settled `Transport::Corrupt` by its id \
+         without being read, counts toward `budget`, and the pass continues \
+         (driftsys/ridl#569).\n\n`buf` must \
          be at least `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is \
          encoded into the same buffer as the arguments. A shorter buffer \
          returns `Ok(0)` without consuming a claim or changing \
@@ -155,8 +160,30 @@ pub(super) fn dispatch(
             }
             let mut settled = 0usize;
             while *budget > 0 {
-                let Some(claim) = h.next_claim(buf)? else {
-                    break;
+                let claim = match h.next_claim(buf) {
+                    Ok(Some(claim)) => claim,
+                    Ok(None) => break,
+                    // The claim's arguments exceed `MAX_BUFFER_SIZE`, which
+                    // is the member's largest valid encoding, so they are
+                    // not a well-formed encoding: the claim is settled
+                    // `Transport::Corrupt` without being read, as argument
+                    // bytes that fail the structure check are, and counts
+                    // toward `budget` like any claim taken
+                    // (driftsys/ridl#569).
+                    Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                        *budget -= 1;
+                        let settlement = h.settle(
+                            claim,
+                            Err(::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Corrupt,
+                            )),
+                        );
+                        if settlement.is_ok() {
+                            settled += 1;
+                        }
+                        continue;
+                    }
+                    Err(error) => return Err(error),
                 };
                 *budget -= 1;
                 let settlement = if claim.iface != #number {

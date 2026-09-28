@@ -328,6 +328,12 @@ pub struct QueuedClaims {
     /// Once no claim is left, `next_claim` fails with `ReadError::Detached`
     /// instead of answering `None`, so that `serve` resolves.
     fail_when_empty: bool,
+    /// Every claim is presented as `ReadError::ShortClaim`, with arguments
+    /// that fit no buffer, and never as `Ok(Some)`. The double takes the
+    /// claim at that presentation, where a runtime keeps it until it is
+    /// settled, because every test over it settles the claim before the next
+    /// `next_claim`.
+    oversized: bool,
 }
 
 /// What a [`QueuedClaims`] did, shared with the test while `serve` holds
@@ -336,7 +342,8 @@ pub struct QueuedClaims {
 pub struct ClaimCounts {
     /// Claims not yet presented.
     pub waiting: Cell<usize>,
-    /// Claims presented so far, counted from `next_claim`'s `Ok(Some)`.
+    /// Claims presented so far, counted from `next_claim`'s `Ok(Some)` and
+    /// its `ShortClaim`.
     pub taken: Cell<usize>,
     /// `settle` calls so far, accepted or not.
     pub settles: Cell<usize>,
@@ -353,6 +360,16 @@ impl QueuedClaims {
             counts: Rc::new(counts),
             reject: false,
             fail_when_empty: false,
+            oversized: false,
+        }
+    }
+
+    /// The same, but every claim is presented as `ReadError::ShortClaim`
+    /// rather than `Ok(Some)`: its arguments fit no buffer.
+    pub fn oversized(iface: InterfaceNo, waiting: usize) -> Self {
+        QueuedClaims {
+            oversized: true,
+            ..QueuedClaims::new(iface, waiting)
         }
     }
 
@@ -408,6 +425,12 @@ impl Handler for QueuedClaims {
         self.counts.waiting.set(waiting - 1);
         let taken = self.counts.taken.get() + 1;
         self.counts.taken.set(taken);
+        if self.oversized {
+            return Err(ReadError::ShortClaim {
+                claim: ClaimId(taken as u64),
+                needed: usize::MAX,
+            });
+        }
         Ok(Some(Claim {
             id: ClaimId(taken as u64),
             iface: self.iface,

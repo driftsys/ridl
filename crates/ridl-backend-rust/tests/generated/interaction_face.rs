@@ -2363,7 +2363,7 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     }
     /**Settles the claims of interface `Cabin` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Cabin::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Cabin::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments exceed `Cabin::MAX_BUFFER_SIZE`, the member's largest valid encoding, so the claim is settled `Transport::Corrupt` by its id without being read, counts toward `budget`, and the pass continues (driftsys/ridl#569).
 
 `buf` must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
@@ -2385,8 +2385,26 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         }
         let mut settled = 0usize;
         while *budget > 0 {
-            let Some(claim) = h.next_claim(buf)? else {
-                break;
+            let claim = match h.next_claim(buf) {
+                Ok(Some(claim)) => claim,
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    *budget -= 1;
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_ok() {
+                        settled += 1;
+                    }
+                    continue;
+                }
+                Err(error) => return Err(error),
             };
             *budget -= 1;
             let settlement = if claim.iface
@@ -3628,7 +3646,7 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     }
     /**Settles the claims of interface `Valve` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Valve::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled.
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted, and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Valve::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments exceed `Valve::MAX_BUFFER_SIZE`, the member's largest valid encoding, so the claim is settled `Transport::Corrupt` by its id without being read, counts toward `budget`, and the pass continues (driftsys/ridl#569).
 
 `buf` must be at least `Valve::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
@@ -3650,8 +3668,26 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         }
         let mut settled = 0usize;
         while *budget > 0 {
-            let Some(claim) = h.next_claim(buf)? else {
-                break;
+            let claim = match h.next_claim(buf) {
+                Ok(Some(claim)) => claim,
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    *budget -= 1;
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_ok() {
+                        settled += 1;
+                    }
+                    continue;
+                }
+                Err(error) => return Err(error),
             };
             *budget -= 1;
             let settlement = if claim.iface
