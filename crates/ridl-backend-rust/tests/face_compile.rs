@@ -85,9 +85,7 @@ fn face_compiles(name: &str, source: &str) {
 /// (`__p`, `__v`). The blocking module's deadline helper is a module-level
 /// function, and a parameter named `deadlineAfter` is bound as `deadline_after`
 /// in the method body, so the function is `__deadline_after` for the same
-/// reason. The generated `dispatch` still binds the ridl name directly beside
-/// its own locals (`claim`, `h`, `accepted`, and `buf` for a query); that
-/// collision predates the story and is not covered here.
+/// reason. The generated `dispatch` has the same treatment; its cases follow.
 #[test]
 fn a_call_parameter_named_like_a_future_local_compiles() {
     face_compiles(
@@ -108,4 +106,61 @@ interface Names {
 }
 "#,
     );
+}
+
+/// Emits and checks a face whose one command and one query both take a
+/// parameter named `param`. The generated `dispatch` binds a claim's decoded
+/// argument next to its own parameters (`h`, `p`, `buf`) and locals (`claim`,
+/// `accepted`, `reply`). Before issue #570 it bound the argument under the
+/// ridl parameter's own name, so a parameter named like one of those failed
+/// to compile; it now binds the argument as `__arg`, which no ridl identifier
+/// can be.
+fn dispatch_parameter_compiles(param: &str) {
+    face_compiles(
+        &format!("dispatch_{param}"),
+        &format!(
+            r#"
+package face.dispatch{param}
+
+type Level : integer [0..100]
+type Window : integer [0..100000]
+type Average : integer [0..1000]
+
+interface Dispatch {{
+  command setLevel({param}: Level) @[..50ms]
+  query average({param}: Window): Average @[..50ms]
+}}
+"#
+        ),
+    );
+}
+
+#[test]
+fn a_call_parameter_named_claim_compiles_in_dispatch() {
+    dispatch_parameter_compiles("claim");
+}
+
+#[test]
+fn a_call_parameter_named_h_compiles_in_dispatch() {
+    dispatch_parameter_compiles("h");
+}
+
+#[test]
+fn a_call_parameter_named_accepted_compiles_in_dispatch() {
+    dispatch_parameter_compiles("accepted");
+}
+
+#[test]
+fn a_call_parameter_named_buf_compiles_in_dispatch() {
+    dispatch_parameter_compiles("buf");
+}
+
+#[test]
+fn a_call_parameter_named_p_compiles_in_dispatch() {
+    dispatch_parameter_compiles("p");
+}
+
+#[test]
+fn a_call_parameter_named_reply_compiles_in_dispatch() {
+    dispatch_parameter_compiles("reply");
 }

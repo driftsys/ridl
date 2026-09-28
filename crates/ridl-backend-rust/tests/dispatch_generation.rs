@@ -134,12 +134,12 @@ fn dispatch_evaluates_require_before_the_provider_and_ensure_after_it() {
 
     let require = at(
         &d,
-        "<super::CabinAverageas::ridl_rt::contract::Query>::require(&window,)",
+        "<super::CabinAverageas::ridl_rt::contract::Query>::require(&__arg,)",
     );
-    let call = at(&d, "p.average(&window)");
+    let call = at(&d, "p.average(&__arg)");
     let ensure = at(
         &d,
-        "<super::CabinAverageas::ridl_rt::contract::Query>::ensure(&window,&reply,)",
+        "<super::CabinAverageas::ridl_rt::contract::Query>::ensure(&__arg,&reply,)",
     );
     assert!(
         require < call,
@@ -152,11 +152,11 @@ fn dispatch_evaluates_require_before_the_provider_and_ensure_after_it() {
 
     // A command has a require clause and no ensure clause.
     assert!(
-        d.contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(&level,)"),
+        d.contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(&__arg,)"),
         "the command's require is evaluated",
     );
     assert!(
-        d.contains("p.set_level(&level);"),
+        d.contains("p.set_level(&__arg);"),
         "the command reaches the provider",
     );
 }
@@ -277,14 +277,14 @@ fn a_command_is_settled_before_the_application_method_runs() {
     // generated dispatch settles `Ok(&[])` after the arguments and `require`
     // pass and before application code runs.
     assert!(
-        d.contains("letaccepted=h.settle(claim.id,Ok(&[]));p.set_level(&level);accepted"),
+        d.contains("letaccepted=h.settle(claim.id,Ok(&[]));p.set_level(&__arg);accepted"),
         "the command is settled, then the provider runs, and that settlement is what counts",
     );
 
     // A query is the other way round: its settlement carries the reply, so it
     // cannot precede the provider.
     assert!(
-        at(&d, "p.average(&window)") < at(&d, "h.settle(claim.id,Ok(bytes))"),
+        at(&d, "p.average(&__arg)") < at(&d, "h.settle(claim.id,Ok(bytes))"),
         "a query is settled after the provider returns",
     );
 }

@@ -7,6 +7,13 @@ use super::{Call, decode_args, encode_into, interface_number};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
+/// Emits `dispatch`. Each arm binds the claim's decoded argument as `__arg`
+/// and never under the ridl parameter's name, because the body also names
+/// its own parameters (`h`, `p`, `buf`) and locals (`claim`, `accepted`,
+/// `reply`), and a parameter with one of those names would shadow them or be
+/// shadowed by them (issue #570). A ridl identifier cannot start with an
+/// underscore (`ridl check` refuses one), so `__arg` cannot be a parameter's
+/// name, as in the call method and the call futures.
 pub(super) fn dispatch(
     iface: &Ident,
     iface_name: &str,
@@ -21,14 +28,13 @@ pub(super) fn dispatch(
         let method = &member.method;
         let descriptor = &member.descriptor;
         let decode = decode_args(call.arg_type);
-        let arg = &call.arg;
         quote! {
             #ordinal => {
                 let decoded = #decode;
                 match decoded {
                     Err(error) => h.settle(claim.id, Err(error)),
-                    Ok(#arg) => {
-                        match <#descriptor as ::ridl_rt::contract::Command>::require(&#arg) {
+                    Ok(__arg) => {
+                        match <#descriptor as ::ridl_rt::contract::Command>::require(&__arg) {
                             Err(()) => h.settle(
                                 claim.id,
                                 Err(::ridl_rt::error::CallError::Contract(
@@ -42,7 +48,7 @@ pub(super) fn dispatch(
                                 // arguments and `require` pass and before the
                                 // application's method runs (`Handler`).
                                 let accepted = h.settle(claim.id, Ok(&[]));
-                                p.#method(&#arg);
+                                p.#method(&__arg);
                                 accepted
                             }
                         }
@@ -64,14 +70,13 @@ pub(super) fn dispatch(
             quote! { buf },
             "the dispatch buffer",
         );
-        let arg = &call.arg;
         quote! {
             #ordinal => {
                 let decoded = #decode;
                 match decoded {
                     Err(error) => h.settle(claim.id, Err(error)),
-                    Ok(#arg) => {
-                        match <#descriptor as ::ridl_rt::contract::Query>::require(&#arg) {
+                    Ok(__arg) => {
+                        match <#descriptor as ::ridl_rt::contract::Query>::require(&__arg) {
                             Err(()) => h.settle(
                                 claim.id,
                                 Err(::ridl_rt::error::CallError::Contract(
@@ -79,9 +84,9 @@ pub(super) fn dispatch(
                                 )),
                             ),
                             Ok(()) => {
-                                let reply = p.#method(&#arg);
+                                let reply = p.#method(&__arg);
                                 match <#descriptor as ::ridl_rt::contract::Query>::ensure(
-                                    &#arg,
+                                    &__arg,
                                     &reply,
                                 ) {
                                     Err(()) => h.settle(
