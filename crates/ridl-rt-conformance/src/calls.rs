@@ -7,7 +7,7 @@
 //! documentation, "What the suite leaves out", says why.
 
 use ridl_rt::contract::InterfaceNo;
-use ridl_rt::error::{CallError, Contract};
+use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 
 use crate::{Factory, IFACE, ORD, runtime};
@@ -196,16 +196,32 @@ pub fn a_claim_is_presented_once_and_settled_once<F: Factory>() {
     );
 }
 
-/// `ReadError::Short` does not consume the call.
-pub fn a_short_buffer_leaves_the_claim_for_the_next_call<F: Factory>() {
+/// A buffer shorter than the next call's arguments gives
+/// `ReadError::ShortClaim` with that call's id and the bytes it needs, and
+/// does not consume the call: a later `next_claim` with a buffer of at least
+/// `needed` bytes presents the same call under the same id, and its
+/// settlement reaches the caller (driftsys/ridl#569).
+pub fn an_oversized_claim_is_reported_with_its_id_and_is_not_consumed<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
 
     let mut short = [0u8; 1];
+    let Err(ReadError::ShortClaim {
+        claim: unread,
+        needed,
+    }) = rt.next_claim(&mut short)
+    else {
+        panic!("a buffer shorter than the arguments reports ShortClaim");
+    };
+    assert_eq!(needed, 3, "the bytes the arguments need");
     assert_eq!(
         rt.next_claim(&mut short),
-        Err(ReadError::Short { needed: 3 })
+        Err(ReadError::ShortClaim {
+            claim: unread,
+            needed: 3
+        }),
+        "the call is not consumed, and is presented again under the same id"
     );
 
     let mut buf = [0u8; 8];
@@ -213,7 +229,83 @@ pub fn a_short_buffer_leaves_the_claim_for_the_next_call<F: Factory>() {
         .next_claim(&mut buf)
         .expect("read")
         .expect("still waiting");
+    assert_eq!(claim.id, unread, "the read presents the same claim");
     assert_eq!(&buf[..claim.len], &[1, 2, 3]);
+
+    rt.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(rt.ack(correlation), Some(Ok(())));
+}
+
+/// A claim presented through `ShortClaim` is settled by its id with its
+/// arguments never read; the caller sees the outcome, the call leaves the
+/// waiting calls, and a second settlement is unknown (driftsys/ridl#569).
+pub fn an_unread_claim_is_settled_by_its_id<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+
+    let mut short = [0u8; 1];
+    let Err(ReadError::ShortClaim { claim, .. }) = rt.next_claim(&mut short) else {
+        panic!("a buffer shorter than the arguments reports ShortClaim");
+    };
+    rt.settle(claim, Err(CallError::Transport(Transport::Corrupt)))
+        .expect("an unread claim is settled by its id");
+    assert_eq!(
+        rt.ack(correlation),
+        Some(Err(CallError::Transport(Transport::Corrupt))),
+        "the caller sees the outcome"
+    );
+
+    let mut buf = [0u8; 8];
+    assert!(
+        rt.next_claim(&mut buf).expect("read").is_none(),
+        "the settled call is no longer waiting"
+    );
+    assert_eq!(
+        rt.settle(claim, Ok(&[])),
+        Err(SettleError::UnknownClaim),
+        "a claim already settled is unknown to a second settlement"
+    );
+}
+
+/// An oversized call blocks the calls sent after it until it is settled:
+/// each `next_claim` with the short buffer reports the same claim, and the
+/// settlement of that claim by its id lets the next call be presented, under
+/// an id of its own (driftsys/ridl#569).
+pub fn the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let oversized = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let behind = rt.command(IFACE, ORD, &[4]).expect("send");
+
+    let mut buf = [0u8; 2];
+    let Err(ReadError::ShortClaim { claim: first, .. }) = rt.next_claim(&mut buf) else {
+        panic!("a buffer shorter than the arguments reports ShortClaim");
+    };
+    assert_eq!(
+        rt.next_claim(&mut buf),
+        Err(ReadError::ShortClaim {
+            claim: first,
+            needed: 3
+        }),
+        "the oversized call stays the next one until it is settled"
+    );
+
+    rt.settle(first, Err(CallError::Transport(Transport::Corrupt)))
+        .expect("settle the unread claim");
+    let second = rt
+        .next_claim(&mut buf)
+        .expect("read")
+        .expect("the call behind it is presented");
+    assert_ne!(second.id, first, "a claim id names one call");
+    assert_eq!(&buf[..second.len], &[4]);
+
+    rt.settle(second.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        rt.ack(oversized),
+        Some(Err(CallError::Transport(Transport::Corrupt)))
+    );
+    assert_eq!(rt.ack(behind), Some(Ok(())));
 }
 
 /// After `forget`, a settled outcome is no longer retrievable.
