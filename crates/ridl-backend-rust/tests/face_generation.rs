@@ -889,6 +889,42 @@ fn no_subscribe_without_an_event_and_no_invalidate_without_a_signal() {
             && !valve.contains("commit"),
         "a calls-only interface emits neither trait, in code or in rustdoc",
     );
+
+    // The positive side: the prelude's rustdoc lists the methods of the
+    // traits it re-exports, and the blocking client's rustdoc names the event
+    // traits where the interface declares an event.
+    let prelude_doc = |module: &str| {
+        let start = at(module, "Thetraitsaconsumerofinterface");
+        let end = start + at(&module[start..], "pubmodprelude{");
+        module[start..end].to_string()
+    };
+    let cabin = dense(&module(&source, "cabin"));
+    assert!(
+        prelude_doc(&cabin).contains(
+            "`new`,`next_event`,`subscribe_<event>`,`commit`,`invalidate_<signal>`,`with_timeout`,`set_timeout`"
+        ),
+        "cabin's prelude rustdoc lists the methods of every trait it re-exports",
+    );
+    assert!(
+        prelude_doc(&horn).contains("`new`,`commit`,`invalidate_<signal>`—"),
+        "horn's prelude rustdoc lists new, commit and invalidate_<signal> alone",
+    );
+    assert!(
+        prelude_doc(&siren)
+            .contains("`new`,`next_event`,`subscribe_<event>`,`with_timeout`,`set_timeout`"),
+        "siren's prelude rustdoc lists the event methods and the timeout methods",
+    );
+    assert!(
+        prelude_doc(&valve).contains("`new`,`with_timeout`,`set_timeout`"),
+        "valve's prelude rustdoc lists new and the timeout methods alone",
+    );
+    let blocking = &cabin[at(&cabin, "pubmodblocking{")..];
+    assert!(
+        blocking.contains(
+            "`with_timeout`and`set_timeout`are`ridl_rt::face::Timeout`'s,`next_event`is`ridl_rt::face::Events`'sand`subscribe_<event>`istheparentmodule's`Subscribe`'s,allinscope"
+        ),
+        "cabin's blocking client rustdoc names Timeout, Events and Subscribe",
+    );
 }
 
 #[test]

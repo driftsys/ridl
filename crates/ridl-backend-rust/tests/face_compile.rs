@@ -27,6 +27,26 @@ fn face_compiles(name: &str, source: &str) {
 /// face — appended to the emitted face before it is checked, so a proof can
 /// cover what a consumer writes and not only what the emitter writes.
 fn face_compiles_with(name: &str, source: &str, consumer: &str) {
+    for std in [true, false] {
+        let (face, compiled) = compile_face(name, source, consumer, std);
+        assert!(
+            compiled.status.success(),
+            "the emitted face must compile with the std cfg {}, rustc said:\n{}\nsource:\n{face}",
+            if std { "on" } else { "off" },
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
+}
+
+/// One `rustc` check of the face of `source` with `consumer` appended, with
+/// the `std` cfg on or off, returning the source checked and rustc's output,
+/// so a proof can expect a failure as well as a success.
+fn compile_face(
+    name: &str,
+    source: &str,
+    consumer: &str,
+    std: bool,
+) -> (String, std::process::Output) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
     // and such a call is one of the shapes proven here.
@@ -47,40 +67,33 @@ fn face_compiles_with(name: &str, source: &str, consumer: &str) {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join(format!("{name}.rs"));
     std::fs::write(&source_path, &face).expect("the generated source is written");
-    for std in [true, false] {
-        let ridl_rt = if std {
-            rustc::ridl_rt_rlib(dir.path())
-        } else {
-            rustc::ridl_rt_rlib_without_std(dir.path())
-        };
-        let mut command = std::process::Command::new("rustc");
-        command.args([
-            "--edition",
-            "2024",
-            "--crate-type",
-            "lib",
-            "--emit=metadata",
-            "-D",
-            "warnings",
-        ]);
-        if std {
-            command.arg("--cfg").arg(r#"feature="std""#);
-        }
-        let compiled = command
-            .arg("-o")
-            .arg(dir.path().join(format!("lib{name}_std_{std}.rmeta")))
-            .arg("--extern")
-            .arg(format!("ridl_rt={}", ridl_rt.display()))
-            .arg(&source_path)
-            .output()
-            .expect("rustc must be installed and runnable for this test to be meaningful");
-        assert!(
-            compiled.status.success(),
-            "the emitted face must compile with the std cfg {}, rustc said:\n{}\nsource:\n{face}",
-            if std { "on" } else { "off" },
-            String::from_utf8_lossy(&compiled.stderr)
-        );
+    let ridl_rt = if std {
+        rustc::ridl_rt_rlib(dir.path())
+    } else {
+        rustc::ridl_rt_rlib_without_std(dir.path())
+    };
+    let mut command = std::process::Command::new("rustc");
+    command.args([
+        "--edition",
+        "2024",
+        "--crate-type",
+        "lib",
+        "--emit=metadata",
+        "-D",
+        "warnings",
+    ]);
+    if std {
+        command.arg("--cfg").arg(r#"feature="std""#);
     }
+    let compiled = command
+        .arg("-o")
+        .arg(dir.path().join(format!("lib{name}_std_{std}.rmeta")))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", ridl_rt.display()))
+        .arg(&source_path)
+        .output()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    (face, compiled)
 }
 
 /// A ridl member or parameter may carry a name the emitter uses for a local
@@ -176,7 +189,8 @@ interface Dispatch {{
 /// the dot call reaches follows Rust's method probe, which tries the
 /// receiver by value before `&` and before `&mut`, and at each step an
 /// inherent method before a trait method: a member takes `&self` or
-/// `&mut self`, and so does every trait method except
+/// `&mut self`; `Bind::new` takes no receiver and is reached by a path call,
+/// and every other trait method takes `&mut self` except
 /// `Timeout::with_timeout`, which takes `self`. So the member keeps the dot
 /// call for every name but `with_timeout`, where the by-value step comes
 /// first and the trait method wins on a client held by value; the consumer
@@ -341,6 +355,43 @@ pub mod consumer {{
         let borrowed: &mut super::cabin::blocking::Client<P> = &mut client;
         let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> =
             borrowed.with_timeout(level);
+    }}
+}}
+"#
+        ),
+    );
+}
+
+/// A signal named `withTimeout` is a read, `with_timeout(&self)`, on both
+/// clients. On the blocking client the dot call on a client held by value is
+/// `Timeout::with_timeout` as for the command, and the inherent path
+/// `blocking::Client::with_timeout(&client)` is the member's one route: a
+/// `&mut` borrow does not reach a `&self` member, because the probe meets the
+/// by-value trait method at the dereferenced step before `&Client`. On the
+/// async client the dot call is the member.
+#[test]
+fn a_signal_named_with_timeout_compiles() {
+    face_compiles_with(
+        "signal_with_timeout",
+        &fixed_name_face("  signal withTimeout : Level @10ms\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn client<P: {CLIENT_BOUNDS}>(port: P) {{
+        let client = super::cabin::Client::new(port);
+        let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
+            client.with_timeout();
+    }}
+
+    #[cfg(feature = "std")]
+    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P) {{
+        let client = super::cabin::blocking::Client::new(port);
+        let client: super::cabin::blocking::Client<P> =
+            client.with_timeout(::std::time::Duration::from_millis(10));
+        let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
+            super::cabin::blocking::Client::with_timeout(&client);
     }}
 }}
 "#
@@ -558,6 +609,99 @@ pub mod consumer {
     }
 }
 "#,
+    );
+}
+
+/// A prelude brings the `ridl_rt::face` traits its own interface's types
+/// implement, and no other (ADR-0023 decision 7): `Horn` declares a signal
+/// only, so `horn::prelude` re-exports `Bind`, `Publish` and `Invalidate` and
+/// no `Timeout`, and `valve::blocking::Client`'s `with_timeout` is E0599
+/// ("items from traits can only be used if the trait is in scope") with
+/// `horn::prelude` alone in scope. With `valve::prelude` imported as well the
+/// consumer compiles. The failing half is one `rustc` call with the `std`
+/// cfg on, where the blocking module exists, whose failure is asserted; the
+/// passing half is a `face_compiles_with` proof, with `valve::prelude`
+/// imported inside the `std`-only function, because with the cfg off
+/// `valve::prelude` adds nothing to what `horn::prelude` brings — `Bind`,
+/// and `Timeout` only under `std` — and rustc reports it as an unused
+/// import, which a third `rustc` call, with the cfg off and the import at
+/// module level, pins as well.
+#[test]
+fn a_prelude_brings_only_its_own_interfaces_traits() {
+    let source = r#"
+package face.preludescope
+
+type Level : integer [0..100]
+
+interface Horn {
+  signal active : Level @10ms
+}
+
+interface Valve {
+  command open(level: Level) @[..50ms]
+}
+"#;
+    let consumer = |module_preludes: &str, valve_preludes: &str| {
+        format!(
+            r#"
+pub mod consumer {{
+    {module_preludes}
+
+    #[cfg(feature = "std")]
+    pub fn valve<P>(port: P)
+    where
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    {{
+        {valve_preludes}
+        let _client = super::valve::blocking::Client::new(port)
+            .with_timeout(::std::time::Duration::from_millis(10));
+    }}
+
+    pub fn horn<W: ::ridl_rt::port::SignalWriter>(port: W) {{
+        let mut publisher = super::horn::Publisher::new(port);
+        publisher.commit();
+    }}
+}}
+"#
+        )
+    };
+
+    let (face, compiled) = compile_face(
+        "prelude_scope_horn_only",
+        source,
+        &consumer("use super::horn::prelude::*;", ""),
+        true,
+    );
+    let stderr = String::from_utf8_lossy(&compiled.stderr);
+    assert!(
+        !compiled.status.success()
+            && stderr.contains("error[E0599]")
+            && stderr.contains("with_timeout"),
+        "with_timeout must be E0599 under horn's prelude alone, rustc said:\n{stderr}\nsource:\n{face}"
+    );
+
+    face_compiles_with(
+        "prelude_scope_both",
+        source,
+        &consumer(
+            "use super::horn::prelude::*;",
+            "use super::valve::prelude::*;",
+        ),
+    );
+
+    let (face, compiled) = compile_face(
+        "prelude_scope_unused",
+        source,
+        &consumer(
+            "use super::horn::prelude::*;\n    use super::valve::prelude::*;",
+            "",
+        ),
+        false,
+    );
+    let stderr = String::from_utf8_lossy(&compiled.stderr);
+    assert!(
+        !compiled.status.success() && stderr.contains("unused import: `super::valve::prelude::*`"),
+        "valve's prelude must be an unused import with the std cfg off beside horn's, rustc said:\n{stderr}\nsource:\n{face}"
     );
 }
 
