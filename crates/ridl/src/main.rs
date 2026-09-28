@@ -82,9 +82,9 @@ enum Command {
         /// (RIDL-407) on every interaction whose ordinal moved and every
         /// struct field or union arm change `ridl diff` gates on: a member
         /// inserted, one removed, one moved in an edit that added or removed
-        /// no member, and one appended beside such a change. Without the
-        /// flag, `.ridl/baseline/` at the workspace root is used when it
-        /// exists.
+        /// no member, and one appended beside such a change or to a result
+        /// union. Without the flag, `.ridl/baseline/` at the workspace root
+        /// is used when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -643,8 +643,9 @@ const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
 /// insertion or removal category: a member present on one side only is a
 /// `DeclAdded` or `DeclRemoved` under the container's path, and the
 /// classifier reads the two bodies to decide its direction — an append with
-/// no other change is compatible; an insertion, a removal, and an append
-/// beside a move or a removal are breaking. So the
+/// no other change is compatible, except to a result union, whose arms are
+/// its transport identity (ADR-0008 decision 4); an insertion, a removal,
+/// and an append beside a move or a removal are breaking. So the
 /// category does not say whether an ordinal moved; the change's verdict
 /// does, and it is the verdict `ridl diff` gates on. `desk_check` warns on
 /// one of these exactly when the verdict is
@@ -1432,6 +1433,10 @@ enum MemberDrift {
         gone: Vec<String>,
         inserted: Vec<String>,
     },
+    /// An arm appended to a union that is, or becomes, a result union, with
+    /// no other change: breaking because a result union's arms are its
+    /// transport identity (ADR-0008 decision 4).
+    ResultArm,
     /// A member the baseline declares at `ordinal` that the body no longer
     /// holds there. `tombstone` is the ordinal of a `reserved` entry under
     /// its name elsewhere in the body, and `shifted` names the surviving
@@ -1462,6 +1467,8 @@ struct CompositeBody {
     live: Vec<(String, u32)>,
     /// Each `reserved` entry's retired name, if it carries one, and ordinal.
     reserved: Vec<(Option<String>, u32)>,
+    /// A union whose arms are its transport identity (ADR-0008 decision 4).
+    result: bool,
 }
 
 impl CompositeBody {
@@ -1526,7 +1533,11 @@ fn composite_body(
                     None => {}
                 }
             }
-            Some(CompositeBody { live, reserved })
+            Some(CompositeBody {
+                live,
+                reserved,
+                result: false,
+            })
         }
         Kind::UnionDef(def) => Some(CompositeBody {
             live: def
@@ -1539,6 +1550,7 @@ fn composite_body(
                 .iter()
                 .map(|entry| (entry.name.clone(), entry.ordinal))
                 .collect(),
+            result: def.is_result,
         }),
         _ => None,
     }
@@ -1578,13 +1590,13 @@ fn member_drift(
                     moved,
                 }
             } else {
-                let gone = before
+                let gone: Vec<String> = before
                     .live
                     .iter()
                     .filter(|(name, _)| after.ordinal_of(name).is_none())
                     .map(|(name, _)| name.clone())
                     .collect();
-                let inserted = after
+                let inserted: Vec<String> = after
                     .live
                     .iter()
                     .filter(|(name, held)| {
@@ -1594,10 +1606,18 @@ fn member_drift(
                     })
                     .map(|(name, _)| name.clone())
                     .collect();
-                MemberDrift::Appended {
-                    moved,
-                    gone,
-                    inserted,
+                if moved.is_empty()
+                    && gone.is_empty()
+                    && inserted.is_empty()
+                    && (before.result || after.result)
+                {
+                    MemberDrift::ResultArm
+                } else {
+                    MemberDrift::Appended {
+                        moved,
+                        gone,
+                        inserted,
+                    }
                 }
             })
         }
@@ -1700,6 +1720,9 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             if !inserted.is_empty() {
                 reasons.push(format!("{} was inserted", quoted_list(&inserted)));
             }
+            if reasons.is_empty() {
+                reasons.push("the body changed".to_string());
+            }
             format!(
                 "`{name}` is declared{in_shape} after every ordinal the published baseline \
                  assigns or retires, and `ridl diff` still reports the addition as breaking \
@@ -1710,6 +1733,13 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
                 reasons.join(" and "),
             )
         }
+        MemberDrift::ResultArm => format!(
+            "`{name}` is declared{in_shape} after every ordinal the published baseline assigns \
+             or retires, and `ridl diff` still reports the addition as breaking: a result \
+             union's arms are its transport identity (ADR-0008 decision 4), so an arm added \
+             or removed changes what a consumer built against the baseline must handle. This \
+             warning repeats the gate rather than disagree with it",
+        ),
         MemberDrift::Removed {
             ordinal,
             tombstone,

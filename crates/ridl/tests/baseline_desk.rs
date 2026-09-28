@@ -1361,6 +1361,65 @@ fn check_is_silent_for_an_enum_value_added_or_removed() {
     }
 }
 
+/// An arm appended to a union that becomes a result union is breaking on its
+/// own: a result union's arms are its transport identity (ADR-0008 decision
+/// 4). No sibling moved, so the desk check does not name one; it says why the
+/// gate reports the append and that the warning repeats the gate.
+#[test]
+fn check_repeats_the_gate_on_an_arm_added_to_a_result_union() {
+    let fixture = format!(
+        "{COMPOSITES}error struct Fault {{\n  code: DoorState\n}}\nunion Outcome {{\n  ok: \
+         Reading\n}}\n"
+    );
+    let dir = TempDir::new("result-arm");
+    let root = package_workspace(&dir, &fixture);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    let edited = fixture.replace("  ok: Reading\n", "  ok: Reading\n  err: Fault\n");
+    dir.write("cluster.ridl", &edited);
+    let (code, diff) = diff_against_baseline(&root);
+    assert_eq!(code, 1, "`ridl diff` gates on the arm:\n{diff}");
+    assert!(
+        diff.contains("[breaking] decl_added veh.cluster/Outcome/err")
+            && !diff.contains("member_reordered"),
+        "the diff reports the added arm as breaking and no reorder:\n{diff}",
+    );
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        stderr.matches("warning[RIDL-407]").count(),
+        1,
+        "one warning, for the added arm:\n{stderr}",
+    );
+    let block = ridl_407_block(&stderr, "err");
+    assert!(
+        block.starts_with(
+            "warning[RIDL-407]: `err` is declared in `Outcome` after every ordinal the \
+             published baseline assigns or retires, and `ridl diff` still reports the \
+             addition as breaking: a result union's arms are its transport identity \
+             (ADR-0008 decision 4)"
+        ) && block.contains("repeats the gate"),
+        "the message names the rule instead of a sibling:\n{stderr}",
+    );
+    assert!(
+        !block.contains("because ") && !block.contains("put the other members back"),
+        "no sibling is blamed and no move is asked for:\n{stderr}",
+    );
+    let line = edited
+        .lines()
+        .position(|line| line.trim_start().starts_with("err: Fault"))
+        .expect("the arm is in the edited file")
+        + 1;
+    assert_underlines(
+        block,
+        "err: Fault",
+        &format!("cluster.ridl:{line}:3"),
+        &stderr,
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
 /// An enum value or enum-set bit takes its identity from its explicit number,
 /// so reordering the body is not a change (typl §8, §9). `ridl diff` still
 /// reports it conservatively; the desk check stays silent, because its

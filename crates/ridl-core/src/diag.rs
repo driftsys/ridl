@@ -794,7 +794,9 @@ diag_codes! {
         /// added or removed none, by a reorder or by a `reserved` entry
         /// added, moved or removed above it; and a member appended beside
         /// any of those, which the diff reports as breaking although the
-        /// append is compatible on its own. An append alone draws nothing.
+        /// append is compatible on its own. An append alone draws nothing,
+        /// except an arm added to a result union, whose arms are its
+        /// transport identity (ADR-0008 decision 4).
         /// The diff reports no reorder beside an addition or a removal, so
         /// the warning for an added or removed member names the siblings
         /// whose ordinal changed. An enum value's or enum-set bit's reorder
