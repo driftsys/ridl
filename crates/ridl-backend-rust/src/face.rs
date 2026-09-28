@@ -48,7 +48,8 @@
 //! or timer, and no port waits; a face may return a future, and that future
 //! never blocks. Each future's `poll` registers its interest with the port,
 //! then reads the port — a call or event future once, `Serve` until the
-//! handler has no claim waiting — and returns; what waits is the executor or
+//! handler has no claim waiting or it has taken `SERVE_BUDGET` claims in
+//! that poll — and returns; what waits is the executor or
 //! the frame loop that polls it, or `ridl_rt::task::block_on` under the
 //! `blocking` module, which is the library's and not generated. No method is
 //! bounded on `CoherentSignals`.

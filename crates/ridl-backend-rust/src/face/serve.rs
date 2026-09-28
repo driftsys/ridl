@@ -3,8 +3,13 @@
 //! module, `face.rs`.
 
 use super::{Call, interface_number};
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
+
+/// The most claims one poll of the generated `Serve` takes
+/// (driftsys/ridl#568). It is emitted as the value of the interface module's
+/// private `SERVE_BUDGET` and is the number the emitted documentation states.
+const SERVE_BUDGET: usize = 32;
 
 /// `serve` and its future (the async face design, note F-7): the served set
 /// is registered when the function is called; each poll registers
@@ -23,6 +28,7 @@ pub(super) fn serve(
         .iter()
         .chain(queries.iter())
         .map(|call| &call.member.ordinal);
+    let budget = Literal::usize_unsuffixed(SERVE_BUDGET);
     let bounds = quote! { H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable, P: Provider };
 
     let serve_doc = format!(
@@ -32,13 +38,17 @@ pub(super) fn serve(
          ordinals when this function runs; a refusal is a future that is ready \
          with `ProviderError::Serve`. Each poll of the future registers its \
          interest in the interface's claims, then takes and settles the claims \
-         the handler has, at most 32 in one poll, so that one poll does not \
-         hold a single-threaded executor while callers keep sending. A poll \
-         that took 32 claims wakes the future's waker and is `Pending`, so \
-         the executor polls it again after other tasks have run; a poll that \
-         found no claim left before 32 is `Pending` without waking it. The \
-         future resolves \
-         only when the handler port fails, to `ProviderError::Claim`; every \
+         the handler has, at most {SERVE_BUDGET} in one poll, so that one poll \
+         does not hold a single-threaded executor while callers keep sending. \
+         A poll that took {SERVE_BUDGET} claims wakes the future's waker and \
+         is `Pending`, so the executor polls it again after other tasks have \
+         run; a poll that found no claim left before {SERVE_BUDGET} is \
+         `Pending` without waking it. Under `ridl_rt::task::noop_waker` that \
+         wake is discarded, so a frame loop that polls the future once per \
+         frame settles at most {SERVE_BUDGET} claims per frame; a frame loop \
+         that polls with `ridl_rt::task::flag_waker` polls again while its \
+         flag was set, up to the loop's own limit of polls per frame. The \
+         future resolves only when the handler port fails, to `ProviderError::Claim`; every \
          claim settled before the failure stays settled. `h` is held by value \
          and `p` by `&mut` until the future is dropped."
     );
@@ -49,13 +59,17 @@ pub(super) fn serve(
          polling it again after it resolved panics."
     );
 
+    let budget_doc = format!(
+        "The most claims one poll of `Serve` takes (driftsys/ridl#568). A \
+         future that holds one poll for an unbounded time blocks every other \
+         task on a single-threaded executor; {SERVE_BUDGET} bounds one poll \
+         and keeps the cost of registering the claim interest, paid once per \
+         poll, small beside the claims the poll settles."
+    );
+
     quote! {
-        /// The most claims one poll of `Serve` takes (driftsys/ridl#568). A
-        /// future that holds one poll for an unbounded time blocks every other
-        /// task on a single-threaded executor; 32 bounds one poll and keeps the
-        /// cost of registering the claim interest, paid once per poll, small
-        /// beside the claims the poll settles.
-        const SERVE_BUDGET: usize = 32;
+        #[doc = #budget_doc]
+        const SERVE_BUDGET: usize = #budget;
 
         #[doc = #serve_doc]
         pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>

@@ -116,8 +116,9 @@ pub(super) fn dispatch(
          the handler already has and returns. `budget` is decreased by one \
          for each claim taken from `Handler::next_claim`, whether or not its \
          settlement is accepted, and the pass stops when it reaches 0 without \
-         asking for another claim. `Ok` with `budget` above 0 means the \
-         handler has no claim waiting; `Ok` with `budget` at 0 means claims \
+         asking for another claim. With a buffer of at least \
+         `{iface_name}::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
+         means the handler has no claim waiting; `Ok` with `budget` at 0 means claims \
          may still be waiting; `Err` means `Handler::next_claim` failed, and \
          every claim settled before the failure stays settled.\n\n`buf` must \
          be at least `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is \

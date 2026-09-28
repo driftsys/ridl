@@ -1519,8 +1519,8 @@ fn a_resolved_serve_future_panics_when_polled_again() {
     let _ = poll_once(&mut serve);
 }
 
-/// Note F-7: each poll of `Serve` registers `Interest::Claim` before it drains
-/// the handler, so a call sent while it is pending wakes it.
+/// Note F-7: each poll of `Serve` registers `Interest::Claim` before it takes
+/// claims from the handler, so a call sent while it is pending wakes it.
 #[test]
 fn a_send_wakes_a_pending_serve() {
     let mut rt = loopback();
@@ -1637,6 +1637,84 @@ fn the_serve_poll_bound_counts_claims_taken_not_settlements_accepted() {
     assert_eq!(counts.taken.get(), 32);
     assert_eq!(counts.settles.get(), 32, "every claim taken was settled");
     assert_eq!(wakes, 1);
+}
+
+/// A claim for another interface is settled `Contract::UnknownInteraction`
+/// and spends the budget like any other claim taken: with 40 waiting, one
+/// poll takes 32 and wakes itself.
+#[test]
+fn a_claim_for_another_interface_counts_toward_the_serve_poll_bound() {
+    let other = InterfaceNo(CABIN.0.wrapping_add(1000));
+    let handler = QueuedClaims::new(other, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+
+    let (poll, wakes) = poll_counting_wakes(&mut serve);
+    assert!(poll.is_pending());
+    assert_eq!(counts.taken.get(), 32);
+    assert_eq!(wakes, 1);
+}
+
+/// A frame loop that polls `Serve` with `ridl_rt::task::flag_waker` polls
+/// again while the flag was set, up to its own limit of polls per frame, so
+/// one frame settles all 40 waiting claims. One poll with the no-op waker
+/// settles 32, because its self-wake is discarded.
+#[test]
+fn a_frame_loop_over_a_flag_waker_settles_past_the_serve_poll_bound_in_one_frame() {
+    const POLLS_PER_FRAME: usize = 4;
+
+    let handler = QueuedClaims::new(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counts.taken.get(), 32, "one poll with the no-op waker");
+
+    let handler = QueuedClaims::new(CABIN, 40);
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+    let (waker, woken) = ridl_rt::task::flag_waker();
+    let mut cx = Context::from_waker(&waker);
+    let mut polls = 0;
+    for _ in 0..POLLS_PER_FRAME {
+        polls += 1;
+        assert!(Pin::new(&mut serve).poll(&mut cx).is_pending());
+        if !woken.take() {
+            break;
+        }
+    }
+    assert_eq!(counts.taken.get(), 40, "one frame settles every claim");
+    assert_eq!(counts.settles.get(), 40);
+    assert_eq!(
+        polls, 2,
+        "the second poll found no claim left and did not wake"
+    );
+}
+
+/// `blocking::serve` is `block_on` over `serve`, and the self-wake at the
+/// bound makes `block_on` poll again at once instead of parking until the
+/// timeout. The handler fails once its 40 claims were taken, so the call
+/// returns that failure; without the self-wake it would park for the whole
+/// generous timeout after the first 32.
+#[test]
+fn blocking_serve_takes_claims_past_the_serve_poll_bound_without_waiting_for_its_timeout() {
+    let handler = QueuedClaims::new(CABIN, 40).failing_when_empty();
+    let counts = handler.counts();
+    let mut provider = TestProvider::new(0);
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        generated::cabin::blocking::serve(handler, &mut provider, Some(GENEROUS)),
+        Err(ProviderError::Claim(ReadError::Detached))
+    );
+    assert!(
+        started.elapsed() < GENEROUS,
+        "the call parked until its timeout after the first 32 claims"
+    );
+    assert_eq!(counts.taken.get(), 40);
+    assert_eq!(counts.settles.get(), 40);
 }
 
 /// The same for a query: a send failure other than `Busy` on the slot-wait

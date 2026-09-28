@@ -72,9 +72,16 @@ again after other tasks have run; a poll that found no claim left before 32 is
 `Pending` without waking itself, as before. 32 bounds one poll and keeps the
 cost of registering the claim interest, paid once per poll, small beside the
 claims the poll settles. The bound is a private constant of each generated
-interface module, not a setting and not a `ridl-rt` item. The `Serve` type and
-its output are unchanged, so the change is not breaking. Taken on delegated
-authority while fixing driftsys/ridl#568, which it closes.
+interface module that emits `serve`, not a setting and not a `ridl-rt` item. The
+`Serve` type and its output are unchanged, so the change is not breaking. Taken
+on delegated authority while fixing driftsys/ridl#568, which it closes. The
+self-wake is discarded under `ridl_rt::task::noop_waker`, so a frame loop that
+polls `Serve` once per frame with it settles at most 32 claims per frame.
+Sebastien decided, during the review of driftsys/ridl#584, that `ridl-rt` adds
+`task::flag_waker` (ADR-0021 decision 8, amended the same day), whose wake sets
+a flag the loop reads: the loop polls, then polls again while the flag was set,
+up to its own limit of polls per frame. A `no_std` frame loop writes the same
+small waker over its own atomic flag.
 
 ## Context
 

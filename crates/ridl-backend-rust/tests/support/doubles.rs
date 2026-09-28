@@ -325,13 +325,16 @@ pub struct QueuedClaims {
     counts: Rc<ClaimCounts>,
     /// `settle` answers `SettleError::UnknownClaim` instead of accepting.
     reject: bool,
+    /// Once no claim is left, `next_claim` fails with `ReadError::Detached`
+    /// instead of answering `None`, so that `serve` resolves.
+    fail_when_empty: bool,
 }
 
 /// What a [`QueuedClaims`] did, shared with the test while `serve` holds
 /// the handler.
 #[derive(Default)]
 pub struct ClaimCounts {
-    /// Claims not yet presented; a test adds to it to queue more.
+    /// Claims not yet presented.
     pub waiting: Cell<usize>,
     /// Claims presented so far, counted from `next_claim`'s `Ok(Some)`.
     pub taken: Cell<usize>,
@@ -349,6 +352,7 @@ impl QueuedClaims {
             iface,
             counts: Rc::new(counts),
             reject: false,
+            fail_when_empty: false,
         }
     }
 
@@ -357,6 +361,15 @@ impl QueuedClaims {
         QueuedClaims {
             reject: true,
             ..QueuedClaims::new(iface, waiting)
+        }
+    }
+
+    /// The same, but once every claim was taken `next_claim` fails with
+    /// `ReadError::Detached`, so that a `serve` future over it resolves.
+    pub fn failing_when_empty(self) -> Self {
+        QueuedClaims {
+            fail_when_empty: true,
+            ..self
         }
     }
 
@@ -387,7 +400,11 @@ impl Handler for QueuedClaims {
     fn next_claim(&mut self, _out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
         let waiting = self.counts.waiting.get();
         if waiting == 0 {
-            return Ok(None);
+            return if self.fail_when_empty {
+                Err(ReadError::Detached)
+            } else {
+                Ok(None)
+            };
         }
         self.counts.waiting.set(waiting - 1);
         let taken = self.counts.taken.get() + 1;
