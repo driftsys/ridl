@@ -2811,23 +2811,19 @@ impl Checker<'_> {
                         declared_bits.insert(name.clone(), name_range);
                     }
                 }
-                let Some(value) = bit
-                    .value()
-                    .and_then(|literal| match literal_kind(&literal) {
-                        LitKind::Number { value } => exact_to_i64(&value),
-                        _ => None,
-                    })
-                else {
+                let Some(literal) = bit.value() else {
                     continue;
                 };
-                let range = bit
-                    .value()
-                    .map(|literal| literal.syntax().text_range())
-                    .unwrap_or(name_range);
+                let Some(value) = (match literal_kind(&literal) {
+                    LitKind::Number { value } => exact_to_i64(&value),
+                    _ => None,
+                }) else {
+                    continue;
+                };
                 if bits.iter().any(|existing| existing.value == value) {
                     self.error(
                         DiagCode::TYPL_207,
-                        range,
+                        literal.syntax().text_range(),
                         format!("duplicate enumset bit position {value}"),
                     );
                 }
@@ -6205,6 +6201,10 @@ mod tests {
         assert_eq!(usize::from(diagnostic.primary.range.start()), second);
         assert_eq!(usize::from(diagnostic.primary.range.end()), second + 1);
         assert_eq!(usize::from(diagnostic.labels[0].span.range.start()), first);
+        assert_eq!(
+            usize::from(diagnostic.labels[0].span.range.end()),
+            first + 1
+        );
     }
 
     /// Every repeat is reported against the first declaration, so the map
@@ -6265,11 +6265,23 @@ mod tests {
     }
 
     /// Bits whose names differ only in case are distinct names: the Rust
-    /// backend emits a bit's const under its source spelling, with no
-    /// transform, so `a` and `A` do not collide and draw nothing.
+    /// backend emits a bit's const under its source spelling, changing only
+    /// a name that is a Rust path keyword (`self`, `Self`, `super`, `crate`),
+    /// so `a` and `A` do not collide and draw nothing.
     #[test]
     fn typl_218_does_not_fire_for_names_that_differ_in_case() {
         let checked = check_source("app", "package app\nenumset W { a = 0, A = 1 }\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// The rule is per enumset: two enumsets in one package may each declare
+    /// a bit with the same name.
+    #[test]
+    fn typl_218_does_not_fire_across_two_enumsets() {
+        let checked = check_source(
+            "app",
+            "package app\nenumset V { A = 0 }\nenumset W { A = 0 }\n",
+        );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
     }
 

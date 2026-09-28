@@ -134,7 +134,8 @@ the namespace. A value name repeated verbatim is not a transform collision and
 is held out of the check, as a union arm's is; the exact-duplicate rule is
 TYPL-216 (driftsys/ridl#554), the sibling of TYPL-215 for struct fields and
 RIDL-413 for parameters. A union's arms have their own exact-duplicate rule,
-TYPL-217 (driftsys/ridl#452).
+TYPL-217 (driftsys/ridl#452), and so do a standalone enumset's bits, TYPL-218
+(driftsys/ridl#565); a bit name is not projected through the transform.
 
 The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
 has the defect, and a wire schema's value names are read by peers in other
@@ -404,9 +405,9 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   distinct in source, and `lower_union` deliberately holds a verbatim repeat out
   of the projection maps rather than report a collision the transform did not
   cause. The exact-duplicate rule for a union's arms is TYPL-217, the sibling of
-  TYPL-215 for struct fields, TYPL-216 for enum values and RIDL-413 for
-  parameters; it refuses that input at check time, which closes the residual.
-  Recorded on driftsys/ridl#452.
+  TYPL-215 for struct fields, TYPL-216 for enum values, TYPL-218 for enumset
+  bits and RIDL-413 for parameters; it refuses that input at check time, which
+  closes the residual. Recorded on driftsys/ridl#452.
 - **Negative — a tuple field name is projected through the pinned transform but
   is in no checked namespace.** typl §15.1 makes a tuple field name camelCase
   exactly as it makes a struct field name one, and the Rust backend writes it as
