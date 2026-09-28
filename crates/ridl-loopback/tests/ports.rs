@@ -147,8 +147,8 @@ use ridl_loopback::{Handles, Loopback};
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
-    Attached, Caller, Clock, EventSink, EventSource, FixedReader, Handler, Interest, ReadError,
-    SendError, SettleError, SignalReader, SignalWriter, Wakeable,
+    Attached, Caller, ClaimId, Clock, EventSink, EventSource, FixedReader, Handler, Interest,
+    ReadError, SendError, SettleError, SignalReader, SignalWriter, Wakeable,
 };
 use ridl_rt::sample::{Duration, Freshness, Timestamp};
 
@@ -768,6 +768,154 @@ fn a_dropped_handler_returns_its_claims_to_the_waiting_calls() {
     second.settle(then.id, Ok(&[])).expect("settle");
     assert_eq!(caller.ack(c), Some(Ok(())));
     assert_eq!(caller.ack(later), Some(Ok(())));
+}
+
+/// The number of commands `caller` accepts before it answers
+/// `SendError::Busy`, counting at most one more than `Loopback::SLOTS`.
+fn sends_until_busy(caller: &mut impl Caller) -> usize {
+    for sent in 0..=Loopback::SLOTS {
+        match caller.command(IFACE, ORD, &[9]) {
+            Ok(_) => {}
+            Err(SendError::Busy) => return sent,
+            Err(error) => panic!("a send failed other than busy: {error:?}"),
+        }
+    }
+    Loopback::SLOTS + 1
+}
+
+/// Offers `handler` the next waiting call through a buffer too short for it,
+/// and returns the id `ShortClaim` carried.
+fn offer(handler: &mut impl Handler) -> ClaimId {
+    let mut short = [0u8; 1];
+    match handler.next_claim(&mut short) {
+        Err(ReadError::ShortClaim { claim, .. }) => claim,
+        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
+    }
+}
+
+/// driftsys/ridl#569: a call offered through `ShortClaim` whose caller then
+/// forgets it stays among the waiting calls, so the provider's retry with a
+/// larger buffer presents it under the same id, and its settlement frees the
+/// slot as for a forgotten taken claim.
+#[test]
+fn a_forgotten_offered_call_is_presented_again_under_the_same_id_and_its_settlement_frees_the_slot()
+{
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    handler.serve(IFACE, &[ORD]).expect("serve");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let claim = offer(&mut handler);
+    caller.forget(c);
+
+    let mut buf = [0u8; 8];
+    let retry = handler
+        .next_claim(&mut buf)
+        .expect("read")
+        .expect("a forgotten offered call stays presentable");
+    assert_eq!(retry.id, claim, "under the id ShortClaim carried");
+    assert_eq!(&buf[..retry.len], &[1, 2, 3]);
+    handler.settle(retry.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        sends_until_busy(&mut caller),
+        Loopback::SLOTS,
+        "the settlement freed the slot"
+    );
+}
+
+/// driftsys/ridl#569: a dropped handler's offered claim never left the
+/// waiting calls, so it is not re-inserted; another handler that serves the
+/// member takes it exactly once, under the same id, and its settlement reaches
+/// the caller.
+#[test]
+fn a_dropped_handlers_offered_claim_is_taken_once_by_another_handler_under_the_same_id() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    first.serve(IFACE, &[ORD]).expect("serve");
+    second.serve(IFACE, &[ORD]).expect("serve");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let claim = offer(&mut first);
+
+    drop(first);
+    let mut buf = [0u8; 8];
+    let taken = second
+        .next_claim(&mut buf)
+        .expect("read")
+        .expect("the offered call is still waiting");
+    assert_eq!(taken.id, claim, "the id stays on the call");
+    assert_eq!(
+        second.next_claim(&mut buf).expect("read"),
+        None,
+        "the call is presented once, not re-inserted"
+    );
+    second.settle(taken.id, Ok(&[])).expect("settle");
+    assert_eq!(
+        caller.ack(c),
+        Some(Ok(())),
+        "the settlement reaches the caller"
+    );
+}
+
+/// driftsys/ridl#569: an offered call whose caller forgot it is withdrawn when
+/// its handler drops, as a forgotten taken claim is: no handler is presented
+/// it, and its slot is reclaimed.
+#[test]
+fn a_forgotten_offered_call_is_withdrawn_when_its_handler_drops() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    first.serve(IFACE, &[ORD]).expect("serve");
+    second.serve(IFACE, &[ORD]).expect("serve");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    offer(&mut first);
+    caller.forget(c);
+
+    drop(first);
+    let mut buf = [0u8; 8];
+    assert_eq!(
+        second.next_claim(&mut buf).expect("read"),
+        None,
+        "a forgotten offered call is withdrawn at the drop"
+    );
+    assert_eq!(
+        sends_until_busy(&mut caller),
+        Loopback::SLOTS,
+        "and its slot is reclaimed"
+    );
+}
+
+/// driftsys/ridl#569: another handler that serves the member may take a call
+/// offered to the first, under the same id; the claim moves with the take, so
+/// the first handler's settlement of that id is unknown.
+#[test]
+fn an_offered_call_taken_by_another_handler_moves_the_claim_to_it() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    first.serve(IFACE, &[ORD]).expect("serve");
+    second.serve(IFACE, &[ORD]).expect("serve");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let claim = offer(&mut first);
+
+    let mut buf = [0u8; 8];
+    let taken = second
+        .next_claim(&mut buf)
+        .expect("read")
+        .expect("an offered call can be taken by another serving handler");
+    assert_eq!(taken.id, claim);
+    second
+        .settle(taken.id, Ok(&[]))
+        .expect("the taker settles it");
+    assert_eq!(
+        first.settle(claim, Ok(&[])),
+        Err(SettleError::UnknownClaim),
+        "the claim moved to the taker"
+    );
+    assert_eq!(caller.ack(c), Some(Ok(())));
 }
 
 #[test]

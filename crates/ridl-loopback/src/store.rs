@@ -110,13 +110,15 @@ impl HandlerState {
     }
 }
 
-/// A presented claim: the call it presented, and the handler holding it. The
-/// call is taken when it has left the waiting calls, and offered when it is
-/// still among them: `next_claim` offered it through `ReadError::ShortClaim`
-/// and has not yet copied its arguments (driftsys/ridl#569).
+/// A presented claim: the call it presented, the handler holding it, and
+/// whether the handler took it. A taken call has left the waiting calls; an
+/// offered one is still among them, because `next_claim` offered it through
+/// `ReadError::ShortClaim` and has not yet copied its arguments
+/// (driftsys/ridl#569).
 struct ClaimOwner {
     call: Correlation,
     handler: usize,
+    taken: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -639,6 +641,12 @@ impl Store {
     ///   runtime. This is this runtime's behaviour, not a port contract: a
     ///   transport that has already sent a request cannot recall it (decision
     ///   1 of the pass-1 dispositions on driftsys/ridl#553).
+    /// - **Waiting, offered to a handler through `ReadError::ShortClaim`**:
+    ///   it is a handler's claim although it is still waiting, so it is
+    ///   marked forgotten as a taken claim is, and it stays among the waiting
+    ///   calls, so the provider's retry with a larger buffer still presents
+    ///   it under the same id. That handler's settlement, by either id, or
+    ///   its drop reclaims the slot (driftsys/ridl#569).
     ///
     /// `forget` and the handler side — `serve` and `next_claim` — run under
     /// the store's one lock, so a call is either claimed first, and held
@@ -649,16 +657,12 @@ impl Store {
     /// wakes every caller's `Slot` waiter, as any reclaim does, and no
     /// handler's `Claim` waiter, because it adds no call to claim.
     pub(crate) fn forget(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
-        if let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
+        if !self.offered(c)
+            && let Some(at) = self.pending.iter().position(|waiting| *waiting == c)
+        {
             self.pending.remove(at);
-            // A call offered through `ReadError::ShortClaim` is a handler's
-            // claim although it is still waiting: it is marked forgotten
-            // below and settled by that handler, as a taken claim is, and
-            // no other handler is presented it.
-            if !self.offered(c) {
-                self.withdraw(c, wake);
-                return;
-            }
+            self.withdraw(c, wake);
+            return;
         }
         match self.table.forget(c) {
             Forgotten::Reclaimed => self.reclaimed(c, wake),
@@ -768,12 +772,16 @@ impl Store {
         id
     }
 
-    /// Removes a dropped handler. Every claim it held and had not settled
-    /// returns to the waiting calls, in its place by send order, so another
-    /// handler that serves the member can take it, and every handler that
-    /// serves the member has its `Claim` waiter woken. A claim whose call the
-    /// caller forgot is withdrawn instead, as [`Store::forget`] withdraws a
-    /// waiting call: its slot is reclaimed now, no handler is presented it
+    /// Removes a dropped handler. Every claim it had taken and not settled
+    /// returns to the waiting calls, in its place by send order and under the
+    /// id it was first presented with, so another handler that serves the
+    /// member can take it, and every handler that serves the member has its
+    /// `Claim` waiter woken. A claim it had only been offered, through
+    /// `ReadError::ShortClaim`, never left the waiting calls, so it is neither
+    /// re-inserted nor woken for; its id stays on the entry for the next
+    /// presentation (driftsys/ridl#569). A claim whose call the caller forgot
+    /// is withdrawn instead, taken or offered, as [`Store::forget`] withdraws
+    /// a waiting call: its slot is reclaimed now, no handler is presented it
     /// again, and no `Claim` waiter is woken for it (decision 2 of the pass-1
     /// dispositions on driftsys/ridl#557). The loopback enforces
     /// no deadline on the returned call: what bounds the caller's wait is the
@@ -793,12 +801,17 @@ impl Store {
             let owner = self.claims.remove(&claim).expect("listed above");
             let entry = self.entry(owner.call);
             if entry.forgotten {
+                // A forgotten offered call is still among the waiting calls;
+                // `withdraw` expects a call that is not.
+                if !owner.taken
+                    && let Some(at) = self.pending.iter().position(|c| *c == owner.call)
+                {
+                    self.pending.remove(at);
+                }
                 self.withdraw(owner.call, wake);
                 continue;
             }
-            // An offered call never left the waiting calls; its id stays on
-            // its entry for the next presentation.
-            if self.pending.contains(&owner.call) {
+            if !owner.taken {
                 continue;
             }
             let (sent, key) = (entry.sent, (entry.iface, entry.ord));
@@ -926,8 +939,14 @@ impl Store {
         let entry = &self.calls[&Calls::slot(c)];
         if out.len() < entry.args.len() {
             let needed = entry.args.len();
-            self.claims
-                .insert(claim_id, ClaimOwner { call: c, handler });
+            self.claims.insert(
+                claim_id,
+                ClaimOwner {
+                    call: c,
+                    handler,
+                    taken: false,
+                },
+            );
             return Err(ReadError::ShortClaim {
                 claim: ClaimId(claim_id),
                 needed,
@@ -945,8 +964,14 @@ impl Store {
             len: entry.args.len(),
         };
         self.pending.remove(position);
-        self.claims
-            .insert(claim_id, ClaimOwner { call: c, handler });
+        self.claims.insert(
+            claim_id,
+            ClaimOwner {
+                call: c,
+                handler,
+                taken: true,
+            },
+        );
         Ok(Some(claim))
     }
 
@@ -967,11 +992,11 @@ impl Store {
         outcome: Result<&[u8], CallError>,
         wake: &mut Vec<Waker>,
     ) -> Result<(), SettleError> {
-        let c = match self.claims.get(&claim.0) {
+        let (c, taken) = match self.claims.get(&claim.0) {
             // A claim another handler holds is unknown to this one: two
             // providers in one process settle their own calls and not each
             // other's.
-            Some(owner) if owner.handler == handler => owner.call,
+            Some(owner) if owner.handler == handler => (owner.call, owner.taken),
             _ => return Err(SettleError::UnknownClaim),
         };
         if self.fail_next_settle {
@@ -981,7 +1006,7 @@ impl Store {
         self.claims.remove(&claim.0);
         // An offered call is still among the waiting calls: its settlement
         // takes it out, so no handler is presented it afterwards.
-        if let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
+        if !taken && let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
             self.pending.remove(at);
         }
         match self.table.settle(c, outcome.map(|_| ())) {
@@ -1010,9 +1035,11 @@ impl Store {
     /// Whether a handler holds a claim on `c` that it has not yet taken: the
     /// call was offered through `ReadError::ShortClaim`.
     fn offered(&self, c: Correlation) -> bool {
-        self.calls[&Calls::slot(c)]
-            .claim
-            .is_some_and(|id| self.claims.contains_key(&id))
+        self.calls
+            .get(&Calls::slot(c))
+            .and_then(|entry| entry.claim)
+            .and_then(|id| self.claims.get(&id))
+            .is_some_and(|owner| !owner.taken)
     }
 }
 
