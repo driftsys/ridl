@@ -1627,6 +1627,9 @@ fn member_drift(
             let before = composite_body(baseline, package, container)?;
             let ordinal = before.ordinal_of(member)?;
             let after = composite_body(current, package, container);
+            // `Some(None)` is a bare `reserved N` at the ordinal and `None`
+            // is no entry there: the two outer cases branch differently
+            // below, so this is not flattened.
             let holder = after.as_ref().and_then(|after| {
                 after
                     .reserved
