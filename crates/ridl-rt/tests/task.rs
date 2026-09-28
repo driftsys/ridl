@@ -1,4 +1,5 @@
-//! `block_on` and `noop_waker` under the `std` feature (story E11.17).
+//! `block_on`, `noop_waker` and `flag_waker` under the `std` feature (story E11.17,
+//! driftsys/ridl#568).
 //!
 //! The whole file is gated on the feature, because `just test` builds the
 //! workspace with default features and the module does not exist there. The
@@ -24,7 +25,7 @@ use std::task::{Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use ridl_rt::task::{block_on, noop_waker};
+use ridl_rt::task::{block_on, flag_waker, noop_waker};
 
 /// A future that stays pending until `done` is set, and that stores the waker
 /// of its last poll so another thread can wake it. `polls` counts the polls.
@@ -407,4 +408,62 @@ fn waking_a_noop_waker_from_another_thread_does_not_poll_the_future() {
         (2..=8).contains(&polls),
         "a no-op wake unparked the waiting thread: {polls} polls in {bound:?}"
     );
+}
+
+#[test]
+fn a_flag_waker_sets_its_flag_on_each_kind_of_wake_and_take_clears_it() {
+    let (waker, woken) = flag_waker();
+    assert!(!woken.take(), "the flag starts clear");
+
+    waker.wake_by_ref();
+    assert!(woken.take(), "a wake by reference sets the flag");
+    assert!(!woken.take(), "take clears the flag");
+
+    let clone = waker.clone();
+    clone.wake();
+    assert!(woken.take(), "a wake of a clone, by value, sets the flag");
+
+    let remote = waker.clone();
+    thread::spawn(move || remote.wake_by_ref()).join().unwrap();
+    assert!(woken.take(), "a wake from another thread sets the flag");
+    assert!(!woken.take());
+
+    let (other, other_woken) = flag_waker();
+    other.wake_by_ref();
+    assert!(!woken.take(), "each call gives its own flag");
+    assert!(other_woken.take());
+}
+
+#[test]
+fn a_frame_loop_over_a_flag_waker_polls_again_while_the_future_wakes_itself() {
+    // A future that wakes itself on each of its first three polls and is ready
+    // on the fourth. Under a flag waker one frame polls it four times; under a
+    // no-op waker one poll is all a frame gets.
+    let polls = AtomicUsize::new(0);
+    let fut = poll_fn(|cx| {
+        if polls.fetch_add(1, Ordering::SeqCst) < 3 {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    });
+    let mut fut = std::pin::pin!(fut);
+    let (waker, woken) = flag_waker();
+    let mut cx = std::task::Context::from_waker(&waker);
+    let mut ready = false;
+    for _ in 0..8 {
+        if fut.as_mut().poll(&mut cx).is_ready() {
+            ready = true;
+            break;
+        }
+        if !woken.take() {
+            break;
+        }
+    }
+    assert!(
+        ready,
+        "the frame polled until the future stopped waking itself"
+    );
+    assert_eq!(polls.load(Ordering::SeqCst), 4);
 }

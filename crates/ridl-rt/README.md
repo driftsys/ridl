@@ -18,7 +18,8 @@ contains no `unsafe` code and has no dependency in any feature combination. It
 declares one cargo feature per payload encoding — `flatbuffers`, which enables
 the FlatBuffers reading and writing helpers, and `proto3` and `repr-c`, which
 enable nothing in this version — and a `std` feature, off by default, that links
-the standard library and enables `task::block_on` and `task::noop_waker`.
+the standard library and enables `task::block_on`, `task::noop_waker` and
+`task::flag_waker`.
 
 ## Versioning
 

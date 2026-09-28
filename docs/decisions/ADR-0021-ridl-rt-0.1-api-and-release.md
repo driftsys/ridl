@@ -73,6 +73,12 @@ unsettled claim is returned to the waiting calls and presented again, and
 amended decision 13 in place: one waker per kind of key, and a same-task
 registration is a refresh.
 
+**Amendment (2026-09-28) — decision 8.** driftsys/ridl#568 bounds one poll of
+the generated `Serve` to 32 claims, after which the future wakes itself. A frame
+loop that polls with `noop_waker` loses that wake, so decision 8 gains a third
+`task` function, `flag_waker`, whose wake the loop can read. Sebastien took the
+decision during the review of driftsys/ridl#584.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -323,6 +329,19 @@ trusted with no `unsafe` and no second verification pass.
    `task` links `std`, and `std` brings `alloc` with it, which is the one place
    the crate reaches an allocator; decision 11's correction of the same date
    says what that does and does not change.
+
+   **Amended (2026-09-28, driftsys/ridl#568) — a third `task` function,
+   `task::flag_waker() -> (Waker, WakeFlag)`.** Its waker sets an atomic flag on
+   each wake, and `WakeFlag::take(&self) -> bool` reads and clears it; it is
+   written over `std::task::Wake` on an `Arc` with no `unsafe`, under the same
+   `std` feature, and adds no dependency. It is for the frame loop above when
+   the future it polls wakes itself: the generated `Serve` takes at most 32
+   claims per poll and then wakes its own waker (ADR-0023 decision 6, as amended
+   the same day), and under `noop_waker` that wake is discarded, so a loop that
+   polls once per frame settles at most 32 claims per frame. With `flag_waker`
+   the loop polls again while the flag was set, up to its own limit of polls per
+   frame. Sebastien chose this function over documenting the cap alone, during
+   the review of driftsys/ridl#584. Under decision 10 it is additive.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
