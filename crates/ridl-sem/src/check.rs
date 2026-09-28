@@ -6229,6 +6229,23 @@ mod tests {
         assert_eq!(codes(&checked), vec!["TYPL-218", "TYPL-207"]);
     }
 
+    /// A bit whose position is not an integer is skipped before it lowers,
+    /// but its name is still declared, so a later bit with the same name
+    /// draws TYPL-218. Only TYPL-218's presence is asserted: what the
+    /// non-integer position itself draws is not this rule's concern.
+    #[test]
+    fn typl_218_counts_a_bit_whose_position_is_not_an_integer() {
+        for position in ["\"x\"", "1.5"] {
+            let source = format!("package app\nenumset W {{ A = {position}, A = 1 }}\n");
+            let checked = check_source("app", &source);
+            assert!(
+                codes(&checked).contains(&"TYPL-218"),
+                "{position}: got: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
     /// The duplicate is reported, not dropped: both bits still lower, so the
     /// message claims no winner. Asserted over the IR, because no diagnostic
     /// can show it.
