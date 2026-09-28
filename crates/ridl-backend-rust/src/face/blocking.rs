@@ -126,49 +126,6 @@ fn client(
         });
     }
 
-    for (member, _) in events {
-        let method = ident(&format!("subscribe_{}", member.method));
-        let doc = format!(
-            "Starts delivery of event `{}`, as `Client::{method}` does.",
-            member.declared
-        );
-        methods.push(quote! {
-            #[doc = #doc]
-            pub fn #method(
-                &mut self,
-            ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
-                self.inner.#method()
-            }
-        });
-    }
-
-    if !events.is_empty() {
-        let doc = format!(
-            "Waits for the next occurrence of any subscribed event of interface \
-             `{iface_name}` and returns it, routed to its variant by ordinal, \
-             or `Ok(None)` when this client's timeout passes first. With no \
-             timeout it returns only with an occurrence or a read failure. It \
-             is `block_on` over `Client::next_event`."
-        );
-        methods.push(quote! {
-            #[doc = #doc]
-            pub fn next_event(
-                &mut self,
-            ) -> ::core::result::Result<
-                ::core::option::Option<super::Event>,
-                ::ridl_rt::port::ReadError,
-            > {
-                let __deadline = __deadline_after(self.timeout);
-                let mut __next = self.inner.next_event();
-                match ::ridl_rt::task::block_on(&mut __next, __deadline) {
-                    Some(Ok(event)) => Ok(Some(event)),
-                    Some(Err(error)) => Err(error),
-                    None => Ok(None),
-                }
-            }
-        });
-    }
-
     for call in commands {
         methods.push(call_method(call, "command", quote! { () }, "Undelivered"));
     }
@@ -182,6 +139,72 @@ fn client(
         ));
     }
 
+    // The member methods above are inherent; the fixed methods and the
+    // derived `subscribe_<event>` are trait methods (ADR-0023 decision 7),
+    // and this client's own calls into the async one go through the traits'
+    // paths, so a member named `new`, `nextEvent` or `subscribe<Event>`
+    // cannot capture them.
+    let events_impl = (!events.is_empty()).then(|| {
+        let subscribes = events.iter().map(|(member, _)| {
+            let method = ident(&format!("subscribe_{}", member.method));
+            let doc = format!(
+                "Starts delivery of event `{}`, as `Client::{method}` does.",
+                member.declared
+            );
+            quote! {
+                #[doc = #doc]
+                fn #method(
+                    &mut self,
+                ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
+                    super::Subscribe::#method(&mut self.inner)
+                }
+            }
+        });
+        let doc = format!(
+            "Waits for the next occurrence of any subscribed event of interface \
+             `{iface_name}` and returns it, routed to its variant by ordinal, \
+             or `Ok(None)` when this client's timeout passes first. With no \
+             timeout it returns only with an occurrence or a read failure. It \
+             is `block_on` over `Client::next_event`."
+        );
+        quote! {
+            impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P> {
+                type Next<'a> = ::core::result::Result<
+                    ::core::option::Option<super::Event>,
+                    ::ridl_rt::port::ReadError,
+                > where Self: 'a;
+
+                #[doc = #doc]
+                fn next_event(
+                    &mut self,
+                ) -> ::core::result::Result<
+                    ::core::option::Option<super::Event>,
+                    ::ridl_rt::port::ReadError,
+                > {
+                    let __deadline = __deadline_after(self.timeout);
+                    let mut __next = ::ridl_rt::face::Events::next_event(&mut self.inner);
+                    match ::ridl_rt::task::block_on(&mut __next, __deadline) {
+                        Some(Ok(event)) => Ok(Some(event)),
+                        Some(Err(error)) => Err(error),
+                        None => Ok(None),
+                    }
+                }
+            }
+
+            impl<P: #(#bounds)+*> super::Subscribe for Client<P> {
+                #(#subscribes)*
+            }
+        }
+    });
+
+    let inherent = (!methods.is_empty()).then(|| {
+        quote! {
+            impl<P: #(#bounds)+*> Client<P> {
+                #(#methods)*
+            }
+        }
+    });
+
     let doc = format!(
         "The blocking consumer face of interface `{iface_name}`: the async \
          `Client` with a timeout, over the same ports. Every call is \
@@ -193,7 +216,12 @@ fn client(
          that does not, `ridl-loopback` among them, leaves an unserved call \
          waiting until this client's timeout. The timeout is `None` until \
          `with_timeout` or `set_timeout` sets it, and with none a call returns \
-         only with its outcome, or at `max` on a runtime that wakes at it."
+         only with its outcome, or at `max` on a runtime that wakes at it. Its \
+         member methods are inherent; `new` is `ridl_rt::face::Bind`'s, \
+         `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, \
+         `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is \
+         the parent module's `Subscribe`'s, all in scope through the parent \
+         module's `prelude`."
     );
     quote! {
         #[doc = #doc]
@@ -202,34 +230,40 @@ fn client(
             timeout: ::core::option::Option<::std::time::Duration>,
         }
 
-        impl<P: #(#bounds)+*> Client<P> {
+        #inherent
+
+        impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P> {
+            type Port = P;
+
             /// Binds the face to a port, with no timeout. The port is held
             /// by value: pass a handle, or a `&mut` borrow of one.
-            pub fn new(port: P) -> Self {
+            fn new(port: P) -> Self {
                 Client {
-                    inner: super::Client::new(port),
+                    inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
                     timeout: None,
                 }
             }
+        }
 
+        impl<P: #(#bounds)+*> ::ridl_rt::face::Timeout for Client<P> {
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a
             /// member's `max` is accepted, and ends the call first; a longer
             /// one ends an unserved call at `max` only on a runtime that
             /// wakes the call when its bound passes.
-            pub fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
+            fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
                 self.timeout = Some(timeout);
                 self
             }
 
             /// Sets or clears the timeout every waiting method of this
             /// client is bounded by.
-            pub fn set_timeout(&mut self, timeout: ::core::option::Option<::std::time::Duration>) {
+            fn set_timeout(&mut self, timeout: ::core::option::Option<::std::time::Duration>) {
                 self.timeout = timeout;
             }
-
-            #(#methods)*
         }
+
+        #events_impl
     }
 }
 

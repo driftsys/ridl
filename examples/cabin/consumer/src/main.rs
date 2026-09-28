@@ -53,6 +53,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use api::cabin;
+use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef};
 use ridl_rt::sample::Provenance;

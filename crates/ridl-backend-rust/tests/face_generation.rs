@@ -263,9 +263,20 @@ fn the_client_reads_a_signal_through_the_signal_reader_port() {
 fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
     let d = dense(&module(&face(), "cabin"));
 
+    // `subscribe_<event>` is a method of the module's `Subscribe` trait, and
+    // `next_event` of `ridl_rt::face::Events`, not inherent methods (ADR-0023
+    // decision 7): a member named `subscribeWarning` or `nextEvent` compiles.
     assert!(
-        d.contains("pubfnsubscribe_warning(&mutself,)"),
-        "one subscribe method per event",
+        d.contains("pubtraitSubscribe{")
+            && d.contains(
+                "fnsubscribe_warning(&mutself,)\
+                 ->::core::result::Result<(),::ridl_rt::port::SubscribeError>;"
+            ),
+        "one subscribe method per event, declared by the per-interface trait",
+    );
+    assert!(
+        d.contains("SubscribeforClient<P>{fnsubscribe_warning(&mutself,)"),
+        "the async client implements Subscribe",
     );
     assert!(
         d.contains("self.port.subscribe(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,&[::ridl_rt::contract::Ordinal(2u32)],)"),
@@ -275,7 +286,11 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
     // `poll_next_event`, which the future's `poll` calls after it registers
     // `Interest::Event` (the async face design, notes F-5 and F-10).
     assert!(
-        d.contains("pubfnnext_event(&mutself)->NextEvent<'_,P>"),
+        d.contains("::ridl_rt::face::EventsforClient<P>{typeNext<'a>=NextEvent<'a,P>whereSelf:'a;"),
+        "the async client's Events::Next is the named event future",
+    );
+    assert!(
+        d.contains("fnnext_event(&mutself)->NextEvent<'_,P>"),
         "next_event returns the named event future",
     );
     assert!(
@@ -680,8 +695,11 @@ fn the_blocking_module_follows_the_interface() {
         "an event-only interface's blocking client repeats its async client's two bounds",
     );
     assert!(
-        blocking.contains("pubfnnext_event(&mutself,)"),
-        "an event-only interface has a blocking client",
+        blocking.contains(
+            "::ridl_rt::face::EventsforClient<P>{typeNext<'a>=::core::result::Result<\
+             ::core::option::Option<super::Event>,::ridl_rt::port::ReadError,>whereSelf:'a;"
+        ),
+        "an event-only interface has a blocking client, whose Events::Next is the owned result",
     );
     assert!(
         !blocking.contains("pubfnserve"),
@@ -715,9 +733,19 @@ fn the_publisher_writes_signals_and_raises_events() {
         d.contains("self.port.set(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),bytes,)"),
         "publishing calls SignalWriter::set"
     );
+    // `invalidate_<signal>` is a method of the module's `Invalidate` trait,
+    // and `commit` of `ridl_rt::face::Publish` (ADR-0023 decision 7).
     assert!(
-        d.contains("pubfninvalidate_temperature(&mutself,)"),
-        "one invalidate method per signal",
+        d.contains("pubtraitInvalidate{")
+            && d.contains(
+                "fninvalidate_temperature(&mutself,)\
+                 ->::core::result::Result<(),::ridl_rt::port::WriteError>;"
+            ),
+        "one invalidate method per signal, declared by the per-interface trait",
+    );
+    assert!(
+        d.contains("InvalidateforPublisher<W>{fninvalidate_temperature(&mutself,)"),
+        "the publisher implements Invalidate",
     );
     assert!(
         d.contains("self.port.invalidate(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),)"),
@@ -731,10 +759,91 @@ fn the_publisher_writes_signals_and_raises_events() {
         d.contains("self.port.raise(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(2u32),bytes,)"),
         "raising calls EventSink::raise"
     );
-    assert!(d.contains("pubfncommit(&mutself)"), "the publisher commits");
     assert!(
-        d.contains("self.port.commit()"),
-        "commit calls SignalWriter::commit"
+        d.contains("::ridl_rt::face::PublishforPublisher<W>{")
+            && d.contains("fncommit(&mutself){self.port.commit()}"),
+        "the publisher commits through Publish, and commit calls SignalWriter::commit"
+    );
+}
+
+/// ADR-0023 decision 7 (driftsys/ridl#580): the face's fixed methods are
+/// trait methods and only the member methods are inherent, so a member may
+/// carry a fixed name; the emitter's own calls go through the traits' paths;
+/// and each interface module carries a `prelude` that re-exports exactly the
+/// traits its types implement.
+#[test]
+fn the_fixed_methods_are_trait_methods_and_the_prelude_follows_the_interface() {
+    let source = face();
+
+    let cabin = dense(&module(&source, "cabin"));
+    assert!(
+        !cabin.contains("pubfnnew(")
+            && !cabin.contains("pubfnnext_event(")
+            && !cabin.contains("pubfncommit(")
+            && !cabin.contains("pubfnwith_timeout(")
+            && !cabin.contains("pubfnset_timeout(")
+            && !cabin.contains("pubfnsubscribe_")
+            && !cabin.contains("pubfninvalidate_"),
+        "no fixed or derived method of the face is inherent",
+    );
+    assert!(
+        cabin.contains("::ridl_rt::face::BindforClient<P>{typePort=P;")
+            && cabin.contains("::ridl_rt::face::BindforPublisher<W>{typePort=W;"),
+        "both faces bind through Bind",
+    );
+    let blocking = &cabin[at(&cabin, "pubmodblocking{")..];
+    assert!(
+        blocking.contains("::ridl_rt::face::BindforClient<P>{typePort=P;")
+            && blocking.contains("inner:<super::Client<P>as::ridl_rt::face::Bind>::new(port),"),
+        "the blocking client binds through Bind, and builds the async one through Bind's path",
+    );
+    assert!(
+        blocking.contains("::ridl_rt::face::TimeoutforClient<P>{")
+            && blocking.contains("fnwith_timeout(mutself,timeout:::std::time::Duration)->Self")
+            && blocking.contains(
+                "fnset_timeout(&mutself,timeout:::core::option::Option<::std::time::Duration>,)"
+            ),
+        "the blocking client's timeout methods are Timeout's",
+    );
+    assert!(
+        blocking.contains("super::SubscribeforClient<P>{")
+            && blocking.contains("super::Subscribe::subscribe_warning(&mutself.inner)")
+            && blocking.contains("::ridl_rt::face::Events::next_event(&mutself.inner)"),
+        "the blocking client delegates to the async one through the traits' paths",
+    );
+    assert!(
+        cabin.contains(
+            r#"pubmodprelude{pubuse::ridl_rt::face::Bind;pubuse::ridl_rt::face::Events;pubusesuper::Subscribeas_;pubuse::ridl_rt::face::Publish;pubusesuper::Invalidateas_;#[cfg(feature="std")]pubuse::ridl_rt::face::Timeout;}"#
+        ),
+        "cabin's prelude re-exports every face trait: it has a signal, an event and a blocking module",
+    );
+    assert!(
+        at(&cabin, "pubmodprelude{") < at(&cabin, "pubmodblocking{"),
+        "the prelude precedes the blocking module, which stays the module's last item",
+    );
+
+    let horn = dense(&module(&source, "horn"));
+    assert!(
+        horn.contains(
+            "pubmodprelude{pubuse::ridl_rt::face::Bind;pubuse::ridl_rt::face::Publish;pubusesuper::Invalidateas_;}"
+        ),
+        "a signal-only interface's prelude has no Events, no Subscribe and no Timeout",
+    );
+
+    let siren = dense(&module(&source, "siren"));
+    assert!(
+        siren.contains(
+            r#"pubmodprelude{pubuse::ridl_rt::face::Bind;pubuse::ridl_rt::face::Events;pubusesuper::Subscribeas_;#[cfg(feature="std")]pubuse::ridl_rt::face::Timeout;}"#
+        ),
+        "an event-only interface's prelude has no Publish and no Invalidate",
+    );
+
+    let valve = dense(&module(&source, "valve"));
+    assert!(
+        valve.contains(
+            r#"pubmodprelude{pubuse::ridl_rt::face::Bind;#[cfg(feature="std")]pubuse::ridl_rt::face::Timeout;}"#
+        ),
+        "a calls-only interface's prelude has Bind and Timeout alone",
     );
 }
 
