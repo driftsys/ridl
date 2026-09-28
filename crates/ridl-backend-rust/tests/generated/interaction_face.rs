@@ -2430,9 +2430,9 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                         };
                         match decoded {
                             Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(level) => {
+                            Ok(__arg) => {
                                 match <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(
-                                    &level,
+                                    &__arg,
                                 ) {
                                     Err(()) => {
                                         h.settle(
@@ -2446,7 +2446,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                     }
                                     Ok(()) => {
                                         let accepted = h.settle(claim.id, Ok(&[]));
-                                        p.set_level(&level);
+                                        p.set_level(&__arg);
                                         accepted
                                     }
                                 }
@@ -2483,9 +2483,9 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                         };
                         match decoded {
                             Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(window) => {
+                            Ok(__arg) => {
                                 match <super::CabinAverage as ::ridl_rt::contract::Query>::require(
-                                    &window,
+                                    &__arg,
                                 ) {
                                     Err(()) => {
                                         h.settle(
@@ -2498,9 +2498,9 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                         )
                                     }
                                     Ok(()) => {
-                                        let reply = p.average(&window);
+                                        let reply = p.average(&__arg);
                                         match <super::CabinAverage as ::ridl_rt::contract::Query>::ensure(
-                                            &window,
+                                            &__arg,
                                             &reply,
                                         ) {
                                             Err(()) => {
@@ -3682,9 +3682,9 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                         };
                         match decoded {
                             Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(level) => {
+                            Ok(__arg) => {
                                 match <super::ValveOpen as ::ridl_rt::contract::Command>::require(
-                                    &level,
+                                    &__arg,
                                 ) {
                                     Err(()) => {
                                         h.settle(
@@ -3698,7 +3698,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                     }
                                     Ok(()) => {
                                         let accepted = h.settle(claim.id, Ok(&[]));
-                                        p.open(&level);
+                                        p.open(&__arg);
                                         accepted
                                     }
                                 }
@@ -3735,9 +3735,9 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                         };
                         match decoded {
                             Err(error) => h.settle(claim.id, Err(error)),
-                            Ok(window) => {
+                            Ok(__arg) => {
                                 match <super::ValvePressure as ::ridl_rt::contract::Query>::require(
-                                    &window,
+                                    &__arg,
                                 ) {
                                     Err(()) => {
                                         h.settle(
@@ -3750,9 +3750,9 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                         )
                                     }
                                     Ok(()) => {
-                                        let reply = p.pressure(&window);
+                                        let reply = p.pressure(&__arg);
                                         match <super::ValvePressure as ::ridl_rt::contract::Query>::ensure(
-                                            &window,
+                                            &__arg,
                                             &reply,
                                         ) {
                                             Err(()) => {

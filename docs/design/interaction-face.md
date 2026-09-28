@@ -230,22 +230,24 @@ on.
 
 **The ridl-named argument is rebound to an emitter-owned name.** The call
 method, its future's `poll` and the internal send rebind the argument to `__arg`
-first, and the internal send names its port parameter `__port`; the blocking
-methods' locals are `__deadline` and `__call`, and the blocking module's
-deadline helper is the function `__deadline_after`, because a parameter is bound
-under its own snake case in the method body and would shadow a function of that
-name. A ridl identifier cannot start with an underscore, so no parameter can be
-shadowed by, or shadow, a local or a function the emitter owns;
-`tests/face_compile.rs` compiles an interface whose members are named `port`,
-`deadline`, `deadlineAfter`, `this` and `cx`. `dispatch` still binds the ridl
-name directly beside its own locals, so a parameter named `claim`, `h`,
-`accepted`, or `buf` on a query, does not compile (driftsys/ridl#570). A member
-whose snake case is a fixed method name of the face collides the same way, and
-is not refused: `new` and `next_event` on both clients, `with_timeout` and
-`set_timeout` on the blocking one, `new` and `commit` on `Publisher`, and the
-derived names `subscribe_<event>` and `invalidate_<signal>` against a member
-spelled that way; the blocking client's two are recorded on driftsys/ridl#570
-with the rest.
+first, `dispatch` binds a claim's decoded argument as `__arg`, and the internal
+send names its port parameter `__port`; the blocking methods' locals are
+`__deadline` and `__call`, and the blocking module's deadline helper is the
+function `__deadline_after`, because a parameter is bound under its own snake
+case in the method body and would shadow a function of that name. A ridl
+identifier cannot start with an underscore, so no parameter can be shadowed by,
+or shadow, a local or a function the emitter owns. `dispatch`'s own parameters
+and locals keep unprefixed names, and are safe because no ridl parameter name is
+bound in its body. `tests/face_compile.rs` compiles an interface whose members
+are named `port`, `deadline`, `deadlineAfter`, `this` and `cx`, and, for
+`dispatch`, commands and queries whose parameter is named `claim`, `h`, `p`,
+`buf`, `accepted` or `reply`, the names in `dispatch`'s body that collided
+before driftsys/ridl#570. A member whose snake case is a fixed method name of
+the face collides the same way, and is not refused: `new` and `next_event` on
+both clients, `with_timeout` and `set_timeout` on the blocking one, `new` and
+`commit` on `Publisher`, and the derived names `subscribe_<event>` and
+`invalidate_<signal>` against a member spelled that way; the blocking client's
+two are recorded on driftsys/ridl#580 with the rest.
 
 **Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no
 thread, socket or timer, and no port waits; a face may return a future, and that
@@ -710,8 +712,9 @@ step for a consumer of generated code. The second (2026-09-28) emitted the
 `blocking` module, made the emitted manifest's `std` feature forward to
 `ridl-rt/std`, added the blocking round trips to the consumer, rewrote this
 record from the design note, and archived the note, the plan and the lane
-driver. The sections above describe the face as both left it; nothing in them
-describes a face the fixture does not hold.
+driver. The sections above describe the face as both left it, with the later
+fixes that cite their own issues; nothing in them describes a face the fixture
+does not hold.
 
 ## What is provisional
 
@@ -722,7 +725,6 @@ describes a face the fixture does not hold.
 | The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
 | One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |
 | The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
-| `dispatch` binding the ridl parameter name beside its own locals                               | driftsys/ridl#570                            |
 
 **The hand-written payload row was retired on 2026-09-21**, by E11.7's D-11 in
 stage K9b. It read "the hand-written `Payload<ReprC>` implementations", and it
@@ -732,6 +734,10 @@ declaration the projection minted a root table for, which was a `struct` or a
 one struct. ADR-0019 decision 8 gave every declaration a root, and D-11 made the
 face name `Wire`. The hand-written module is deleted, and the round trips run
 over the generated codec and `ridl-loopback`.
+
+**The `dispatch` binding row was retired on 2026-09-28**, by driftsys/ridl#570.
+It read "`dispatch` binding the ridl parameter name beside its own locals";
+`dispatch` now binds a claim's decoded argument as `__arg`.
 
 ## Trace
 

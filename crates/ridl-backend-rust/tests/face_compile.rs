@@ -85,9 +85,7 @@ fn face_compiles(name: &str, source: &str) {
 /// (`__p`, `__v`). The blocking module's deadline helper is a module-level
 /// function, and a parameter named `deadlineAfter` is bound as `deadline_after`
 /// in the method body, so the function is `__deadline_after` for the same
-/// reason. The generated `dispatch` still binds the ridl name directly beside
-/// its own locals (`claim`, `h`, `accepted`, and `buf` for a query); that
-/// collision predates the story and is not covered here.
+/// reason. The generated `dispatch` has the same treatment; its cases follow.
 #[test]
 fn a_call_parameter_named_like_a_future_local_compiles() {
     face_compiles(
@@ -107,5 +105,45 @@ interface Names {
   command deadlineAfter(deadlineAfter: Level)
 }
 "#,
+    );
+}
+
+/// The generated `dispatch` binds a claim's decoded argument next to its own
+/// parameters and locals. Before issue #570 it bound the argument under the
+/// ridl parameter's own name, so a parameter named like one of them failed
+/// to compile; it now binds the argument as `__arg`, which no ridl identifier
+/// can be. These six are the names that collided: the parameters `h`, `p`
+/// and `buf`, and the locals `claim`, `accepted` and `reply`. `h`, `p` and
+/// `claim` collided in both arms, `accepted` in the command arm only, and
+/// `buf` and `reply` in the query arm only. Each name is a parameter of one
+/// command (`set<Name>`) and of one query (`read<Name>`), so the generated
+/// source that the failure message prints shows which arm failed. One face
+/// holds every case, because each `face_compiles` call builds ridl-rt twice.
+#[test]
+fn a_call_parameter_named_like_a_dispatch_local_compiles() {
+    let members: String = ["claim", "h", "accepted", "buf", "p", "reply"]
+        .iter()
+        .map(|param| {
+            let suffix = format!("{}{}", param[..1].to_uppercase(), &param[1..]);
+            format!(
+                "  command set{suffix}({param}: Level) @[..50ms]\n  \
+                 query read{suffix}({param}: Window): Average @[..50ms]\n"
+            )
+        })
+        .collect();
+    face_compiles(
+        "dispatch_locals",
+        &format!(
+            r#"
+package face.dispatchlocals
+
+type Level : integer [0..100]
+type Window : integer [0..100000]
+type Average : integer [0..1000]
+
+interface Dispatch {{
+{members}}}
+"#
+        ),
     );
 }
