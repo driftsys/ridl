@@ -16,6 +16,12 @@
 //! [`FailingHandler`] wraps a `HandlerHandle` and fails where the loopback
 //! never does: `next_claim` answers `ReadError::Detached` once a set number of
 //! claims were presented, or `serve` refuses the members.
+//!
+//! [`QueuedClaims`] is a handler port with no runtime behind it: it presents
+//! a set number of claims, more than the loopback's call table can hold, and
+//! counts the claims taken and the settlements it was asked for. It can
+//! reject every settlement, which the loopback does only once
+//! (`Loopback::fail_next_settle`).
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -30,7 +36,7 @@ use ridl_rt::port::{
     RawOccurrence, RawSample, ReadError, SendError, ServeError, SettleError, SignalReader,
     SubscribeError, Wakeable,
 };
-use ridl_rt::sample::Timestamp;
+use ridl_rt::sample::{Envelope, Timestamp};
 
 /// One `Caller` or `Wakeable` call the face made, with what the port
 /// answered where the answer is what a test asserts on.
@@ -304,4 +310,115 @@ impl Wakeable for FailingHandler {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         self.inner.wake_on(what, waker);
     }
+}
+
+/// A handler port with no runtime behind it, which presents a set number of
+/// claims and then none.
+///
+/// Every claim names ordinal 99 of the interface it is built with, which no
+/// member of the fixture's interfaces has, so `dispatch` settles each one
+/// `Contract::UnknownInteraction` without calling the provider. `wake_on`
+/// stores nothing: a test that counts wakes counts only the wakes the future
+/// makes itself.
+pub struct QueuedClaims {
+    iface: InterfaceNo,
+    counts: Rc<ClaimCounts>,
+    /// `settle` answers `SettleError::UnknownClaim` instead of accepting.
+    reject: bool,
+}
+
+/// What a [`QueuedClaims`] did, shared with the test while `serve` holds
+/// the handler.
+#[derive(Default)]
+pub struct ClaimCounts {
+    /// Claims not yet presented; a test adds to it to queue more.
+    pub waiting: Cell<usize>,
+    /// Claims presented so far, counted from `next_claim`'s `Ok(Some)`.
+    pub taken: Cell<usize>,
+    /// `settle` calls so far, accepted or not.
+    pub settles: Cell<usize>,
+}
+
+impl QueuedClaims {
+    /// A handler with `waiting` claims of interface `iface`, which accepts
+    /// every settlement.
+    pub fn new(iface: InterfaceNo, waiting: usize) -> Self {
+        let counts = ClaimCounts::default();
+        counts.waiting.set(waiting);
+        QueuedClaims {
+            iface,
+            counts: Rc::new(counts),
+            reject: false,
+        }
+    }
+
+    /// The same, but `settle` rejects every settlement.
+    pub fn rejecting(iface: InterfaceNo, waiting: usize) -> Self {
+        QueuedClaims {
+            reject: true,
+            ..QueuedClaims::new(iface, waiting)
+        }
+    }
+
+    /// The counts, for the test to read and change while `serve` holds the
+    /// handler.
+    pub fn counts(&self) -> Rc<ClaimCounts> {
+        Rc::clone(&self.counts)
+    }
+}
+
+/// The catalog `QueuedClaims` reports. The generated face checks no catalog.
+const QUEUED_CATALOG: CatalogRef = CatalogRef {
+    name: "face.demo",
+    hash: ridl_rt::contract::CatalogHash([0u8; 32]),
+};
+
+impl Attached for QueuedClaims {
+    fn catalog(&self) -> &CatalogRef {
+        &QUEUED_CATALOG
+    }
+}
+
+impl Handler for QueuedClaims {
+    fn serve(&mut self, _iface: InterfaceNo, _ords: &[Ordinal]) -> Result<(), ServeError> {
+        Ok(())
+    }
+
+    fn next_claim(&mut self, _out: &mut [u8]) -> Result<Option<Claim>, ReadError> {
+        let waiting = self.counts.waiting.get();
+        if waiting == 0 {
+            return Ok(None);
+        }
+        self.counts.waiting.set(waiting - 1);
+        let taken = self.counts.taken.get() + 1;
+        self.counts.taken.set(taken);
+        Ok(Some(Claim {
+            id: ClaimId(taken as u64),
+            iface: self.iface,
+            ord: Ordinal(99),
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: taken as u64,
+            },
+            remaining: None,
+            len: 0,
+        }))
+    }
+
+    fn settle(
+        &mut self,
+        _claim: ClaimId,
+        _outcome: Result<&[u8], CallError>,
+    ) -> Result<(), SettleError> {
+        self.counts.settles.set(self.counts.settles.get() + 1);
+        if self.reject {
+            Err(SettleError::UnknownClaim)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Wakeable for QueuedClaims {
+    fn wake_on(&self, _what: Interest, _waker: &Waker) {}
 }

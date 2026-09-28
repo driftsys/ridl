@@ -248,10 +248,12 @@ other entry below is Accepted.
   closing a gap that design left open. The 2026-09-20 amendment makes that
   success half the call's own `Copy` correlation newtype, one per command and
   per query, so a query's correlation cannot be passed to an `ack`; and its
-  decision 5 has a face hold its port by value, with no lifetime parameter.
-  Binds every later story that extends the Rust backend's interaction face,
-  until superseded: E5.1, Epic 10, and any later language backend that follows
-  this precedent. The as-built face this record's decisions produced is
+  decision 5 has a face hold its port by value, with no lifetime parameter. The
+  2026-09-28 amendment bounds one poll of `serve` to 32 claims, after which the
+  future wakes itself and is `Pending`. Binds every later story that extends the
+  Rust backend's interaction face, until superseded: E5.1, Epic 10, and any
+  later language backend that follows this precedent. The as-built face this
+  record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family

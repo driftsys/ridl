@@ -282,27 +282,35 @@ acknowledgment, the runtime's finding, and carries no acceptance value.
 **`serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`**
 calls `Handler::serve` with the interface's command and query ordinals when the
 function runs; a refusal is a future ready with `ProviderError::Serve`. Each
-poll registers `Interest::Claim`, then drains the handler through the internal
-one-pass step, and is `Pending` once no claim is left; the handler port's
-failure resolves the future to `ProviderError::Claim`, with every claim settled
-before it staying settled. `Output` is `Result<Infallible, ProviderError>`: the
-future never resolves to `Ok` (F-7). It holds the handler by value, the provider
-by `&mut`, and the claim buffer of `MAX_BUFFER_SIZE` bytes inline, so the
-application supplies no buffer and reads no count. A resolved `Serve` panics
-when it is polled again. Over `ridl-loopback`, registering the served set means
-a handler under `serve` is presented only the interface's own members; the
-settlement table's unknown-route rows are reachable only through the internal
-step directly, which is how `tests/interaction_face.rs` still exercises them —
-the test file is inside the crate that `include!`s the fixture, so `pub(crate)`
-reaches it.
+poll registers `Interest::Claim`, then settles claims through the internal
+one-pass step, at most 32 in one poll (`SERVE_BUDGET`, a private constant of
+each interface module; ADR-0023's 2026-09-28 amendment). A poll that took 32
+claims wakes its own waker and is `Pending`, so the executor polls it again
+after other tasks have run, because a future that holds one poll for an
+unbounded time blocks every other task on a single-threaded executor; a poll
+that found no claim left before 32 is `Pending` without waking itself. The 32
+are counted as claims are taken, not as their settlements are accepted. The
+handler port's failure resolves the future to `ProviderError::Claim`, with every
+claim settled before it staying settled. `Output` is
+`Result<Infallible, ProviderError>`: the future never resolves to `Ok` (F-7). It
+holds the handler by value, the provider by `&mut`, and the claim buffer of
+`MAX_BUFFER_SIZE` bytes inline, so the application supplies no buffer and reads
+no count. A resolved `Serve` panics when it is polled again. Over
+`ridl-loopback`, registering the served set means a handler under `serve` is
+presented only the interface's own members; the settlement table's unknown-route
+rows are reachable only through the internal step directly, which is how
+`tests/interaction_face.rs` still exercises them — the test file is inside the
+crate that `include!`s the fixture, so `pub(crate)` reaches it.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
 the failure `serve` resolves to — and `Ok(0)` on a buffer shorter than
-`MAX_BUFFER_SIZE`, without consuming a claim. It loops over
-`Handler::next_claim`, routing and settling every claim it takes — including one
-this interface does not recognise, because `Handler`'s own contract requires
-every claim to be settled:
+`MAX_BUFFER_SIZE`, without consuming a claim. It takes a `budget: &mut usize`,
+which it decreases by one for each claim it takes and at 0 stops without asking
+for another claim; `serve` passes 32 and reads the budget left to know whether
+the pass stopped at the bound. It loops over `Handler::next_claim`, routing and
+settling every claim it takes — including one this interface does not recognise,
+because `Handler`'s own contract requires every claim to be settled:
 
 | Cause                                       | Settled as                     |
 | ------------------------------------------- | ------------------------------ |

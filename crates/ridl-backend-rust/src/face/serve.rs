@@ -8,9 +8,10 @@ use quote::quote;
 
 /// `serve` and its future (the async face design, note F-7): the served set
 /// is registered when the function is called; each poll registers
-/// `Interest::Claim`, then drains the handler through `dispatch`; the
-/// handler port's failure is the value the future resolves to, and the
-/// future never resolves to `Ok`.
+/// `Interest::Claim`, then settles claims through `dispatch`, at most
+/// `SERVE_BUDGET` of them (driftsys/ridl#568), and wakes its own waker when it
+/// stopped at that bound; the handler port's failure is the value the future
+/// resolves to, and the future never resolves to `Ok`.
 pub(super) fn serve(
     iface: &Ident,
     iface_name: &str,
@@ -30,8 +31,13 @@ pub(super) fn serve(
          `Handler::serve` is called with the interface's command and query \
          ordinals when this function runs; a refusal is a future that is ready \
          with `ProviderError::Serve`. Each poll of the future registers its \
-         interest in the interface's claims, then settles every claim the \
-         handler has, and is `Pending` once none is left. The future resolves \
+         interest in the interface's claims, then takes and settles the claims \
+         the handler has, at most 32 in one poll, so that one poll does not \
+         hold a single-threaded executor while callers keep sending. A poll \
+         that took 32 claims wakes the future's waker and is `Pending`, so \
+         the executor polls it again after other tasks have run; a poll that \
+         found no claim left before 32 is `Pending` without waking it. The \
+         future resolves \
          only when the handler port fails, to `ProviderError::Claim`; every \
          claim settled before the failure stays settled. `h` is held by value \
          and `p` by `&mut` until the future is dropped."
@@ -44,6 +50,13 @@ pub(super) fn serve(
     );
 
     quote! {
+        /// The most claims one poll of `Serve` takes (driftsys/ridl#568). A
+        /// future that holds one poll for an unbounded time blocks every other
+        /// task on a single-threaded executor; 32 bounds one poll and keeps the
+        /// cost of registering the claim interest, paid once per poll, small
+        /// beside the claims the poll settles.
+        const SERVE_BUDGET: usize = 32;
+
         #[doc = #serve_doc]
         pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
         where
@@ -76,7 +89,8 @@ pub(super) fn serve(
             /// `Handler::serve` refused the members; the first poll reports
             /// it.
             Refused(::ridl_rt::port::ServeError),
-            /// Each poll registers the claim interest and drains the handler.
+            /// Each poll registers the claim interest and settles at most
+            /// `SERVE_BUDGET` claims.
             Serving,
             /// The failure was reported.
             Done,
@@ -109,8 +123,25 @@ pub(super) fn serve(
                             ::ridl_rt::port::Interest::Claim(#number),
                             cx.waker(),
                         );
-                        match dispatch(&mut this.handler, &mut *this.provider, &mut this.buf) {
-                            Ok(_) => ::core::task::Poll::Pending,
+                        let mut budget = SERVE_BUDGET;
+                        match dispatch(
+                            &mut this.handler,
+                            &mut *this.provider,
+                            &mut this.buf,
+                            &mut budget,
+                        ) {
+                            Ok(_) => {
+                                // The poll stopped at the bound, so claims
+                                // may still be waiting. A claim that was
+                                // already waiting is not a change the
+                                // registered interest wakes for (`Wakeable`),
+                                // so the future wakes itself to be polled
+                                // again.
+                                if budget == 0 {
+                                    cx.waker().wake_by_ref();
+                                }
+                                ::core::task::Poll::Pending
+                            }
                             Err(error) => {
                                 this.state = ServeState::Done;
                                 ::core::task::Poll::Ready(Err(

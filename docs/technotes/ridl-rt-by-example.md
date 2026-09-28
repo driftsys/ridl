@@ -633,9 +633,11 @@ let mut serving = cabin::serve(handler, &mut provider);
 
 `Handler::serve` is called with the interface's command and query ordinals when
 `serve` runs; a refusal is a future that is ready with `ProviderError::Serve`.
-Each poll registers `Interest::Claim` for this interface, then drains every
-claim the handler already has, settling each one the way the settlement table
-below describes, and is `Pending` once none is left. The future resolves only
+Each poll registers `Interest::Claim` for this interface, then takes the claims
+the handler already has, at most 32 in one poll, settling each one the way the
+settlement table below describes. A poll that took 32 wakes its own waker and is
+`Pending`, so an executor polls it again after other tasks have run; a poll that
+found no claim left is `Pending` without waking itself. The future resolves only
 when the handler port fails (`ProviderError::Claim`); every claim settled before
 the failure stays settled. `Output` is `Result<Infallible, ProviderError>`, so a
 successful serve never produces a value — it is `Pending` for as long as it
