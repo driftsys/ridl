@@ -161,12 +161,29 @@ interface Dispatch {{
 /// case equals a fixed name — `new`, `next_event`, `with_timeout`,
 /// `set_timeout`, `commit` — or a derived name of another member —
 /// `subscribe_<event>`, `invalidate_<signal>` — compiles, because Rust gives a
-/// trait its own namespace and an inherent method wins a dot call. Before
-/// decision 7 every one of these was rustc E0592. One case per name; the
-/// member's kind is chosen so that the name lands on the type whose fixed
-/// method it collides with: a signal is read by both clients and set by the
-/// publisher, a command reaches both clients, and the blocking client exists
-/// only when something waits, which is why each source declares an event.
+/// trait its own namespace. Before decision 7 every one of these was rustc
+/// E0592. One case per name; the member's kind is chosen so that the name
+/// lands on the type whose fixed method it collides with: a signal is read by
+/// both clients and set by the publisher, a command reaches both clients, and
+/// the blocking client exists only when something waits, which is why each
+/// source declares an event.
+///
+/// Each case also compiles a consumer with the interface's `prelude` in scope
+/// that dot-calls the member and reaches the fixed operation through the
+/// trait's path. The member is told apart from the trait method by its
+/// arguments and its result: a command takes `level`, a signal set takes
+/// `level`, a signal read returns a `Sample`, and no trait method does. What
+/// the dot call reaches follows Rust's method probe, which tries the
+/// receiver by value before `&` and before `&mut`, and at each step an
+/// inherent method before a trait method: a member takes `&self` or
+/// `&mut self`, and so does every trait method except
+/// `Timeout::with_timeout`, which takes `self`. So the member keeps the dot
+/// call for every name but `with_timeout`, where the by-value step comes
+/// first and the trait method wins on a client held by value; the consumer
+/// reaches that member through the inherent path
+/// `blocking::Client::with_timeout(&mut client, level)`, and the dot call
+/// reaches it again through a `&mut` borrow of the client, whose own type is
+/// the first candidate.
 fn fixed_name_face(members: &str) -> String {
     format!(
         r#"
@@ -187,53 +204,171 @@ interface Cabin {{
     )
 }
 
+/// The bounds of `Cabin`'s two clients in [`fixed_name_face`], with a command
+/// declared; a case without one names a superset, which is accepted.
+const CLIENT_BOUNDS: &str = "::ridl_rt::port::SignalReader \
+    + ::ridl_rt::port::EventSource \
+    + ::ridl_rt::port::Caller \
+    + ::ridl_rt::port::Clock \
+    + ::ridl_rt::port::Wakeable";
+
+/// The bounds of `Cabin`'s publisher in [`fixed_name_face`].
+const PUBLISHER_BOUNDS: &str = "::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink";
+
 /// A signal named `new` is a read on both clients and a setter on the
-/// publisher: it meets `Bind::new` on all three types.
+/// publisher: it meets `Bind::new` on all three types. `Client::new(port)` is
+/// the member, so the consumer binds through `Bind`'s path; the dot call
+/// `client.new()` is the read, and `publisher.new(level)` the set.
 #[test]
 fn a_member_named_new_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_new",
         &fixed_name_face("  signal new : Level @10ms\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn client<P: {CLIENT_BOUNDS}>(port: P) {{
+        let client = <super::cabin::Client<P> as Bind>::new(port);
+        let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
+            client.new();
+    }}
+
+    pub fn publisher<W: {PUBLISHER_BOUNDS}>(port: W, level: super::Level) {{
+        let mut publisher: super::cabin::Publisher<W> = Bind::new(port);
+        let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> = publisher.new(level);
+    }}
+
+    #[cfg(feature = "std")]
+    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P) {{
+        let client = <super::cabin::blocking::Client<P> as Bind>::new(port);
+        let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
+            client.new();
+    }}
+}}
+"#
+        ),
     );
 }
 
 /// A signal named `commit` is a setter on the publisher: it meets
-/// `Publish::commit`.
+/// `Publish::commit`. `publisher.commit(level)` is the member, and
+/// `Publish::commit(&mut publisher)` the face's.
 #[test]
 fn a_member_named_commit_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_commit",
         &fixed_name_face("  signal commit : Level @10ms\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn publisher<W: {PUBLISHER_BOUNDS}>(port: W, level: super::Level) {{
+        let mut publisher = super::cabin::Publisher::new(port);
+        let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> = publisher.commit(level);
+        let () = Publish::commit(&mut publisher);
+    }}
+}}
+"#
+        ),
     );
 }
 
 /// A command named `nextEvent` is `next_event` on both clients: it meets
-/// `Events::next_event`.
+/// `Events::next_event`. `client.next_event(level)` is the member, and
+/// `Events::next_event(&mut client)` the face's.
 #[test]
 fn a_member_named_next_event_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_next_event",
         &fixed_name_face("  command nextEvent(level: Level) @[..50ms]\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn client<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        let mut client = super::cabin::Client::new(port);
+        let _: super::cabin::NextEventCall<'_, P> = client.next_event(level);
+        let _: super::cabin::NextEvent<'_, P> = Events::next_event(&mut client);
+    }}
+
+    #[cfg(feature = "std")]
+    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        let mut client = super::cabin::blocking::Client::new(port);
+        let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> = client.next_event(level);
+        let _: ::core::result::Result<::core::option::Option<super::cabin::Event>, ::ridl_rt::port::ReadError> =
+            Events::next_event(&mut client);
+    }}
+}}
+"#
+        ),
     );
 }
 
-/// A command named `withTimeout` is `with_timeout` on the blocking client:
-/// it meets `Timeout::with_timeout`.
+/// A command named `withTimeout` is `with_timeout` on the blocking client: it
+/// meets `Timeout::with_timeout`, the one fixed method that takes `self` by
+/// value. On a blocking client held by value the dot call reaches the trait
+/// method, because the probe's by-value step comes before its `&mut` step;
+/// the consumer reaches the member through the inherent path
+/// `blocking::Client::with_timeout(&mut client, level)`, and the dot call on
+/// a `&mut` borrow of the client is the member again. On the async client,
+/// which implements no `Timeout`, the dot call is the member.
 #[test]
 fn a_member_named_with_timeout_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_with_timeout",
         &fixed_name_face("  command withTimeout(level: Level) @[..50ms]\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn client<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        let mut client = super::cabin::Client::new(port);
+        let _: super::cabin::WithTimeoutCall<'_, P> = client.with_timeout(level);
+    }}
+
+    #[cfg(feature = "std")]
+    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        let client = super::cabin::blocking::Client::new(port);
+        let mut client: super::cabin::blocking::Client<P> =
+            client.with_timeout(::std::time::Duration::from_millis(10));
+        let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> =
+            super::cabin::blocking::Client::with_timeout(&mut client, level);
+        let borrowed: &mut super::cabin::blocking::Client<P> = &mut client;
+        let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> =
+            borrowed.with_timeout(level);
+    }}
+}}
+"#
+        ),
     );
 }
 
 /// A command named `setTimeout` is `set_timeout` on the blocking client: it
-/// meets `Timeout::set_timeout`.
+/// meets `Timeout::set_timeout`. `client.set_timeout(level)` is the member,
+/// and `Timeout::set_timeout(&mut client, None)` the face's.
 #[test]
 fn a_member_named_set_timeout_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_set_timeout",
         &fixed_name_face("  command setTimeout(level: Level) @[..50ms]\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    #[cfg(feature = "std")]
+    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        use super::cabin::prelude::*;
+        let mut client = super::cabin::blocking::Client::new(port);
+        let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> = client.set_timeout(level);
+        let () = Timeout::set_timeout(&mut client, None);
+    }}
+}}
+"#
+        ),
     );
 }
 
@@ -241,34 +376,80 @@ fn a_member_named_set_timeout_compiles() {
 /// `subscribe_warning` on both clients: it meets the generated
 /// `Subscribe::subscribe_warning`. RIDL-149 does not refuse the pair, because
 /// `subscribe_warning` and `warning` are distinct names.
+/// `client.subscribe_warning(level)` is the member, and
+/// `Subscribe::subscribe_warning(&mut client)` the face's.
 #[test]
 fn a_member_named_like_a_subscribe_method_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_subscribe_warning",
         &fixed_name_face("  command subscribeWarning(level: Level) @[..50ms]\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn client<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        let mut client = super::cabin::Client::new(port);
+        let _: super::cabin::SubscribeWarningCall<'_, P> = client.subscribe_warning(level);
+        let _: ::core::result::Result<(), ::ridl_rt::port::SubscribeError> =
+            super::cabin::Subscribe::subscribe_warning(&mut client);
+    }}
+
+    #[cfg(feature = "std")]
+    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+        let mut client = super::cabin::blocking::Client::new(port);
+        let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> = client.subscribe_warning(level);
+        let _: ::core::result::Result<(), ::ridl_rt::port::SubscribeError> =
+            super::cabin::Subscribe::subscribe_warning(&mut client);
+    }}
+}}
+"#
+        ),
     );
 }
 
 /// A signal named `invalidateTemperature` beside the signal `temperature` is
 /// `invalidate_temperature` on the publisher: it meets the generated
-/// `Invalidate::invalidate_temperature`.
+/// `Invalidate::invalidate_temperature`. `publisher.invalidate_temperature(level)`
+/// is the member, and `Invalidate::invalidate_temperature(&mut publisher)` the
+/// face's.
 #[test]
 fn a_member_named_like_an_invalidate_method_compiles() {
-    face_compiles(
+    face_compiles_with(
         "member_invalidate_temperature",
         &fixed_name_face("  signal invalidateTemperature : Level @10ms\n"),
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::cabin::prelude::*;
+
+    pub fn publisher<W: {PUBLISHER_BOUNDS}>(port: W, level: super::Level) {{
+        let mut publisher = super::cabin::Publisher::new(port);
+        let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> =
+            publisher.invalidate_temperature(level);
+        let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> =
+            super::cabin::Invalidate::invalidate_temperature(&mut publisher);
+    }}
+}}
+"#
+        ),
     );
 }
 
-/// What a consumer writes: one `use <iface>::prelude::*;` per interface puts
-/// the fixed traits and the per-interface traits in scope, two interfaces'
-/// preludes glob-imported together do not conflict (each `Subscribe` is
-/// re-exported as `_`, and `Bind` re-exported by both is one item), and every
-/// call site is the one an inherent method had. Interface `Names` declares a
-/// signal `new`, so `names::Client::new(port)` is the member and the consumer
-/// binds the face through the qualified path `<Client<_> as Bind>::new(port)`
-/// or the typed `let c: Client<_> = Bind::new(port)` (ADR-0023 decision 7).
-/// The blocking half is under the `std` cfg, as the module it uses is.
+/// What a consumer writes: `use <iface>::prelude::*;` puts the fixed traits
+/// and the per-interface traits in scope; two interfaces' preludes
+/// glob-imported together do not conflict (each `Subscribe` and each
+/// `Invalidate` is re-exported as `_`, and `Bind` re-exported by both is one
+/// item); and every call site is the one an inherent method had. `Cabin` and
+/// `Siren` each declare a signal and an event, so each prelude carries a
+/// `Subscribe` and an `Invalidate` of its own, and the consumer dot-calls
+/// both interfaces' `subscribe_<event>` and `invalidate_<signal>`: each
+/// prelude is used, so neither is an unused import under `-D warnings`.
+/// Interface `Names` declares a signal `new`, so `names::Client::new(port)` is
+/// the member and the consumer binds the face through the qualified path
+/// `<Client<_> as Bind>::new(port)` or the typed `let c: Client<_> =
+/// Bind::new(port)` (ADR-0023 decision 7). The blocking half is under the
+/// `std` cfg, as the module it uses is.
 #[test]
 fn a_consumer_of_two_preludes_compiles() {
     face_compiles_with(
@@ -290,7 +471,8 @@ interface Cabin {
 }
 
 interface Siren {
-  event tripped : Warning @[100ms..1s]
+  signal level   : Level @10ms
+  event  tripped : Warning @[100ms..1s]
 }
 
 interface Names {
@@ -318,20 +500,26 @@ pub mod consumer {
         Ok(())
     }
 
-    pub fn siren<P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable>(
-        port: P,
-    ) -> Result<(), ::ridl_rt::port::SubscribeError> {
+    pub fn siren<P>(port: P) -> Result<(), ::ridl_rt::port::SubscribeError>
+    where
+        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+    {
         let mut client = super::siren::Client::new(port);
+        let _sample = client.level();
         client.subscribe_tripped()?;
-        let _next = client.next_event();
+        let _next: super::siren::NextEvent<'_, P> = client.next_event();
         Ok(())
     }
 
     pub fn publish<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink>(
-        port: W,
+        cabin: W,
+        siren: W,
     ) -> Result<(), ::ridl_rt::port::WriteError> {
-        let mut publisher = super::cabin::Publisher::new(port);
+        let mut publisher = super::cabin::Publisher::new(cabin);
         publisher.invalidate_temperature()?;
+        publisher.commit();
+        let mut publisher = super::siren::Publisher::new(siren);
+        publisher.invalidate_level()?;
         publisher.commit();
         Ok(())
     }
@@ -371,4 +559,52 @@ pub mod consumer {
 }
 "#,
     );
+}
+
+/// `ridl_rt::face::Timeout` is under `ridl-rt`'s `std` feature (ADR-0021
+/// decision 19), as the generated prelude's `#[cfg(feature = "std")]`
+/// re-export of it assumes: a crate that names the trait compiles against a
+/// `ridl-rt` built with `std` and fails to resolve the import (E0432) against
+/// one built without. The proof is two bare `rustc` calls over a one-line
+/// crate, the way the face proofs above are checked.
+#[test]
+fn timeout_is_under_ridl_rt_s_std_feature() {
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("names_timeout.rs");
+    std::fs::write(&source_path, "pub use ridl_rt::face::Timeout;\n")
+        .expect("the source is written");
+    for std in [true, false] {
+        let ridl_rt = if std {
+            rustc::ridl_rt_rlib(dir.path())
+        } else {
+            rustc::ridl_rt_rlib_without_std(dir.path())
+        };
+        let compiled = std::process::Command::new("rustc")
+            .args([
+                "--edition",
+                "2024",
+                "--crate-type",
+                "lib",
+                "--emit=metadata",
+            ])
+            .arg("-o")
+            .arg(dir.path().join(format!("libnames_timeout_std_{std}.rmeta")))
+            .arg("--extern")
+            .arg(format!("ridl_rt={}", ridl_rt.display()))
+            .arg(&source_path)
+            .output()
+            .expect("rustc must be installed and runnable for this test to be meaningful");
+        let stderr = String::from_utf8_lossy(&compiled.stderr);
+        if std {
+            assert!(
+                compiled.status.success(),
+                "`ridl_rt::face::Timeout` resolves with the std feature on, rustc said:\n{stderr}"
+            );
+        } else {
+            assert!(
+                !compiled.status.success() && stderr.contains("error[E0432]"),
+                "`ridl_rt::face::Timeout` must not resolve with the std feature off, rustc said:\n{stderr}"
+            );
+        }
+    }
 }

@@ -467,12 +467,20 @@ fn client(
         }
     });
 
+    // The rustdoc names only the traits this interface's client implements:
+    // `Events` and `Subscribe` exist on it only when the interface declares
+    // an event.
+    let traits = if events.is_empty() {
+        "`new` is `ridl_rt::face::Bind`'s, in scope through `prelude`."
+    } else {
+        "`new` is `ridl_rt::face::Bind`'s, `next_event` is \
+         `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's \
+         `Subscribe`'s, all in scope through `prelude`."
+    };
     let doc = format!(
         "The consumer face of interface `{iface_name}`, generic over exactly \
          the ports the interface's interactions need. Its member methods are \
-         inherent; `new` is `ridl_rt::face::Bind`'s, `next_event` is \
-         `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's \
-         `Subscribe`'s, all in scope through `prelude`."
+         inherent; {traits}"
     );
     quote! {
         #[doc = #doc]
@@ -590,13 +598,25 @@ fn prelude(
             pub use ::ridl_rt::face::Timeout;
         });
     }
+    // The rustdoc names only the methods the re-exported traits carry, so
+    // an interface without an event, a signal or a blocking module is not
+    // documented with a method its face lacks.
+    let mut methods = vec!["`new`"];
+    if !events.is_empty() {
+        methods.extend(["`next_event`", "`subscribe_<event>`"]);
+    }
+    if !signals.is_empty() {
+        methods.extend(["`commit`", "`invalidate_<signal>`"]);
+    }
+    if has_blocking {
+        methods.extend(["`with_timeout`", "`set_timeout`"]);
+    }
+    let methods = methods.join(", ");
     let doc = format!(
         "The traits a consumer of interface `{iface_name}`'s face needs in \
-         scope. Glob-import this module once, `use <this interface's \
-         module>::prelude::*;`, and every fixed method — `new`, `next_event`, \
-         `commit`, `with_timeout`, `set_timeout` — and every \
-         `subscribe_<event>` and `invalidate_<signal>` is called as an \
-         inherent method would be. Only \
+         scope. Glob-import this module, `use <this interface's \
+         module>::prelude::*;`, and every method of those traits — \
+         {methods} — is called as an inherent method would be. Only \
          the `ridl-rt` traits are re-exported by name; this module's own \
          traits are re-exported as `_`, so the preludes of two interfaces can \
          share one scope."
@@ -814,11 +834,19 @@ fn publisher(
         }
     });
 
+    // The rustdoc names only the traits this interface's publisher
+    // implements: `Publish` and `Invalidate` exist on it only when the
+    // interface declares a signal.
+    let traits = if signals.is_empty() {
+        "`new` is `ridl_rt::face::Bind`'s, in scope through `prelude`."
+    } else {
+        "`new` is `ridl_rt::face::Bind`'s, `commit` is \
+         `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this \
+         module's `Invalidate`'s, all in scope through `prelude`."
+    };
     let doc = format!(
         "The provider face of interface `{iface_name}`'s signals and events. \
-         Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, \
-         `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is \
-         this module's `Invalidate`'s, all in scope through `prelude`."
+         Its member methods are inherent; {traits}"
     );
     quote! {
         #[doc = #doc]

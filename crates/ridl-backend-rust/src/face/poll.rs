@@ -209,8 +209,8 @@ fn poll_next_event(iface: &Ident, iface_name: &str, events: &[(Member, &str)]) -
          `{iface_name}`, routed to its variant by ordinal: `Ok(None)` when \
          none is waiting. It does not wait; `NextEvent` polls it. An \
          occurrence of another interface is reported as \
-         `Contract::UnknownInteraction`, for the reason `Client::next_event` \
-         gives."
+         `Contract::UnknownInteraction`, for the reason the `Client`'s \
+         `ridl_rt::face::Events::next_event` gives."
     );
     quote! {
         #[doc = #doc]

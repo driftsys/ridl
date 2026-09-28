@@ -2092,7 +2092,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    ///The future of `Client::next_event` over interface `Cabin`. Each poll registers its interest in the interface's events, reads the queue once, and returns: an occurrence resolves it, and a read failure resolves it with that failure. It can be polled again after it resolved, for the next occurrence.
+    ///The future of `ridl_rt::face::Events::next_event` on the `Client` of interface `Cabin`. Each poll registers its interest in the interface's events, reads the queue once, and returns: an occurrence resolves it, and a read failure resolves it with that failure. It can be polled again after it resolved, for the next occurrence.
     #[must_use = "an occurrence is taken only when the future is polled"]
     pub struct NextEvent<
         'a,
@@ -2248,7 +2248,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    ///Reads the next occurrence of any subscribed event of interface `Cabin`, routed to its variant by ordinal: `Ok(None)` when none is waiting. It does not wait; `NextEvent` polls it. An occurrence of another interface is reported as `Contract::UnknownInteraction`, for the reason `Client::next_event` gives.
+    ///Reads the next occurrence of any subscribed event of interface `Cabin`, routed to its variant by ordinal: `Ok(None)` when none is waiting. It does not wait; `NextEvent` polls it. An occurrence of another interface is reported as `Contract::UnknownInteraction`, for the reason the `Client`'s `ridl_rt::face::Events::next_event` gives.
     pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
         port: &mut P,
     ) -> ::core::result::Result<
@@ -2734,7 +2734,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             }
         }
     }
-    ///The traits a consumer of interface `Cabin`'s face needs in scope. Glob-import this module once, `use <this interface's module>::prelude::*;`, and every fixed method — `new`, `next_event`, `commit`, `with_timeout`, `set_timeout` — and every `subscribe_<event>` and `invalidate_<signal>` is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    ///The traits a consumer of interface `Cabin`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `next_event`, `subscribe_<event>`, `commit`, `invalidate_<signal>`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
     pub mod prelude {
         pub use ::ridl_rt::face::Bind;
         pub use ::ridl_rt::face::Events;
@@ -2885,7 +2885,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             >
             where
                 Self: 'a;
-            ///Waits for the next occurrence of any subscribed event of interface `Cabin` and returns it, routed to its variant by ordinal, or `Ok(None)` when this client's timeout passes first. With no timeout it returns only with an occurrence or a read failure. It is `block_on` over `Client::next_event`.
+            ///Waits for the next occurrence of any subscribed event of interface `Cabin` and returns it, routed to its variant by ordinal, or `Ok(None)` when this client's timeout passes first. With no timeout it returns only with an occurrence or a read failure. It is `block_on` over the async client's `ridl_rt::face::Events::next_event`.
             fn next_event(
                 &mut self,
             ) -> ::core::result::Result<
@@ -2906,7 +2906,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
                 + ::ridl_rt::port::Wakeable,
         > super::Subscribe for Client<P> {
-            ///Starts delivery of event `warning`, as `Client::subscribe_warning` does.
+            ///Starts delivery of event `warning`, as the async client's `Subscribe::subscribe_warning` does.
             fn subscribe_warning(
                 &mut self,
             ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -2935,7 +2935,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
 }
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
-    ///The consumer face of interface `Horn`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's `Subscribe`'s, all in scope through `prelude`.
+    ///The consumer face of interface `Horn`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Client<P: ::ridl_rt::port::SignalReader> {
         port: P,
     }
@@ -3073,7 +3073,7 @@ pub mod horn {
                 )
         }
     }
-    ///The traits a consumer of interface `Horn`'s face needs in scope. Glob-import this module once, `use <this interface's module>::prelude::*;`, and every fixed method — `new`, `next_event`, `commit`, `with_timeout`, `set_timeout` — and every `subscribe_<event>` and `invalidate_<signal>` is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    ///The traits a consumer of interface `Horn`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `commit`, `invalidate_<signal>` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
     pub mod prelude {
         pub use ::ridl_rt::face::Bind;
         pub use ::ridl_rt::face::Publish;
@@ -3131,7 +3131,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         ///An occurrence of event `tripped`.
         Tripped(::ridl_rt::sample::Occurrence<super::Warning>),
     }
-    ///The future of `Client::next_event` over interface `Siren`. Each poll registers its interest in the interface's events, reads the queue once, and returns: an occurrence resolves it, and a read failure resolves it with that failure. It can be polled again after it resolved, for the next occurrence.
+    ///The future of `ridl_rt::face::Events::next_event` on the `Client` of interface `Siren`. Each poll registers its interest in the interface's events, reads the queue once, and returns: an occurrence resolves it, and a read failure resolves it with that failure. It can be polled again after it resolved, for the next occurrence.
     #[must_use = "an occurrence is taken only when the future is polled"]
     pub struct NextEvent<
         'a,
@@ -3162,7 +3162,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    ///Reads the next occurrence of any subscribed event of interface `Siren`, routed to its variant by ordinal: `Ok(None)` when none is waiting. It does not wait; `NextEvent` polls it. An occurrence of another interface is reported as `Contract::UnknownInteraction`, for the reason `Client::next_event` gives.
+    ///Reads the next occurrence of any subscribed event of interface `Siren`, routed to its variant by ordinal: `Ok(None)` when none is waiting. It does not wait; `NextEvent` polls it. An occurrence of another interface is reported as `Contract::UnknownInteraction`, for the reason the `Client`'s `ridl_rt::face::Events::next_event` gives.
     pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
         port: &mut P,
     ) -> ::core::result::Result<
@@ -3211,7 +3211,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    ///The provider face of interface `Siren`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
+    ///The provider face of interface `Siren`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Publisher<W: ::ridl_rt::port::EventSink> {
         port: W,
     }
@@ -3253,7 +3253,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             Publisher { port }
         }
     }
-    ///The traits a consumer of interface `Siren`'s face needs in scope. Glob-import this module once, `use <this interface's module>::prelude::*;`, and every fixed method — `new`, `next_event`, `commit`, `with_timeout`, `set_timeout` — and every `subscribe_<event>` and `invalidate_<signal>` is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    ///The traits a consumer of interface `Siren`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `next_event`, `subscribe_<event>`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
     pub mod prelude {
         pub use ::ridl_rt::face::Bind;
         pub use ::ridl_rt::face::Events;
@@ -3320,7 +3320,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             >
             where
                 Self: 'a;
-            ///Waits for the next occurrence of any subscribed event of interface `Siren` and returns it, routed to its variant by ordinal, or `Ok(None)` when this client's timeout passes first. With no timeout it returns only with an occurrence or a read failure. It is `block_on` over `Client::next_event`.
+            ///Waits for the next occurrence of any subscribed event of interface `Siren` and returns it, routed to its variant by ordinal, or `Ok(None)` when this client's timeout passes first. With no timeout it returns only with an occurrence or a read failure. It is `block_on` over the async client's `ridl_rt::face::Events::next_event`.
             fn next_event(
                 &mut self,
             ) -> ::core::result::Result<
@@ -3339,7 +3339,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         impl<
             P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
         > super::Subscribe for Client<P> {
-            ///Starts delivery of event `tripped`, as `Client::subscribe_tripped` does.
+            ///Starts delivery of event `tripped`, as the async client's `Subscribe::subscribe_tripped` does.
             fn subscribe_tripped(
                 &mut self,
             ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -3356,7 +3356,7 @@ pub mod valve {
     ///Identifies one sent query `pressure` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct PressureCorrelation(pub ::ridl_rt::port::Correlation);
-    ///The consumer face of interface `Valve`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's `Subscribe`'s, all in scope through `prelude`.
+    ///The consumer face of interface `Valve`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Client<
         P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > {
@@ -4138,7 +4138,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
             }
         }
     }
-    ///The traits a consumer of interface `Valve`'s face needs in scope. Glob-import this module once, `use <this interface's module>::prelude::*;`, and every fixed method — `new`, `next_event`, `commit`, `with_timeout`, `set_timeout` — and every `subscribe_<event>` and `invalidate_<signal>` is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    ///The traits a consumer of interface `Valve`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
     pub mod prelude {
         pub use ::ridl_rt::face::Bind;
         #[cfg(feature = "std")]
@@ -4155,7 +4155,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         ) -> ::core::option::Option<::std::time::Instant> {
             timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
         }
-        ///The blocking consumer face of interface `Valve`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is the parent module's `Subscribe`'s, all in scope through the parent module's `prelude`.
+        ///The blocking consumer face of interface `Valve`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, all in scope through the parent module's `prelude`.
         pub struct Client<
             P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
                 + ::ridl_rt::port::Wakeable,

@@ -847,6 +847,50 @@ fn the_fixed_methods_are_trait_methods_and_the_prelude_follows_the_interface() {
     );
 }
 
+/// The two generated traits follow the interface: `Subscribe` is emitted only
+/// with an event, `Invalidate` only with a signal, and the rustdoc on a
+/// `Client`, a `Publisher` and a `blocking::Client` names only the traits that
+/// type implements (ADR-0023 decision 7).
+#[test]
+fn no_subscribe_without_an_event_and_no_invalidate_without_a_signal() {
+    let source = face();
+
+    // Horn declares a signal and no event: no `Subscribe`, no `Events`, and
+    // the client's rustdoc names neither.
+    let horn = dense(&module(&source, "horn"));
+    assert!(
+        !horn.contains("Subscribe") && !horn.contains("next_event"),
+        "a signal-only interface emits no Subscribe and no next_event, in code or in rustdoc",
+    );
+    assert!(
+        horn.contains("pubtraitInvalidate{"),
+        "a signal-only interface emits Invalidate",
+    );
+
+    // Siren declares an event and no signal: no `Invalidate`, no `Publish`,
+    // and the publisher's rustdoc names neither.
+    let siren = dense(&module(&source, "siren"));
+    assert!(
+        !siren.contains("Invalidate") && !siren.contains("commit"),
+        "an event-only interface emits no Invalidate and no commit, in code or in rustdoc",
+    );
+    assert!(
+        siren.contains("pubtraitSubscribe{"),
+        "an event-only interface emits Subscribe",
+    );
+
+    // Valve declares calls only: neither trait, and the two clients' rustdoc
+    // names neither.
+    let valve = dense(&module(&source, "valve"));
+    assert!(
+        !valve.contains("Subscribe")
+            && !valve.contains("Invalidate")
+            && !valve.contains("next_event")
+            && !valve.contains("commit"),
+        "a calls-only interface emits neither trait, in code or in rustdoc",
+    );
+}
+
 #[test]
 fn the_provider_trait_carries_the_settled_method_signatures() {
     let d = dense(&module(&face(), "cabin"));

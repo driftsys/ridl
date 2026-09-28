@@ -143,12 +143,18 @@ fn client(
     // derived `subscribe_<event>` are trait methods (ADR-0023 decision 7),
     // and this client's own calls into the async one go through the traits'
     // paths, so a member named `new`, `nextEvent` or `subscribe<Event>`
-    // cannot capture them.
+    // cannot capture them. A member keeps the dot call for every fixed name
+    // but `with_timeout`: `Timeout::with_timeout` takes `self` by value, and
+    // Rust's method probe tries the by-value receiver before `&mut`, so on a
+    // client held by value `client.with_timeout(x)` is the trait method even
+    // beside a member `withTimeout`, which the consumer reaches through the
+    // inherent path `blocking::Client::with_timeout(&mut client, x)`.
     let events_impl = (!events.is_empty()).then(|| {
         let subscribes = events.iter().map(|(member, _)| {
             let method = ident(&format!("subscribe_{}", member.method));
             let doc = format!(
-                "Starts delivery of event `{}`, as `Client::{method}` does.",
+                "Starts delivery of event `{}`, as the async client's \
+                 `Subscribe::{method}` does.",
                 member.declared
             );
             quote! {
@@ -165,7 +171,8 @@ fn client(
              `{iface_name}` and returns it, routed to its variant by ordinal, \
              or `Ok(None)` when this client's timeout passes first. With no \
              timeout it returns only with an occurrence or a read failure. It \
-             is `block_on` over `Client::next_event`."
+             is `block_on` over the async client's \
+             `ridl_rt::face::Events::next_event`."
         );
         quote! {
             impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P> {
@@ -205,6 +212,14 @@ fn client(
         }
     });
 
+    // The rustdoc names only the traits this client implements: `Events`
+    // and `Subscribe` exist on it only when the interface declares an event.
+    let events_traits = if events.is_empty() {
+        ""
+    } else {
+        ", `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` \
+         is the parent module's `Subscribe`'s"
+    };
     let doc = format!(
         "The blocking consumer face of interface `{iface_name}`: the async \
          `Client` with a timeout, over the same ports. Every call is \
@@ -218,10 +233,8 @@ fn client(
          `with_timeout` or `set_timeout` sets it, and with none a call returns \
          only with its outcome, or at `max` on a runtime that wakes at it. Its \
          member methods are inherent; `new` is `ridl_rt::face::Bind`'s, \
-         `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, \
-         `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is \
-         the parent module's `Subscribe`'s, all in scope through the parent \
-         module's `prelude`."
+         `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s{events_traits}, \
+         all in scope through the parent module's `prelude`."
     );
     quote! {
         #[doc = #doc]
