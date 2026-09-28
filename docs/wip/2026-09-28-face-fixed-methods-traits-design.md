@@ -1,14 +1,15 @@
 # The face's fixed methods behind traits — design note
 
-**Status:** a design note for driftsys/ridl#570, part 2, awaiting the
-maintainer's review. It settles the shape of the generated API; it does not
-implement it. Part 1 (the `dispatch` locals, branch `fix/570-dispatch-locals`)
-is separate. driftsys/ridl#568, driftsys/ridl#569 and the rest of
-driftsys/ridl#571 are out of scope.
+**Status:** a design note for driftsys/ridl#580, awaiting the maintainer's
+review. driftsys/ridl#580 was split from driftsys/ridl#570, where the direction
+was decided. It settles the shape of the generated API; it does not implement
+it. The `dispatch` locals, the other half of driftsys/ridl#570, merged
+separately as driftsys/ridl#581. driftsys/ridl#568, driftsys/ridl#569 and the
+rest of driftsys/ridl#571 are out of scope.
 
 **Date:** 2026-09-28.
 
-**Trace:** driftsys/ridl#570;
+**Trace:** driftsys/ridl#580 (tracking); driftsys/ridl#570 (origin);
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6 (the
 two clients, `serve` and the poll face, which this note amends as decision 7);
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
@@ -70,7 +71,7 @@ subject of this note.
 | package module, values                  | `__ridl_fb_encode_<type>`, `__ridl_fb_verify_<type>`, `__ridl_fb_decode_<type>`                        | fixed prefix `__` | No: the prefix starts with `_`.                                                                                                                                                                                                                                                                                                 |
 | `<Type>` (newtype) inherent             | `new`, `check`, `new_unchecked`, `get`                                                                 | fixed             | No: a typl type declares no member, so the type has no derived method.                                                                                                                                                                                                                                                          |
 | `<Type>`, trait impls                   | `TryFrom`, `From`, `Default`, `Payload` (`MAX_SIZE`, `View`, `encode`, `verify`, `decode`)             | fixed             | No: trait items live in their trait's namespace, and no derived item is in it.                                                                                                                                                                                                                                                  |
-| `<Struct>FbView` inherent               | `bytes` (fixed); one accessor per field (derived)                                                      | mixed             | **Yes**, a struct field named `bytes` is E0592 — the same class as the face's, on the codec side. Not in driftsys/ridl#570's scope; the same fix shape (a `ridl_rt::payload` trait carrying `bytes`) applies. Listed in §8 for a new issue.                                                                                     |
+| `<Struct>FbView` inherent               | `bytes` (fixed); one accessor per field (derived)                                                      | mixed             | **Yes**, a struct field named `bytes` is E0592 — the same class as the face's, on the codec side. Not in driftsys/ridl#580's scope; the same fix shape (a `ridl_rt::payload` trait carrying `bytes`) applies. Listed in §8 for a new issue.                                                                                     |
 | `<Iface>` inherent                      | `MAX_BUFFER_SIZE`, `EVENT_SOURCE_BUFFER_SIZE`                                                          | fixed             | No: the interface struct has no derived item; the `Interface` trait's constants are in the trait's namespace.                                                                                                                                                                                                                   |
 | `<Iface><Member>`, trait impls          | `Interaction`, `Signal`, `Event`, `Command`, `Query` items                                             | fixed             | No: trait namespace, no inherent impl.                                                                                                                                                                                                                                                                                          |
 | `<iface>` module, types                 | `Client`, `Event`, `NextEvent`, `Publisher`, `Provider`, `Serve`, `ServeState`, `blocking`             | fixed             | No: every derived type in the module carries a fixed suffix — `<Member>Call`, `<Member>Phase`, `<Member>Correlation` — so a bare fixed name equals none of them. This is the property that makes the module the home of every new fixed name in this design (`Subscribe`, `Invalidate`, `prelude`).                             |
@@ -83,7 +84,7 @@ subject of this note.
 | `<Member>Call`, `NextEvent`, `Serve`    | `expired`, `sent` (private inherent); `Future::poll`, `Drop::drop`                                     | fixed             | No: these types have no derived method.                                                                                                                                                                                                                                                                                         |
 | `<iface>::blocking` module, values      | `serve` (fixed), `__deadline_after`                                                                    | fixed             | No: no derived value lives in the module.                                                                                                                                                                                                                                                                                       |
 | struct fields                           | `port`, `inner`, `timeout`, `handler`, `provider`, `buf`, `state`, `phase`, `deadline`                 | fixed             | No: a field and a method are different namespaces in Rust, and every field is private.                                                                                                                                                                                                                                          |
-| method locals                           | `dispatch`'s `claim`, `h`, `accepted`, `buf`, `reply`                                                  | fixed             | Yes, with a parameter of that name — part 1 of driftsys/ridl#570, not this note.                                                                                                                                                                                                                                                |
+| method locals                           | `dispatch`'s `claim`, `h`, `p`, `accepted`, `buf`, `reply`                                             | fixed             | Yes, with a parameter of that name — merged as driftsys/ridl#581, not this note.                                                                                                                                                                                                                                                |
 
 Headline: three types collide — the two clients and `Publisher` — over five
 fixed names (`new`, `next_event`, `with_timeout`, `set_timeout`, `commit`) and

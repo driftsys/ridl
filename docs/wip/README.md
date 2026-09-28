@@ -178,12 +178,12 @@ design note, from the archive.
   fact-level drift test — every fact it compared is a function of the model by
   construction now — and closed §9 item 2 (the private `snake_case` of
   driftsys/ridl#450) by construction. The other three backends keep theirs.
-- **2026-09-28-face-fixed-methods-traits-design.md** — driftsys/ridl#570, part
-  2: the generated face's fixed methods (`new`, `next_event`, `with_timeout`,
-  `set_timeout`, `commit`) and derived methods (`subscribe_<event>`,
-  `invalidate_<signal>`) are inherent today, so a member of that name is rustc
-  E0592. The note inventories every generated item for such a collision, moves
-  the fixed methods onto four `ridl-rt` traits
+- **2026-09-28-face-fixed-methods-traits-design.md** — driftsys/ridl#580 (split
+  from driftsys/ridl#570): the generated face's fixed methods (`new`,
+  `next_event`, `with_timeout`, `set_timeout`, `commit`) and derived methods
+  (`subscribe_<event>`, `invalidate_<signal>`) are inherent today, so a member
+  of that name is rustc E0592. The note inventories every generated item for
+  such a collision, moves the fixed methods onto four `ridl-rt` traits
   (`ridl_rt::face::{Bind, Events,
   Timeout, Publish}`) and the derived ones
   onto two generated traits per interface (`Subscribe`, `Invalidate`), adds a
