@@ -1003,6 +1003,71 @@ fn check_names_the_tombstone_that_shifted_a_struct_field_or_union_arm() {
     }
 }
 
+/// A swap and a tombstone in one edit: `door` and `latch` change places, and
+/// a `reserved` entry goes in above `hinge`, whose own place among the live
+/// members does not change. The two swapped members are reported as moved
+/// and `hinge` as shifted — the decision is per member, not per body.
+#[test]
+fn check_tells_a_moved_member_from_a_shifted_one_in_the_same_edit() {
+    let three = COMPOSITES.replace(
+        "struct Report {\n  door: DoorState\n  latch: LatchState\n}",
+        "struct Report {\n  door: DoorState\n  latch: LatchState\n  hinge: DoorState\n}",
+    );
+    let dir = TempDir::new("swap-and-shift");
+    let root = package_workspace(&dir, &three);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write(
+        "cluster.ridl",
+        &three.replace(
+            "struct Report {\n  door: DoorState\n  latch: LatchState\n  hinge: DoorState\n}",
+            "struct Report {\n  latch: LatchState\n  door: DoorState\n  reserved gone\n  hinge: \
+             DoorState\n}",
+        ),
+    );
+    let (code, diff) = diff_against_baseline(&root);
+    assert_eq!(code, 1, "`ridl diff` gates on the edit:\n{diff}");
+    assert_eq!(
+        diff.matches("member_reordered").count(),
+        3,
+        "every ordinal moved:\n{diff}",
+    );
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        stderr.matches("warning[RIDL-407]").count(),
+        3,
+        "one warning per member:\n{stderr}",
+    );
+    assert_member_moved(
+        &stderr,
+        "door",
+        "Report",
+        1,
+        2,
+        "door: DoorState",
+        "cluster.ridl:6:3",
+    );
+    assert_member_moved(
+        &stderr,
+        "latch",
+        "Report",
+        2,
+        1,
+        "latch: LatchState",
+        "cluster.ridl:5:3",
+    );
+    let block = ridl_407_block(&stderr, "hinge");
+    assert!(
+        block.starts_with("warning[RIDL-407]: `hinge` has not moved in `Report`")
+            && block.contains("(ordinal 3 there, ordinal 4 here)"),
+        "the member the tombstone shifted is not reported as moved:\n{stderr}",
+    );
+    assert_underlines(block, "hinge: DoorState", "cluster.ridl:8:3", &stderr);
+    assert_eq!(code, 0, "the warnings leave the exit code alone:\n{stderr}");
+}
+
 /// An enum value or enum-set bit takes its identity from its explicit number,
 /// so reordering the body is not a change (typl §8, §9). `ridl diff` still
 /// reports it conservatively; the desk check stays silent, because its

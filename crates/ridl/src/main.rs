@@ -1418,11 +1418,12 @@ enum MemberDrift {
     /// `reserved` list (the limit `diff_composite` records), and the desk
     /// repeats the gate rather than disagree with it.
     Retired,
-    /// A surviving member whose ordinal changed while the live members kept
-    /// their order: a `reserved` entry above it was added, moved or removed.
+    /// A surviving member whose ordinal changed while it kept its place
+    /// among the live members: a `reserved` entry above it was added, moved
+    /// or removed. Decided per member, so a swap and a tombstone in one
+    /// edit report the swapped members as moved and the rest as shifted.
     Shifted,
-    /// A surviving member whose ordinal changed because the live members
-    /// changed order.
+    /// A surviving member whose place among the live members changed.
     Moved,
 }
 
@@ -1514,10 +1515,9 @@ fn member_drift(
         ridl_diff::Category::MemberReordered => {
             let before = composite_body(baseline, package, container)?;
             let after = composite_body(current, package, container)?;
-            fn names(body: &CompositeBody) -> Vec<&str> {
-                body.live.iter().map(|(name, _)| name.as_str()).collect()
-            }
-            Some(if names(&before) == names(&after) {
+            let place =
+                |body: &CompositeBody| body.live.iter().position(|(name, _)| name == member);
+            Some(if place(&before) == place(&after) {
                 MemberDrift::Shifted
             } else {
                 MemberDrift::Moved
