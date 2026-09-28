@@ -293,10 +293,15 @@ compat-check: toolchain-check
     mkdir -p "$cabin"
     "${CARGO_TARGET_DIR:-target}/debug/ridl" build examples/cabin --emit rust --out-dir "$cabin/generated"
     echo "compat-check: $minimum, edition 2021 (the emitted cabin crate)"
+    # `std` is on for both: the emitted crate's `blocking` module is under its
+    # `std` feature and names `ridl_rt::task::block_on`, which `ridl-rt`'s
+    # `std` feature gates, so the cell covers that module too.
     rustup run "$minimum" rustc --edition 2021 --crate-type rlib --crate-name ridl_rt \
-        --cfg 'feature="flatbuffers"' "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
+        --cfg 'feature="flatbuffers"' --cfg 'feature="std"' \
+        "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
     rustup run "$minimum" rustc --edition 2021 --crate-type lib --crate-name veh_cabin \
-        --emit=metadata -D warnings --extern "ridl_rt=$cabin/libridl_rt.rlib" \
+        --emit=metadata -D warnings --cfg 'feature="std"' \
+        --extern "ridl_rt=$cabin/libridl_rt.rlib" \
         "$cabin/generated/lib.rs" -o "$cabin/libveh_cabin.rmeta"
 
     export CARGO_TARGET_DIR="$PWD/target/compat-check/build"
@@ -400,7 +405,8 @@ demo:
         exit 1
     fi
     printf '%s\n' "$output"
-    for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7"; do
+    for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7" \
+            "blocking command ok 42" "blocking query ok 7"; do
         if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
             echo "demo: the consumer did not report \"$round_trip\"" >&2
             exit 1

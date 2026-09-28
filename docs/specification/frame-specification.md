@@ -816,8 +816,8 @@ generated faces run over a Kotlin runtime that binds the ports this way.
 > generated per interface by the Kotlin backend, with the ordinal as the
 > transaction code: [the lane P driver](../wip/2026-09-22-lane-p-driver.md)
 > decision D-P5, taken 2026-09-22. driftsys/ridl#516 and
-> [the lane F driver](../wip/2026-09-25-lane-f-driver.md) reversed it; the note
-> under D-P5 gives the reasons.
+> [the lane F driver](../archive/2026-09-25-lane-f-driver.md) reversed it; the
+> note under D-P5 gives the reasons.
 
 ### 11.3 Bindings this document does not name
 

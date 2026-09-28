@@ -42,7 +42,7 @@ those documents do not yet show.
 
 **Amendment (2026-09-26) — decision 4 superseded for the public surface, and a
 sixth decision.** Lane F's design note,
-[`2026-09-25-async-face-design.md`](../wip/2026-09-25-async-face-design.md),
+[`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md),
 found that the poll face makes every application write the same wait loop and
 handle correlations it has no use for, and that `dispatch` hides a handler
 failure (driftsys/ridl#485). Decision 6 gives every interface an async `Client`,
@@ -465,8 +465,8 @@ argument for it in the command case.
   2026-09-26 amendment) — `Wakeable` and `Interest`, `Transport::Busy`, the
   `correlate` module, `ClientError` and `ProviderError`, the helpers, and the
   release decision 6 is built over
-- [`2026-09-25-async-face-design.md`](../wip/2026-09-25-async-face-design.md) —
-  lane F's design note, F-1 to F-15, and the disposition that ratifies decision
-  6 and the 2026-09-26 amendment of decision 4
+- [`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md)
+  — lane F's design note, F-1 to F-15, and the disposition that ratifies
+  decision 6 and the 2026-09-26 amendment of decision 4
 - driftsys/ridl#485 — the two call-shape findings decision 6 closes;
   driftsys/ridl#509 — the amendments issue

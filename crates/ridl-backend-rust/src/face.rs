@@ -4,8 +4,8 @@
 //!
 //! For each named interface this module emits one `pub mod`, named after the
 //! interface, holding what the design note's §8 calls the face, as story
-//! E11.21's first half reshaped it (`docs/wip/2026-09-25-async-face-design.md`,
-//! notes F-2 to F-7 and F-10):
+//! E11.21 reshaped it (`docs/archive/2026-09-25-async-face-design.md`, notes
+//! F-2 to F-7, F-10 and F-11):
 //!
 //! - `Client<P>`, the consumer face, generic over exactly the ports the
 //!   interface's own interactions need and no others (RA-19): `SignalReader`
@@ -26,6 +26,12 @@
 //! - `serve`, which registers the interface's calls with the handler and
 //!   returns the future that settles every claim, and resolves only when the
 //!   handler port fails;
+//! - `blocking`, under the emitted crate's `std` feature, when the interface
+//!   declares an event, a command or a query: a `Client` that is the async
+//!   one with a timeout per client, each waiting method `block_on` over the
+//!   async method's future, and, when the interface declares a command or a
+//!   query, a `serve` that is `block_on` over `serve` and returns `Ok(())`
+//!   at its timeout;
 //! - the internal poll face those futures are built over, `pub(crate)`: one
 //!   `Copy` correlation newtype per command and per query,
 //!   `<Name>Correlation`; `send_<name>`, `poll_<name>_ack`,
@@ -43,7 +49,9 @@
 //! never blocks. Each future's `poll` registers its interest with the port,
 //! then reads the port — a call or event future once, `Serve` until the
 //! handler has no claim waiting — and returns; what waits is the executor or
-//! the frame loop that polls it. No method is bounded on `CoherentSignals`.
+//! the frame loop that polls it, or `ridl_rt::task::block_on` under the
+//! `blocking` module, which is the library's and not generated. No method is
+//! bounded on `CoherentSignals`.
 //!
 //! Since E11.14 the face is reached from [`crate::generate_pipeline`], which
 //! is what `ridl build --emit rust` calls, as well as from
@@ -54,8 +62,8 @@
 //! the consumer face (`Client` and the `Event` enum), the provider face
 //! (`Publisher` and `Provider`) and the pieces the sections share. The
 //! submodules hold the rest: `futures` the named futures, `poll` the internal
-//! poll face, `dispatch` the one-pass step, and `serve` the `serve` function
-//! and its future.
+//! poll face, `dispatch` the one-pass step, `serve` the `serve` function and
+//! its future, and `blocking` the `blocking` module.
 
 use crate::descriptors::{
     declared_name, interactions, query_param_type, query_reply_type, single_param_type,
@@ -65,11 +73,13 @@ use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
 use ridl_ir::codegen::v1;
 
+mod blocking;
 mod dispatch;
 mod futures;
 mod poll;
 mod serve;
 
+use self::blocking::blocking;
 use self::dispatch::dispatch;
 use self::futures::futures;
 use self::poll::plumbing;
@@ -205,6 +215,7 @@ pub(crate) fn one_interface(
         body.push(dispatch(&iface, iface_name, &commands, &queries));
         body.push(serve(&iface, iface_name, &commands, &queries));
     }
+    body.extend(blocking(iface_name, &signals, &events, &commands, &queries));
 
     if body.is_empty() {
         return Ok(None);
@@ -261,15 +272,15 @@ fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
     items
 }
 
-fn client(
-    iface: &Ident,
-    iface_name: &str,
+/// The port bounds of `Client<P>`: exactly the traits the interface's
+/// interactions need (RA-19). The blocking client repeats them, because it
+/// is the async client and its timeout and nothing more.
+fn client_bounds(
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
-) -> TokenStream {
-    let number = interface_number(iface);
+) -> Vec<TokenStream> {
     let has_calls = !commands.is_empty() || !queries.is_empty();
     let mut bounds: Vec<TokenStream> = Vec::new();
     if !signals.is_empty() {
@@ -290,6 +301,19 @@ fn client(
         // event-only client needs no `Clock` (note F-10).
         bounds.push(quote! { ::ridl_rt::port::Wakeable });
     }
+    bounds
+}
+
+fn client(
+    iface: &Ident,
+    iface_name: &str,
+    signals: &[(Member, &str)],
+    events: &[(Member, &str)],
+    commands: &[Call],
+    queries: &[Call],
+) -> TokenStream {
+    let number = interface_number(iface);
+    let bounds = client_bounds(signals, events, commands, queries);
 
     let mut methods: Vec<TokenStream> = Vec::new();
 

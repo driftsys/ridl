@@ -6,6 +6,16 @@ license.workspace = true
 repository.workspace = true
 description = "Compiles a RIDL IR package to Rust source, plus the generated interaction face."
 
+[features]
+# Not a feature of the backend: the library reads nothing under it. The
+# checked-in generated face is `include!`d by the round-trip tests, and its
+# `blocking` module is under `#[cfg(feature = "std")]`, which rustc evaluates
+# against the crate that includes it, this one. Naming the feature here, on by
+# default, is what compiles that module in the tests (story E11.21, second
+# half).
+default = ["std"]
+std = []
+
 [dependencies]
 prettyplease.workspace = true
 proc-macro2.workspace = true

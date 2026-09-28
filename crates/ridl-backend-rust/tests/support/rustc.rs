@@ -14,7 +14,9 @@
 //! with the encoding features and has no dependency in any feature combination
 //! (ADR-0021 decision 8). It is built with the same `rustc` the proof itself
 //! spawns; an rlib built by
-//! another toolchain is rejected with E0514.
+//! another toolchain is rejected with E0514. The `std` feature is on as well,
+//! because the face proof in `face_compile.rs` compiles the emitted `blocking`
+//! module, which names `ridl_rt::task::block_on`.
 
 // Three integration test targets pull this module in with `#[path]`, and
 // each uses the helpers it needs: `flatbuffers_roundtrip.rs` and
@@ -26,15 +28,33 @@
 
 use std::path::{Path, PathBuf};
 
-/// Builds `ridl-rt` as an rlib in `dir` and returns its path.
+/// Builds `ridl-rt` as an rlib in `dir`, with the `std` feature, and
+/// returns its path.
 pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
+    ridl_rt_rlib_with(dir, true)
+}
+
+/// Builds `ridl-rt` as an rlib in `dir` without the `std` feature, so a
+/// proof can compile emitted code with `std` off against a runtime that has
+/// no `task` module: an item the emitter left outside `cfg(feature = "std")`
+/// then fails to resolve.
+pub fn ridl_rt_rlib_without_std(dir: &Path) -> PathBuf {
+    ridl_rt_rlib_with(dir, false)
+}
+
+fn ridl_rt_rlib_with(dir: &Path, std: bool) -> PathBuf {
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("ridl-rt")
         .join("src")
         .join("lib.rs");
-    let rlib = dir.join("libridl_rt.rlib");
-    let status = std::process::Command::new("rustc")
+    let rlib = dir.join(if std {
+        "libridl_rt.rlib"
+    } else {
+        "libridl_rt_no_std.rlib"
+    });
+    let mut command = std::process::Command::new("rustc");
+    command
         .args([
             "--edition",
             "2021",
@@ -48,7 +68,11 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
         .arg("--cfg")
         .arg(r#"feature="proto3""#)
         .arg("--cfg")
-        .arg(r#"feature="repr-c""#)
+        .arg(r#"feature="repr-c""#);
+    if std {
+        command.arg("--cfg").arg(r#"feature="std""#);
+    }
+    let status = command
         .arg(&source)
         .arg("-o")
         .arg(&rlib)

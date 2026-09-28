@@ -521,11 +521,17 @@ interaction face. Each interface gets the parts its own interactions need: a
 `Publisher` for the producer side when it carries a signal or an event; and a
 `Provider` trait the application implements plus a `serve` function whose
 future settles the claims waiting on a port, when it carries a command or a
-query. So a signal-only interface gets a `Client` and a `Publisher` and nothing
-to settle with, a command-only interface gets a `Client`, a `Provider` and a
-`serve` and no `Publisher`, and an interface carrying only `fixed` declarations
-gets no face module at all. Beside the per-package files it writes a `lib.rs`
-crate root and a `Cargo.toml` naming `ridl-rt` with the encoding's feature.
+query; and, when it carries an event, a command or a query, a `blocking`
+module under the crate's `std` feature, on by default, holding the same
+`Client`, and the same `serve` when there is one, as blocking calls with a
+timeout, each waiting call `ridl_rt::task::block_on` over the async form. So a
+signal-only interface gets
+a `Client` and a `Publisher` and nothing to settle with and nothing to block
+on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
+`blocking` module and no `Publisher`, and an interface carrying only `fixed`
+declarations gets no face module at all. Beside the per-package files it
+writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
+encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
 
 **Two things it may leave out, each with a note in the source it writes.** A
 type whose size the compiler cannot bound — one that reaches itself, or a
@@ -543,7 +549,8 @@ runtime and opens no socket, so an application supplies the ports. The one
 runtime in this workspace is `ridl-loopback`, which runs in process.
 `examples/cabin/` is a worked example — a schema, and a consumer program
 against the crate built from it — and `just demo` generates that crate and runs
-the program, which prints one round trip per interaction kind.
+the program, which prints one round trip per interaction kind through the
+async client and the command and the query again through the blocking one.
 
 There is **no flag for the payload encoding**. A package emits the FlatBuffers
 codec, which is the only one built; the emitted `pub type Wire` names it in one

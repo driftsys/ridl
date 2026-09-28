@@ -30,10 +30,11 @@ use std::path::{Path, PathBuf};
 /// only `flatbuffers` is so that E11.8 and E11.12 inherit a working proof
 /// without editing this helper again.
 ///
-/// **The `std` feature is enabled too**, for one consumer: the cabin
+/// **The `std` feature is enabled too**, for two consumers: the cabin
 /// example's program (`cabin_example.rs`) polls the generated async client's
-/// futures by hand with `ridl_rt::task::noop_waker`, and `ridl_rt::task` is
-/// what that feature gates. Nothing generated names an item behind it.
+/// futures by hand with `ridl_rt::task::noop_waker`, and the generated
+/// `blocking` module, which that test builds with the `std` cfg, names
+/// `ridl_rt::task::block_on`; `ridl_rt::task` is what the feature gates.
 ///
 /// Edition 2021 is the edition `crates/ridl-rt/Cargo.toml` declares. The
 /// generated code keeps compiling as edition 2024; the two are independent.

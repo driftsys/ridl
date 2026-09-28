@@ -19,6 +19,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::task::Waker;
 
 use ridl_loopback::{CallerHandle, HandlerHandle, Loopback, ReaderHandle, SourceHandle};
@@ -82,6 +83,10 @@ pub struct RecordingPorts {
     caller: CallerHandle,
     log: Log,
     faults: Rc<Faults>,
+    /// The waker last registered under `Interest::Outcome`, kept for a test
+    /// that wakes the waiting call from another thread the way a runtime
+    /// that measures a call's bound would, which `ridl-loopback` does not.
+    outcome_waker: Arc<Mutex<Option<Waker>>>,
 }
 
 impl RecordingPorts {
@@ -92,7 +97,14 @@ impl RecordingPorts {
             caller: rt.caller(),
             log: Log::default(),
             faults: Rc::default(),
+            outcome_waker: Arc::default(),
         }
+    }
+
+    /// A handle on the `Outcome` waker slot, taken before the ports move
+    /// into a `Client`; `Send`, so another thread can wake the call.
+    pub fn outcome_waker(&self) -> Arc<Mutex<Option<Waker>>> {
+        Arc::clone(&self.outcome_waker)
     }
 
     /// A handle on the log, taken before the ports move into a `Client`.
@@ -208,7 +220,11 @@ impl Wakeable for RecordingPorts {
         self.record(Op::WakeOn(what));
         match what {
             Interest::Event(_) => self.source.wake_on(what, waker),
-            Interest::Outcome(_) | Interest::Slot | Interest::Claim(_) => {
+            Interest::Outcome(_) => {
+                *self.outcome_waker.lock().expect("no poisoned waker slot") = Some(waker.clone());
+                self.caller.wake_on(what, waker);
+            }
+            Interest::Slot | Interest::Claim(_) => {
                 self.caller.wake_on(what, waker);
             }
         }

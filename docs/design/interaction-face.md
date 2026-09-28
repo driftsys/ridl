@@ -1,51 +1,51 @@
-# The generated interaction face (E11.13, the MVP)
+# The generated interaction face
 
-The Rust backend's generated `Client`/`Publisher`/`Provider`/`dispatch` face
-over `ridl-rt`, as built by roadmap story E11.13. ADR-0018 decision 15 restores
-this face as the runtime layer's "phase 2", sequenced after the frame
-specification (E11.1) and the transport and loopback runtime (E11.9, whose
-loopback half became E11.15 when that story was split on 2026-09-20). E11.13 is
-a deliberate exception to that sequence: an in-process-only MVP, built ahead of
-both so the team has a face to write against. It generates, for one example
-package, the consumer and provider faces of one interface, proves them with an
-in-process round trip in a test, and carries several placeholders each named
-below and tied to the story that replaces it. This is the architecture as built;
-the generation decisions that bind future work on it are
-[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md). Read this
-record together with [the `ridl-rt` design record](ridl-rt.md), which the face
-binds against, and the
+The Rust backend's generated face over `ridl-rt`: per interface, an async
+`Client`, a `Publisher`, a `Provider` trait, `serve`, and a `blocking` module
+holding the same client, and `serve` where there is one, as blocking calls.
+Roadmap story E11.13 built the first form of it — an in-process-only MVP, ahead
+of the frame specification (E11.1) and the transport (E11.9), so the team had a
+face to write against; ADR-0018 decision 15 restores the face as the runtime
+layer's "phase 2". Story E11.14 made `ridl build --emit rust` emit it, and story
+E11.21 reshaped its call surface: the poll face the MVP made public — a send
+that returns a correlation, a poll per outcome, a one-pass `dispatch` — became
+internal, and the two clients and `serve` took its place. This is the
+architecture as built. The generation decisions that bind future work on it are
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), whose decision
+6 records the call surface, and the reasoning behind that surface is the
+archived design note
+[`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md),
+cited below by decision number (F-1 to F-15). Read this record together with
+[the `ridl-rt` design record](ridl-rt.md), which the face binds against, and the
 [ridl language reference](../specification/ridl-language-reference.md) §6 and §7
-(command and query), which `dispatch`'s settlement table implements.
+(command and query), which the settlement table implements.
 
 ## Scope and the two entry points
 
-`crates/ridl-backend-rust` gained three new modules and one new public function:
+`crates/ridl-backend-rust` holds the face in three modules and one public
+function beside the domain-type emission:
 
 - `src/descriptors.rs` — one `ridl_rt::contract::Interface` implementation per
   named interface, one `Interaction` implementation per member, and the
   generated buffer-size constants.
 - `src/face.rs`, with its submodules under `src/face/` — `Client`, `Publisher`,
-  `Provider` and `dispatch`, and since E11.21's first half the named futures,
-  the internal poll face and `serve`.
+  `Provider` and the `Event` enum in `face.rs`; the named futures in
+  `futures.rs`; the internal poll face in `poll.rs`; the internal one-pass step
+  in `dispatch.rs`; `serve` and its future in `serve.rs`; and the `blocking`
+  module in `blocking.rs`.
 - `src/clauses.rs` — the contract-clause translator. Only `src/descriptors.rs`
   calls it, when it emits a `Command`'s or a `Query`'s `require` and `ensure`
-  bodies. `src/face/dispatch.rs` names those generated methods from the
-  `dispatch` body it writes, but does not translate a clause itself.
+  bodies. `src/face/dispatch.rs` names those generated methods from the step it
+  writes, but does not translate a clause itself.
 
-`generate(package)` — the existing pipeline entry point `ridl --emit rust` calls
-— keeps its pre-E11.13 output exactly: the domain types, naming no runtime.
-`generate_face(package)` is a companion entry point that emits what `generate`
-emits, plus the descriptor and face items. It is the only caller of the clause
-translator, and the only entry point whose output names `::ridl_rt::…`.
-**`ridl --emit rust` did not yet emit the face** when this section was written —
-the pipeline (`crates/ridlc/src/lib.rs`) called `generate`, not `generate_face`.
-Story E11.14 closed that on 2026-09-21 by giving the pipeline
-`generate_pipeline`; the E11.14 section below is the record. It was correct for
-E11.13 rather than a shortfall: ADR-0018 decision 15 makes the face phase 2, and
-nothing in E11.13 ships a runtime for a pipeline consumer to link against.
-Closing that gap is story E11.14 (driftsys/ridl#444), which also gives the
-emitted `Cargo.toml` the encoding feature the codec needs. Why a companion entry
-point rather than folding the face into `generate` is
+`generate(package)` keeps its pre-E11.13 output: the domain types and the codec,
+naming no port. `generate_face(package)` is a companion entry point that emits
+what `generate` emits, plus the descriptor and face items. It is the only caller
+of the clause translator, and the only entry point whose output names
+`::ridl_rt::port`. `ridl build --emit rust` calls `generate_pipeline`, which
+walks interfaces one at a time and emits the face of each it can carry; the
+E11.14 section below is the record. Why a companion entry point rather than
+folding the face into `generate` is
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 2.
 
 ## The descriptors
@@ -68,7 +68,7 @@ carries no `interfaces.lock`, so `Interface::NUMBER` and
 
 **The two buffer constants are computed, not counted.** `MAX_BUFFER_SIZE` is the
 maximum over every argument and reply `<T as Payload<Wire>>::MAX_SIZE` the
-interface's calls use — arguments alone would under-size a dispatch buffer
+interface's calls use — arguments alone would under-size the claim buffer
 whenever a query's reply is larger than its argument, because a reply is encoded
 into the same buffer. `EVENT_SOURCE_BUFFER_SIZE` is the maximum over event
 payload sizes only, because `EventSource::next`'s payload type is not known
@@ -95,10 +95,11 @@ the emitter.
   states the other, narrower reading and that E16.2 reconciles the two. That
   note is stale: the `ridl-rt` doc-comment change it refers to has landed.
   Dropping it is a change to the emitter and to the checked-in fixture the
-  byte-equality guard compares against, so it is not made here. `dispatch` never
-  reads these fields — it sizes buffers from `<T as Payload<Wire>>::MAX_SIZE`
-  directly — so the absent sizes cost the face nothing and cost a future catalog
-  consumer everything, which is the right way round for a placeholder.
+  byte-equality guard compares against, so it is not made here. Nothing in the
+  face reads these fields — it sizes buffers from
+  `<T as Payload<Wire>>::MAX_SIZE` directly — so the absent sizes cost the face
+  nothing and cost a future catalog consumer everything, which is the right way
+  round for a placeholder.
 
 ## The contract-clause translator
 
@@ -123,38 +124,35 @@ Why the translator refuses rather than widens, and why it lives behind
 `generate_face` rather than `generate`, is
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 1.
 
-## The consumer and provider faces
+## The consumer face
 
 `src/face.rs` emits, per named interface with at least one member the face
-covers, one `pub mod` holding:
+covers, one `pub mod` named after the interface. Its consumer side is:
 
-- **`Client<P: ...>`** — one read method per signal, a `subscribe_*` and a
-  shared `next_event` per interface's events, one send method per command and
-  query, a `*_reply` poll per query, and a `*_ack` poll per command. The trait
-  bounds on `P` are computed from the interface's actual interaction kinds and
-  no others: `SignalReader` only if it declares a signal, `EventSource` only if
-  it declares an event, `Caller` only if it declares a command or a query. This
-  is RA-19: a `Client` never carries a bound its own interface does not need. It
-  is proven, not merely asserted, by
+- **`Client<P: ...>`** — one read method per signal, returning
+  `Result<Sample<T>, ReadError>` at once; a `subscribe_<event>` per event and
+  one `next_event` per interface, returning the `NextEvent` future; and one
+  method per command and per query, returning that call's own named future. The
+  trait bounds on `P` are computed from the interface's interaction kinds and no
+  others: `SignalReader` when it declares a signal, `EventSource` when it
+  declares an event, `Caller` and `Clock` when it declares a command or a query
+  (`Clock` for the call's deadline), and `Wakeable` when it declares an event, a
+  command or a query (for the wait). This is RA-19: a `Client` never carries a
+  bound its own interface does not need. It is proven, not merely asserted, by
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` in
   `tests/interaction_face.rs`, which constructs the fixture's signal-only `Horn`
   interface's `Client` with a port implementing only `SignalReader` and
   `Attached` — a bound the emitter should not have added would fail this to
-  compile. (The converse — that a bound the interface does need is never missing
-  — is not separately proven: under-bounding cannot compile at all, because a
-  method body that needs a port trait the bound omits fails to build.)
-- **`Publisher<W: ...>`** — over `SignalWriter` and `EventSink` on the same
-  rule, with `invalidate_*` per signal and `commit`.
-- **`trait Provider`** — one method per command and query, generated only when
-  the interface declares one. **A method takes its argument by reference**
-  (`fn set_level(&mut self, level: &Level)`), because `dispatch` reads the
-  argument again when it evaluates a query's `ensure` clause after the provider
-  returns, and the generated payload types implement neither `Copy` nor `Clone`.
-  A command method returns nothing — a command has no failure the application
-  reports (ridl §6.1) — and a query method returns its declared reply type.
-- **`fn dispatch<H: Handler, P: Provider>(h: &mut H, p: &mut P, buf: &mut [u8])
-  -> usize`**
-  — see the next section.
+  compile — and the three other bound sets are pinned by
+  `tests/face_generation.rs`. (The converse — that a bound the interface does
+  need is never missing — is not separately proven: under-bounding cannot
+  compile at all.)
+- **`Event`** — one enum per interface that declares an event, with one variant
+  per event carrying `Occurrence<T>`, which `next_event` routes into by ordinal.
+- **One future type per command and per query, `<Name>Call<'a, P>`**, and
+  **`NextEvent<'a, P>`** when the interface declares an event.
+- **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
+  section "The blocking module" below.
 
 **A face holds its port by value and has no lifetime parameter.** `Client<P>`
 and `Publisher<W>` hold `P` and `W`, and `new` takes the port by value. A
@@ -163,11 +161,10 @@ under the forwarding impls of
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11 —
 and so does an owned handle, a `Clone` handle, or any wrapper that forwards the
 port traits. A face built over a borrow holds that borrow for as long as the
-face lives, so a runtime that implements every port on one value can be held by
-one face at a time and by none while `dispatch` runs over it; that is why the
-round-trip tests in `tests/interaction_face.rs` build a face inside a block,
-drop it, and build another for the next step. The bounds are unchanged, and the
-constructor is still where the catalog check of
+face lives, and a call's future holds the client's port for as long as the
+future lives; so the provider side runs over a handler handle taken from the
+runtime before the client is built, which is what `examples/cabin/consumer` and
+the round-trip tests do. The constructor is still where the catalog check of
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
 belongs — **but no constructor performs one, and none ever has** (see "The
 catalog check is not emitted" below). This supersedes the M1 design's
@@ -175,38 +172,132 @@ catalog check is not emitted" below). This supersedes the M1 design's
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
 records it.
 
-**A `Client` method's send call returns
-`Result<<Name>Correlation, SendError>`.** The error half is the `Caller` port's
-own `SendError`, which already carries `Contract`, so a `require` clause that
-fails client-side is reported as
-`SendError::Contract(Contract::PreconditionFailed)` with no lossy mapping into
-the settlement side's `CallError`. The success half is a `Copy` newtype the face
-emits per call — `SetLevelCorrelation` for command `setLevel`,
-`AverageCorrelation` for query `average` — and only that call's own outcome
-method accepts it: `average_reply` takes an `AverageCorrelation`, and
-`set_level_ack` takes a `SetLevelCorrelation`. So a query's correlation cannot
-be handed to an acknowledgment, and a command's cannot be handed to a reply.
-Both compiled before, and `Caller::ack` returns `None` for a query's correlation
-always, with no part of the type saying it will. The newtype is the face's, not
-the port's: `Correlation` and `ClaimId` in `ridl-rt` stay untyped, because a
-port carries identity and bytes and never a payload type, while which
-interaction a correlation belongs to is a payload-shaped fact. Why the parameter
-is by reference, why the error half is `SendError` rather than `CallError` — a
-gap the M1 design left open — and why the success half is the call's own newtype
-is [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decisions 3
-and 4.
+**A command and a query return a named future.**
+`set_level(&mut self, level: Level) -> SetLevelCall<'_, P>` and
+`average(&mut self, window: Window) -> AverageCall<'_, P>`, with the future
+bound on `P: Caller + Clock + Wakeable`, `Output = Result<(), ClientError>` for
+the command and `Result<Average, ClientError>` for the query. `ClientError` is
+`ridl-rt`'s (F-1): `Send(SendError)` when nothing was sent, `Call(CallError)`
+for the outcome the provider or the transport settled, `Read(ReadError)` when
+the reply could not be read. The call is sent when the method runs, not when the
+future is first polled (F-4). The future holds `&'a mut P`, its phase —
+`Unsent(arg)` while the port answers `SendError::Busy`, `Waiting(c)`,
+`Failed(SendError)` for a `require` failure or a send failure other than `Busy`,
+which the first poll reports, and `Done` — and the deadline,
+`Option<Timestamp>`, computed as the port's `now` plus `Member::call_deadline()`
+when the method runs (F-2); a member with no `max` has no deadline. Every poll
+registers its phase's interest — `Interest::Slot` in `Unsent`,
+`Interest::Outcome(c)` in `Waiting` — then reads the port once, then returns
+(F-5). At the deadline, an unsent call resolves to
+`Err(ClientError::Send(SendError::Busy))`; a sent call calls `Caller::forget`
+and resolves to `Transport::Undelivered` for a command and `Transport::Timeout`
+for a query (F-3). A call at exactly `max` is still within its bound: the
+deadline has passed when `now > deadline`, as `Freshness::of` counts an age
+equal to `max` as fresh. Leaving `Waiting` inside `poll` forgets the call there,
+so `Drop` forgets only a future that is still waiting, and a future that took
+its outcome forgets nothing on drop. A resolved call future panics when it is
+polled again.
 
-**Nothing here waits (RA-20).** No generated method spawns a thread, holds a
-future, opens a socket, or reads a timer. A query send returns its correlation
-immediately; a separate `*_reply` method polls it without blocking. `dispatch`
-makes one pass over the claims a handler already has and returns; the loop that
-calls it repeatedly belongs to the application or the runtime.
+A `require` clause is evaluated before anything is sent, so a failure costs no
+round trip and is `ClientError::Send(SendError::Contract(PreconditionFailed))`:
+the `SendError` the internal send returns, carried up unchanged, with no
+conversion between the two sides' vocabularies (F-12; ADR-0023 decision 4 as
+amended).
 
-## `dispatch` and the settlement table
+**`next_event(&mut self) -> NextEvent<'_, P>`**, with
+`P: EventSource + Wakeable` and `Output = Result<Event, ReadError>`, registers
+`Interest::Event`, reads the queue once, and returns; it has no deadline — an
+event has no response bound, and its `max` is the time to live the runtime
+applies inside `EventSource::next` — and no `Drop`, and it can be polled again
+for the next occurrence. The interface number is checked before the ordinal, for
+the reason `serve` checks it: a port is attached to a whole catalog, ordinals
+restart at 1 in each interface, and an occurrence of a sibling interface at the
+same ordinal would otherwise be decoded as this interface's payload; such an
+occurrence is `Contract::UnknownInteraction`.
 
-`dispatch` requires `buf.len() >= <Interface>::MAX_BUFFER_SIZE` before it does
-anything else; a shorter buffer returns `0` immediately, without consuming a
-claim, so the caller can retry with a correctly sized one. It then loops over
+**The futures are named, `Unpin`, and store nothing they cannot forget.** A
+named type is what a `no_std` frame loop needs: a value it can store in its own
+state between frames, which `impl Future` cannot be without allocation, and one
+the blocking client can ask whether the call was sent (F-10). The call futures
+and `NextEvent` are `Unpin` by their fields — `&'a mut P`, the phase and the
+deadline — and declare nothing; `Serve` declares it, because it holds the
+handler by value. Nothing emitted uses `async` or `impl Trait` in return
+position, so the emitted source compiles as edition 2021 at Rust 1.83, the first
+cell of the codegen build matrix
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10),
+which `just compat-check` builds for the emitted cabin crate with the `std` cfg
+on.
+
+**The ridl-named argument is rebound to an emitter-owned name.** The call
+method, its future's `poll` and the internal send rebind the argument to `__arg`
+first, and the internal send names its port parameter `__port`; the blocking
+methods' locals are `__deadline` and `__call`, and the blocking module's
+deadline helper is the function `__deadline_after`, because a parameter is bound
+under its own snake case in the method body and would shadow a function of that
+name. A ridl identifier cannot start with an underscore, so no parameter can be
+shadowed by, or shadow, a local or a function the emitter owns;
+`tests/face_compile.rs` compiles an interface whose members are named `port`,
+`deadline`, `deadlineAfter`, `this` and `cx`. `dispatch` still binds the ridl
+name directly beside its own locals, so a parameter named `claim`, `h`,
+`accepted`, or `buf` on a query, does not compile (driftsys/ridl#570). A member
+whose snake case is a fixed method name of the face collides the same way, and
+is not refused: `new` and `next_event` on both clients, `with_timeout` and
+`set_timeout` on the blocking one, `new` and `commit` on `Publisher`, and the
+derived names `subscribe_<event>` and `invalidate_<signal>` against a member
+spelled that way; the blocking client's two are recorded on driftsys/ridl#570
+with the rest.
+
+**Nothing here waits (RA-20, as F-15 restates it).** Generated code contains no
+thread, socket or timer, and no port waits; a face may return a future, and that
+future never blocks. Each future's `poll` registers its interest with the port,
+then reads the port — a call or event future once, `Serve` until the handler has
+no claim waiting — and returns. What waits is the executor or the frame loop
+that polls the future, or `ridl_rt::task::block_on` under the `blocking` module,
+which is the library's and not generated. ADR-0018's two rejections — `async fn`
+at the platform layer, blocking calls at the platform layer — are about the
+engine's layers and bind neither the ports library nor generated code; its open
+question 5 is answered for the face: a command's future resolves on the delivery
+acknowledgment, the runtime's finding, and carries no acceptance value.
+
+## The provider face
+
+- **`Publisher<W: ...>`** — over `SignalWriter` when the interface declares a
+  signal and `EventSink` when it declares an event, with one `set` and one
+  `invalidate_*` per signal, `commit`, and one `raise` per event. Unchanged by
+  E11.21.
+- **`trait Provider`** — one method per command and query, generated only when
+  the interface declares one. **A method takes its argument by reference**
+  (`fn set_level(&mut self, level: &Level)`), because the internal step reads
+  the argument again when it evaluates a query's `ensure` clause after the
+  provider returns, and the generated payload types implement neither `Copy` nor
+  `Clone`. A command method returns nothing — a command has no failure the
+  application reports (ridl §6.1) — and a query method returns its declared
+  reply type.
+- **`serve`** — the next section.
+
+## `serve`, the internal step, and the settlement table
+
+**`serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`**
+calls `Handler::serve` with the interface's command and query ordinals when the
+function runs; a refusal is a future ready with `ProviderError::Serve`. Each
+poll registers `Interest::Claim`, then drains the handler through the internal
+one-pass step, and is `Pending` once no claim is left; the handler port's
+failure resolves the future to `ProviderError::Claim`, with every claim settled
+before it staying settled. `Output` is `Result<Infallible, ProviderError>`: the
+future never resolves to `Ok` (F-7). It holds the handler by value, the provider
+by `&mut`, and the claim buffer of `MAX_BUFFER_SIZE` bytes inline, so the
+application supplies no buffer and reads no count. A resolved `Serve` panics
+when it is polled again. Over `ridl-loopback`, registering the served set means
+a handler under `serve` is presented only the interface's own members; the
+settlement table's unknown-route rows are reachable only through the internal
+step directly, which is how `tests/interaction_face.rs` still exercises them —
+the test file is inside the crate that `include!`s the fixture, so `pub(crate)`
+reaches it.
+
+**The internal step, `dispatch`**, is `pub(crate)` and returns
+`Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
+the failure `serve` resolves to — and `Ok(0)` on a buffer shorter than
+`MAX_BUFFER_SIZE`, without consuming a claim. It loops over
 `Handler::next_claim`, routing and settling every claim it takes — including one
 this interface does not recognise, because `Handler`'s own contract requires
 every claim to be settled:
@@ -227,7 +318,7 @@ vs §10.3).
 
 **A command settles before the provider method runs; a query settles after.** A
 command's acknowledgment is a delivery acknowledgment, not a completion one
-(ridl §6.1), so once its arguments and `require` pass, `dispatch` calls
+(ridl §6.1), so once its arguments and `require` pass, the step calls
 `Handler::settle(claim.id, Ok(&[]))` and only then calls the provider's method.
 A query settles after the provider returns and `ensure` is evaluated, because
 its settlement carries the reply. **This ordering is pinned only by an
@@ -240,12 +331,12 @@ That test is not written, which is a gap in the tests rather than a defect in
 the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
-manufactured contract error.** Every buffer `dispatch` and the face encode into
-is sized from `<T as Payload<Wire>>::MAX_SIZE`, the largest encoded size of any
-legal value, so a legal value cannot exceed it. If `Ref::encode` still returns
-`Capacity`, the provider returned a value outside its own type's range, or a
-`Payload` implementation does not honor `MAX_SIZE` — a defect the generated code
-has no vocabulary to describe as one of the five settlement outcomes, because
+manufactured contract error.** Every buffer the face encodes into is sized from
+`<T as Payload<Wire>>::MAX_SIZE`, the largest encoded size of any legal value,
+so a legal value cannot exceed it. If `Ref::encode` still returns `Capacity`,
+the provider returned a value outside its own type's range, or a `Payload`
+implementation does not honor `MAX_SIZE` — a defect the generated code has no
+vocabulary to describe as one of the five settlement outcomes, because
 `EncodeError::Capacity` carries no received bytes and no violated rule. The
 generated branch is an explicit `unreachable!` naming the type, the needed size
 and the available size. No runtime test drives this branch: doing so needs a
@@ -254,15 +345,106 @@ buffers the round trip's other assertions share, and nothing in the fixture
 isolates one type enough to do that safely under the test binary's parallel
 execution.
 
-**`dispatch`'s returned count is the number of claims `Handler::settle`
-accepted, not the number of claims taken.** A `SettleError` is left to the
-handler — which already owns that claim's settlement — and is not turned into a
-different `CallError`; `dispatch` continues to the next claim regardless.
-`tests/interaction_face.rs`'s
-`round_trip_dispatch_counts_only_accepted_settlements` injects one settlement
-failure followed by one successful claim and asserts the counts are `0` then
-`1`. It is a runtime test through `dispatch`, not a source-text assertion;
-`tests/dispatch_generation.rs` holds only the latter.
+**A `SettleError` is left to the handler** — which already owns that claim's
+settlement — and is not turned into a different `CallError`; the step continues
+to the next claim. `round_trip_dispatch_counts_only_accepted_settlements` in
+`tests/interaction_face.rs` injects one settlement failure followed by one
+successful claim and asserts the counts are `0` then `1`.
+
+**The poll face the step and the futures are built over is `pub(crate)`**
+(F-12): the `Copy` correlation newtypes, `<Name>Correlation`;
+`send_<name>(port: &mut P, arg: &T) -> Result<<Name>Correlation, SendError>`;
+`poll_<name>_ack`, `poll_<name>_reply` and `poll_next_event`. They are
+module-level functions over a bare port rather than methods of `Client<P>`,
+because a future holds `&'a mut P` under the narrower bound F-10 fixes, and an
+inherent method of `Client<P>`, whose struct bounds also name `SignalReader` and
+`EventSource`, cannot be called on it. The newtypes stay because inside the face
+they still keep a query's correlation out of an acknowledgment — `Caller::ack`
+returns `None` for a query's correlation always, with no part of the type saying
+so — and cost nothing when private. They are the face's, not the port's:
+`Correlation` and `ClaimId` in `ridl-rt` stay untyped, because a port carries
+identity and bytes and never a payload type, while which interaction a
+correlation belongs to is a payload-shaped fact
+([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decisions 3
+and 4). Making the face private closed both items of driftsys/ridl#485: no
+public method returns the three-deep reply shape, and a handler failure is the
+value `serve` resolves to.
+
+## The blocking module
+
+Under `#[cfg(feature = "std")]`, and only when the interface declares an event,
+a command or a query — a signal-only interface's `Client` never waits, so it has
+no blocking form — the face module holds `pub mod blocking`:
+
+```rust,ignore
+pub struct Client<P: /* the async Client's bounds */> {
+    inner: super::Client<P>,
+    timeout: Option<std::time::Duration>,
+}
+impl<P: ...> Client<P> {
+    pub fn new(port: P) -> Self;                                      // timeout None
+    pub fn with_timeout(self, timeout: Duration) -> Self;
+    pub fn set_timeout(&mut self, timeout: Option<Duration>);
+    pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError>;  // unchanged
+    pub fn subscribe_warning(&mut self) -> Result<(), SubscribeError>;    // unchanged
+    pub fn next_event(&mut self) -> Result<Option<Event>, ReadError>;     // None at the timeout
+    pub fn set_level(&mut self, level: Level) -> Result<(), ClientError>;
+    pub fn average(&mut self, window: Window) -> Result<Average, ClientError>;
+}
+pub fn serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P, timeout: Option<Duration>)
+    -> Result<(), ProviderError>;   // only when the interface declares a command or a query
+```
+
+**Every waiting method is `ridl_rt::task::block_on` over the async method's
+future**, polled through `&mut` because every face future is `Unpin`, so the two
+clients cannot diverge: what a call does is the future's, and the blocking
+module adds the thread's wait and the timeout (F-10, F-11); a signal read and a
+`subscribe_*` delegate unchanged. The deadline is the timeout added to
+`Instant::now()` with `checked_add`; a timeout so large that the instant cannot
+be represented is a wait with no bound, as the call future's own deadline
+saturates rather than panics. The timeout is per client, `None` by default, and
+a timeout shorter than a member's `max` is accepted and ends the call first.
+**What `max` bounds under `block_on`, stated.** The member's `max` is measured
+by the future on the port's clock, and the future reads that clock only when it
+is polled, which under `block_on` is when the port wakes it. On a runtime that
+measures the bound and wakes the `Outcome` waiter when it passes, the woken poll
+finds the bound passed and the call ends at `max`; `ridl-loopback` measures no
+bound and `advance` wakes nobody, so over it an unserved call returns only at
+the client's timeout (F-3 "A limit, stated", F-11's reason). The face is not
+what would change that: it is the runtime's clock and wake. When `block_on`
+returns `None`, the client asks the future whether the call was sent — a private
+`sent()` on each call future, itself under `std` — and answers as the future
+would at its own deadline: unsent is `Err(ClientError::Send(SendError::Busy))`,
+sent is `Transport::Undelivered` for a command and `Transport::Timeout` for a
+query; dropping the future then forgets a sent call. `next_event` returns
+`Ok(None)` at the timeout, and `serve` returns `Ok(())` at it, so a loop that
+also does other work can call either repeatedly; with no timeout, a call returns
+only with its outcome, `next_event` only with an occurrence or a read failure,
+and `serve` only with a failure. `blocking::serve` holds `h` by value, as
+`serve` does, and drops it when it returns; a loop passes `&mut handler`, under
+the forwarding impls of ADR-0021 decision 11, so the handle outlives each pass.
+
+**Why per client and not per call.** A timeout parameter on every call would
+make the two clients' signatures differ in more than the future, and an absolute
+`Instant` is computed from a duration by every caller anyway; a caller that
+wants one call bounded differently sets the timeout before it. `None` by default
+because, on a runtime that measures the bound and wakes at it, a member with a
+`max` is bounded by the future, and the reference says an untimed member waits.
+Over `ridl-loopback`, whose clock moves only under `advance`, a blocking call
+whose provider never serves returns only at a timeout the caller set, so a test
+over the loopback sets one (F-11).
+
+**The feature.** The manifest `ridl build` emits declares
+`std = ["ridl-rt/std"]`, on by default, and the `blocking` module is under the
+emitted crate's own `std`, so a build with default features off has no
+`blocking` module, links `ridl-rt` as `no_std`, and builds for
+`wasm32-unknown-unknown`. `block_on` is what `ridl-rt`'s `std` feature carries
+([the `ridl-rt` design record](ridl-rt.md), the `task` module); it is not usable
+on wasm, where `Instant::now()` panics, and a frame loop there polls with
+`noop_waker` instead. Inside this repository the fixture is `include!`d by the
+backend crate's own tests, and `cfg(feature = "std")` is evaluated against the
+including crate, so `crates/ridl-backend-rust` declares a `std` feature of its
+own, on by default and read by nothing in the library, for that purpose alone.
 
 ## The encoding and the ports
 
@@ -296,31 +478,30 @@ second set written for it, and the checked-in fixture stays a single `include!`.
 
 **The alias is an unprefixed item at package scope, and one name can collide.**
 A declaration named `Wire` emits `pub struct Wire(..)` beside the alias and the
-generated crate does not compile. Measured over a package that declares
-`type Wire : integer [0..10]`: the compiler draws no diagnostic and
-`generate_face` returns source carrying both items. It reached `generate_face`
-only — `generate` emits no alias — so `ridl build --emit rust` was unaffected
-until E11.14 made the CLI emit the face, which it now does; E11.14 decision 5
-refuses such a package rather than emitting the collision. Fixing it means
-either refusing a legal typl package or changing the name D-11 fixes, neither of
-which D-11 takes, so it is **driftsys/ridl#476** rather than a patch here. The
-codec has no such exposure: its free functions carry a `__ridl_fb_` prefix,
-which typl §15.1 makes uncollidable.
+generated crate does not compile. E11.14 decision 5 refuses such a package
+rather than emitting the collision (driftsys/ridl#476). The codec has no such
+exposure: its free functions carry a `__ridl_fb_` prefix, which typl §15.1 makes
+uncollidable.
 
 Through stage K7 this was a placeholder instead: `ReprC`, with
 `tests/interaction_face.rs` hand-writing `Payload<ReprC>` for the fixture's
 types, marked throwaway in its own module documentation. Both are gone.
 
 **The ports are `ridl-loopback`'s**, the in-process reference runtime (ADR-0020
-decision 6, story E11.15, [its design record](ridl-loopback.md)). Every
-`round_trip_*` test builds its face over that crate's aggregate handle, which
-implements all twelve port traits by delegating to one handle per port role.
-Through E11.13 the ports were instead a disposable double at
-`tests/support/loopback.rs`, which implemented nine of the eleven traits and
-neither signal extension; E11.15 deleted it and moved its own tests into
-`crates/ridl-loopback/tests/ports.rs`. What did not change with it: the round
-trip is still in one process, on one thread, with a clock the test advances by
-hand and no I/O — the runtime is in-process by design, not as a placeholder.
+decision 6, story E11.15, [its design record](ridl-loopback.md)). The round-trip
+tests build their faces over that crate's aggregate handle, which implements
+every port trait by delegating to one handle per port role, or over the role
+handles themselves: `tests/support/doubles.rs` builds the consumer ports from
+the loopback's reader, source and caller handles — with a log of every `Caller`
+and `Wakeable` call — so that a test can `advance` the clock, take a handler for
+the provider side, and fill the call table while a future is alive. Through
+E11.13 the ports were instead a disposable double at
+`tests/support/loopback.rs`; E11.15 deleted it and moved its own tests into
+`crates/ridl-loopback/tests/ports.rs`. The runtime is in-process, with a clock
+the test advances by hand and no I/O, by design and not as a placeholder; its
+limit is that it measures no bound of its own, so a call over it whose provider
+never serves is bounded by the future's deadline or the blocking client's
+timeout and by nothing else.
 
 ## The fixture and the round trip
 
@@ -331,23 +512,26 @@ one all-fixed-size struct, no optional field, sequence, map, union, string or
 bytes. The stand-in is gone and the generated codec carries every typl shape, so
 the cut is now a limit on what this fixture exercises rather than on what the
 face can carry; the codec's own suites (`tests/flatbuffers_roundtrip.rs`,
-`tests/flatbuffers_conformance.rs`) run the wider corpus. It declares two
+`tests/flatbuffers_conformance.rs`) run the wider corpus. It declares four
 interfaces:
 
 - **`Cabin`** — one signal, one event, one command (`setLevel`, with a `require`
-  clause) and one query (`average`, with a `require` and an `ensure` clause).
-  This is the interface the round trip runs against: publish and read a signal,
-  raise and receive an event, send the command and the query through `Client`,
-  run `dispatch` against a `Provider`, and observe the acknowledgment and the
-  reply, plus the `PreconditionFailed` and `ContractBroken` settlements the two
-  clauses make reachable. Every call declares exactly one parameter of a
+  clause and `@[..50ms]`) and one query (`average`, with a `require` and an
+  `ensure` clause and `@[..200ms]`). This is the interface the round trips run
+  against, through both clients. Every call declares exactly one parameter of a
   declared named type, and every query replies with one declared named type —
   the face emits no induced argument struct, so a call needing more than one
   parameter is refused (`descriptors::single_param_type`), and a multi-parameter
-  call is a recorded follow-up, not E11.13 work.
+  call is a recorded follow-up.
 - **`Horn`** — one signal and nothing else, existing only to make RA-19's claim
   testable in the direction described above: a minimal port cannot construct a
-  `Client` unless the emitted bounds are exactly what the interface needs.
+  `Client` unless the emitted bounds are exactly what the interface needs. It
+  has no `blocking` module.
+- **`Siren`** — one event and nothing else, so the event-only bound set
+  (`EventSource + Wakeable`, no `Clock`) is pinned.
+- **`Valve`** — one command and one query with no response bound, so a call with
+  no deadline (F-2) and the blocking client's timeout on an untimed member
+  (F-11) are testable.
 
 The fixture declares no `fixed` interaction; the descriptor emitter's `Fixed`
 path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
@@ -357,10 +541,10 @@ path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
 fixture, brought into `tests/interaction_face.rs` with `include!` under a
 handwritten module carrying only outer `#[allow(...)]` lint attributes — the
 emitter itself must never emit an inner attribute, because one inside an
-`include!`d file is a hard compile error, and this constraint is unchanged by
-E11.13. A test in its own target, `tests/interaction_face_regeneration.rs`,
-regenerates the fixture and compares the result byte-for-byte against the
-checked-in file, failing with the instruction to regenerate
+`include!`d file is a hard compile error. A test in its own target,
+`tests/interaction_face_regeneration.rs`, regenerates the fixture and compares
+the result byte-for-byte against the checked-in file, failing with the
+instruction to regenerate
 (`RIDL_UPDATE_GENERATED=1 cargo test -p
 ridl-backend-rust --test interaction_face_regeneration`)
 when it drifts. This is what makes the generated face genuinely compiled and
@@ -371,11 +555,37 @@ regeneration test is kept apart from the tests that consume the fixture, so that
 it still compiles, and can rewrite the fixture, when a change to the face's
 shape leaves those tests unable to compile against the old fixture.
 
-Four test files exercise the layers separately before the round trip:
-`tests/descriptor_generation.rs`, `tests/face_generation.rs`,
-`tests/dispatch_generation.rs` (source-text assertions on the generated code),
-and `tests/interaction_face.rs` (the compiled round trip over `ridl-loopback`);
-the byte-equality guard is `tests/interaction_face_regeneration.rs`.
+**What proves it** (F-14), in `tests/interaction_face.rs`: the round trips of a
+signal, an event, a command and a query through the async client, polled with
+`ridl_rt::task::noop_waker`, and of the command and the query through the
+blocking client, with `blocking::serve` on a second thread; the dropped future
+forgets once and a poll registers before it reads; a future that took its
+outcome forgot in that poll and forgets nothing on drop; a future dropped while
+waiting for a slot forgets nothing; a call with every slot taken is `Pending`,
+is woken by a reclaim, sends on the next poll, and resolves; an unsent call at
+its deadline is `Send(Busy)` and is not sent when a slot frees later; a sent
+command and a sent query at their deadline are `Undelivered` and `Timeout` and
+forget once; a settled call delivers its outcome after its deadline passed; a
+send failure other than `Busy` on the retry resolves either kind of call;
+`next_event` waits for a raise and resolves with a read failure; `serve`
+registers the served set, resolves to `ProviderError::Claim` after settling the
+claims before the failure, is ready with a refusal, is woken by a send, and
+panics when polled again after either; the blocking client over `Valve` answers
+`Send(Busy)`, `Undelivered` or `Timeout` at its own timeout, by phase and by
+kind, forgetting a sent call once; a client timeout shorter than `max` is
+accepted; `blocking::next_event` returns `Ok(None)` at the timeout and the
+occurrence when one is raised from another thread; and `blocking::serve` returns
+`Ok(())` at its timeout and a refusal at once. Four test files exercise the
+layers before the round trip: `tests/descriptor_generation.rs`,
+`tests/face_generation.rs`, `tests/dispatch_generation.rs` (source-text
+assertions on the generated code) and `tests/face_compile.rs` (the emitted face
+compiled with a bare `rustc`, the `blocking` module included, over shapes the
+fixture does not hold); the byte-equality guard is
+`tests/interaction_face_regeneration.rs`. `examples/cabin/consumer` runs the
+four round trips through the async client and the command and the query through
+the blocking client, under `just demo` and
+`crates/ridlc/tests/cabin_example.rs`. The test gaps the reviews of E11.21 left
+are on driftsys/ridl#571.
 
 ## Coupling with Lane C's Epic 10
 
@@ -410,9 +620,8 @@ same all-zero hash the face declares.
 
 ## E11.14: the face is emitted by `ridl build` (2026-09-21)
 
-E11.14 (driftsys/ridl#444) closes the gap this record names above: the face was
-generated by a companion entry point no CLI called, so there was nothing to link
-against.
+E11.14 (driftsys/ridl#444) closed the gap E11.13 left: the face was generated by
+a companion entry point no CLI called, so there was nothing to link against.
 
 **The story's six decisions, numbered.** Every `E11.14 decision N` citation in
 the tree resolves against this list, which is why it is numbered rather than
@@ -480,125 +689,29 @@ written as prose.
    builds `examples/cabin/`, compiles the emitted crate and
    `examples/cabin/consumer/src/main.rs` against it with plain `rustc`, runs the
    program, and requires one round trip of each of a signal, an event, a command
-   and a query through the generated `Client`, `Publisher`, `Provider` and
-   `dispatch` over `ridl-loopback`. What is new is the path rather than the
-   running: other proofs run generated code, and the round trips above already
-   run these four, but each runs the backend's own output inside this workspace.
-   This one runs what the CLI wrote, linked as a separate crate into a separate
-   process. It does not establish identity — the round trip is symmetric, so a
-   wrong `InterfaceNo`, ordinal or catalog hash would be written and read back
-   consistently; `descriptor_generation.rs` pins those.
+   and a query through the generated face over `ridl-loopback` — since E11.21,
+   the command and the query through both clients. What is new is the path
+   rather than the running: other proofs run generated code, but each runs the
+   backend's own output inside this workspace. This one runs what the CLI wrote,
+   linked as a separate crate into a separate process. It does not establish
+   identity — the round trip is symmetric, so a wrong `InterfaceNo`, ordinal or
+   catalog hash would be written and read back consistently;
+   `descriptor_generation.rs` pins those.
 
-## E11.21, first half: the async client, the named futures and `serve` (2026-09-27)
+## E11.21: the two clients and `serve` (2026-09-27 and 2026-09-28)
 
-Story E11.21's first half (plan Task 4 of
-`docs/wip/2026-09-25-async-face-plan.md`; the design is
-`docs/wip/2026-09-25-async-face-design.md`, notes F-2 to F-7, F-10, F-12 and
-F-15) changed what `src/face.rs` emits. This section records the face the
-fixture `tests/generated/interaction_face.rs` contains from that change on, so
-that the record never describes a face the fixture does not hold. The sections
-above — the `Client` bullet of "The consumer and provider faces", the paragraph
-on the send call's `Result<<Name>Correlation, SendError>`, the `fn dispatch`
-bullet and its signature, the paragraph "A face holds its port by value" where
-it says a runtime is held by no face while `dispatch` runs and that the round
-trips build a face inside a block, "Nothing here waits (RA-20)", "`dispatch` and
-the settlement table", and "The fixture and the round trip" where it counts two
-interfaces and runs `dispatch` against a `Provider` — describe the poll face,
-which is now internal; their rewrite is the story's second half (Task 5), which
-also adds the `blocking` module.
-
-**The bounds of `Client<P>`.** RA-19 still holds, with two ports more: `Clock`
-and `Wakeable` are added when the interface declares a command or a query
-(`Clock` for the call's deadline, `Wakeable` for the wait), and `Wakeable` alone
-when it declares an event; a signal-only interface's `Client` is unchanged. The
-fixture gained an event-only interface, `Siren`, so that all three bound sets
-are pinned by `tests/face_generation.rs`.
-
-**A command and a query return a named future.**
-`set_level(&mut self, level: Level) -> SetLevelCall<'_, P>` and
-`average(&mut self, window: Window) -> AverageCall<'_, P>`, with
-`P: Caller + Clock + Wakeable`, `Output = Result<(), ClientError>` for the
-command and `Result<Average, ClientError>` for the query. The call is sent when
-the method runs, not when the future is first polled (note F-4). The future
-holds `&'a mut P`, its phase — `Unsent(arg)` while the port answers
-`SendError::Busy`, `Waiting(c)`, `Failed(SendError)` for a `require` failure or
-a send failure other than `Busy`, which the first poll reports, and `Done` — and
-the deadline, `Option<Timestamp>`, computed as the port's `now` plus
-`Member::call_deadline()` when the method runs (note F-2); a member with no
-`max` has no deadline. Every poll registers its phase's interest —
-`Interest::Slot` in `Unsent`, `Interest::Outcome(c)` in `Waiting` — then reads
-the port once, then returns (note F-5). At the deadline, an unsent call resolves
-to `Err(ClientError::Send(SendError::Busy))`; a sent call calls `Caller::forget`
-and resolves to `Transport::Undelivered` for a command and `Transport::Timeout`
-for a query (note F-3). A call at exactly `max` is still within its bound: the
-deadline has passed when `now > deadline`, as `Freshness::of` counts an age
-equal to `max` as fresh. Leaving `Waiting` inside `poll` forgets the call there,
-so `Drop` forgets only a future that is still waiting, and a future that took
-its outcome forgets nothing on drop. A resolved call future panics when it is
-polled again. `next_event(&mut self) -> NextEvent<'_, P>`, with
-`P: EventSource + Wakeable` and `Output = Result<Event, ReadError>`, registers
-`Interest::Event`, reads the queue once, and returns; it has no deadline and no
-`Drop`, and it can be polled again for the next occurrence. The call futures and
-`NextEvent` are `Unpin` by their fields — `&'a mut P`, the phase and the
-deadline — and declare nothing; `Serve` declares it, because it holds the
-handler by value. A resolved call future or `Serve` panics when it is polled
-again. The call method, its future's `poll` and the internal send rebind the
-ridl-named argument to the emitter-owned `__arg` first, and the internal send
-names its port parameter `__port`, because a ridl identifier cannot start with
-an underscore and the locals that follow would otherwise shadow a parameter
-named `port`, `deadline`, `this` or `cx`; `tests/face_compile.rs` compiles such
-an interface. `dispatch` still binds the ridl name directly beside its own
-locals, so a parameter named `claim`, `h`, `accepted`, or `buf` on a query, does
-not compile; that predates this change and is not covered here.
-
-**`serve` replaces the public `dispatch`.**
-`serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`
-calls `Handler::serve` with the interface's command and query ordinals when the
-function runs; a refusal is a future ready with `ProviderError::Serve`. Each
-poll registers `Interest::Claim`, then drains the handler through the internal
-one-pass step, and is `Pending` once no claim is left; the handler port's
-failure resolves the future to `ProviderError::Claim`, with every claim settled
-before it staying settled. `Output` is `Result<Infallible, ProviderError>`: the
-future never resolves to `Ok`. It holds the handler by value, the provider by
-`&mut`, and the claim buffer of `MAX_BUFFER_SIZE` bytes inline (note F-7). The
-settlement table is unchanged.
-
-**The poll face is `pub(crate)`** (note F-12): the correlation newtypes;
-`send_<name>(port: &mut P, arg: &T) -> Result<<Name>Correlation, SendError>`,
-`poll_<name>_ack`, `poll_<name>_reply` and `poll_next_event`; and `dispatch`,
-which returns `Result<usize, ReadError>` — the count, or the failure `serve`
-resolves to — and `Ok(0)` on a short buffer. The three reads and the sends are
-module-level functions over a bare port rather than methods of `Client<P>`,
-because a future holds `&'a mut P` under the narrower bound note F-10 fixes, and
-an inherent method of `Client<P>`, whose struct bounds also name `SignalReader`
-and `EventSource`, cannot be called on it. That closes both items of
-driftsys/ridl#485: no public method returns the three-deep reply shape, and a
-handler failure is the value `serve` resolves to.
-
-**Over `ridl-loopback`.** `serve` registers the served set, so a handler under
-`serve` is presented only the interface's own members; the settlement table's
-unknown-route rows are reachable only through `dispatch` directly, which is how
-`tests/interaction_face.rs` still exercises them — the test file is inside the
-crate that `include!`s the fixture, so `pub(crate)` reaches it. A `Client` over
-`&mut Loopback` holds the runtime for as long as a future lives, so the provider
-side runs over a `Loopback::handler()` taken before the client is built, and
-`tests/support/doubles.rs` builds the consumer ports from the loopback's role
-handles — with a log of every `Caller` and `Wakeable` call — so that a test can
-`advance` the clock and fill the call table while a future is alive.
-
-**What proves it.** Note F-14's face tests in `tests/interaction_face.rs`: the
-dropped future forgets once and a poll registers before it reads; a future that
-took its outcome forgot in that poll and forgets nothing on drop; a future
-dropped while waiting for a slot forgets nothing; a call with every slot taken
-is `Pending`, is woken by a reclaim, sends on the next poll, and resolves; an
-unsent call at its deadline is `Send(Busy)`; a sent command and a sent query at
-their deadline are `Undelivered` and `Timeout` and forget once; `next_event`
-waits for a raise; `serve` registers the served set, resolves to
-`ProviderError::Claim` after settling the claims before the failure, and is
-ready with a refusal. The round trips run through the async client and `serve`,
-polled with `ridl_rt::task::noop_waker`. `examples/cabin/consumer` polls the
-same way, and `just compat-check` builds the emitted cabin crate at Rust 1.83 as
-edition 2021, the first cell of the codegen build matrix (note F-10).
+Story E11.21 landed in two changes to `src/face.rs`, with the `ridl-rt` 0.3.0
+release between them, because the second needed `block_on` from a published
+crate. The first (2026-09-27) emitted the async `Client`, the named futures and
+`serve`, made the poll face `pub(crate)` under names of its own, restated RA-20
+in the module documentation, added `Siren` and `Valve` to the fixture, and
+rewrote `examples/cabin/consumer` onto the async client; it was the one breaking
+step for a consumer of generated code. The second (2026-09-28) emitted the
+`blocking` module, made the emitted manifest's `std` feature forward to
+`ridl-rt/std`, added the blocking round trips to the consumer, rewrote this
+record from the design note, and archived the note, the plan and the lane
+driver. The sections above describe the face as both left it; nothing in them
+describes a face the fixture does not hold.
 
 ## What is provisional
 
@@ -609,6 +722,7 @@ edition 2021, the first cell of the codegen build matrix (note F-10).
 | The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
 | One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |
 | The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
+| `dispatch` binding the ridl parameter name beside its own locals                               | driftsys/ridl#570                            |
 
 **The hand-written payload row was retired on 2026-09-21**, by E11.7's D-11 in
 stage K9b. It read "the hand-written `Payload<ReprC>` implementations", and it
@@ -619,23 +733,22 @@ one struct. ADR-0019 decision 8 gave every declaration a root, and D-11 made the
 face name `Wire`. The hand-written module is deleted, and the round trips run
 over the generated codec and `ridl-loopback`.
 
-`ridl --emit rust` emitting the face itself is not on this list as a defect:
-ADR-0018 decision 15 places that behind the frame specification and the
-transport, and nothing in E11.13 changes that gate. It is story E11.14
-(driftsys/ridl#444), which takes the same gate with it.
-
 ## Trace
 
-- Roadmap: `docs/ROADMAP.md` — E11.13
-- Tracking issue: driftsys/ridl#393
+- Roadmap: `docs/ROADMAP.md` — E11.13, E11.14, E11.21
+- Tracking issues: driftsys/ridl#393 (E11.13), driftsys/ridl#444 (E11.14),
+  driftsys/ridl#515 (E11.21), driftsys/ridl#485 (the call-shape findings E11.21
+  closes)
 - Binds: [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
   decision 15;
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 1, 5, 6 and 7;
-  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md);
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md), decisions 13
+  to 18 for the items the futures poll;
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) — the
-  generation decisions specific to this face
-- Depends on: `crates/ridl-rt` 0.1.0 (E11.0, landed); the IR's provisional
+  generation decisions specific to this face, decision 6 for the call surface
+- Depends on: `crates/ridl-rt` 0.3.0 (`Wakeable`, `Interest`, `ClientError`,
+  `ProviderError`, the `std` feature's `block_on`); the IR's provisional
   interface numbering (the lock design's L4, driftsys/ridl#391)
 - Replaced later by: E16.2 (the catalog hash and the encoded sizes), E5.1 (the
   clause translator). E11.7 replaced the payload stand-in and E11.15 the
@@ -643,12 +756,19 @@ transport, and nothing in E11.13 changes that gate. It is story E11.14
 - Reasoning trail (archived):
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),
-  [`2026-09-17-interaction-face-v0-plan.md`](../archive/2026-09-17-interaction-face-v0-plan.md)
+  [`2026-09-17-interaction-face-v0-plan.md`](../archive/2026-09-17-interaction-face-v0-plan.md);
+  [`2026-09-25-lane-f-driver.md`](../archive/2026-09-25-lane-f-driver.md),
+  [`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md),
+  [`2026-09-25-async-face-plan.md`](../archive/2026-09-25-async-face-plan.md)
 - `crates/ridl-backend-rust/src/descriptors.rs`, `src/face.rs` and its
-  submodules under `src/face/`, `src/clauses.rs`, `src/lib.rs` (`generate_face`)
-  — the emitter as built
+  submodules under `src/face/`, `src/clauses.rs`, `src/lib.rs` (`generate_face`,
+  `generate_pipeline`) — the emitter as built
 - `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`,
   `tests/generated/interaction_face.rs`, `tests/interaction_face.rs`,
-  `tests/interaction_face_regeneration.rs` — the fixture, the checked-in output,
-  the round trip, and the regeneration guard; the ports the round trip runs over
-  are `crates/ridl-loopback/`
+  `tests/interaction_face_regeneration.rs`, `tests/support/doubles.rs` — the
+  fixture, the checked-in output, the round trips, the regeneration guard and
+  the port doubles; the ports the round trips run over are
+  `crates/ridl-loopback/`
+- `examples/cabin/consumer/src/main.rs`, `crates/ridlc/tests/cabin_example.rs`,
+  the `demo` and `compat-check` recipes of `justfile` — the emitted crate built,
+  linked and run outside this workspace's own crates

@@ -358,14 +358,21 @@ publisher.warning(Warning { code: Level(5), health: Health::Warn })?;
 There is no `commit`. `EventSink::raise` publishes one occurrence immediately —
 an event is not staged, because there is no coherent set to assemble.
 
-Receiving takes two calls:
+Receiving takes two calls. `next_event` returns a future, `NextEvent`, which
+resolves to the next occurrence and is `Pending` while none is waiting; the
+blocking client's `next_event` waits on it and returns `Ok(None)` at the
+client's timeout:
 
 ```rust
 client.subscribe_warning()?;
-// ... later ...
-match client.next_event()? {
+// ... later, on the async client ...
+match client.next_event().await? {
+    cabin::Event::Warning(occurrence) => { /* ... */ }
+}
+// ... or on the blocking client, which gives up at its timeout ...
+match blocking_client.next_event()? {
     Some(cabin::Event::Warning(occurrence)) => { /* ... */ }
-    None => { /* nothing waiting */ }
+    None => { /* the timeout passed with nothing raised */ }
 }
 ```
 
@@ -426,55 +433,74 @@ Commands and queries are the first interactions with two ends and an outcome.
 The generated client methods are:
 
 ```rust
-pub fn set_level(&mut self, level: Level)   -> Result<SetLevelCorrelation, SendError>;
-pub fn average(&mut self, window: Window)   -> Result<AverageCorrelation, SendError>;
+pub fn set_level(&mut self, level: Level) -> SetLevelCall<'_, P>;
+pub fn average(&mut self, window: Window) -> AverageCall<'_, P>;
 ```
 
-Neither returns a reply. **Nothing in generated code waits.** There is no
-thread, future, socket or timer anywhere in the emitted file, and no port method
-blocks: every one of them returns immediately. Waiting — blocking, `async`, or a
-loop driving a runtime — belongs to a layer above the port, and `ridl-rt`
-defines no such layer.
+Generated code contains no thread, socket or timer, and no port waits: a face
+may return a future, and that future never blocks. That is rule RA-20, as
+restated by the async face design (note F-15).
 
-So a call returns a correlation, which identifies that one sent call to its
-caller, and you ask about the outcome separately:
+`set_level` and `average` return named futures, not a correlation. Each future
+resolves to that call's outcome:
 
 ```rust
-let correlation = client.set_level(Level(42))?;
-// ... later ...
-match client.set_level_ack(correlation) {
-    Some(Ok(()))   => { /* accepted */ }
-    Some(Err(e))   => { /* rejected, or a transport failure */ }
-    None           => { /* not known yet */ }
+impl Future for SetLevelCall<'_, P> {
+    type Output = Result<(), ClientError>;
+}
+impl Future for AverageCall<'_, P> {
+    type Output = Result<Average, ClientError>;
+}
+```
+
+The call is sent when the method runs, not when the future is first polled.
+Polling the future afterward drives it toward its outcome:
+
+```rust
+let mut call = client.set_level(Level(42));
+// ... poll `call` until it resolves, e.g. from a frame loop or an executor ...
+match Pin::new(&mut call).poll(cx) {
+    Poll::Ready(Ok(())) => { /* the provider accepted the command */ }
+    Poll::Ready(Err(e)) => { /* ClientError */ }
+    Poll::Pending       => { /* not settled yet */ }
 }
 ```
 
 ```rust
-let correlation = client.average(Window(10))?;
-// ... later ...
-match client.average_reply(correlation)? {
-    Some(Ok(average)) => { /* the reply */ }
-    Some(Err(e))      => { /* a CallError from the peer or the transport */ }
-    None              => { /* not known yet */ }
+let mut call = client.average(Window(10));
+match Pin::new(&mut call).poll(cx) {
+    Poll::Ready(Ok(average)) => { /* the reply */ }
+    Poll::Ready(Err(e))      => { /* ClientError */ }
+    Poll::Pending             => { /* not settled yet */ }
 }
 ```
 
-Each call has its own correlation type. `set_level` returns a
-`SetLevelCorrelation` and `average` an `AverageCorrelation`, each a `Copy`
-newtype around `ridl_rt::port::Correlation`, which is itself a `u64`. Only that
-call's own outcome method accepts it: `set_level_ack` takes a
-`SetLevelCorrelation` and `average_reply` an `AverageCorrelation`. The newtypes
-are the generated face's. `Correlation` in `ridl-rt` stays untyped, because a
-port carries identity and bytes and never a payload type, while which
-interaction a correlation belongs to is a payload-shaped fact. Reach the `u64`
-through the newtype's field — `correlation.0` — when you call a port method such
-as `Caller::forget` yourself.
+The future resolves in one of three ways. It resolves on the outcome the
+provider settled. It resolves at the member's `max`, measured on the port's
+clock from the moment the method ran, to
+`ClientError::Call(CallError::Transport(Transport::Undelivered))` for a command
+or `..Transport::Timeout` for a query — the port's own expired outcome. Or, if
+no slot was free to send the call within that same bound, it resolves to
+`ClientError::Send(SendError::Busy)`, and nothing was sent. A `require` clause
+that fails is evaluated before sending and is
+`ClientError::Send(SendError::Contract(Contract::PreconditionFailed))`; nothing
+is sent in that case either. Dropping a future while it waits for its outcome
+calls `Caller::forget` on the call, releasing it at the port. Polling a future
+again after it has resolved panics.
+
+Each call has its own future type. `set_level` returns `SetLevelCall` and
+`average` returns `AverageCall`, each borrowing the client's port for as long as
+the future lives — which is why the examples above hold `call` in a local rather
+than discarding it. There is no correlation newtype in the public face any more:
+`SetLevelCorrelation` and `AverageCorrelation` still exist, but as `pub(crate)`
+types the future uses internally to track the sent call, not as something an
+application receives.
 
 ### Why a command and a query have separate methods
 
 `Caller` has `command` and `query` as separate port methods, and correspondingly
-a generated `*_ack` and a generated `*_reply`, because their outcomes are
-different things (ridl §6, §7).
+a generated `SetLevelCall` and a generated `AverageCall`, because their outcomes
+are different things (ridl §6, §7).
 
 A command's acknowledgment is a **delivery** acknowledgment, not a completion
 one (ridl §6.1). `Ok(())` means the provider accepted the command, not that it
@@ -482,29 +508,33 @@ finished doing anything. A command has no failure the application reports —
 which is why, in step 6, the generated `Provider` method for a command returns
 nothing at all.
 
-A query's outcome is its reply. `Caller::ack` is always `None` for a query's
-correlation, and that is a trap worth naming at the port: `ack` returns
-`Option<...>` with no error case, so a caller that polls it for a query's
-correlation waits forever. Through the generated face the trap is closed — a
-`*_ack` takes its own command's newtype, so a query's correlation does not
-compile there — but a caller that drives the `Caller` port itself must keep the
-correlations `command` returned and ask only about those. Likewise, after
-`Caller::forget` releases a correlation its outcome is no longer retrievable, so
-do not ask about it.
+A query's outcome is its reply, so `AverageCall` resolves to
+`Result<Average, ClientError>` rather than `Result<(), ClientError>`. The
+distinction that mattered at the port level — `Caller::ack` always answering
+`None` for a query's correlation — is internal now: the generated future for a
+command polls the port's acknowledgment and the future for a query polls its
+reply, and an application never has the chance to ask the wrong one, because
+there is no correlation to ask about.
 
-### Why the error type is `SendError` and not `CallError`
+### Why the error type is `ClientError::Send(SendError)` and not `CallError` alone
 
-`SendError` reports the failure to _send_: the runtime is busy, the arguments
-exceed the call's capacity, a contract error, or the runtime is gone. It is what
-the `Caller` port itself returns, so the generated method passes it through
-without inventing a conversion.
+`ClientError` is one type for every generated call, covering everything that can
+go wrong at any point in a call's life: `Send(SendError)` when the call was
+never sent, `Call(CallError)` when it was sent and its outcome is a failure, and
+`Read(ReadError)` when the port failed while the outcome was being read.
+
+`SendError` is the failure to _send_: the runtime is busy, the arguments exceed
+the call's capacity, a contract error, or the runtime is gone. It is what the
+`Caller` port itself returns, wrapped in `ClientError::Send` without inventing a
+further conversion.
 
 `CallError` — `Contract` or `Transport` — is the outcome that comes back from
-the peer, and it appears where outcomes appear: inside `ack` and inside
-`average_reply`.
+the peer, or from the port's own expired-outcome handling at the member's `max`.
+It appears wrapped in `ClientError::Call`.
 
 One case crosses that line deliberately. `Cabin.setLevel` declares
-`require level < 100`, and the generated client evaluates it **before sending**:
+`require level < 100`, and the generated client evaluates it **before sending**,
+inside the future's construction:
 
 ```rust
 CabinSetLevel::require(&level)
@@ -513,9 +543,35 @@ CabinSetLevel::require(&level)
 
 A `require` that fails locally costs no round trip, and the caller sees the same
 `Contract::PreconditionFailed` category it would have seen from the provider —
-reported as a `SendError` because nothing was sent.
+reported as `ClientError::Send(SendError::Contract(..))` because nothing was
+sent.
 
-## Step 6 — the provider side, and `dispatch`
+### The blocking client
+
+An application that does not run an executor or a frame loop can use
+`blocking::Client` instead, under the generated crate's `std` feature (on by
+default). It wraps the async `Client` and parks the calling thread:
+
+```rust
+let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
+let acknowledged = client.set_level(Level(42));
+let reply = client.average(Window(10));
+```
+
+Each call is `ridl_rt::task::block_on` over the async call's future. The timeout
+is per client, `None` by default; `with_timeout` sets it when constructing the
+client, and `set_timeout` changes it afterward. At the timeout, a call that was
+never sent because no slot was free is `ClientError::Send(SendError::Busy)`, and
+a call that was sent answers as the future would at its own deadline:
+`Transport::Undelivered` for a command, `Transport::Timeout` for a query. A
+timeout shorter than a member's `max` is accepted and ends the call first. A
+longer one, or none, leaves `max` to the future, which reads the port's clock
+only when the port wakes it: a runtime that measures the bound and wakes the
+call when it passes ends the call at `max`, and `ridl-loopback`, which measures
+no bound, does not — over it an unserved call returns only at the client's
+timeout.
+
+## Step 6 — the provider side, and `serve`
 
 Serving `Cabin`'s calls means implementing one generated trait:
 
@@ -561,39 +617,39 @@ bound (ridl §9.3).
 The contract that shapes everything below is one sentence from the trait's own
 documentation: **every claim is settled.**
 
-### `dispatch`
+### `serve`
 
 You do not implement `Handler` and you do not call `next_claim`. The backend
-generates the loop:
+generates a function that returns a future:
 
 ```rust
-pub fn dispatch<H: Handler, P: Provider>(h: &mut H, p: &mut P, buf: &mut [u8]) -> usize
+pub fn serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>
 ```
 
 ```rust
-let mut buf = [0u8; Cabin::MAX_BUFFER_SIZE];
-let settled = cabin::dispatch(&mut port, &mut provider, &mut buf);
+let mut serving = cabin::serve(handler, &mut provider);
+// ... poll `serving` from a frame loop or an executor ...
 ```
 
-It makes **one pass** over the claims the handler already has and returns how
-many it settled. It does not wait. The loop that calls it belongs to the
-application or to the runtime — which is the same property as step 5's
-`Correlation`, seen from the other end.
+`Handler::serve` is called with the interface's command and query ordinals when
+`serve` runs; a refusal is a future that is ready with `ProviderError::Serve`.
+Each poll registers `Interest::Claim` for this interface, then drains every
+claim the handler already has, settling each one the way the settlement table
+below describes, and is `Pending` once none is left. The future resolves only
+when the handler port fails (`ProviderError::Claim`); every claim settled before
+the failure stays settled. `Output` is `Result<Infallible, ProviderError>`, so a
+successful serve never produces a value — it is `Pending` for as long as it
+runs.
 
-`buf` is caller-owned and must be at least `Cabin::MAX_BUFFER_SIZE` bytes,
-because a reply is encoded into the same buffer the arguments arrived in. A
-shorter buffer returns `0` **without consuming a claim**, so the caller can
-retry with a correctly sized one rather than losing a call to a programming
-error.
-
-The returned count is claims that `Handler::settle` **accepted**. A
-`SettleError` is left to the handler, which already owns that claim's
-settlement, and the pass continues with the next claim.
+The claim buffer — `Cabin::MAX_BUFFER_SIZE` bytes, sized so a reply can be
+encoded into the same buffer the arguments arrived in — is held inside the
+future. The application supplies no buffer and receives no count of claims
+settled; the future's repeated polling is what stands in for both.
 
 ### The settlement table
 
 The generated match is total over the claims that can arrive, because the
-`Handler` contract requires it. The rows are in the order dispatch evaluates
+`Handler` contract requires it. The rows are in the order `serve` evaluates
 them:
 
 | Cause                                       | Settled as                     |
@@ -634,6 +690,24 @@ carries the reply.
 > side effect that reordering would change, so no test can observe the
 > difference today. E11.9 is what would make it observable.
 
+### The blocking provider loop
+
+`blocking::serve` is the provider-side counterpart of `blocking::Client`: it is
+`block_on` over `serve`, on the calling thread, until the handler port fails or
+a timeout passes.
+
+```rust
+while !done.load(Ordering::Acquire) {
+    cabin::blocking::serve(&mut handler, &mut provider, Some(SERVE_PASS))?;
+}
+```
+
+A failure is returned the way `serve`'s future resolves to it. The timeout
+itself is `Ok(())`, not a failure, so a loop that also has other work to do —
+checking a shutdown flag, as above — calls `blocking::serve` again for another
+pass. With `timeout: None` it returns only on a failure, so it never gives the
+loop a chance to do anything else.
+
 ## Step 7 — the descriptors, and why the bounds are exact
 
 One thing has been in every example without being introduced: `Cabin` itself.
@@ -667,7 +741,7 @@ step 1 falls back to. `Command` adds `require`. `Query` adds `require` and
 Both interfaces in the fixture produce a `Client`, and the bounds differ:
 
 ```rust
-pub struct cabin::Client<P: SignalReader + EventSource + Caller>;
+pub struct cabin::Client<P: SignalReader + EventSource + Caller + Clock + Wakeable>;
 pub struct horn::Client<P: SignalReader>;
 ```
 
@@ -680,7 +754,18 @@ The bounds are computed from the interaction kinds the interface actually
 declares. `Horn` has one signal, so its `Client` requires a port that can read a
 signal and nothing more, and a port type implementing only `SignalReader` and
 its `Attached` supertrait constructs it. `Horn` generates no `Provider` and no
-`dispatch` at all, because it declares no call.
+`serve` at all, because it declares no call.
+
+`Cabin` declares an event, a command and a query, and each of those now returns
+a future, which is why its `Client` carries two bounds `Horn`'s does not.
+`Clock` is there because a command's or a query's future computes its own
+deadline — the member's `max`, measured from the port's `Clock::now()` at the
+moment the method runs — rather than the port timing out on its own. `Wakeable`
+is there because a future that is `Pending` must be able to register interest
+and be woken later; it is required whenever an interface declares an event, a
+command or a query, and `Horn`'s signal-only `Client` needs neither. A
+signal-only interface also generates no `blocking` module, because a signal read
+never waits and there is nothing for `block_on` to wrap.
 
 This is why the face is generic over a port rather than taking a single runtime
 type: an application links exactly the port capabilities its interfaces use, and
@@ -692,17 +777,18 @@ because `ridl-rt` implements every port trait for `&mut P`; an owned handle, a
 `Clone` handle and a wrapper that forwards the port traits are accepted just as
 well. A face built over a borrow holds that borrow for as long as the face
 lives, so a runtime that implements every port on one value can be held by one
-face at a time, and by none while `dispatch` runs over it. That is why the
-examples above build a client, use it, and let it go before the next step.
+face at a time. A call's future goes further: it holds the client's port for as
+long as the future itself lives, not just for as long as the client does, so the
+port is unavailable to any other future or method until that one is dropped.
+That is why the examples above build a client, use it, and let its futures and
+the client itself go before the next step.
 
 ## The ports that did not appear
 
-Four of `port.rs`'s traits have had no step of their own, which is itself
-informative.
-
-**`Clock`** — `fn now(&self) -> Timestamp`. A runtime has one and stamps
-envelopes from it. No port method takes the current time, and generated code
-never calls `Clock`.
+Three of `port.rs`'s traits have had no step of their own, which is itself
+informative. A fourth, `Clock`, appeared only where step 5 and step 7 needed it:
+`fn now(&self) -> Timestamp`, called by a command's or a query's future to
+compute its own deadline, and by nothing else in the generated face.
 
 **`FixedReader`** — the consumer side of `fixed`, the provisioned constants of
 ridl §8. The emitter writes a `fixed` member's descriptor but no method for it,

@@ -1533,8 +1533,55 @@ fn a_send_wakes_a_pending_serve() {
     assert_eq!(provider.set_level_calls, vec![1]);
 }
 
+/// The same for a query: a send failure other than `Busy` on the slot-wait
+/// retry resolves `AverageCall` with that failure (driftsys/ridl#571).
+#[test]
+fn a_send_failure_other_than_busy_on_the_retry_resolves_the_query() {
+    let rt = loopback();
+    let mut filler = rt.caller();
+    let _held = fill_the_call_table(&mut filler);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let faults = ports.faults();
+    let mut client = generated::cabin::Client::new(ports);
+
+    let mut call = client.average(generated::Window::new_unchecked(10));
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::Query(Err(SendError::Busy))],
+        "the query waits for a slot"
+    );
+    faults.send.set(Some(SendError::Detached));
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Send(SendError::Detached)))
+    );
+    assert!(
+        doubles::forgets(&log).is_empty(),
+        "nothing was sent, so nothing is forgotten"
+    );
+}
+
+/// A `Serve` that resolved with the handler port's failure panics when it is
+/// polled again, as one that resolved with a refusal does
+/// (driftsys/ridl#571).
+#[test]
+#[should_panic(expected = "polled after completion")]
+fn a_serve_future_resolved_by_the_handlers_failure_panics_when_polled_again() {
+    let rt = loopback();
+    let handler = FailingHandler::failing_after(rt.handler(), 0);
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(handler, &mut provider);
+    assert_eq!(
+        poll_once(&mut serve),
+        Poll::Ready(Err(ProviderError::Claim(ReadError::Detached)))
+    );
+    let _ = poll_once(&mut serve);
+}
+
 /// Note F-4: a call future is `Send` when its port is, and `Unpin` by its
-/// fields; `Serve` is both over a `Send` handler and provider.
+/// fields; `Serve` is both over a `Send` handler and provider. The blocking
+/// client is `Send` when its port is, so a thread can own one.
 const _: () = {
     const fn assert_send<T: Send>() {}
     const fn assert_unpin<T: Unpin>() {}
@@ -1542,11 +1589,444 @@ const _: () = {
     assert_send::<generated::cabin::AverageCall<'static, Loopback>>();
     assert_send::<generated::cabin::NextEvent<'static, Loopback>>();
     assert_send::<generated::cabin::Serve<'static, ridl_loopback::HandlerHandle, TestProvider>>();
+    assert_send::<generated::cabin::blocking::Client<Loopback>>();
     assert_unpin::<generated::cabin::SetLevelCall<'static, Loopback>>();
     assert_unpin::<generated::cabin::AverageCall<'static, Loopback>>();
     assert_unpin::<generated::cabin::NextEvent<'static, Loopback>>();
     assert_unpin::<generated::cabin::Serve<'static, ridl_loopback::HandlerHandle, TestProvider>>();
 };
+
+// ---------------------------------------------------------------------------
+// The blocking client and `blocking::serve` (story E11.21, second half; the
+// async face design, notes F-10, F-11 and F-14). Each blocking call is
+// `ridl_rt::task::block_on` over the async call's future, so the calling
+// thread parks until a wake or the client's own timeout. The provider side
+// therefore runs on a second thread where a call is served, and where it is
+// not, the test reads what the client answers at its timeout. The loopback's
+// clock is hand-driven and never advanced here, so a member's `max` never
+// passes inside the future: every timed answer below comes from the client's
+// timeout, which is what note F-11 says a timeout shorter than `max` does.
+// ---------------------------------------------------------------------------
+
+/// A timeout long enough that a served call never reaches it, and short
+/// enough that a test which fails does not hang the suite.
+const GENEROUS: std::time::Duration = std::time::Duration::from_secs(10);
+/// The blocking client's timeout in the tests that reach it.
+const SHORT: std::time::Duration = std::time::Duration::from_millis(20);
+/// A longer timeout, for the test that shows the value set is the value
+/// waited.
+const LONG: std::time::Duration = std::time::Duration::from_millis(300);
+/// How long the serving thread sleeps before it serves, in the tests that
+/// show a client with no timeout waits for the provider.
+const LATE: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Serves `Valve` once on a second thread, after `LATE`, and returns what
+/// the blocking `open` on `client` answered and how long it waited. The
+/// handler fails once the one claim was presented, so the thread ends with
+/// the failure and the scope joins it at once.
+fn open_served_late(
+    rt: &Loopback,
+    client: &mut generated::valve::blocking::Client<RecordingPorts>,
+) -> (Result<(), ClientError>, std::time::Duration) {
+    let handler = FailingHandler::failing_after(rt.handler(), 1);
+    let mut provider = TestProvider::new(0);
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            std::thread::sleep(LATE);
+            let _ = generated::valve::blocking::serve(handler, &mut provider, Some(GENEROUS));
+        });
+        let started = std::time::Instant::now();
+        let answer = client.open(generated::Level::new_unchecked(42));
+        (answer, started.elapsed())
+    })
+}
+
+/// The correlation of the first send in `ops`, and every correlation
+/// `forget` was called with, in order.
+fn first_send_and_forgets(ops: &[Op]) -> (Correlation, Vec<Correlation>) {
+    let sent = match ops.first() {
+        Some(Op::Command(Ok(c))) | Some(Op::Query(Ok(c))) => *c,
+        _ => panic!("the call is sent when the method runs, not {ops:?}"),
+    };
+    let forgets = ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Forget(c) => Some(*c),
+            _ => None,
+        })
+        .collect();
+    (sent, forgets)
+}
+
+/// Note F-14: the cabin round trip passes through the blocking client. The
+/// provider side is `blocking::serve` on a second thread, over a handler that
+/// fails once two claims were presented, so that thread ends with the failure
+/// after the two calls rather than at its timeout, and the join returns at
+/// once. Note F-7 for the blocking form: the claims settled before the
+/// failure stay settled, and the failure is what `blocking::serve` returns.
+#[test]
+fn blocking_round_trip_command_and_query_are_served_from_another_thread() {
+    let mut rt = loopback();
+    let handler = FailingHandler::failing_after(rt.handler(), 2);
+    let mut provider = TestProvider::new(7);
+
+    let (acknowledged, reply, served) = std::thread::scope(|scope| {
+        let serving = scope
+            .spawn(|| generated::cabin::blocking::serve(handler, &mut provider, Some(GENEROUS)));
+        let mut client = generated::cabin::blocking::Client::new(&mut rt).with_timeout(GENEROUS);
+        let acknowledged = client.set_level(generated::Level::new_unchecked(42));
+        let reply = client.average(generated::Window::new_unchecked(10));
+        let served = serving.join().expect("the serving thread does not panic");
+        (acknowledged, reply, served)
+    });
+
+    assert_eq!(acknowledged, Ok(()));
+    assert_eq!(reply, Ok(generated::Average::new_unchecked(7)));
+    assert_eq!(
+        served,
+        Err(ProviderError::Claim(ReadError::Detached)),
+        "the handler failed after the two claims, and serve returned that failure"
+    );
+    assert_eq!(provider.set_level_calls, vec![42]);
+}
+
+/// Note F-11, the unsent phase: with every slot taken, the blocking call
+/// gives up at the client's timeout with `Send(Busy)`, the answer the future
+/// gives at its own deadline; nothing was sent, so nothing is forgotten. The
+/// member is `Valve::open`, which has no `max`, so the client's timeout is
+/// the only bound. `set_timeout` is the setter here, `with_timeout` in the
+/// other tests.
+#[test]
+fn a_blocking_call_still_unsent_at_its_timeout_returns_send_busy() {
+    let rt = loopback();
+    let mut filler = rt.caller();
+    let _held = fill_the_call_table(&mut filler);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::valve::blocking::Client::new(ports);
+    client.set_timeout(Some(SHORT));
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        client.open(generated::Level::new_unchecked(42)),
+        Err(ClientError::Send(SendError::Busy))
+    );
+    assert!(
+        started.elapsed() >= SHORT,
+        "the client waits its whole timeout before it gives up"
+    );
+    assert!(
+        doubles::forgets(&log).is_empty(),
+        "nothing was sent, so nothing is forgotten"
+    );
+}
+
+/// Note F-11, the unsent phase, a query: the same `Send(Busy)` at the
+/// client's timeout, by kind.
+#[test]
+fn a_blocking_query_still_unsent_at_its_timeout_returns_send_busy() {
+    let rt = loopback();
+    let mut filler = rt.caller();
+    let _held = fill_the_call_table(&mut filler);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::valve::blocking::Client::new(ports).with_timeout(SHORT);
+
+    assert_eq!(
+        client.pressure(generated::Window::new_unchecked(10)),
+        Err(ClientError::Send(SendError::Busy))
+    );
+    assert!(
+        doubles::forgets(&log).is_empty(),
+        "nothing was sent, so nothing is forgotten"
+    );
+}
+
+/// Note F-11, the other direction: the member's `max` ends the call before
+/// the client's timeout, on a runtime that wakes the waiter when the bound
+/// passes. `ridl-loopback` measures no bound and `advance` wakes nobody, so
+/// this test does what such a runtime does, from another thread: it advances
+/// the clock past `setLevel`'s `max` and wakes the call's `Outcome` waiter.
+/// The woken poll finds the bound passed and resolves to `Undelivered`,
+/// well before the 10 s client timeout, and forgets the call once.
+#[test]
+fn the_members_max_ends_a_blocking_call_before_the_clients_timeout_when_the_runtime_wakes_it() {
+    let mut rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let waiter = ports.outcome_waker();
+    let mut client = generated::cabin::blocking::Client::new(ports).with_timeout(GENEROUS);
+
+    let started = std::time::Instant::now();
+    let answer = std::thread::scope(|scope| {
+        scope.spawn(|| {
+            std::thread::sleep(SHORT);
+            rt.advance(SET_LEVEL_MAX);
+            rt.advance(Duration(1));
+            // The call registers its waiter on its first poll; wake it once
+            // it has, whichever thread got there first. Bounded, so a call
+            // that never registers fails the test rather than hanging it.
+            for attempt in 0.. {
+                let woken = waiter.lock().expect("no poisoned waker slot").take();
+                if let Some(waker) = woken {
+                    waker.wake();
+                    break;
+                }
+                assert!(
+                    attempt < 2_000,
+                    "the call registered no Outcome waiter within two seconds"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        });
+        client.set_level(generated::Level::new_unchecked(42))
+    });
+
+    assert_eq!(
+        answer,
+        Err(ClientError::Call(CallError::Transport(
+            Transport::Undelivered
+        )))
+    );
+    assert!(
+        started.elapsed() < GENEROUS / 2,
+        "the member's bound ended the call, not the client's timeout"
+    );
+    let (sent, forgets) = first_send_and_forgets(&doubles::take(&log));
+    assert_eq!(
+        forgets,
+        vec![sent],
+        "forgotten once, in the poll that found the bound passed"
+    );
+}
+
+/// Note F-11, the sent phase, a command: `Undelivered` at the client's
+/// timeout, and the call is forgotten once, when the future is dropped.
+#[test]
+fn a_blocking_command_sent_but_unserved_returns_undelivered_at_its_timeout_and_forgets() {
+    let rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::valve::blocking::Client::new(ports).with_timeout(SHORT);
+
+    assert_eq!(
+        client.open(generated::Level::new_unchecked(42)),
+        Err(ClientError::Call(CallError::Transport(
+            Transport::Undelivered
+        )))
+    );
+    let (sent, forgets) = first_send_and_forgets(&doubles::take(&log));
+    assert_eq!(
+        forgets,
+        vec![sent],
+        "forgotten once, when the future is dropped"
+    );
+}
+
+/// Note F-11, the sent phase, a query: `Timeout` at the client's timeout, and
+/// the call is forgotten once.
+#[test]
+fn a_blocking_query_sent_but_unserved_returns_timeout_at_its_timeout_and_forgets() {
+    let rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::valve::blocking::Client::new(ports).with_timeout(SHORT);
+
+    assert_eq!(
+        client.pressure(generated::Window::new_unchecked(10)),
+        Err(ClientError::Call(CallError::Transport(Transport::Timeout)))
+    );
+    let (sent, forgets) = first_send_and_forgets(&doubles::take(&log));
+    assert_eq!(
+        forgets,
+        vec![sent],
+        "forgotten once, when the future is dropped"
+    );
+}
+
+/// Note F-11: a client timeout shorter than the member's `max` is accepted.
+/// `setLevel`'s `max` is 50 ms on the loopback's clock, which never advances
+/// here, so the future's deadline cannot pass; the answer at 20 ms is the
+/// client's.
+#[test]
+fn a_blocking_timeout_shorter_than_the_members_max_is_accepted() {
+    let mut rt = loopback();
+    let mut client = generated::cabin::blocking::Client::new(&mut rt).with_timeout(SHORT);
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        client.set_level(generated::Level::new_unchecked(42)),
+        Err(ClientError::Call(CallError::Transport(
+            Transport::Undelivered
+        )))
+    );
+    assert!(started.elapsed() >= SHORT);
+}
+
+/// Note F-11: the timeout is `None` until one is set, and with none an
+/// untimed member waits for its provider: `Valve::open` has no `max`, the
+/// client sets no timeout, and the call resolves when the provider serves it
+/// after `LATE`, rather than at a default bound shorter than that.
+#[test]
+fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
+    let rt = loopback();
+    let mut client = generated::valve::blocking::Client::new(RecordingPorts::new(&rt));
+
+    let (answer, waited) = open_served_late(&rt, &mut client);
+    assert_eq!(answer, Ok(()), "the call was served, not cut off");
+    assert!(waited >= LATE, "the client waited for the provider");
+}
+
+/// The deadline is `Instant::now().checked_add(timeout)`: a timeout so large
+/// that the instant cannot be represented is a wait with no bound, and the
+/// call is served rather than the client panicking on the addition.
+#[test]
+fn a_timeout_too_large_to_represent_is_a_wait_with_no_bound() {
+    let rt = loopback();
+    let mut client = generated::valve::blocking::Client::new(RecordingPorts::new(&rt))
+        .with_timeout(std::time::Duration::MAX);
+
+    let (answer, waited) = open_served_late(&rt, &mut client);
+    assert_eq!(answer, Ok(()), "the call was served, and nothing panicked");
+    assert!(waited >= LATE);
+}
+
+/// Note F-11: `set_timeout(None)` clears a timeout that was set. With
+/// `SHORT` left in place the call would answer `Undelivered` before the
+/// provider serves it after `LATE`.
+#[test]
+fn set_timeout_none_clears_the_timeout() {
+    let rt = loopback();
+    let mut client =
+        generated::valve::blocking::Client::new(RecordingPorts::new(&rt)).with_timeout(SHORT);
+    client.set_timeout(None);
+
+    let (answer, waited) = open_served_late(&rt, &mut client);
+    assert_eq!(
+        answer,
+        Ok(()),
+        "the bound was lifted, so the call was served"
+    );
+    assert!(waited >= LATE);
+}
+
+/// Note F-11: the timeout waited is the one set, not only its presence. A
+/// `LONG` timeout waits at least `LONG`; the `SHORT` one set after it waits
+/// less than the `LONG` one did. Both are unserved, so each answers at its
+/// timeout.
+#[test]
+fn the_timeout_waited_is_the_one_set() {
+    let rt = loopback();
+    let mut client =
+        generated::valve::blocking::Client::new(RecordingPorts::new(&rt)).with_timeout(LONG);
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        client.open(generated::Level::new_unchecked(1)),
+        Err(ClientError::Call(CallError::Transport(
+            Transport::Undelivered
+        )))
+    );
+    let long = started.elapsed();
+    assert!(long >= LONG, "the client waited the whole long timeout");
+
+    client.set_timeout(Some(SHORT));
+    let started = std::time::Instant::now();
+    assert_eq!(
+        client.open(generated::Level::new_unchecked(2)),
+        Err(ClientError::Call(CallError::Transport(
+            Transport::Undelivered
+        )))
+    );
+    let short = started.elapsed();
+    assert!(short >= SHORT);
+    assert!(
+        short < LONG,
+        "the short timeout ended the call before the long one would have ({short:?})"
+    );
+    assert!(
+        short < long,
+        "the short timeout waits less than the long one did ({short:?} against {long:?})"
+    );
+}
+
+/// Note F-11: a read failure is returned as the failure, distinct from the
+/// `Ok(None)` of the timeout.
+#[test]
+fn blocking_next_event_returns_the_read_failure() {
+    let rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let faults = ports.faults();
+    let mut client = generated::cabin::blocking::Client::new(ports).with_timeout(SHORT);
+    client.subscribe_warning().expect("subscribe");
+
+    faults.next.set(Some(ReadError::Detached));
+    assert!(
+        matches!(client.next_event(), Err(ReadError::Detached)),
+        "the read's failure is the answer, not the timeout's Ok(None)"
+    );
+}
+
+/// Note F-11: `blocking::next_event` returns `Ok(None)` at the timeout when
+/// no occurrence arrived, and `Ok(Some)` when one is raised, here from
+/// another thread, which is what a wake across threads is for.
+#[test]
+fn blocking_next_event_returns_none_at_its_timeout_and_the_occurrence_when_raised() {
+    let mut rt = loopback();
+    // The client is built over the role handles, so the `Loopback` stays
+    // free for the thread that raises.
+    let ports = RecordingPorts::new(&rt);
+    let mut client = generated::cabin::blocking::Client::new(ports).with_timeout(SHORT);
+    client.subscribe_warning().expect("subscribe");
+
+    assert!(
+        matches!(client.next_event(), Ok(None)),
+        "nothing was raised, so the timeout answers"
+    );
+
+    client.set_timeout(Some(GENEROUS));
+    let event = std::thread::scope(|scope| {
+        scope.spawn(|| {
+            std::thread::sleep(SHORT);
+            generated::cabin::Publisher::new(&mut rt)
+                .warning(generated::Warning {
+                    code: generated::Level::new_unchecked(5),
+                    health: generated::Health::Warn,
+                })
+                .expect("raise");
+        });
+        client.next_event()
+    });
+    let Ok(Some(generated::cabin::Event::Warning(occurrence))) = event else {
+        panic!("the raise wakes the waiting client, which answers the occurrence");
+    };
+    assert_eq!(
+        occurrence.payload.expect("the payload verifies").code.get(),
+        5
+    );
+}
+
+/// Note F-11: `blocking::serve` returns `Ok(())` at its timeout, so a loop
+/// that also does other work can call it repeatedly; a refused
+/// `Handler::serve` is returned at once.
+#[test]
+fn blocking_serve_returns_ok_at_its_timeout_and_the_refusal_at_once() {
+    let rt = loopback();
+    let mut provider = TestProvider::new(0);
+
+    let started = std::time::Instant::now();
+    assert_eq!(
+        generated::cabin::blocking::serve(rt.handler(), &mut provider, Some(SHORT)),
+        Ok(())
+    );
+    assert!(started.elapsed() >= SHORT, "serve waits its whole timeout");
+
+    let handler = FailingHandler::refusing(rt.handler(), ServeError::NotOwner);
+    assert_eq!(
+        generated::cabin::blocking::serve(handler, &mut provider, Some(GENEROUS)),
+        Err(ProviderError::Serve(ServeError::NotOwner))
+    );
+}
 
 // ---------------------------------------------------------------------------
 // RA-19's compiled proof (design §6): a minimal port, not a bound.

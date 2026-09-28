@@ -150,6 +150,16 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
             fn expired(&self) -> bool {
                 self.deadline.is_some_and(|deadline| self.port.now() > deadline)
             }
+
+            /// Whether the call was sent and waits for its outcome. The
+            /// blocking client asks this when `block_on` gives up, to answer
+            /// as the future would at its own deadline; it is under `std`
+            /// with that client, so a build without the feature has no
+            /// unused item.
+            #[cfg(feature = "std")]
+            fn sent(&self) -> bool {
+                matches!(self.phase, #phase::Waiting(_))
+            }
         }
 
         impl<P: #bounds> ::core::future::Future for #future<'_, P> {

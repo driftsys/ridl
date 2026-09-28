@@ -498,10 +498,11 @@ puts the `Payload<FlatBuffers>` implementations in `generate`'s own output
 rather than behind a third entry point, and `ridlc::run_build` calls `generate`
 — so `ridl build --emit rust` has carried the codec since stage K5
 (driftsys/ridl#465), and `crates/ridlc/src/lib.rs` has rendered
-`ridl-rt = { version = "0.1", features = ["flatbuffers"] }` since the same
-stage. What remained to E11.14 was the descriptors and the face, which
-`generate_face` emitted and which `run_build` did not call — and which it now
-calls `generate_pipeline` for.
+`ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` since
+the same stage, where the version is the crate's own at the time — `"0.3"` since
+the 0.3.0 release. What remained to E11.14 was the descriptors and the face,
+which `generate_face` emitted and which `run_build` did not call — and which it
+now calls `generate_pipeline` for.
 
 **E11.14 landed** (driftsys/ridl#479). `ridlc::run_build` calls
 `generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the
@@ -530,32 +531,35 @@ declaration has a root table, and a named scalar, an enum and an enum set are
 rooted in a box — and D-11 landed over it in stage K9b. E11.14's `Done when` is
 written over a payload that has a codec.
 
-**Six stories added 2026-09-25: the async face and the runtime substrate.** The
-generated face of E11.13 and E11.14 exposes one poll-based surface — a send
-returns a per-call correlation, and the application polls `*_ack`, `*_reply` and
-`next_event` in a loop of its own, and runs `dispatch` repeatedly on the
-provider side. Every application that waits for a reply writes the same loop.
-The stories below replace that public surface with two clients per interface, an
-async one that works under `no_std` and a blocking one behind a `std` cargo
-feature implemented over the async one, with `serve` in both forms in place of
-the public `dispatch`; the poll methods and the correlation newtypes become
-`pub(crate)`. Underneath, `ridl-rt` gains what every runtime with asynchronous
-replies otherwise writes on its own: a keyed `Wakeable` port extension (no port
-waits, so a runtime must be able to say "what you wait for may have arrived"),
-`Transport::Busy`, a `std` feature with `block_on` and a no-op waker, a
-correlation table with a keyed waker registry, and four helpers every runtime
-computes on its own — freshness, event loss and the call deadline, which the
-language reference defines, and the in-flight byte budget, which is derived from
-the descriptors and which no specification defines. The port contract tests of
-`crates/ridl-loopback/tests/ports.rs` become a crate any runtime runs. The
-ADR-0023 decision that a `Client` call returns `Result<Correlation, SendError>`
-(decision 4 and its 2026-09-20 amendment) is reversed for the public surface by
-an amendment that also closes driftsys/ridl#485; the `ridl-rt` additions are an
-ADR-0021 amendment, and E11.16 to E11.19 ship as one 0.x minor of the crate
-under that record's decision 10. The lane is driven by
-[the lane F driver](wip/2026-09-25-lane-f-driver.md), which carries the
-sequencing, the fifteen decisions its design note takes, and what each stage
-owes the Kotlin runtime, which mirrors every item one wave behind.
+**Six stories added 2026-09-25, all landed by 2026-09-28: the async face and the
+runtime substrate.** Lane F is closed; the rows below stay here for the
+reasoning the paragraph carries, and the landed record holds them with their
+pull requests. The generated face of E11.13 and E11.14 exposes one poll-based
+surface — a send returns a per-call correlation, and the application polls
+`*_ack`, `*_reply` and `next_event` in a loop of its own, and runs `dispatch`
+repeatedly on the provider side. Every application that waits for a reply writes
+the same loop. The stories below replace that public surface with two clients
+per interface, an async one that works under `no_std` and a blocking one behind
+a `std` cargo feature implemented over the async one, with `serve` in both forms
+in place of the public `dispatch`; the poll methods and the correlation newtypes
+become `pub(crate)`. Underneath, `ridl-rt` gains what every runtime with
+asynchronous replies otherwise writes on its own: a keyed `Wakeable` port
+extension (no port waits, so a runtime must be able to say "what you wait for
+may have arrived"), `Transport::Busy`, a `std` feature with `block_on` and a
+no-op waker, a correlation table with a keyed waker registry, and four helpers
+every runtime computes on its own — freshness, event loss and the call deadline,
+which the language reference defines, and the in-flight byte budget, which is
+derived from the descriptors and which no specification defines. The port
+contract tests of `crates/ridl-loopback/tests/ports.rs` become a crate any
+runtime runs. The ADR-0023 decision that a `Client` call returns
+`Result<Correlation, SendError>` (decision 4 and its 2026-09-20 amendment) is
+reversed for the public surface by an amendment that also closes
+driftsys/ridl#485; the `ridl-rt` additions are an ADR-0021 amendment, and E11.16
+to E11.19 ship as one 0.x minor of the crate under that record's decision 10.
+The lane was driven by [the lane F driver](archive/2026-09-25-lane-f-driver.md),
+which carries the sequencing, the fifteen decisions its design note takes, and
+what each stage owes the Kotlin runtime, which mirrors every item one wave
+behind.
 
 | ID     | Story                                                                                                                                                                                                                                                                                                                                   | Done when                                                                                                                                                                                                                                                                                                                                                             | Size |
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |

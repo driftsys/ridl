@@ -140,11 +140,11 @@ with the alternative rejected):
   roadmap; no earlier record states it.
 
   **Reversed 2026-09-25** by driftsys/ridl#516 and
-  [the lane F driver](2026-09-25-lane-f-driver.md) (stage F1c). On Android, a
-  runtime binds the ports over its own binder contract, which may be one
-  generic, versioned AIDL serving every catalog; ridl specifies no Binder layout
-  and no transaction code, and the Kotlin backend generates no binding. The
-  reasons: a binding generated per interface ties the AIDL version to every
+  [the lane F driver](../archive/2026-09-25-lane-f-driver.md) (stage F1c). On
+  Android, a runtime binds the ports over its own binder contract, which may be
+  one generic, versioned AIDL serving every catalog; ridl specifies no Binder
+  layout and no transaction code, and the Kotlin backend generates no binding.
+  The reasons: a binding generated per interface ties the AIDL version to every
   interface change; it reads signals over IPC; it gives a command no path to
   report "busy"; and its fixed transaction codes collide with the control
   methods (finding K3b of driftsys/ridlc-gen-kotlin#3). The frame specification

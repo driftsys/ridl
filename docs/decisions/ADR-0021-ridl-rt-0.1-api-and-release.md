@@ -57,7 +57,7 @@ does not yet contain.
 
 **Amendment (2026-09-26) — decisions 13 to 18, decision 8 folded, decision 11
 corrected, open questions 5 and 6.** Lane F's design note,
-[`2026-09-25-async-face-design.md`](../wip/2026-09-25-async-face-design.md),
+[`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md),
 designed the substrate the generated async client of
 [ADR-0023](ADR-0023-interaction-face-generation.md) decision 6 polls: a keyed
 wake source on a port, a correlation table, and the errors a call and a `serve`
@@ -765,9 +765,9 @@ trusted with no `unsafe` and no second verification pass.
 - `crates/ridl-rt/src/contract.rs`, `crates/ridl-rt/src/payload.rs`,
   `crates/ridl-rt/src/encoding.rs` — the identity types, the proof type and the
   sealed `Encoding` trait as built
-- [`2026-09-25-async-face-design.md`](../wip/2026-09-25-async-face-design.md) —
-  lane F's design note, F-1 to F-15, and the disposition that ratifies decisions
-  13 to 18
+- [`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md)
+  — lane F's design note, F-1 to F-15, and the disposition that ratifies
+  decisions 13 to 18
 - [ADR-0023](ADR-0023-interaction-face-generation.md) decision 6 — the generated
   clients and `serve` built over decisions 13 to 16
 - `crates/ridl-rt/src/task.rs`, `sample.rs`, `contract.rs` — the `std` feature
