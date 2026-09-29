@@ -243,8 +243,13 @@ enum Repr {
     /// A named scalar over one of the three above.
     Named(NamedScalar),
     /// A generated `#[repr(i64)]` enum. `first` is the variant a discharged
-    /// read decodes to.
-    Enum { name: String, first: String },
+    /// read decodes to; `zero` is the variant whose value is 0, which is what
+    /// an absent field reads as, when the enum declares one.
+    Enum {
+        name: String,
+        first: String,
+        zero: Option<String>,
+    },
     /// A generated enum set: a `#[repr(transparent)]` newtype over `i64`.
     EnumSet { name: String },
 }
@@ -294,6 +299,69 @@ impl Scalar {
         }
     }
 
+    /// The domain value an absent non-optional field reads as: the
+    /// FlatBuffers default, 0, as its own type spells it (driftsys/ridl#472).
+    /// `verify` has already refused an absent field whose type excludes 0
+    /// ([`Scalar::verify_absent`]), so for an enum this is its zero member;
+    /// the first variant stands in only where `verify` makes the read
+    /// unreachable.
+    fn decode_default(&self) -> TokenStream {
+        let zero = self.domain_zero();
+        match &self.repr {
+            Repr::Bool | Repr::Int | Repr::Float => zero,
+            Repr::Named(named) => {
+                let ty = type_path(&named.name);
+                let ctor = format_ident!("{}", named.ctor);
+                quote! { #ty::#ctor(#zero) }
+            }
+            Repr::Enum { name, first, zero } => {
+                let ty = type_path(name);
+                let variant = ident(zero.as_ref().unwrap_or(first));
+                quote! { #ty::#variant }
+            }
+            Repr::EnumSet { name } => {
+                let ty = type_path(name);
+                quote! { #ty(0i64) }
+            }
+        }
+    }
+
+    /// What `verify` does with an absent non-optional field
+    /// (driftsys/ridl#472): nothing when 0, the FlatBuffers default, is a
+    /// legal value of the field's type, and `MissingRequired` when it is not.
+    ///
+    /// Legality is judged by the check `verify` gives a present value: an
+    /// enum's members, and a constrained named scalar's `check`, called on 0.
+    /// An enum set's 0 is the empty set, which is always legal. A boolean,
+    /// integer or float with no named type is not checked by `verify` when it
+    /// is present (driftsys/ridl#469), so an absent one reads as 0 too.
+    fn verify_absent(&self) -> TokenStream {
+        match &self.repr {
+            Repr::Enum { zero: None, .. } => missing_required(),
+            Repr::Named(named) if named.ctor == "new_unchecked" => {
+                let ty = type_path(&named.name);
+                let zero = self.domain_zero();
+                let missing = missing_required();
+                quote! {
+                    if #ty::check(&#zero).is_err() {
+                        #missing
+                    }
+                }
+            }
+            _ => quote! {},
+        }
+    }
+
+    /// 0 in the language layer's type: `i64`, `f64` or `bool`, the type
+    /// [`Scalar::widen`] produces.
+    fn domain_zero(&self) -> TokenStream {
+        match self.prim {
+            Prim::Bool => quote! { false },
+            Prim::F32 | Prim::F64 => quote! { 0.0f64 },
+            _ => quote! { 0i64 },
+        }
+    }
+
     /// The domain value, from bytes `verify` has already accepted.
     fn decode(&self, buf: &TokenStream, at: &TokenStream) -> TokenStream {
         let read = self.read(buf, at);
@@ -306,7 +374,7 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#widened) }
             }
-            Repr::Enum { name, first } => {
+            Repr::Enum { name, first, .. } => {
                 let ty = type_path(name);
                 let variant = ident(first);
                 quote! {
@@ -524,6 +592,30 @@ fn decode_path(owner: &str) -> TokenStream {
     let prefix = owner_prefix(package);
     let id = decode_ident(name);
     quote! { #prefix #id }
+}
+
+/// The `verify` statement for an absent field that carries no value: a
+/// non-optional string, bytes, table, union or collection, or a scalar or
+/// enum whose type excludes 0 ([`Scalar::verify_absent`]).
+fn missing_required() -> TokenStream {
+    quote! {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+}
+
+/// What `verify` does when a non-optional field is absent. A scalar or an
+/// enum reads as the FlatBuffers default unless its type excludes 0
+/// ([`Scalar::verify_absent`], driftsys/ridl#472); anything else is an offset
+/// with no default, so its absence is `MissingRequired`.
+fn verify_absent(wire: &Wire) -> TokenStream {
+    match wire {
+        Wire::Scalar(scalar) => scalar.verify_absent(),
+        _ => missing_required(),
+    }
 }
 
 /// The typl constraint check for a named scalar's value, over a borrow
@@ -960,6 +1052,10 @@ impl<'a> Codec<'a> {
                         // The variant `emit_enum` declared, which is the
                         // pinned `pascal_case` spelling.
                         first: pascal_of(first.name.as_ref()),
+                        zero: def
+                            .zero_member
+                            .and_then(|index| def.values.get(index as usize))
+                            .map(|zero| pascal_of(zero.name.as_ref())),
                     },
                 }))
             }
@@ -1291,6 +1387,19 @@ impl<'a> Codec<'a> {
                     }
                 }
             })
+        } else if let Wire::Scalar(scalar) = &slot.wire {
+            // An absent scalar or enum reads as the FlatBuffers default
+            // (driftsys/ridl#472): there is no slot to read it from.
+            let default = scalar.decode_default();
+            Ok(quote! {
+                #[doc = #doc]
+                #vis fn #name(&self) -> #inner_ty {
+                    match ::ridl_rt::flatbuffers::field(self.buf, self.table, #id, #width) {
+                        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner,
+                        _ => #default,
+                    }
+                }
+            })
         } else {
             Ok(quote! {
                 #[doc = #doc]
@@ -1602,15 +1711,8 @@ impl<'a> Codec<'a> {
             let absent = if slot.optional {
                 quote! { ::core::option::Option::None => {} }
             } else {
-                quote! {
-                    ::core::option::Option::None => {
-                        return ::core::result::Result::Err(
-                            ::ridl_rt::payload::VerifyError::Structure(
-                                ::ridl_rt::payload::Malformed::MissingRequired,
-                            ),
-                        );
-                    }
-                }
+                let absent = verify_absent(&slot.wire);
+                quote! { ::core::option::Option::None => { #absent } }
             };
             checks.push(quote! {
                 match ::ridl_rt::flatbuffers::field(buf, table, #id, #width)
@@ -1790,6 +1892,16 @@ impl<'a> Codec<'a> {
                         ::core::option::Option::Some(#inner)
                     }
                     _ => ::core::option::Option::None,
+                }
+            }
+        } else if let Wire::Scalar(scalar) = &slot.wire {
+            // An absent scalar or enum reads as the FlatBuffers default
+            // (driftsys/ridl#472): there is no slot to read it from.
+            let default = scalar.decode_default();
+            quote! {
+                match ::ridl_rt::flatbuffers::field(#buf, #table, #id, #width) {
+                    ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner,
+                    _ => #default,
                 }
             }
         } else {
@@ -2087,8 +2199,8 @@ impl<'a> Codec<'a> {
     /// box idiom rather than minting a second shape, and this is where that is
     /// true of the code rather than only of the records: `union_arm`'s
     /// non-table branch and `root_box_items` both call it, and the slot, the
-    /// vtable width, the inline placement and the `MissingRequired` rule are
-    /// written once. `table` is the layout the projection hands over —
+    /// vtable width, the inline placement and the rule for an absent value
+    /// are written once. `table` is the layout the projection hands over —
     /// `union_arm_box_table` for an arm, `root_box_table` for a root — so the
     /// table this writes and the table `max_size` charges cannot be two
     /// different tables.
@@ -2139,6 +2251,29 @@ impl<'a> Codec<'a> {
         let field = self.encode_field(wire, value)?;
         let inner_verify = self.verify_at(owner, wire, &quote! { __p })?;
         let inner_decode = self.decode_expr(wire, &quote! { buf }, &quote! { __p })?;
+        let absent_verify = verify_absent(wire);
+        // An absent scalar or enum reads as the FlatBuffers default
+        // (driftsys/ridl#472); a string or a bytes box has no default, and
+        // `verify` has refused an absent one.
+        let decode = match wire {
+            Wire::Scalar(scalar) => {
+                let default = scalar.decode_default();
+                quote! {
+                    match ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit) {
+                        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner_decode,
+                        _ => #default,
+                    }
+                }
+            }
+            _ => quote! {
+                {
+                    let __p = ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
+                        .unwrap_or(::core::option::Option::None)
+                        .unwrap_or(0usize);
+                    #inner_decode
+                }
+            },
+        };
 
         Ok(BoxBodies {
             encode: quote! {
@@ -2151,30 +2286,19 @@ impl<'a> Codec<'a> {
                     builder.push_table(#size, #align, #slots, &__box)?
                 }
             },
-            // The box's one field is not optional, so a buffer with no slot
-            // for it carries no value at all.
+            // The box's one field is not optional. A buffer with no slot for
+            // it holds the FlatBuffers default when that is a legal value of
+            // the box's type, and no value at all when it is not
+            // (driftsys/ridl#472).
             verify: quote! {
                 match ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?
                 {
                     ::core::option::Option::Some(__p) => { #inner_verify }
-                    ::core::option::Option::None => {
-                        return ::core::result::Result::Err(
-                            ::ridl_rt::payload::VerifyError::Structure(
-                                ::ridl_rt::payload::Malformed::MissingRequired,
-                            ),
-                        );
-                    }
+                    ::core::option::Option::None => { #absent_verify }
                 }
             },
-            decode: quote! {
-                {
-                    let __p = ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
-                        .unwrap_or(::core::option::Option::None)
-                        .unwrap_or(0usize);
-                    #inner_decode
-                }
-            },
+            decode,
         })
     }
 
@@ -2315,8 +2439,10 @@ impl<'a> Codec<'a> {
                 #[doc = #doc]
                 ///
                 /// The buffer's root is the box table ADR-0019 decision 8
-                /// gives this declaration: one required `value` field. A
-                /// buffer carrying no slot for it is `MissingRequired`.
+                /// gives this declaration: one non-optional `value` field. A
+                /// buffer carrying no slot for it holds the FlatBuffers
+                /// default, 0, when 0 is a legal value of this type, and is
+                /// `MissingRequired` when it is not.
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {

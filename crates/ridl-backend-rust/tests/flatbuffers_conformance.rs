@@ -25,31 +25,33 @@
 //! keeps the checked-in reader honest: it regenerates it from the fixture's
 //! own emitted schema and asserts byte equality.
 //!
-//! **The two implementations do not agree about a default-valued field, by
-//! design, and the disagreement has two sides.** planus omits a table field
-//! whose value equals its FlatBuffers default, which is what a FlatBuffers
-//! writer does. Design note D-9 makes this codec always write such a field
-//! and read an absent non-optional one as `Malformed::MissingRequired`. So:
+//! **A default-valued field is read the way a conforming writer writes it**
+//! (driftsys/ridl#472, decision (a1)). planus omits a table field whose value
+//! equals its FlatBuffers default, which is what a FlatBuffers writer does.
+//! This codec still writes every field (design note D-9's writer rule), and
+//! reads an absent one as follows:
 //!
-//! - a buffer planus writes from a value carrying a default-valued
-//!   **non-optional** scalar is a buffer this codec refuses
-//!   ([`a_buffer_planus_wrote_omitting_a_default_is_refused`]);
-//! - an **optional** scalar present at its default survives no foreign round
-//!   trip, because it projects to a plain scalar with no `= null` and the
-//!   schema gives another reader nothing to read presence from
-//!   ([`an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip`]).
+//! - an absent **non-optional** scalar or enum reads as the default, 0 or the
+//!   enum's zero member, in every table position and in a box root
+//!   ([`a_buffer_planus_wrote_omitting_a_default_is_read_as_the_default`],
+//!   [`a_box_root_with_no_value_slot_reads_as_the_default`]), unless 0 is
+//!   not a legal value of the field's type, where it is still refused with
+//!   `Malformed::MissingRequired`
+//!   ([`an_absent_field_whose_type_excludes_zero_is_refused`]);
+//! - an **optional** scalar or enum projects with `= null` (ADR-0019
+//!   decision 9), so a present 0 survives a foreign round trip
+//!   ([`an_optional_scalar_at_its_default_survives_a_foreign_round_trip`]).
+//!
+//! What the rule gives up is telling a missing non-optional field from a
+//! present 0 where 0 is legal. FlatBuffers cannot state that difference for a
+//! scalar in any case: no scalar field can be `required`. A field whose
+//! presence matters is declared optional.
 //!
 //! **A scalar root is a root like any other** (ADR-0019 decision 8). A named
 //! scalar, an enum and an enum set are rooted in a box table, and
 //! [`a_scalar_root_round_trips_through_planus_both_ways`] measures both
 //! directions over one — the same obligation the composite cases carry, on the
 //! shape that had no root at all until decision 8.
-//!
-//! Both are decided divergences rather than defects, both are measured here
-//! rather than described, and driftsys/ridl#472 carries the pair. The
-//! optional half also bounds what D-9 claims: a present default is
-//! distinguishable from an absent optional for this codec reading its own
-//! bytes, and for no reader following the emitted schema.
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -140,10 +142,9 @@ fn the_checked_in_planus_reader_is_what_planus_codegen_writes() {
 /// trip, written in the generated package's own vocabulary.
 ///
 /// **Every scalar in it differs from its FlatBuffers default**, deliberately:
-/// planus omits a default-valued field, and this codec reads an omitted
-/// non-optional field as `Malformed::MissingRequired` (D-9). The divergence
-/// has its own case below; this value is chosen so that the two directions
-/// of the round trip test the encoding rather than that one disagreement.
+/// planus omits a default-valued field, so a field at its default would test
+/// the rule for an absent field rather than the encoding of a value. That
+/// rule has its own cases below.
 const CONFORMANCE_VALUE: &str = r#"
 fn inner(speed: i64, label: &str) -> Inner {
     Inner {
@@ -793,6 +794,49 @@ fn main() {{
     rustc::run_program("fb_conformance_spare_kept", &program(&main));
 }
 
+/// **This codec writes a non-optional field at its FlatBuffers default**
+/// (design note D-9's writer rule, which driftsys/ridl#472 keeps).
+///
+/// A reader that follows the schema reads an absent non-optional field as
+/// its default, so omitting one would save nothing a reader could see — and
+/// this encoder reserves inline space for every field anyway. It keeps
+/// writing the field because a reader generated before driftsys/ridl#472
+/// refuses an absent one with `MissingRequired`: omitting it would break
+/// that reader. No round trip through this codec can see the difference any
+/// more, so the vtable is read instead: `Report.id` at 0 has a non-zero
+/// `voffset`.
+#[test]
+fn this_codec_writes_a_non_optional_field_at_its_default() {
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_id_zero",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let mut value = conformance();
+    value.id = Count::new_unchecked(0);
+    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    let mut text = String::new();
+    for byte in bytes {
+        text.push_str(&format!("{byte:02x}"));
+    }
+    println!("{text}");
+}
+"#,
+        ),
+    );
+    let ours = from_hex(&transcript);
+    assert_ne!(
+        voffset(&ours, ID_SLOT),
+        0,
+        "this codec must write a non-optional field at its FlatBuffers default, \
+         or a reader generated before driftsys/ridl#472 refuses the buffer"
+    );
+}
+
 /// **A scalar root, both directions** (ADR-0019 decision 8).
 ///
 /// `Speed` is a named scalar, so before decision 8 it had no root table and
@@ -802,11 +846,12 @@ fn main() {{
 /// this codec writes for one, and this codec accepts the buffer planus writes
 /// for one.
 ///
-/// The value is 150, which is not `ushort`'s default, so the disagreement
-/// [`a_buffer_planus_wrote_omitting_a_default_is_refused`] measures is not in
-/// the way — it applies to a box's `value` field exactly as it does to any
-/// other non-optional field, since decision 8 resolves that field as an
-/// ordinary one.
+/// The value is 150, which is not `ushort`'s default, so planus writes the
+/// slot and this case measures the encoding of a value. A box at its default
+/// has no slot at all, and
+/// [`a_box_root_with_no_value_slot_reads_as_the_default`] measures that: a
+/// box's `value` is read as any other non-optional field is, since decision 8
+/// resolves that field as an ordinary one.
 #[test]
 fn a_scalar_root_round_trips_through_planus_both_ways() {
     // Direction one: this codec writes the box, planus reads it.
@@ -1056,13 +1101,14 @@ fn evolution_program(fixture: &str, main: &str) -> String {
 }
 
 /// **An empty string box survives a foreign round trip**, which bounds how far
-/// the case above reaches.
+/// the default rule reaches.
 ///
 /// A FlatBuffers default applies to a scalar and an enum, not to a string or a
 /// bytes field: an offset is present or absent, and a conforming writer writes
-/// an empty string as a present zero-length one. So the root-level refusal
-/// above does not swallow an empty `Label`, and this is the case that says so —
-/// the review of 2026-09-21 found the records claiming otherwise.
+/// an empty string as a present zero-length one. So an empty `Label` is a
+/// present value, never an absent one read as a default, and this is the case
+/// that says so — the review of 2026-09-21 found the records claiming
+/// otherwise.
 ///
 /// What a non-optional string box does refuse is an **absent** offset, which is
 /// a null string; typl gives a non-optional field no way to state one.
@@ -1079,8 +1125,8 @@ fn an_empty_string_box_round_trips_through_planus() {
         .to_vec();
 
     // The slot is present, which is what distinguishes this case from
-    // `a_box_root_with_no_value_slot_is_refused`: planus elides a default, and
-    // a string field has none to elide.
+    // `a_box_root_with_no_value_slot_reads_as_the_default`: planus elides a
+    // default, and a string field has none to elide.
     assert_ne!(
         voffset(&bytes, 0),
         0,
