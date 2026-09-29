@@ -702,8 +702,8 @@ fn the_closure_of_a_foreign_copy_reaches_foreign_through_a_bare_reference() {
 /// A local declaration that names a declaration of another package reaches
 /// foreign, and a reference to a foreign constant does too: the constant
 /// resolves, so its declaring package decides. The two packages hold the
-/// same number of declarations, so only their names tell them apart
-/// (driftsys/ridl#594).
+/// same number of declarations, so a comparison by declaration count would
+/// not tell them apart (driftsys/ridl#594).
 #[test]
 fn a_local_declaration_reaches_foreign_through_a_resolved_reference() {
     let a = v2::Package {
@@ -774,6 +774,81 @@ fn a_local_declaration_reaches_foreign_through_a_resolved_reference() {
         capped.reaches_unresolved,
         "a reference to a constant is not a type position"
     );
+}
+
+/// An unresolved reference has no declaring package, so the closure falls
+/// back to the spelling, as `TypeRef.foreign` does: `b.Missing` inside `b`
+/// is dotted and reaches foreign (driftsys/ridl#594).
+#[test]
+fn an_unresolved_self_qualified_reference_reaches_foreign() {
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "Holder".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![member(1, "missing", named("b.Missing"))],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&package_a()]);
+    let v1::declaration::Kind::Struct(def) = model.declarations[0].kind.as_ref().expect("a kind")
+    else {
+        panic!("`Holder` is a struct");
+    };
+    let Some(v1::slot::Occupant::Field(field)) = def.slots[0].occupant.as_ref() else {
+        panic!("the first slot holds a field");
+    };
+    let Some(v1::r#type::Kind::Named(reference)) =
+        field.r#type.as_ref().expect("a type").kind.as_ref()
+    else {
+        panic!("the field is typed by a named reference");
+    };
+    assert!(!reference.resolved);
+    assert!(reference.foreign, "the unresolved reference is dotted");
+
+    let closure = model.declarations[0].closure.as_ref().expect("a closure");
+    assert!(
+        closure.reaches_foreign,
+        "the closure states `b.Missing` as `TypeRef.foreign` does"
+    );
+    assert!(closure.reaches_unresolved);
+}
+
+/// A bare unresolved reference inside a foreign copy does not reach foreign:
+/// it has no declaring package and its text is not dotted, whatever package
+/// it was written in (driftsys/ridl#594).
+#[test]
+fn a_bare_unresolved_reference_inside_a_foreign_copy_is_not_foreign() {
+    let mut a = package_a();
+    let Some(v2::decl::Kind::UnionDef(choice)) = a.decls[2].kind.as_mut() else {
+        panic!("the third declaration of `a` is the union `Choice`");
+    };
+    choice.arms[0].type_ref = "Missing".to_string();
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "Uses".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![member(1, "choice", named("a.Choice"))],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&a]);
+    let (_, choice) = foreign_declaration(&model, "a", "Choice");
+    let closure = choice.closure.as_ref().expect("a closure");
+    assert!(
+        !closure.reaches_foreign,
+        "the bare `Missing` names no declaration and is not dotted"
+    );
+    assert!(closure.reaches_unresolved);
 }
 
 /// A reference `b` spells with its own package is not foreign: its declaring
