@@ -176,8 +176,11 @@ of [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 the port traits. A face built over a borrow holds that borrow for as long as the
 face lives, and a call's future holds the client's port for as long as the
 future lives; so the provider side runs over a handler handle taken from the
-runtime before the client is built, which is what `examples/cabin/consumer` and
-the round-trip tests do. The constructor is still where the catalog check of
+runtime before the client is built, which is what the round-trip tests do. A
+program that holds its faces for its whole run gives each face an aggregate of
+its own from `Loopback::attach` instead, and takes the handler from
+`Loopback::handler`, which is what `examples/cabin/consumer` does
+(driftsys/ridl#488). The constructor is still where the catalog check of
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
 belongs — **but no constructor performs one, and none ever has** (see "The
 catalog check is not emitted" below). This supersedes the M1 design's
