@@ -181,7 +181,9 @@ other entry below is Accepted.
   `table <Name>Box { value: … (id: 0); }`. Decision 8 is FlatBuffers-scoped like
   the other seven. Amended 2026-09-29, adding decision 9 from driftsys/ridl#472:
   an optional table field that holds a scalar or an enum takes `= null`, so a
-  present 0 survives a round trip through another implementation.
+  present 0 survives a round trip through another implementation. Amended
+  2026-09-30 from driftsys/ridl#598: decision 3's premise that every struct
+  field append is compatible is qualified, and its rule does not change.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a

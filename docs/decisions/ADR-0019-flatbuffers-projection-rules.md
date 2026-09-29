@@ -31,6 +31,12 @@ now reads an absent non-optional scalar or enum as the FlatBuffers default when
 joined the table. Decisions 1 to 8 are otherwise unchanged. Decision 9 is
 FlatBuffers-scoped like the other eight.
 
+**Amended 2026-09-30 — decision 3, from the decision on driftsys/ridl#598.**
+Decision 3's sentence that appending a struct field is a compatible change in
+typl is qualified in place: ADR-0008 decision 14 now calls an appended
+non-optional field breaking unless its type is a scalar, enum or enum set that
+allows the value 0. The rule decision 3 chose does not change.
+
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
 [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
@@ -164,6 +170,17 @@ refused.
    which makes ADR-0016 decision 6 property 3 unsatisfiable on the construct,
    silently. The `fixed_layout` flag stays in the IR for a target where a fixed
    layout is safe.
+
+   _Amended 2026-09-30, from the decision on driftsys/ridl#598._ "Appending a
+   struct field is a compatible change in typl" holds only for some appends.
+   ADR-0008 decision 14, as amended on 2026-09-30, and typl §7.4 make an
+   appended field compatible when it is optional, or when it is a scalar, enum
+   or enum set whose type allows the value 0; every other appended non-optional
+   field is breaking, because a reader of the new version refuses a payload of
+   the old one. The rule this decision chose does not change: for a compatible
+   append the `struct` form still fabricates the field from padding, where a
+   `table` reads it as absent or, for a non-optional field whose type allows 0,
+   as 0 (decision 6 as amended on 2026-09-29).
 
 4. **A map is a vector of generated entry tables, with no `(key)`.** FlatBuffers
    has no map type; each map field emits

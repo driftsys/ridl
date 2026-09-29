@@ -307,6 +307,27 @@ fn added(
     }
 }
 
+/// Whether a reader built against `new_set` refuses a payload in which the
+/// field `member` of struct `container`, in package `package`, is absent —
+/// the rule that makes an appended field breaking for its type
+/// (driftsys/ridl#598). `false` when `container` is not a struct of that
+/// package. The `ridl check` desk check reads it to say so in its RIDL-407
+/// message for an append that also sits beside a moved sibling.
+pub fn absence_refused(
+    new_set: &[v2::Package],
+    package: &str,
+    container: &str,
+    member: &str,
+) -> bool {
+    let Some(home) = new_set.iter().find(|candidate| candidate.name == package) else {
+        return false;
+    };
+    match find_decl(home, container).and_then(|decl| decl.kind.as_ref()) {
+        Some(v2::decl::Kind::StructDef(def)) => !absence_reads_as_legal(def, member, home, new_set),
+        _ => false,
+    }
+}
+
 /// Whether a reader built against the new struct body accepts a payload the old
 /// body wrote, in which the appended field `member` is absent
 /// (driftsys/ridl#598).

@@ -1441,6 +1441,45 @@ fn main() {{
     );
 }
 
+/// **The emitted schema states no default for a field whose type excludes
+/// 0** (driftsys/ridl#598). The `.fbs` gives `c : Level` (`[1..10]`) and
+/// `r : integer [1..10]` no `= …` annotation, so their FlatBuffers default is
+/// the implicit 0, and a reader generated from the schema reads an absent one
+/// as 0 where this codec refuses it. The enum with no zero member is the
+/// contrast: ADR-0019 decision 6 gives `g : Gear` `= null`, which this reads,
+/// so the check below is not blind to an annotation.
+#[test]
+fn the_schema_states_no_default_for_a_field_whose_type_excludes_zero() {
+    let schema =
+        ridl_backend_flatbuffers::generate(&ir::compile_fixture("flatbuffers_evolution_v2.ridl"))
+            .expect("the fixture's schema generates")
+            .fbs_source;
+    let field_line = |table: &str, field: &str| -> String {
+        let body = schema
+            .split(&format!("table {table} {{"))
+            .nth(1)
+            .and_then(|rest| rest.split('}').next())
+            .unwrap_or_else(|| panic!("the schema declares table {table}:\n{schema}"));
+        body.lines()
+            .map(str::trim)
+            .find(|line| line.starts_with(&format!("{field}:")))
+            .unwrap_or_else(|| panic!("table {table} declares `{field}`:\n{schema}"))
+            .to_string()
+    };
+    for (table, field) in [("WithLevel", "c"), ("WithInlineRange", "r")] {
+        let line = field_line(table, field);
+        assert!(
+            !line.contains('='),
+            "`{line}` must carry no default, so a foreign reader reads an absent `{field}` as 0"
+        );
+    }
+    let gear = field_line("WithGear", "g");
+    assert!(
+        gear.contains("= null"),
+        "`{gear}` carries ADR-0019 decision 6's `= null`"
+    );
+}
+
 /// The generated codec's source for one of the fixtures other than the
 /// round-trip one, with `main` appended.
 fn fixture_program(fixture: &str, main: &str) -> String {

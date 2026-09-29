@@ -32,7 +32,7 @@ mod classify;
 pub mod system;
 mod walk;
 
-pub use classify::{category_from_word, classify, explain};
+pub use classify::{absence_refused, category_from_word, classify, explain};
 pub use system::{SystemChange, SystemHeading, diff_systems};
 
 #[cfg(test)]

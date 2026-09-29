@@ -362,7 +362,7 @@ follows the wrong `.fbs`. What this suite proves is that the codec's bytes are
 FlatBuffers and agree with the emitted schema; agreement between the emitted
 schema and ADR-0019 rests on the schema backend's own snapshots.
 
-Twelve cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
+Thirteen cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 
 1. bytes this codec writes are read by planus and compare equal field by field;
 2. bytes planus writes are accepted by `verify` and decode to the same value;
@@ -402,7 +402,10 @@ Twelve cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
     each gain one field — optional, legal at 0, excluding 0, or with no default
     at all — every append `ridl_diff::diff_packages` calls compatible verifies,
     and every one it calls breaking is refused with `MissingRequired`
-    (driftsys/ridl#598).
+    (driftsys/ridl#598);
+13. the emitted `.fbs` gives a field whose type excludes 0 — `c : Level`
+    (`[1..10]`) and `r : integer [1..10]` — no default annotation, while the
+    enum with no zero member carries `= null` (ADR-0019 decision 6).
 
 Cases 4, 5, 7, 9 and 11 are the default rule of driftsys/ridl#472, below: case 4
 is the reader rule at each table position and for each scalar kind, case 7 the
@@ -424,7 +427,8 @@ with its own schema is exactly what a round trip through itself cannot see.
 Turning a short vtable into an error in `ridl-rt` leaves the round-trip suite
 passing and fails five conformance cases — 3, 4, 7, 9 and 11, each of which
 reads a buffer that planus or an earlier version of a type wrote without a
-trailing slot.
+trailing slot. Re-measured on 2026-09-30, after case 12 was added, it fails six:
+case 12 reads such a buffer for every struct of the evolution fixture.
 
 **What the cases do not reach.** An empty vector, a multi-byte UTF-8 string, and
 any assertion about alignment. A default-valued scalar inside a nested table was
@@ -493,10 +497,12 @@ it, planus or `flatc`, reads an absent `c` as 0, a value outside the field's
 range, where this codec refuses the buffer. This codec writes every non-optional
 field, so under the rule above such an absence reaches a reader only from an
 append `ridl diff` reports as breaking, or from a foreign writer that left the
-field out; a foreign consumer that must reject it checks the range itself. This
-is recorded rather than tested: a test would need a second checked-in planus
-reader, generated from the evolution fixture, only to measure what the
-FlatBuffers format already specifies for an absent scalar.
+field out; a foreign consumer that must reject it checks the range itself. Case
+13 pins the schema half: the emitted field carries no default annotation, so its
+default is the implicit 0. What a foreign reader then does with an absent field
+is what the FlatBuffers format specifies for an absent scalar, and is not
+measured here: that would need a second checked-in planus reader, generated from
+the evolution fixture.
 
 ## `wasm32`
 

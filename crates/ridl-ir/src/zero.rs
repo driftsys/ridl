@@ -123,6 +123,9 @@ mod tests {
             (Some("0"), Some("10"), None, true),
             (Some("1"), Some("10"), None, false),
             (Some("-10"), Some("-1"), None, false),
+            // A bound of exactly 0 holds it, from either side.
+            (Some("-10"), Some("0"), None, true),
+            (Some("0"), Some("0"), None, true),
             (Some("-1.5"), Some("1.5"), Some("1.0"), false),
             (Some("-1.0"), Some("1.0"), Some("1.0"), true),
             (Some("0.0"), Some("1.0"), Some("0.01"), true),

@@ -1425,15 +1425,18 @@ enum MemberDrift {
     },
     /// A member declared after every ordinal the baseline assigns or
     /// retires, in an edit that also moved, removed or inserted another
-    /// member, which is what makes the classifier report the addition as
-    /// breaking. The warning stands for the siblings it names. An append
-    /// with none of those beside it draws no warning, even when the
-    /// classifier reports it breaking for the field's type
-    /// (driftsys/ridl#598): no ordinal moved.
+    /// member, which makes the classifier report the addition as breaking.
+    /// The warning stands for the siblings it names. `refused_absent` says
+    /// the member is a struct field that is breaking on its own too: a
+    /// reader of this version refuses a payload of the baseline, which does
+    /// not carry the field (driftsys/ridl#598). An append with none of those
+    /// siblings beside it draws no warning, even when it is breaking for its
+    /// type: no ordinal moved.
     Appended {
         moved: Vec<String>,
         gone: Vec<String>,
         inserted: Vec<String>,
+        refused_absent: bool,
     },
     /// An arm appended to a union that is, or becomes, a result union, with
     /// no other change: breaking because a result union's arms are its
@@ -1625,6 +1628,9 @@ fn member_drift(
                         moved,
                         gone,
                         inserted,
+                        refused_absent: ridl_diff::absence_refused(
+                            current, package, container, member,
+                        ),
                     }
                 }
             })
@@ -1730,6 +1736,7 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             moved,
             gone,
             inserted,
+            refused_absent,
         } => {
             let mut reasons = Vec::new();
             if !moved.is_empty() {
@@ -1741,13 +1748,23 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             if !inserted.is_empty() {
                 reasons.push(format!("{} was inserted", quoted_list(&inserted)));
             }
+            let by_type = if refused_absent {
+                format!(
+                    ". `{name}` is also breaking on its own: its type does not allow the value \
+                     0, so a reader built against this version refuses a payload of the \
+                     baseline, which does not carry the field (typl §7.4) — declare it \
+                     optional, with `?` after its type"
+                )
+            } else {
+                String::new()
+            };
             format!(
                 "`{name}` is declared{in_shape} after every ordinal the published baseline \
                  assigns or retires, and `ridl diff` still reports the addition as breaking \
                  because {} in the same edit. The diff reports no reorder beside an addition or \
                  a removal, so this warning stands for that change: a struct field or union arm \
                  keeps its ordinal for ever (typl §7.4) — put the other members back where the \
-                 baseline has them; this one stays at the end",
+                 baseline has them; this one stays at the end{by_type}",
                 reasons.join(" and "),
             )
         }

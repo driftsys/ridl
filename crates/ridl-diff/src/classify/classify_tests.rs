@@ -1919,6 +1919,24 @@ fn stepped(min: &str, max: &str, step: &str) -> v2::Constraint {
     constraint
 }
 
+/// A named float scalar over `backing` — the `float` primitive or a unit —
+/// with a range.
+fn float_scalar(name: &str, backing: v2::backing::Kind, min: &str, max: &str) -> v2::Decl {
+    decl(
+        name,
+        0,
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(backing),
+            }),
+            constraint: Some(bounds(Some(min), Some(max))),
+            declared_init: None,
+            init: None,
+            width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
+        }),
+    )
+}
+
 fn enum_set_decl(name: &str) -> v2::Decl {
     decl(
         name,
@@ -1954,6 +1972,30 @@ fn append_decls() -> Vec<v2::Decl> {
         ),
         enum_set_decl("Flags"),
         backed("Flag", v2::PrimitiveType::Boolean, None),
+        float_scalar(
+            "Ratio",
+            v2::backing::Kind::Primitive(v2::PrimitiveType::Float as i32),
+            "0.0",
+            "1.0",
+        ),
+        float_scalar(
+            "Upper",
+            v2::backing::Kind::Primitive(v2::PrimitiveType::Float as i32),
+            "0.5",
+            "1.0",
+        ),
+        float_scalar(
+            "Speed",
+            v2::backing::Kind::Unit("km/h".to_string()),
+            "0.0",
+            "300.0",
+        ),
+        float_scalar(
+            "Moving",
+            v2::backing::Kind::Unit("km/h".to_string()),
+            "10.0",
+            "300.0",
+        ),
         backed(
             "Label",
             v2::PrimitiveType::String,
@@ -2028,7 +2070,7 @@ fn an_appended_optional_field_is_compatible_whatever_its_type() {
 
 #[test]
 fn an_appended_scalar_whose_type_holds_zero_is_compatible() {
-    for name in ["Count", "Free", "Even", "Flag"] {
+    for name in ["Count", "Free", "Even", "Flag", "Ratio", "Speed"] {
         assert_eq!(
             append_verdict(named(name)),
             Verdict::Compatible,
@@ -2057,7 +2099,7 @@ fn an_appended_scalar_whose_type_holds_zero_is_compatible() {
 /// grid -1.5, -0.5, 0.5, 1.5.
 #[test]
 fn an_appended_scalar_whose_type_excludes_zero_is_breaking() {
-    for name in ["Level", "Below", "Odd"] {
+    for name in ["Level", "Below", "Odd", "Upper", "Moving"] {
         assert_eq!(
             append_verdict(named(name)),
             Verdict::Breaking,
@@ -2190,6 +2232,136 @@ fn an_appended_field_typed_from_another_package_is_judged_by_its_declaration() {
         Verdict::Breaking,
         "one package pair cannot resolve `veh.units.Count`"
     );
+}
+
+/// Two fields appended in one edit are judged each by its own type: the
+/// classifier looks the appended field up by name, not by position.
+#[test]
+fn two_fields_appended_in_one_edit_are_judged_each_by_its_own_type() {
+    for (first, second) in [("Level", "Count"), ("Count", "Level")] {
+        let old = decl_pkg(
+            append_decls()
+                .into_iter()
+                .chain([struct_decl("S", vec![field("a", 1, "Count")])])
+                .collect(),
+        );
+        let new = decl_pkg(
+            append_decls()
+                .into_iter()
+                .chain([struct_decl(
+                    "S",
+                    vec![
+                        field("a", 1, "Count"),
+                        field("b", 2, first),
+                        field("c", 3, second),
+                    ],
+                )])
+                .collect(),
+        );
+        let report = diff_packages(&old, &new);
+        let verdict_of = |path: &str| {
+            report
+                .changes
+                .iter()
+                .find(|change| change.path == path)
+                .map(|change| change.verdict)
+        };
+        let expected = |name: &str| {
+            Some(if name == "Level" {
+                Verdict::Breaking
+            } else {
+                Verdict::Compatible
+            })
+        };
+        assert_eq!(
+            verdict_of("veh.cluster/S/b"),
+            expected(first),
+            "`b : {first}`"
+        );
+        assert_eq!(
+            verdict_of("veh.cluster/S/c"),
+            expected(second),
+            "`c : {second}`"
+        );
+    }
+}
+
+/// A field whose type is declared in the same edit is judged by the new
+/// package's declaration: the old package does not hold the type at all.
+#[test]
+fn an_appended_field_whose_type_is_new_in_the_same_edit_is_judged_by_the_new_package() {
+    for (fresh, verdict) in [
+        (
+            scalar("Fresh", bounds(Some("0"), Some("5")), v2::IntWidth::U8),
+            Verdict::Compatible,
+        ),
+        (
+            scalar("Fresh", bounds(Some("1"), Some("5")), v2::IntWidth::U8),
+            Verdict::Breaking,
+        ),
+    ] {
+        let old = decl_pkg(vec![
+            scalar("Count", bounds(Some("0"), Some("200")), v2::IntWidth::U8),
+            struct_decl("S", vec![field("a", 1, "Count")]),
+        ]);
+        let new = decl_pkg(vec![
+            scalar("Count", bounds(Some("0"), Some("200")), v2::IntWidth::U8),
+            fresh,
+            struct_decl("S", vec![field("a", 1, "Count"), field("b", 2, "Fresh")]),
+        ]);
+        let report = diff_packages(&old, &new);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.path == "veh.cluster/S/b")
+            .expect("the appended field is reported");
+        assert_eq!(change.verdict, verdict, "{:?}", report.changes);
+    }
+}
+
+/// `diff_sets` resolves a type of another package against the **new**
+/// snapshot's packages. Here the old `veh.units` declares `Count` over
+/// `[1..10]` and the new one over `[0..10]`, so the old declaration would
+/// give the opposite verdict.
+#[test]
+fn diff_sets_resolves_a_foreign_field_type_against_the_new_snapshot() {
+    let units = |min: &str| v2::Package {
+        name: "veh.units".to_string(),
+        decls: vec![scalar(
+            "Count",
+            bounds(Some(min), Some("10")),
+            v2::IntWidth::U8,
+        )],
+        interfaces: Vec::new(),
+        services: Vec::new(),
+        retired: Vec::new(),
+    };
+    let body = |appended: bool| -> v2::Package {
+        let mut members = vec![field("a", 1, "veh.units.Count")];
+        if appended {
+            members.push(field("b", 2, "veh.units.Count"));
+        }
+        decl_pkg(vec![struct_decl("S", members)])
+    };
+    for (old_min, new_min, verdict) in [
+        ("1", "0", Verdict::Compatible),
+        ("0", "1", Verdict::Breaking),
+    ] {
+        let report = crate::diff_sets(
+            &[units(old_min), body(false)],
+            &[units(new_min), body(true)],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.path == "veh.cluster/S/b")
+            .expect("the appended field is reported");
+        assert_eq!(
+            change.verdict, verdict,
+            "`Count` from [{old_min}..10] to [{new_min}..10]: {:?}",
+            report.changes
+        );
+    }
 }
 
 /// The classifier is the **only** line of defence here, so this is the module's
