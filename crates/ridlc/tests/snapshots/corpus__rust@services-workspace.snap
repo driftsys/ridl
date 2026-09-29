@@ -338,24 +338,18 @@ pub(crate) fn __ridl_fb_verify_door_id(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            DoorId::check(&(i64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            if DoorId::check(&0i64).is_err() {
-                return ::core::result::Result::Err(
-                    ::ridl_rt::payload::VerifyError::Structure(
-                        ::ridl_rt::payload::Malformed::MissingRequired,
-                    ),
-                );
-            }
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        DoorId::check(&(i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -479,24 +473,18 @@ pub(crate) fn __ridl_fb_verify_percent(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Percent::check(&(f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            if Percent::check(&0.0f64).is_err() {
-                return ::core::result::Result::Err(
-                    ::ridl_rt::payload::VerifyError::Structure(
-                        ::ridl_rt::payload::Malformed::MissingRequired,
-                    ),
-                );
-            }
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Percent::check(&(f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -620,24 +608,18 @@ pub(crate) fn __ridl_fb_verify_odometer(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Odometer::check(&(i64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            if Odometer::check(&0i64).is_err() {
-                return ::core::result::Result::Err(
-                    ::ridl_rt::payload::VerifyError::Structure(
-                        ::ridl_rt::payload::Malformed::MissingRequired,
-                    ),
-                );
-            }
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_u32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Odometer::check(&(i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -957,24 +939,18 @@ pub(crate) fn __ridl_fb_verify_door_report(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            DoorId::check(&(i64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            if DoorId::check(&0i64).is_err() {
-                return ::core::result::Result::Err(
-                    ::ridl_rt::payload::VerifyError::Structure(
-                        ::ridl_rt::payload::Malformed::MissingRequired,
-                    ),
-                );
-            }
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        DoorId::check(&(i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,

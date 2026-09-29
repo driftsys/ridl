@@ -258,6 +258,13 @@ enum Repr {
 struct Scalar {
     prim: Prim,
     repr: Repr,
+    /// Whether 0, the FlatBuffers default, is a legal value of the type,
+    /// decided at generation time: an enum declares a zero member, an enum
+    /// set is always legal at 0 (the empty set), and a numeric scalar's
+    /// range and step hold 0 ([`zero_is_legal`]). An absent non-optional
+    /// field reads as 0 when this is true and is refused when it is not
+    /// (driftsys/ridl#472).
+    zero_legal: bool,
 }
 
 impl Scalar {
@@ -329,26 +336,13 @@ impl Scalar {
     /// What `verify` does with an absent non-optional field
     /// (driftsys/ridl#472): nothing when 0, the FlatBuffers default, is a
     /// legal value of the field's type, and `MissingRequired` when it is not.
-    ///
-    /// Legality is judged by the check `verify` gives a present value: an
-    /// enum's members, and a constrained named scalar's `check`, called on 0.
-    /// An enum set's 0 is the empty set, which is always legal. A boolean,
-    /// integer or float with no named type is not checked by `verify` when it
-    /// is present (driftsys/ridl#469), so an absent one reads as 0 too.
+    /// Which of the two is decided at generation time ([`Scalar::zero_legal`]),
+    /// so no check runs in the generated code.
     fn verify_absent(&self) -> TokenStream {
-        match &self.repr {
-            Repr::Enum { zero: None, .. } => missing_required(),
-            Repr::Named(named) if named.ctor == "new_unchecked" => {
-                let ty = type_path(&named.name);
-                let zero = self.domain_zero();
-                let missing = missing_required();
-                quote! {
-                    if #ty::check(&#zero).is_err() {
-                        #missing
-                    }
-                }
-            }
-            _ => quote! {},
+        if self.zero_legal {
+            quote! {}
+        } else {
+            missing_required()
         }
     }
 
@@ -592,6 +586,97 @@ fn decode_path(owner: &str) -> TokenStream {
     let prefix = owner_prefix(package);
     let id = decode_ident(name);
     quote! { #prefix #id }
+}
+
+/// Whether 0 is a value of a numeric scalar's declared range and step,
+/// decided at generation time from the IR's exact decimal text
+/// (driftsys/ridl#472).
+///
+/// 0 must lie within `[min..max]`, and when a `step` is declared it must also
+/// be on the grid `min + n·step` for a whole `n` (typl §4.3):
+/// `[-1.5..1.5 step 1.0]` holds -1.5, -0.5, 0.5 and 1.5, and not 0. A `step`
+/// with no `min` has no anchor, and a bound that is not plain decimal text
+/// (`-`, digits, and an optional fractional part) is not read here; in both
+/// cases the answer is `false`, so an absent field is refused rather than
+/// read as a value that may not be legal. No constraint at all holds 0.
+///
+/// This is decided from the declaration, for a named type and for an inline
+/// constraint alike, and not by calling the type's `check`: `check` ignores
+/// `step` (driftsys/ridl#469), and an inline constraint has no `check`.
+fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
+    let Some(constraint) = constraint else {
+        return true;
+    };
+    let read = |text: &Option<String>| -> Result<Option<Decimal>, ()> {
+        match text.as_deref() {
+            None => Ok(None),
+            Some(text) => Decimal::parse(text).map(Some).ok_or(()),
+        }
+    };
+    let (Ok(min), Ok(max), Ok(step)) = (
+        read(&constraint.min),
+        read(&constraint.max),
+        read(&constraint.step),
+    ) else {
+        return false;
+    };
+    if min.is_some_and(|min| min.units > 0) || max.is_some_and(|max| max.units < 0) {
+        return false;
+    }
+    match (step, min) {
+        (None, _) => true,
+        (Some(_), None) => false,
+        // 0 = min + n·step with a whole n: -min is a whole multiple of step.
+        (Some(step), Some(min)) => {
+            let scale = min.scale.max(step.scale);
+            match (min.rescaled(scale), step.rescaled(scale)) {
+                (Some(min), Some(step)) if step > 0 => min % step == 0,
+                _ => false,
+            }
+        }
+    }
+}
+
+/// An exact decimal read from the IR's canonical text: `units / 10^scale`.
+#[derive(Debug, Clone, Copy)]
+struct Decimal {
+    units: i128,
+    scale: u32,
+}
+
+impl Decimal {
+    /// Reads `-`, digits, and an optional `.` followed by digits. Anything
+    /// else, or more digits than an `i128` holds exactly, is `None`.
+    fn parse(text: &str) -> Option<Self> {
+        let (negative, unsigned) = match text.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, text),
+        };
+        let (whole, fraction) = match unsigned.split_once('.') {
+            Some((whole, fraction)) => (whole, fraction),
+            None => (unsigned, ""),
+        };
+        let digits_only = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+        if whole.is_empty()
+            || !digits_only(whole)
+            || !digits_only(fraction)
+            || (unsigned.contains('.') && fraction.is_empty())
+            || whole.len() + fraction.len() > 30
+        {
+            return None;
+        }
+        let units: i128 = format!("{whole}{fraction}").parse().ok()?;
+        Some(Decimal {
+            units: if negative { -units } else { units },
+            scale: u32::try_from(fraction.len()).ok()?,
+        })
+    }
+
+    /// `units` at a larger `scale`, or `None` on overflow.
+    fn rescaled(self, scale: u32) -> Option<i128> {
+        self.units
+            .checked_mul(10i128.checked_pow(scale.checked_sub(self.scale)?)?)
+    }
 }
 
 /// The `verify` statement for an absent field that carries no value: a
@@ -957,14 +1042,17 @@ impl<'a> Codec<'a> {
                     Some(v1::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::Bool,
                         repr: Repr::Bool,
+                        zero_legal: true,
                     })),
                     Some(v1::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::I64,
                         repr: Repr::Int,
+                        zero_legal: true,
                     })),
                     Some(v1::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::F64,
                         repr: Repr::Float,
+                        zero_legal: true,
                     })),
                     // A bare `string` or `bytes` carries no length bound, so
                     // it has no finite bound and the type was refused before
@@ -1064,19 +1152,21 @@ impl<'a> Codec<'a> {
                         ),
                     });
                 };
+                let zero = def
+                    .zero_member
+                    .and_then(|index| def.values.get(index as usize))
+                    .map(|zero| pascal_of(zero.name.as_ref()));
                 Ok(Wire::Scalar(Scalar {
                     // Every typl enum is emitted at one underlying width,
                     // `long`, which is what the projection charges it.
                     prim: Prim::I64,
+                    zero_legal: zero.is_some(),
                     repr: Repr::Enum {
                         name: owner.clone(),
                         // The variant `emit_enum` declared, which is the
                         // pinned `pascal_case` spelling.
                         first: pascal_of(first.name.as_ref()),
-                        zero: def
-                            .zero_member
-                            .and_then(|index| def.values.get(index as usize))
-                            .map(|zero| pascal_of(zero.name.as_ref())),
+                        zero,
                     },
                 }))
             }
@@ -1087,6 +1177,7 @@ impl<'a> Codec<'a> {
                 repr: Repr::EnumSet {
                     name: owner.clone(),
                 },
+                zero_legal: true,
             })),
             Some(v1::declaration::Kind::Struct(_)) => Ok(Wire::Table(owner.clone())),
             Some(v1::declaration::Kind::Union(_)) => Ok(Wire::Union(owner.clone())),
@@ -1127,6 +1218,7 @@ impl<'a> Codec<'a> {
                 Ok(Wire::Scalar(Scalar {
                     prim,
                     repr: scalar_repr(named, backing),
+                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 }))
             }
             Some(v1::scalar::Width::FloatWidth(width)) => {
@@ -1142,12 +1234,14 @@ impl<'a> Codec<'a> {
                 Ok(Wire::Scalar(Scalar {
                     prim,
                     repr: scalar_repr(named, backing),
+                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 }))
             }
             None => match backing {
                 ScalarBacking::Boolean => Ok(Wire::Scalar(Scalar {
                     prim: Prim::Bool,
                     repr: scalar_repr(named, backing),
+                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 })),
                 ScalarBacking::String => Ok(Wire::Text(named)),
                 ScalarBacking::Bytes => Ok(Wire::Bytes(named)),
@@ -2696,5 +2790,47 @@ fn int_prim(width: i32) -> Option<Prim> {
         v1::IntWidth::U64 => Some(Prim::U64),
         v1::IntWidth::I64 => Some(Prim::I64),
         v1::IntWidth::Unspecified => None,
+    }
+}
+
+#[cfg(test)]
+mod zero_tests {
+    use super::{v1, zero_is_legal};
+
+    fn constraint(min: Option<&str>, max: Option<&str>, step: Option<&str>) -> v1::Constraint {
+        v1::Constraint {
+            min: min.map(String::from),
+            max: max.map(String::from),
+            step: step.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn zero_is_legal_follows_the_range_and_the_step() {
+        let cases = [
+            (None, None, None, true),
+            (Some("0"), Some("10"), None, true),
+            (Some("1"), Some("10"), None, false),
+            (Some("-10"), Some("-1"), None, false),
+            (Some("-1.5"), Some("1.5"), Some("1.0"), false),
+            (Some("-1.0"), Some("1.0"), Some("1.0"), true),
+            (Some("0.0"), Some("1.0"), Some("0.01"), true),
+            (Some("-0.25"), Some("1"), Some("0.125"), true),
+            (Some("-0.3"), Some("1"), Some("0.2"), false),
+            // A step with no lower bound has no anchor, so it is not decided.
+            (None, Some("10"), Some("1"), false),
+            // Text this reader does not accept is not decided either.
+            (Some("-1e3"), Some("10"), None, false),
+            (Some("-1."), Some("10"), None, false),
+        ];
+        for (min, max, step, legal) in cases {
+            assert_eq!(
+                zero_is_legal(Some(&constraint(min, max, step))),
+                legal,
+                "min {min:?}, max {max:?}, step {step:?}"
+            );
+        }
+        assert!(zero_is_legal(None), "no constraint holds 0");
     }
 }

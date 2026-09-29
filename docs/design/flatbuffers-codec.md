@@ -273,11 +273,16 @@ directly: the equally long prefix of the same buffer fails `verify`.
   a field at its default, and it holds in `verify`, in `decode` and in a view's
   accessor, in every table — a struct's, a tuple's, a map entry's, a union arm's
   box — and in a box root. When 0 is not a legal value of the field's type, the
-  absent field is `Malformed::MissingRequired`. Legality is judged by the check
-  `verify` gives a present value: an enum's members, and a constrained named
-  scalar's `check`, called on 0. An enum set's 0 is the empty set, which is
-  always legal. An anonymous inline constraint is not checked by `verify` when
-  the field is present (driftsys/ridl#469), so an absent one reads as 0 too.
+  absent field is `Malformed::MissingRequired`. Legality is decided at
+  generation time from the declaration, so no check runs in the generated code:
+  an enum is legal at 0 when it declares a zero member, an enum set always is (0
+  is the empty set), and a numeric scalar — named or with an inline constraint —
+  is when 0 lies in its range and, if it declares a `step`, on its grid
+  `min + n·step`. `[-1.5..1.5 step 1.0]` holds -1.5, -0.5, 0.5 and 1.5, so an
+  absent field of that type is refused. The generated `check` is not used for
+  this, because it ignores `step` (driftsys/ridl#469) and an inline constraint
+  has none. What cannot be decided — a `step` with no lower bound, or a bound
+  that is not plain decimal text — is refused.
 - An absent non-optional string, bytes, table, union or collection field is
   `Malformed::MissingRequired`: an offset has no default.
 - A field whose enum declares no zero member carries `= null` in the schema
