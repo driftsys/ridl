@@ -640,9 +640,9 @@ fn push_field(
 /// The middle element of the result is whether the field needs an explicit
 /// `= null` default: a field typed by an enum with no zero member (ADR-0019
 /// decision 6), and an optional field holding a scalar or an enum (decision
-/// 9, [`holds_a_default`]) — see [`push_field`]. At a vector-element
-/// position it is dropped, never forwarded: only a table field carries a
-/// default in FlatBuffers, and a vector element must not inherit one.
+/// 9) — see [`push_field`]. At a vector-element position it is dropped,
+/// never forwarded: only a table field carries a default in FlatBuffers, and
+/// a vector element must not inherit one.
 fn resolve_field_type(
     packages: Packages,
     owner: &str,
@@ -652,49 +652,67 @@ fn resolve_field_type(
     induced: &mut Vec<Induced>,
     includes: &mut BTreeSet<String>,
 ) -> Result<(String, bool, Option<String>), GenerateError> {
-    let (type_text, needs_null_default, comment) =
-        resolve_type_position(packages, owner, field_name, hint, ty, induced, includes)?;
-    let optional_with_default = ty.optional && holds_a_default(packages, owner, field_name, ty)?;
+    let position = resolve_type_position(packages, owner, field_name, hint, ty, induced, includes)?;
     Ok((
-        type_text,
-        needs_null_default || optional_with_default,
-        comment,
+        position.type_text,
+        position.needs_null_default || (ty.optional && position.holds_a_default),
+        position.comment,
     ))
 }
 
-/// Whether a field of type `ty` holds a FlatBuffers scalar or an enum — the
-/// two kinds a FlatBuffers default applies to (ADR-0019 decision 9).
-///
-/// A string, a bytes vector, a table and a union are offsets: a writer
-/// writes them or leaves them out, and no default stands in for an absent
-/// one, so an optional field of those kinds needs no marker. A scalar or an
-/// enum field is different: a conforming writer omits it when it equals its
-/// default, so without `= null` an absent optional field and a present one
-/// at its default are one reading for every reader following the schema.
-fn holds_a_default(
-    packages: Packages,
-    owner: &str,
-    field_name: &str,
-    ty: &v2::FieldType,
-) -> Result<bool, GenerateError> {
-    let is_scalar = |text: &str| !matches!(text, "string" | "[ubyte]");
-    Ok(match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Primitive(primitive)) => is_scalar(fbs_primitive(*primitive)),
-        Some(v2::field_type::Kind::InlineScalar(td)) => is_scalar(fbs_scalar(td)),
-        Some(v2::field_type::Kind::Named(reference)) => {
-            let (decl, _) = resolve_reference(packages, owner, field_name, reference)?;
-            match &decl.kind {
-                Some(v2::decl::Kind::TypeDef(td)) => is_scalar(fbs_scalar(td)),
-                Some(v2::decl::Kind::EnumDef(_)) | Some(v2::decl::Kind::EnumSetDef(_)) => true,
-                _ => false,
-            }
+/// One resolved type position, before ADR-0019 decision 9's optional rule is
+/// applied to it.
+struct Position {
+    type_text: String,
+    /// The `= null` decision 6 calls for: an enum with no zero member.
+    needs_null_default: bool,
+    /// Whether the position holds a FlatBuffers scalar or an enum — the two
+    /// kinds a FlatBuffers default applies to (decision 9). A string, a bytes
+    /// vector, a table, a union and a vector are offsets: a writer writes
+    /// them or leaves them out, and no default stands in for an absent one,
+    /// so an optional field of those kinds needs no marker. A scalar or an
+    /// enum field is different: a conforming writer omits it when it equals
+    /// its default, so without `= null` an absent optional field and a
+    /// present one at its default are one reading for every reader following
+    /// the schema.
+    holds_a_default: bool,
+    comment: Option<String>,
+}
+
+impl Position {
+    /// A position whose resolved text is all that is known about it: it
+    /// holds a default exactly when that text is a FlatBuffers scalar.
+    fn scalar_or_offset(type_text: String, comment: Option<String>) -> Self {
+        let holds_a_default = is_fbs_scalar(&type_text);
+        Position {
+            type_text,
+            needs_null_default: false,
+            holds_a_default,
+            comment,
         }
-        _ => false,
-    })
+    }
+
+    /// A position that is an offset: a vector, a table or a union.
+    fn offset(type_text: String, comment: Option<String>) -> Self {
+        Position {
+            type_text,
+            needs_null_default: false,
+            holds_a_default: false,
+            comment,
+        }
+    }
+}
+
+/// Whether a resolved type text is a FlatBuffers scalar rather than a string
+/// or a bytes vector, for the kinds [`fbs_primitive`] and [`fbs_scalar`]
+/// spell.
+fn is_fbs_scalar(type_text: &str) -> bool {
+    !matches!(type_text, "string" | "[ubyte]")
 }
 
 /// [`resolve_field_type`] before the optional rule: the type text, the `= null`
-/// ADR-0019 decision 6 calls for, and the constraint comment.
+/// ADR-0019 decision 6 calls for, whether the position holds a default, and
+/// the constraint comment.
 fn resolve_type_position(
     packages: Packages,
     owner: &str,
@@ -703,11 +721,12 @@ fn resolve_type_position(
     ty: &v2::FieldType,
     induced: &mut Vec<Induced>,
     includes: &mut BTreeSet<String>,
-) -> Result<(String, bool, Option<String>), GenerateError> {
+) -> Result<Position, GenerateError> {
     match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Primitive(primitive)) => {
-            Ok((fbs_primitive(*primitive).to_string(), false, None))
-        }
+        Some(v2::field_type::Kind::Primitive(primitive)) => Ok(Position::scalar_or_offset(
+            fbs_primitive(*primitive).to_string(),
+            None,
+        )),
         // An inline constrained scalar, e.g. `integer [0..100]` (typl §5.2,
         // Appendix B) — the anonymous counterpart of a named scalar. It has
         // no name of its own to comment with, so — mirroring
@@ -716,10 +735,30 @@ fn resolve_type_position(
         // ([`named_field_type`]), which comments the constraint under the
         // name that carries it.
         Some(v2::field_type::Kind::InlineScalar(td)) => {
-            Ok((fbs_scalar(td).to_string(), false, None))
+            Ok(Position::scalar_or_offset(fbs_scalar(td).to_string(), None))
         }
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(packages, owner, field_name, reference, includes)
+            let (decl, foreign_package) =
+                resolve_reference(packages, owner, field_name, reference)?;
+            let holds_a_default = match &decl.kind {
+                Some(v2::decl::Kind::TypeDef(td)) => is_fbs_scalar(fbs_scalar(td)),
+                Some(v2::decl::Kind::EnumDef(_)) | Some(v2::decl::Kind::EnumSetDef(_)) => true,
+                _ => false,
+            };
+            let (type_text, needs_null_default, comment) = named_decl_type(
+                decl,
+                foreign_package,
+                owner,
+                field_name,
+                reference,
+                includes,
+            )?;
+            Ok(Position {
+                type_text,
+                needs_null_default,
+                holds_a_default,
+                comment,
+            })
         }
         Some(v2::field_type::Kind::Array(array)) => {
             let element = array.element.as_ref().ok_or_else(|| GenerateError {
@@ -756,8 +795,13 @@ fn resolve_type_position(
             }
             // The element's `= null` marker is dropped, never forwarded: a
             // vector element carries no per-element default — only a table
-            // field does.
-            let (element_text, _needs_null_default, comment) = resolve_field_type(
+            // field does. So the element is resolved without the optional
+            // rule, and its `needs_null_default` is not read.
+            let Position {
+                type_text: element_text,
+                comment,
+                ..
+            } = resolve_type_position(
                 packages,
                 owner,
                 field_name,
@@ -779,7 +823,7 @@ fn resolve_type_position(
                     ),
                 });
             }
-            Ok((format!("[{element_text}]"), false, comment))
+            Ok(Position::offset(format!("[{element_text}]"), comment))
         }
         Some(v2::field_type::Kind::Map(map)) => {
             let entry_name = format!("{hint}Entry");
@@ -789,7 +833,7 @@ fn resolve_type_position(
                 claim: "an entry table generated for a map, named for the field path that \
                         reaches it",
             });
-            Ok((format!("[{entry_name}]"), false, None))
+            Ok(Position::offset(format!("[{entry_name}]"), None))
         }
         Some(v2::field_type::Kind::Tuple(tuple)) => {
             induced.push(Induced {
@@ -797,7 +841,7 @@ fn resolve_type_position(
                 kind: InducedKind::Tuple(tuple.clone()),
                 claim: "a table generated for a tuple, named for the field path that reaches it",
             });
-            Ok((hint.to_string(), false, None))
+            Ok(Position::offset(hint.to_string(), None))
         }
         _ => Err(GenerateError {
             message: format!(
@@ -896,6 +940,26 @@ fn named_field_type(
     includes: &mut BTreeSet<String>,
 ) -> Result<(String, bool, Option<String>), GenerateError> {
     let (decl, foreign_package) = resolve_reference(packages, owner, field_name, reference)?;
+    named_decl_type(
+        decl,
+        foreign_package,
+        owner,
+        field_name,
+        reference,
+        includes,
+    )
+}
+
+/// [`named_field_type`] once the reference is resolved, for a caller that
+/// has already resolved it.
+fn named_decl_type(
+    decl: &v2::Decl,
+    foreign_package: Option<&str>,
+    owner: &str,
+    field_name: &str,
+    reference: &str,
+    includes: &mut BTreeSet<String>,
+) -> Result<(String, bool, Option<String>), GenerateError> {
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
             fbs_scalar(td).to_string(),
