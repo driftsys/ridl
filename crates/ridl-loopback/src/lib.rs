@@ -223,6 +223,39 @@ impl Loopback {
         self.handles
     }
 
+    /// An additional aggregate on the same store: six new role handles, made
+    /// the way [`reader`](Loopback::reader) to [`handler`](Loopback::handler)
+    /// make one each. This is how an application holds several faces over one
+    /// runtime — a `Client`, a `Publisher`, a second `Client` with a call of
+    /// its own in flight — each owning its own aggregate (driftsys/ridl#488).
+    ///
+    /// What is in the store is shared: the published signals, the `fixed`
+    /// values, the clock and the call table. What is on a handle is not
+    /// carried over: the attached aggregate starts subscribed to nothing, with
+    /// no value staged, no call sent and nothing served. Dropping it closes
+    /// only its own handles, and the store lives until the last handle of
+    /// every aggregate is dropped.
+    ///
+    /// Not `Clone`, because a clone that shares none of its origin's
+    /// subscriptions, calls or claims is not a copy, and those cannot be
+    /// copied: a call's outcome belongs to the one caller that sent it, and a
+    /// claim to the one handler it was presented to.
+    #[must_use]
+    pub fn attach(&self) -> Loopback {
+        Loopback {
+            shared: Arc::clone(&self.shared),
+            catalog: self.catalog,
+            handles: Handles {
+                reader: self.reader(),
+                writer: self.writer(),
+                source: self.source(),
+                sink: self.sink(),
+                caller: self.caller(),
+                handler: self.handler(),
+            },
+        }
+    }
+
     /// An additional reader handle on the same store.
     #[must_use]
     pub fn reader(&self) -> ReaderHandle {
