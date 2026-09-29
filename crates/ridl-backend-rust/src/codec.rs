@@ -618,6 +618,27 @@ fn verify_absent(wire: &Wire) -> TokenStream {
     }
 }
 
+/// The `verify` statement for one field: `present` over the field's position
+/// `__p` when the slot is present, `absent` when it is not. An absent field
+/// that needs no statement is written as an `if let`, because a `match` with an
+/// empty arm is what clippy's `single_match` refuses in a consumer's build.
+fn verify_field(field: &TokenStream, present: &TokenStream, absent: &TokenStream) -> TokenStream {
+    if absent.is_empty() {
+        quote! {
+            if let ::core::option::Option::Some(__p) = #field {
+                #present
+            }
+        }
+    } else {
+        quote! {
+            match #field {
+                ::core::option::Option::Some(__p) => { #present }
+                ::core::option::Option::None => { #absent }
+            }
+        }
+    }
+}
+
 /// The typl constraint check for a named scalar's value, over a borrow
 /// (design note D-4, plan Task 5, stage K6). `value` is an expression
 /// already of `check`'s own parameter type — `&f64`/`&i64`/`&bool` for a
@@ -1709,19 +1730,18 @@ impl<'a> Codec<'a> {
             let width = Literal::usize_suffixed(slot.wire.inline_width());
             let present = self.verify_at(owner, &slot.wire, &quote! { __p })?;
             let absent = if slot.optional {
-                quote! { ::core::option::Option::None => {} }
+                quote! {}
             } else {
-                let absent = verify_absent(&slot.wire);
-                quote! { ::core::option::Option::None => { #absent } }
+                verify_absent(&slot.wire)
             };
-            checks.push(quote! {
-                match ::ridl_rt::flatbuffers::field(buf, table, #id, #width)
-                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
-                {
-                    ::core::option::Option::Some(__p) => { #present }
-                    #absent
-                }
-            });
+            checks.push(verify_field(
+                &quote! {
+                    ::ridl_rt::flatbuffers::field(buf, table, #id, #width)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                },
+                &present,
+                &absent,
+            ));
         }
         Ok(quote! { #(#checks)* })
     }
@@ -2290,14 +2310,14 @@ impl<'a> Codec<'a> {
             // it holds the FlatBuffers default when that is a legal value of
             // the box's type, and no value at all when it is not
             // (driftsys/ridl#472).
-            verify: quote! {
-                match ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
-                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
-                {
-                    ::core::option::Option::Some(__p) => { #inner_verify }
-                    ::core::option::Option::None => { #absent_verify }
-                }
-            },
+            verify: verify_field(
+                &quote! {
+                    ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                },
+                &inner_verify,
+                &absent_verify,
+            ),
             decode,
         })
     }

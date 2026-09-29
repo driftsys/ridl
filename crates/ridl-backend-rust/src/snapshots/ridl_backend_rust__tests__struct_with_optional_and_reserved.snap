@@ -574,16 +574,18 @@ pub(crate) fn __ridl_fb_verify_driver_profile(
             }
         }
     }
-    match ::ridl_rt::flatbuffers::field(buf, table, 3u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            3u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Speed::check(&(f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Speed::check(&(f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }

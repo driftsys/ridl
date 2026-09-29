@@ -940,16 +940,18 @@ pub(crate) fn __ridl_fb_verify_health(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <Health as ::core::convert::TryFrom<i64>>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <Health as ::core::convert::TryFrom<i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1147,16 +1149,18 @@ pub(crate) fn __ridl_fb_verify_warning(
             }
         }
     }
-    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <Health as ::core::convert::TryFrom<i64>>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <Health as ::core::convert::TryFrom<i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }

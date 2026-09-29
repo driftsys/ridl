@@ -1037,7 +1037,7 @@ fn main() {
     };
 
     let mut builder = planus::Builder::new();
-    let empty_box = to_hex(&builder.finish(fb::SpeedBox { value: 0 }, None).to_vec());
+    let empty_box = to_hex(builder.finish(fb::SpeedBox { value: 0 }, None));
 
     let main = format!(
         r#"

@@ -1580,16 +1580,18 @@ pub(crate) fn __ridl_fb_verify_gear_position(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <GearPosition as ::core::convert::TryFrom<i64>>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <GearPosition as ::core::convert::TryFrom<i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1720,16 +1722,18 @@ pub(crate) fn __ridl_fb_verify_warning(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <Warning as ::core::convert::TryFrom<i64>>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <Warning as ::core::convert::TryFrom<i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1854,16 +1858,18 @@ pub(crate) fn __ridl_fb_verify_warning_flags(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <WarningFlags as ::core::convert::TryFrom<i64>>::try_from(i64::from(__raw))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <WarningFlags as ::core::convert::TryFrom<i64>>::try_from(i64::from(__raw))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -2996,23 +3002,27 @@ pub(crate) fn __ridl_fb_verify_door_payload(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_u8(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
-    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_bool(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_bool(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -3154,16 +3164,18 @@ pub(crate) fn __ridl_fb_verify_diag_error(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <DiagError as ::core::convert::TryFrom<i64>>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <DiagError as ::core::convert::TryFrom<i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -3896,23 +3908,27 @@ pub(crate) fn __ridl_fb_verify_filter_state(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            2usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_u16(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
-    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_bool(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_bool(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -4054,16 +4070,18 @@ pub(crate) fn __ridl_fb_verify_hvac_error(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <HvacError as ::core::convert::TryFrom<i64>>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {}
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <HvacError as ::core::convert::TryFrom<i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }

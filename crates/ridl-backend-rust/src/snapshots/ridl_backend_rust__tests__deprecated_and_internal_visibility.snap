@@ -329,14 +329,16 @@ pub(crate) fn __ridl_fb_verify_old_flag(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_bool(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_bool(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -458,14 +460,16 @@ pub(crate) fn __ridl_fb_verify_raw_ticks(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_u32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_u32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     ::core::result::Result::Ok(())
 }

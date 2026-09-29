@@ -302,14 +302,16 @@ pub(crate) fn __ridl_fb_verify_counter(
     buf: &[u8],
     table: usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            2usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::read_u16(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        }
-        ::core::option::Option::None => {}
+        ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -564,14 +566,16 @@ pub(crate) fn __ridl_fb_verify_table(
             for __i in 0..__v.len {
                 let table = ::ridl_rt::flatbuffers::follow(buf, __v.element(__i, 4usize))
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+                if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+                        buf,
+                        table,
+                        0u16,
+                        2usize,
+                    )
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?
                 {
-                    ::core::option::Option::Some(__p) => {
-                        ::ridl_rt::flatbuffers::read_u16(buf, __p)
-                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                    }
-                    ::core::option::Option::None => {}
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?;
                 }
                 match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?
