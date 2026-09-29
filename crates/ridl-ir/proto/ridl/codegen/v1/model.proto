@@ -688,7 +688,12 @@ message FbSlot {
   uint32 id = 1;
   // What the slot holds on the wire.
   FbWire wire = 2;
-  // `projection::enum_field_needs_null_default` on an enum-typed slot.
+  // Whether the schema gives the field an explicit `= null` default. True on
+  // an enum-typed slot whose enum declares no zero member
+  // (`projection::enum_field_needs_null_default`, ADR-0019 decision 6), and
+  // on an optional slot that holds a scalar or an enum (decision 9): `= null`
+  // is how the schema states that such a field may be absent, so a reader
+  // following it reads an absent field as absent rather than as 0.
   bool needs_null_default = 3;
   // `SlotSource`.
   oneof source {

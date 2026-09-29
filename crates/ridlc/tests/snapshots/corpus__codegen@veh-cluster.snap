@@ -1624,7 +1624,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "widthBytes": 4
               }
             },
-            "needsNullDefault": false,
+            "needsNullDefault": true,
             "field": 2
           },
           {

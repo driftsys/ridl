@@ -266,7 +266,7 @@ fn planus_value() -> fb::Report {
             field_2: Some(Box::new(planus_inner(6, "six"))),
         })),
         note: Some(String::from("note")),
-        spare: 9,
+        spare: Some(9),
     }
 }
 
@@ -400,7 +400,7 @@ fn a_planus_buffer_with_a_truncated_vtable_is_decoded_by_this_codec() {
     let mut value = planus_value();
     value.pair = None;
     value.note = None;
-    value.spare = 0;
+    value.spare = None;
     let mut builder = planus::Builder::new();
     let bytes = builder.finish(value, None).to_vec();
 
@@ -542,30 +542,25 @@ fn main() {{
     rustc::run_program("fb_conformance_omitted_default", &program(&main));
 }
 
-/// **The same disagreement from the other side: an optional scalar present at
-/// its FlatBuffers default is lost by a foreign round trip.**
+/// **An optional scalar present at its FlatBuffers default survives a foreign
+/// round trip** (ADR-0019 decision 9, driftsys/ridl#472).
 ///
-/// `spare: Speed?` projects to a plain `ushort` with no `= null`, so
-/// presence for it is exactly "the slot is in the buffer". This codec writes
+/// `spare: Speed?` projects to `spare: ushort = null`, so the schema states
+/// that the field may be absent, and a reader following it reads presence
+/// from the buffer rather than from the value. This codec writes
 /// `Some(Speed(0))` as a present slot, which is what design note D-9 asks
-/// for; planus reads `0`, which is all the schema lets it read; and a planus
-/// re-encode of what it read omits the slot, because 0 is the field's
-/// default. Round-tripped through another implementation,
-/// `Some(Speed(0))` comes back `None`.
+/// for; planus reads `Some(0)`; a planus re-encode of what it read writes the
+/// slot, because under `= null` a present 0 is not the default; and this
+/// codec decodes that buffer to `Some(Speed(0))`.
 ///
-/// **This bounds D-9's claim.** "A present value is written even when it
-/// equals the field's FlatBuffers default, so that the reader can tell the
-/// two apart" holds for this codec reading its own bytes, and for no reader
-/// following the emitted schema. It is the optional half of
-/// driftsys/ridl#472, which the case above measures the non-optional half
-/// of; a `= null` default on an optional scalar field is the projection
-/// change that would close it, and that is a projection decision rather than
-/// a codec one.
+/// Before decision 9 the field was a plain `ushort`: planus read `0`, omitted
+/// the slot on the re-encode, and the round trip turned `Some(0)` into
+/// `None`. This case measured that loss, and now measures that it is gone.
 ///
 /// All three legs are asserted, so a pass cannot come from the wrong place:
 /// this codec's own buffer carries a **non-zero `voffset`** for `spare`,
-/// planus's re-encode carries none, and the decode that follows reads
-/// `None` while every other field is unchanged.
+/// planus's re-encode carries one too, and the decode that follows reads
+/// `Some(Speed(0))` while every other field is unchanged.
 ///
 /// Leg one reads the `voffset`, not the vtable's declared width. The width
 /// says nothing about what was written: `ridl-rt`'s `push_table` emits one
@@ -576,7 +571,7 @@ fn main() {{
 /// that mutation; the review of 2026-09-21 found it. The current assertion
 /// fails under it.
 #[test]
-fn an_optional_scalar_at_its_default_is_lost_by_a_foreign_round_trip() {
+fn an_optional_scalar_at_its_default_survives_a_foreign_round_trip() {
     let transcript = rustc::run_program_capturing_stdout(
         "fb_conformance_spare_zero",
         &program(
@@ -614,22 +609,23 @@ fn main() {
         .expect("planus reads the buffer this codec wrote");
     let owned = fb::Report::try_from(read).expect("planus reads every field");
     assert_eq!(
-        owned.spare, 0,
-        "planus reads the slot as 0, which is all the schema lets it read"
+        owned.spare,
+        Some(0),
+        "planus reads the present slot as Some(0), which `= null` lets it read"
     );
 
-    // Leg two: planus re-encodes what it read, and omits the slot.
+    // Leg two: planus re-encodes what it read, and writes the slot.
     let mut builder = planus::Builder::new();
     let theirs = builder.finish(owned, None).to_vec();
-    assert_eq!(
+    assert_ne!(
         voffset(&theirs, SPARE_SLOT),
         0,
-        "planus must omit the default-valued slot, or this case proves \
-         nothing about what a conforming writer does"
+        "planus must write a present optional at 0 under `= null`, or the \
+         schema does not state presence"
     );
 
     // Leg three: this codec decodes planus's buffer, and the optional is
-    // gone.
+    // still present.
     let hex = to_hex(&theirs);
     let main = format!(
         r#"
@@ -644,22 +640,18 @@ fn main() {{
         .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
         .collect();
     let proof: Ref<'_, Report, FlatBuffers> =
-        Ref::verify(&bytes).expect("the re-encoded buffer still verifies");
-    let back = proof.decode();
-    assert_eq!(
-        back.spare, None,
-        "the round trip through another implementation turns Some(0) into None",
-    );
+        Ref::verify(&bytes).expect("the re-encoded buffer verifies");
     let mut expected = conformance();
-    expected.spare = None;
+    expected.spare = Some(Speed::new_unchecked(0));
     assert_eq!(
-        back, expected,
-        "and nothing else about the value changed, so the loss is the optional's",
+        proof.decode(),
+        expected,
+        "the round trip through another implementation keeps Some(0)",
     );
 }}
 "#
     );
-    rustc::run_program("fb_conformance_spare_lost", &program(&main));
+    rustc::run_program("fb_conformance_spare_kept", &program(&main));
 }
 
 /// **A scalar root, both directions** (ADR-0019 decision 8).
