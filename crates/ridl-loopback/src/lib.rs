@@ -201,7 +201,12 @@ impl Loopback {
     /// The catalog is carried, not checked: see the crate documentation.
     #[must_use]
     pub fn new(catalog: CatalogRef) -> Self {
-        let shared: Shared = Arc::new(Mutex::new(Store::new()));
+        Loopback::over(Arc::new(Mutex::new(Store::new())), catalog)
+    }
+
+    /// An aggregate of six new role handles on `shared`: what `new` and
+    /// `attach` both build, over a new store and over this one.
+    fn over(shared: Shared, catalog: CatalogRef) -> Self {
         let handles = Handles {
             reader: ReaderHandle::new(Arc::clone(&shared), catalog),
             writer: WriterHandle::new(Arc::clone(&shared), catalog),
@@ -241,18 +246,7 @@ impl Loopback {
     /// Not `Clone`: `docs/design/ridl-loopback.md` records why.
     #[must_use]
     pub fn attach(&self) -> Loopback {
-        Loopback {
-            shared: Arc::clone(&self.shared),
-            catalog: self.catalog,
-            handles: Handles {
-                reader: self.reader(),
-                writer: self.writer(),
-                source: self.source(),
-                sink: self.sink(),
-                caller: self.caller(),
-                handler: self.handler(),
-            },
-        }
+        Loopback::over(Arc::clone(&self.shared), self.catalog)
     }
 
     /// An additional reader handle on the same store.

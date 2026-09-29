@@ -159,13 +159,13 @@ Four ways to obtain handles, each with one purpose:
   with its own per handle state. This is how a test builds two callers on one
   provider, or two event sources of one event.
 - `Loopback::attach(&self)` — an **additional** aggregate on the same store,
-  whose six handles are made by those six methods. This is how an application
-  holds several faces over one runtime, each owning its own aggregate: a
-  `Client` and a `Publisher`, or two clients, one with a call in flight while
-  the other waits on `next_event`. A face holds its port for as long as it
-  lives, and a call's future and `next_event`'s future hold the client's port
-  for as long as they live, so one aggregate serves one face at a time
-  (driftsys/ridl#488).
+  whose six handles are opened as those six methods open one each. This is how
+  an application holds several faces over one runtime, each owning its own
+  aggregate: a `Client` and a `Publisher`, or two clients, one with a call in
+  flight while the other waits on `next_event`. A face holds its port for as
+  long as it lives, and a call's future and `next_event`'s future hold the
+  client's port for as long as they live, so one aggregate serves one face at a
+  time (driftsys/ridl#488).
 
 `advance`, `provision_fixed` and `fail_next_settle` are the aggregate's, not any
 role handle's: each acts on the runtime as a whole rather than through a port,
