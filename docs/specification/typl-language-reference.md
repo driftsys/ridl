@@ -237,12 +237,60 @@ UTF-8 in double quotes. Escapes follow
 ### 2.7 Regex Literals
 
 Enclosed in forward slashes; syntax follows
-[ECMA-262](https://tc39.es/ecma262/#sec-regexp-regular-expression-objects).
-Forward slashes inside the pattern are escaped `\/`.
+[ECMA-262](https://tc39.es/ecma262/#sec-regexp-regular-expression-objects),
+restricted to the patterns that the Rust [`regex`](https://docs.rs/regex/1)
+crate also compiles. Forward slashes inside the pattern are escaped `\/`.
 
 ```ridl
 /^[A-HJ-NPR-Z0-9]{17}$/
 ```
+
+A pattern that is not ECMA-262 syntax is TYPL-106. A pattern that is ECMA-262
+syntax but that the `regex` crate cannot compile is TYPL-220. The Rust backend
+emits a `match` constraint on a `string`-backed type as a `regex::Regex::new`
+call in the generated code, under the generated crate's `validate-pattern`
+feature (on by default), and a pattern that call refuses would fail at run time
+instead of at build time. A regex constant is emitted as text and is not
+compiled, but a `match` that names the constant is, so the constant is checked
+at its declaration (§6.2).
+
+The ECMA-262 constructs that the `regex` crate refuses, and that a typl pattern
+therefore cannot use, include:
+
+- lookaround: `(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`
+- a backreference, numbered (`\1`) or named (`\k<name>`)
+- the control escape `\cX`, the NUL escape `\0`, and an identity escape of a
+  letter, such as `\e`, `\Q` or `\k`
+- the empty class `[]`, the negated empty class `[^]`, and an unescaped `[`
+  inside a class, as in `[[]`
+- the backspace escape inside a class, `[\b]`
+- a class escape as a range bound, as in `[\d-z]` or `[\w-.]`
+- a quantifier with no lower bound, such as `{,3}`, and a `{` that opens no
+  complete quantifier, as in `{` alone or `a{`
+- a pattern whose compiled form exceeds the `regex` crate's size limit. `\w` and
+  `\p{..}` are large Unicode classes in that crate, so an ordinary pattern such
+  as `^\w{1,256}$` exceeds the limit, while `^[A-Za-z0-9_]{1,256}$` does not. An
+  artificial pattern such as `(a{1000}){1000}` exceeds it too.
+
+This list is not complete. The rule is that the compiler compiles the pattern
+with both engines: a construct not listed here that the `regex` crate refuses is
+TYPL-220 too.
+
+TYPL-220 guarantees only that the Rust output can compile the pattern. It does
+not guarantee that the checker, the Rust output and the output of another
+backend match the same strings. The checker tests a declared init value against
+a pattern (TYPL-109) with ECMA-262 semantics, and some patterns that both
+engines compile have a different meaning in each (driftsys/ridl#597):
+
+| In a pattern | ECMA-262, no `u` flag (the checker) | The Rust `regex` crate                  |
+| ------------ | ----------------------------------- | --------------------------------------- |
+| `\d`, `\w`   | ASCII digits, ASCII word characters | Unicode digits, Unicode word characters |
+| `\p{L}`      | the text `p{L}`                     | a Unicode letter                        |
+| `\A`, `\z`   | the letters `A` and `z`             | the start and the end of the text       |
+| `\a`         | the letter `a`                      | the bell character, U+0007              |
+| `\<`         | the character `<`                   | a start-of-word boundary                |
+| `[a&&b]`     | one of `a`, `&`, `b`                | the intersection of `a` and `b`, empty  |
+| `[[a]]`      | one of `[`, `a`, followed by `]`    | the nested class `[a]`                  |
 
 ### 2.8 Tokens recognised but not used by typl
 
@@ -656,7 +704,10 @@ struct GearState {
 
 ### 6.2 Regex Constants
 
-A `const` may hold a regex literal, reusable in `match` constraints:
+A `const` may hold a regex literal, reusable in `match` constraints. The pattern
+follows §2.7, and TYPL-106 or TYPL-220 is reported at the constant's
+declaration, not at each `match` that names it. The Rust backend emits the
+constant itself as text, not as a compiled pattern:
 
 ```ridl
 const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
@@ -1139,7 +1190,7 @@ the family overview §7 and are not restated here.
 | TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                      | warning; error if active profile requires          |
 | TYPL-104 | range `min > max`                                                                                          | error                                              |
 | TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                               | error                                              |
-| TYPL-106 | invalid regex syntax in `match` or `const`                                                                 | error                                              |
+| TYPL-106 | invalid regex syntax in `match` or `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220    | error                                              |
 | TYPL-107 | regex contradicts declared character bound                                                                 | warning                                            |
 | TYPL-108 | `const` value violates its declared type constraints                                                       | error                                              |
 | TYPL-109 | init (`= value`) incompatible with the type/field constraints                                              | error                                              |
@@ -1171,6 +1222,7 @@ the family overview §7 and are not restated here.
 | TYPL-217 | union arm name declared twice in one union                                                                 | error    |
 | TYPL-218 | enumset bit name declared twice in one enumset                                                             | error    |
 | TYPL-219 | enumset bit position is not a number with an integer value                                                 | error    |
+| TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite   | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
@@ -1697,21 +1749,21 @@ internal struct RawWheelFrame {
 
 ## Appendix C — Standards References
 
-| Standard                                                                                                                                                         | Used for                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| [Unicode 15.0](https://www.unicode.org/versions/Unicode15.0.0/)                                                                                                  | source encoding                   |
-| [RFC 3629](https://www.rfc-editor.org/rfc/rfc3629)                                                                                                               | UTF-8                             |
-| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259)                                                                                                               | string escapes                    |
-| [ECMA-262](https://tc39.es/ecma262/)                                                                                                                             | regex literal syntax              |
-| [CommonMark](https://commonmark.org)                                                                                                                             | doc comment markdown              |
-| [IEEE 754-2019](https://ieeexplore.ieee.org/document/8766229)                                                                                                    | floating point                    |
-| [ISO/IEC 9899:2018 (C17)](https://www.iso.org/standard/74528.html)                                                                                               | integer/float literal conventions |
-| [UCUM](https://ucum.org/ucum)                                                                                                                                    | physical unit expressions         |
-| [ISO 8601](https://www.iso.org/standard/70907.html) / [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)                                                         | time types                        |
-| [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986), [RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)                                                           | Uri, Uuid                         |
-| [SemVer 2.0.0](https://semver.org/)                                                                                                                              | Version                           |
-| [ISO 3779](https://www.iso.org/standard/52200.html), [ISO 3166-1](https://www.iso.org/standard/72482.html), [ISO 639-1](https://www.iso.org/standard/22109.html) | Vin, CountryCode, LanguageCode    |
-| [JSON Schema 2020-12](https://json-schema.org/specification)                                                                                                     | coverage benchmark (Appendix G)   |
+| Standard                                                                                                                                                         | Used for                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [Unicode 15.0](https://www.unicode.org/versions/Unicode15.0.0/)                                                                                                  | source encoding                                                                              |
+| [RFC 3629](https://www.rfc-editor.org/rfc/rfc3629)                                                                                                               | UTF-8                                                                                        |
+| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259)                                                                                                               | string escapes                                                                               |
+| [ECMA-262](https://tc39.es/ecma262/)                                                                                                                             | regex literal syntax, restricted to the patterns the Rust `regex` crate also compiles (§2.7) |
+| [CommonMark](https://commonmark.org)                                                                                                                             | doc comment markdown                                                                         |
+| [IEEE 754-2019](https://ieeexplore.ieee.org/document/8766229)                                                                                                    | floating point                                                                               |
+| [ISO/IEC 9899:2018 (C17)](https://www.iso.org/standard/74528.html)                                                                                               | integer/float literal conventions                                                            |
+| [UCUM](https://ucum.org/ucum)                                                                                                                                    | physical unit expressions                                                                    |
+| [ISO 8601](https://www.iso.org/standard/70907.html) / [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)                                                         | time types                                                                                   |
+| [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986), [RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)                                                           | Uri, Uuid                                                                                    |
+| [SemVer 2.0.0](https://semver.org/)                                                                                                                              | Version                                                                                      |
+| [ISO 3779](https://www.iso.org/standard/52200.html), [ISO 3166-1](https://www.iso.org/standard/72482.html), [ISO 639-1](https://www.iso.org/standard/22109.html) | Vin, CountryCode, LanguageCode                                                               |
+| [JSON Schema 2020-12](https://json-schema.org/specification)                                                                                                     | coverage benchmark (Appendix G)                                                              |
 
 ---
 

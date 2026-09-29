@@ -1447,14 +1447,42 @@ impl Checker<'_> {
 
     /// Validates a regex literal's pattern with the `regress` ECMA-262 engine
     /// (typl §2.7; ADR-0007 decision 10), emitting TYPL-106 on invalid syntax.
-    /// A typl regex literal carries its `/…/` delimiters; the engine parses the
-    /// body between them.
+    /// A pattern `regress` accepts is then compiled with the Rust `regex`
+    /// crate, and one that crate refuses is TYPL-220: the Rust backend emits a
+    /// `match` on a `String`-backed type as a `regex::Regex::new(..).expect(..)`
+    /// call under the generated crate's `validate-pattern` feature, which
+    /// panics if the pattern fails (issue #437). A regex constant is emitted as
+    /// a `&str` and not compiled, but a `match` naming it is. TYPL-220 does
+    /// not make the two engines match the same strings with a pattern that
+    /// both compile (typl §2.7, issue #597). A typl regex literal carries its
+    /// `/…/` delimiters; both engines parse the body between them, which is
+    /// also the text the codegen lowering hands the backend.
+    ///
+    /// Every pattern that reaches a backend passes through here: an inline
+    /// `match` pattern at its type or field, and a regex constant at its
+    /// declaration, which is the text a `match` naming that constant carries.
     fn validate_regex(&mut self, raw: &str, range: TextRange) {
-        if regress::Regex::new(regex_body(raw)).is_err() {
+        // The `regex` configuration below must equal the one the Rust backend
+        // emits in `constraint_checks` (`ridl-backend-rust`): `Regex::new`
+        // with the builder defaults, Unicode mode on, and the crate's default
+        // features. A different configuration here accepts or refuses other
+        // patterns than the generated code compiles.
+        let body = regex_body(raw);
+        if regress::Regex::new(body).is_err() {
             self.error(
                 DiagCode::TYPL_106,
                 range,
                 "invalid regular expression syntax".to_string(),
+            );
+        } else if let Err(error) = regex::Regex::new(body) {
+            self.error(
+                DiagCode::TYPL_220,
+                range,
+                format!(
+                    "the Rust `regex` crate cannot compile this pattern: {} — a typl pattern is \
+                     ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
+                    regex_crate_refusal(&error),
+                ),
             );
         }
     }
@@ -5269,6 +5297,32 @@ fn regex_body(raw: &str) -> &str {
         .unwrap_or(raw)
 }
 
+/// The reason the `regex` crate gives for refusing a pattern, on one line
+/// (TYPL-220). A syntax error renders as several lines — the pattern, a caret
+/// line, and an `error: ` line — and only the last is the reason.
+fn regex_crate_refusal(error: &regex::Error) -> String {
+    match error {
+        // The usual cause is a large Unicode class under a counted
+        // repetition. Measured with regex 1.13.1: `^\w{1,n}$` is over the
+        // limit from n = 210 and `^\p{L}{1,n}$` from n = 245, `^\d{1,n}$`
+        // only from n = 2031, and `\s`, `.` and `[A-Za-z0-9_]` not up to
+        // n = 5000.
+        regex::Error::CompiledTooBig(limit) => format!(
+            "the compiled pattern exceeds the crate's size limit of {limit} bytes; in the Rust \
+             output `\\w` and `\\p{{..}}` are large Unicode classes, so a counted repetition \
+             of one is the usual cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller"
+        ),
+        other => {
+            let rendered = other.to_string();
+            rendered
+                .lines()
+                .rev()
+                .find_map(|line| line.strip_prefix("error: "))
+                .map_or_else(|| rendered.clone(), str::to_string)
+        }
+    }
+}
+
 /// Whether a blank line separates `definition`'s doc comment from the
 /// definition (TYPL-404). Only meaningful when a doc comment is attached; the
 /// check reads the whitespace token immediately before the definition — two or
@@ -8161,6 +8215,272 @@ mod tests {
                 value: None,
             }),
         );
+    }
+
+    // --- TYPL-220: a pattern the Rust `regex` crate cannot compile --------
+
+    /// Patterns that `regress` (ECMA-262, TYPL-106) accepts and the Rust
+    /// `regex` crate refuses, one per construct measured on driftsys/ridl#437.
+    /// The Rust backend emits a `match` pattern into
+    /// `regex::Regex::new(..).expect(..)`, so each of these drew no diagnostic
+    /// and panicked in the consumer's process on first use.
+    const REFUSED_BY_THE_REGEX_CRATE: &[&str] = &[
+        // Lookahead, negative lookahead, lookbehind, negative lookbehind.
+        r"/^(?=a)a$/",
+        r"/^(?!a)b$/",
+        r"/(?<=a)b/",
+        r"/(?<!a)b/",
+        // A numbered and a named backreference.
+        r"/^(a)\1$/",
+        r"/^(?<w>a)\k<w>$/",
+        // A control escape and the NUL escape.
+        r"/^\cJ$/",
+        r"/^\0$/",
+        // The empty class and the negated empty class.
+        r"/^a[]$/",
+        r"/^[^]$/",
+        // A quantifier with no lower bound.
+        r"/^a{,3}$/",
+        // Patterns over the `regex` crate's compiled-size limit: an ordinary
+        // one, because `\w` is a Unicode class in that crate, and an
+        // artificial one.
+        r"/^\w{1,256}$/",
+        r"/^(a{1000}){1000}$/",
+        // A backspace escape in a class, and a class escape as a range bound.
+        r"/^[\b]$/",
+        r"/^[\d-z]$/",
+        r"/^[\w-.]$/",
+        // An unescaped `[` inside a class.
+        r"/^[[]$/",
+        // A lone `{`, and a `{` that opens no complete quantifier.
+        r"/^{$/",
+        r"/^a{$/",
+        // An identity escape of a letter.
+        r"/^\e$/",
+        r"/^\Q$/",
+        r"/^\k$/",
+    ];
+
+    /// Patterns both engines accept: an ordinary one, and every `match` pattern
+    /// in `ridl.std`, which must keep drawing nothing.
+    fn accepted_by_both_engines() -> Vec<String> {
+        let std_patterns = ridl_core::std_lib::RIDL_STD_SOURCE
+            .lines()
+            .filter_map(|line| {
+                let start = line.find("match /")? + "match ".len();
+                let end = line.rfind("/]")? + 1;
+                Some(line[start..end].to_string())
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            std_patterns.len() >= 5,
+            "ridl.std's `match` patterns were not found: {std_patterns:?}"
+        );
+        std::iter::once(r"/^[A-Z]{2}$/".to_string())
+            .chain(std_patterns)
+            .collect()
+    }
+
+    /// Every `match` pattern in the codegen model the backends read, as the
+    /// backend receives it (delimiters already stripped by the lowering).
+    fn backend_patterns(checked: &CheckedPackage) -> Vec<String> {
+        use ridl_ir::codegen::v1;
+        ridl_ir::codegen::lower(&checked.ir, &[])
+            .declarations
+            .iter()
+            .filter_map(|declaration| match declaration.kind.as_ref() {
+                Some(v1::declaration::Kind::Scalar(scalar)) => {
+                    scalar.constraint.as_ref()?.pattern.clone()
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The probes are what they claim to be: ECMA-262 syntax that `regress`
+    /// accepts, so TYPL-106 stays silent, and that the `regex` crate refuses.
+    /// If a later `regex` release starts to accept one, this test names it.
+    #[test]
+    fn typl_220_probes_are_ecma_262_the_regex_crate_refuses() {
+        for raw in REFUSED_BY_THE_REGEX_CRATE {
+            let body = regex_body(raw);
+            assert!(
+                regress::Regex::new(body).is_ok(),
+                "{raw}: regress refuses it"
+            );
+            assert!(regex::Regex::new(body).is_err(), "{raw}: regex accepts it");
+        }
+    }
+
+    /// An inline `match` pattern the `regex` crate cannot compile is TYPL-220,
+    /// on the pattern literal. The `match`-typed type is TYPL-115 (info) as
+    /// for any pattern.
+    #[test]
+    fn typl_220_refuses_an_inline_match_pattern_the_regex_crate_cannot_compile() {
+        for raw in REFUSED_BY_THE_REGEX_CRATE {
+            let source = format!("package app\ntype T : string [1..10 match {raw}]\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-220", "TYPL-115"],
+                "{raw}: got: {:?}",
+                checked.diagnostics
+            );
+            let start = source.find(raw).expect("the pattern is in the source");
+            let range = checked.diagnostics[0].primary.range;
+            assert_eq!(usize::from(range.start()), start, "{raw}");
+            assert_eq!(usize::from(range.end()), start + raw.len(), "{raw}");
+            // The message gives the crate's reason on one line.
+            let message = &checked.diagnostics[0].message;
+            assert!(
+                message.starts_with("the Rust `regex` crate cannot compile this pattern: ")
+                    && !message.contains('\n'),
+                "{raw}: {message}"
+            );
+        }
+    }
+
+    /// The size-limit refusal names the likely cause. An ordinary pattern such
+    /// as `^\w{1,256}$` exceeds the limit because `\w` is a large Unicode
+    /// class in the `regex` crate, so the message names `\w` and `\p{..}` and
+    /// the ASCII class that fits. The whole message is pinned, so the size-limit arm of
+    /// `regex_crate_refusal` cannot be removed without failing here.
+    #[test]
+    fn typl_220_size_limit_message_names_the_large_unicode_classes() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Word : string [1..256 match /^\\w{1,256}$/]\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-220", "TYPL-115"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "the Rust `regex` crate cannot compile this pattern: the compiled pattern exceeds \
+             the crate's size limit of 10485760 bytes; in the Rust output `\\w` and \
+             `\\p{..}` are large Unicode classes, so a counted repetition of one is the usual \
+             cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller \
+             — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
+        );
+    }
+
+    /// The checker compiles a pattern with the same `regex` configuration the
+    /// Rust backend emits: `regex::Regex::new`, whose default builder options
+    /// are Unicode mode on. Under `RegexBuilder::unicode(false)` in the checker
+    /// alone, `\p{L}` and a `.` that may match a non-ASCII character do not
+    /// compile, so these would draw TYPL-220 while the generated code compiles
+    /// them.
+    #[test]
+    fn typl_220_uses_the_regex_configuration_the_rust_backend_emits() {
+        for raw in [r"/^\p{L}+$/", r"/^.+$/"] {
+            let checked = check_source(
+                "app",
+                &format!("package app\ntype T : string [1..32 match {raw}]\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-115"],
+                "{raw}: got: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    /// A regex constant the `regex` crate cannot compile is TYPL-220 at the
+    /// constant's declaration, and only there: the `match` that reuses it is
+    /// not reported a second time, as for TYPL-106.
+    #[test]
+    fn typl_220_refuses_a_regex_constant_the_regex_crate_cannot_compile() {
+        for raw in REFUSED_BY_THE_REGEX_CRATE {
+            let source = format!("package app\nconst P = {raw}\ntype T : string [1..10 match P]\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-220", "TYPL-115"],
+                "{raw}: got: {:?}",
+                checked.diagnostics
+            );
+            let start = source.find(raw).expect("the pattern is in the source");
+            let range = checked.diagnostics[0].primary.range;
+            assert_eq!(usize::from(range.start()), start, "{raw}");
+        }
+    }
+
+    /// A pattern that is not ECMA-262 is TYPL-106 alone: TYPL-220 is for a
+    /// pattern the reference's own syntax accepts, so the two never stack.
+    #[test]
+    fn typl_220_is_not_added_to_typl_106() {
+        let checked = check_source("app", "package app\nconst BAD = /(/\n");
+        assert_eq!(codes(&checked), vec!["TYPL-106"]);
+    }
+
+    /// An ordinary pattern and every `ridl.std` pattern draw nothing but the
+    /// TYPL-115 information that any `match`-typed type draws.
+    #[test]
+    fn typl_220_accepts_the_patterns_both_engines_accept() {
+        for raw in accepted_by_both_engines() {
+            let inline = check_source(
+                "app",
+                &format!("package app\ntype T : string [1..32 match {raw}]\n"),
+            );
+            assert_eq!(
+                codes(&inline),
+                vec!["TYPL-115"],
+                "{raw}: got: {:?}",
+                inline.diagnostics
+            );
+            let named = check_source("app", &format!("package app\nconst P = {raw}\n"));
+            assert!(
+                codes(&named).is_empty(),
+                "{raw}: got: {:?}",
+                named.diagnostics
+            );
+        }
+    }
+
+    /// The end-to-end claim TYPL-220 exists for (driftsys/ridl#437): every
+    /// `match` pattern that passes the checker reaches the backend as text the
+    /// real `regex` crate compiles, so the generated `Regex::new(..).expect(..)`
+    /// cannot panic on it. Each candidate is written inline and through a
+    /// regex constant, and the pattern is read from the codegen model the
+    /// Rust backend reads, not from the source.
+    #[test]
+    fn every_pattern_the_checker_passes_compiles_under_the_regex_crate() {
+        let candidates = REFUSED_BY_THE_REGEX_CRATE
+            .iter()
+            .map(|raw| raw.to_string())
+            .chain(accepted_by_both_engines())
+            .chain([r"/(/".to_string()]);
+        let mut compiled = 0;
+        for raw in candidates {
+            for source in [
+                format!("package app\ntype T : string [1..32 match {raw}]\n"),
+                format!("package app\nconst P = {raw}\ntype T : string [1..32 match P]\n"),
+            ] {
+                let checked = check_source("app", &source);
+                if checked
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.severity == Severity::Error)
+                {
+                    continue;
+                }
+                let patterns = backend_patterns(&checked);
+                assert_eq!(patterns.len(), 1, "{source}: {patterns:?}");
+                for pattern in patterns {
+                    assert!(
+                        regex::Regex::new(&pattern).is_ok(),
+                        "{source}: the checker passed `{pattern}`, which `regex` cannot compile"
+                    );
+                    compiled += 1;
+                }
+            }
+        }
+        // Not vacuous: every accepted pattern, in both forms, reached the check.
+        assert_eq!(compiled, 2 * accepted_by_both_engines().len());
     }
 
     // --- TYPL-005: internal-type exposure ---------------------------------

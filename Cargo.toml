@@ -89,6 +89,14 @@ protox = "0.9.1"
 pulldown-cmark = { version = "0.13.4", default-features = false }
 quote = "1.0.46"
 regress = "0.11.1"
+# The Rust backend emits a `match` pattern into `regex::Regex::new` in the
+# generated crate, which depends on `regex = "1.13"`. ridl-sem compiles every
+# pattern with this crate too (TYPL-220), so a pattern that passes the checker
+# is one the generated code can compile. Keep its major and minor version equal
+# to the generated crate's requirement (`crates/ridlc/src/lib.rs`); the test
+# `regex_version_requirement_matches_the_checker` in
+# `crates/ridlc/tests/rust_crate_emit.rs` fails when they differ.
+regex = "1.13.1"
 # Every internal crate carries a `version` alongside its `path`: a path-only
 # dependency has no registry version for `cargo publish` to substitute once a
 # crate leaves the workspace, so without this block none of them could be

@@ -170,7 +170,7 @@ fn rust_emit_writes_a_compiling_crate() {
 
     let manifest = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
     assert!(manifest.contains("default = [\"validate-pattern\", \"std\"]"));
-    assert!(manifest.contains("regex = { version = \"1\", optional = true }"));
+    assert!(manifest.contains("regex = { version = \"1.13\", optional = true }"));
     assert!(manifest.contains("ridl-rt = "));
 
     let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
@@ -446,8 +446,8 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
     );
     assert_eq!(
         dependencies["regex"].version(),
-        "1",
-        "the regex requirement is the major version alone"
+        "1.13",
+        "the regex requirement is the checker's major and minor version (TYPL-220)"
     );
     assert!(
         !dependencies["ridl-rt"].optional(),
@@ -1111,6 +1111,66 @@ fn ridl_rt_version_requirement_matches_the_crate() {
     // the version half is what this test guards, so it matches the version
     // string inside the dependency table rather than the whole line.
     let expected = format!("ridl-rt = {{ version = \"{major}.{minor}\"");
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-common"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let manifest = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
+    assert!(
+        manifest.contains(&expected),
+        "expected `{expected}` in the emitted manifest, got:\n{manifest}"
+    );
+}
+
+/// The `regex` requirement in the emitted manifest and the `regex` version the
+/// checker compiles patterns with (TYPL-220, the workspace root's
+/// `[workspace.dependencies]`) must agree on major and minor. A consumer that
+/// resolves an older `regex` than the checker's could refuse a pattern the
+/// checker accepted, and the generated `Regex::new(..).expect(..)` would
+/// panic: `regex` before 1.8 refuses `(?<name>…)` and `\/`, which TYPL-220
+/// passes. `ridlc` cannot read the workspace manifest at run time, so the
+/// emitted requirement is a literal and this test keeps the two together.
+#[test]
+fn regex_version_requirement_matches_the_checker() {
+    #[derive(serde::Deserialize)]
+    struct RootManifest {
+        workspace: RootWorkspace,
+    }
+    #[derive(serde::Deserialize)]
+    struct RootWorkspace {
+        dependencies: std::collections::BTreeMap<String, toml::Value>,
+    }
+
+    let root_manifest_text =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml"))
+            .expect("the workspace root Cargo.toml must exist");
+    let root_manifest: RootManifest = toml::from_str(&root_manifest_text)
+        .expect("the workspace root Cargo.toml must be valid TOML");
+    let version = match root_manifest.workspace.dependencies.get("regex") {
+        Some(toml::Value::String(version)) => version.clone(),
+        Some(toml::Value::Table(table)) => table
+            .get("version")
+            .and_then(toml::Value::as_str)
+            .expect("the workspace `regex` dependency names a version")
+            .to_string(),
+        other => panic!("the workspace declares no `regex` dependency: {other:?}"),
+    };
+    let mut segments = version.split('.');
+    let major = segments.next().expect("a version has a major segment");
+    let minor = segments
+        .next()
+        .expect("the workspace `regex` version names a minor segment");
+    let expected = format!("regex = {{ version = \"{major}.{minor}\"");
 
     let out = tempfile::tempdir().expect("temp dir");
     let run = ridlc::run_build(

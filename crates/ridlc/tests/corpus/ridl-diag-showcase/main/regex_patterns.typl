@@ -1,0 +1,12 @@
+// Regex patterns (typl §2.7, §6.2): TYPL-220. A pattern that is valid
+// ECMA-262 syntax but that the Rust `regex` crate cannot compile used to draw
+// no diagnostic, and the generated Rust code panicked on it at first use
+// (issue #437).
+
+package diag.ridl
+
+/// A lookahead in an inline `match` pattern.
+type LookaheadCode : string [1..8 match /^(?=A)[A-Z]+$/]
+
+/// A backreference in a regex constant.
+const REPEATED_PATTERN = /^(a)\1$/

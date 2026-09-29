@@ -340,7 +340,8 @@ diag_codes! {
 
         /// Invalid regex syntax in a `match` constraint or a regex `const`
         /// (typl §16.2). Validated with the `regress` ECMA-262 engine (ADR-0007
-        /// decision 10). Emitted by the checker (E1.7b).
+        /// decision 10). A pattern `regress` accepts and the Rust `regex`
+        /// crate refuses is TYPL-220. Emitted by the checker (E1.7b).
         TYPL_106 = "TYPL-106", Error,
             "invalid regex syntax in `match` or a regex `const`";
 
@@ -466,6 +467,22 @@ diag_codes! {
         /// code. A non-integer `enum` value is TYPL-203.
         TYPL_219 = "TYPL-219", Error,
             "enumset bit position is not a number with an integer value";
+
+        /// A `match` pattern or regex `const` that is valid ECMA-262 syntax
+        /// (so not TYPL-106) but that the Rust `regex` crate cannot compile —
+        /// for example lookaround, a backreference, `\cX`, `\0`, `[]`, `[^]`,
+        /// `{,n}`, or a pattern over the crate's compiled-size limit; typl
+        /// §2.7 lists more, and neither list is complete (typl §2.7, §6.2,
+        /// §16.3). The Rust backend emits a `match` on a `String`-backed type
+        /// as a `regex::Regex::new(..).expect(..)` call under the generated
+        /// crate's `validate-pattern` feature, so without this check such a
+        /// pattern panics in the consumer's process (issue #437). A regex
+        /// constant is emitted as a `&str` and not compiled, but a `match`
+        /// naming it is. This code guarantees only that the Rust output can
+        /// compile the pattern, not that every engine matches the same strings
+        /// with it (issue #597). Emitted by the checker.
+        TYPL_220 = "TYPL-220", Error,
+            "regex pattern the Rust `regex` crate cannot compile";
 
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by

@@ -949,6 +949,12 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// feature gates. A build with default features off has no `blocking` module
 /// and links `ridl-rt` as `no_std`.
 ///
+/// The `regex = "1.13"` requirement is the major and minor version of the
+/// `regex` crate the checker compiles every `match` pattern with (TYPL-220).
+/// An older `regex` could refuse a pattern the checker accepted, and the
+/// generated `Regex::new(..).expect(..)` would then panic. A guard test in
+/// `crates/ridlc/tests/` keeps it equal to the workspace's `regex` version.
+///
 /// The `ridl-rt = "0.4"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
@@ -971,7 +977,7 @@ std = ["ridl-rt/std"]
 
 [dependencies]
 ridl-rt = {{ version = "0.4", features = ["flatbuffers"] }}
-regex = {{ version = "1", optional = true }}
+regex = {{ version = "1.13", optional = true }}
 
 [lib]
 path = "lib.rs"
