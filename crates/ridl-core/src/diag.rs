@@ -458,14 +458,14 @@ diag_codes! {
         TYPL_218 = "TYPL-218", Error,
             "enumset bit name declared twice in one enumset";
 
-        /// A standalone `enumset` bit position that is not an integer literal
-        /// — a string, a boolean, a fractional number, a regex, or a constant
-        /// reference, even one naming an integer constant (typl §9.1,
-        /// §16.3). The bit has no position to lower, so it is left out of the
+        /// A standalone `enumset` bit position that is not a number with an
+        /// integer value — a string, a boolean, a fractional number, a regex,
+        /// or a constant reference, even one naming an integer constant (typl
+        /// §9.1, §16.3). `1.0` has an integer value and is accepted as bit 1. The bit has no position to lower, so it is left out of the
         /// IR. An integer outside the `int64` domain is TYPL-111, not this
         /// code. A non-integer `enum` value is TYPL-203.
         TYPL_219 = "TYPL-219", Error,
-            "enumset bit position is not an integer literal";
+            "enumset bit position is not a number with an integer value";
 
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by

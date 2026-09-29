@@ -2824,7 +2824,7 @@ impl Checker<'_> {
                         )),
                     _ => Err((
                         DiagCode::TYPL_219,
-                        "is not an integer literal — a bit position is an integer from 0 to 63 (typl §9.1)",
+                        "is not a number with an integer value — a bit position is an integer from 0 to 63 (typl §9.1)",
                     )),
                 };
                 let value = match position {
@@ -6361,8 +6361,8 @@ mod tests {
         }
     }
 
-    /// Each literal form that is not an integer literal draws TYPL-219, and
-    /// only TYPL-219: a string, a boolean, a fraction of either sign, a regex,
+    /// Each literal form that is not a number with an integer value draws
+    /// TYPL-219, and only TYPL-219: a string, a boolean, a fraction of either sign, a regex,
     /// and a constant reference, which is refused even when the constant is an
     /// integer, as the enum path refuses it under TYPL-203.
     #[test]
@@ -6436,6 +6436,41 @@ mod tests {
                 .map(|bit| (bit.name.as_str(), bit.value))
                 .collect();
             assert_eq!(bits, vec![("B", 1)], "{position}");
+        }
+    }
+
+    /// The message quotes the position's significant text, so a sign written
+    /// apart from its digits is quoted as `-1.5`, not as the source spacing.
+    #[test]
+    fn typl_219_quotes_the_position_without_its_inner_spacing() {
+        let checked = check_source("app", "package app\nenumset W { A = - 1.5 }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-219"]);
+        let message = &checked.diagnostics[0].message;
+        assert!(message.contains("`-1.5`"), "{message}");
+    }
+
+    /// The issue asked whether the enum path has the same gap. It does not:
+    /// an enum value that is not a number with an integer value draws
+    /// TYPL-203 and is not lowered. Pinned here so the two paths stay in
+    /// step.
+    #[test]
+    fn typl_203_refuses_an_enum_value_that_is_not_an_integer() {
+        for value in ["\"x\"", "1.5", "true", "/x/", "LIMIT"] {
+            let source = format!(
+                "package app\nconst LIMIT : integer = 1\nenum E {{ A = {value}, B = 1 }}\n"
+            );
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-203"],
+                "{value}: got: {:?}",
+                checked.diagnostics
+            );
+            let Some(v2::decl::Kind::EnumDef(def)) = &decl(&checked, "E").kind else {
+                panic!("E is an enum def");
+            };
+            let values: Vec<&str> = def.values.iter().map(|v| v.name.as_str()).collect();
+            assert_eq!(values, vec!["B"], "{value}");
         }
     }
 
