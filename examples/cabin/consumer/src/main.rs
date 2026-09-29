@@ -39,12 +39,25 @@
 //! that also does other work serves. The generated crate's `std` feature, on
 //! by default, is what carries the `blocking` module.
 //!
-//! One `Loopback` per round trip, rather than one for all six: the loopback
-//! holds every value in one map, and a fresh port is what keeps each round
-//! trip's assertions about what is waiting true independently of the order
-//! they run in. The handler `serve` runs over is taken from the runtime
-//! before the client borrows it, because a call's future holds the client's
-//! port for as long as it lives.
+//! One runtime for all six round trips, and every face over it held for the
+//! whole program, which is the shape an application has (driftsys/ridl#488).
+//! The `Publisher`, the async `Client` and the `blocking::Client` each own an
+//! aggregate from `Loopback::attach`, and the provider side serves over one
+//! handler from `Loopback::handler`. The store is shared, so what one round
+//! trip leaves in it is still there for the next: the temperature of round
+//! trip 1 stays published, and the async client stays subscribed to
+//! `warning` after round trip 2. Each round trip therefore asserts only what
+//! it put there itself — the one occurrence it raised, the one call it sent —
+//! and each call's future forgets its call when it takes the outcome, so no
+//! call is left waiting for the next round trip's `serve` to find. A call's
+//! future borrows its client until it is dropped, which is why each round
+//! trip is a block.
+//!
+//! Every value the program sends or replies with is built with `new`, which
+//! checks the type's typl constraints, never with `new_unchecked`, which is
+//! for a value already known to satisfy them (driftsys/ridl#484). The
+//! provider holds its reply as an `Average`, so the value a query replies
+//! with was checked when it was built.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -66,7 +79,7 @@ const CATALOG: CatalogRef = CatalogRef {
 
 struct Cabin {
     levels: Vec<i64>,
-    average: i64,
+    average: api::Average,
 }
 
 impl cabin::Provider for Cabin {
@@ -74,7 +87,7 @@ impl cabin::Provider for Cabin {
         self.levels.push(level.get());
     }
     fn average(&mut self, _window: &api::Window) -> api::Average {
-        api::Average::new_unchecked(self.average)
+        self.average
     }
 }
 
@@ -122,124 +135,107 @@ fn main() {
     let waker = ridl_rt::task::noop_waker();
     let mut cx = Context::from_waker(&waker);
 
-    // 1 — signal
-    let mut port = Loopback::new(CATALOG);
-    {
-        let mut publisher = cabin::Publisher::new(&mut port);
-        publisher
-            .temperature(api::Temperature::new_unchecked(21))
-            .expect("publish temperature");
-        publisher.commit();
-    }
-    let sample = cabin::Client::new(&mut port)
-        .temperature()
-        .expect("read temperature");
-    assert_eq!(sample.value.get(), 21);
-    assert_eq!(sample.provenance, Provenance::Live);
-    println!("signal ok {}", sample.value.get());
-
-    // 2 — event
-    let mut port = Loopback::new(CATALOG);
-    cabin::Client::new(&mut port)
-        .subscribe_warning()
-        .expect("subscribe");
-    cabin::Publisher::new(&mut port)
-        .warning(api::Warning {
-            code: api::Level::new_unchecked(5),
-            health: api::Health::Warn,
-        })
-        .expect("raise warning");
-    let mut client = cabin::Client::new(&mut port);
-    let mut next = client.next_event();
-    let Poll::Ready(event) = poll_once(&mut next, &mut cx) else {
-        panic!("an occurrence is waiting, so next_event is ready on its first poll");
-    };
-    let code = match event.expect("next_event") {
-        cabin::Event::Warning(occurrence) => {
-            let warning = occurrence.payload.expect("payload verifies");
-            assert_eq!(warning.code.get(), 5);
-            assert!(matches!(warning.health, api::Health::Warn));
-            warning.code.get()
-        }
-    };
-    println!("event ok {}", code);
-
-    // 3 — command
-    let mut port = Loopback::new(CATALOG);
-    let handler = port.handler();
+    let rt = Loopback::new(CATALOG);
+    let mut publisher = cabin::Publisher::new(rt.attach());
+    let mut client = cabin::Client::new(rt.attach());
+    let mut blocking_client =
+        cabin::blocking::Client::new(rt.attach()).with_timeout(CLIENT_TIMEOUT);
+    let mut handler = rt.handler();
     let mut provider = Cabin {
         levels: Vec::new(),
-        average: 0,
+        average: api::Average::new(7).expect("7 is inside Average's range"),
     };
-    let mut serve = cabin::serve(handler, &mut provider);
-    let mut client = cabin::Client::new(&mut port);
-    let mut call = client.set_level(api::Level::new_unchecked(42));
-    // Step 1: the call was sent when `set_level` ran, and nothing has served
-    // it yet.
-    assert!(poll_once(&mut call, &mut cx).is_pending());
-    // Step 2: one pass of the provider side settles it.
-    assert!(poll_once(&mut serve, &mut cx).is_pending());
-    // Step 3: the acknowledgment is taken.
-    assert_eq!(poll_once(&mut call, &mut cx), Poll::Ready(Ok(())));
-    drop(serve);
+
+    // 1 — signal
+    {
+        publisher
+            .temperature(api::Temperature::new(21).expect("21 is inside Temperature's range"))
+            .expect("publish temperature");
+        publisher.commit();
+        let sample = client.temperature().expect("read temperature");
+        assert_eq!(sample.value.get(), 21);
+        assert_eq!(sample.provenance, Provenance::Live);
+        println!("signal ok {}", sample.value.get());
+    }
+
+    // 2 — event
+    {
+        client.subscribe_warning().expect("subscribe");
+        publisher
+            .warning(api::Warning {
+                code: api::Level::new(5).expect("5 is inside Level's range"),
+                health: api::Health::Warn,
+            })
+            .expect("raise warning");
+        let mut next = client.next_event();
+        let Poll::Ready(event) = poll_once(&mut next, &mut cx) else {
+            panic!("an occurrence is waiting, so next_event is ready on its first poll");
+        };
+        let code = match event.expect("next_event") {
+            cabin::Event::Warning(occurrence) => {
+                let warning = occurrence.payload.expect("payload verifies");
+                assert_eq!(warning.code.get(), 5);
+                assert!(matches!(warning.health, api::Health::Warn));
+                warning.code.get()
+            }
+        };
+        println!("event ok {}", code);
+    }
+
+    // 3 — command
+    {
+        let mut serve = cabin::serve(&mut handler, &mut provider);
+        let mut call = client.set_level(api::Level::new(42).expect("42 is inside Level's range"));
+        // Step 1: the call was sent when `set_level` ran, and nothing has
+        // served it yet.
+        assert!(poll_once(&mut call, &mut cx).is_pending());
+        // Step 2: one pass of the provider side settles it.
+        assert!(poll_once(&mut serve, &mut cx).is_pending());
+        // Step 3: the acknowledgment is taken.
+        assert_eq!(poll_once(&mut call, &mut cx), Poll::Ready(Ok(())));
+    }
     assert_eq!(provider.levels, vec![42]);
     println!("command ok {}", provider.levels[0]);
 
     // 4 — query
-    let mut port = Loopback::new(CATALOG);
-    let handler = port.handler();
-    let mut provider = Cabin {
-        levels: Vec::new(),
-        average: 7,
-    };
-    let mut serve = cabin::serve(handler, &mut provider);
-    let mut client = cabin::Client::new(&mut port);
-    let mut call = client.average(api::Window::new_unchecked(10));
-    assert!(poll_once(&mut call, &mut cx).is_pending());
-    assert!(poll_once(&mut serve, &mut cx).is_pending());
-    let reply = match poll_once(&mut call, &mut cx) {
-        Poll::Ready(Ok(average)) => average,
-        other => panic!("the reply is known after one pass of serve, not {other:?}"),
-    };
-    assert_eq!(reply.get(), 7);
-    println!("query ok {}", reply.get());
+    {
+        let mut serve = cabin::serve(&mut handler, &mut provider);
+        let mut call = client.average(api::Window::new(10).expect("10 is inside Window's range"));
+        assert!(poll_once(&mut call, &mut cx).is_pending());
+        assert!(poll_once(&mut serve, &mut cx).is_pending());
+        let reply = match poll_once(&mut call, &mut cx) {
+            Poll::Ready(Ok(average)) => average,
+            other => panic!("the reply is known after one pass of serve, not {other:?}"),
+        };
+        assert_eq!(reply.get(), 7);
+        println!("query ok {}", reply.get());
+    }
 
     // 5 — command, through the blocking client. `set_level` parks this
     // thread until the serving thread settles the call; `done` then ends
     // that thread's loop, and the scope joins it.
-    let mut port = Loopback::new(CATALOG);
-    let mut handler = port.handler();
-    let mut provider = Cabin {
-        levels: Vec::new(),
-        average: 0,
-    };
     let done = AtomicBool::new(false);
     let served = std::thread::scope(|scope| {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
         let _ends_the_loop = DoneOnDrop(&done);
-        let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
-        let acknowledged = client.set_level(api::Level::new_unchecked(42));
+        let acknowledged =
+            blocking_client.set_level(api::Level::new(42).expect("42 is inside Level's range"));
         done.store(true, Ordering::Release);
         assert_eq!(acknowledged, Ok(()));
         serving.join().expect("the serving thread does not panic")
     });
     assert_eq!(served, Ok(()));
-    assert_eq!(provider.levels, vec![42]);
-    println!("blocking command ok {}", provider.levels[0]);
+    // The command of round trip 3 is the first entry; this one is the second.
+    assert_eq!(provider.levels, vec![42, 42]);
+    println!("blocking command ok {}", provider.levels[1]);
 
     // 6 — query, through the blocking client.
-    let mut port = Loopback::new(CATALOG);
-    let mut handler = port.handler();
-    let mut provider = Cabin {
-        levels: Vec::new(),
-        average: 7,
-    };
     let done = AtomicBool::new(false);
     let (reply, served) = std::thread::scope(|scope| {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
         let _ends_the_loop = DoneOnDrop(&done);
-        let mut client = cabin::blocking::Client::new(&mut port).with_timeout(CLIENT_TIMEOUT);
-        let reply = client.average(api::Window::new_unchecked(10));
+        let reply =
+            blocking_client.average(api::Window::new(10).expect("10 is inside Window's range"));
         done.store(true, Ordering::Release);
         let served = serving.join().expect("the serving thread does not panic");
         (reply, served)
