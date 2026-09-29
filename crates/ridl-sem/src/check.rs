@@ -1447,14 +1447,33 @@ impl Checker<'_> {
 
     /// Validates a regex literal's pattern with the `regress` ECMA-262 engine
     /// (typl §2.7; ADR-0007 decision 10), emitting TYPL-106 on invalid syntax.
-    /// A typl regex literal carries its `/…/` delimiters; the engine parses the
-    /// body between them.
+    /// A pattern `regress` accepts is then compiled with the Rust `regex`
+    /// crate, and one that crate refuses is TYPL-220: the Rust backend's
+    /// generated code compiles every pattern with that crate and panics if it
+    /// fails (issue #437). A typl regex literal carries its `/…/` delimiters;
+    /// both engines parse the body between them, which is also the text the
+    /// codegen lowering hands the backend.
+    ///
+    /// Every pattern that reaches a backend passes through here: an inline
+    /// `match` pattern at its type or field, and a regex constant at its
+    /// declaration, which is the text a `match` naming that constant carries.
     fn validate_regex(&mut self, raw: &str, range: TextRange) {
-        if regress::Regex::new(regex_body(raw)).is_err() {
+        let body = regex_body(raw);
+        if regress::Regex::new(body).is_err() {
             self.error(
                 DiagCode::TYPL_106,
                 range,
                 "invalid regular expression syntax".to_string(),
+            );
+        } else if let Err(error) = regex::Regex::new(body) {
+            self.error(
+                DiagCode::TYPL_220,
+                range,
+                format!(
+                    "the Rust `regex` crate cannot compile this pattern: {} — a typl pattern is \
+                     ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
+                    regex_crate_refusal(&error),
+                ),
             );
         }
     }
@@ -5269,6 +5288,25 @@ fn regex_body(raw: &str) -> &str {
         .unwrap_or(raw)
 }
 
+/// The reason the `regex` crate gives for refusing a pattern, on one line
+/// (TYPL-220). A syntax error renders as several lines — the pattern, a caret
+/// line, and an `error: ` line — and only the last is the reason.
+fn regex_crate_refusal(error: &regex::Error) -> String {
+    match error {
+        regex::Error::CompiledTooBig(limit) => {
+            format!("the compiled pattern exceeds the crate's size limit of {limit} bytes")
+        }
+        other => {
+            let rendered = other.to_string();
+            rendered
+                .lines()
+                .rev()
+                .find_map(|line| line.strip_prefix("error: "))
+                .map_or_else(|| rendered.clone(), str::to_string)
+        }
+    }
+}
+
 /// Whether a blank line separates `definition`'s doc comment from the
 /// definition (TYPL-404). Only meaningful when a doc comment is attached; the
 /// check reads the whitespace token immediately before the definition — two or
@@ -8260,6 +8298,16 @@ mod tests {
             let range = checked.diagnostics[0].primary.range;
             assert_eq!(usize::from(range.start()), start, "{raw}");
             assert_eq!(usize::from(range.end()), start + raw.len(), "{raw}");
+            // The message gives the crate's reason on one line.
+            let message = &checked.diagnostics[0].message;
+            assert!(
+                message.starts_with("the Rust `regex` crate cannot compile this pattern: ")
+                    && !message.contains('\n'),
+                "{raw}: {message}"
+            );
+            if raw.contains("{1000}") {
+                assert!(message.contains("size limit"), "{raw}: {message}");
+            }
         }
     }
 

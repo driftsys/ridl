@@ -237,12 +237,31 @@ UTF-8 in double quotes. Escapes follow
 ### 2.7 Regex Literals
 
 Enclosed in forward slashes; syntax follows
-[ECMA-262](https://tc39.es/ecma262/#sec-regexp-regular-expression-objects).
-Forward slashes inside the pattern are escaped `\/`.
+[ECMA-262](https://tc39.es/ecma262/#sec-regexp-regular-expression-objects),
+restricted to the patterns that the Rust [`regex`](https://docs.rs/regex/1)
+crate also compiles. Forward slashes inside the pattern are escaped `\/`.
 
 ```ridl
 /^[A-HJ-NPR-Z0-9]{17}$/
 ```
+
+A pattern that is not ECMA-262 syntax is TYPL-106. A pattern that is ECMA-262
+syntax but that the `regex` crate cannot compile is TYPL-220: the Rust backend
+compiles every pattern with that crate in the generated code, and a pattern it
+refuses would fail there instead of at build time. The ECMA-262 constructs that
+the `regex` crate refuses, and that a typl pattern therefore cannot use, are:
+
+- lookaround: `(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`
+- a backreference, numbered (`\1`) or named (`\k<name>`)
+- the control escape `\cX` and the NUL escape `\0`
+- the empty class `[]` and the negated empty class `[^]`
+- a quantifier with no lower bound, such as `{,3}`
+- a pattern whose compiled form exceeds the `regex` crate's size limit, such as
+  `(a{1000}){1000}`
+
+The check is the compiler compiling the pattern with both engines, not this
+list: a construct not listed here that the `regex` crate refuses is TYPL-220
+too.
 
 ### 2.8 Tokens recognised but not used by typl
 
@@ -656,7 +675,9 @@ struct GearState {
 
 ### 6.2 Regex Constants
 
-A `const` may hold a regex literal, reusable in `match` constraints:
+A `const` may hold a regex literal, reusable in `match` constraints. The pattern
+follows §2.7, and TYPL-106 or TYPL-220 is reported at the constant's
+declaration, not at each `match` that names it:
 
 ```ridl
 const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
@@ -1139,7 +1160,7 @@ the family overview §7 and are not restated here.
 | TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                      | warning; error if active profile requires          |
 | TYPL-104 | range `min > max`                                                                                          | error                                              |
 | TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                               | error                                              |
-| TYPL-106 | invalid regex syntax in `match` or `const`                                                                 | error                                              |
+| TYPL-106 | invalid regex syntax in `match` or `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220    | error                                              |
 | TYPL-107 | regex contradicts declared character bound                                                                 | warning                                            |
 | TYPL-108 | `const` value violates its declared type constraints                                                       | error                                              |
 | TYPL-109 | init (`= value`) incompatible with the type/field constraints                                              | error                                              |
@@ -1171,6 +1192,7 @@ the family overview §7 and are not restated here.
 | TYPL-217 | union arm name declared twice in one union                                                                 | error    |
 | TYPL-218 | enumset bit name declared twice in one enumset                                                             | error    |
 | TYPL-219 | enumset bit position is not a number with an integer value                                                 | error    |
+| TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite   | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 

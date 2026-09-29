@@ -569,6 +569,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("TYPL-217", Showcase),
     ("TYPL-218", Showcase),
     ("TYPL-219", Showcase),
+    ("TYPL-220", Showcase),
     ("TYPL-301", Showcase),
     (
         "TYPL-302",
@@ -598,8 +599,9 @@ const SHOWCASE_INCIDENTAL_CODES: &[&str] = &[
     // their own message-level assertion — set equality over codes alone would
     // not notice one of them starting to accept.
     "FORM-101",
-    // `Serial` carries a `match` pattern, so it has no derivable init — the
-    // typl-level statement of the condition RIDL-109 escalates for a signal.
+    // `Serial` and `LookaheadCode` carry a `match` pattern, so neither has a
+    // derivable init — the typl-level statement of the condition RIDL-109
+    // escalates for a signal.
     "TYPL-115",
 ];
 
@@ -1059,6 +1061,7 @@ fn showcase_pins_every_severity() {
         ("TYPL-217", Severity::Error),
         ("TYPL-218", Severity::Error),
         ("TYPL-219", Severity::Error),
+        ("TYPL-220", Severity::Error),
         ("TYPL-301", Severity::Error),
         ("TYPL-303", Severity::Error),
         ("TYPL-304", Severity::Error),

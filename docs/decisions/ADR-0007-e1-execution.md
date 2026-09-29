@@ -118,6 +118,14 @@ at epic close) and cites these decisions by number.
     TYPL-403 are still unimplemented and still deferred; that remaining
     inventory is carried on the E2 debt issue #172 beside the E1 one (#135).
 
+    _Amended (2026-09-29)._ `regress` alone is not enough, because the Rust
+    backend's generated code compiles each pattern with the `regex` crate and
+    panics on one that crate refuses (issue #437). The checker now compiles a
+    pattern that `regress` accepts with `regex` as well, and a pattern `regex`
+    refuses is the new error TYPL-220. `regress` still decides TYPL-106, and a
+    typl pattern is the ECMA-262 syntax that `regex` also accepts (typl
+    reference §2.7).
+
 11. **The general form's attribute promotion is E2 scope.** E1 parses the typl
     profile per typl reference Appendix E, with `@labels` and `@deprecated` as
     doc-comment tags per typl §14. The general form §4 attribute block (single

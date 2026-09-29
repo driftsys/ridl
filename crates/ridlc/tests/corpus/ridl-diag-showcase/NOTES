@@ -84,7 +84,9 @@ review caught and no single-clause fixture could have. Keep both clauses.
   (a union arm name declared twice, exactly, from the same file), 218 (an
   enumset bit name declared twice, exactly, from the same file), 219 (an
   enumset bit position that is not a number with an integer value, from
-  `main/enumset_positions.typl`), 301, 303, 304 (the profile boundary, folded
+  `main/enumset_positions.typl`), 220 (a lookahead in an inline `match`
+  pattern and a backreference in a regex constant, from
+  `main/regex_patterns.typl`), 301, 303, 304 (the profile boundary, folded
   in from the E1 debt list).
 
 The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
