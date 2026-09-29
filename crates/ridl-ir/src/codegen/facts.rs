@@ -454,18 +454,31 @@ impl<'a> Closures<'a> {
         }
     }
 
+    /// `reaches_foreign` follows the rule `TypeRef.foreign` follows: a
+    /// resolved reference, a constant included, is foreign when its declaring
+    /// package is not `Scope.package`, whatever its spelling. An unresolved
+    /// reference has no declaring package, so whether its text is dotted is
+    /// the only evidence left (driftsys/ridl#594).
     fn walk_reference(&mut self, home: &'a v2::Package, reference: &str, found: &mut v1::Closure) {
-        if is_foreign(reference) {
-            found.reaches_foreign = true;
-        }
         match self.scope.resolve(home, reference) {
-            // A reference that names a constant is not a type position a
-            // printer can carry.
-            Some((decl, _)) if matches!(decl.kind, Some(v2::decl::Kind::ConstDef(_))) => {
+            Some((decl, declaring)) => {
+                if declaring.name != self.scope.package.name {
+                    found.reaches_foreign = true;
+                }
+                // A reference that names a constant is not a type position a
+                // printer can carry.
+                if matches!(decl.kind, Some(v2::decl::Kind::ConstDef(_))) {
+                    found.reaches_unresolved = true;
+                } else {
+                    self.walk_decl(declaring, decl, found);
+                }
+            }
+            None => {
+                if is_foreign(reference) {
+                    found.reaches_foreign = true;
+                }
                 found.reaches_unresolved = true;
             }
-            Some((decl, declaring)) => self.walk_decl(declaring, decl, found),
-            None => found.reaches_unresolved = true,
         }
     }
 }

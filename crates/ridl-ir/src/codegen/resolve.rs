@@ -65,9 +65,11 @@ impl<'a> Scope<'a> {
 /// Whether a reference is spelled with a package: the IR's canonical form
 /// writes a cross-package reference as `pkg.Name`, a same-package one as the
 /// bare `Name`. A text test, not a property of what the scope holds:
-/// `Lowering::type_ref` derives `TypeRef.foreign` from the declaring package
-/// for a resolved reference and uses this only for an unresolved one, which
-/// has no declaring package (driftsys/ridl#586).
+/// `Lowering::type_ref` derives `TypeRef.foreign`, and
+/// `Closures::walk_reference` derives `Closure.reaches_foreign`, from the
+/// declaring package for a resolved reference, and both use this only for an
+/// unresolved one, which has no declaring package (driftsys/ridl#586,
+/// driftsys/ridl#594).
 pub(crate) fn is_foreign(reference: &str) -> bool {
     reference.contains('.')
 }

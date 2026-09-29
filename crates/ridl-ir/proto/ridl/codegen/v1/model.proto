@@ -423,7 +423,10 @@ message Closure {
   bool reaches_text_or_bytes = 2;
   // An array or a map.
   bool reaches_collection = 3;
-  // A reference into another package, resolved or not.
+  // A reference into a package other than `Scope.package`, by the rule
+  // `TypeRef.foreign` follows: a resolved reference, a constant included,
+  // when its declaring package is not `Scope.package`, whatever its
+  // spelling; an unresolved one when its text is dotted.
   bool reaches_foreign = 4;
   // A reference no package in scope declares, or one to a constant.
   bool reaches_unresolved = 5;
