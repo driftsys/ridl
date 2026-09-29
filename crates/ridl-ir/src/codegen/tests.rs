@@ -331,6 +331,13 @@ fn a_bare_unresolved_reference_is_not_foreign() {
         "an unresolved reference indexes nothing"
     );
     assert_eq!(reference.kind, v1::DeclKind::Unspecified as i32);
+
+    let closure = model.declarations[2].closure.as_ref().expect("a closure");
+    assert!(
+        !closure.reaches_foreign,
+        "a bare unresolved reference does not reach another package"
+    );
+    assert!(closure.reaches_unresolved);
 }
 
 /// Package `a`: a named scalar, an enum, and one declaration of each kind
@@ -690,6 +697,83 @@ fn the_closure_of_a_foreign_copy_reaches_foreign_through_a_bare_reference() {
         "the bare `Small` inside `a.Choice` is declared by `a`, not by `b`"
     );
     assert!(!closure.reaches_unresolved);
+}
+
+/// A local declaration that names a declaration of another package reaches
+/// foreign, and a reference to a foreign constant does too: the constant
+/// resolves, so its declaring package decides. The two packages hold the
+/// same number of declarations, so only their names tell them apart
+/// (driftsys/ridl#594).
+#[test]
+fn a_local_declaration_reaches_foreign_through_a_resolved_reference() {
+    let a = v2::Package {
+        name: "a".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Gear".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![value("PARK", 0), value("DRIVE", 1)],
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "LIMIT".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::ConstDef(v2::ConstDef {
+                    type_ref: Some("integer".to_string()),
+                    value: "5".to_string(),
+                    regex: None,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Probe".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "g", named("a.Gear"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Capped".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "limit", named("a.LIMIT"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(a.decls.len(), b.decls.len());
+    let model = lower(&b, &[&a]);
+
+    let probe = model.declarations[0].closure.as_ref().expect("a closure");
+    assert!(
+        probe.reaches_foreign,
+        "`a.Gear` is declared by `a`, not by the scope's package `b`"
+    );
+    assert!(!probe.reaches_unresolved);
+
+    let capped = model.declarations[1].closure.as_ref().expect("a closure");
+    assert!(
+        capped.reaches_foreign,
+        "the constant `a.LIMIT` is declared by `a`, not by `b`"
+    );
+    assert!(
+        capped.reaches_unresolved,
+        "a reference to a constant is not a type position"
+    );
 }
 
 /// A reference `b` spells with its own package is not foreign: its declaring
