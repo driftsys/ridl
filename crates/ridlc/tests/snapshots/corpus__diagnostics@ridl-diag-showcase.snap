@@ -132,13 +132,13 @@ error[RIDL-306]: `result` is a query result of type `diag.ridl.Sample`, which is
 31 │     ensure result.value >= 0.0
    │            ^^^^^^
 
-error[TYPL-219]: enumset bit `NAMED` has position `"x"`, which is not an integer — a bit position is an integer from 0 to 63 (typl §9.1)
+error[TYPL-219]: enumset bit `NAMED` has position `"x"`, which is not an integer literal — a bit position is an integer from 0 to 63 (typl §9.1)
   ┌─ tests/corpus/ridl-diag-showcase/main/enumset_positions.typl:9:16
   │
 9 │   NAMED      = "x"
   │                ^^^
 
-error[TYPL-219]: enumset bit `FRACTIONAL` has position `1.5`, which is not an integer — a bit position is an integer from 0 to 63 (typl §9.1)
+error[TYPL-219]: enumset bit `FRACTIONAL` has position `1.5`, which is not an integer literal — a bit position is an integer from 0 to 63 (typl §9.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/enumset_positions.typl:10:16
    │
 10 │   FRACTIONAL = 1.5

@@ -82,8 +82,10 @@ review caught and no single-clause fixture could have. Keep both clauses.
   struct field name declared twice, exactly, from `main/projection.ridl`),
   216 (an enum value name declared twice, exactly, from the same file), 217
   (a union arm name declared twice, exactly, from the same file), 218 (an
-  enumset bit name declared twice, exactly, from the same file), 301, 303,
-  304 (the profile boundary, folded in from the E1 debt list).
+  enumset bit name declared twice, exactly, from the same file), 219 (an
+  enumset bit position that is not an integer literal, from
+  `main/enumset_positions.typl`), 301, 303, 304 (the profile boundary, folded
+  in from the E1 debt list).
 
 The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
 `RIDL_PROFILE_CODES` and asserts the showcase emits **exactly** that set —
