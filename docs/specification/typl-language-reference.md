@@ -267,8 +267,8 @@ therefore cannot use, include:
 - a class escape as a range bound, as in `[\d-z]` or `[\w-.]`
 - a quantifier with no lower bound, such as `{,3}`, and a `{` that opens no
   complete quantifier, as in `{` alone or `a{`
-- a pattern whose compiled form exceeds the `regex` crate's size limit. `\w`,
-  `\d` and `\s` are Unicode classes in that crate, so an ordinary pattern such
+- a pattern whose compiled form exceeds the `regex` crate's size limit. `\w` and
+  `\p{..}` are large Unicode classes in that crate, so an ordinary pattern such
   as `^\w{1,256}$` exceeds the limit, while `^[A-Za-z0-9_]{1,256}$` does not. An
   artificial pattern such as `(a{1000}){1000}` exceeds it too.
 

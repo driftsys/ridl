@@ -5302,12 +5302,15 @@ fn regex_body(raw: &str) -> &str {
 /// line, and an `error: ` line — and only the last is the reason.
 fn regex_crate_refusal(error: &regex::Error) -> String {
     match error {
-        // The usual cause is a Unicode class under a counted repetition:
-        // `^\w{1,256}$` is over the limit, `^[A-Za-z0-9_]{1,256}$` is not.
+        // The usual cause is a large Unicode class under a counted
+        // repetition. Measured with regex 1.13.1: `^\w{1,n}$` is over the
+        // limit from n = 210 and `^\p{L}{1,n}$` from n = 245, `^\d{1,n}$`
+        // only from n = 2031, and `\s`, `.` and `[A-Za-z0-9_]` not up to
+        // n = 5000.
         regex::Error::CompiledTooBig(limit) => format!(
             "the compiled pattern exceeds the crate's size limit of {limit} bytes; in the Rust \
-             output `\\w`, `\\d` and `\\s` are Unicode classes, and an ASCII class such as \
-             `[A-Za-z0-9_]` is smaller"
+             output `\\w` and `\\p{{..}}` are large Unicode classes, so a counted repetition \
+             of one is the usual cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller"
         ),
         other => {
             let rendered = other.to_string();
@@ -8338,12 +8341,12 @@ mod tests {
     }
 
     /// The size-limit refusal names the likely cause. An ordinary pattern such
-    /// as `^\w{1,256}$` exceeds the limit because `\w` is a Unicode class in
-    /// the `regex` crate, so the message says so and names the ASCII class
-    /// that fits. The whole message is pinned, so the size-limit arm of
+    /// as `^\w{1,256}$` exceeds the limit because `\w` is a large Unicode
+    /// class in the `regex` crate, so the message names `\w` and `\p{..}` and
+    /// the ASCII class that fits. The whole message is pinned, so the size-limit arm of
     /// `regex_crate_refusal` cannot be removed without failing here.
     #[test]
-    fn typl_220_size_limit_message_names_the_unicode_classes() {
+    fn typl_220_size_limit_message_names_the_large_unicode_classes() {
         let checked = check_source(
             "app",
             "package app\ntype Word : string [1..256 match /^\\w{1,256}$/]\n",
@@ -8357,8 +8360,9 @@ mod tests {
         assert_eq!(
             checked.diagnostics[0].message,
             "the Rust `regex` crate cannot compile this pattern: the compiled pattern exceeds \
-             the crate's size limit of 10485760 bytes; in the Rust output `\\w`, `\\d` and \
-             `\\s` are Unicode classes, and an ASCII class such as `[A-Za-z0-9_]` is smaller \
+             the crate's size limit of 10485760 bytes; in the Rust output `\\w` and \
+             `\\p{..}` are large Unicode classes, so a counted repetition of one is the usual \
+             cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller \
              — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
         );
     }
