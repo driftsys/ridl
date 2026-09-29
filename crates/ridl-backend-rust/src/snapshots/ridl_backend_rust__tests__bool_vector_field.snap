@@ -70,8 +70,7 @@ impl<'a> EngagedFbView<'a> {
     }
 }
 /// Writes `Engaged` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Engaged(
     value: &Engaged,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -93,8 +92,7 @@ pub(crate) fn __ridl_fb_encode_Engaged(
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Engaged(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -112,8 +110,7 @@ pub(crate) fn __ridl_fb_verify_Engaged(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Engaged(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

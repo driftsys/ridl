@@ -677,8 +677,7 @@ impl<'a> SpeedFbView<'a> {
     }
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -702,8 +701,7 @@ pub(crate) fn __ridl_fb_encode_Speed(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Speed(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -723,8 +721,7 @@ pub(crate) fn __ridl_fb_verify_Speed(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Speed(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -824,8 +821,7 @@ impl<'a> TemperatureFbView<'a> {
     }
 }
 /// Writes `Temperature` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Temperature(
     value: &Temperature,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -849,8 +845,7 @@ pub(crate) fn __ridl_fb_encode_Temperature(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Temperature(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -870,8 +865,7 @@ pub(crate) fn __ridl_fb_verify_Temperature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Temperature(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -974,8 +968,7 @@ impl<'a> RPMFbView<'a> {
     }
 }
 /// Writes `RPM` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_RPM(
     value: &RPM,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -999,8 +992,7 @@ pub(crate) fn __ridl_fb_encode_RPM(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_RPM(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1020,8 +1012,7 @@ pub(crate) fn __ridl_fb_verify_RPM(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_RPM(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1121,8 +1112,7 @@ impl<'a> RatioFbView<'a> {
     }
 }
 /// Writes `Ratio` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Ratio(
     value: &Ratio,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1146,8 +1136,7 @@ pub(crate) fn __ridl_fb_encode_Ratio(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Ratio(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1167,8 +1156,7 @@ pub(crate) fn __ridl_fb_verify_Ratio(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Ratio(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1268,8 +1256,7 @@ impl<'a> CounterFbView<'a> {
     }
 }
 /// Writes `Counter` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Counter(
     value: &Counter,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1293,8 +1280,7 @@ pub(crate) fn __ridl_fb_encode_Counter(
         builder.push_table(6usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Counter(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1312,8 +1298,7 @@ pub(crate) fn __ridl_fb_verify_Counter(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Counter(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1413,8 +1398,7 @@ impl<'a> GainFbView<'a> {
     }
 }
 /// Writes `Gain` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Gain(
     value: &Gain,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1438,8 +1422,7 @@ pub(crate) fn __ridl_fb_encode_Gain(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Gain(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1459,8 +1442,7 @@ pub(crate) fn __ridl_fb_verify_Gain(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Gain(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1560,8 +1542,7 @@ impl<'a> GearPositionFbView<'a> {
     }
 }
 /// Writes `GearPosition` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_GearPosition(
     value: &GearPosition,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1583,8 +1564,7 @@ pub(crate) fn __ridl_fb_encode_GearPosition(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1606,8 +1586,7 @@ pub(crate) fn __ridl_fb_verify_GearPosition(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1712,8 +1691,7 @@ impl<'a> WarningFbView<'a> {
     }
 }
 /// Writes `Warning` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Warning(
     value: &Warning,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1735,8 +1713,7 @@ pub(crate) fn __ridl_fb_encode_Warning(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Warning(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1756,8 +1733,7 @@ pub(crate) fn __ridl_fb_verify_Warning(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Warning(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1856,8 +1832,7 @@ impl<'a> WarningFlagsFbView<'a> {
     }
 }
 /// Writes `WarningFlags` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_WarningFlags(
     value: &WarningFlags,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1881,8 +1856,7 @@ pub(crate) fn __ridl_fb_encode_WarningFlags(
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_WarningFlags(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1904,8 +1878,7 @@ pub(crate) fn __ridl_fb_verify_WarningFlags(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_WarningFlags(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

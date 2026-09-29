@@ -66,8 +66,7 @@ impl<'a> GearPositionFbView<'a> {
     }
 }
 /// Writes `GearPosition` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_GearPosition(
     value: &GearPosition,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -89,8 +88,7 @@ pub(crate) fn __ridl_fb_encode_GearPosition(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -112,8 +110,7 @@ pub(crate) fn __ridl_fb_verify_GearPosition(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

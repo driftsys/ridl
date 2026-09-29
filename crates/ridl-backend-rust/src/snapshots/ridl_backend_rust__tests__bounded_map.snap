@@ -140,8 +140,7 @@ impl<'a> SpeedFbView<'a> {
     }
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -165,8 +164,7 @@ pub(crate) fn __ridl_fb_encode_Speed(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Speed(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -186,8 +184,7 @@ pub(crate) fn __ridl_fb_verify_Speed(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Speed(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -287,8 +284,7 @@ impl<'a> CounterFbView<'a> {
     }
 }
 /// Writes `Counter` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Counter(
     value: &Counter,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -312,8 +308,7 @@ pub(crate) fn __ridl_fb_encode_Counter(
         builder.push_table(6usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Counter(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -331,8 +326,7 @@ pub(crate) fn __ridl_fb_verify_Counter(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Counter(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

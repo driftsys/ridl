@@ -319,8 +319,7 @@ impl<'a> DoorIdFbView<'a> {
     }
 }
 /// Writes `DoorId` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorId(
     value: &DoorId,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -342,8 +341,7 @@ pub(crate) fn __ridl_fb_encode_DoorId(
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DoorId(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -363,8 +361,7 @@ pub(crate) fn __ridl_fb_verify_DoorId(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_DoorId(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -464,8 +461,7 @@ impl<'a> PercentFbView<'a> {
     }
 }
 /// Writes `Percent` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Percent(
     value: &Percent,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -489,8 +485,7 @@ pub(crate) fn __ridl_fb_encode_Percent(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Percent(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -510,8 +505,7 @@ pub(crate) fn __ridl_fb_verify_Percent(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Percent(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -611,8 +605,7 @@ impl<'a> OdometerFbView<'a> {
     }
 }
 /// Writes `Odometer` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Odometer(
     value: &Odometer,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -636,8 +629,7 @@ pub(crate) fn __ridl_fb_encode_Odometer(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Odometer(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -657,8 +649,7 @@ pub(crate) fn __ridl_fb_verify_Odometer(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Odometer(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -761,8 +752,7 @@ impl<'a> LockStateFbView<'a> {
     }
 }
 /// Writes `LockState` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_LockState(
     value: &LockState,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -784,8 +774,7 @@ pub(crate) fn __ridl_fb_encode_LockState(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_LockState(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -805,8 +794,7 @@ pub(crate) fn __ridl_fb_verify_LockState(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_LockState(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1143,8 +1131,7 @@ impl<'a> DoorFaultFbView<'a> {
     }
 }
 /// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorFault(
     value: &DoorFault,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1166,8 +1153,7 @@ pub(crate) fn __ridl_fb_encode_DoorFault(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DoorFault(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1187,8 +1173,7 @@ pub(crate) fn __ridl_fb_verify_DoorFault(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_DoorFault(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1327,8 +1312,7 @@ impl<'a> DoorFaultFbView<'a> {
     }
 }
 /// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorFault(
     value: &DoorFault,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -1350,8 +1334,7 @@ pub(crate) fn __ridl_fb_encode_DoorFault(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DoorFault(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -1371,8 +1354,7 @@ pub(crate) fn __ridl_fb_verify_DoorFault(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_DoorFault(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

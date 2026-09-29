@@ -201,7 +201,10 @@ fn declarations_named_like_prelude_names_compile() {
 /// `LOW`, typed `i64`, compiles `emit_const`'s named-type path
 /// (`ridl-backend-rust/src/lib.rs`) beside `type i64`: the constant's type is
 /// the bare path `i64`, which resolves to this package's declared scalar, not
-/// the primitive.
+/// the primitive. `RAW` and `RAW_STR`, typed with the plain typl primitives
+/// `integer` and `string`, declare no named type at all, so they compile
+/// `emit_const`'s backend-chosen-primitive path instead, which writes
+/// `::core::primitive::i64` and `&::core::primitive::str` outright.
 #[test]
 fn declarations_named_like_primitives_compile() {
     let declarations: String = [
@@ -210,7 +213,7 @@ fn declarations_named_like_primitives_compile() {
     .iter()
     .map(|name| format!("type {name} : integer [0..100]\n"))
     .collect();
-    pipeline_compiles_with(
+    let emitted = pipeline_compiles_with(
         "primitive_names",
         &format!(
             "{}
@@ -234,11 +237,24 @@ struct Widths {{
 
 {declarations}
 
-const LOW : i64 = 5",
+const LOW : i64 = 5
+const RAW : integer = 5
+const RAW_STR : string = \"hi\"",
             base_package("probe.primitives")
         ),
         "",
         NAMING_LINTS,
+    );
+    // `base_package` gives `Cabin` a `require` and an `ensure` clause so the
+    // face is emitted; see `declarations_named_like_prelude_names_compile`
+    // above for why this must be asserted rather than left implicit.
+    assert!(
+        emitted.contains("pub mod cabin"),
+        "the interface's face module must be emitted, got:\n{emitted}"
+    );
+    assert!(
+        !emitted.contains("__RIDL_NO_FACE_"),
+        "the face must not be skipped, got:\n{emitted}"
     );
 }
 

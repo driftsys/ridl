@@ -229,8 +229,7 @@ impl<'a> NameFbView<'a> {
     }
 }
 /// Writes `Name` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Name(
     value: &Name,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -251,8 +250,7 @@ pub(crate) fn __ridl_fb_encode_Name(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Name(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -275,8 +273,7 @@ pub(crate) fn __ridl_fb_verify_Name(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Name(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -376,8 +373,7 @@ impl<'a> DigestFbView<'a> {
     }
 }
 /// Writes `Digest` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Digest(
     value: &Digest,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -398,8 +394,7 @@ pub(crate) fn __ridl_fb_encode_Digest(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Digest(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -423,8 +418,7 @@ pub(crate) fn __ridl_fb_verify_Digest(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Digest(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -527,8 +521,7 @@ impl<'a> RatioFbView<'a> {
     }
 }
 /// Writes `Ratio` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Ratio(
     value: &Ratio,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -550,8 +543,7 @@ pub(crate) fn __ridl_fb_encode_Ratio(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Ratio(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -570,8 +562,7 @@ pub(crate) fn __ridl_fb_verify_Ratio(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Ratio(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

@@ -2277,8 +2277,7 @@ impl<'a> Codec<'a> {
                 }
             },
             quote! {
-                #[allow(deprecated)]
-                #[allow(non_snake_case)]
+                #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #encode_name(
                     value: &#ty,
                     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2305,8 +2304,7 @@ impl<'a> Codec<'a> {
                 }
             },
             quote! {
-                #[allow(deprecated)]
-                #[allow(non_snake_case)]
+                #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #verify_name(
                     buf: &[::core::primitive::u8],
                     table: ::core::primitive::usize,
@@ -2336,8 +2334,7 @@ impl<'a> Codec<'a> {
                 }
             },
             quote! {
-                #[allow(deprecated)]
-                #[allow(non_snake_case)]
+                #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #decode_name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                     let __d = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
                         .unwrap_or(::core::option::Option::None)
@@ -2630,8 +2627,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[doc = #encode_doc]
-                #[allow(deprecated)]
-                #[allow(non_snake_case)]
+                #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #encode_name(
                     value: &#ty,
                     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2643,8 +2639,7 @@ impl<'a> Codec<'a> {
                 }
             },
             quote! {
-                #[allow(deprecated)]
-                #[allow(non_snake_case)]
+                #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #verify_name(
                     buf: &[::core::primitive::u8],
                     table: ::core::primitive::usize,
@@ -2654,8 +2649,7 @@ impl<'a> Codec<'a> {
                 }
             },
             quote! {
-                #[allow(deprecated)]
-                #[allow(non_snake_case)]
+                #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #decode_name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                     #decode_body
                 }

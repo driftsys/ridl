@@ -354,8 +354,7 @@ impl<'a> TemperatureFbView<'a> {
     }
 }
 /// Writes `Temperature` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Temperature(
     value: &Temperature,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -377,8 +376,7 @@ pub(crate) fn __ridl_fb_encode_Temperature(
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Temperature(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -398,8 +396,7 @@ pub(crate) fn __ridl_fb_verify_Temperature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Temperature(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -502,8 +499,7 @@ impl<'a> LevelFbView<'a> {
     }
 }
 /// Writes `Level` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Level(
     value: &Level,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -525,8 +521,7 @@ pub(crate) fn __ridl_fb_encode_Level(
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Level(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -546,8 +541,7 @@ pub(crate) fn __ridl_fb_verify_Level(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Level(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -647,8 +641,7 @@ impl<'a> WindowFbView<'a> {
     }
 }
 /// Writes `Window` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Window(
     value: &Window,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -672,8 +665,7 @@ pub(crate) fn __ridl_fb_encode_Window(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Window(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -693,8 +685,7 @@ pub(crate) fn __ridl_fb_verify_Window(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Window(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -794,8 +785,7 @@ impl<'a> AverageFbView<'a> {
     }
 }
 /// Writes `Average` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Average(
     value: &Average,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -819,8 +809,7 @@ pub(crate) fn __ridl_fb_encode_Average(
         builder.push_table(6usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Average(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -840,8 +829,7 @@ pub(crate) fn __ridl_fb_verify_Average(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Average(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -941,8 +929,7 @@ impl<'a> HealthFbView<'a> {
     }
 }
 /// Writes `Health` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Health(
     value: &Health,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -964,8 +951,7 @@ pub(crate) fn __ridl_fb_encode_Health(
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Health(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -985,8 +971,7 @@ pub(crate) fn __ridl_fb_verify_Health(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Health(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
