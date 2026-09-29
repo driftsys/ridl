@@ -63,28 +63,30 @@ raw (`crate`, `self`, `Self`, `super`).
 
 Two facts decide many rows. A ridl identifier starts with a letter
 (`[A-Za-z][A-Za-z0-9_]*`), so a name that starts with `_` is out of reach of
-every ridl name. And a Rust trait has its own namespace, so a trait item
-collides with nothing a ridl name derives.
+every ridl name. And a Rust trait has its own namespace, so a trait item never
+meets an inherent item, a module item or an item of another trait. Two items of
+one generated trait can still meet each other: the derived methods of
+`Subscribe` and `Invalidate` are spelled from member names (X-1d).
 
-| Rust namespace                                                   | ridl names that reach it                                                                                                                                                    | Transform                                                                                                       | Fixed names the backend puts there, or writes unqualified in its scope                                                                                | Issues and experiments                                                                                            | Checked today?                                                                                                                                            |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Package module, types                                            | declaration; interface; interface and member (descriptor); declaration (view); field path (induced tuple); interface (face module)                                          | verbatim; verbatim; `<Iface>` + `camel_case(member)`; `<Decl>FbView`; `camel_case` of the path; `snake_case`    | `Wire`; written unqualified: `Default`, `String`, `Vec`, `Option`, and the primitives `bool`, `f32`, `f64`, `i64`, `str`, `u8`, `u16`, `u64`, `usize` | #588 (X-3), #423 (X-4), #453 (X-7b), #455 (X-8), #583 (X-1c); new: X-5, X-9, X-10, X-11, X-12, X-13, X-14a, X-14b | TYPL-009 refuses a declaration and an interface of one name (X-19); the lowering refuses two tuples of one name; the backend refuses `Wire`; nothing else |
-| Package module, values                                           | constant; newtype and enum set (tuple-struct constructor); interface and descriptor (unit-struct constructor); declaration (codec functions); interface (skipped-face note) | verbatim; verbatim; as above; `__ridl_fb_{encode,verify,decode}_` + `snake_case`; `__RIDL_NO_FACE_` + screaming | the `__` names on the left; written unqualified: `Some`, `None`                                                                                       | #423 (X-4); new: X-14c, X-15, X-17                                                                                | no                                                                                                                                                        |
-| Crate module tree (`lib.rs`)                                     | package segment                                                                                                                                                             | verbatim through `module_segment`, which is `ident()`                                                           | `__ridl_package`                                                                                                                                      | #416 (X-18), #583 (X-1f)                                                                                          | no                                                                                                                                                        |
-| One struct's fields, and its view's accessors                    | field                                                                                                                                                                       | `snake_case`                                                                                                    | view: `bytes`                                                                                                                                         | #583 (X-1b), #587 (X-2a)                                                                                          | RIDL-149 (`snake_case`), TYPL-215 (exact repeat)                                                                                                          |
-| One induced tuple's fields, and its view's accessors             | tuple field                                                                                                                                                                 | `snake_case`                                                                                                    | view: `bytes`                                                                                                                                         | #449 (X-6), #583 (X-1e), #587 (X-2b)                                                                              | no                                                                                                                                                        |
-| One enum's variants                                              | enum value                                                                                                                                                                  | `pascal_case`                                                                                                   | none                                                                                                                                                  | none                                                                                                              | RIDL-149 (`pascal_case`), TYPL-216                                                                                                                        |
-| One union's variants                                             | arm                                                                                                                                                                         | `camel_case`                                                                                                    | none                                                                                                                                                  | none                                                                                                              | RIDL-149 (`snake_case` and `camel_case`), TYPL-217                                                                                                        |
-| One enum set's inherent constants                                | bit                                                                                                                                                                         | verbatim                                                                                                        | none since driftsys/ridl#562; the path call `T::default()` resolves here first                                                                        | #583 (X-1a); new: X-16                                                                                            | TYPL-218 (exact repeat)                                                                                                                                   |
-| A newtype's inherent items                                       | none                                                                                                                                                                        | none                                                                                                            | `new`, `check`, `new_unchecked`, `get`, `into_inner`                                                                                                  | none                                                                                                              | not needed                                                                                                                                                |
-| `<Iface>`'s inherent items                                       | none                                                                                                                                                                        | none                                                                                                            | `MAX_BUFFER_SIZE`, `EVENT_SOURCE_BUFFER_SIZE`                                                                                                         | none                                                                                                              | not needed                                                                                                                                                |
-| A scalar, enum or union view's inherent items                    | none                                                                                                                                                                        | none                                                                                                            | `bytes`, `value`                                                                                                                                      | none                                                                                                              | not needed                                                                                                                                                |
-| Face module `<iface>`, types                                     | member                                                                                                                                                                      | `camel_case` + `Call`, `Phase`, `Correlation`                                                                   | `Client`, `Publisher`, `Provider`, `Event`, `NextEvent`, `Serve`, `ServeState`, `Subscribe`, `Invalidate`, `prelude`, `blocking`                      | #455 (X-8)                                                                                                        | no                                                                                                                                                        |
-| Face module `<iface>`, values                                    | member                                                                                                                                                                      | `send_`, `poll_…_ack`, `poll_…_reply` around `snake_case`                                                       | `serve`, `dispatch`, `poll_next_event`                                                                                                                | none                                                                                                              | RIDL-149 (`snake_case`)                                                                                                                                   |
-| `<iface>::Event`'s variants                                      | event member                                                                                                                                                                | `camel_case`                                                                                                    | none                                                                                                                                                  | #455                                                                                                              | no                                                                                                                                                        |
-| `Client`, `blocking::Client`, `Publisher` inherent methods       | member                                                                                                                                                                      | `snake_case`                                                                                                    | none since driftsys/ridl#580 moved the fixed ones to traits                                                                                           | #583 (X-1d)                                                                                                       | RIDL-149 (`snake_case`)                                                                                                                                   |
-| `Provider`, `Subscribe`, `Invalidate` methods; method parameters | member; parameter                                                                                                                                                           | `snake_case`, with `subscribe_` or `invalidate_`                                                                | the `__arg`-style locals of driftsys/ridl#581                                                                                                         | none                                                                                                              | RIDL-149, RIDL-413                                                                                                                                        |
-| Trait items, derive macros                                       | none                                                                                                                                                                        | none                                                                                                            | `Payload`, `TryFrom`, `From`, `Default` items; `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, `PartialOrd`, `Ord`                               | none: a declaration named like any of them compiles (X-4)                                                         | not needed                                                                                                                                                |
+| Rust namespace                                                   | ridl names that reach it                                                                                                                                                    | Transform                                                                                                       | Fixed names the backend puts there, or writes unqualified in its scope                                                                                                           | Issues and experiments                                                                                            | Checked today?                                                                                                                                            |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Package module, types                                            | declaration; interface; interface and member (descriptor); declaration (view); field path (induced tuple); interface (face module)                                          | verbatim; verbatim; `<Iface>` + `camel_case(member)`; `<Decl>FbView`; `camel_case` of the path; `snake_case`    | `Wire`; written unqualified: `Default`, `String`, `Vec`, `Option`, and the primitives `bool`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `usize`, `str` | #588 (X-3), #423 (X-4), #453 (X-7b), #455 (X-8), #583 (X-1c); new: X-5, X-9, X-10, X-11, X-12, X-13, X-14a, X-14b | TYPL-009 refuses a declaration and an interface of one name (X-19); the lowering refuses two tuples of one name; the backend refuses `Wire`; nothing else |
+| Package module, values                                           | constant; newtype and enum set (tuple-struct constructor); interface and descriptor (unit-struct constructor); declaration (codec functions); interface (skipped-face note) | verbatim; verbatim; as above; `__ridl_fb_{encode,verify,decode}_` + `snake_case`; `__RIDL_NO_FACE_` + screaming | the `__` names on the left; written unqualified: `Some`, `None`                                                                                                                  | #423 (X-4); new: X-14c, X-15, X-17                                                                                | no                                                                                                                                                        |
+| Crate module tree (`lib.rs`)                                     | package segment                                                                                                                                                             | verbatim through `module_segment`, which is `ident()`                                                           | `__ridl_package`                                                                                                                                                                 | #416 (X-18), #583 (X-1f)                                                                                          | no                                                                                                                                                        |
+| One struct's fields, and its view's accessors                    | field                                                                                                                                                                       | `snake_case`                                                                                                    | view: `bytes`                                                                                                                                                                    | #583 (X-1b), #587 (X-2a)                                                                                          | RIDL-149 (`snake_case`), TYPL-215 (exact repeat)                                                                                                          |
+| One induced tuple's fields, and its view's accessors             | tuple field                                                                                                                                                                 | `snake_case`                                                                                                    | view: `bytes`                                                                                                                                                                    | #449 (X-6), #583 (X-1e), #587 (X-2b)                                                                              | no                                                                                                                                                        |
+| One enum's variants                                              | enum value                                                                                                                                                                  | `pascal_case`                                                                                                   | none                                                                                                                                                                             | none                                                                                                              | RIDL-149 (`pascal_case`), TYPL-216                                                                                                                        |
+| One union's variants                                             | arm                                                                                                                                                                         | `camel_case`                                                                                                    | none                                                                                                                                                                             | none                                                                                                              | RIDL-149 (`snake_case` and `camel_case`), TYPL-217                                                                                                        |
+| One enum set's inherent constants                                | bit                                                                                                                                                                         | verbatim                                                                                                        | none since driftsys/ridl#562; the path call `T::default()` resolves here first                                                                                                   | #583 (X-1a); new: X-16                                                                                            | TYPL-218 (exact repeat)                                                                                                                                   |
+| A newtype's inherent items                                       | none                                                                                                                                                                        | none                                                                                                            | `new`, `check`, `new_unchecked`, `get`, `into_inner`                                                                                                                             | none                                                                                                              | not needed                                                                                                                                                |
+| `<Iface>`'s inherent items                                       | none                                                                                                                                                                        | none                                                                                                            | `MAX_BUFFER_SIZE`, `EVENT_SOURCE_BUFFER_SIZE`                                                                                                                                    | none                                                                                                              | not needed                                                                                                                                                |
+| A scalar, enum or union view's inherent items                    | none                                                                                                                                                                        | none                                                                                                            | `bytes`, `value`                                                                                                                                                                 | none                                                                                                              | not needed                                                                                                                                                |
+| Face module `<iface>`, types                                     | member                                                                                                                                                                      | `camel_case` + `Call`, `Phase`, `Correlation`                                                                   | `Client`, `Publisher`, `Provider`, `Event`, `NextEvent`, `Serve`, `ServeState`, `Subscribe`, `Invalidate`, `prelude`, `blocking`                                                 | #455 (X-8)                                                                                                        | no                                                                                                                                                        |
+| Face module `<iface>`, values                                    | member                                                                                                                                                                      | `send_`, `poll_…_ack`, `poll_…_reply` around `snake_case`                                                       | `serve`, `dispatch`, `poll_next_event`, `SERVE_BUDGET` (upper case, so no member-derived name reaches it)                                                                        | none                                                                                                              | RIDL-149 (`snake_case`)                                                                                                                                   |
+| `<iface>::Event`'s variants                                      | event member                                                                                                                                                                | `camel_case`                                                                                                    | none                                                                                                                                                                             | #455                                                                                                              | no                                                                                                                                                        |
+| `Client`, `blocking::Client`, `Publisher` inherent methods       | member                                                                                                                                                                      | `snake_case`                                                                                                    | none since driftsys/ridl#580 moved the fixed ones to traits                                                                                                                      | #583 (X-1d)                                                                                                       | RIDL-149 (`snake_case`)                                                                                                                                   |
+| `Provider`, `Subscribe`, `Invalidate` methods; method parameters | member; parameter                                                                                                                                                           | `snake_case`, with `subscribe_` or `invalidate_`                                                                | the `__arg`-style locals of driftsys/ridl#581                                                                                                                                    | #583 (X-1d): with `self` beside `self_`, `invalidate_self_` twice in `Invalidate` (E0428, E0201, E0046)           | RIDL-149, RIDL-413                                                                                                                                        |
+| Trait items, derive macros                                       | none                                                                                                                                                                        | none                                                                                                            | `Payload`, `TryFrom`, `From`, `Default` items; `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, `PartialOrd`, `Ord`                                                          | none: a declaration named like any of them compiles (X-4)                                                         | not needed                                                                                                                                                |
 
 Headline. Twenty-one cases reproduce: the seven issues, driftsys/ridl#416, and
 thirteen found by the inventory (X-5, X-9, X-10, X-11, X-12, X-13, X-14a to c,
@@ -142,8 +144,12 @@ second.
       at `ridl build`,** with one message that names both sources, from one
       claim table per Rust namespace. It generalizes the backend's
       `tuple_collision` and the claim tables the proto and FlatBuffers backends
-      already keep (X-11). Each case it refuses either fails rustc today or is
-      already refused at `ridl build`, so it rejects nothing that builds.
+      already keep (X-11). The table claims only what the backend emits: an
+      interface whose face is skipped (E11.14 decision 2) emits no descriptors
+      and no face module, so its members claim nothing, and the collision is
+      refused when a later change emits that face (X-8b, X-8c). With that, each
+      case the table refuses either fails rustc today or is already refused at
+      `ridl build`, so it rejects nothing that builds.
 
 The constraint that an asymmetry between backends justifies a backend strategy
 and not a language rule decides the line in step 1. Three of the issues proposed
@@ -157,6 +163,17 @@ compiles `(minSpeed : Speed, min_speed : Speed)` (X-6a). So the three go to the
 Rust backend's claim table. An exact repeat, `(a : Speed, a : Speed)`, fails in
 Rust (E0124) and in TypeScript (TS2300, X-6b), so it is the language's.
 
+The declarations of one package under `snake_case` show the rule with two
+backends. The Rust backend spells its internal codec functions from it (X-15),
+and the proto backend spells an enum's value prefix from it, so
+`enum HTTPServer` beside `enum HttpServer` gives `HTTP_SERVER_ON` twice. The
+proto backend already refuses that pair at `ridl build` with its own claim
+table; the FlatBuffers and TypeScript backends emit both enums, and `tsc`
+accepts the TypeScript (X-15b). Two backends meet it and two do not, so it is
+not the language's: the proto backend owns its collision and keeps its refusal,
+and the Rust backend owns its collision and removes it by spelling the internal
+names from the declared name (§4.2).
+
 The rule leaves one inconsistency in place, and this note states it rather than
 changing it. RIDL-149 checks a union's arms under `camel_case` (2026-09-20
 amendment) and an enum's values under `pascal_case` (2026-09-26 amendment), and
@@ -167,21 +184,21 @@ the ADR-0016 amendment record the question as open (§4.4; §10, decision 2).
 
 ### 4.2 Per namespace
 
-| Namespace                                            | Collision                                                                                                                                                                                                      | Home                   | Mechanism                                                                                                                                                                                                                                    | Experiments                  |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| One tuple's fields                                   | the same name twice                                                                                                                                                                                            | language               | TYPL-215 also covers a tuple's fields (a tuple is an anonymous struct, typl §11)                                                                                                                                                             | X-6b                         |
-| Package module, types and values                     | a declaration named like a prelude name the backend writes (`Default`, `String`, `Vec`, `Option`, `Some`, `None`)                                                                                              | backend, rename        | write `::core::default::Default`, `::std::string::String`, `::std::vec::Vec`, `::core::option::Option` and its `Some` and `None` in package scope, as driftsys/ridl#420 did for five names                                                   | X-4, X-4c                    |
-| Package module, types                                | a declaration named like a primitive the backend writes (`bool`, `f32`, `f64`, `i64`, `str`, `u8`, `u16`, `u64`, `usize`)                                                                                      | backend, rename        | write `::core::primitive::<name>` in package scope; a `#[repr(i64)]` keeps the bare name                                                                                                                                                     | X-5, X-5c                    |
-| Enum set constants                                   | a bit named `default` captures `T::default()`                                                                                                                                                                  | backend, rename        | write `<T as ::core::default::Default>::default()` (`defaults.rs`, `descriptors.rs`)                                                                                                                                                         | X-16                         |
-| Struct and tuple views                               | a field whose `snake_case` is `bytes` against the fixed `bytes`                                                                                                                                                | backend, trait         | `bytes` moves from every view's inherent impl to a trait in `ridl-rt`, `ridl_rt::payload::View<'a>` with `fn bytes(&self) -> &'a [u8]`; the accessor stays inherent and wins the dot call, the trait path reaches the bytes                  | X-2                          |
-| Package module, types                                | a declaration or an interface named `Wire`                                                                                                                                                                     | backend, rename        | the alias becomes `pub type __Wire`; `refuse_wire_collision` and E11.14 decision 5 are retired                                                                                                                                               | X-3                          |
-| Every namespace `ident()` writes, and the crate tree | a name `k` and a name `k_`, where `k` is `crate`, `self`, `Self` or `super`                                                                                                                                    | backend, rename        | the escape becomes injective: a name that is one of the four followed by zero or more `_` gets one more `_`, so `self` is `self_` as today and `self_` is `self__`                                                                           | X-1a, X-1b, X-1c, X-1e, X-1f |
-| Package module, values                               | two declarations or two skipped interfaces whose `snake_case` agrees (`HTTPServer`, `HttpServer`)                                                                                                              | backend, rename        | spell `__ridl_fb_{encode,verify,decode}_*`, `__RIDL_FB_NO_CODEC_*` and `__RIDL_NO_FACE_*` from the declared name, with `#[allow(non_snake_case)]` or `#[allow(non_upper_case_globals)]` on the item                                          | X-15, X-14c                  |
-| Crate module tree                                    | a type `veh.common` hidden by the child package module `veh::common`                                                                                                                                           | backend, rename (path) | a reference to such a type is written through the package's own module, `crate::veh::__ridl_package::common`, and `__ridl_package` becomes `#[doc(hidden)] pub`; `ridlc` knows the child packages, and the model's `Scope.others` lists them | X-18                         |
-| Package module, types                                | descriptor against declaration, view against declaration, tuple against declaration, descriptor against interface, two descriptors across interfaces, face module against declaration or interface, two tuples | backend, claim         | one claim table over the package module's type namespace; the second claim is refused with both sources named                                                                                                                                | X-7, X-9 to X-14b            |
-| Package module, values                               | a constant against a unit or tuple-struct constructor                                                                                                                                                          | backend, claim         | the same table over the value namespace                                                                                                                                                                                                      | X-17                         |
-| One tuple's fields                                   | two field names whose `snake_case` agrees                                                                                                                                                                      | backend, claim         | a claim table per induced tuple                                                                                                                                                                                                              | X-6a, X-1e                   |
-| Face module types, `Event` variants                  | two members whose `camel_case` agrees                                                                                                                                                                          | backend, claim         | the package-scope descriptors `<Iface><Member>` already carry the same collision, so the package table refuses it first; the face module and `Event` tables are kept for totality                                                            | X-8, X-1d                    |
+| Namespace                                            | Collision                                                                                                                                                                                                      | Home                   | Mechanism                                                                                                                                                                                                                                                                             | Experiments                  |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| One tuple's fields                                   | the same name twice                                                                                                                                                                                            | language               | TYPL-215 also covers a tuple's fields (a tuple is an anonymous struct, typl §11)                                                                                                                                                                                                      | X-6b                         |
+| Package module, types and values                     | a declaration named like a prelude name the backend writes (`Default`, `String`, `Vec`, `Option`, `Some`, `None`)                                                                                              | backend, rename        | write `::core::default::Default`, `::std::string::String`, `::std::vec::Vec`, `::core::option::Option` and its `Some` and `None` in package scope, as driftsys/ridl#420 did for five names. driftsys/ridl#423 lists five of these six; `Option` is this note's addition, found by X-4 | X-4, X-4c                    |
+| Package module, types                                | a declaration named like a primitive the backend writes (`bool`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `usize`, `str`)                                                           | backend, rename        | write `::core::primitive::<name>` in package scope; a `#[repr(i64)]` keeps the bare name                                                                                                                                                                                              | X-5, X-5c                    |
+| Enum set constants                                   | a bit named `default` captures `T::default()`                                                                                                                                                                  | backend, rename        | write `<T as ::core::default::Default>::default()` (`defaults.rs`, `descriptors.rs`)                                                                                                                                                                                                  | X-16                         |
+| Struct and tuple views                               | a field whose `snake_case` is `bytes` against the fixed `bytes`                                                                                                                                                | backend, trait         | `bytes` moves from every view's inherent impl to a trait in `ridl-rt`, `ridl_rt::payload::View<'a>` with `fn bytes(&self) -> &'a [u8]`; the accessor stays inherent and wins the dot call, the trait path reaches the bytes                                                           | X-2                          |
+| Package module, types                                | a declaration or an interface named `Wire`                                                                                                                                                                     | backend, rename        | the alias becomes `pub type __Wire`; `refuse_wire_collision` and E11.14 decision 5 are retired                                                                                                                                                                                        | X-3                          |
+| Every namespace `ident()` writes, and the crate tree | a name `k` and a name `k_`, where `k` is `crate`, `self`, `Self` or `super`                                                                                                                                    | backend, rename        | the escape becomes injective: a name that is one of the four followed by zero or more `_` gets one more `_`, so `self` is `self_` as today and `self_` is `self__`                                                                                                                    | X-1a, X-1b, X-1c, X-1e, X-1f |
+| Package module, values                               | two declarations or two skipped interfaces whose `snake_case` agrees (`HTTPServer`, `HttpServer`)                                                                                                              | backend, rename        | spell `__ridl_fb_{encode,verify,decode}_*`, `__RIDL_FB_NO_CODEC_*` and `__RIDL_NO_FACE_*` from the declared name, with `#[allow(non_snake_case)]` or `#[allow(non_upper_case_globals)]` on the item                                                                                   | X-15, X-14c                  |
+| Crate module tree                                    | a type `veh.common` hidden by the child package module `veh::common`                                                                                                                                           | backend, rename (path) | a reference to such a type is written through the package's own module, `crate::veh::__ridl_package::common`, and `__ridl_package` becomes `#[doc(hidden)] pub`; `ridlc` knows the child packages, and the model's `Scope.others` lists them                                          | X-18                         |
+| Package module, types                                | descriptor against declaration, view against declaration, tuple against declaration, descriptor against interface, two descriptors across interfaces, face module against declaration or interface, two tuples | backend, claim         | one claim table over the package module's type namespace; the second claim is refused with both sources named                                                                                                                                                                         | X-7, X-9 to X-14b            |
+| Package module, values                               | a constant against a unit or tuple-struct constructor                                                                                                                                                          | backend, claim         | the same table over the value namespace                                                                                                                                                                                                                                               | X-17                         |
+| One tuple's fields                                   | two field names whose `snake_case` agrees                                                                                                                                                                      | backend, claim         | a claim table per induced tuple                                                                                                                                                                                                                                                       | X-6a, X-1e                   |
+| Face module types, `Event` variants                  | two members whose `camel_case` agrees                                                                                                                                                                          | backend, claim         | the package-scope descriptors `<Iface><Member>` already carry the same collision, so the package table refuses it first; the face module and `Event` tables are kept for totality. A skipped interface claims nothing (X-8b)                                                          | X-8, X-1d                    |
 
 The claim table runs before the codec. Today a tuple named like a declaration
 reaches the FlatBuffers projection first and is refused with "the FlatBuffers
@@ -218,17 +235,22 @@ The implementer applies these; this stage touches neither `docs/decisions/` nor
 >
 > Applied here: TYPL-215 covers a tuple's fields, because a repeated tuple field
 > fails in Rust and in TypeScript. A tuple field's `snake_case`, a struct
-> field's and a member's `camel_case`, and the interface and declaration names
-> of one package are not RIDL-149 scopes: each is applied by the Rust backend
-> alone (the wire backends name a tuple's fields by position), so the Rust
-> backend refuses those collisions at `ridl build`. The consequences entries on
-> driftsys/ridl#449, #453 and #455 are resolved by this, not by extending
-> RIDL-149.
+> field's and a member's `camel_case`, and an interface's `snake_case` are not
+> RIDL-149 scopes: of the in-tree backends, each is applied in that scope by the
+> Rust backend alone (the wire backends name a tuple's fields by position), so
+> the Rust backend refuses those collisions at `ridl build`, and only for the
+> items it emits. A declaration's `snake_case` is applied by the Rust backend,
+> for internal names it now spells from the declared name, and by the proto
+> backend, as an enum's value prefix; the FlatBuffers and TypeScript backends
+> keep the declared name. So it is not a RIDL-149 scope either, and the proto
+> backend keeps its own refusal under ADR-0017 decision 4. The consequences
+> entries on driftsys/ridl#449, #453 and #455 are resolved by this, not by
+> extending RIDL-149.
 >
 > Open: RIDL-149 checks a union's arms under `camel_case` and an enum's values
-> under `pascal_case`, and only the Rust backend applies either transform. By
-> this amendment's line those two checks are the Rust backend's. They stay where
-> they are until a change needs to move them.
+> under `pascal_case`, and of the in-tree backends only the Rust backend applies
+> either transform. By this amendment's line those two checks are the Rust
+> backend's. They stay where they are until a change needs to move them.
 
 **The interaction-face design record,** the E11.14 decisions list: decision 5
 (the `Wire` refusal) is superseded; the alias is `__Wire`; the paragraph "The
@@ -262,8 +284,14 @@ as open).
   `view.bytes()` adds `use ridl_rt::payload::View;`. With a field whose accessor
   is `bytes`, `view.bytes()` is the field and `View::bytes(&view)` is the buffer
   (X-2a).
-- `Wire` becomes `__Wire`. No consumer in the tree names it
-  (`examples/cabin/consumer`, the tests outside `generated/`, the book).
+- `Wire` becomes `__Wire`. A consumer that names `<package>::Wire` changes that
+  path. In the tree, `examples/cabin/consumer` does not name it, but two test
+  crates do: `crates/ridl-backend-rust/tests/interaction_face.rs` writes
+  `generated::Wire` at eight sites (lines 104, 521, 741, 742, 758, 761, 829 and
+  958), and `crates/ridl-backend-rust/tests/descriptor_generation.rs` asserts on
+  `Payload<Wire` (line 26) and on `pub type Wire` (lines 310 and 317). The book
+  names the alias in prose (`docs/book/cli-reference.md`, line 565). All of
+  these change with the rename.
 - A source name `self_`, `Self_`, `super_` or `crate_` (and a package segment of
   that form) now emits one more `_`. Only a package that declared both forms
   failed before; a package that declared `self_` alone changes spelling.
@@ -271,8 +299,10 @@ as open).
 The rest adds nothing a consumer can name: absolute paths name the same items,
 the `__ridl_fb_*` and `__RIDL_*` items are `pub(crate)` or private, and
 `__ridl_package` becoming `#[doc(hidden)] pub` is an addition. Every claim-table
-refusal and the TYPL-215 extension reject only sources that fail rustc today,
-and the TYPL-215 case also fails TypeScript (X-6b).
+refusal and the TYPL-215 extension reject only sources that fail rustc or
+`ridl build` today, and the TYPL-215 case also fails TypeScript (X-6b). A
+collision inside an interface whose face is skipped is not refused, because the
+table claims only emitted items (X-8b).
 
 The backend commit is `feat(ridl-backend-rust)!:`. At 0.x a breaking commit is a
 minor bump, so the next release is **0.5.0**, as 0.4.0 followed
@@ -324,7 +354,7 @@ a naming lint is not a collision, and the lint is emitted for those names today
 | Test                                             | Source                                                                                                                                               | Asserts                                                                                          |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `declarations_named_like_prelude_names_compile`  | X-4c: `Default`, `String`, `Vec`, `Option`, `Some`, `None`, `Result`, `Ok`, `Err`, `From`, `TryFrom` beside an interface with `require` and `ensure` | compiles; this is driftsys/ridl#424's recipe, over the pipeline entry point                      |
-| `declarations_named_like_primitives_compile`     | X-5c: the nine primitive names                                                                                                                       | compiles                                                                                         |
+| `declarations_named_like_primitives_compile`     | X-5c: the thirteen primitive names, in a package that reaches every integer width                                                                    | compiles                                                                                         |
 | `an_enum_set_bit_named_default_compiles`         | X-16                                                                                                                                                 | compiles                                                                                         |
 | `a_field_whose_accessor_is_bytes_compiles`       | X-2a and X-2b, with a consumer module                                                                                                                | compiles; the consumer's `view.bytes()` has the field's type and `View::bytes(&view)` is `&[u8]` |
 | `a_declaration_or_interface_named_wire_compiles` | X-3a and X-3b                                                                                                                                        | compiles                                                                                         |
@@ -336,14 +366,22 @@ claim table: for each of X-1d, X-6a, X-7a, X-7b, X-8, X-9, X-10, X-11, X-12,
 X-13, X-14a, X-14b and X-17, `ridlc::compile` reports no error and
 `generate_pipeline` returns a `GenerateError` whose message names the generated
 name and both sources. X-11's test also asserts the message does not mention the
-FlatBuffers projection.
+FlatBuffers projection. One more test pins the skip rule: X-8b builds with no
+error and the emitted crate compiles, and X-8c, the same source with a call the
+face carries, is refused.
 
 **`crates/ridlc/tests/rust_crate_emit.rs`,** the crate module tree, since the
 tree is `ridlc`'s: X-18 (a type named like its child package, referenced from
 the child) and X-1f (packages `p.self` and `p.self_`) are emitted with the CLI
-path and compiled, with a consumer that names both packages' types. The two
-existing `Wire` refusal tests (near line 1210 and 1252) invert: the source now
-compiles.
+path and compiled, with a consumer that names both packages' types. The existing
+`Wire` refusal test `an_interface_named_wire_is_refused` (line 1264) inverts:
+the source now compiles. Its neighbour
+`a_service_with_an_inline_shape_is_not_refused` (line 1225) guards the
+inline-shape skip of `refuse_wire_collision` and is deleted with that function.
+In `crates/ridl-backend-rust/src/tests.rs`,
+`a_declaration_named_wire_is_refused_by_the_face` (line 371) inverts in the same
+way, and `a_declaration_named_wire_generates_without_a_face` (line 394) stays,
+since `generate` emits no alias.
 
 **`ridl-sem`:** a TYPL-215 test for X-6b, beside the struct-field one.
 `crates/ridl-sem/src/check.rs` is owned by a peer session at the time of
@@ -351,26 +389,27 @@ writing, so the implementer coordinates that edit.
 
 **`ridl-rt`:** a doc test on `payload::View`.
 
-`just compat-check` covers the `ridl-rt` addition at 1.83 in both editions with
-no recipe change. `just demo` covers `examples/cabin` after the rename of `Wire`
-and the move of `bytes`, neither of which the consumer names.
+`just compat-check` covers the `ridl-rt` addition with no recipe change: it
+builds the crate as edition 2021 at 1.83 and as edition 2024 at the pin, 1.98.1.
+`just demo` covers `examples/cabin` after the rename of `Wire` and the move of
+`bytes`, neither of which the consumer names.
 
 ## 7. Alternatives considered
 
-| Alternative                                                                                                                                                                                         | Verdict  | Reason                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Extend RIDL-149 to a tuple's fields (`snake_case`, `camel_case`), a struct field's and a member's `camel_case`, and the declarations of one package (`snake_case`), as #449, #453 and #455 proposed | rejected | Each transform is applied in that scope by the Rust backend alone (X-6a), so the check would put one backend's namespaces into the language, which the constraint forbids. It would also refuse `HTTPServer` beside `HttpServer`, which every other backend accepts.                                                                                                       |
-| A reserved-word list in `ridl-sem` (Rust keywords, `Wire`, prelude and primitive names, `bytes`)                                                                                                    | rejected | The same objection, and the list grows with every fixed name the backend adds, which driftsys/ridl#580 already rejected.                                                                                                                                                                                                                                                   |
-| Keep E11.14 decision 5's refusal of `Wire` and close driftsys/ridl#588 as intended                                                                                                                  | rejected | The backend refuses a package over a name it chose, which the #580 rule excludes, and `__Wire` costs one rename in generated code no consumer names.                                                                                                                                                                                                                       |
-| Move `Wire` into each face module                                                                                                                                                                   | rejected | The descriptors at package scope also name it (`<T as Payload<Wire>>::MAX_SIZE`), and an interface whose members are all `fixed` has no face module.                                                                                                                                                                                                                       |
-| Delete the views' `bytes` instead of moving it                                                                                                                                                      | rejected | It duplicates `Ref::bytes`, but a function that holds only a nested view would lose the buffer. The trait keeps it at the cost of one `use` line.                                                                                                                                                                                                                          |
-| A leading-underscore escape (`_self`, `_Self`)                                                                                                                                                      | rejected | It is out of reach of every ridl name, but it renames every existing keyword-named item, where the injective suffix renames only `k_` names, which are rarer.                                                                                                                                                                                                              |
-| Refuse a declaration named like a primitive                                                                                                                                                         | rejected | The backend chose to write the primitive unqualified; `::core::primitive` has been stable since Rust 1.43 and costs only length.                                                                                                                                                                                                                                           |
-| Refuse `HTTPServer` beside `HttpServer` in the claim table                                                                                                                                          | rejected | The only colliding names are internal (`__ridl_fb_*`, `__RIDL_*`) and derived through a lossy transform the backend chose; the declared name is unique by TYPL-009.                                                                                                                                                                                                        |
-| Skip the interface's face and descriptors on a member collision, as E11.14 decision 2 does for a call the face cannot carry                                                                         | rejected | A skipped face builds and is found missing at the consumer's call site. Decision 2 covers gaps that named stories remove; a name collision is permanent until the source changes.                                                                                                                                                                                          |
-| Move descriptors, views and induced tuples into per-shape modules (option 3)                                                                                                                        | rejected | It removes the concatenation collisions by construction, but it renames every descriptor, view and tuple path a consumer or the face names, which is larger than the class it removes. The most likely case, `type CabinTemperature` beside `interface Cabin { signal temperature }` (X-9), is refused with a message; if it proves common, this option can be taken then. |
-| A new TYPL code for a repeated tuple field                                                                                                                                                          | rejected | The rule and its remedy are TYPL-215's; a tuple is an anonymous struct (typl §11).                                                                                                                                                                                                                                                                                         |
-| Leave driftsys/ridl#416 as a naming rule in the language reference, or refuse the combination                                                                                                       | rejected | A path through `__ridl_package` compiles (X-18), so the backend removes the collision without refusing.                                                                                                                                                                                                                                                                    |
+| Alternative                                                                                                                                                                                         | Verdict  | Reason                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Extend RIDL-149 to a tuple's fields (`snake_case`, `camel_case`), a struct field's and a member's `camel_case`, and the declarations of one package (`snake_case`), as #449, #453 and #455 proposed | rejected | Each transform is applied in that scope by the Rust backend alone (X-6a), so the check would put one backend's namespaces into the language, which the constraint forbids. It would also refuse `type HTTPServer` beside `type HttpServer`, which the proto, FlatBuffers and TypeScript backends accept (X-15); for two enums of those names only the proto backend refuses (X-15b). |
+| A reserved-word list in `ridl-sem` (Rust keywords, `Wire`, prelude and primitive names, `bytes`)                                                                                                    | rejected | The same objection, and the list grows with every fixed name the backend adds, which driftsys/ridl#580 already rejected.                                                                                                                                                                                                                                                             |
+| Keep E11.14 decision 5's refusal of `Wire` and close driftsys/ridl#588 as intended                                                                                                                  | rejected | The backend refuses a package over a name it chose, which the #580 rule excludes, and `__Wire` costs one rename in generated code no consumer names.                                                                                                                                                                                                                                 |
+| Move `Wire` into each face module                                                                                                                                                                   | rejected | The descriptors at package scope also name it (`<T as Payload<Wire>>::MAX_SIZE`), and an interface whose members are all `fixed` has no face module.                                                                                                                                                                                                                                 |
+| Delete the views' `bytes` instead of moving it                                                                                                                                                      | rejected | It duplicates `Ref::bytes`, but a function that holds only a nested view would lose the buffer. The trait keeps it at the cost of one `use` line.                                                                                                                                                                                                                                    |
+| A leading-underscore escape (`_self`, `_Self`)                                                                                                                                                      | rejected | It is out of reach of every ridl name, but it renames every existing keyword-named item, where the injective suffix renames only `k_` names, which are rarer.                                                                                                                                                                                                                        |
+| Refuse a declaration named like a primitive                                                                                                                                                         | rejected | The backend chose to write the primitive unqualified; `::core::primitive` has been stable since Rust 1.43 and costs only length.                                                                                                                                                                                                                                                     |
+| Refuse `HTTPServer` beside `HttpServer` in the claim table                                                                                                                                          | rejected | In the Rust output the only colliding names are internal (`__ridl_fb_*`, `__RIDL_*`) and derived through a lossy transform the backend chose; the declared name is unique by TYPL-009. The proto backend's refusal of two such enums (X-15b) is its own and stays.                                                                                                                   |
+| Skip the interface's face and descriptors on a member collision, as E11.14 decision 2 does for a call the face cannot carry                                                                         | rejected | A skipped face builds and is found missing at the consumer's call site. Decision 2 covers gaps that named stories remove; a name collision is permanent until the source changes.                                                                                                                                                                                                    |
+| Move descriptors, views and induced tuples into per-shape modules (option 3)                                                                                                                        | rejected | It removes the concatenation collisions by construction, but it renames every descriptor, view and tuple path a consumer or the face names, which is larger than the class it removes. The most likely case, `type CabinTemperature` beside `interface Cabin { signal temperature }` (X-9), is refused with a message; if it proves common, this option can be taken then.           |
+| A new TYPL code for a repeated tuple field                                                                                                                                                          | rejected | The rule and its remedy are TYPL-215's; a tuple is an anonymous struct (typl §11).                                                                                                                                                                                                                                                                                                   |
+| Leave driftsys/ridl#416 as a naming rule in the language reference, or refuse the combination                                                                                                       | rejected | A path through `__ridl_package` compiles (X-18), so the backend removes the collision without refusing.                                                                                                                                                                                                                                                                              |
 
 ## 8. Scope decisions on #416 and #424
 
@@ -386,11 +425,12 @@ the reference.
 
 **driftsys/ridl#424 is in scope.** It is the test gap under the class: no rustc
 proof compiled face output against a package declaring prelude names. The first
-test of §6 is its recipe (the five names of driftsys/ridl#420 plus the six of
-driftsys/ridl#423, and an interface with `require` and `ensure` so the clause
-translator runs), over `generate_pipeline`, which emits the face as
-`generate_face` does and is the CLI's path. X-4c shows the source fails today
-(E0404) and compiles with the fix.
+test of §6 is its recipe (the five names of driftsys/ridl#420, the five that
+driftsys/ridl#423 lists (`Default`, `String`, `Vec`, `Some`, `None`) and
+`Option`, which the issue does not list and this note adds, and an interface
+with `require` and `ensure` so the clause translator runs), over
+`generate_pipeline`, which emits the face as `generate_face` does and is the
+CLI's path. X-4c shows the source fails today (E0404) and compiles with the fix.
 
 ## 9. Issues
 
@@ -413,9 +453,9 @@ others.
 
 1. **The rule of §4.1**: the language refuses a collision only when every
    projecting backend meets it, and the Rust backend owns the rest. Rejected:
-   extending RIDL-149 to the scopes #449, #453 and #455 proposed, because only
-   the Rust backend applies those transforms there (X-6a) and the constraint
-   puts such a rule in the backend.
+   extending RIDL-149 to the scopes #449, #453 and #455 proposed, because of the
+   in-tree backends only the Rust backend applies those transforms there (X-6a)
+   and the constraint puts such a rule in the backend.
 2. **RIDL-149's arm and value scopes stay**, and the ADR-0016 amendment records
    that they are Rust-only transforms as an open question. Rejected: moving them
    into the claim table now, which loosens the language and is needed by no
@@ -448,6 +488,16 @@ others.
     peer session owns `check.rs`; one for everything else (the backend, the
     `ridlc` tree, the `ridl-rt` trait, the records of §4.4, the tests of §6).
     Rejected: one pull request, which would wait on the peer-owned file.
+13. **The claim table claims only the items the backend emits.** An interface
+    whose face is skipped under E11.14 decision 2 emits neither descriptors nor
+    a face module, so a collision among its members is not refused while the
+    skip lasts; it is refused by the change that makes the face emittable, as
+    X-8c shows for the same members with a call the face carries. This keeps
+    "rejects nothing that builds" true: X-8b builds and compiles today and still
+    does. Rejected: claiming every interface's derived names whether or not they
+    are emitted, which would refuse a package that builds today (X-8b) over
+    names that appear nowhere in its output, and would make a source change
+    necessary before the story that removes the skip has run.
 
 ## Appendix: experiments
 
@@ -511,9 +561,16 @@ X-1c, `type Self : integer [0..100]` and `type Self_ : integer [0..100]`:
 X-1d,
 `interface Cabin { signal self : Level @10ms  signal self_ : Level @10ms }`:
 `pub struct CabinSelf;` twice (both names are `Self` under `camel_case`) and
-`pub fn self_(` twice in `Client` and in `Publisher`;
-``error[E0428]: the name `CabinSelf` is defined multiple times``. Fix: the claim
-table refuses the descriptor pair; no compile fix.
+`pub fn self_(` twice in `Client` and in `Publisher`, and `fn invalidate_self_(`
+twice in the trait `Invalidate` and in its impl for `Publisher`;
+``error[E0428]: the name `CabinSelf` is defined multiple times``, and among the
+eight errors also
+``error[E0428]: the name `invalidate_self_` is defined multiple times`` (in the
+trait), E0201 (in the impl), E0046 and E0592. With the injective escape (built
+with `qqq` for `self_`, then `qqq` renamed `self__` and `Qqq` renamed `Self`),
+the trait holds `invalidate_self_` and `invalidate_self__`, and the only errors
+left are E0428 on `CabinSelf` and its two E0119: the `camel_case` pair. Fix: the
+claim table refuses that pair; no compile fix.
 
 X-1e, `struct S { t : (self : Level, self_ : Level) }`: `pub self_: Level,`
 twice in `ST`; ``error[E0124]: field `self_` is already declared``. Fix:
@@ -632,8 +689,9 @@ One package per name. `ridl check` exits 0 for every one.
 A newtype is a tuple struct, so `Some` and `None` reach the value namespace as
 well as the type one.
 
-Fix, one package per failing name, by placeholder: compiles, no warning, for
-each of the six.
+driftsys/ridl#423 lists five of the six failing names (`Default`, `String`,
+`Vec`, `Some`, `None`); `Option` is found here. Fix, one package per failing
+name, by placeholder: compiles, no warning, for each of the six.
 
 X-4c, the test of §6: the base with the calls given clauses,
 
@@ -652,29 +710,58 @@ and the eleven declarations `Default`, `String`, `Vec`, `Option`, `Some`,
 Fixed by placeholder: compiles, no warning; the face is emitted (no
 `__RIDL_NO_FACE_` note) and holds both `fn require`.
 
-X-4d: the same package with the nine primitive names of X-5 added (twenty
-declarations), with the prelude and primitive qualifications applied **only
-above the first face module** (`pub mod cabin {`), so that the face module is as
-emitted today: compiles, with the eighteen naming-lint warnings of the nine
-lowercase types. The face module needs no change.
+X-4d: the same package on the X-5 base (every integer width reached), with the
+thirteen primitive names of X-5 added (twenty-four declarations), and the
+prelude and primitive qualifications applied **only above the first face
+module** (`pub mod cabin {`), so that the face module is as emitted today.
+Unfixed: E0404, 107 errors. Fixed: compiles, with the twenty-six naming-lint
+warnings of the thirteen lowercase types and their views; the face is emitted
+and holds both `fn require`. The face module needs no change.
 
 ### X-5: declarations and interfaces named like primitives
 
-X-5a, the X-4 base plus `type <name> : integer [0..100]` for a lowercase name.
-`ridl check` exits 0 for every one.
+X-5a. The base is the X-4 base plus the types that reach the four widths it
+lacks, so that the codec writes every primitive it can write (`Prim::rust_name`
+in `crates/ridl-backend-rust/src/codec.rs`):
 
-| Name               | Result                                                                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `bool`             | `` error[E0326]: implemented const `PROVISIONAL` has an incompatible type for trait: expected `bool`, found a different `bool` `` |
-| `f32`              | `` error[E0308]: mismatched types: expected `f32`, found `qf32::f32` ``                                                           |
-| `f64`              | ``error[E0308]: mismatched types: expected `f64`, found floating-point number``                                                   |
-| `i64`              | ``error[E0072]: recursive type `qi64::i64` has infinite size`` (`pub struct i64(i64);`)                                           |
-| `str`              | `` error[E0326]: implemented const `NAME` has an incompatible type for trait: expected `str`, found `qstr::str` ``                |
-| `u8`               | `` error[E0053]: method `encode` has an incompatible type for trait: expected `u8`, found `qu8::u8` ``                            |
-| `u16`              | `` error[E0308]: mismatched types: expected `u16`, found `qu16::u16` ``                                                           |
-| `u64`              | ``error[E0308]: mismatched types: expected `u64`, found integer``                                                                 |
-| `usize`            | `` error[E0326]: implemented const `MAX_SIZE` has an incompatible type for trait: expected `usize`, found `qusize::usize` ``      |
-| `i8`, `i32`, `u32` | compile (the package-scope code does not write them)                                                                              |
+```ridl
+type W8 : integer [-10..10]
+type W16 : integer [-1000..1000]
+type W32 : integer [-100000..100000]
+type U32w : integer [0..100000]
+
+struct Widths {
+  a : W8
+  b : W16
+  c : W32
+  d : U32w
+}
+```
+
+plus `type <name> : integer [0..100]` for a lowercase name. `ridl check` exits 0
+for every one.
+
+| Name                            | Result                                                                                                                            |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `bool`                          | `` error[E0326]: implemented const `PROVISIONAL` has an incompatible type for trait: expected `bool`, found a different `bool` `` |
+| `i8`                            | `` error[E0308]: mismatched types: expected `i8`, found `wi8::i8` ``                                                              |
+| `u8`                            | `` error[E0053]: method `encode` has an incompatible type for trait: expected `u8`, found `wu8::u8` ``                            |
+| `i16`                           | `` error[E0308]: mismatched types: expected `i16`, found `wi16::i16` ``                                                           |
+| `u16`                           | `` error[E0308]: mismatched types: expected `u16`, found `wu16::u16` ``                                                           |
+| `i32`                           | `` error[E0308]: mismatched types: expected `i32`, found `wi32::i32` ``                                                           |
+| `u32`                           | `` error[E0308]: mismatched types: expected `u32`, found `wu32::u32` ``                                                           |
+| `i64`                           | ``error[E0072]: recursive type `wi64::i64` has infinite size`` (`pub struct i64(i64);`)                                           |
+| `u64`                           | ``error[E0308]: mismatched types: expected `u64`, found integer``                                                                 |
+| `f32`                           | `` error[E0308]: mismatched types: expected `f32`, found `wf32::f32` ``                                                           |
+| `f64`                           | ``error[E0308]: mismatched types: expected `f64`, found floating-point number``                                                   |
+| `usize`                         | `` error[E0326]: implemented const `MAX_SIZE` has an incompatible type for trait: expected `usize`, found `wusize::usize` ``      |
+| `str`                           | `` error[E0326]: implemented const `NAME` has an incompatible type for trait: expected `str`, found `wstr::str` ``                |
+| `i128`, `u128`, `isize`, `char` | compile (no emitter writes them)                                                                                                  |
+
+The first version of this note ran X-5a on the X-4 base alone, which reaches no
+`i8`, `i16`, `i32` or `u32` field, and reported that `i8`, `i32` and `u32`
+compile. They compile only when no declaration of that width exists; with one,
+they fail as above.
 
 X-5b, the X-4 base plus `interface <Name> { signal on : Engaged @10ms }` for
 `Bool`, `F64`, `I64`, `Str`, `U8`, `U16`, `U32`, `Usize`: each emits
@@ -682,7 +769,8 @@ X-5b, the X-4 base plus `interface <Name> { signal on : Engaged @10ms }` for
 
 Fix, one package per failing name, by placeholder: compiles, with the two
 `non_camel_case_types` warnings the lowercase type and its view draw today.
-X-5c, the nine names in one package: compiles, eighteen such warnings.
+X-5c, the thirteen names in one package on the X-5a base: compiles, twenty-six
+such warnings.
 
 ### X-6: a tuple's field names (driftsys/ridl#449)
 
@@ -734,6 +822,31 @@ interface Cabin {
 `ridl check` exit 0; `ridl build` exit 0. Emitted: `pub struct CabinXY;` twice.
 Result: ``error[E0428]: the name `CabinXY` is defined multiple times``, with two
 E0119 on its trait impls. Fix: the claim table refuses the pair.
+
+X-8b, the same two members beside a call the face cannot carry:
+
+```ridl
+package probe.x08b
+
+type Level : integer [0..100]
+
+interface Cabin {
+  signal XY : Level @10ms
+  signal x_y : Level @10ms
+  command set(a: Level, b: Level) @[..50ms]
+}
+```
+
+`ridl check` exit 0; `ridl build` exit 0. The interface's face is skipped
+(E11.14 decision 2): the output holds `const __RIDL_NO_FACE_CABIN: () = ();` and
+no `CabinXY` and no `pub mod cabin`. The crate compiles with no error and no
+warning. Under decision 13 the claim table claims nothing for `Cabin`, so this
+stays a clean build.
+
+X-8c, X-8b with `command set(level: Level) @[..50ms]`, a call the face carries:
+the face and descriptors are emitted, and
+``error[E0428]: the name `CabinXY` is defined multiple times`` returns. This is
+the build the claim table refuses once the skip is removed.
 
 ### X-9: a descriptor against a declaration
 
@@ -823,6 +936,28 @@ Fix, by placeholder (`Qqa`, `Qqb`, and a `struct Both` naming both so a
 cross-type call is exercised): the functions are
 `__ridl_fb_{encode,verify,decode}_HTTPServer` and `…_HttpServer`, each under
 `#[allow(non_snake_case)]`: compiles, no warning.
+
+X-15b, the same names as enums:
+
+```ridl
+package probe.x15b
+
+enum HTTPServer {
+  ON = 0
+}
+
+enum HttpServer {
+  ON = 0
+}
+```
+
+`--emit rust`: `__ridl_fb_encode_http_server` twice, E0428, as in X-15.
+`--emit proto`: exit 1, "`HTTP_SERVER_ON` is claimed twice in package
+`probe.x15b`: once by value `ON` of enum `HTTPServer`, and again by value `ON`
+of enum `HttpServer`. proto3 rejects a name defined twice, …".
+`--emit flatbuffers`: exit 0, both enums emitted. `--emit typescript`: exit 0,
+and `tsc --noEmit --strict` accepts it. The X-15 source (two newtypes) is
+accepted by all three of those backends.
 
 ### X-16: an enum set bit named `default`
 
