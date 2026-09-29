@@ -468,6 +468,11 @@ struct Holder {
   meta    : [Label : Speed?; 0..3]
   plain   : Speed
   mode    : Health
+  opair   : (lo: Speed, hi: Speed)?
+  olist   : [Speed; 0..3]?
+  omap    : [Label : Speed; 0..3]?
+  speeds  : [Speed?; 0..3]
+  gears   : [Gear; 0..3]
 }
 "#;
 
@@ -480,21 +485,35 @@ struct Holder {
 /// are one reading for every reader following the schema, and a conforming
 /// writer omits a field at its default. The positions are the three table
 /// fields typl lets carry a `?` — a struct field, a tuple field and a map
-/// entry's value. An optional string, bytes or table field is an offset,
-/// which is absent or present with no default, so it takes no marker; a
-/// non-optional scalar takes none either, and a field typed by an enum with
-/// no zero member takes one whether or not it is optional (decision 6).
+/// entry's value. An optional string, bytes, table, tuple, array or map field
+/// is an offset, which is absent or present with no default, so it takes no
+/// marker; a non-optional scalar takes none either, and a field typed by an
+/// enum with no zero member takes one whether or not it is optional (decision
+/// 6).
+///
+/// An array's element carries no marker of its own, because a FlatBuffers
+/// vector element has no default: `speeds` holds optional scalars and `gears`
+/// holds a zero-less enum, and neither array field takes `= null`. The model
+/// states the same, which is checked slot by slot below as well as through
+/// [`assert_tables_agree`].
 #[test]
 fn an_optional_scalar_or_enum_field_takes_null_in_the_schema_and_the_model() {
     let output = ridlc::compile("optional.ridl", OPTIONAL_FIELDS);
     // `ridlc::compile` also runs the Rust backend, whose codec refuses an
-    // optional map value: its map entry has no absent half. The schema
-    // backend emits the field all the same, and the schema is what is under
-    // test here, so that one refusal is the only diagnostic allowed.
+    // optional map value and an optional array element: a map entry has no
+    // absent half there, and a vector no absent element. It reports the first
+    // one it meets. The schema backend emits both fields all the same, and the
+    // schema is what is under test here, so those refusals are the only
+    // diagnostics allowed.
     let unexpected: Vec<_> = output
         .diagnostics
         .iter()
-        .filter(|diagnostic| !diagnostic.message.starts_with("a map value is optional"))
+        .filter(|diagnostic| {
+            !diagnostic.message.starts_with("a map value is optional")
+                && !diagnostic
+                    .message
+                    .starts_with("an array element is optional")
+        })
         .collect();
     assert!(
         unexpected.is_empty(),
@@ -518,6 +537,11 @@ fn an_optional_scalar_or_enum_field_takes_null_in_the_schema_and_the_model() {
         ("Holder", "meta", false),
         ("Holder", "plain", false),
         ("Holder", "mode", false),
+        ("Holder", "opair", false),
+        ("Holder", "olist", false),
+        ("Holder", "omap", false),
+        ("Holder", "speeds", false),
+        ("Holder", "gears", false),
         ("HolderPair", "field_1", true),
         ("HolderPair", "field_2", false),
         ("HolderMetaEntry", "key", false),
@@ -542,5 +566,22 @@ fn an_optional_scalar_or_enum_field_takes_null_in_the_schema_and_the_model() {
     }
 
     let model = codegen::lower(&package, &[]);
+    for (table, field, null) in expected {
+        let fb_table = model
+            .flatbuffers
+            .as_ref()
+            .and_then(|projection| projection.tables.iter().find(|fb| fb.name == *table))
+            .unwrap_or_else(|| panic!("the model lists no table `{table}`"));
+        let slot = fb_table
+            .slots
+            .iter()
+            .find(|slot| expected_field_name(&model, fb_table, slot).as_deref() == Some(*field))
+            .unwrap_or_else(|| panic!("the model lists no slot `{table}.{field}`"));
+        assert_eq!(
+            slot.needs_null_default, *null,
+            "the model states `{table}.{field}` needs_null_default = {}, expected {null}",
+            slot.needs_null_default
+        );
+    }
     assert_tables_agree("optional.ridl", &model, &schema);
 }
