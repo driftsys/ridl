@@ -331,6 +331,13 @@ fn a_bare_unresolved_reference_is_not_foreign() {
         "an unresolved reference indexes nothing"
     );
     assert_eq!(reference.kind, v1::DeclKind::Unspecified as i32);
+
+    let closure = model.declarations[2].closure.as_ref().expect("a closure");
+    assert!(
+        !closure.reaches_foreign,
+        "a bare unresolved reference does not reach another package"
+    );
+    assert!(closure.reaches_unresolved);
 }
 
 /// Package `a`: a named scalar, an enum, and one declaration of each kind
@@ -659,6 +666,256 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
     assert!(
         model.foreign.iter().all(|foreign| foreign.package != "b"),
         "no declaration of `b` is copied into `Model.foreign`"
+    );
+}
+
+/// `Closure.reaches_foreign` follows the rule `TypeRef.foreign` follows: the
+/// declaring package against `Scope.package`, not the spelling. The arm of
+/// the foreign copy `a.Choice` is the bare `Small`, which `a` declares
+/// (driftsys/ridl#594).
+#[test]
+fn the_closure_of_a_foreign_copy_reaches_foreign_through_a_bare_reference() {
+    let a = package_a();
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "Uses".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![member(1, "choice", named("a.Choice"))],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&a]);
+    let (_, choice) = foreign_declaration(&model, "a", "Choice");
+    let closure = choice.closure.as_ref().expect("a closure");
+    assert!(
+        closure.reaches_foreign,
+        "the bare `Small` inside `a.Choice` is declared by `a`, not by `b`"
+    );
+    assert!(!closure.reaches_unresolved);
+}
+
+/// A local declaration that names a declaration of another package reaches
+/// foreign, and a reference to a foreign constant does too: the constant
+/// resolves, so its declaring package decides. The two packages hold the
+/// same number of declarations, so a comparison by declaration count would
+/// not tell them apart (driftsys/ridl#594).
+#[test]
+fn a_local_declaration_reaches_foreign_through_a_resolved_reference() {
+    let a = v2::Package {
+        name: "a".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Gear".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![value("PARK", 0), value("DRIVE", 1)],
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "LIMIT".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::ConstDef(v2::ConstDef {
+                    type_ref: Some("integer".to_string()),
+                    value: "5".to_string(),
+                    regex: None,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Probe".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "g", named("a.Gear"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Capped".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "limit", named("a.LIMIT"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(a.decls.len(), b.decls.len());
+    let model = lower(&b, &[&a]);
+
+    let probe = model.declarations[0].closure.as_ref().expect("a closure");
+    assert!(
+        probe.reaches_foreign,
+        "`a.Gear` is declared by `a`, not by the scope's package `b`"
+    );
+    assert!(!probe.reaches_unresolved);
+
+    let capped = model.declarations[1].closure.as_ref().expect("a closure");
+    assert!(
+        capped.reaches_foreign,
+        "the constant `a.LIMIT` is declared by `a`, not by `b`"
+    );
+    assert!(
+        capped.reaches_unresolved,
+        "a reference to a constant is not a type position"
+    );
+}
+
+/// An unresolved reference has no declaring package, so the closure falls
+/// back to the spelling, as `TypeRef.foreign` does: `b.Missing` inside `b`
+/// is dotted and reaches foreign (driftsys/ridl#594).
+#[test]
+fn an_unresolved_self_qualified_reference_reaches_foreign() {
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "Holder".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![member(1, "missing", named("b.Missing"))],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&package_a()]);
+    let v1::declaration::Kind::Struct(def) = model.declarations[0].kind.as_ref().expect("a kind")
+    else {
+        panic!("`Holder` is a struct");
+    };
+    let Some(v1::slot::Occupant::Field(field)) = def.slots[0].occupant.as_ref() else {
+        panic!("the first slot holds a field");
+    };
+    let Some(v1::r#type::Kind::Named(reference)) =
+        field.r#type.as_ref().expect("a type").kind.as_ref()
+    else {
+        panic!("the field is typed by a named reference");
+    };
+    assert!(!reference.resolved);
+    assert!(reference.foreign, "the unresolved reference is dotted");
+
+    let closure = model.declarations[0].closure.as_ref().expect("a closure");
+    assert!(
+        closure.reaches_foreign,
+        "the closure states `b.Missing` as `TypeRef.foreign` does"
+    );
+    assert!(closure.reaches_unresolved);
+}
+
+/// A bare unresolved reference inside a foreign copy does not reach foreign:
+/// it has no declaring package and its text is not dotted, whatever package
+/// it was written in (driftsys/ridl#594).
+#[test]
+fn a_bare_unresolved_reference_inside_a_foreign_copy_is_not_foreign() {
+    let mut a = package_a();
+    let Some(v2::decl::Kind::UnionDef(choice)) = a.decls[2].kind.as_mut() else {
+        panic!("the third declaration of `a` is the union `Choice`");
+    };
+    choice.arms[0].type_ref = "Missing".to_string();
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "Uses".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![member(1, "choice", named("a.Choice"))],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&a]);
+    let (_, choice) = foreign_declaration(&model, "a", "Choice");
+    let closure = choice.closure.as_ref().expect("a closure");
+    assert!(
+        !closure.reaches_foreign,
+        "the bare `Missing` names no declaration and is not dotted"
+    );
+    assert!(closure.reaches_unresolved);
+}
+
+/// A reference `b` spells with its own package is not foreign: its declaring
+/// package is `Scope.package`. A reference that resolves to a constant
+/// follows the same rule (driftsys/ridl#594).
+#[test]
+fn a_self_qualified_reference_does_not_reach_foreign() {
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Own".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![value("ONE", 0)],
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Holder".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "own", named("b.Own"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "MAX".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::ConstDef(v2::ConstDef {
+                    type_ref: Some("integer".to_string()),
+                    value: "5".to_string(),
+                    regex: None,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Limits".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "max", named("b.MAX"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&package_a()]);
+
+    let holder = model.declarations[1].closure.as_ref().expect("a closure");
+    assert!(
+        !holder.reaches_foreign,
+        "`b.Own` is declared by the scope's package, whatever its spelling"
+    );
+    assert!(!holder.reaches_unresolved);
+
+    let limits = model.declarations[3].closure.as_ref().expect("a closure");
+    assert!(
+        !limits.reaches_foreign,
+        "the constant `b.MAX` is declared by the scope's package"
+    );
+    assert!(
+        limits.reaches_unresolved,
+        "a reference to a constant is not a type position"
     );
 }
 
