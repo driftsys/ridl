@@ -172,7 +172,9 @@ other entry below is Accepted.
   adding decision 8, the root rule: every declaration has a root table, and a
   named scalar, an enum, and an enum set are rooted in
   `table <Name>Box { value: … (id: 0); }`. Decision 8 is FlatBuffers-scoped like
-  the other seven.
+  the other seven. Amended 2026-09-29, adding decision 9 from driftsys/ridl#472:
+  an optional table field that holds a scalar or an enum takes `= null`, so a
+  present 0 survives a round trip through another implementation.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a

@@ -29,6 +29,12 @@
 > the fixture package joins `just wasm-check`, which it cannot; and D-9's
 > presence claim holds only for this codec reading its own bytes.
 >
+> **D-9's second bullet is amended, 2026-09-29, from the decision on
+> driftsys/ridl#472.** The writer half stands; the reader now reads an absent
+> non-optional scalar or enum as the FlatBuffers default unless 0 is not a legal
+> value of its type. The amendment is written into D-9 below, and the first
+> bullet, the third and the rejected alternative stand as written.
+>
 > §5's records have moved, each with the stage that needed it. What remained at
 > the end — `2026-09-13-catalog-descriptor-plan.md` Task 7, amended to call the
 > bound of D-6 rather than derive a second one — moved with stage K8, and so did
@@ -335,6 +341,34 @@ formats, not in the rigor of the two stories.
 **Rejected:** omitting a present default-valued field, which is what a
 FlatBuffers writer does by default. It makes a present-and-default value
 indistinguishable from an absent optional, which typl distinguishes.
+
+**Amended 2026-09-29 (driftsys/ridl#472), on the second bullet.** Its writer
+half stands: a non-optional field is always written. Its reader half is
+replaced. An absent non-optional **scalar or enum** field reads as its
+FlatBuffers default, 0 or the enum's zero member, and is
+`Malformed::MissingRequired` only when 0 is not a legal value of the field's
+type — a range that excludes it, or an enum with no zero member, which is the
+third bullet's case and is unchanged. An absent non-optional string, bytes,
+table, union or collection field is still `MissingRequired`: an offset has no
+default. `verify`, `decode` and the view accessors changed together, because
+`decode` read an absent non-optional field at offset 0, the buffer's root
+offset.
+
+The ground is what a conforming writer does. `planus` and `flatc` omit a field
+at its default, and the bullet as written made this codec refuse every such
+buffer — in a root table, a nested table, a map entry and a box root, measured
+on the issue. It also made a reader of a struct's second version refuse every
+buffer of its first after a non-optional field was appended, which `ridl diff`
+calls compatible. The cost is that a missing non-optional field can no longer be
+told from a present 0 where 0 is legal. FlatBuffers cannot state that difference
+for a scalar in any case (ADR-0019 decision 6), and a field whose presence
+matters is declared optional: it now projects with `= null` (ADR-0019 decision
+9), so the first bullet's claim holds for a reader following the schema, not
+only for this codec reading its own bytes — the bound §4e measured is lifted.
+
+The writer rule is kept rather than joined by a writer that omits defaults.
+Omitting saves no bytes for this encoder, which reserves inline space for every
+field, and a reader generated before this amendment would refuse the buffer.
 
 ### D-10 — the discriminant is `UnionArm.ordinal`, and #302 becomes visible
 
