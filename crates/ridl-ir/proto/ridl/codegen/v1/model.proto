@@ -319,7 +319,9 @@ message TypeRef {
   bool resolved = 2;
   // The declaring package, when resolved.
   string package = 3;
-  // `package` is not `Scope.package`.
+  // `package` is not `Scope.package` — also inside a foreign declaration,
+  // where `reference` is spelled bare. When no package in scope declares it:
+  // whether `reference` is dotted.
   bool foreign = 4;
   // Into `Model.declarations` when local, into `Model.foreign` when foreign.
   uint32 index = 5;

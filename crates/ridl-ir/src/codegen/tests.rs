@@ -300,6 +300,368 @@ fn an_unresolved_reference_is_carried_as_a_fact() {
     assert!(closure.reaches_unresolved);
 }
 
+/// An unresolved reference has no declaring package, so its flag follows
+/// its spelling: a bare name no package declares is not foreign.
+#[test]
+fn a_bare_unresolved_reference_is_not_foreign() {
+    let mut package = package();
+    let Some(v2::decl::Kind::StructDef(def)) = package.decls[2].kind.as_mut() else {
+        panic!("the third declaration is a struct");
+    };
+    def.members.push(member(4, "cabin", named("Temperature")));
+    let model = lower(&package, &[]);
+    let v1::declaration::Kind::Struct(def) = model.declarations[2].kind.as_ref().expect("a kind")
+    else {
+        panic!("the third declaration is a struct");
+    };
+    let Some(v1::slot::Occupant::Field(field)) = def.slots[3].occupant.as_ref() else {
+        panic!("the fourth slot holds a field");
+    };
+    let Some(v1::r#type::Kind::Named(reference)) =
+        field.r#type.as_ref().expect("a type").kind.as_ref()
+    else {
+        panic!("the field is typed by a named reference");
+    };
+    assert!(!reference.resolved);
+    assert!(!reference.foreign, "the reference is bare");
+    assert_eq!(reference.package, "");
+    assert_eq!(reference.reference, "Temperature");
+    assert_eq!(
+        reference.index, 0,
+        "an unresolved reference indexes nothing"
+    );
+    assert_eq!(reference.kind, v1::DeclKind::Unspecified as i32);
+}
+
+/// Package `a`: a named scalar, an enum, and one declaration of each kind
+/// that holds a reference — a union arm, a struct field, an enum set's
+/// backing enum, a constant's type — each spelled bare, as `a` writes it.
+fn package_a() -> v2::Package {
+    v2::Package {
+        name: "a".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Small".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    backing: Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Primitive(
+                            v2::PrimitiveType::Integer as i32,
+                        )),
+                    }),
+                    constraint: Some(v2::Constraint {
+                        min: Some("0".to_string()),
+                        max: Some("100".to_string()),
+                        ..Default::default()
+                    }),
+                    init: Some(v2::InitValue {
+                        derivable: true,
+                        value: Some("0".to_string()),
+                    }),
+                    width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Gear".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![value("PARK", 0), value("DRIVE", 1)],
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Choice".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "small".to_string(),
+                        ordinal: 1,
+                        type_ref: "Small".to_string(),
+                        doc: String::new(),
+                    }],
+                    is_result: false,
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Pair".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "small", named("Small"))],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Gears".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    backing_enum: Some("Gear".to_string()),
+                    bits: vec![value("PARK", 0), value("DRIVE", 1)],
+                    width: v2::IntWidth::U8 as i32,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "LIMIT".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::ConstDef(v2::ConstDef {
+                    type_ref: Some("Small".to_string()),
+                    value: "5".to_string(),
+                    regex: None,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+/// The foreign declaration `name` of `package`, with its index in
+/// `Model.foreign`.
+fn foreign_declaration<'m>(
+    model: &'m v1::Model,
+    package: &str,
+    name: &str,
+) -> (u32, &'m v1::Declaration) {
+    model
+        .foreign
+        .iter()
+        .enumerate()
+        .find_map(|(index, foreign)| {
+            let declaration = foreign.declaration.as_ref()?;
+            (foreign.package == package && declaration.name.as_ref()?.declared == name)
+                .then_some((index as u32, declaration))
+        })
+        .unwrap_or_else(|| panic!("`{package}.{name}` is in `Model.foreign`"))
+}
+
+/// `reference` is foreign, names `a.<name>`, and its index resolves in
+/// `Model.foreign` to that declaration.
+fn assert_foreign_reference(model: &v1::Model, reference: &v1::TypeRef, name: &str) {
+    assert!(
+        reference.foreign,
+        "`{}` is declared by `a`, not by the scope's package `b`",
+        reference.reference
+    );
+    assert_eq!(reference.package, "a");
+    let (index, _) = foreign_declaration(model, "a", name);
+    assert_eq!(
+        reference.index, index,
+        "`{}` indexes `Model.foreign`",
+        reference.reference
+    );
+}
+
+/// A reference inside a foreign declaration is foreign too: `foreign` and
+/// `index` follow one rule, the declaring package against `Scope.package`,
+/// so a plugin that trusts the flag reads the table the index points into
+/// (driftsys/ridl#586).
+#[test]
+fn a_reference_inside_a_foreign_declaration_is_foreign() {
+    let a = package_a();
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "Uses".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![
+                    member(1, "choice", named("a.Choice")),
+                    member(2, "pair", named("a.Pair")),
+                    member(3, "gears", named("a.Gears")),
+                    member(4, "limit", named("a.LIMIT")),
+                ],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&a]);
+    assert_eq!(model.scope.as_ref().expect("a scope").package, "b");
+
+    // The references `b` writes itself are dotted and foreign.
+    let v1::declaration::Kind::Struct(uses) = model.declarations[0].kind.as_ref().expect("a kind")
+    else {
+        panic!("`Uses` is a struct");
+    };
+    let Some(v1::slot::Occupant::Field(field)) = uses.slots[0].occupant.as_ref() else {
+        panic!("the first slot holds a field");
+    };
+    let Some(v1::r#type::Kind::Named(reference)) =
+        field.r#type.as_ref().expect("a type").kind.as_ref()
+    else {
+        panic!("the field is typed by a named reference");
+    };
+    assert!(reference.resolved);
+    assert_foreign_reference(&model, reference, "Choice");
+
+    // The union arm inside the foreign `Choice`, spelled bare in `a`.
+    let (_, choice) = foreign_declaration(&model, "a", "Choice");
+    let Some(v1::declaration::Kind::Union(union)) = choice.kind.as_ref() else {
+        panic!("`Choice` is a union");
+    };
+    let arm = union.arms[0].r#type.as_ref().expect("an arm type");
+    assert!(arm.resolved);
+    assert_eq!(arm.reference, "Small", "the arm keeps `a`'s bare spelling");
+    assert_foreign_reference(&model, arm, "Small");
+
+    // The struct field inside the foreign `Pair`.
+    let (_, pair) = foreign_declaration(&model, "a", "Pair");
+    let Some(v1::declaration::Kind::Struct(def)) = pair.kind.as_ref() else {
+        panic!("`Pair` is a struct");
+    };
+    let Some(v1::slot::Occupant::Field(field)) = def.slots[0].occupant.as_ref() else {
+        panic!("the first slot holds a field");
+    };
+    let Some(v1::r#type::Kind::Named(reference)) =
+        field.r#type.as_ref().expect("a type").kind.as_ref()
+    else {
+        panic!("the field is typed by a named reference");
+    };
+    assert_foreign_reference(&model, reference, "Small");
+
+    // The backing enum of the foreign enum set `Gears`.
+    let (_, gears) = foreign_declaration(&model, "a", "Gears");
+    let Some(v1::declaration::Kind::EnumSet(def)) = gears.kind.as_ref() else {
+        panic!("`Gears` is an enum set");
+    };
+    let backing = def.backing_enum.as_ref().expect("a backing enum");
+    assert_foreign_reference(&model, backing, "Gear");
+
+    // The declared type of the foreign constant `LIMIT`.
+    let (_, limit) = foreign_declaration(&model, "a", "LIMIT");
+    let Some(v1::declaration::Kind::Constant(def)) = limit.kind.as_ref() else {
+        panic!("`LIMIT` is a constant");
+    };
+    let Some(v1::constant::Typed::Named(reference)) = def.typed.as_ref() else {
+        panic!("`LIMIT` is typed by a named scalar");
+    };
+    assert_foreign_reference(&model, reference, "Small");
+}
+
+/// The FlatBuffers projection states a reference by the same rule: the enum
+/// a boxed arm wraps is foreign when its declaring package is not the
+/// scope's, and its index then points into `Model.foreign`
+/// (driftsys/ridl#586).
+#[test]
+fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
+    let a = package_a();
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Pick".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![
+                        v2::UnionArm {
+                            name: "gear".to_string(),
+                            ordinal: 1,
+                            type_ref: "a.Gear".to_string(),
+                            doc: String::new(),
+                        },
+                        v2::UnionArm {
+                            name: "own".to_string(),
+                            ordinal: 2,
+                            type_ref: "Own".to_string(),
+                            doc: String::new(),
+                        },
+                        // The scope's own enum, spelled with its package: the
+                        // spelling a text test for a dot calls foreign while
+                        // the declaring package is the scope's.
+                        v2::UnionArm {
+                            name: "qualified".to_string(),
+                            ordinal: 3,
+                            type_ref: "b.Own".to_string(),
+                            doc: String::new(),
+                        },
+                    ],
+                    is_result: false,
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Own".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![value("ONE", 0)],
+                    reserved: vec![],
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&a]);
+    let projection = model.flatbuffers.as_ref().expect("a projection");
+    let boxed_enum = |arm_box: u32| -> &v1::TypeRef {
+        let table = projection
+            .tables
+            .iter()
+            .find(|table| {
+                matches!(
+                    table.source,
+                    Some(v1::fb_table::Source::ArmBox(v1::ArmBox { declaration: 0, arm })) if arm == arm_box
+                )
+            })
+            .expect("the arm is boxed");
+        let Some(v1::fb_wire::Kind::Enum(wire)) =
+            table.slots[0].wire.as_ref().expect("a wire").kind.as_ref()
+        else {
+            panic!("the box wraps an enum");
+        };
+        wire.r#type.as_ref().expect("a reference")
+    };
+
+    let gear = boxed_enum(0);
+    assert!(gear.resolved);
+    assert_foreign_reference(&model, gear, "Gear");
+
+    let own = boxed_enum(1);
+    assert!(own.resolved);
+    assert!(!own.foreign, "`Own` is declared by the scope's package");
+    assert_eq!(own.package, "b");
+    assert_eq!(own.index, 1, "`Own` indexes `Model.declarations`");
+
+    let qualified = boxed_enum(2);
+    assert!(qualified.resolved);
+    assert!(
+        !qualified.foreign,
+        "`b.Own` is declared by the scope's package, whatever its spelling"
+    );
+    assert_eq!(qualified.package, "b");
+    assert_eq!(qualified.index, 1, "`b.Own` indexes `Model.declarations`");
+
+    // The lowering states the same arm by the same rule, and copies nothing
+    // of the scope's own package into `Model.foreign`.
+    let v1::declaration::Kind::Union(pick) = model.declarations[0].kind.as_ref().expect("a kind")
+    else {
+        panic!("`Pick` is a union");
+    };
+    let lowered = pick.arms[2].r#type.as_ref().expect("an arm type");
+    assert!(lowered.resolved);
+    assert!(
+        !lowered.foreign,
+        "the lowered `b.Own` is declared by the scope's package"
+    );
+    assert_eq!(lowered.package, "b");
+    assert_eq!(
+        lowered.index, 1,
+        "the lowered `b.Own` indexes `Model.declarations`"
+    );
+    assert!(
+        model.foreign.iter().all(|foreign| foreign.package != "b"),
+        "no declaration of `b` is copied into `Model.foreign`"
+    );
+}
+
 /// The three encodings the model carries, over one lowered package.
 #[test]
 fn the_model_round_trips_through_each_encoding() {
