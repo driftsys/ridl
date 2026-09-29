@@ -1,13 +1,11 @@
-///The payload encoding this package's generated interaction face encodes and verifies over, and the one the `Payload` implementations below implement: FlatBuffers (ADR-0019, ADR-0020 decision 2). It is named once here rather than repeated at every buffer and every `Ref` the face builds, so the package's encoding is one line to read and one line to change.
-pub type Wire = ::ridl_rt::encoding::FlatBuffers;
 /// Cabin temperature, in degrees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct Temperature(i64);
+pub struct Temperature(::core::primitive::i64);
 impl Temperature {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -23,7 +21,7 @@ impl Temperature {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < -40 {
@@ -45,25 +43,27 @@ impl Temperature {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> i64 {
+    pub const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Temperature {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Temperature {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Temperature> for i64 {
+impl ::core::convert::From<Temperature> for ::core::primitive::i64 {
     fn from(value: Temperature) -> Self {
         value.0
     }
 }
-impl Default for Temperature {
+impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0)
     }
@@ -71,11 +71,11 @@ impl Default for Temperature {
 /// A control level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct Level(i64);
+pub struct Level(::core::primitive::i64);
 impl Level {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -91,7 +91,7 @@ impl Level {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -113,25 +113,27 @@ impl Level {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> i64 {
+    pub const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Level {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Level {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Level> for i64 {
+impl ::core::convert::From<Level> for ::core::primitive::i64 {
     fn from(value: Level) -> Self {
         value.0
     }
 }
-impl Default for Level {
+impl ::core::default::Default for Level {
     fn default() -> Self {
         Level::new_unchecked(0)
     }
@@ -139,11 +141,11 @@ impl Default for Level {
 /// A window length, in samples.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct Window(i64);
+pub struct Window(::core::primitive::i64);
 impl Window {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -159,7 +161,7 @@ impl Window {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -181,25 +183,27 @@ impl Window {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> i64 {
+    pub const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Window {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Window {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Window> for i64 {
+impl ::core::convert::From<Window> for ::core::primitive::i64 {
     fn from(value: Window) -> Self {
         value.0
     }
 }
-impl Default for Window {
+impl ::core::default::Default for Window {
     fn default() -> Self {
         Window::new_unchecked(0)
     }
@@ -207,11 +211,11 @@ impl Default for Window {
 /// An averaged reading.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct Average(i64);
+pub struct Average(::core::primitive::i64);
 impl Average {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -227,7 +231,7 @@ impl Average {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -249,25 +253,27 @@ impl Average {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> i64 {
+    pub const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Average {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Average {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Average> for i64 {
+impl ::core::convert::From<Average> for ::core::primitive::i64 {
     fn from(value: Average) -> Self {
         value.0
     }
 }
-impl Default for Average {
+impl ::core::default::Default for Average {
     fn default() -> Self {
         Average::new_unchecked(0)
     }
@@ -279,10 +285,10 @@ pub enum Health {
     Warn = 1,
     Fail = 2,
 }
-impl ::core::convert::TryFrom<i64> for Health {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Health {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
             0 => ::core::result::Result::Ok(Self::Ok),
@@ -297,12 +303,12 @@ impl ::core::convert::TryFrom<i64> for Health {
         }
     }
 }
-impl ::core::convert::From<Health> for i64 {
+impl ::core::convert::From<Health> for ::core::primitive::i64 {
     fn from(value: Health) -> Self {
-        value as i64
+        value as ::core::primitive::i64
     }
 }
-impl Default for Health {
+impl ::core::default::Default for Health {
     fn default() -> Self {
         Health::Ok
     }
@@ -313,11 +319,11 @@ pub struct Warning {
     pub code: Level,
     pub health: Health,
 }
-impl Default for Warning {
+impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning {
-            code: Level::default(),
-            health: Health::default(),
+            code: <Level as ::core::default::Default>::default(),
+            health: <Health as ::core::default::Default>::default(),
         }
     }
 }
@@ -331,23 +337,25 @@ impl Default for Warning {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for TemperatureFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> TemperatureFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Temperature` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Temperature {
-        __ridl_fb_decode_temperature(self.buf, self.table)
+        __ridl_fb_decode_Temperature(self.buf, self.table)
     }
 }
 /// Writes `Temperature` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_temperature(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Temperature(
     value: &Temperature,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -361,17 +369,17 @@ pub(crate) fn __ridl_fb_encode_temperature(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I8(__s.get() as i8)
+                    ::ridl_rt::flatbuffers::Field::I8(__s.get() as ::core::primitive::i8)
                 },
             },
         ];
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_temperature(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Temperature(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -383,17 +391,22 @@ pub(crate) fn __ridl_fb_verify_temperature(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i8(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Temperature::check(&(i64::from(__raw)))
+        Temperature::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_temperature(buf: &[u8], table: usize) -> Temperature {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Temperature(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Temperature {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Temperature::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_i8(buf, __p).unwrap_or(0i8)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_i8(buf, __p).unwrap_or(0i8),
+                ),
             )
         }
         _ => Temperature::new_unchecked(0i64),
@@ -412,17 +425,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 43usize;
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
     type View<'a> = TemperatureFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, TemperatureFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_temperature(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Temperature(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -434,7 +447,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<TemperatureFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -449,14 +462,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_temperature(buf, table)?;
+        __ridl_fb_verify_Temperature(buf, table)?;
         ::core::result::Result::Ok(TemperatureFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_temperature(__view.buf, __view.table)
+        __ridl_fb_decode_Temperature(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Level`'s `verify` accepted.
@@ -469,23 +482,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LevelFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for LevelFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> LevelFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Level` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Level {
-        __ridl_fb_decode_level(self.buf, self.table)
+        __ridl_fb_decode_Level(self.buf, self.table)
     }
 }
 /// Writes `Level` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_level(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Level(
     value: &Level,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -499,17 +514,17 @@ pub(crate) fn __ridl_fb_encode_level(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U8(__s.get() as u8)
+                    ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
                 },
             },
         ];
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_level(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Level(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -521,17 +536,22 @@ pub(crate) fn __ridl_fb_verify_level(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Level::check(&(i64::from(__raw)))
+        Level::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_level(buf: &[u8], table: usize) -> Level {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Level(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Level {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Level::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                ),
             )
         }
         _ => Level::new_unchecked(0i64),
@@ -550,17 +570,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 43usize;
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
     type View<'a> = LevelFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, LevelFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_level(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Level(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -569,7 +589,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LevelFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -584,14 +604,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_level(buf, table)?;
+        __ridl_fb_verify_Level(buf, table)?;
         ::core::result::Result::Ok(LevelFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_level(__view.buf, __view.table)
+        __ridl_fb_decode_Level(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Window`'s `verify` accepted.
@@ -604,23 +624,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WindowFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WindowFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> WindowFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Window` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Window {
-        __ridl_fb_decode_window(self.buf, self.table)
+        __ridl_fb_decode_Window(self.buf, self.table)
     }
 }
 /// Writes `Window` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_window(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Window(
     value: &Window,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -634,17 +656,19 @@ pub(crate) fn __ridl_fb_encode_window(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U32(__s.get() as u32)
+                    ::ridl_rt::flatbuffers::Field::U32(
+                        __s.get() as ::core::primitive::u32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_window(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Window(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -656,17 +680,22 @@ pub(crate) fn __ridl_fb_verify_window(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Window::check(&(i64::from(__raw)))
+        Window::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_window(buf: &[u8], table: usize) -> Window {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Window(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Window {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Window::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_u32(buf, __p).unwrap_or(0u32)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u32(buf, __p).unwrap_or(0u32),
+                ),
             )
         }
         _ => Window::new_unchecked(0i64),
@@ -685,17 +714,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = WindowFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, WindowFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_window(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Window(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -704,7 +733,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WindowFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -719,14 +748,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_window(buf, table)?;
+        __ridl_fb_verify_Window(buf, table)?;
         ::core::result::Result::Ok(WindowFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_window(__view.buf, __view.table)
+        __ridl_fb_decode_Window(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Average`'s `verify` accepted.
@@ -739,23 +768,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct AverageFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for AverageFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> AverageFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Average` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Average {
-        __ridl_fb_decode_average(self.buf, self.table)
+        __ridl_fb_decode_Average(self.buf, self.table)
     }
 }
 /// Writes `Average` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_average(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Average(
     value: &Average,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -769,17 +800,19 @@ pub(crate) fn __ridl_fb_encode_average(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+                    ::ridl_rt::flatbuffers::Field::U16(
+                        __s.get() as ::core::primitive::u16,
+                    )
                 },
             },
         ];
         builder.push_table(6usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_average(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Average(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -791,17 +824,22 @@ pub(crate) fn __ridl_fb_verify_average(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Average::check(&(i64::from(__raw)))
+        Average::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_average(buf: &[u8], table: usize) -> Average {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Average(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Average {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Average::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                ),
             )
         }
         _ => Average::new_unchecked(0i64),
@@ -820,17 +858,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 44usize;
+    const MAX_SIZE: ::core::primitive::usize = 44usize;
     type View<'a> = AverageFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, AverageFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_average(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Average(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -839,7 +877,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<AverageFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -854,14 +892,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_average(buf, table)?;
+        __ridl_fb_verify_Average(buf, table)?;
         ::core::result::Result::Ok(AverageFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_average(__view.buf, __view.table)
+        __ridl_fb_decode_Average(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Health`'s `verify` accepted.
@@ -874,23 +912,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct HealthFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for HealthFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> HealthFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Health` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Health {
-        __ridl_fb_decode_health(self.buf, self.table)
+        __ridl_fb_decode_Health(self.buf, self.table)
     }
 }
 /// Writes `Health` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_health(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Health(
     value: &Health,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -904,17 +944,17 @@ pub(crate) fn __ridl_fb_encode_health(
                 offset: 8u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
                 },
             },
         ];
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_health(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Health(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -926,17 +966,20 @@ pub(crate) fn __ridl_fb_verify_health(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Health as ::core::convert::TryFrom<i64>>::try_from(__raw)
+        <Health as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_health(buf: &[u8], table: usize) -> Health {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Health(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Health {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Health as ::core::convert::TryFrom<
-                i64,
+                ::core::primitive::i64,
             >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
                 .unwrap_or(Health::Ok)
         }
@@ -956,17 +999,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 50usize;
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
     type View<'a> = HealthFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, HealthFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_health(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Health(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -975,7 +1018,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<HealthFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -990,14 +1033,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_health(buf, table)?;
+        __ridl_fb_verify_Health(buf, table)?;
         ::core::result::Result::Ok(HealthFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_health(__view.buf, __view.table)
+        __ridl_fb_decode_Health(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
@@ -1009,21 +1052,23 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> WarningFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `Warning`'s `code` field in place.
     pub fn code(&self) -> Level {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 1usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Level::new_unchecked(
-                    i64::from(
+                    ::core::primitive::i64::from(
                         ::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8),
                     ),
                 )
@@ -1036,7 +1081,7 @@ impl<'a> WarningFbView<'a> {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 8usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Health as ::core::convert::TryFrom<
-                    i64,
+                    ::core::primitive::i64,
                 >>::try_from(
                         ::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64),
                     )
@@ -1047,8 +1092,8 @@ impl<'a> WarningFbView<'a> {
     }
 }
 /// Writes `Warning` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_warning(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Warning(
     value: &Warning,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1066,7 +1111,7 @@ pub(crate) fn __ridl_fb_encode_warning(
         offset: 4u16,
         value: {
             let __s = value.code;
-            ::ridl_rt::flatbuffers::Field::U8(__s.get() as u8)
+            ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
         },
     };
     __n += 1;
@@ -1075,7 +1120,7 @@ pub(crate) fn __ridl_fb_encode_warning(
         offset: 8u16,
         value: {
             let __s = value.health;
-            ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
         },
     };
     __n += 1;
@@ -1101,10 +1146,10 @@ pub(crate) fn __ridl_fb_encode_warning(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_warning(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Warning(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1116,7 +1161,7 @@ pub(crate) fn __ridl_fb_verify_warning(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Level::check(&(i64::from(__raw)))
+        Level::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -1129,7 +1174,7 @@ pub(crate) fn __ridl_fb_verify_warning(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Health as ::core::convert::TryFrom<i64>>::try_from(__raw)
+        <Health as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -1146,13 +1191,18 @@ pub(crate) fn __ridl_fb_verify_warning(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Warning(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Warning {
     Warning {
         code: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Level::new_unchecked(
-                    i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                    ),
                 )
             }
             _ => Level::new_unchecked(0i64),
@@ -1160,7 +1210,7 @@ pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
         health: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 8usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Health as ::core::convert::TryFrom<
-                    i64,
+                    ::core::primitive::i64,
                 >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
                     .unwrap_or(Health::Ok)
             }
@@ -1181,17 +1231,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 60usize;
+    const MAX_SIZE: ::core::primitive::usize = 60usize;
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, WarningFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_warning(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Warning(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1200,7 +1250,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WarningFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -1215,14 +1265,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_warning(buf, table)?;
+        __ridl_fb_verify_Warning(buf, table)?;
         ::core::result::Result::Ok(WarningFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_warning(__view.buf, __view.table)
+        __ridl_fb_decode_Warning(__view.buf, __view.table)
     }
 }
 /**Descriptor for interface `Cabin`.
@@ -1237,25 +1287,25 @@ impl ::ridl_rt::contract::Interface for Cabin {
         hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
-    const PROVISIONAL: bool = true;
-    const NAME: &'static str = "Cabin";
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Cabin";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(1),
             kind: ::ridl_rt::contract::Kind::Signal,
             name: "temperature",
-            timing: Some(::ridl_rt::contract::Timing {
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
                 mode: ::ridl_rt::contract::TimingMode::StrictPeriodic,
-                min: Some(::ridl_rt::sample::Duration(10000)),
-                max: Some(::ridl_rt::sample::Duration(10000)),
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
             }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Temperature",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1264,18 +1314,18 @@ impl ::ridl_rt::contract::Interface for Cabin {
             ordinal: ::ridl_rt::contract::Ordinal(2),
             kind: ::ridl_rt::contract::Kind::Event,
             name: "warning",
-            timing: Some(::ridl_rt::contract::Timing {
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
                 mode: ::ridl_rt::contract::TimingMode::Range,
-                min: Some(::ridl_rt::sample::Duration(100000)),
-                max: Some(::ridl_rt::sample::Duration(1000000)),
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(100000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
             }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Warning",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1284,18 +1334,18 @@ impl ::ridl_rt::contract::Interface for Cabin {
             ordinal: ::ridl_rt::contract::Ordinal(3),
             kind: ::ridl_rt::contract::Kind::Command,
             name: "setLevel",
-            timing: Some(::ridl_rt::contract::Timing {
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
                 mode: ::ridl_rt::contract::TimingMode::Range,
-                min: None,
-                max: Some(::ridl_rt::sample::Duration(50000)),
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(50000)),
             }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Level",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1304,26 +1354,26 @@ impl ::ridl_rt::contract::Interface for Cabin {
             ordinal: ::ridl_rt::contract::Ordinal(4),
             kind: ::ridl_rt::contract::Kind::Query,
             name: "average",
-            timing: Some(::ridl_rt::contract::Timing {
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
                 mode: ::ridl_rt::contract::TimingMode::Range,
-                min: None,
-                max: Some(::ridl_rt::sample::Duration(200000)),
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(200000)),
             }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Window",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Average",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1331,12 +1381,18 @@ impl ::ridl_rt::contract::Interface for Cabin {
     ];
 }
 impl Cabin {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: usize = {
+    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
-            <Level as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE,
-            <Window as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE,
-            <Average as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE,
+            <Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Window as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Average as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
         ];
         let mut max = 0usize;
         let mut index = 0usize;
@@ -1348,9 +1404,13 @@ impl Cabin {
         }
         max
     };
-    ///The largest event payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: usize = {
-        let sizes = [<Warning as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE];
+    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <Warning as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+        ];
         let mut max = 0usize;
         let mut index = 0usize;
         while index < sizes.len() {
@@ -1370,7 +1430,7 @@ impl ::ridl_rt::contract::Interaction for CabinTemperature {
 impl ::ridl_rt::contract::Signal for CabinTemperature {
     type Payload = Temperature;
     fn init() -> Self::Payload {
-        Temperature::default()
+        <Temperature as ::core::default::Default>::default()
     }
 }
 pub struct CabinWarning;
@@ -1437,25 +1497,25 @@ impl ::ridl_rt::contract::Interface for Horn {
         hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
-    const PROVISIONAL: bool = true;
-    const NAME: &'static str = "Horn";
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Horn";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(1),
             kind: ::ridl_rt::contract::Kind::Signal,
             name: "active",
-            timing: Some(::ridl_rt::contract::Timing {
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
                 mode: ::ridl_rt::contract::TimingMode::StrictPeriodic,
-                min: Some(::ridl_rt::sample::Duration(10000)),
-                max: Some(::ridl_rt::sample::Duration(10000)),
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
             }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Health",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1463,10 +1523,10 @@ impl ::ridl_rt::contract::Interface for Horn {
     ];
 }
 impl Horn {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: usize = 0usize;
-    ///The largest event payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: usize = 0usize;
+    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
 }
 pub struct HornActive;
 impl ::ridl_rt::contract::Interaction for HornActive {
@@ -1476,7 +1536,7 @@ impl ::ridl_rt::contract::Interaction for HornActive {
 impl ::ridl_rt::contract::Signal for HornActive {
     type Payload = Health;
     fn init() -> Self::Payload {
-        Health::default()
+        <Health as ::core::default::Default>::default()
     }
 }
 /**Descriptor for interface `Siren`.
@@ -1491,25 +1551,25 @@ impl ::ridl_rt::contract::Interface for Siren {
         hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
-    const PROVISIONAL: bool = true;
-    const NAME: &'static str = "Siren";
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Siren";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(1),
             kind: ::ridl_rt::contract::Kind::Event,
             name: "tripped",
-            timing: Some(::ridl_rt::contract::Timing {
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
                 mode: ::ridl_rt::contract::TimingMode::Range,
-                min: Some(::ridl_rt::sample::Duration(100000)),
-                max: Some(::ridl_rt::sample::Duration(1000000)),
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(100000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
             }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Warning",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1517,11 +1577,15 @@ impl ::ridl_rt::contract::Interface for Siren {
     ];
 }
 impl Siren {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: usize = 0usize;
-    ///The largest event payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: usize = {
-        let sizes = [<Warning as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE];
+    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <Warning as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+        ];
         let mut max = 0usize;
         let mut index = 0usize;
         while index < sizes.len() {
@@ -1553,21 +1617,21 @@ impl ::ridl_rt::contract::Interface for Valve {
         hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
-    const PROVISIONAL: bool = true;
-    const NAME: &'static str = "Valve";
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Valve";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(1),
             kind: ::ridl_rt::contract::Kind::Command,
             name: "open",
-            timing: None,
+            timing: ::core::option::Option::None,
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Level",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1576,22 +1640,22 @@ impl ::ridl_rt::contract::Interface for Valve {
             ordinal: ::ridl_rt::contract::Ordinal(2),
             kind: ::ridl_rt::contract::Kind::Query,
             name: "pressure",
-            timing: None,
+            timing: ::core::option::Option::None,
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Window",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Average",
                     max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: None,
-                        flatbuffers: None,
-                        repr_c: None,
+                        proto3: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::None,
+                        repr_c: ::core::option::Option::None,
                     },
                 },
             ],
@@ -1599,12 +1663,18 @@ impl ::ridl_rt::contract::Interface for Valve {
     ];
 }
 impl Valve {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: usize = {
+    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
-            <Level as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE,
-            <Window as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE,
-            <Average as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE,
+            <Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Window as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Average as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
         ];
         let mut max = 0usize;
         let mut index = 0usize;
@@ -1616,8 +1686,8 @@ impl Valve {
         }
         max
     };
-    ///The largest event payload of this interface, over `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: usize = 0usize;
+    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
 }
 pub struct ValveOpen;
 impl ::ridl_rt::contract::Interaction for ValveOpen {
@@ -1687,7 +1757,7 @@ pub mod cabin {
             ::ridl_rt::port::ReadError,
         > {
             let mut buf = [0u8; <super::Temperature as ::ridl_rt::payload::Payload<
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE];
             let raw = self
                 .port
@@ -1709,7 +1779,7 @@ pub mod cabin {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         super::Temperature,
-                        super::Wire,
+                        ::ridl_rt::encoding::FlatBuffers,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -2129,16 +2199,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 )
             })?;
         let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE];
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Level,
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >::encode(__arg, &mut buf) {
             Ok(encoded) => encoded.bytes(),
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -2174,16 +2244,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 )
             })?;
         let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE];
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Window,
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >::encode(__arg, &mut buf) {
             Ok(encoded) => encoded.bytes(),
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -2208,7 +2278,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         ::ridl_rt::port::ReadError,
     > {
         let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE];
         match port.reply(correlation.0, &mut buf)? {
             None => Ok(None),
@@ -2218,7 +2288,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     Some(
                         match ::ridl_rt::payload::Ref::<
                             super::Average,
-                            super::Wire,
+                            ::ridl_rt::encoding::FlatBuffers,
                         >::verify(&buf[..len]) {
                             Ok(checked) => Ok(checked.decode()),
                             Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -2266,7 +2336,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                         Event::Warning(::ridl_rt::sample::Occurrence {
                             payload: match ::ridl_rt::payload::Ref::<
                                 super::Warning,
-                                super::Wire,
+                                ::ridl_rt::encoding::FlatBuffers,
                             >::verify(&buf[..occurrence.len]) {
                                 Ok(checked) => Ok(checked.decode()),
                                 Err(
@@ -2308,16 +2378,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
             value: super::Temperature,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
             let mut buf = [0u8; <super::Temperature as ::ridl_rt::payload::Payload<
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE];
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Temperature,
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >::encode(&value, &mut buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Temperature as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Temperature as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2336,16 +2406,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
             value: super::Warning,
         ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
             let mut buf = [0u8; <super::Warning as ::ridl_rt::payload::Payload<
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE];
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Warning,
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >::encode(&value, &mut buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2457,7 +2527,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                             ::ridl_rt::contract::Ordinal(3u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Level,
-                                    super::Wire,
+                                    ::ridl_rt::encoding::FlatBuffers,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -2512,7 +2582,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                             ::ridl_rt::contract::Ordinal(4u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Window,
-                                    super::Wire,
+                                    ::ridl_rt::encoding::FlatBuffers,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -2574,7 +2644,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                                     Ok(()) => {
                                                         let bytes = match ::ridl_rt::payload::Ref::<
                                                             super::Average,
-                                                            super::Wire,
+                                                            ::ridl_rt::encoding::FlatBuffers,
                                                         >::encode(&reply, buf) {
                                                             Ok(encoded) => encoded.bytes(),
                                                             Err(
@@ -2584,7 +2654,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                                                 },
                                                             ) => {
                                                                 unreachable!(
-                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                                                                     needed, available
                                                                 )
                                                             }
@@ -2941,7 +3011,7 @@ pub mod horn {
             ::ridl_rt::port::ReadError,
         > {
             let mut buf = [0u8; <super::Health as ::ridl_rt::payload::Payload<
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE];
             let raw = self
                 .port
@@ -2963,7 +3033,7 @@ pub mod horn {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         super::Health,
-                        super::Wire,
+                        ::ridl_rt::encoding::FlatBuffers,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -3018,16 +3088,16 @@ pub mod horn {
             value: super::Health,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
             let mut buf = [0u8; <super::Health as ::ridl_rt::payload::Payload<
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE];
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Health,
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >::encode(&value, &mut buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Health as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Health as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3180,7 +3250,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                         Event::Tripped(::ridl_rt::sample::Occurrence {
                             payload: match ::ridl_rt::payload::Ref::<
                                 super::Warning,
-                                super::Wire,
+                                ::ridl_rt::encoding::FlatBuffers,
                             >::verify(&buf[..occurrence.len]) {
                                 Ok(checked) => Ok(checked.decode()),
                                 Err(
@@ -3215,16 +3285,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
             value: super::Warning,
         ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
             let mut buf = [0u8; <super::Warning as ::ridl_rt::payload::Payload<
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE];
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Warning,
-                super::Wire,
+                ::ridl_rt::encoding::FlatBuffers,
             >::encode(&value, &mut buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3681,16 +3751,16 @@ The call's bound is the member's `max`, measured from the port's clock when this
                 )
             })?;
         let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE];
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Level,
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >::encode(__arg, &mut buf) {
             Ok(encoded) => encoded.bytes(),
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -3726,16 +3796,16 @@ The call's bound is the member's `max`, measured from the port's clock when this
                 )
             })?;
         let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE];
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Window,
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >::encode(__arg, &mut buf) {
             Ok(encoded) => encoded.bytes(),
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -3760,7 +3830,7 @@ The call's bound is the member's `max`, measured from the port's clock when this
         ::ridl_rt::port::ReadError,
     > {
         let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
-            super::Wire,
+            ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE];
         match port.reply(correlation.0, &mut buf)? {
             None => Ok(None),
@@ -3770,7 +3840,7 @@ The call's bound is the member's `max`, measured from the port's clock when this
                     Some(
                         match ::ridl_rt::payload::Ref::<
                             super::Average,
-                            super::Wire,
+                            ::ridl_rt::encoding::FlatBuffers,
                         >::verify(&buf[..len]) {
                             Ok(checked) => Ok(checked.decode()),
                             Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -3861,7 +3931,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                             ::ridl_rt::contract::Ordinal(1u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Level,
-                                    super::Wire,
+                                    ::ridl_rt::encoding::FlatBuffers,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -3916,7 +3986,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                             ::ridl_rt::contract::Ordinal(2u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Window,
-                                    super::Wire,
+                                    ::ridl_rt::encoding::FlatBuffers,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -3978,7 +4048,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                                     Ok(()) => {
                                                         let bytes = match ::ridl_rt::payload::Ref::<
                                                             super::Average,
-                                                            super::Wire,
+                                                            ::ridl_rt::encoding::FlatBuffers,
                                                         >::encode(&reply, buf) {
                                                             Ok(encoded) => encoded.bytes(),
                                                             Err(
@@ -3988,7 +4058,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                                                                 },
                                                             ) => {
                                                                 unreachable!(
-                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<Wire>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                                                                     needed, available
                                                                 )
                                                             }

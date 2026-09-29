@@ -81,11 +81,11 @@ fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<T
         ScalarBacking::Boolean => Some(bool_tokens(value.unwrap_or("false"))),
         ScalarBacking::String => match value {
             Some(text) if !text.is_empty() => Some(quote! { #text.to_string() }),
-            _ => Some(quote! { String::new() }),
+            _ => Some(quote! { ::std::string::String::new() }),
         },
         ScalarBacking::Bytes => match value {
             Some(text) if !text.is_empty() => None,
-            _ => Some(quote! { Vec::new() }),
+            _ => Some(quote! { ::std::vec::Vec::new() }),
         },
     }
 }
@@ -134,9 +134,14 @@ pub(crate) fn tuple_default_expr(ctx: &Ctx, tuple: &v1::InducedTuple) -> Option<
     Some(quote! { #name_id { #(#inits),* } })
 }
 
+/// Every prelude name and every `default()` call is written by path, for the
+/// reason `crate::class_tokens` gives and one more: a path call
+/// `T::default()` resolves an inherent item first, so an enum set bit named
+/// `default` would capture it (the generated-name collision design, X-16).
+/// `<T as ::core::default::Default>::default()` reaches the trait method.
 fn slot_default(ctx: &Ctx, ft: &v1::Type, slot: &Slot) -> Option<TokenStream> {
     if ft.optional {
-        return Some(quote! { None });
+        return Some(quote! { ::core::option::Option::None });
     }
     match ft.kind.as_ref() {
         Some(v1::r#type::Kind::Named(reference)) => named_default(ctx, reference, slot),
@@ -152,7 +157,7 @@ fn slot_default(ctx: &Ctx, ft: &v1::Type, slot: &Slot) -> Option<TokenStream> {
             let tuple = ctx.tuple(reference.index)?;
             if tuple_default_expr(ctx, tuple).is_some() {
                 let id = ident(tuple_name(tuple));
-                Some(quote! { #id::default() })
+                Some(quote! { <#id as ::core::default::Default>::default() })
             } else {
                 None
             }
@@ -178,7 +183,7 @@ fn named_default(ctx: &Ctx, reference: &v1::TypeRef, slot: &Slot) -> Option<Toke
             None
         } else if slot.flag == Some(true) {
             let path = type_path(&reference.reference);
-            Some(quote! { #path::default() })
+            Some(quote! { <#path as ::core::default::Default>::default() })
         } else {
             None
         }
@@ -192,7 +197,7 @@ fn named_default(ctx: &Ctx, reference: &v1::TypeRef, slot: &Slot) -> Option<Toke
                     let ctor = scalar_ctor(sc);
                     Some(quote! { #path::#ctor(#inner) })
                 } else {
-                    Some(quote! { #path::default() })
+                    Some(quote! { <#path as ::core::default::Default>::default() })
                 }
             }
             // Same-package composite, enum, or enum set: recurse rather than
@@ -217,7 +222,7 @@ fn named_same_package_default(ctx: &Ctx, reference: &v1::TypeRef) -> Option<Toke
     ctx.leave_default(&reference.reference);
     if derivable {
         let path = type_path(&reference.reference);
-        Some(quote! { #path::default() })
+        Some(quote! { <#path as ::core::default::Default>::default() })
     } else {
         None
     }
@@ -228,8 +233,12 @@ fn primitive_default(prim: i32, slot: &Slot) -> Option<TokenStream> {
         v1::PrimitiveType::Integer => Some(numeric_tokens(slot.init_value.unwrap_or("0"), false)),
         v1::PrimitiveType::Float => Some(numeric_tokens(slot.init_value.unwrap_or("0"), true)),
         v1::PrimitiveType::Boolean => Some(bool_tokens(slot.init_value.unwrap_or("false"))),
-        v1::PrimitiveType::String if slot.flag != Some(false) => Some(quote! { String::new() }),
-        v1::PrimitiveType::Bytes if slot.flag != Some(false) => Some(quote! { Vec::new() }),
+        v1::PrimitiveType::String if slot.flag != Some(false) => {
+            Some(quote! { ::std::string::String::new() })
+        }
+        v1::PrimitiveType::Bytes if slot.flag != Some(false) => {
+            Some(quote! { ::std::vec::Vec::new() })
+        }
         _ => None,
     }
 }
@@ -248,7 +257,7 @@ fn array_default(ctx: &Ctx, array: &v1::ArrayType, slot: &Slot) -> Option<TokenS
         let elem = slot_default(ctx, element, &element_slot)?;
         Some(quote! { ::core::array::from_fn(|_| #elem) })
     } else if array.min == 0 {
-        Some(quote! { Vec::new() })
+        Some(quote! { ::std::vec::Vec::new() })
     } else {
         let elem = slot_default(ctx, element, &element_slot)?;
         let count = count_tokens(array.min);
@@ -258,7 +267,7 @@ fn array_default(ctx: &Ctx, array: &v1::ArrayType, slot: &Slot) -> Option<TokenS
 
 fn map_default(ctx: &Ctx, map: &v1::MapType, slot: &Slot) -> Option<TokenStream> {
     if map.min == 0 {
-        return Some(quote! { Vec::new() });
+        return Some(quote! { ::std::vec::Vec::new() });
     }
     let key_slot = Slot {
         init_value: None,

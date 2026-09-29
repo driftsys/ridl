@@ -1390,7 +1390,7 @@ fn veh_cluster_generated_rust_compiles_with_rustc() {
     // something if the corpus's vocabulary is actually in the source it sees —
     // a named scalar, a constant, an enum, and a cross-package reference.
     for marker in [
-        "pub struct Speed(f64);",
+        "pub struct Speed(::core::primitive::f64);",
         "pub const MAX_SPEED: Speed",
         "pub enum GearPosition",
         "crate::veh::common::",
@@ -1971,7 +1971,7 @@ fn const_chains_lower_as_values_not_names() {
         (
             "Rust",
             &compiled.rust,
-            "pub const FAN_LABEL: &str = \"cabin-fan\";",
+            "pub const FAN_LABEL: &::core::primitive::str = \"cabin-fan\";",
         ),
         (
             "TypeScript",

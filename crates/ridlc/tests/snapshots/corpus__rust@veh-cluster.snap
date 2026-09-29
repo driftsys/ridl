@@ -9,11 +9,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct Speed(f64);
+pub struct Speed(::core::primitive::f64);
 impl Speed {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -29,7 +29,7 @@ impl Speed {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
@@ -51,25 +51,27 @@ impl Speed {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for Speed {
+impl ::core::convert::TryFrom<::core::primitive::f64> for Speed {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Speed> for f64 {
+impl ::core::convert::From<Speed> for ::core::primitive::f64 {
     fn from(value: Speed) -> Self {
         value.0
     }
 }
-impl Default for Speed {
+impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
     }
@@ -79,11 +81,11 @@ impl Default for Speed {
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct Temperature(f64);
+pub struct Temperature(::core::primitive::f64);
 impl Temperature {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -99,7 +101,7 @@ impl Temperature {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < -40.0 {
@@ -121,25 +123,27 @@ impl Temperature {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for Temperature {
+impl ::core::convert::TryFrom<::core::primitive::f64> for Temperature {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Temperature> for f64 {
+impl ::core::convert::From<Temperature> for ::core::primitive::f64 {
     fn from(value: Temperature) -> Self {
         value.0
     }
 }
-impl Default for Temperature {
+impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0.0)
     }
@@ -149,11 +153,11 @@ impl Default for Temperature {
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct RPM(f64);
+pub struct RPM(::core::primitive::f64);
 impl RPM {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -169,7 +173,7 @@ impl RPM {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
@@ -191,25 +195,27 @@ impl RPM {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for RPM {
+impl ::core::convert::TryFrom<::core::primitive::f64> for RPM {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<RPM> for f64 {
+impl ::core::convert::From<RPM> for ::core::primitive::f64 {
     fn from(value: RPM) -> Self {
         value.0
     }
 }
-impl Default for RPM {
+impl ::core::default::Default for RPM {
     fn default() -> Self {
         RPM::new_unchecked(0.0)
     }
@@ -219,11 +225,11 @@ impl Default for RPM {
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct Ratio(f64);
+pub struct Ratio(::core::primitive::f64);
 impl Ratio {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -239,7 +245,7 @@ impl Ratio {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
@@ -261,36 +267,38 @@ impl Ratio {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for Ratio {
+impl ::core::convert::TryFrom<::core::primitive::f64> for Ratio {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Ratio> for f64 {
+impl ::core::convert::From<Ratio> for ::core::primitive::f64 {
     fn from(value: Ratio) -> Self {
         value.0
     }
 }
-impl Default for Ratio {
+impl ::core::default::Default for Ratio {
     fn default() -> Self {
         Ratio::new_unchecked(0.0)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct Counter(i64);
+pub struct Counter(::core::primitive::i64);
 impl Counter {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -306,7 +314,7 @@ impl Counter {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -328,25 +336,27 @@ impl Counter {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> i64 {
+    pub const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for Counter {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Counter {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Counter> for i64 {
+impl ::core::convert::From<Counter> for ::core::primitive::i64 {
     fn from(value: Counter) -> Self {
         value.0
     }
 }
-impl Default for Counter {
+impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new_unchecked(0)
     }
@@ -354,11 +364,11 @@ impl Default for Counter {
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct Gain(f64);
+pub struct Gain(::core::primitive::f64);
 impl Gain {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -374,7 +384,7 @@ impl Gain {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
@@ -396,32 +406,34 @@ impl Gain {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for Gain {
+impl ::core::convert::TryFrom<::core::primitive::f64> for Gain {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Gain> for f64 {
+impl ::core::convert::From<Gain> for ::core::primitive::f64 {
     fn from(value: Gain) -> Self {
         value.0
     }
 }
-impl Default for Gain {
+impl ::core::default::Default for Gain {
     fn default() -> Self {
         Gain::new_unchecked(0.0)
     }
 }
 pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);
 pub const SPEED_LIMIT_EU: Speed = Speed::new_unchecked(130.0);
-pub const MAX_GEAR: i64 = 6;
+pub const MAX_GEAR: ::core::primitive::i64 = 6;
 pub const IDLE_RPM: RPM = RPM::new_unchecked(800.0);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
@@ -431,10 +443,10 @@ pub enum GearPosition {
     Reverse = 2,
     Neutral = 3,
 }
-impl ::core::convert::TryFrom<i64> for GearPosition {
+impl ::core::convert::TryFrom<::core::primitive::i64> for GearPosition {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
             0 => ::core::result::Result::Ok(Self::Park),
@@ -450,12 +462,12 @@ impl ::core::convert::TryFrom<i64> for GearPosition {
         }
     }
 }
-impl ::core::convert::From<GearPosition> for i64 {
+impl ::core::convert::From<GearPosition> for ::core::primitive::i64 {
     fn from(value: GearPosition) -> Self {
-        value as i64
+        value as ::core::primitive::i64
     }
 }
-impl Default for GearPosition {
+impl ::core::default::Default for GearPosition {
     fn default() -> Self {
         GearPosition::Park
     }
@@ -468,10 +480,10 @@ pub enum Warning {
     DoorOpen = 2,
     Seatbelt = 3,
 }
-impl ::core::convert::TryFrom<i64> for Warning {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Warning {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
             0 => ::core::result::Result::Ok(Self::LowFuel),
@@ -487,29 +499,31 @@ impl ::core::convert::TryFrom<i64> for Warning {
         }
     }
 }
-impl ::core::convert::From<Warning> for i64 {
+impl ::core::convert::From<Warning> for ::core::primitive::i64 {
     fn from(value: Warning) -> Self {
-        value as i64
+        value as ::core::primitive::i64
     }
 }
-impl Default for Warning {
+impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning::LowFuel
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct WarningFlags(i64);
+pub struct WarningFlags(::core::primitive::i64);
 impl WarningFlags {
     pub const LOW_FUEL: WarningFlags = WarningFlags(1 << 0);
     pub const CHECK_ENGINE: WarningFlags = WarningFlags(1 << 1);
     pub const DOOR_OPEN: WarningFlags = WarningFlags(1 << 2);
     pub const SEATBELT: WarningFlags = WarningFlags(1 << 3);
 }
-impl ::core::convert::TryFrom<i64> for WarningFlags {
+impl ::core::convert::TryFrom<::core::primitive::i64> for WarningFlags {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
-        const DECLARED_MASK: i64 = 15;
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
+        const DECLARED_MASK: ::core::primitive::i64 = 15;
         if value & !DECLARED_MASK != 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "WarningFlags",
@@ -519,12 +533,12 @@ impl ::core::convert::TryFrom<i64> for WarningFlags {
         ::core::result::Result::Ok(Self(value))
     }
 }
-impl ::core::convert::From<WarningFlags> for i64 {
+impl ::core::convert::From<WarningFlags> for ::core::primitive::i64 {
     fn from(value: WarningFlags) -> Self {
         value.0
     }
 }
-impl Default for WarningFlags {
+impl ::core::default::Default for WarningFlags {
     fn default() -> Self {
         WarningFlags(0)
     }
@@ -535,11 +549,11 @@ pub struct SpeedLimitPayload {
     pub limit: Speed,
     pub actual: Speed,
 }
-impl Default for SpeedLimitPayload {
+impl ::core::default::Default for SpeedLimitPayload {
     fn default() -> Self {
         SpeedLimitPayload {
-            limit: Speed::default(),
-            actual: Speed::default(),
+            limit: <Speed as ::core::default::Default>::default(),
+            actual: <Speed as ::core::default::Default>::default(),
         }
     }
 }
@@ -547,24 +561,24 @@ impl Default for SpeedLimitPayload {
 pub struct DriverProfile {
     pub name: crate::ridl::std::Name,
     pub speed: Speed,
-    pub r#override: Option<Speed>,
-    pub gears: i64,
+    pub r#override: ::core::option::Option<Speed>,
+    pub gears: ::core::primitive::i64,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
     pub readings: [Speed; 8],
-    pub labels: Vec<crate::ridl::std::Label>,
-    pub meta: Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
+    pub labels: ::std::vec::Vec<crate::ridl::std::Label>,
+    pub meta: ::std::vec::Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
 }
-impl Default for SensorResult {
+impl ::core::default::Default for SensorResult {
     fn default() -> Self {
-        SensorResult::Ok(SensorReading::default())
+        SensorResult::Ok(<SensorReading as ::core::default::Default>::default())
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -573,11 +587,11 @@ pub struct SensorReading {
     pub value: Speed,
     pub timestamp: crate::ridl::std::Timestamp,
 }
-impl Default for SensorReading {
+impl ::core::default::Default for SensorReading {
     fn default() -> Self {
         SensorReading {
-            value: Speed::default(),
-            timestamp: crate::ridl::std::Timestamp::default(),
+            value: <Speed as ::core::default::Default>::default(),
+            timestamp: <crate::ridl::std::Timestamp as ::core::default::Default>::default(),
         }
     }
 }
@@ -589,18 +603,18 @@ pub struct SensorFault {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RawWheelFrame {
     pub ticks: Counter,
-    pub frame: Vec<u8>,
+    pub frame: ::std::vec::Vec<::core::primitive::u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
 }
-impl Default for SensorBoundsRange {
+impl ::core::default::Default for SensorBoundsRange {
     fn default() -> Self {
         SensorBoundsRange {
-            min: Speed::default(),
-            max: Speed::default(),
+            min: <Speed as ::core::default::Default>::default(),
+            max: <Speed as ::core::default::Default>::default(),
         }
     }
 }
@@ -617,8 +631,8 @@ impl Default for SensorBoundsRange {
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_DriverProfile: () = ();
 /// `SensorBounds` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The members `labels`, `meta` reach a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -632,8 +646,8 @@ const __RIDL_FB_NO_CODEC_DRIVER_PROFILE: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_SensorBounds: () = ();
 /// `SensorResult` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The members `ok`, `err` reach a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -647,8 +661,8 @@ const __RIDL_FB_NO_CODEC_SENSOR_BOUNDS: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_SensorResult: () = ();
 /// `SensorReading` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The member `timestamp` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -662,8 +676,8 @@ const __RIDL_FB_NO_CODEC_SENSOR_RESULT: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_SENSOR_READING: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_SensorReading: () = ();
 /// `SensorFault` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The member `message` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -677,8 +691,8 @@ const __RIDL_FB_NO_CODEC_SENSOR_READING: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_SENSOR_FAULT: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_SensorFault: () = ();
 /// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
@@ -689,23 +703,25 @@ const __RIDL_FB_NO_CODEC_SENSOR_FAULT: () = ();
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
-        __ridl_fb_decode_speed(self.buf, self.table)
+        __ridl_fb_decode_Speed(self.buf, self.table)
     }
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_speed(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -719,17 +735,19 @@ pub(crate) fn __ridl_fb_encode_speed(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_speed(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -741,17 +759,22 @@ pub(crate) fn __ridl_fb_verify_speed(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
+        Speed::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Speed {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Speed::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
             )
         }
         _ => Speed::new_unchecked(0.0f64),
@@ -770,17 +793,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = SpeedFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_speed(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Speed(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -789,7 +812,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -804,14 +827,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_speed(buf, table)?;
+        __ridl_fb_verify_Speed(buf, table)?;
         ::core::result::Result::Ok(SpeedFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_speed(__view.buf, __view.table)
+        __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Temperature`'s `verify` accepted.
@@ -824,23 +847,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for TemperatureFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> TemperatureFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Temperature` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Temperature {
-        __ridl_fb_decode_temperature(self.buf, self.table)
+        __ridl_fb_decode_Temperature(self.buf, self.table)
     }
 }
 /// Writes `Temperature` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_temperature(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Temperature(
     value: &Temperature,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -854,17 +879,19 @@ pub(crate) fn __ridl_fb_encode_temperature(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_temperature(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Temperature(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -876,17 +903,22 @@ pub(crate) fn __ridl_fb_verify_temperature(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Temperature::check(&(f64::from(__raw)))
+        Temperature::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_temperature(buf: &[u8], table: usize) -> Temperature {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Temperature(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Temperature {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Temperature::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
             )
         }
         _ => Temperature::new_unchecked(0.0f64),
@@ -905,17 +937,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = TemperatureFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, TemperatureFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_temperature(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Temperature(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -927,7 +959,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<TemperatureFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -942,14 +974,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_temperature(buf, table)?;
+        __ridl_fb_verify_Temperature(buf, table)?;
         ::core::result::Result::Ok(TemperatureFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_temperature(__view.buf, __view.table)
+        __ridl_fb_decode_Temperature(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `RPM`'s `verify` accepted.
@@ -962,23 +994,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RPMFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RPMFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RPMFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `RPM` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> RPM {
-        __ridl_fb_decode_rpm(self.buf, self.table)
+        __ridl_fb_decode_RPM(self.buf, self.table)
     }
 }
 /// Writes `RPM` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_rpm(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_RPM(
     value: &RPM,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -992,17 +1026,19 @@ pub(crate) fn __ridl_fb_encode_rpm(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_rpm(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_RPM(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1014,17 +1050,22 @@ pub(crate) fn __ridl_fb_verify_rpm(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        RPM::check(&(f64::from(__raw)))
+        RPM::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_rpm(buf: &[u8], table: usize) -> RPM {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_RPM(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> RPM {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             RPM::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
             )
         }
         _ => RPM::new_unchecked(0.0f64),
@@ -1043,17 +1084,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = RPMFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, RPMFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_rpm(self, &mut builder)?;
+        let __root = __ridl_fb_encode_RPM(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1062,7 +1103,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<RPMFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -1077,14 +1118,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_rpm(buf, table)?;
+        __ridl_fb_verify_RPM(buf, table)?;
         ::core::result::Result::Ok(RPMFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_rpm(__view.buf, __view.table)
+        __ridl_fb_decode_RPM(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Ratio`'s `verify` accepted.
@@ -1097,23 +1138,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RatioFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RatioFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RatioFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Ratio` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Ratio {
-        __ridl_fb_decode_ratio(self.buf, self.table)
+        __ridl_fb_decode_Ratio(self.buf, self.table)
     }
 }
 /// Writes `Ratio` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_ratio(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Ratio(
     value: &Ratio,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1127,17 +1170,19 @@ pub(crate) fn __ridl_fb_encode_ratio(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_ratio(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Ratio(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1149,17 +1194,22 @@ pub(crate) fn __ridl_fb_verify_ratio(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Ratio::check(&(f64::from(__raw)))
+        Ratio::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_ratio(buf: &[u8], table: usize) -> Ratio {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Ratio(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Ratio {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Ratio::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
             )
         }
         _ => Ratio::new_unchecked(0.0f64),
@@ -1178,17 +1228,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = RatioFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, RatioFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_ratio(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Ratio(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1197,7 +1247,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<RatioFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -1212,14 +1262,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_ratio(buf, table)?;
+        __ridl_fb_verify_Ratio(buf, table)?;
         ::core::result::Result::Ok(RatioFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_ratio(__view.buf, __view.table)
+        __ridl_fb_decode_Ratio(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
@@ -1232,23 +1282,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for CounterFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> CounterFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Counter` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Counter {
-        __ridl_fb_decode_counter(self.buf, self.table)
+        __ridl_fb_decode_Counter(self.buf, self.table)
     }
 }
 /// Writes `Counter` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_counter(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Counter(
     value: &Counter,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1262,17 +1314,19 @@ pub(crate) fn __ridl_fb_encode_counter(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+                    ::ridl_rt::flatbuffers::Field::U16(
+                        __s.get() as ::core::primitive::u16,
+                    )
                 },
             },
         ];
         builder.push_table(6usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_counter(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Counter(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1284,17 +1338,22 @@ pub(crate) fn __ridl_fb_verify_counter(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Counter::check(&(i64::from(__raw)))
+        Counter::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_counter(buf: &[u8], table: usize) -> Counter {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Counter(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Counter {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Counter::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                ),
             )
         }
         _ => Counter::new_unchecked(0i64),
@@ -1313,17 +1372,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 44usize;
+    const MAX_SIZE: ::core::primitive::usize = 44usize;
     type View<'a> = CounterFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, CounterFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_counter(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Counter(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1332,7 +1391,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<CounterFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -1347,14 +1406,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_counter(buf, table)?;
+        __ridl_fb_verify_Counter(buf, table)?;
         ::core::result::Result::Ok(CounterFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_counter(__view.buf, __view.table)
+        __ridl_fb_decode_Counter(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Gain`'s `verify` accepted.
@@ -1367,23 +1426,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GainFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for GainFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> GainFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Gain` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Gain {
-        __ridl_fb_decode_gain(self.buf, self.table)
+        __ridl_fb_decode_Gain(self.buf, self.table)
     }
 }
 /// Writes `Gain` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_gain(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Gain(
     value: &Gain,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1397,17 +1458,19 @@ pub(crate) fn __ridl_fb_encode_gain(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_gain(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Gain(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1419,17 +1482,22 @@ pub(crate) fn __ridl_fb_verify_gain(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Gain::check(&(f64::from(__raw)))
+        Gain::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_gain(buf: &[u8], table: usize) -> Gain {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Gain(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Gain {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Gain::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
             )
         }
         _ => Gain::new_unchecked(0.0f64),
@@ -1448,17 +1516,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = GainFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, GainFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_gain(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Gain(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1467,7 +1535,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<GainFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -1482,14 +1550,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_gain(buf, table)?;
+        __ridl_fb_verify_Gain(buf, table)?;
         ::core::result::Result::Ok(GainFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_gain(__view.buf, __view.table)
+        __ridl_fb_decode_Gain(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
@@ -1502,23 +1570,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for GearPositionFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> GearPositionFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `GearPosition` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> GearPosition {
-        __ridl_fb_decode_gear_position(self.buf, self.table)
+        __ridl_fb_decode_GearPosition(self.buf, self.table)
     }
 }
 /// Writes `GearPosition` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_gear_position(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_GearPosition(
     value: &GearPosition,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1532,17 +1602,17 @@ pub(crate) fn __ridl_fb_encode_gear_position(
                 offset: 8u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
                 },
             },
         ];
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_gear_position(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_GearPosition(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1554,17 +1624,22 @@ pub(crate) fn __ridl_fb_verify_gear_position(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <GearPosition as ::core::convert::TryFrom<i64>>::try_from(__raw)
+        <GearPosition as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(__raw)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_gear_position(buf: &[u8], table: usize) -> GearPosition {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_GearPosition(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> GearPosition {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <GearPosition as ::core::convert::TryFrom<
-                i64,
+                ::core::primitive::i64,
             >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
                 .unwrap_or(GearPosition::Park)
         }
@@ -1584,17 +1659,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 50usize;
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
     type View<'a> = GearPositionFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, GearPositionFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_gear_position(self, &mut builder)?;
+        let __root = __ridl_fb_encode_GearPosition(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1606,7 +1681,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         GearPositionFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -1624,14 +1699,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_gear_position(buf, table)?;
+        __ridl_fb_verify_GearPosition(buf, table)?;
         ::core::result::Result::Ok(GearPositionFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_gear_position(__view.buf, __view.table)
+        __ridl_fb_decode_GearPosition(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
@@ -1644,23 +1719,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> WarningFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Warning` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Warning {
-        __ridl_fb_decode_warning(self.buf, self.table)
+        __ridl_fb_decode_Warning(self.buf, self.table)
     }
 }
 /// Writes `Warning` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_warning(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Warning(
     value: &Warning,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1674,17 +1751,17 @@ pub(crate) fn __ridl_fb_encode_warning(
                 offset: 8u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
                 },
             },
         ];
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_warning(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Warning(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1696,17 +1773,20 @@ pub(crate) fn __ridl_fb_verify_warning(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Warning as ::core::convert::TryFrom<i64>>::try_from(__raw)
+        <Warning as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Warning(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Warning {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Warning as ::core::convert::TryFrom<
-                i64,
+                ::core::primitive::i64,
             >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
                 .unwrap_or(Warning::LowFuel)
         }
@@ -1726,17 +1806,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 50usize;
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, WarningFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_warning(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Warning(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1745,7 +1825,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WarningFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -1760,14 +1840,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_warning(buf, table)?;
+        __ridl_fb_verify_Warning(buf, table)?;
         ::core::result::Result::Ok(WarningFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_warning(__view.buf, __view.table)
+        __ridl_fb_decode_Warning(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
@@ -1780,23 +1860,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningFlagsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> WarningFlagsFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `WarningFlags` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> WarningFlags {
-        __ridl_fb_decode_warning_flags(self.buf, self.table)
+        __ridl_fb_decode_WarningFlags(self.buf, self.table)
     }
 }
 /// Writes `WarningFlags` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_warning_flags(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_WarningFlags(
     value: &WarningFlags,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1810,17 +1892,19 @@ pub(crate) fn __ridl_fb_encode_warning_flags(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U8(i64::from(__s) as u8)
+                    ::ridl_rt::flatbuffers::Field::U8(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::u8,
+                    )
                 },
             },
         ];
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_warning_flags(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_WarningFlags(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -1832,19 +1916,26 @@ pub(crate) fn __ridl_fb_verify_warning_flags(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <WarningFlags as ::core::convert::TryFrom<i64>>::try_from(i64::from(__raw))
+        <WarningFlags as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_WarningFlags(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> WarningFlags {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <WarningFlags as ::core::convert::TryFrom<
-                i64,
+                ::core::primitive::i64,
             >>::try_from(
-                    i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                    ),
                 )
                 .unwrap_or(WarningFlags(0i64))
         }
@@ -1864,17 +1955,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 43usize;
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
     type View<'a> = WarningFlagsFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, WarningFlagsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_warning_flags(self, &mut builder)?;
+        let __root = __ridl_fb_encode_WarningFlags(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -1886,7 +1977,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         WarningFlagsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -1904,14 +1995,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_warning_flags(buf, table)?;
+        __ridl_fb_verify_WarningFlags(buf, table)?;
         ::core::result::Result::Ok(WarningFlagsFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_warning_flags(__view.buf, __view.table)
+        __ridl_fb_decode_WarningFlags(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `SpeedLimitPayload`'s `verify` accepted.
@@ -1923,21 +2014,23 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedLimitPayloadFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedLimitPayloadFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> SpeedLimitPayloadFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `SpeedLimitPayload`'s `limit` field in place.
     pub fn limit(&self) -> Speed {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -1950,7 +2043,7 @@ impl<'a> SpeedLimitPayloadFbView<'a> {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -1960,8 +2053,8 @@ impl<'a> SpeedLimitPayloadFbView<'a> {
     }
 }
 /// Writes `SpeedLimitPayload` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_speed_limit_payload(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_SpeedLimitPayload(
     value: &SpeedLimitPayload,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -1979,7 +2072,7 @@ pub(crate) fn __ridl_fb_encode_speed_limit_payload(
         offset: 4u16,
         value: {
             let __s = value.limit;
-            ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as ::core::primitive::f32)
         },
     };
     __n += 1;
@@ -1988,7 +2081,7 @@ pub(crate) fn __ridl_fb_encode_speed_limit_payload(
         offset: 8u16,
         value: {
             let __s = value.actual;
-            ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as ::core::primitive::f32)
         },
     };
     __n += 1;
@@ -2014,10 +2107,10 @@ pub(crate) fn __ridl_fb_encode_speed_limit_payload(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_speed_limit_payload(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_SpeedLimitPayload(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -2029,7 +2122,7 @@ pub(crate) fn __ridl_fb_verify_speed_limit_payload(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
+        Speed::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -2042,7 +2135,7 @@ pub(crate) fn __ridl_fb_verify_speed_limit_payload(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
+        Speed::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2059,16 +2152,16 @@ pub(crate) fn __ridl_fb_verify_speed_limit_payload(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_speed_limit_payload(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_SpeedLimitPayload(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> SpeedLimitPayload {
     SpeedLimitPayload {
         limit: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -2078,7 +2171,7 @@ pub(crate) fn __ridl_fb_decode_speed_limit_payload(
         actual: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -2101,17 +2194,17 @@ for SpeedLimitPayload {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 59usize;
+    const MAX_SIZE: ::core::primitive::usize = 59usize;
     type View<'a> = SpeedLimitPayloadFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, SpeedLimitPayloadFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_speed_limit_payload(self, &mut builder)?;
+        let __root = __ridl_fb_encode_SpeedLimitPayload(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -2123,7 +2216,7 @@ for SpeedLimitPayload {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         SpeedLimitPayloadFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -2141,7 +2234,7 @@ for SpeedLimitPayload {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_speed_limit_payload(buf, table)?;
+        __ridl_fb_verify_SpeedLimitPayload(buf, table)?;
         ::core::result::Result::Ok(SpeedLimitPayloadFbView {
             buf,
             table,
@@ -2151,7 +2244,7 @@ for SpeedLimitPayload {
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_speed_limit_payload(__view.buf, __view.table)
+        __ridl_fb_decode_SpeedLimitPayload(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `RawWheelFrame`'s `verify` accepted.
@@ -2163,21 +2256,23 @@ for SpeedLimitPayload {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawWheelFrameFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RawWheelFrameFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RawWheelFrameFbView<'a> {
-    /// The verified bytes this view reads.
-    pub(crate) fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `RawWheelFrame`'s `ticks` field in place.
     pub(crate) fn ticks(&self) -> Counter {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Counter::new_unchecked(
-                    i64::from(
+                    ::core::primitive::i64::from(
                         ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
                     ),
                 )
@@ -2186,7 +2281,7 @@ impl<'a> RawWheelFrameFbView<'a> {
         }
     }
     /// Reads `RawWheelFrame`'s `frame` field in place.
-    pub(crate) fn frame(&self) -> &'a [u8] {
+    pub(crate) fn frame(&self) -> &'a [::core::primitive::u8] {
         let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
             .unwrap_or(::core::option::Option::None)
             .unwrap_or(0usize);
@@ -2201,8 +2296,8 @@ impl<'a> RawWheelFrameFbView<'a> {
     }
 }
 /// Writes `RawWheelFrame` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_raw_wheel_frame(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_RawWheelFrame(
     value: &RawWheelFrame,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -2220,7 +2315,7 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_frame(
         offset: 4u16,
         value: {
             let __s = value.ticks;
-            ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
         },
     };
     __n += 1;
@@ -2254,10 +2349,10 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_frame(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_raw_wheel_frame(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_RawWheelFrame(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -2269,7 +2364,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_frame(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Counter::check(&(i64::from(__raw)))
+        Counter::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
@@ -2301,16 +2396,18 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_frame(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_raw_wheel_frame(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_RawWheelFrame(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> RawWheelFrame {
     RawWheelFrame {
         ticks: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Counter::new_unchecked(
-                    i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
                 )
             }
             _ => Counter::new_unchecked(0i64),
@@ -2343,17 +2440,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 76usize;
+    const MAX_SIZE: ::core::primitive::usize = 76usize;
     type View<'a> = RawWheelFrameFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, RawWheelFrameFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_raw_wheel_frame(self, &mut builder)?;
+        let __root = __ridl_fb_encode_RawWheelFrame(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -2365,7 +2462,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         RawWheelFrameFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -2383,14 +2480,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_raw_wheel_frame(buf, table)?;
+        __ridl_fb_verify_RawWheelFrame(buf, table)?;
         ::core::result::Result::Ok(RawWheelFrameFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_raw_wheel_frame(__view.buf, __view.table)
+        __ridl_fb_decode_RawWheelFrame(__view.buf, __view.table)
     }
 }
 
@@ -2399,10 +2496,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorPayload {
-    pub sensor_id: i64,
-    pub is_open: bool,
+    pub sensor_id: ::core::primitive::i64,
+    pub is_open: ::core::primitive::bool,
 }
-impl Default for DoorPayload {
+impl ::core::default::Default for DoorPayload {
     fn default() -> Self {
         DoorPayload {
             sensor_id: 0,
@@ -2412,20 +2509,20 @@ impl Default for DoorPayload {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiagFilter {
-    pub severity: i64,
-    pub category: Option<crate::ridl::std::Label>,
+    pub severity: ::core::primitive::i64,
+    pub category: ::core::option::Option<crate::ridl::std::Label>,
 }
-impl Default for DiagFilter {
+impl ::core::default::Default for DiagFilter {
     fn default() -> Self {
         DiagFilter {
             severity: 0,
-            category: None,
+            category: ::core::option::Option::None,
         }
     }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaultEvent {
-    pub code: i64,
+    pub code: ::core::primitive::i64,
     pub message: crate::ridl::std::Message,
     pub timestamp: crate::ridl::std::Timestamp,
 }
@@ -2436,10 +2533,10 @@ pub enum DiagError {
     StorageBusy = 1,
     AccessDenied = 2,
 }
-impl ::core::convert::TryFrom<i64> for DiagError {
+impl ::core::convert::TryFrom<::core::primitive::i64> for DiagError {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
             0 => ::core::result::Result::Ok(Self::FilterInvalid),
@@ -2454,23 +2551,25 @@ impl ::core::convert::TryFrom<i64> for DiagError {
         }
     }
 }
-impl ::core::convert::From<DiagError> for i64 {
+impl ::core::convert::From<DiagError> for ::core::primitive::i64 {
     fn from(value: DiagError) -> Self {
-        value as i64
+        value as ::core::primitive::i64
     }
 }
-impl Default for DiagError {
+impl ::core::default::Default for DiagError {
     fn default() -> Self {
         DiagError::FilterInvalid
     }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaultPage {
-    pub faults: Vec<FaultEvent>,
+    pub faults: ::std::vec::Vec<FaultEvent>,
 }
-impl Default for FaultPage {
+impl ::core::default::Default for FaultPage {
     fn default() -> Self {
-        FaultPage { faults: Vec::new() }
+        FaultPage {
+            faults: ::std::vec::Vec::new(),
+        }
     }
 }
 /// A package-private payload type, so the interaction layer's legal
@@ -2479,11 +2578,11 @@ impl Default for FaultPage {
 /// `internal` name never resolves (typl §3.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub(crate) struct RawTickCount(i64);
+pub(crate) struct RawTickCount(::core::primitive::i64);
 impl RawTickCount {
     /// Constructs the value, enforcing its typl constraints.
     pub(crate) fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -2499,7 +2598,7 @@ impl RawTickCount {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -2521,25 +2620,27 @@ impl RawTickCount {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub(crate) const fn new_unchecked(value: i64) -> Self {
+    pub(crate) const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub(crate) const fn get(self) -> i64 {
+    pub(crate) const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for RawTickCount {
+impl ::core::convert::TryFrom<::core::primitive::i64> for RawTickCount {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<RawTickCount> for i64 {
+impl ::core::convert::From<RawTickCount> for ::core::primitive::i64 {
     fn from(value: RawTickCount) -> Self {
         value.0
     }
 }
-impl Default for RawTickCount {
+impl ::core::default::Default for RawTickCount {
     fn default() -> Self {
         RawTickCount::new_unchecked(0)
     }
@@ -2551,21 +2652,21 @@ pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
     pub bursts: [RawWheelSpanBurstsElement; 2],
 }
-impl Default for RawWheelSpan {
+impl ::core::default::Default for RawWheelSpan {
     fn default() -> Self {
         RawWheelSpan {
-            span: RawWheelSpanSpan::default(),
-            bursts: ::core::array::from_fn(|_| RawWheelSpanBurstsElement::default()),
+            span: <RawWheelSpanSpan as ::core::default::Default>::default(),
+            bursts: ::core::array::from_fn(|_| <RawWheelSpanBurstsElement as ::core::default::Default>::default()),
         }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct FanLevel(i64);
+pub struct FanLevel(::core::primitive::i64);
 impl FanLevel {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -2581,7 +2682,7 @@ impl FanLevel {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &i64,
+        value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0 {
@@ -2603,25 +2704,27 @@ impl FanLevel {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: i64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> i64 {
+    pub const fn get(self) -> ::core::primitive::i64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<i64> for FanLevel {
+impl ::core::convert::TryFrom<::core::primitive::i64> for FanLevel {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<FanLevel> for i64 {
+impl ::core::convert::From<FanLevel> for ::core::primitive::i64 {
     fn from(value: FanLevel) -> Self {
         value.0
     }
 }
-impl Default for FanLevel {
+impl ::core::default::Default for FanLevel {
     fn default() -> Self {
         FanLevel::new_unchecked(0)
     }
@@ -2629,10 +2732,10 @@ impl Default for FanLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FilterState {
-    pub hours_run: i64,
-    pub clogged: bool,
+    pub hours_run: ::core::primitive::i64,
+    pub clogged: ::core::primitive::bool,
 }
-impl Default for FilterState {
+impl ::core::default::Default for FilterState {
     fn default() -> Self {
         FilterState {
             hours_run: 0,
@@ -2647,12 +2750,12 @@ pub struct ClimateReport {
     pub setpoint: crate::veh::common::Temperature,
     pub fan: FanLevel,
 }
-impl Default for ClimateReport {
+impl ::core::default::Default for ClimateReport {
     fn default() -> Self {
         ClimateReport {
-            cabin: crate::veh::common::Temperature::default(),
-            setpoint: crate::veh::common::Temperature::default(),
-            fan: FanLevel::default(),
+            cabin: <crate::veh::common::Temperature as ::core::default::Default>::default(),
+            setpoint: <crate::veh::common::Temperature as ::core::default::Default>::default(),
+            fan: <FanLevel as ::core::default::Default>::default(),
         }
     }
 }
@@ -2662,10 +2765,10 @@ pub enum HvacError {
     CompressorOff = 0,
     SensorFault = 1,
 }
-impl ::core::convert::TryFrom<i64> for HvacError {
+impl ::core::convert::TryFrom<::core::primitive::i64> for HvacError {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
             0 => ::core::result::Result::Ok(Self::CompressorOff),
@@ -2679,12 +2782,12 @@ impl ::core::convert::TryFrom<i64> for HvacError {
         }
     }
 }
-impl ::core::convert::From<HvacError> for i64 {
+impl ::core::convert::From<HvacError> for ::core::primitive::i64 {
     fn from(value: HvacError) -> Self {
-        value as i64
+        value as ::core::primitive::i64
     }
 }
-impl Default for HvacError {
+impl ::core::default::Default for HvacError {
     fn default() -> Self {
         HvacError::CompressorOff
     }
@@ -2700,11 +2803,11 @@ pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);
 /// The label a cabin fan reports itself under.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct FanTag(String);
+pub struct FanTag(::std::string::String);
 impl FanTag {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: String,
+        value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -2720,15 +2823,15 @@ impl FanTag {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &str,
+        value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
-        if (value.chars().count() as u64) < 1 {
+        if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "FanTag",
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
-        if (value.chars().count() as u64) > 32 {
+        if (value.chars().count() as ::core::primitive::u64) > 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "FanTag",
                 rule: ::ridl_rt::payload::Rule::Length,
@@ -2741,46 +2844,48 @@ impl FanTag {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: String) -> Self {
+    pub const fn new_unchecked(value: ::std::string::String) -> Self {
         Self(value)
     }
-    pub fn get(&self) -> &str {
+    pub fn get(&self) -> &::core::primitive::str {
         &self.0
     }
-    pub fn into_inner(self) -> String {
+    pub fn into_inner(self) -> ::std::string::String {
         self.0
     }
 }
-impl ::core::convert::TryFrom<String> for FanTag {
+impl ::core::convert::TryFrom<::std::string::String> for FanTag {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: String) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<FanTag> for String {
+impl ::core::convert::From<FanTag> for ::std::string::String {
     fn from(value: FanTag) -> Self {
         value.0
     }
 }
-impl Default for FanTag {
+impl ::core::default::Default for FanTag {
     fn default() -> Self {
         FanTag::new_unchecked("unset".to_string())
     }
 }
 /// The cabin fan's label.
-pub const FAN_TAG: &str = "cabin-fan";
+pub const FAN_TAG: &::core::primitive::str = "cabin-fan";
 /// The same label, reached through the constant above.
-pub const FAN_LABEL: &str = "cabin-fan";
+pub const FAN_LABEL: &::core::primitive::str = "cabin-fan";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct RawWheelSpanSpan {
     pub first: RawTickCount,
     pub latest: RawTickCount,
 }
-impl Default for RawWheelSpanSpan {
+impl ::core::default::Default for RawWheelSpanSpan {
     fn default() -> Self {
         RawWheelSpanSpan {
-            first: RawTickCount::default(),
-            latest: RawTickCount::default(),
+            first: <RawTickCount as ::core::default::Default>::default(),
+            latest: <RawTickCount as ::core::default::Default>::default(),
         }
     }
 }
@@ -2789,11 +2894,11 @@ pub(crate) struct RawWheelSpanBurstsElement {
     pub first: RawTickCount,
     pub latest: RawTickCount,
 }
-impl Default for RawWheelSpanBurstsElement {
+impl ::core::default::Default for RawWheelSpanBurstsElement {
     fn default() -> Self {
         RawWheelSpanBurstsElement {
-            first: RawTickCount::default(),
-            latest: RawTickCount::default(),
+            first: <RawTickCount as ::core::default::Default>::default(),
+            latest: <RawTickCount as ::core::default::Default>::default(),
         }
     }
 }
@@ -2810,8 +2915,8 @@ impl Default for RawWheelSpanBurstsElement {
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_DIAG_FILTER: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_DiagFilter: () = ();
 /// `FaultEvent` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The members `message`, `timestamp` reach a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -2825,8 +2930,8 @@ const __RIDL_FB_NO_CODEC_DIAG_FILTER: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_FAULT_EVENT: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_FaultEvent: () = ();
 /// `FaultPage` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The member `faults` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -2840,8 +2945,8 @@ const __RIDL_FB_NO_CODEC_FAULT_EVENT: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_FAULT_PAGE: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_FaultPage: () = ();
 /// `ClimateReport` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The members `cabin`, `setpoint` reach a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
@@ -2855,8 +2960,8 @@ const __RIDL_FB_NO_CODEC_FAULT_PAGE: () = ();
 ///
 /// This is a silent omission in the sense ADR-0016 decision 6 and
 /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-#[allow(dead_code)]
-const __RIDL_FB_NO_CODEC_CLIMATE_REPORT: () = ();
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_FB_NO_CODEC_ClimateReport: () = ();
 /// A zero-copy accessor over FlatBuffers bytes `DoorPayload`'s `verify` accepted.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
@@ -2866,26 +2971,30 @@ const __RIDL_FB_NO_CODEC_CLIMATE_REPORT: () = ();
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorPayloadFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for DoorPayloadFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> DoorPayloadFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `DoorPayload`'s `sensor_id` field in place.
-    pub fn sensor_id(&self) -> i64 {
+    pub fn sensor_id(&self) -> ::core::primitive::i64 {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 1usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-                i64::from(::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8))
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8),
+                )
             }
             _ => 0i64,
         }
     }
     /// Reads `DoorPayload`'s `is_open` field in place.
-    pub fn is_open(&self) -> bool {
+    pub fn is_open(&self) -> ::core::primitive::bool {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 1usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 ::ridl_rt::flatbuffers::read_bool(self.buf, __p).unwrap_or(false)
@@ -2895,8 +3004,8 @@ impl<'a> DoorPayloadFbView<'a> {
     }
 }
 /// Writes `DoorPayload` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_door_payload(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_DoorPayload(
     value: &DoorPayload,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -2914,7 +3023,7 @@ pub(crate) fn __ridl_fb_encode_door_payload(
         offset: 4u16,
         value: {
             let __s = value.sensor_id;
-            ::ridl_rt::flatbuffers::Field::U8(__s as u8)
+            ::ridl_rt::flatbuffers::Field::U8(__s as ::core::primitive::u8)
         },
     };
     __n += 1;
@@ -2949,10 +3058,10 @@ pub(crate) fn __ridl_fb_encode_door_payload(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_door_payload(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_DoorPayload(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -2990,12 +3099,17 @@ pub(crate) fn __ridl_fb_verify_door_payload(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_door_payload(buf: &[u8], table: usize) -> DoorPayload {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_DoorPayload(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> DoorPayload {
     DoorPayload {
         sensor_id: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-                i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8))
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                )
             }
             _ => 0i64,
         },
@@ -3020,17 +3134,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 53usize;
+    const MAX_SIZE: ::core::primitive::usize = 53usize;
     type View<'a> = DoorPayloadFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, DoorPayloadFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_door_payload(self, &mut builder)?;
+        let __root = __ridl_fb_encode_DoorPayload(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -3042,7 +3156,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<DoorPayloadFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -3057,14 +3171,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_door_payload(buf, table)?;
+        __ridl_fb_verify_DoorPayload(buf, table)?;
         ::core::result::Result::Ok(DoorPayloadFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_door_payload(__view.buf, __view.table)
+        __ridl_fb_decode_DoorPayload(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `DiagError`'s `verify` accepted.
@@ -3077,23 +3191,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DiagErrorFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for DiagErrorFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> DiagErrorFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `DiagError` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> DiagError {
-        __ridl_fb_decode_diag_error(self.buf, self.table)
+        __ridl_fb_decode_DiagError(self.buf, self.table)
     }
 }
 /// Writes `DiagError` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_diag_error(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_DiagError(
     value: &DiagError,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -3107,17 +3223,17 @@ pub(crate) fn __ridl_fb_encode_diag_error(
                 offset: 8u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
                 },
             },
         ];
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_diag_error(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_DiagError(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -3129,17 +3245,20 @@ pub(crate) fn __ridl_fb_verify_diag_error(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <DiagError as ::core::convert::TryFrom<i64>>::try_from(__raw)
+        <DiagError as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_diag_error(buf: &[u8], table: usize) -> DiagError {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_DiagError(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> DiagError {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <DiagError as ::core::convert::TryFrom<
-                i64,
+                ::core::primitive::i64,
             >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
                 .unwrap_or(DiagError::FilterInvalid)
         }
@@ -3159,17 +3278,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 50usize;
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
     type View<'a> = DiagErrorFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, DiagErrorFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_diag_error(self, &mut builder)?;
+        let __root = __ridl_fb_encode_DiagError(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -3181,7 +3300,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<DiagErrorFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -3196,14 +3315,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_diag_error(buf, table)?;
+        __ridl_fb_verify_DiagError(buf, table)?;
         ::core::result::Result::Ok(DiagErrorFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_diag_error(__view.buf, __view.table)
+        __ridl_fb_decode_DiagError(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `RawTickCount`'s `verify` accepted.
@@ -3216,23 +3335,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawTickCountFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RawTickCountFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RawTickCountFbView<'a> {
-    /// The verified bytes this view reads.
-    pub(crate) fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `RawTickCount` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub(crate) fn value(&self) -> RawTickCount {
-        __ridl_fb_decode_raw_tick_count(self.buf, self.table)
+        __ridl_fb_decode_RawTickCount(self.buf, self.table)
     }
 }
 /// Writes `RawTickCount` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_raw_tick_count(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_RawTickCount(
     value: &RawTickCount,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -3246,17 +3367,19 @@ pub(crate) fn __ridl_fb_encode_raw_tick_count(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+                    ::ridl_rt::flatbuffers::Field::U16(
+                        __s.get() as ::core::primitive::u16,
+                    )
                 },
             },
         ];
         builder.push_table(6usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_raw_tick_count(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_RawTickCount(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -3268,17 +3391,22 @@ pub(crate) fn __ridl_fb_verify_raw_tick_count(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        RawTickCount::check(&(i64::from(__raw)))
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_raw_tick_count(buf: &[u8], table: usize) -> RawTickCount {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_RawTickCount(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> RawTickCount {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             RawTickCount::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                ),
             )
         }
         _ => RawTickCount::new_unchecked(0i64),
@@ -3297,17 +3425,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 44usize;
+    const MAX_SIZE: ::core::primitive::usize = 44usize;
     type View<'a> = RawTickCountFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, RawTickCountFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_raw_tick_count(self, &mut builder)?;
+        let __root = __ridl_fb_encode_RawTickCount(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -3319,7 +3447,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         RawTickCountFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -3337,14 +3465,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_raw_tick_count(buf, table)?;
+        __ridl_fb_verify_RawTickCount(buf, table)?;
         ::core::result::Result::Ok(RawTickCountFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_raw_tick_count(__view.buf, __view.table)
+        __ridl_fb_decode_RawTickCount(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `RawWheelSpan`'s `verify` accepted.
@@ -3356,15 +3484,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawWheelSpanFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RawWheelSpanFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RawWheelSpanFbView<'a> {
-    /// The verified bytes this view reads.
-    pub(crate) fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `RawWheelSpan`'s `span` field in place.
     pub(crate) fn span(&self) -> RawWheelSpanSpanFbView<'a> {
         let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize)
@@ -3388,7 +3518,7 @@ impl<'a> RawWheelSpanFbView<'a> {
                 });
             ::core::array::from_fn(|__i| {
                 let __at = __v.element(__i, 4usize);
-                __ridl_fb_decode_raw_wheel_span_bursts_element(
+                __ridl_fb_decode_RawWheelSpanBurstsElement(
                     self.buf,
                     ::ridl_rt::flatbuffers::follow(self.buf, __at).unwrap_or(0usize),
                 )
@@ -3397,8 +3527,8 @@ impl<'a> RawWheelSpanFbView<'a> {
     }
 }
 /// Writes `RawWheelSpan` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_raw_wheel_span(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_RawWheelSpan(
     value: &RawWheelSpan,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -3415,7 +3545,7 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span(
         slot: 0u16,
         offset: 4u16,
         value: ::ridl_rt::flatbuffers::Field::Offset(
-            __ridl_fb_encode_raw_wheel_span_span(&value.span, builder)?,
+            __ridl_fb_encode_RawWheelSpanSpan(&value.span, builder)?,
         ),
     };
     __n += 1;
@@ -3424,12 +3554,12 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span(
         offset: 8u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.bursts;
-            let mut __offsets: Vec<::ridl_rt::flatbuffers::Pos> = Vec::with_capacity(
+            let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> = ::std::vec::Vec::with_capacity(
                 __c.len(),
             );
             for __e in __c.iter() {
                 __offsets
-                    .push(__ridl_fb_encode_raw_wheel_span_bursts_element(__e, builder)?);
+                    .push(__ridl_fb_encode_RawWheelSpanBurstsElement(__e, builder)?);
             }
             builder.push_offset_vector(&__offsets)?
         }),
@@ -3457,10 +3587,10 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_raw_wheel_span(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_RawWheelSpan(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
@@ -3468,7 +3598,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span(
         ::core::option::Option::Some(__p) => {
             let __t = ::ridl_rt::flatbuffers::follow(buf, __p)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            __ridl_fb_verify_raw_wheel_span_span(buf, __t)?;
+            __ridl_fb_verify_RawWheelSpanSpan(buf, __t)?;
         }
         ::core::option::Option::None => {
             return ::core::result::Result::Err(
@@ -3496,7 +3626,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span(
                 let __at = __v.element(__i, 4usize);
                 let __t = ::ridl_rt::flatbuffers::follow(buf, __at)
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                __ridl_fb_verify_raw_wheel_span_bursts_element(buf, __t)?;
+                __ridl_fb_verify_RawWheelSpanBurstsElement(buf, __t)?;
             }
         }
         ::core::option::Option::None => {
@@ -3521,14 +3651,17 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_raw_wheel_span(buf: &[u8], table: usize) -> RawWheelSpan {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_RawWheelSpan(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> RawWheelSpan {
     RawWheelSpan {
         span: {
             let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
                 .unwrap_or(::core::option::Option::None)
                 .unwrap_or(0usize);
-            __ridl_fb_decode_raw_wheel_span_span(
+            __ridl_fb_decode_RawWheelSpanSpan(
                 buf,
                 ::ridl_rt::flatbuffers::follow(buf, __p).unwrap_or(0usize),
             )
@@ -3545,7 +3678,7 @@ pub(crate) fn __ridl_fb_decode_raw_wheel_span(buf: &[u8], table: usize) -> RawWh
                     });
                 ::core::array::from_fn(|__i| {
                     let __at = __v.element(__i, 4usize);
-                    __ridl_fb_decode_raw_wheel_span_bursts_element(
+                    __ridl_fb_decode_RawWheelSpanBurstsElement(
                         buf,
                         ::ridl_rt::flatbuffers::follow(buf, __at).unwrap_or(0usize),
                     )
@@ -3567,17 +3700,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 210usize;
+    const MAX_SIZE: ::core::primitive::usize = 210usize;
     type View<'a> = RawWheelSpanFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, RawWheelSpanFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_raw_wheel_span(self, &mut builder)?;
+        let __root = __ridl_fb_encode_RawWheelSpan(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -3589,7 +3722,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         RawWheelSpanFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -3607,14 +3740,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_raw_wheel_span(buf, table)?;
+        __ridl_fb_verify_RawWheelSpan(buf, table)?;
         ::core::result::Result::Ok(RawWheelSpanFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_raw_wheel_span(__view.buf, __view.table)
+        __ridl_fb_decode_RawWheelSpan(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `FanLevel`'s `verify` accepted.
@@ -3627,23 +3760,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FanLevelFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for FanLevelFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> FanLevelFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `FanLevel` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> FanLevel {
-        __ridl_fb_decode_fan_level(self.buf, self.table)
+        __ridl_fb_decode_FanLevel(self.buf, self.table)
     }
 }
 /// Writes `FanLevel` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_fan_level(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_FanLevel(
     value: &FanLevel,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -3657,17 +3792,17 @@ pub(crate) fn __ridl_fb_encode_fan_level(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U8(__s.get() as u8)
+                    ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
                 },
             },
         ];
         builder.push_table(5usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_fan_level(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_FanLevel(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -3679,17 +3814,22 @@ pub(crate) fn __ridl_fb_verify_fan_level(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        FanLevel::check(&(i64::from(__raw)))
+        FanLevel::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_fan_level(buf: &[u8], table: usize) -> FanLevel {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_FanLevel(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> FanLevel {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             FanLevel::new_unchecked(
-                i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                ),
             )
         }
         _ => FanLevel::new_unchecked(0i64),
@@ -3708,17 +3848,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 43usize;
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
     type View<'a> = FanLevelFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, FanLevelFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_fan_level(self, &mut builder)?;
+        let __root = __ridl_fb_encode_FanLevel(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -3730,7 +3870,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FanLevelFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -3745,14 +3885,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_fan_level(buf, table)?;
+        __ridl_fb_verify_FanLevel(buf, table)?;
         ::core::result::Result::Ok(FanLevelFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_fan_level(__view.buf, __view.table)
+        __ridl_fb_decode_FanLevel(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `FilterState`'s `verify` accepted.
@@ -3764,20 +3904,22 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FilterStateFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for FilterStateFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> FilterStateFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `FilterState`'s `hours_run` field in place.
-    pub fn hours_run(&self) -> i64 {
+    pub fn hours_run(&self) -> ::core::primitive::i64 {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-                i64::from(
+                ::core::primitive::i64::from(
                     ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
                 )
             }
@@ -3785,7 +3927,7 @@ impl<'a> FilterStateFbView<'a> {
         }
     }
     /// Reads `FilterState`'s `clogged` field in place.
-    pub fn clogged(&self) -> bool {
+    pub fn clogged(&self) -> ::core::primitive::bool {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 1usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 ::ridl_rt::flatbuffers::read_bool(self.buf, __p).unwrap_or(false)
@@ -3795,8 +3937,8 @@ impl<'a> FilterStateFbView<'a> {
     }
 }
 /// Writes `FilterState` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_filter_state(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_FilterState(
     value: &FilterState,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -3814,7 +3956,7 @@ pub(crate) fn __ridl_fb_encode_filter_state(
         offset: 4u16,
         value: {
             let __s = value.hours_run;
-            ::ridl_rt::flatbuffers::Field::U16(__s as u16)
+            ::ridl_rt::flatbuffers::Field::U16(__s as ::core::primitive::u16)
         },
     };
     __n += 1;
@@ -3849,10 +3991,10 @@ pub(crate) fn __ridl_fb_encode_filter_state(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_filter_state(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_FilterState(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -3890,12 +4032,17 @@ pub(crate) fn __ridl_fb_verify_filter_state(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_filter_state(buf: &[u8], table: usize) -> FilterState {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_FilterState(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> FilterState {
     FilterState {
         hours_run: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-                i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16))
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                )
             }
             _ => 0i64,
         },
@@ -3920,17 +4067,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 54usize;
+    const MAX_SIZE: ::core::primitive::usize = 54usize;
     type View<'a> = FilterStateFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, FilterStateFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_filter_state(self, &mut builder)?;
+        let __root = __ridl_fb_encode_FilterState(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -3942,7 +4089,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FilterStateFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -3957,14 +4104,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_filter_state(buf, table)?;
+        __ridl_fb_verify_FilterState(buf, table)?;
         ::core::result::Result::Ok(FilterStateFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_filter_state(__view.buf, __view.table)
+        __ridl_fb_decode_FilterState(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `HvacError`'s `verify` accepted.
@@ -3977,23 +4124,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct HvacErrorFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for HvacErrorFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> HvacErrorFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `HvacError` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> HvacError {
-        __ridl_fb_decode_hvac_error(self.buf, self.table)
+        __ridl_fb_decode_HvacError(self.buf, self.table)
     }
 }
 /// Writes `HvacError` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_hvac_error(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_HvacError(
     value: &HvacError,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -4007,17 +4156,17 @@ pub(crate) fn __ridl_fb_encode_hvac_error(
                 offset: 8u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
                 },
             },
         ];
         builder.push_table(16usize, 8usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_hvac_error(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_HvacError(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -4029,17 +4178,20 @@ pub(crate) fn __ridl_fb_verify_hvac_error(
     {
         let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <HvacError as ::core::convert::TryFrom<i64>>::try_from(__raw)
+        <HvacError as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_hvac_error(buf: &[u8], table: usize) -> HvacError {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_HvacError(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> HvacError {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <HvacError as ::core::convert::TryFrom<
-                i64,
+                ::core::primitive::i64,
             >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
                 .unwrap_or(HvacError::CompressorOff)
         }
@@ -4059,17 +4211,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 50usize;
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
     type View<'a> = HvacErrorFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, HvacErrorFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_hvac_error(self, &mut builder)?;
+        let __root = __ridl_fb_encode_HvacError(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -4081,7 +4233,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<HvacErrorFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -4096,14 +4248,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_hvac_error(buf, table)?;
+        __ridl_fb_verify_HvacError(buf, table)?;
         ::core::result::Result::Ok(HvacErrorFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_hvac_error(__view.buf, __view.table)
+        __ridl_fb_decode_HvacError(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `FanTag`'s `verify` accepted.
@@ -4116,23 +4268,25 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FanTagFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for FanTagFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> FanTagFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `FanTag` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> FanTag {
-        __ridl_fb_decode_fan_tag(self.buf, self.table)
+        __ridl_fb_decode_FanTag(self.buf, self.table)
     }
 }
 /// Writes `FanTag` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_fan_tag(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_FanTag(
     value: &FanTag,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -4152,10 +4306,10 @@ pub(crate) fn __ridl_fb_encode_fan_tag(
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_fan_tag(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_FanTag(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
@@ -4175,14 +4329,19 @@ pub(crate) fn __ridl_fb_verify_fan_tag(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_fan_tag(buf: &[u8], table: usize) -> FanTag {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_FanTag(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> FanTag {
     {
         let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
             .unwrap_or(::core::option::Option::None)
             .unwrap_or(0usize);
         FanTag::new_unchecked(
-            String::from(::ridl_rt::flatbuffers::string(buf, __p).unwrap_or("")),
+            ::std::string::String::from(
+                ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+            ),
         )
     }
 }
@@ -4199,17 +4358,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 186usize;
+    const MAX_SIZE: ::core::primitive::usize = 186usize;
     type View<'a> = FanTagFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, FanTagFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_fan_tag(self, &mut builder)?;
+        let __root = __ridl_fb_encode_FanTag(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -4218,7 +4377,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FanTagFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -4233,14 +4392,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_fan_tag(buf, table)?;
+        __ridl_fb_verify_FanTag(buf, table)?;
         ::core::result::Result::Ok(FanTagFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_fan_tag(__view.buf, __view.table)
+        __ridl_fb_decode_FanTag(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `RawWheelSpanSpan`'s `verify` accepted.
@@ -4252,21 +4411,23 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawWheelSpanSpanFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RawWheelSpanSpanFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RawWheelSpanSpanFbView<'a> {
-    /// The verified bytes this view reads.
-    pub(crate) fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `RawWheelSpanSpan`'s `first` field in place.
     pub(crate) fn first(&self) -> RawTickCount {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(
+                    ::core::primitive::i64::from(
                         ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
                     ),
                 )
@@ -4279,7 +4440,7 @@ impl<'a> RawWheelSpanSpanFbView<'a> {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(
+                    ::core::primitive::i64::from(
                         ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
                     ),
                 )
@@ -4289,8 +4450,8 @@ impl<'a> RawWheelSpanSpanFbView<'a> {
     }
 }
 /// Writes `RawWheelSpanSpan` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_raw_wheel_span_span(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_RawWheelSpanSpan(
     value: &RawWheelSpanSpan,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -4308,7 +4469,7 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span_span(
         offset: 4u16,
         value: {
             let __s = value.first;
-            ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
         },
     };
     __n += 1;
@@ -4317,7 +4478,7 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span_span(
         offset: 6u16,
         value: {
             let __s = value.latest;
-            ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
         },
     };
     __n += 1;
@@ -4343,10 +4504,10 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span_span(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_raw_wheel_span_span(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_RawWheelSpanSpan(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -4358,7 +4519,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span_span(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        RawTickCount::check(&(i64::from(__raw)))
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -4371,7 +4532,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span_span(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        RawTickCount::check(&(i64::from(__raw)))
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -4388,16 +4549,18 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span_span(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_raw_wheel_span_span(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_RawWheelSpanSpan(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> RawWheelSpanSpan {
     RawWheelSpanSpan {
         first: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
                 )
             }
             _ => RawTickCount::new_unchecked(0i64),
@@ -4405,7 +4568,9 @@ pub(crate) fn __ridl_fb_decode_raw_wheel_span_span(
         latest: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
                 )
             }
             _ => RawTickCount::new_unchecked(0i64),
@@ -4421,21 +4586,23 @@ pub(crate) fn __ridl_fb_decode_raw_wheel_span_span(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub(crate) struct RawWheelSpanBurstsElementFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RawWheelSpanBurstsElementFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> RawWheelSpanBurstsElementFbView<'a> {
-    /// The verified bytes this view reads.
-    pub(crate) fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `RawWheelSpanBurstsElement`'s `first` field in place.
     pub(crate) fn first(&self) -> RawTickCount {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(
+                    ::core::primitive::i64::from(
                         ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
                     ),
                 )
@@ -4448,7 +4615,7 @@ impl<'a> RawWheelSpanBurstsElementFbView<'a> {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(
+                    ::core::primitive::i64::from(
                         ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
                     ),
                 )
@@ -4458,8 +4625,8 @@ impl<'a> RawWheelSpanBurstsElementFbView<'a> {
     }
 }
 /// Writes `RawWheelSpanBurstsElement` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_raw_wheel_span_bursts_element(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_RawWheelSpanBurstsElement(
     value: &RawWheelSpanBurstsElement,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -4477,7 +4644,7 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span_bursts_element(
         offset: 4u16,
         value: {
             let __s = value.first;
-            ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
         },
     };
     __n += 1;
@@ -4486,7 +4653,7 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span_bursts_element(
         offset: 6u16,
         value: {
             let __s = value.latest;
-            ::ridl_rt::flatbuffers::Field::U16(__s.get() as u16)
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
         },
     };
     __n += 1;
@@ -4512,10 +4679,10 @@ pub(crate) fn __ridl_fb_encode_raw_wheel_span_bursts_element(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_raw_wheel_span_bursts_element(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_RawWheelSpanBurstsElement(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -4527,7 +4694,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span_bursts_element(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        RawTickCount::check(&(i64::from(__raw)))
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -4540,7 +4707,7 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span_bursts_element(
     {
         let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        RawTickCount::check(&(i64::from(__raw)))
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -4557,16 +4724,18 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_span_bursts_element(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_raw_wheel_span_bursts_element(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> RawWheelSpanBurstsElement {
     RawWheelSpanBurstsElement {
         first: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
                 )
             }
             _ => RawTickCount::new_unchecked(0i64),
@@ -4574,7 +4743,9 @@ pub(crate) fn __ridl_fb_decode_raw_wheel_span_bursts_element(
         latest: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 2usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 RawTickCount::new_unchecked(
-                    i64::from(::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16)),
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
                 )
             }
             _ => RawTickCount::new_unchecked(0i64),

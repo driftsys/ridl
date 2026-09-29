@@ -7,11 +7,11 @@ expression: rust_for(decls)
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct Speed(f64);
+pub struct Speed(::core::primitive::f64);
 impl Speed {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -27,7 +27,7 @@ impl Speed {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
@@ -49,25 +49,27 @@ impl Speed {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for Speed {
+impl ::core::convert::TryFrom<::core::primitive::f64> for Speed {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Speed> for f64 {
+impl ::core::convert::From<Speed> for ::core::primitive::f64 {
     fn from(value: Speed) -> Self {
         value.0
     }
 }
-impl Default for Speed {
+impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
     }
@@ -76,10 +78,10 @@ impl Default for Speed {
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
 }
-impl Default for SensorBounds {
+impl ::core::default::Default for SensorBounds {
     fn default() -> Self {
         SensorBounds {
-            range: SensorBoundsRange::default(),
+            range: <SensorBoundsRange as ::core::default::Default>::default(),
         }
     }
 }
@@ -88,11 +90,11 @@ pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
 }
-impl Default for SensorBoundsRange {
+impl ::core::default::Default for SensorBoundsRange {
     fn default() -> Self {
         SensorBoundsRange {
-            min: Speed::default(),
-            max: Speed::default(),
+            min: <Speed as ::core::default::Default>::default(),
+            max: <Speed as ::core::default::Default>::default(),
         }
     }
 }
@@ -106,23 +108,25 @@ impl Default for SensorBoundsRange {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
-        __ridl_fb_decode_speed(self.buf, self.table)
+        __ridl_fb_decode_Speed(self.buf, self.table)
     }
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_speed(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -136,17 +140,19 @@ pub(crate) fn __ridl_fb_encode_speed(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
         builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_speed(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -158,17 +164,22 @@ pub(crate) fn __ridl_fb_verify_speed(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
+        Speed::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Speed {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             Speed::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
             )
         }
         _ => Speed::new_unchecked(0.0f64),
@@ -187,17 +198,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = SpeedFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_speed(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Speed(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -206,7 +217,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -221,14 +232,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_speed(buf, table)?;
+        __ridl_fb_verify_Speed(buf, table)?;
         ::core::result::Result::Ok(SpeedFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_speed(__view.buf, __view.table)
+        __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `SensorBounds`'s `verify` accepted.
@@ -240,15 +251,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SensorBoundsFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorBoundsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> SensorBoundsFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `SensorBounds`'s `range` field in place.
     pub fn range(&self) -> SensorBoundsRangeFbView<'a> {
         let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize)
@@ -261,8 +274,8 @@ impl<'a> SensorBoundsFbView<'a> {
     }
 }
 /// Writes `SensorBounds` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_sensor_bounds(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_SensorBounds(
     value: &SensorBounds,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -279,7 +292,7 @@ pub(crate) fn __ridl_fb_encode_sensor_bounds(
         slot: 0u16,
         offset: 4u16,
         value: ::ridl_rt::flatbuffers::Field::Offset(
-            __ridl_fb_encode_sensor_bounds_range(&value.range, builder)?,
+            __ridl_fb_encode_SensorBoundsRange(&value.range, builder)?,
         ),
     };
     __n += 1;
@@ -305,10 +318,10 @@ pub(crate) fn __ridl_fb_encode_sensor_bounds(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_sensor_bounds(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_SensorBounds(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
@@ -316,7 +329,7 @@ pub(crate) fn __ridl_fb_verify_sensor_bounds(
         ::core::option::Option::Some(__p) => {
             let __t = ::ridl_rt::flatbuffers::follow(buf, __p)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            __ridl_fb_verify_sensor_bounds_range(buf, __t)?;
+            __ridl_fb_verify_SensorBoundsRange(buf, __t)?;
         }
         ::core::option::Option::None => {
             return ::core::result::Result::Err(
@@ -340,14 +353,17 @@ pub(crate) fn __ridl_fb_verify_sensor_bounds(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_sensor_bounds(buf: &[u8], table: usize) -> SensorBounds {
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_SensorBounds(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> SensorBounds {
     SensorBounds {
         range: {
             let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
                 .unwrap_or(::core::option::Option::None)
                 .unwrap_or(0usize);
-            __ridl_fb_decode_sensor_bounds_range(
+            __ridl_fb_decode_SensorBoundsRange(
                 buf,
                 ::ridl_rt::flatbuffers::follow(buf, __p).unwrap_or(0usize),
             )
@@ -367,17 +383,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorBou
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 94usize;
+    const MAX_SIZE: ::core::primitive::usize = 94usize;
     type View<'a> = SensorBoundsFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, SensorBoundsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_sensor_bounds(self, &mut builder)?;
+        let __root = __ridl_fb_encode_SensorBounds(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -389,7 +405,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorBou
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         SensorBoundsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -407,14 +423,14 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorBou
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_sensor_bounds(buf, table)?;
+        __ridl_fb_verify_SensorBounds(buf, table)?;
         ::core::result::Result::Ok(SensorBoundsFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_sensor_bounds(__view.buf, __view.table)
+        __ridl_fb_decode_SensorBounds(__view.buf, __view.table)
     }
 }
 /// A zero-copy accessor over FlatBuffers bytes `SensorBoundsRange`'s `verify` accepted.
@@ -426,21 +442,23 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorBou
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SensorBoundsRangeFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorBoundsRangeFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> SensorBoundsRangeFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// Reads `SensorBoundsRange`'s `min` field in place.
     pub fn min(&self) -> Speed {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -453,7 +471,7 @@ impl<'a> SensorBoundsRangeFbView<'a> {
         match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -463,8 +481,8 @@ impl<'a> SensorBoundsRangeFbView<'a> {
     }
 }
 /// Writes `SensorBoundsRange` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_sensor_bounds_range(
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_SensorBoundsRange(
     value: &SensorBoundsRange,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -482,7 +500,7 @@ pub(crate) fn __ridl_fb_encode_sensor_bounds_range(
         offset: 4u16,
         value: {
             let __s = value.min;
-            ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as ::core::primitive::f32)
         },
     };
     __n += 1;
@@ -491,7 +509,7 @@ pub(crate) fn __ridl_fb_encode_sensor_bounds_range(
         offset: 8u16,
         value: {
             let __s = value.max;
-            ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as ::core::primitive::f32)
         },
     };
     __n += 1;
@@ -517,10 +535,10 @@ pub(crate) fn __ridl_fb_encode_sensor_bounds_range(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_sensor_bounds_range(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_SensorBoundsRange(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
             buf,
@@ -532,7 +550,7 @@ pub(crate) fn __ridl_fb_verify_sensor_bounds_range(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
+        Speed::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -545,7 +563,7 @@ pub(crate) fn __ridl_fb_verify_sensor_bounds_range(
     {
         let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
+        Speed::check(&(::core::primitive::f64::from(__raw)))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -562,16 +580,16 @@ pub(crate) fn __ridl_fb_verify_sensor_bounds_range(
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_sensor_bounds_range(
-    buf: &[u8],
-    table: usize,
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_SensorBoundsRange(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> SensorBoundsRange {
     SensorBoundsRange {
         min: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
                     ),
                 )
@@ -581,7 +599,7 @@ pub(crate) fn __ridl_fb_decode_sensor_bounds_range(
         max: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 Speed::new_unchecked(
-                    f64::from(
+                    ::core::primitive::f64::from(
                         ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
                     ),
                 )

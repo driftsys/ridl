@@ -142,8 +142,8 @@ fn one_interface(
                 };
             const NUMBER: ::ridl_rt::contract::InterfaceNo =
                 ::ridl_rt::contract::InterfaceNo(#number);
-            const PROVISIONAL: bool = #provisional;
-            const NAME: &'static str = #iface_name;
+            const PROVISIONAL: ::core::primitive::bool = #provisional;
+            const NAME: &'static ::core::primitive::str = #iface_name;
             const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
                 #(#member_rows),*
             ];
@@ -151,19 +151,20 @@ fn one_interface(
     });
 
     let max_buffer_doc = "The largest argument or reply payload of this \
-        interface, over `<T as Payload<Wire>>::MAX_SIZE`. The claim buffer \
-        `serve` holds is this large, because a reply is encoded into the same \
-        buffer as the arguments. `0` when the interface declares no call.";
+        interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim \
+        buffer `serve` holds is this large, because a reply is encoded into \
+        the same buffer as the arguments. `0` when the interface declares no \
+        call.";
     let event_buffer_doc = "The largest event payload of this interface, over \
-        `<T as Payload<Wire>>::MAX_SIZE`. `0` when the interface declares no \
-        event.";
+        `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface \
+        declares no event.";
 
     items.push(quote! {
         impl #iface_ident {
             #[doc = #max_buffer_doc]
-            pub const MAX_BUFFER_SIZE: usize = #max_buffer;
+            pub const MAX_BUFFER_SIZE: ::core::primitive::usize = #max_buffer;
             #[doc = #event_buffer_doc]
-            pub const EVENT_SOURCE_BUFFER_SIZE: usize = #event_buffer;
+            pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = #event_buffer;
         }
     });
 
@@ -204,7 +205,7 @@ fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, G
         ),
         Some(v1::interaction::Shape::Fixed(fixed)) => (
             quote! { ::ridl_rt::contract::Kind::Fixed },
-            quote! { None },
+            quote! { ::core::option::Option::None },
             vec![payload_info(fixed_payload_type(fixed, member)?)],
         ),
         None => return Err(not_an_interaction(member)),
@@ -245,12 +246,15 @@ fn interaction_item(
             // `init()` returns the payload type's default, which is the
             // channel init (ridl §4.4) for a signal with no `= value`
             // override — the fixture's case. A declared init override is a
-            // follow-up; the payload type derives `Default` here.
+            // follow-up; the payload type derives `Default` here. The call
+            // is the trait's path rather than `T::default()`, which an enum
+            // set bit named `default` would capture (the generated-name
+            // collision design, X-16).
             quote! {
                 impl ::ridl_rt::contract::Signal for #struct_ident {
                     type Payload = #payload;
                     fn init() -> Self::Payload {
-                        #payload::default()
+                        <#payload as ::core::default::Default>::default()
                     }
                 }
             }
@@ -370,24 +374,25 @@ fn payload_info(type_name: &str) -> TokenStream {
         ::ridl_rt::contract::PayloadInfo {
             type_name: #type_name,
             max_size: ::ridl_rt::contract::EncodedSizes {
-                proto3: None,
-                flatbuffers: None,
-                repr_c: None,
+                proto3: ::core::option::Option::None,
+                flatbuffers: ::core::option::Option::None,
+                repr_c: ::core::option::Option::None,
             },
         }
     }
 }
 
-/// The `<T as Payload<Wire>>::MAX_SIZE` const-evaluable path for a payload
-/// type. Buffer sizes are written in terms of it, never as a literal, so a
-/// buffer is sized by the codec's own bound rather than by a number this
-/// emitter would have to keep equal to it. `Wire` is the package's own alias
-/// (design note D-11), emitted at the same module scope these descriptors
-/// are.
+/// The `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE`
+/// const-evaluable path for a payload type. Buffer sizes are written in terms
+/// of it, never as a literal, so a buffer is sized by the codec's own bound
+/// rather than by a number this emitter would have to keep equal to it. The
+/// encoding is named by its full path at each site, as the codec names it in
+/// its own implementations; the package carries no alias for it (the
+/// generated-name collision design, decision 5).
 fn max_size_path(type_name: &str) -> TokenStream {
     let path = type_path(type_name);
     quote! {
-        <#path as ::ridl_rt::payload::Payload<Wire>>::MAX_SIZE
+        <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE
     }
 }
 
@@ -415,7 +420,7 @@ fn max_size_const(sizes: &[TokenStream]) -> TokenStream {
 
 fn timing_tokens(timing: Option<&v1::Timing>) -> TokenStream {
     let Some(timing) = timing else {
-        return quote! { None };
+        return quote! { ::core::option::Option::None };
     };
     let mode = match v1::TimingMode::try_from(timing.mode).unwrap_or(v1::TimingMode::Unspecified) {
         v1::TimingMode::StrictPeriodic => {
@@ -426,17 +431,19 @@ fn timing_tokens(timing: Option<&v1::Timing>) -> TokenStream {
     let min = duration_tokens(timing.min_us.as_deref());
     let max = duration_tokens(timing.max_us.as_deref());
     quote! {
-        Some(::ridl_rt::contract::Timing { mode: #mode, min: #min, max: #max })
+        ::core::option::Option::Some(
+            ::ridl_rt::contract::Timing { mode: #mode, min: #min, max: #max },
+        )
     }
 }
 
 fn duration_tokens(micros: Option<&str>) -> TokenStream {
     match micros {
-        None => quote! { None },
+        None => quote! { ::core::option::Option::None },
         Some(text) => {
             let value = parse_micros(text);
             let literal = Literal::i64_unsuffixed(value);
-            quote! { Some(::ridl_rt::sample::Duration(#literal)) }
+            quote! { ::core::option::Option::Some(::ridl_rt::sample::Duration(#literal)) }
         }
     }
 }
@@ -571,7 +578,7 @@ mod tests {
     /// `max_size_const` must compute the maximum of its inputs, not their sum,
     /// minimum, first, or last — design §6 requires `MAX_BUFFER_SIZE` and
     /// `EVENT_SOURCE_BUFFER_SIZE` to be the maximum over the relevant
-    /// `<T as Payload<Wire>>::MAX_SIZE` values.
+    /// `<T as Payload<FlatBuffers>>::MAX_SIZE` values.
     ///
     /// `max_size_const` emits a const-evaluable block, not a literal number, so
     /// asserting on the emitted token text cannot distinguish "compute the
@@ -704,9 +711,9 @@ mod tests {
         assert!(dense.contains("typePayload=Provisioned;"));
         assert!(dense.contains("::ridl_rt::contract::Kind::Fixed"));
         // A fixed carries no timing.
-        assert!(dense.contains("name:\"brightness\",timing:None"));
+        assert!(dense.contains("name:\"brightness\",timing:::core::option::Option::None"));
         // A fixed is not a call or an event, so both buffer constants are 0.
-        assert!(dense.contains("MAX_BUFFER_SIZE:usize=0usize"));
-        assert!(dense.contains("EVENT_SOURCE_BUFFER_SIZE:usize=0usize"));
+        assert!(dense.contains("MAX_BUFFER_SIZE:::core::primitive::usize=0usize"));
+        assert!(dense.contains("EVENT_SOURCE_BUFFER_SIZE:::core::primitive::usize=0usize"));
     }
 }

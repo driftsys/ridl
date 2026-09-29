@@ -17,10 +17,11 @@ and its plan
 
 **Every decision of that note is built.** The last was D-11, the generated
 interaction face moving off its `ReprC` placeholder and onto this codec, landed
-by stage K9b: the face names one per-package alias,
-`pub type Wire = ::ridl_rt::encoding::FlatBuffers;`, at every buffer it sizes
-and every `Ref` it builds, and the hand-written `Payload<ReprC>` implementations
-its fixture carried are deleted. The projection decision that had blocked it,
+by stage K9b: the face names `::ridl_rt::encoding::FlatBuffers` at every buffer
+it sizes and every `Ref` it builds (through a per-package `pub type Wire` alias
+until 2026-09-29, when the generated-name collision design removed it,
+driftsys/ridl#588), and the hand-written `Payload<ReprC>` implementations its
+fixture carried are deleted. The projection decision that had blocked it,
 **driftsys/ridl#470**, is
 [ADR-0019 decision 8](../decisions/ADR-0019-flatbuffers-projection-rules.md):
 every declaration has a root table, and a named scalar, an enum and an enum set
@@ -38,7 +39,8 @@ are rooted in a box. What the face does with this codec is
 | The reader and builder the emitted code calls                        | `crates/ridl-rt/src/flatbuffers.rs`                         |
 | The round trip, run rather than compiled                             | `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`   |
 | Conformance against planus, and the `wasm32` check                   | `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` |
-| The `Wire` alias and the option that writes it                       | `crates/ridl-backend-rust/src/lib.rs`                       |
+| The encoding option (`WireEncoding`) the entry points check          | `crates/ridl-backend-rust/src/lib.rs`                       |
+| The `View` trait every emitted view implements                       | `crates/ridl-rt/src/payload.rs`                             |
 | The face over this codec, run rather than compiled                   | `crates/ridl-backend-rust/tests/interaction_face.rs`        |
 
 ## The shared facts live outside both backends
@@ -74,14 +76,24 @@ renders `ridl-rt = { version = "0.4", features = ["flatbuffers"] }` in the
 manifest it writes (the version is a literal there, and moves with each
 release).
 
-Per table: three free functions — `__ridl_fb_{encode,verify,decode}_<snake>` —
+Per table: three free functions — `__ridl_fb_{encode,verify,decode}_<Name>` —
 and one view struct `<T>FbView<'a>`, at the generated package's module scope
 rather than in a submodule. At module scope a same-package reference is spelled
 as `type_path` spells it everywhere else, and the functions can read a generated
 type's private inner value the way any other item of that module can, which is
 what lets `decode` build an enum set that publishes no constructor. The
-`__ridl_fb_` prefix collides with no typl name: typl §15.1 gives a declaration a
-CamelCase name and a constant a SCREAMING_SNAKE one.
+`__ridl_fb_` prefix collides with no typl name, because no typl name begins with
+an underscore, and the tail is the declared name rather than its `snake_case`
+(since 2026-09-29, the generated-name collision design): `snake_case` is not
+injective over the names TYPL-009 accepts, so `type HTTPServer` beside
+`type HttpServer` gave one function name twice (E0428). Each function carries
+`#[allow(non_snake_case)]` for the CamelCase tail. The view's `bytes`, which
+hands back the verified buffer, is a method of `ridl_rt::payload::View<'a>`
+(ADR-0021 decision 20) and not an inherent method, so a field whose accessor is
+named `bytes` does not meet it: the accessor is inherent and wins the dot call,
+and a consumer reaches the buffer through `View::bytes(&view)`. Every primitive
+and prelude type the codec writes at package scope is written by its `::core::`
+or `::std::` path, because a declaration may carry any of those names.
 
 A `Payload<FlatBuffers>` implementation is written for every declaration
 `ridl_ir::projection::flatbuffers::root_table` names a root for, which is every
@@ -226,22 +238,20 @@ exactly the items `generate` emits. There is one codec emitter and one call to
 it, so a face compiles over the same implementations a consumer of `generate`
 gets rather than over a second set written for it.
 
-The face names the encoding once, through an alias the generated package
-carries:
-
-```rust
-pub type Wire = ::ridl_rt::encoding::FlatBuffers;
-```
-
-`MAX_BUFFER_SIZE`, `EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and
-`Ref::verify` the face builds and every `unreachable!` message it writes name
-`Wire`. The alias is written from `ridl_backend_rust::WireEncoding`, which
-defaults to `FlatBuffers` and reaches the output through
-`generate_face_with(package, wire)`; `generate_face(package)` is its defaulted
-form. It is emitted by that entry point alone, so `generate`'s output is
-unchanged by it and a package generated with no face names no encoding. The
-reasoning, and why the face takes no `E: Encoding` type parameter, is design
-note D-11 and [the interaction-face design record](interaction-face.md).
+The face names the encoding by its full path at each site: `MAX_BUFFER_SIZE`,
+`EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and `Ref::verify` the face
+builds name `::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload`
+implementations do. From stage K9b to 2026-09-29 they named it through a
+per-package alias, `pub type Wire`, which a declaration or an interface named
+`Wire` collided with; the generated-name collision design removed the alias
+(driftsys/ridl#588). The encoding is stated by
+`ridl_backend_rust::WireEncoding`, which defaults to `FlatBuffers` and reaches
+the entry points through `generate_face_with(package, wire)` and
+`generate_pipeline`; `generate_face(package)` is the defaulted form. The entry
+points check the option against the one variant, so `generate`'s output is
+unchanged by it. The reasoning, and why the face takes no `E: Encoding` type
+parameter, is design note D-11 and
+[the interaction-face design record](interaction-face.md).
 
 **One consequence of the codec building at the tail reaches every consumer.**
 `Encoded.bytes` is a subslice of the output buffer, so a caller that

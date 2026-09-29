@@ -30,7 +30,7 @@ decision 19), plus two that a cargo feature adds:
 | Module        | Contents                                                                                                                                                                                                                                                             |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                |
-| `payload`     | `Payload<E>`, `Ref`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                                       |
+| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                           |
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                         |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`                                |
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
@@ -358,6 +358,8 @@ pub trait Payload<E: Encoding>: Sized {
 
 pub struct Encoded<'a, V> { pub bytes: &'a [u8], pub view: V } // data, not a proof; bytes is a subslice of out
 
+pub trait View<'a> { fn bytes(&self) -> &'a [u8]; } // what a generated view implements; the verified bytes it reads
+
 pub struct Ref<'a, T: Payload<E>, E: Encoding> { /* private fields */ }
 impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     pub fn verify(buf: &'a [u8]) -> Result<Self, VerifyError>;    // calls T::verify
@@ -389,10 +391,14 @@ constraints: a value is trusted to be valid when constructed, and the receiver's
 `verify` reports one that is not. The closed encoding set and the proof-type
 design are ADR-0021 decision 7.
 
-`View` carries what the check produced — the bytes, an accessor over them, or an
-owned parsed value — and has no `Copy` bound, because a parsed value holding a
-`String` or a `Vec` is not `Copy`; `Ref` is therefore not `Copy` either, and
-`Ref::view` lends the view while `Ref::into_view` moves it out.
+`Payload::View` carries what the check produced — the bytes, an accessor over
+them, or an owned parsed value — and has no `Copy` bound, because a parsed value
+holding a `String` or a `Vec` is not `Copy`; `Ref` is therefore not `Copy`
+either, and `Ref::view` lends the view while `Ref::into_view` moves it out. The
+trait `payload::View<'a>` is what a generated accessor view implements: its one
+method, `bytes`, hands back the verified buffer, and it is a trait method rather
+than an inherent one so that a field whose accessor is named `bytes` does not
+meet it (ADR-0021 decision 20, driftsys/ridl#587).
 
 ## Features, `no_std`, `alloc` and `wasm32`
 

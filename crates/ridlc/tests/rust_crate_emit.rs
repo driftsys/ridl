@@ -1266,62 +1266,16 @@ fn a_cross_package_struct_or_union_reference_compiles() {
     compile_crate_root(out.path());
 }
 
-/// A **service** whose inline shape sits at package scope is not refused by
-/// the `Wire` guard, because no identity struct is emitted for one.
-///
-/// `refuse_wire_collision` walks `shapes()`, which yields a service's inline
-/// shape as well as a named interface, and then skips the former for the same
-/// reason `descriptors::interface_items` does. Without that skip the guard
-/// would refuse on a shape that emits nothing.
-///
-/// What this pins is that the widened walk does not over-refuse: a mutation
-/// that refuses on any name rather than on `Wire` fails it. It does **not**
-/// pin the `.filter(|shape| shape.service.is_none())`, which is unreachable —
-/// a service's name is dotted and lowercase, so an inline shape's name can
-/// never be `Wire`. That filter is kept because it mirrors
-/// `descriptors::interface_items`, not because a case reaches it; dropping it
-/// changes nothing observable today.
-#[test]
-fn a_service_with_an_inline_shape_is_not_refused() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let entry = dir.path().join("pkg");
-    std::fs::create_dir_all(&entry).expect("the package directory is created");
-    std::fs::write(
-        entry.join("ridl.toml"),
-        "[package]\nname = \"px.s\"\nversion = \"1.0.0\"\n",
-    )
-    .expect("the manifest is written");
-    std::fs::write(
-        entry.join("source.ridl"),
-        "package px.s\n\ntype Level : integer [0..100]\n\n\
-         service px.s.wire {\n  signal level : Level @10ms\n}\n",
-    )
-    .expect("the source is written");
-    let out = tempfile::tempdir().expect("temp dir");
-    let run =
-        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
-    assert!(
-        !run.has_error(),
-        "a service's inline shape emits no identity struct, so it collides \
-         with nothing and must not be refused, got: {:?}",
-        run.diagnostics
-    );
-    compile_crate_root(out.path());
-}
-
-/// An **interface** named `Wire` is refused, the same as a declaration is
-/// (E11.14 decision 5).
+/// An **interface** named `Wire` builds and the emitted crate compiles.
 ///
 /// The descriptor emitter writes `pub struct <Interface>;` at package scope,
-/// which is the scope `pub type Wire` lands at, so an interface collides with
-/// the alias exactly as a typl declaration does. Refusing only declarations
-/// let this through to a rustc E0428 in the emitted source, which is the
-/// failure the refusal exists to replace.
-///
-/// The mutation that proves this test: drop the `interfaces` half of
-/// `refuse_wire_collision`'s scan, and the build succeeds here.
+/// which is where the `pub type Wire` alias used to land, so E11.14 decision 5
+/// refused this package. The alias is gone (the generated-name collision
+/// design, decision 5, driftsys/ridl#588): every site that named it writes
+/// `::ridl_rt::encoding::FlatBuffers`, so the interface's identity struct
+/// collides with nothing and no name is reserved.
 #[test]
-fn an_interface_named_wire_is_refused() {
+fn an_interface_named_wire_compiles() {
     let dir = tempfile::tempdir().expect("temp dir");
     // Written by hand rather than through `write_package_fixture`, which
     // writes a `.typl` file: an interface is a ridl declaration and draws
@@ -1343,30 +1297,20 @@ fn an_interface_named_wire_is_refused() {
     let run =
         ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
     assert!(
-        run.has_error(),
-        "an interface named `Wire` must be refused, diagnostics: {:?}",
+        !run.has_error(),
+        "an interface named `Wire` collides with nothing, diagnostics: {:?}",
         run.diagnostics
     );
-    let message = run
-        .diagnostics
-        .iter()
-        .map(|diagnostic| diagnostic.message.as_str())
-        .collect::<String>();
+    let source = std::fs::read_to_string(out.path().join("px.w.rs")).expect("px.w.rs is written");
     assert!(
-        message.contains("Wire") && message.contains("collide"),
-        "the refusal must state the collision and name `Wire`, got: {message}"
+        source.contains("pub struct Wire;"),
+        "the interface's identity struct is emitted, got:\n{source}"
     );
     assert!(
-        message.contains("rename the interface"),
-        "the refusal must name the interface as the thing to rename, got: {message}"
+        !source.contains("pub type Wire"),
+        "the package carries no encoding alias, got:\n{source}"
     );
-    // The message is one string literal across several source lines, so a
-    // dropped continuation reaches the user as a run of spaces.
-    assert!(
-        !message.contains("     "),
-        "the refusal may not carry a run of literal spaces from a broken \
-         string continuation, got: {message}"
-    );
+    compile_crate_root(out.path());
 }
 
 /// An interface the face cannot carry is skipped with a note, and the rest of
@@ -1402,7 +1346,7 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
 
     // The note exists, and names the interface it stands for.
     assert!(
-        source.contains("__RIDL_NO_FACE_VEHICLE_STATUS"),
+        source.contains("__RIDL_NO_FACE_VehicleStatus"),
         "a skipped interface leaves a note naming it, got:\n{source}"
     );
     assert!(
@@ -1421,7 +1365,7 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     // of the refusal names the multi-parameter story under a clause reason,
     // which is what this pins.
     let note = source
-        .split("const __RIDL_NO_FACE_VEHICLE_STATUS")
+        .split("const __RIDL_NO_FACE_VehicleStatus")
         .next()
         .expect("the note precedes its constant");
     let note = &note[note
@@ -1442,7 +1386,7 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     // call-shape one, and they are separate string literals, so checking one
     // leaves the other free to break.
     let call_shape_note = source
-        .split("const __RIDL_NO_FACE_WHEEL_DIAGNOSTICS")
+        .split("const __RIDL_NO_FACE_WheelDiagnostics")
         .next()
         .expect("the note precedes its constant");
     let call_shape_note = &call_shape_note[call_shape_note
@@ -1467,5 +1411,80 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "an interface the face can carry still gets one, got:\n{source}"
     );
 
+    compile_crate_root(out.path());
+}
+
+/// Writes a single package manifested `p`, whose subdirectories `self/` and
+/// `self_/` become the packages `p.self` and `p.self_` under the
+/// package↔directory law (`load_package_tree`, ADR-0002 §1) — the shape of
+/// X-1f, the generated-name collision design's appendix: a package name whose
+/// last segment is a keyword-escape target (`self`) alongside one whose last
+/// segment is that target with a trailing underscore already on it
+/// (`self_`). MANI-006 (`is_valid_package_name`) checks only the manifest's
+/// own `[package] name`, `p`; a subdirectory's name is never run through it,
+/// so `self_` reaches the package tree with no diagnostic.
+fn write_self_package(dir: &Path) -> PathBuf {
+    let root = dir.join("p");
+    std::fs::create_dir_all(root.join("self")).expect("the self directory is created");
+    std::fs::create_dir_all(root.join("self_")).expect("the self_ directory is created");
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        root.join("self/source.ridl"),
+        "package p.self\n\ntype A : integer [0..100]\n",
+    )
+    .expect("p.self's source is written");
+    std::fs::write(
+        root.join("self_/source.ridl"),
+        "package p.self_\n\ntype B : integer [0..100]\n",
+    )
+    .expect("p.self_'s source is written");
+    root
+}
+
+/// Packages `p.self` and `p.self_` both build and both reach the crate tree
+/// (the generated-name collision design, decision 7, X-1f, driftsys/ridl#583).
+///
+/// `module_segment("self")` and `module_segment("self_")` are `self_` and
+/// `self__` — the same injective escape [`the_keyword_escape_is_injective`]
+/// (`ridl-backend-rust/src/tests.rs`) pins for a declaration — so
+/// `render_lib_rs`'s per-segment `BTreeMap` gets two distinct keys instead of
+/// reusing one node for both packages. Before the escape was injective,
+/// `module_segment` sent both segments to `self_`: `render_lib_rs` visited
+/// `p.self` first and wrote its file to that node, then visited `p.self_` and
+/// overwrote the same node's file with its own, so `lib.rs` held one module
+/// naming `p.self_.rs` and `p.self` was not in the crate at all, with no
+/// error from `ridl check` or `ridl build` (recorded as the fail-before
+/// evidence for this test, since the old code is only reachable from a
+/// checkout of the commit before this fix).
+#[test]
+fn packages_named_self_and_self_underscore_both_reach_the_crate_tree() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_self_package(dir.path());
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let mut lib = std::fs::read_to_string(out.path().join("lib.rs")).expect("lib.rs is written");
+    assert!(
+        lib.contains("pub mod self_;"),
+        "`p.self` must reach the crate tree as `self_`, lib.rs was:\n{lib}"
+    );
+    assert!(
+        lib.contains("pub mod self__;"),
+        "`p.self_` must reach the crate tree as `self__`, lib.rs was:\n{lib}"
+    );
+
+    lib.push_str("\nfn consumer(_a: p::self_::A, _b: p::self__::B) {}\n");
+    std::fs::write(out.path().join("lib.rs"), &lib).expect("the consumer is appended");
     compile_crate_root(out.path());
 }

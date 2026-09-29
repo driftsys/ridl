@@ -162,7 +162,7 @@ fn poll_reply(call: &Call) -> TokenStream {
                 Some(Ok(len)) => Ok(Some(
                     match ::ridl_rt::payload::Ref::<
                         #path,
-                        super::Wire,
+                        ::ridl_rt::encoding::FlatBuffers,
                     >::verify(&buf[..len]) {
                         Ok(checked) => Ok(checked.decode()),
                         Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -192,7 +192,7 @@ fn poll_next_event(iface: &Ident, iface_name: &str, events: &[(Member, &str)]) -
             #ordinal => Ok(Some(Event::#variant(::ridl_rt::sample::Occurrence {
                 payload: match ::ridl_rt::payload::Ref::<
                     #path,
-                    super::Wire,
+                    ::ridl_rt::encoding::FlatBuffers,
                 >::verify(&buf[..occurrence.len]) {
                     Ok(checked) => Ok(checked.decode()),
                     Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {

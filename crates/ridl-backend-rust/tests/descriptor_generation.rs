@@ -15,15 +15,17 @@ fn dense(source: &str) -> String {
     source.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-/// The `<T as Payload<Wire>>` marker a buffer constant sizes from,
-/// whitespace-stripped. `Wire` is the package's own encoding alias (design
-/// note D-11), and `Payload<Wire>` appears only in the generated buffer
-/// constants — the codec's own implementations name the encoding itself — so
-/// its presence for a type name says that type is sized into a buffer. The
-/// `MAX_SIZE` suffix is left off because prettyplease may wrap the path and
-/// insert a trailing comma inside the generic arguments.
+/// The `<T as Payload<::ridl_rt::encoding::FlatBuffers>>` marker a buffer
+/// constant sizes from, whitespace-stripped. The codec's own implementations
+/// write `impl Payload<…> for T` and `<Self as Payload<…>>`, never
+/// `<T as Payload<…>>` with the type's name, so the marker's presence for a
+/// type name says that type is sized into a buffer. The `MAX_SIZE` suffix is
+/// left off because prettyplease may wrap the path and insert a trailing comma
+/// inside the generic arguments.
 fn max_size_path(type_name: &str) -> String {
-    dense(&format!("<{type_name} as ::ridl_rt::payload::Payload<Wire"))
+    dense(&format!(
+        "<{type_name} as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers"
+    ))
 }
 
 #[test]
@@ -78,7 +80,7 @@ fn generate_face_emits_the_interface_and_interaction_descriptors() {
         "Horn number"
     );
     assert!(
-        d.contains("constPROVISIONAL:bool=true"),
+        d.contains("constPROVISIONAL:::core::primitive::bool=true"),
         "provisional from IR"
     );
 
@@ -126,7 +128,10 @@ fn generate_face_emits_the_interface_and_interaction_descriptors() {
 
     // Every payload's encoded sizes are all absent (the M3 placeholder).
     assert!(
-        d.contains("::ridl_rt::contract::EncodedSizes{proto3:None,flatbuffers:None,repr_c:None"),
+        d.contains(
+            "::ridl_rt::contract::EncodedSizes{proto3:::core::option::Option::None,\
+             flatbuffers:::core::option::Option::None,repr_c:::core::option::Option::None"
+        ),
         "encoded sizes are all None",
     );
 
@@ -158,7 +163,7 @@ fn the_interface_buffer_constant_is_the_max_argument_and_reply_size() {
     let d = dense(&generate_face(&package).expect("generate_face").rust_source);
 
     assert!(
-        d.contains("constMAX_BUFFER_SIZE:usize"),
+        d.contains("constMAX_BUFFER_SIZE:::core::primitive::usize"),
         "MAX_BUFFER_SIZE constant"
     );
 
@@ -182,7 +187,7 @@ fn the_event_source_constant_is_the_max_event_size() {
     let d = dense(&generate_face(&package).expect("generate_face").rust_source);
 
     assert!(
-        d.contains("constEVENT_SOURCE_BUFFER_SIZE:usize"),
+        d.contains("constEVENT_SOURCE_BUFFER_SIZE:::core::primitive::usize"),
         "EVENT_SOURCE_BUFFER_SIZE constant",
     );
     // The event payload is sized into the event-source buffer.
@@ -239,6 +244,10 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
         "ridl_rt::payload::EncodeError",
         "ridl_rt::payload::VerifyError",
         "ridl_rt::payload::Malformed",
+        // The trait every generated view implements, so that a field whose
+        // accessor is `bytes` does not meet the fixed `bytes`
+        // (driftsys/ridl#587).
+        "ridl_rt::payload::View",
         "ridl_rt::encoding::FlatBuffers",
     ];
     let dense_plain = dense(&plain);
@@ -274,9 +283,9 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
 }
 
 /// The codec reaches both entry points, and reaches the companion one from
-/// the same emitter: stage K9b moved the face onto `Wire`, so the face is
-/// appended to the pipeline entry point's own items rather than compiled over
-/// implementations written for it.
+/// the same emitter: stage K9b moved the face onto the FlatBuffers codec, so
+/// the face is appended to the pipeline entry point's own items rather than
+/// compiled over implementations written for it.
 #[test]
 fn the_pipeline_generate_carries_the_flatbuffers_codec() {
     let package = ir::compile_fixture("interaction_face.ridl");
@@ -299,27 +308,32 @@ fn the_pipeline_generate_carries_the_flatbuffers_codec() {
     );
 }
 
-/// The `Wire` alias, once per package, from the entry point that emits the
-/// face — and from no other (design note D-11).
+/// Neither entry point emits a `Wire` alias. The face entry point used to emit
+/// one per package (design note D-11); the generated-name collision design
+/// removed it (decision 5, driftsys/ridl#588), and every site that named it
+/// writes `::ridl_rt::encoding::FlatBuffers`, so a declaration or an interface
+/// named `Wire` collides with nothing.
 #[test]
-fn the_face_entry_point_emits_one_wire_alias() {
+fn neither_entry_point_emits_a_wire_alias() {
     let package = ir::compile_fixture("interaction_face.ridl");
     let plain = dense(&generate(&package).expect("generate").rust_source);
     let face = dense(&generate_face(&package).expect("generate_face").rust_source);
 
-    let alias = "pubtypeWire=::ridl_rt::encoding::FlatBuffers;";
-    assert_eq!(
-        face.matches(alias).count(),
-        1,
-        "the face entry point emits the alias exactly once",
+    assert!(
+        !face.contains("pubtypeWire"),
+        "the face entry point emits no alias",
     );
     assert!(
-        !plain.contains("pubtypeWire="),
-        "the pipeline entry point emits no alias: a package with no face names none",
+        !plain.contains("pubtypeWire"),
+        "the pipeline entry point emits no alias",
+    );
+    assert!(
+        face.contains(&max_size_path("Level")),
+        "the face sizes its buffers over the encoding's full path",
     );
 }
 
-/// The option is what chooses the alias, and its default is FlatBuffers.
+/// The option states the encoding, and its default is FlatBuffers.
 #[test]
 fn the_default_wire_encoding_is_flatbuffers() {
     use ridl_backend_rust::{WireEncoding, generate_face_with};

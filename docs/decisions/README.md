@@ -143,7 +143,12 @@ other entry below is Accepted.
   pinned transforms and spells the Rust backend's enum variants (`CHECK_ENGINE`
   becomes `CheckEngine`), and an enum's values join RIDL-149's checked
   namespaces under `pascal_case` alone, because its collision set contains
-  `snake_case`'s.
+  `snake_case`'s. Amended 2026-09-29 (the generated-name collision design): a
+  collision is the language's only when every backend that projects the names
+  meets it; every other collision is one target's, and its backend removes it by
+  changing a name it chose or by refusing the package with both sources named.
+  TYPL-215 covers a tuple's fields; the `snake_case` and `camel_case` collisions
+  of driftsys/ridl#449, #453 and #455 are the Rust backend's.
 
 - **ADR-0017 — The proto3 projection.** The rules the first wire backend needed
   that no earlier record supplied: how a foreign reference projects, where
@@ -220,14 +225,17 @@ other entry below is Accepted.
   re-land (driftsys/ridl#551) amended decision 5 in place (a dropped handler's
   unsettled claim is returned and presented again) and decision 13 in place (one
   waker per kind of key; a same-task registration is a refresh). A third
-  2026-09-28 amendment adds decision 19: the `face` module, the four traits a
-  generated face implements for its fixed methods (`Bind`, `Events`, `Publish`,
-  and `Timeout` under `std`), released as 0.4.0 because the backend change that
-  needs them breaks the generated API. Binds every consumer of `ridl-rt`: the
-  Rust codegen, the two runtimes, and the ridl reference finalization pass
-  (story E14.2). The two reference sentences it gave that pass for #308 and #309
-  are in the reference since driftsys/ridl#544, which aligned it with the frame
-  specification.
+  2026-09-28 amendment adds decision 19, and a 2026-09-29 amendment adds
+  decision 20: `payload::View`, the trait a generated view implements so that
+  its `bytes` is a trait method and a field accessor of that name does not meet
+  it (driftsys/ridl#587), to be released as 0.5.0. Decision 19 is the `face`
+  module, the four traits a generated face implements for its fixed methods
+  (`Bind`, `Events`, `Publish`, and `Timeout` under `std`), released as 0.4.0
+  because the backend change that needs them breaks the generated API. Binds
+  every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
+  reference finalization pass (story E14.2). The two reference sentences it gave
+  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
