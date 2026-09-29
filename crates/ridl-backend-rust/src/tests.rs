@@ -3063,7 +3063,7 @@ pub mod ridl {
         pub struct Label(pub String);
         #[derive(Debug, Clone, PartialEq)]
         pub struct Timestamp(pub i64);
-        impl ::core::default::Default for Timestamp {
+        impl Default for Timestamp {
             fn default() -> Self {
                 Timestamp(0)
             }
@@ -3837,10 +3837,12 @@ fn module_segment_spells_a_segment_the_way_type_path_does() {
 /// driftsys/ridl#583): a name that is one of them followed by zero or more
 /// underscores gets one more, so `self` and `self_` are `self_` and `self__`
 /// rather than `self_` twice. It holds in `ident`, which every emitted name
-/// passes through, and so in `module_segment`, which is `ident`. A package
-/// segment is `[a-z][a-z0-9]*` (`is_valid_name_segment`), so no segment ends
-/// in an underscore and the crate tree meets only the first row of each pair;
-/// a declaration, a field or an enum set bit meets both.
+/// passes through, and so in `module_segment`, which is `ident`.
+/// `is_valid_name_segment` restricts the manifest's `[package] name` to
+/// `[a-z][a-z0-9]*`, but MANI-006 checks only that name, not a later package
+/// segment; a source directory or a package declaration's own segments can
+/// end in an underscore, so the crate tree meets both rows of each pair too
+/// (X-1f), the same as a declaration, a field or an enum set bit.
 #[test]
 fn the_keyword_escape_is_injective() {
     for (name, expected) in [

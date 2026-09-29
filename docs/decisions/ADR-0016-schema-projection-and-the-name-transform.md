@@ -184,9 +184,9 @@ as an enum's value prefix; the FlatBuffers and TypeScript backends keep the
 declared name. So it is not a RIDL-149 scope either, and the proto backend keeps
 its own refusal under ADR-0017 decision 4. The consequences entries on
 driftsys/ridl#449, #453 and #455 are resolved by this, not by extending
-RIDL-149. When this amendment was recorded, neither the TYPL-215 extension nor
-the Rust backend's claim tables were built; those three issues stay open until
-they are.
+RIDL-149. The TYPL-215 extension was built by driftsys/ridl#606. When this
+amendment was recorded, the Rust backend's claim tables were not built;
+driftsys/ridl#449, #453 and #455 stay open until they are.
 
 Open: RIDL-149 checks a union's arms under `camel_case` and an enum's values
 under `pascal_case`, and of the in-tree backends only the Rust backend applies

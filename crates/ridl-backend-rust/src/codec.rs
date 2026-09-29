@@ -1630,9 +1630,8 @@ impl<'a> Codec<'a> {
         let doc = format!(" Writes `{owner}` as a FlatBuffers table and returns its position.");
         Ok(quote! {
             #[doc = #doc]
-            #[allow(deprecated)]
-            #[allow(non_snake_case)]
-                pub(crate) fn #name(
+            #[allow(deprecated, non_snake_case)]
+            pub(crate) fn #name(
                 value: &#ty,
                 builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
             ) -> ::core::result::Result<
@@ -1849,9 +1848,8 @@ impl<'a> Codec<'a> {
             /// - an anonymous inline constraint (a field's own `[..]` or
             ///   `match` written at the field, not through a named scalar)
             ///   is not checked here at all (driftsys/ridl#469).
-            #[allow(deprecated)]
-            #[allow(non_snake_case)]
-                pub(crate) fn #name(
+            #[allow(deprecated, non_snake_case)]
+            pub(crate) fn #name(
                 buf: &[::core::primitive::u8],
                 table: ::core::primitive::usize,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2030,9 +2028,8 @@ impl<'a> Codec<'a> {
             /// built with its unchecked constructor (`new_unchecked`) over a
             /// value `verify` has already range-checked (`check`), so this
             /// never re-checks and never fails.
-            #[allow(deprecated)]
-            #[allow(non_snake_case)]
-                pub(crate) fn #name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
+            #[allow(deprecated, non_snake_case)]
+            pub(crate) fn #name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                 #ty { #(#fields),* }
             }
         })

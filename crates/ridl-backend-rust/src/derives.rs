@@ -48,7 +48,8 @@
 //! is no branch here that can emit it, for any declaration kind.
 //!
 //! **Cross-package references are handled conservatively.** [`defaults`] can be
-//! optimistic — it emits `path::default()` and lets rustc verify. A derive
+//! optimistic — it emits `<path as ::core::default::Default>::default()` and
+//! lets rustc verify. A derive
 //! cannot: `#[derive(Copy)]` on a struct whose cross-package field is not
 //! `Copy` is a hard error in the consumer's build, with no line of the
 //! consumer's own source to point at. So an unresolvable reference anywhere in

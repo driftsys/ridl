@@ -108,7 +108,18 @@ fn compile_pipeline(
 /// whose calls carry a `require` and an `ensure` clause, so the clause
 /// translator runs and the face is emitted: one declaration per shape the
 /// codec carries, so every emitter that writes a prelude name or a primitive
-/// is reached.
+/// is reached. The `fixed` member carries no timing, so the descriptor
+/// emitter's `Fixed` arm writes its timing field as
+/// `::core::option::Option::None` (`descriptors.rs`) — reached beside
+/// `type None` in `declarations_named_like_prelude_names_compile`, the one
+/// caller of this function that declares that name.
+///
+/// The mutation that proves this: change that site to the bare `None` in
+/// `descriptors.rs`; `rustc` reports `error[E0308]: mismatched types` at
+/// `timing: None,` — "expected `Option<Timing>`, found struct constructor
+/// `fn(i64) -> None {None}`" — because `None` now resolves to the declared
+/// newtype's tuple constructor rather than `Option::None`. Reverted after
+/// confirming the failure.
 fn base_package(package: &str) -> String {
     let fixture = include_str!("fixtures/flatbuffers_roundtrip.ridl").replacen(
         "package fb.demo",
@@ -127,6 +138,7 @@ interface Cabin {{
     require window > 0
     ensure  result >= 0
   ]
+  fixed serial : Count
 }}
 "
     )
@@ -147,9 +159,21 @@ fn declarations_named_like_prelude_names_compile() {
     .iter()
     .map(|name| format!("type {name} : integer [0..100]\n"))
     .collect();
-    pipeline_compiles(
+    let emitted = pipeline_compiles(
         "prelude_names",
         &format!("{}\n{declarations}", base_package("probe.prelude")),
+    );
+    // `base_package` gives `Cabin` a `require` and an `ensure` clause so the
+    // face is emitted; a regression that skipped it instead (leaving a
+    // `__RIDL_NO_FACE_` note in its place) would still pass every assertion
+    // above, since none of them reads the face.
+    assert!(
+        emitted.contains("pub mod cabin"),
+        "the interface's face module must be emitted, got:\n{emitted}"
+    );
+    assert!(
+        !emitted.contains("__RIDL_NO_FACE_"),
+        "the face must not be skipped, got:\n{emitted}"
     );
 }
 
@@ -158,7 +182,26 @@ fn declarations_named_like_prelude_names_compile() {
 /// backend writes `::core::primitive::<name>` at package scope. The base
 /// reaches every integer width, so the codec writes every primitive it can
 /// write; a width it does not reach would leave that primitive's sites
-/// unproven.
+/// unproven. `Wide`'s highest bit is 40, which `enumset_width`
+/// (`ridl-sem/src/scalar.rs`) backs at `U64`, the one width the four `W*`
+/// types below do not reach: they stop at 32 bits (`U32w`), so without `Wide`
+/// `codec::Scalar::widen`'s `Prim::U64` arm — the only one that casts rather
+/// than widens (`#raw as ::core::primitive::i64`) — is never compiled here.
+///
+/// The mutation that proves `Wide` reaches that arm: change
+/// `Prim::U64 => quote! { #raw as ::core::primitive::i64 }` to
+/// `Prim::U64 => quote! { #raw as i64 }` (dropping the `::core::primitive`
+/// path, leaving the cast itself intact so this stays a naming mutation, not
+/// a behavior one) in `codec.rs`; `rustc` then reports
+/// `` error[E0605]: non-primitive cast: `u64` as `i64` `` in the `Widths`
+/// codec, because this package also declares `type i64`, and the bare path
+/// resolves to that newtype instead of the primitive, so the cast is no
+/// longer between two primitives. Reverted after confirming the failure.
+///
+/// `LOW`, typed `i64`, compiles `emit_const`'s named-type path
+/// (`ridl-backend-rust/src/lib.rs`) beside `type i64`: the constant's type is
+/// the bare path `i64`, which resolves to this package's declared scalar, not
+/// the primitive.
 #[test]
 fn declarations_named_like_primitives_compile() {
     let declarations: String = [
@@ -176,14 +219,22 @@ type W16 : integer [-1000..1000]
 type W32 : integer [-100000..100000]
 type U32w : integer [0..100000]
 
+enumset Wide {{
+  a = 0
+  b = 40
+}}
+
 struct Widths {{
   a : W8
   b : W16
   c : W32
   d : U32w
+  e : Wide
 }}
 
-{declarations}",
+{declarations}
+
+const LOW : i64 = 5",
             base_package("probe.primitives")
         ),
         "",

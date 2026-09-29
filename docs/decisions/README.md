@@ -228,14 +228,14 @@ other entry below is Accepted.
   2026-09-28 amendment adds decision 19, and a 2026-09-29 amendment adds
   decision 20: `payload::View`, the trait a generated view implements so that
   its `bytes` is a trait method and a field accessor of that name does not meet
-  it (driftsys/ridl#587), released as 0.5.0. Decision 19 is the `face` module,
-  the four traits a generated face implements for its fixed methods (`Bind`,
-  `Events`, `Publish`, and `Timeout` under `std`), released as 0.4.0 because the
-  backend change that needs them breaks the generated API. Binds every consumer
-  of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl reference
-  finalization pass (story E14.2). The two reference sentences it gave that pass
-  for #308 and #309 are in the reference since driftsys/ridl#544, which aligned
-  it with the frame specification.
+  it (driftsys/ridl#587), to be released as 0.5.0. Decision 19 is the `face`
+  module, the four traits a generated face implements for its fixed methods
+  (`Bind`, `Events`, `Publish`, and `Timeout` under `std`), released as 0.4.0
+  because the backend change that needs them breaks the generated API. Binds
+  every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
+  reference finalization pass (story E14.2). The two reference sentences it gave
+  that pass for #308 and #309 are in the reference since driftsys/ridl#544,
+  which aligned it with the frame specification.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

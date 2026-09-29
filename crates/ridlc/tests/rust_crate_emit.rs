@@ -1413,3 +1413,78 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
 
     compile_crate_root(out.path());
 }
+
+/// Writes a single package manifested `p`, whose subdirectories `self/` and
+/// `self_/` become the packages `p.self` and `p.self_` under the
+/// package↔directory law (`load_package_tree`, ADR-0002 §1) — the shape of
+/// X-1f, the generated-name collision design's appendix: a package name whose
+/// last segment is a keyword-escape target (`self`) alongside one whose last
+/// segment is that target with a trailing underscore already on it
+/// (`self_`). MANI-006 (`is_valid_package_name`) checks only the manifest's
+/// own `[package] name`, `p`; a subdirectory's name is never run through it,
+/// so `self_` reaches the package tree with no diagnostic.
+fn write_self_package(dir: &Path) -> PathBuf {
+    let root = dir.join("p");
+    std::fs::create_dir_all(root.join("self")).expect("the self directory is created");
+    std::fs::create_dir_all(root.join("self_")).expect("the self_ directory is created");
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        root.join("self/source.ridl"),
+        "package p.self\n\ntype A : integer [0..100]\n",
+    )
+    .expect("p.self's source is written");
+    std::fs::write(
+        root.join("self_/source.ridl"),
+        "package p.self_\n\ntype B : integer [0..100]\n",
+    )
+    .expect("p.self_'s source is written");
+    root
+}
+
+/// Packages `p.self` and `p.self_` both build and both reach the crate tree
+/// (the generated-name collision design, decision 7, X-1f, driftsys/ridl#583).
+///
+/// `module_segment("self")` and `module_segment("self_")` are `self_` and
+/// `self__` — the same injective escape [`the_keyword_escape_is_injective`]
+/// (`ridl-backend-rust/src/tests.rs`) pins for a declaration — so
+/// `render_lib_rs`'s per-segment `BTreeMap` gets two distinct keys instead of
+/// reusing one node for both packages. Before the escape was injective,
+/// `module_segment` sent both segments to `self_`: `render_lib_rs` visited
+/// `p.self` first and wrote its file to that node, then visited `p.self_` and
+/// overwrote the same node's file with its own, so `lib.rs` held one module
+/// naming `p.self_.rs` and `p.self` was not in the crate at all, with no
+/// error from `ridl check` or `ridl build` (recorded as the fail-before
+/// evidence for this test, since the old code is only reachable from a
+/// checkout of the commit before this fix).
+#[test]
+fn packages_named_self_and_self_underscore_both_reach_the_crate_tree() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_self_package(dir.path());
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let mut lib = std::fs::read_to_string(out.path().join("lib.rs")).expect("lib.rs is written");
+    assert!(
+        lib.contains("pub mod self_;"),
+        "`p.self` must reach the crate tree as `self_`, lib.rs was:\n{lib}"
+    );
+    assert!(
+        lib.contains("pub mod self__;"),
+        "`p.self_` must reach the crate tree as `self__`, lib.rs was:\n{lib}"
+    );
+
+    lib.push_str("\nfn consumer(_a: p::self_::A, _b: p::self__::B) {}\n");
+    std::fs::write(out.path().join("lib.rs"), &lib).expect("the consumer is appended");
+    compile_crate_root(out.path());
+}

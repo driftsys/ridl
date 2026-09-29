@@ -1746,9 +1746,13 @@ pub(crate) fn type_path(reference: &str) -> TokenStream {
 
 /// The Rust module-segment spelling of one typl package name segment: `mod`
 /// becomes `r#mod`, `crate` becomes `crate_`, and an ordinary segment is
-/// returned unchanged. The escape is [`ident`]'s, injective included; a
-/// package segment is `[a-z][a-z0-9]*`, so no segment ends in an underscore
-/// and the tree meets only the first step of the escape.
+/// returned unchanged. The escape is [`ident`]'s, injective included. MANI-006
+/// checks only the manifest's `[package] name`, `[a-z][a-z0-9]*`; a later
+/// package segment (a source directory, or a package declaration's own
+/// segments) is not held to that rule, so the tree can meet both rows of the
+/// escape — packages `p.self` and `p.self_` in directories `self/` and
+/// `self_/` compile, and this function's injective suffix is what keeps their
+/// modules apart: `self_` and `self__`, not `self_` twice (X-1f).
 ///
 /// This exists so that the module tree `ridlc` writes for `--emit rust` and
 /// the paths [`type_path`] emits cannot drift apart. Both spell a package

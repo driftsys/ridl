@@ -696,8 +696,10 @@ const __RIDL_FB_NO_CODEC_SensorFault: () = ();
 /// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -749,22 +751,18 @@ pub(crate) fn __ridl_fb_verify_Speed(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Speed::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Speed::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -774,15 +772,15 @@ pub(crate) fn __ridl_fb_decode_Speed(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Speed {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Speed::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
+            )
+        }
+        _ => Speed::new_unchecked(0.0f64),
     }
 }
 #[allow(deprecated)]
@@ -845,8 +843,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
 /// An accessor over FlatBuffers bytes `Temperature`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
@@ -898,22 +898,18 @@ pub(crate) fn __ridl_fb_verify_Temperature(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Temperature::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Temperature::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -923,15 +919,15 @@ pub(crate) fn __ridl_fb_decode_Temperature(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Temperature {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Temperature::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Temperature::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
+            )
+        }
+        _ => Temperature::new_unchecked(0.0f64),
     }
 }
 #[allow(deprecated)]
@@ -997,8 +993,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 /// An accessor over FlatBuffers bytes `RPM`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RPMFbView<'a> {
@@ -1050,22 +1048,18 @@ pub(crate) fn __ridl_fb_verify_RPM(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            RPM::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        RPM::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1075,15 +1069,15 @@ pub(crate) fn __ridl_fb_decode_RPM(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> RPM {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        RPM::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            RPM::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
+            )
+        }
+        _ => RPM::new_unchecked(0.0f64),
     }
 }
 #[allow(deprecated)]
@@ -1146,8 +1140,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
 /// An accessor over FlatBuffers bytes `Ratio`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RatioFbView<'a> {
@@ -1199,22 +1195,18 @@ pub(crate) fn __ridl_fb_verify_Ratio(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Ratio::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Ratio::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1224,15 +1216,15 @@ pub(crate) fn __ridl_fb_decode_Ratio(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Ratio {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Ratio::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Ratio::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
+            )
+        }
+        _ => Ratio::new_unchecked(0.0f64),
     }
 }
 #[allow(deprecated)]
@@ -1295,8 +1287,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
 /// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -1348,22 +1342,18 @@ pub(crate) fn __ridl_fb_verify_Counter(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            2usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Counter::check(&(::core::primitive::i64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Counter::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1373,15 +1363,15 @@ pub(crate) fn __ridl_fb_decode_Counter(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Counter {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Counter::new_unchecked(
-            ::core::primitive::i64::from(
-                ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
-            ),
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Counter::new_unchecked(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                ),
+            )
+        }
+        _ => Counter::new_unchecked(0i64),
     }
 }
 #[allow(deprecated)]
@@ -1444,8 +1434,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
 /// An accessor over FlatBuffers bytes `Gain`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GainFbView<'a> {
@@ -1497,22 +1489,18 @@ pub(crate) fn __ridl_fb_verify_Gain(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Gain::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Gain::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1522,15 +1510,15 @@ pub(crate) fn __ridl_fb_decode_Gain(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Gain {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Gain::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Gain::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
+            )
+        }
+        _ => Gain::new_unchecked(0.0f64),
     }
 }
 #[allow(deprecated)]
@@ -1593,8 +1581,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
 /// An accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
@@ -1644,24 +1634,20 @@ pub(crate) fn __ridl_fb_verify_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <GearPosition as ::core::convert::TryFrom<
-                ::core::primitive::i64,
-            >>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <GearPosition as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1671,14 +1657,14 @@ pub(crate) fn __ridl_fb_decode_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> GearPosition {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        <GearPosition as ::core::convert::TryFrom<
-            ::core::primitive::i64,
-        >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(GearPosition::Park)
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            <GearPosition as ::core::convert::TryFrom<
+                ::core::primitive::i64,
+            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                .unwrap_or(GearPosition::Park)
+        }
+        _ => GearPosition::Park,
     }
 }
 #[allow(deprecated)]
@@ -1747,8 +1733,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
 /// An accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
@@ -1798,24 +1786,18 @@ pub(crate) fn __ridl_fb_verify_Warning(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <Warning as ::core::convert::TryFrom<
-                ::core::primitive::i64,
-            >>::try_from(__raw)
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <Warning as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1825,14 +1807,14 @@ pub(crate) fn __ridl_fb_decode_Warning(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Warning {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        <Warning as ::core::convert::TryFrom<
-            ::core::primitive::i64,
-        >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-            .unwrap_or(Warning::LowFuel)
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            <Warning as ::core::convert::TryFrom<
+                ::core::primitive::i64,
+            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                .unwrap_or(Warning::LowFuel)
+        }
+        _ => Warning::LowFuel,
     }
 }
 #[allow(deprecated)]
@@ -1895,8 +1877,10 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 /// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one required `value` field. A
-/// buffer carrying no slot for it is `MissingRequired`.
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
@@ -1948,24 +1932,20 @@ pub(crate) fn __ridl_fb_verify_WarningFlags(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            <WarningFlags as ::core::convert::TryFrom<
-                ::core::primitive::i64,
-            >>::try_from(::core::primitive::i64::from(__raw))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        <WarningFlags as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1975,18 +1955,18 @@ pub(crate) fn __ridl_fb_decode_WarningFlags(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> WarningFlags {
-    {
-        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        <WarningFlags as ::core::convert::TryFrom<
-            ::core::primitive::i64,
-        >>::try_from(
-                ::core::primitive::i64::from(
-                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
-                ),
-            )
-            .unwrap_or(WarningFlags(0i64))
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            <WarningFlags as ::core::convert::TryFrom<
+                ::core::primitive::i64,
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                    ),
+                )
+                .unwrap_or(WarningFlags(0i64))
+        }
+        _ => WarningFlags(0i64),
     }
 }
 #[allow(deprecated)]
@@ -2074,30 +2054,33 @@ impl<'a> ::ridl_rt::payload::View<'a> for SpeedLimitPayloadFbView<'a> {
 impl<'a> SpeedLimitPayloadFbView<'a> {
     /// Reads `SpeedLimitPayload`'s `limit` field in place.
     pub fn limit(&self) -> Speed {
-        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Speed::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => Speed::new_unchecked(0.0f64),
+        }
     }
     /// Reads `SpeedLimitPayload`'s `actual` field in place.
     pub fn actual(&self) -> Speed {
-        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Speed::new_unchecked(
-            ::core::primitive::f64::from(
-                ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
-            ),
-        )
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => Speed::new_unchecked(0.0f64),
+        }
     }
 }
 /// Writes `SpeedLimitPayload` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_SpeedLimitPayload(
     value: &SpeedLimitPayload,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2151,83 +2134,76 @@ pub(crate) fn __ridl_fb_encode_SpeedLimitPayload(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_SpeedLimitPayload(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Speed::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Speed::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
-    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            4usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Speed::check(&(::core::primitive::f64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Speed::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
 }
 /// Builds `SpeedLimitPayload` from the FlatBuffers table at `table`.
 ///
-/// It cannot fail. A read that could is discharged with the
-/// neutral value of its own type — zero, the empty string or
-/// collection, the first declared enum variant — and `verify` is
-/// what makes those branches unreachable. A named scalar is
+/// It cannot fail. An absent non-optional scalar or enum field
+/// reads as its FlatBuffers default — 0, or the enum's zero
+/// member — which is a value `verify` accepted
+/// (driftsys/ridl#472). Any other read that could fail is
+/// discharged with the neutral value of its own type — zero, the
+/// empty string or collection, the first declared enum variant —
+/// and `verify` is what makes those branches unreachable. A named scalar is
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_SpeedLimitPayload(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> SpeedLimitPayload {
     SpeedLimitPayload {
-        limit: {
-            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
-                .unwrap_or(::core::option::Option::None)
-                .unwrap_or(0usize);
-            Speed::new_unchecked(
-                ::core::primitive::f64::from(
-                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-                ),
-            )
+        limit: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => Speed::new_unchecked(0.0f64),
         },
-        actual: {
-            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
-                .unwrap_or(::core::option::Option::None)
-                .unwrap_or(0usize);
-            Speed::new_unchecked(
-                ::core::primitive::f64::from(
-                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
-                ),
-            )
+        actual: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => Speed::new_unchecked(0.0f64),
         },
     }
 }
@@ -2320,14 +2296,16 @@ impl<'a> ::ridl_rt::payload::View<'a> for RawWheelFrameFbView<'a> {
 impl<'a> RawWheelFrameFbView<'a> {
     /// Reads `RawWheelFrame`'s `ticks` field in place.
     pub(crate) fn ticks(&self) -> Counter {
-        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize)
-            .unwrap_or(::core::option::Option::None)
-            .unwrap_or(0usize);
-        Counter::new_unchecked(
-            ::core::primitive::i64::from(
-                ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
-            ),
-        )
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Counter::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
+                    ),
+                )
+            }
+            _ => Counter::new_unchecked(0i64),
+        }
     }
     /// Reads `RawWheelFrame`'s `frame` field in place.
     pub(crate) fn frame(&self) -> &'a [::core::primitive::u8] {
@@ -2345,8 +2323,7 @@ impl<'a> RawWheelFrameFbView<'a> {
     }
 }
 /// Writes `RawWheelFrame` as a FlatBuffers table and returns its position.
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_RawWheelFrame(
     value: &RawWheelFrame,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2399,28 +2376,23 @@ pub(crate) fn __ridl_fb_encode_RawWheelFrame(
 /// - an anonymous inline constraint (a field's own `[..]` or
 ///   `match` written at the field, not through a named scalar)
 ///   is not checked here at all (driftsys/ridl#469).
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_RawWheelFrame(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            2usize,
+        )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::core::option::Option::Some(__p) => {
-            let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
-                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            Counter::check(&(::core::primitive::i64::from(__raw)))
-                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
-        }
-        ::core::option::Option::None => {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::MissingRequired,
-                ),
-            );
-        }
+        let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Counter::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
@@ -2441,29 +2413,31 @@ pub(crate) fn __ridl_fb_verify_RawWheelFrame(
 }
 /// Builds `RawWheelFrame` from the FlatBuffers table at `table`.
 ///
-/// It cannot fail. A read that could is discharged with the
-/// neutral value of its own type — zero, the empty string or
-/// collection, the first declared enum variant — and `verify` is
-/// what makes those branches unreachable. A named scalar is
+/// It cannot fail. An absent non-optional scalar or enum field
+/// reads as its FlatBuffers default — 0, or the enum's zero
+/// member — which is a value `verify` accepted
+/// (driftsys/ridl#472). Any other read that could fail is
+/// discharged with the neutral value of its own type — zero, the
+/// empty string or collection, the first declared enum variant —
+/// and `verify` is what makes those branches unreachable. A named scalar is
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
-#[allow(deprecated)]
-#[allow(non_snake_case)]
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_RawWheelFrame(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> RawWheelFrame {
     RawWheelFrame {
-        ticks: {
-            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize)
-                .unwrap_or(::core::option::Option::None)
-                .unwrap_or(0usize);
-            Counter::new_unchecked(
-                ::core::primitive::i64::from(
-                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
-                ),
-            )
+        ticks: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Counter::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
+                )
+            }
+            _ => Counter::new_unchecked(0i64),
         },
         frame: {
             let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)

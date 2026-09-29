@@ -108,11 +108,11 @@ publication on 2026-09-28. The design note is
 **Amendment (2026-09-29) — decision 20: `payload::View`.** A generated view's
 `bytes` moves from an inherent method onto a trait in this crate, so that a
 field whose accessor is named `bytes` does not meet it (driftsys/ridl#587). An
-addition under decision 10, released with the workspace as 0.5.0 because the
-backend change that needs it breaks the generated API. The design note is the
-generated-name collision design (driftsys/ridl#583, #587, #588). The same note
-removes the generated `pub type Wire` alias decision 7's 2026-09-21 addendum
-describes; that addendum carries a dated note.
+addition under decision 10, to be released with the workspace as 0.5.0 because
+the backend change that needs it breaks the generated API. The design note is
+the generated-name collision design (driftsys/ridl#583, #587, #588). The same
+note removes the generated `pub type Wire` alias decision 7's 2026-09-21
+addendum describes; that addendum carries a dated note.
 
 ## Context
 
