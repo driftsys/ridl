@@ -407,9 +407,9 @@ refused.
   an absent box `value` as the FlatBuffers default, as it reads any absent
   non-optional scalar or enum field, so a box of 0, or of an enum's zero member,
   that another implementation wrote is read as that value. What is left of the
-  reach is a box whose type excludes 0 — a range without it, or an enum with no
-  zero member — which has no slot only when the writer wrote no value, and is
-  refused, as the same field is at any other position.
+  reach is a box whose type excludes 0 — a range, or a range and step, without
+  it, or an enum with no zero member — which has no slot only when the writer
+  wrote no value, and is refused, as the same field is at any other position.
 - **Positive — a present 0 in an optional field survives any conforming
   writer.** Decision 9's `= null` states presence in the schema, so a reader
   that follows it tells a present 0 from an absent optional.

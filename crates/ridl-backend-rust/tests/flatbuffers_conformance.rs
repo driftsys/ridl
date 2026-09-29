@@ -35,9 +35,11 @@
 //!   enum's zero member, in every table position and in a box root
 //!   ([`a_buffer_planus_wrote_omitting_a_default_is_read_as_the_default`],
 //!   [`a_box_root_with_no_value_slot_reads_as_the_default`]), unless 0 is
-//!   not a legal value of the field's type, where it is still refused with
+//!   not a legal value of the field's type — a range or a step that excludes
+//!   it, or an enum with no zero member — where it is still refused with
 //!   `Malformed::MissingRequired`
-//!   ([`an_absent_field_whose_type_excludes_zero_is_refused`]);
+//!   ([`an_absent_field_whose_type_excludes_zero_is_refused`],
+//!   [`whether_an_absent_field_reads_as_zero_follows_its_type`]);
 //! - an **optional** scalar or enum projects with `= null` (ADR-0019
 //!   decision 9), so a present 0 survives a foreign round trip
 //!   ([`an_optional_scalar_at_its_default_survives_a_foreign_round_trip`]).

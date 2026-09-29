@@ -347,12 +347,12 @@ half stands: a non-optional field is always written. Its reader half is
 replaced. An absent non-optional **scalar or enum** field reads as its
 FlatBuffers default, 0 or the enum's zero member, and is
 `Malformed::MissingRequired` only when 0 is not a legal value of the field's
-type — a range that excludes it, or an enum with no zero member, which is the
-third bullet's case and is unchanged. An absent non-optional string, bytes,
-table, union or collection field is still `MissingRequired`: an offset has no
-default. `verify`, `decode` and the view accessors changed together, because
-`decode` read an absent non-optional field at offset 0, the buffer's root
-offset.
+type — a range, or a range and step, that excludes it, or an enum with no zero
+member, which is the third bullet's case and is unchanged. An absent
+non-optional string, bytes, table, union or collection field is still
+`MissingRequired`: an offset has no default. `verify`, `decode` and the view
+accessors changed together, because `decode` read an absent non-optional field
+at offset 0, the buffer's root offset.
 
 The ground is what a conforming writer does. `planus` and `flatc` omit a field
 at its default, and the bullet as written made this codec refuse every such

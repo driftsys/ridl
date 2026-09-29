@@ -300,10 +300,12 @@ the buffer's root offset, so relaxing `verify` alone would have let `decode`
 build a value out of the buffer header.
 
 An optional marker outside a table field — an array element, or a map entry's
-key or value — is a `GenerateError` from this codec: a FlatBuffers vector has no
-absent element, and this codec gives a map entry no absent half. `ridl check`
-accepts such a source, so the refusal comes from the backend. The schema backend
-still states an optional map value, with `= null`.
+value — is a `GenerateError` from this codec: a FlatBuffers vector has no absent
+element, and this codec gives a map entry no absent half. `ridl check` accepts
+both, so the refusal comes from the backend. The schema backend still states an
+optional map value, with `= null`. An optional map key is refused earlier, by
+`ridl check` (TYPL-209); the codec's own refusal of one is kept as a second
+guard that no checked source reaches.
 
 ## Determinism
 
@@ -359,8 +361,9 @@ Ten cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
    the missing slots read as absent;
 4. a planus buffer that omits a default-valued non-optional field verifies and
    reads as the default through `verify`, `decode` and the view's accessors —
-   one buffer per position: the root table, a **nested** table, a tuple's table,
-   a map entry, a union arm's box, and an enum field at its zero member;
+   one buffer per position (the root table, a **nested** table, a tuple's table,
+   a map entry, a union arm's box) and one per scalar kind (an integer, a float,
+   a boolean, an enum set, and an enum at its zero member);
 5. an optional scalar present at its default survives a codec → planus → codec
    round trip, because it projects with `= null`;
 6. a **scalar root** — a named scalar in its box table (ADR-0019 decision 8) —
@@ -375,26 +378,37 @@ Ten cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
    second, which appends the field, and in an empty planus box; the appended
    field whose type admits 0 reads as 0;
 10. this codec writes a non-optional field at its default: its buffer carries a
-    slot for `Report.id` at 0.
+    slot for every non-optional field of `Report` at its default, for the
+    scalars of a nested table, a tuple, a map entry and a union arm's box, and
+    for a box root;
+11. whether an absent field reads as 0 **follows its type**: one planus buffer
+    that omits a field is read as five structs that differ only in that field's
+    type — `integer [0..10]` and `[-1.0..1.0 step 1.0]` read as 0, an enum whose
+    zero member is declared second reads as that member, and `integer [1..10]`
+    and `[-1.5..1.5 step 1.0]` (a grid without 0) are refused; an empty planus
+    box is read the same way.
 
-Cases 4, 5, 7 and 9 are the default rule of driftsys/ridl#472, below: case 4 is
-the reader rule at each table position, case 7 the same rule at a root, case 9
-its limit, and case 5 the optional half. Case 10 is the writer rule the issue
-kept, and case 8 is the bound on how far the rule reaches. Case 7 was first
-written because the rule it then measured, a refusal, was otherwise pinned only
-as generated text: deleting the branch that enforced it turned every snapshot
-carrying a box root red — fourteen under `--lib` and six more across `ridlc` —
-and left every round trip and every other conformance case passing, since
-nothing built such a buffer.
+Cases 4, 5, 7, 9 and 11 are the default rule of driftsys/ridl#472, below: case 4
+is the reader rule at each table position and for each scalar kind, case 7 the
+same rule at a root, cases 9 and 11 its limit, and case 5 the optional half.
+Case 10 is the writer rule the issue kept, and case 8 is the bound on how far
+the rule reaches. Case 7 was first written because the rule it then measured, a
+refusal, was otherwise pinned only as generated text: deleting the branch that
+enforced it turned every snapshot carrying a box root red — fourteen under
+`--lib` and six more across `ridlc` — and left every round trip and every other
+conformance case passing, since nothing built such a buffer.
 
 Two mutations were applied and run, and each is what says the suite is not
-decorative. Shifting the union discriminant by one in `codec.rs` leaves every
-case of the self-consistent round-trip suite passing and fails three conformance
-cases — 1, 2 and 3, the last because that sample carries a union field too. A
-codec that disagrees with its own schema is exactly what a round trip through
-itself cannot see. Turning a short vtable into an error in `ridl-rt` leaves the
-round-trip suite and every other conformance case passing, and fails only
-case 3.
+decorative; the counts below were measured on 2026-09-29. Shifting the union
+discriminant by one in `codec.rs` fails five conformance cases — 1 to 5, each of
+which carries a union field through a buffer another implementation writes or
+reads — and, of the round-trip suite, only the case that pins one value's bytes:
+every other round trip through this codec alone passes. A codec that disagrees
+with its own schema is exactly what a round trip through itself cannot see.
+Turning a short vtable into an error in `ridl-rt` leaves the round-trip suite
+passing and fails five conformance cases — 3, 4, 7, 9 and 11, each of which
+reads a buffer that planus or an earlier version of a type wrote without a
+trailing slot.
 
 **What the cases do not reach.** An empty vector, a multi-byte UTF-8 string, and
 any assertion about alignment. A default-valued scalar inside a nested table was
