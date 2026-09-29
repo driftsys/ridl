@@ -2006,10 +2006,13 @@ pub(crate) fn __ridl_fb_verify_speed_limit_payload(
 }
 /// Builds `SpeedLimitPayload` from the FlatBuffers table at `table`.
 ///
-/// It cannot fail. A read that could is discharged with the
-/// neutral value of its own type — zero, the empty string or
-/// collection, the first declared enum variant — and `verify` is
-/// what makes those branches unreachable. A named scalar is
+/// It cannot fail. An absent non-optional scalar or enum field
+/// reads as its FlatBuffers default — 0, or the enum's zero
+/// member — which is a value `verify` accepted
+/// (driftsys/ridl#472). Any other read that could fail is
+/// discharged with the neutral value of its own type — zero, the
+/// empty string or collection, the first declared enum variant —
+/// and `verify` is what makes those branches unreachable. A named scalar is
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
@@ -2243,10 +2246,13 @@ pub(crate) fn __ridl_fb_verify_raw_wheel_frame(
 }
 /// Builds `RawWheelFrame` from the FlatBuffers table at `table`.
 ///
-/// It cannot fail. A read that could is discharged with the
-/// neutral value of its own type — zero, the empty string or
-/// collection, the first declared enum variant — and `verify` is
-/// what makes those branches unreachable. A named scalar is
+/// It cannot fail. An absent non-optional scalar or enum field
+/// reads as its FlatBuffers default — 0, or the enum's zero
+/// member — which is a value `verify` accepted
+/// (driftsys/ridl#472). Any other read that could fail is
+/// discharged with the neutral value of its own type — zero, the
+/// empty string or collection, the first declared enum variant —
+/// and `verify` is what makes those branches unreachable. A named scalar is
 /// built with its unchecked constructor (`new_unchecked`) over a
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.

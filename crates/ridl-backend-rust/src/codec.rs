@@ -333,6 +333,21 @@ impl Scalar {
         }
     }
 
+    /// The value of a non-optional field: `inner`, over the field's position
+    /// `__p`, when `field` — a `ridl_rt::flatbuffers::field` call — finds the
+    /// slot, and [`Scalar::decode_default`] when it does not. Shared by
+    /// `decode`, the view accessors and a box, which read an absent field the
+    /// same way.
+    fn read_or_default(&self, field: &TokenStream, inner: &TokenStream) -> TokenStream {
+        let default = self.decode_default();
+        quote! {
+            match #field {
+                ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner,
+                _ => #default,
+            }
+        }
+    }
+
     /// What `verify` does with an absent non-optional field
     /// (driftsys/ridl#472): nothing when 0, the FlatBuffers default, is a
     /// legal value of the field's type, and `MissingRequired` when it is not.
@@ -1084,6 +1099,8 @@ impl<'a> Codec<'a> {
                 let value = map.value.as_deref().ok_or_else(|| GenerateError {
                     message: "a map carries no value type".to_string(),
                 })?;
+                // Defence in depth: `ridl check` already refuses an optional
+                // map key (TYPL-209), so no checked source reaches this.
                 self.refuse_optional(key, "a map key")?;
                 self.refuse_optional(value, "a map value")?;
                 let entry = self.map_entry_table(
@@ -1505,14 +1522,14 @@ impl<'a> Codec<'a> {
         } else if let Wire::Scalar(scalar) = &slot.wire {
             // An absent scalar or enum reads as the FlatBuffers default
             // (driftsys/ridl#472): there is no slot to read it from.
-            let default = scalar.decode_default();
+            let read = scalar.read_or_default(
+                &quote! { ::ridl_rt::flatbuffers::field(self.buf, self.table, #id, #width) },
+                &inner,
+            );
             Ok(quote! {
                 #[doc = #doc]
                 #vis fn #name(&self) -> #inner_ty {
-                    match ::ridl_rt::flatbuffers::field(self.buf, self.table, #id, #width) {
-                        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner,
-                        _ => #default,
-                    }
+                    #read
                 }
             })
         } else {
@@ -1976,10 +1993,13 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[doc = #doc]
             ///
-            /// It cannot fail. A read that could is discharged with the
-            /// neutral value of its own type — zero, the empty string or
-            /// collection, the first declared enum variant — and `verify` is
-            /// what makes those branches unreachable. A named scalar is
+            /// It cannot fail. An absent non-optional scalar or enum field
+            /// reads as its FlatBuffers default — 0, or the enum's zero
+            /// member — which is a value `verify` accepted
+            /// (driftsys/ridl#472). Any other read that could fail is
+            /// discharged with the neutral value of its own type — zero, the
+            /// empty string or collection, the first declared enum variant —
+            /// and `verify` is what makes those branches unreachable. A named scalar is
             /// built with its unchecked constructor (`new_unchecked`) over a
             /// value `verify` has already range-checked (`check`), so this
             /// never re-checks and never fails.
@@ -2011,13 +2031,10 @@ impl<'a> Codec<'a> {
         } else if let Wire::Scalar(scalar) = &slot.wire {
             // An absent scalar or enum reads as the FlatBuffers default
             // (driftsys/ridl#472): there is no slot to read it from.
-            let default = scalar.decode_default();
-            quote! {
-                match ::ridl_rt::flatbuffers::field(#buf, #table, #id, #width) {
-                    ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner,
-                    _ => #default,
-                }
-            }
+            scalar.read_or_default(
+                &quote! { ::ridl_rt::flatbuffers::field(#buf, #table, #id, #width) },
+                &inner,
+            )
         } else {
             quote! {
                 {
@@ -2370,15 +2387,10 @@ impl<'a> Codec<'a> {
         // (driftsys/ridl#472); a string or a bytes box has no default, and
         // `verify` has refused an absent one.
         let decode = match wire {
-            Wire::Scalar(scalar) => {
-                let default = scalar.decode_default();
-                quote! {
-                    match ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit) {
-                        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner_decode,
-                        _ => #default,
-                    }
-                }
-            }
+            Wire::Scalar(scalar) => scalar.read_or_default(
+                &quote! { ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit) },
+                &inner_decode,
+            ),
             _ => quote! {
                 {
                     let __p = ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
