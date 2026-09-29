@@ -39,6 +39,7 @@
 //! - `an_attached_aggregate_carries_the_catalog`,
 //!   `a_value_committed_through_one_aggregate_is_read_through_an_attached_one`,
 //!   `an_attached_aggregate_advances_the_one_clock`,
+//!   `an_attached_aggregate_starts_with_none_of_the_originals_handle_state`,
 //!   `an_attached_aggregate_has_its_own_subscriptions_and_queue`,
 //!   `a_call_sent_through_one_aggregate_is_served_through_an_attached_one`,
 //!   `dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions`
@@ -379,6 +380,58 @@ fn an_attached_aggregate_advances_the_one_clock() {
     let mut attached = rt.attach();
     attached.advance(Duration(5));
     assert_eq!(rt.now(), Timestamp(5));
+}
+
+#[test]
+fn an_attached_aggregate_starts_with_none_of_the_originals_handle_state() {
+    // Subscriptions, the served set and the sequence counters are on a handle,
+    // so an aggregate attached after the original used all of them starts with
+    // none of them.
+    let mut rt = runtime();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.set(IFACE, ORD, &[1]).expect("staged");
+    rt.commit();
+    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.command(IFACE, ORD, &[1]).expect("send");
+    let mut attached = rt.attach();
+
+    let mut out = [0u8; 8];
+    attached.set(IFACE, ORD, &[2]).expect("staged");
+    attached.commit();
+    let sample = attached.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(
+        sample.envelope.seq, 1,
+        "the attached writer's first publication"
+    );
+
+    attached.raise(IFACE, ORD, &[2]).expect("raise");
+    assert!(
+        attached.next(&mut out).expect("next").is_none(),
+        "the attached source is subscribed to nothing"
+    );
+    let mut raised = Vec::new();
+    while let Some(occurrence) = rt.next(&mut out).expect("next") {
+        raised.push(occurrence.envelope.seq);
+    }
+    assert_eq!(
+        raised,
+        vec![1, 1],
+        "each sink's first raise is its own seq 1"
+    );
+
+    attached.command(IFACE, ORD, &[2]).expect("send");
+    let mut sent = Vec::new();
+    while let Some(claim) = rt.next_claim(&mut out).expect("next_claim") {
+        sent.push(claim.envelope.seq);
+    }
+    assert_eq!(
+        sent,
+        vec![1, 1],
+        "each caller's first call is its own seq 1"
+    );
+
+    assert!(attached.split().handler.served().is_empty());
 }
 
 #[test]
