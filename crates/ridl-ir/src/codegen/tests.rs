@@ -300,6 +300,34 @@ fn an_unresolved_reference_is_carried_as_a_fact() {
     assert!(closure.reaches_unresolved);
 }
 
+/// An unresolved reference has no declaring package, so its flag follows
+/// its spelling: a bare name no package declares is not foreign.
+#[test]
+fn a_bare_unresolved_reference_is_not_foreign() {
+    let mut package = package();
+    let Some(v2::decl::Kind::StructDef(def)) = package.decls[2].kind.as_mut() else {
+        panic!("the third declaration is a struct");
+    };
+    def.members.push(member(4, "cabin", named("Temperature")));
+    let model = lower(&package, &[]);
+    let v1::declaration::Kind::Struct(def) = model.declarations[2].kind.as_ref().expect("a kind")
+    else {
+        panic!("the third declaration is a struct");
+    };
+    let Some(v1::slot::Occupant::Field(field)) = def.slots[3].occupant.as_ref() else {
+        panic!("the fourth slot holds a field");
+    };
+    let Some(v1::r#type::Kind::Named(reference)) =
+        field.r#type.as_ref().expect("a type").kind.as_ref()
+    else {
+        panic!("the field is typed by a named reference");
+    };
+    assert!(!reference.resolved);
+    assert!(!reference.foreign, "the reference is bare");
+    assert_eq!(reference.package, "");
+    assert_eq!(reference.reference, "Temperature");
+}
+
 /// Package `a`: a named scalar, an enum, and one declaration of each kind
 /// that holds a reference — a union arm, a struct field, an enum set's
 /// backing enum, a constant's type — each spelled bare, as `a` writes it.
@@ -539,6 +567,15 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
                             type_ref: "Own".to_string(),
                             doc: String::new(),
                         },
+                        // The scope's own enum, spelled with its package: the
+                        // spelling a text test for a dot calls foreign while
+                        // the declaring package is the scope's.
+                        v2::UnionArm {
+                            name: "qualified".to_string(),
+                            ordinal: 3,
+                            type_ref: "b.Own".to_string(),
+                            doc: String::new(),
+                        },
                     ],
                     is_result: false,
                     reserved: vec![],
@@ -587,6 +624,15 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
     assert!(!own.foreign, "`Own` is declared by the scope's package");
     assert_eq!(own.package, "b");
     assert_eq!(own.index, 1, "`Own` indexes `Model.declarations`");
+
+    let qualified = boxed_enum(2);
+    assert!(qualified.resolved);
+    assert!(
+        !qualified.foreign,
+        "`b.Own` is declared by the scope's package, whatever its spelling"
+    );
+    assert_eq!(qualified.package, "b");
+    assert_eq!(qualified.index, 1, "`b.Own` indexes `Model.declarations`");
 }
 
 /// The three encodings the model carries, over one lowered package.
