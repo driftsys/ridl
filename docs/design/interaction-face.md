@@ -67,15 +67,15 @@ carries no `interfaces.lock`, so `Interface::NUMBER` and
 (`Interface.number`, `Interface.provisional`, added by the lock design's L4).
 
 **The two buffer constants are computed, not counted.** `MAX_BUFFER_SIZE` is the
-maximum over every argument and reply `<T as Payload<Wire>>::MAX_SIZE` the
-interface's calls use — arguments alone would under-size the claim buffer
-whenever a query's reply is larger than its argument, because a reply is encoded
-into the same buffer. `EVENT_SOURCE_BUFFER_SIZE` is the maximum over event
-payload sizes only, because `EventSource::next`'s payload type is not known
-until the occurrence's ordinal is read. Both are emitted as a const-evaluable
-block (a `while` loop over an array), not as a folded literal, so the maximum is
-computed by the same code a consumer compiles, not precomputed and trusted by
-the emitter.
+maximum over every argument and reply
+`<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` the interface's
+calls use — arguments alone would under-size the claim buffer whenever a query's
+reply is larger than its argument, because a reply is encoded into the same
+buffer. `EVENT_SOURCE_BUFFER_SIZE` is the maximum over event payload sizes only,
+because `EventSource::next`'s payload type is not known until the occurrence's
+ordinal is read. Both are emitted as a const-evaluable block (a `while` loop
+over an array), not as a folded literal, so the maximum is computed by the same
+code a consumer compiles, not precomputed and trusted by the emitter.
 
 **Two placeholders, until their replacing stories land:**
 
@@ -97,9 +97,9 @@ the emitter.
   Dropping it is a change to the emitter and to the checked-in fixture the
   byte-equality guard compares against, so it is not made here. Nothing in the
   face reads these fields — it sizes buffers from
-  `<T as Payload<Wire>>::MAX_SIZE` directly — so the absent sizes cost the face
-  nothing and cost a future catalog consumer everything, which is the right way
-  round for a placeholder.
+  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` directly — so the
+  absent sizes cost the face nothing and cost a future catalog consumer
+  everything, which is the right way round for a placeholder.
 
 ## The contract-clause translator
 
@@ -436,18 +436,18 @@ the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
 manufactured contract error.** Every buffer the face encodes into is sized from
-`<T as Payload<Wire>>::MAX_SIZE`, the largest encoded size of any legal value,
-so a legal value cannot exceed it. If `Ref::encode` still returns `Capacity`,
-the provider returned a value outside its own type's range, or a `Payload`
-implementation does not honor `MAX_SIZE` — a defect the generated code has no
-vocabulary to describe as one of the five settlement outcomes, because
-`EncodeError::Capacity` carries no received bytes and no violated rule. The
-generated branch is an explicit `unreachable!` naming the type, the needed size
-and the available size. No runtime test drives this branch: doing so needs a
-`Payload` implementation that lies about `MAX_SIZE` without corrupting the
-buffers the round trip's other assertions share, and nothing in the fixture
-isolates one type enough to do that safely under the test binary's parallel
-execution.
+`<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE`, the largest
+encoded size of any legal value, so a legal value cannot exceed it. If
+`Ref::encode` still returns `Capacity`, the provider returned a value outside
+its own type's range, or a `Payload` implementation does not honor `MAX_SIZE` —
+a defect the generated code has no vocabulary to describe as one of the five
+settlement outcomes, because `EncodeError::Capacity` carries no received bytes
+and no violated rule. The generated branch is an explicit `unreachable!` naming
+the type, the needed size and the available size. No runtime test drives this
+branch: doing so needs a `Payload` implementation that lies about `MAX_SIZE`
+without corrupting the buffers the round trip's other assertions share, and
+nothing in the fixture isolates one type enough to do that safely under the test
+binary's parallel execution.
 
 **A `SettleError` is left to the handler** — which already owns that claim's
 settlement — and is not turned into a different `CallError`; the step continues
@@ -569,39 +569,39 @@ that purpose alone.
 ## The encoding and the ports
 
 **The face runs over the generated FlatBuffers codec** (story E11.7, stage K9b;
-[its design record](flatbuffers-codec.md)). It names that encoding through one
-alias the generated package carries:
-
-```rust
-pub type Wire = ::ridl_rt::encoding::FlatBuffers;
-```
-
-Every buffer the face sizes and every `Ref` it builds names `Wire`, so the
-package's encoding is one line to read and one line to change. The face gains no
+[its design record](flatbuffers-codec.md)). It names that encoding by its full
+path, `::ridl_rt::encoding::FlatBuffers`, at every buffer it sizes and every
+`Ref` it builds, the way the codec's own `Payload` implementations name it and
+the way the prelude names are written (driftsys/ridl#420). The face gains no
 type parameter: a `Client<E: Encoding, ...>` would put `E` on every descriptor,
 every provider trait and every caller, and a `where` bound per payload type on
 every impl, for a choice made once per generated package.
 
-The alias is written from a backend option. `ridl_backend_rust::WireEncoding`
-defaults to `FlatBuffers` and reaches the output through
+The encoding is stated by a backend option. `ridl_backend_rust::WireEncoding`
+defaults to `FlatBuffers` and reaches the entry points through
 `generate_face_with(package, wire)`, of which `generate_face(package)` is the
-defaulted form. It has one variant, because this backend emits a `Payload`
-implementation for one encoding; `repr(C)` and proto3 join it when E11.12 and
-E11.8 emit theirs. The option is on the face entry point alone — a package
-generated with no face names no encoding — so `generate`'s output is unchanged
-by it.
+defaulted form, and `generate_pipeline`. It has one variant, because this
+backend emits a `Payload` implementation for one encoding, and every emitter
+writes that encoding's path; `repr(C)` and proto3 join it when E11.12 and E11.8
+emit theirs, and the entry points check the option against the one variant so
+that a second one is a compile error there rather than a face over
+implementations that do not exist. A consumer names the encoding from
+`ridl_rt::encoding`.
 
 `generate_face` appends the face to the items `generate` emits, the codec
 included. There is one codec emitter and one call to it, so the face compiles
 over the same implementations a consumer of `generate` gets rather than over a
 second set written for it, and the checked-in fixture stays a single `include!`.
 
-**The alias is an unprefixed item at package scope, and one name can collide.**
-A declaration named `Wire` emits `pub struct Wire(..)` beside the alias and the
-generated crate does not compile. E11.14 decision 5 refuses such a package
-rather than emitting the collision (driftsys/ridl#476). The codec has no such
-exposure: its free functions carry a `__ridl_fb_` prefix, which typl §15.1 makes
-uncollidable.
+**From stage K9b to 2026-09-29 the face named the encoding through one alias**,
+`pub type Wire = ::ridl_rt::encoding::FlatBuffers;`, emitted once per package at
+package scope. An unprefixed item at package scope is a name a declaration or an
+interface can carry, and `Wire` collided with both (driftsys/ridl#476, #588);
+E11.14 decision 5 refused such a package. The generated-name collision design
+removed the alias instead (its decision 5), because a name the backend chose
+never refuses a package: every site that named `Wire` writes the full path,
+`refuse_wire_collision` is deleted, and no name is reserved. The codec's free
+functions carry a `__ridl_fb_` prefix, which no typl name can spell.
 
 Through stage K7 this was a placeholder instead: `ReprC`, with
 `tests/interaction_face.rs` hand-writing `Payload<ReprC>` for the fixture's
@@ -771,11 +771,13 @@ written as prose.
    is not a named type, names no story rather than the nearest one.
 
 3. **No flag selects the encoding, in this story.** `--emit rust` writes the
-   FlatBuffers codec because it is the only one built, and the emitted
-   `pub type Wire` names it in one line. A `--wire` flag is E11.8's, when a
-   second codec exists to choose between; ADR-0010 binds its spelling then.
-   Adding one now would be a CLI surface with one legal value, which the next
-   story would have to change rather than fill in.
+   FlatBuffers codec because it is the only one built, and the emitted code
+   names it by its path, `::ridl_rt::encoding::FlatBuffers`, at each site (until
+   2026-09-29 through a `pub type Wire` alias; see "The encoding and the
+   ports"). A `--wire` flag is E11.8's, when a second codec exists to choose
+   between; ADR-0010 binds its spelling then. Adding one now would be a CLI
+   surface with one legal value, which the next story would have to change
+   rather than fill in.
 
 4. **A cross-package reference resolves, and the codec is no longer withheld for
    it** (driftsys/ridl#467). `Ctx` carries the other packages of the build and
@@ -804,6 +806,12 @@ written as prose.
    `generate_pipeline` both refuse rather than emitting the collision. The walk
    is over `shapes()`, the complete set of interface bodies, and skips a
    service's inline shape, for which no identity struct is emitted.
+
+   _Superseded on 2026-09-29 by the generated-name collision design, decision 5
+   (driftsys/ridl#588): the alias is removed, every site that named it writes
+   `::ridl_rt::encoding::FlatBuffers`, `refuse_wire_collision` is deleted, and a
+   package whose declaration or interface is named `Wire` builds and compiles.
+   The rule is that a name the backend chose never refuses a package._
 
 6. **The proof runs what the CLI wrote.** `crates/ridlc/tests/cabin_example.rs`
    builds `examples/cabin/`, compiles the emitted crate and
@@ -878,10 +886,13 @@ It read "`dispatch` binding the ridl parameter name beside its own locals";
 **A member named like a fixed method of the face was never a row here**, and
 compiled to rustc E0592 until 2026-09-28, when driftsys/ridl#580 moved the fixed
 and derived methods behind traits (ADR-0023 decision 7, the section "The
-consumer face" above). Two collisions of the same class outside the face remain
-open: `<Struct>FbView::bytes` against a field named `bytes` (driftsys/ridl#587)
-and the package module's `Wire` against a type or an interface named `Wire`
-(driftsys/ridl#588).
+consumer face" above). Two collisions of the same class outside the face were
+closed on 2026-09-29 by the generated-name collision design:
+`<Struct>FbView::bytes` against a field whose accessor is `bytes`
+(driftsys/ridl#587) — `bytes` is a method of `ridl_rt::payload::View`, ADR-0021
+decision 20 — and the package module's `Wire` against a type or an interface
+named `Wire` (driftsys/ridl#588) — the alias is removed, "The encoding and the
+ports" above.
 
 ## Trace
 

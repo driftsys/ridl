@@ -549,10 +549,15 @@ argument for it in the command case.
    prove the trait methods behave as the inherent ones did. Two collisions of
    the same class outside the face — `<Struct>FbView::bytes` against a field
    named `bytes` (E0592), and the package module's fixed `Wire` against a type
-   or an interface named `Wire` (E0428) — are driftsys/ridl#587 and
-   driftsys/ridl#588, not this decision's. Traces: driftsys/ridl#580 (the
-   change), driftsys/ridl#570 (the origin, and the rule that a backend restricts
-   no member name),
+   or an interface named `Wire` (E0428) — were driftsys/ridl#587 and
+   driftsys/ridl#588, not this decision's; the generated-name collision design
+   (2026-09-29) closed both by the same rule: `bytes` is a method of
+   `ridl_rt::payload::View` ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)
+   decision 20), and the `Wire` alias is removed, the emitted code naming
+   `::ridl_rt::encoding::FlatBuffers` at each site, which retires E11.14
+   decision 5's refusal. Traces: driftsys/ridl#580 (the change),
+   driftsys/ridl#570 (the origin, and the rule that a backend restricts no
+   member name),
    [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decisions 1
    and 4 (the `snake_case` a method name is projected through, and the
    namespaces RIDL-149 checks — a member `subscribeWarning` beside an event

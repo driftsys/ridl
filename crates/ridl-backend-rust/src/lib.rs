@@ -99,8 +99,9 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// checked-in fixture is brought in
 /// with a single `include!`: the face names those types, and the orphan rule
 /// needs them local to the test crate. The codec comes from the same call for
-/// the same reason: the face names `Payload<Wire>` for every payload type, and
-/// the implementations that satisfy it are the ones [`generate`] emits.
+/// the same reason: the face names `Payload<::ridl_rt::encoding::FlatBuffers>`
+/// for every payload type, and the implementations that satisfy it are the
+/// ones [`generate`] emits.
 ///
 /// Total for the same reason [`generate`] is: it returns [`GenerateError`]
 /// rather than panicking, and additionally refuses a contract clause outside
@@ -116,23 +117,24 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 /// `generate_face(package)` is
 /// `generate_face_with(package, WireEncoding::default())`, which is the
 /// relation `ridl-backend-proto` and `ridl-backend-flatbuffers` already give
-/// their own `generate_with`. The encoding reaches the output as one alias,
-/// `pub type Wire`, emitted once per package and named by every buffer the
-/// face sizes and every `Ref` it builds.
+/// their own `generate_with`. The encoding reaches the output at each site
+/// that names it — every buffer the face sizes and every `Ref` it builds —
+/// as the full path `::ridl_rt::encoding::FlatBuffers`, the way the prelude
+/// names are written (driftsys/ridl#420).
 ///
-/// The alias is emitted here and not by [`generate`]: it exists so that the
-/// face names one thing rather than repeating an encoding at each of its
-/// sites, and a package generated with no face names it nowhere. What
-/// [`generate`] emits is unchanged by this entry point's existence.
+/// Until the generated-name collision design (2026-09-29, driftsys/ridl#588)
+/// the encoding reached the output as one alias, `pub type Wire`, emitted
+/// here at package scope, and a declaration or an interface named `Wire`
+/// was refused (E11.14 decision 5). The alias is gone and no name is
+/// reserved: a name the backend chose never refuses a package.
 pub fn generate_face_with(
     package: &v2::Package,
     wire: WireEncoding,
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    refuse_wire_collision(&ctx)?;
-    let mut items = vec![wire_alias(wire)];
-    items.extend(package_items(&ctx)?);
+    wire.check_emitted();
+    let mut items = package_items(&ctx)?;
     items.extend(descriptors::interface_items(&ctx)?);
     items.extend(face::interface_items(&model)?);
     render(items)
@@ -211,9 +213,8 @@ pub(crate) fn generate_pipeline_over(
     wire: WireEncoding,
 ) -> Result<Generated, GenerateError> {
     let ctx = Ctx::over(model);
-    refuse_wire_collision(&ctx)?;
-    let mut items = vec![wire_alias(wire)];
-    items.extend(package_items(&ctx)?);
+    wire.check_emitted();
+    let mut items = package_items(&ctx)?;
     for interface in &model.interfaces {
         if descriptors::declared_name(interface).is_none() {
             continue;
@@ -244,11 +245,15 @@ fn faced_interface(
 /// It is a `const` carrying doc attributes rather than a bare comment, for the
 /// reason the codec's withheld note gives: `quote!` emits tokens, and a doc
 /// attribute is the only comment that survives `prettyplease`. The name cannot
-/// collide with a typl constant — typl §15.1 gives one a SCREAMING_SNAKE name,
-/// and no typl name begins with an underscore.
+/// collide with a typl constant — no typl name begins with an underscore —
+/// and is spelled from the interface's declared name rather than its
+/// `snake_case`, so two skipped interfaces whose `snake_case` agrees
+/// (`HTTPServer` beside `HttpServer`) leave two notes rather than one name
+/// twice (the generated-name collision design, X-14c). The declared name is
+/// CamelCase, so the item allows the naming lint it would otherwise draw.
 fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> TokenStream {
     let iface_name = descriptors::declared_name(interface).unwrap_or_default();
-    let name = format_ident!("__RIDL_NO_FACE_{}", screaming_of(interface));
+    let name = format_ident!("__RIDL_NO_FACE_{}", ident(iface_name));
     let headline = format!(" Interface `{iface_name}` carries no generated interaction face.");
     let reason = format!(" The emitter refused it: {}", err.message);
     let owner = match face_gap(interface, err) {
@@ -277,7 +282,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         /// rest of this package — its domain types, its codec, and every
         /// other interface — is unaffected, which is why the build succeeded
         /// (E11.14 decision 2).
-        #[allow(dead_code)]
+        #[allow(dead_code, non_upper_case_globals)]
         const #name: () = ();
     }
 }
@@ -334,74 +339,6 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
     FaceGap::Other
 }
 
-/// The name [`wire_alias`] emits at package scope.
-const WIRE_ALIAS: &str = "Wire";
-
-/// Refuses a package that declares an item whose emitted name is the encoding
-/// alias's (driftsys/ridl#476).
-///
-/// `generate_face_with` emits `pub type Wire` at package scope, and a typl
-/// declaration named `Wire` emits `pub struct Wire` at the same scope; rustc
-/// reports E0428 on the pair, in the consumer's build rather than here. This
-/// refuses it where the cause is, naming the declaration.
-///
-/// **Refusing rather than renaming** is E11.14 decision 5. The alias name is
-/// fixed by design note D-11 of the FlatBuffers codec and is named by every
-/// record and every consumer that follows it, so renaming it — or escaping the
-/// declaration — would move a name many documents state, to spare one package
-/// a name it is free to change. The rejected alternative is exactly that
-/// rename.
-///
-/// It is a **build error, not decision 2's per-interface skip**: the collision
-/// is a property of the package, not of one interface, so there is no interface
-/// to omit that would leave the rest of the package usable.
-///
-/// [`generate`] is unaffected — it emits no alias, so `Wire` is an ordinary
-/// declaration there, and a package built without a face keeps compiling.
-fn refuse_wire_collision(ctx: &Ctx) -> Result<(), GenerateError> {
-    // Both namespaces, because both land at package scope: a declaration is
-    // emitted as its own item, and an interface is emitted as
-    // `pub struct <Interface>;` by the descriptor emitter. Scanning only the
-    // declarations let `interface Wire` through to a rustc E0428 in the
-    // emitted source, which is the failure this refusal exists to replace.
-    //
-    // The interface half walks `shapes()` rather than `interfaces`, which is
-    // the complete set of interface bodies (`xtask`'s `shape_walk` guard
-    // holds every reader to it), and then skips a service's inline shape for
-    // the same reason `descriptors::interface_items` does: no identity struct
-    // is emitted for one, so it collides with nothing.
-    //
-    // No case reaches that skip today — an inline shape's name is the
-    // service's own, which rsdl requires to be dotted and lowercase, so it
-    // can never be `Wire`. It is here so this walk and the emitter's stay the
-    // same shape, not because it changes an outcome.
-    let declarations = ctx
-        .model
-        .declarations
-        .iter()
-        .map(|decl| (declared(decl.name.as_ref()), "declaration"));
-    let shapes = ctx
-        .model
-        .interfaces
-        .iter()
-        .filter_map(|interface| descriptors::declared_name(interface))
-        .map(|name| (name, "interface"));
-    for (name, kind) in declarations.chain(shapes) {
-        if name == WIRE_ALIAS {
-            return Err(GenerateError {
-                message: format!(
-                    "`{}.{}` collides with the `{}` encoding alias the interaction \
-                     face emits at package scope; rename the {kind}",
-                    ctx.package_name(),
-                    name,
-                    WIRE_ALIAS
-                ),
-            });
-        }
-    }
-    Ok(())
-}
-
 /// The domain types and the codec over them — what [`generate`] emits, and
 /// what a face is appended to.
 ///
@@ -427,6 +364,13 @@ fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
 /// here would emit a face over implementations that do not exist. `repr(C)`
 /// and proto3 join when E11.12 and E11.8 emit their codecs, which is what
 /// `#[non_exhaustive]` says to a caller that matches on this.
+///
+/// The encoding reaches the output as the full path
+/// `::ridl_rt::encoding::FlatBuffers` at every site that names it — the
+/// codec's `Payload` implementations, the descriptors' buffer constants and
+/// the face's `Ref`s — rather than through a `pub type Wire` alias at package
+/// scope, which a declaration or an interface named `Wire` collided with
+/// (driftsys/ridl#588; the generated-name collision design, decision 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum WireEncoding {
@@ -436,22 +380,18 @@ pub enum WireEncoding {
     FlatBuffers,
 }
 
-/// The one `pub type Wire` alias a generated package carries.
-fn wire_alias(wire: WireEncoding) -> TokenStream {
-    let (path, doc) = match wire {
-        WireEncoding::FlatBuffers => (
-            quote! { ::ridl_rt::encoding::FlatBuffers },
-            "The payload encoding this package's generated interaction face \
-             encodes and verifies over, and the one the `Payload` \
-             implementations below implement: FlatBuffers (ADR-0019, ADR-0020 \
-             decision 2). It is named once here rather than repeated at every \
-             buffer and every `Ref` the face builds, so the package's \
-             encoding is one line to read and one line to change.",
-        ),
-    };
-    quote! {
-        #[doc = #doc]
-        pub type Wire = #path;
+impl WireEncoding {
+    /// Checks that the encoding asked for is the one every emitter writes.
+    ///
+    /// The codec, the descriptors and the face all write the FlatBuffers path
+    /// at their own sites, so a second variant here would emit a face over
+    /// implementations that do not exist unless every one of those sites
+    /// learns to read it. This match is where that shows up as a compile
+    /// error rather than as wrong output.
+    fn check_emitted(self) {
+        match self {
+            WireEncoding::FlatBuffers => {}
+        }
     }
 }
 
@@ -785,16 +725,6 @@ fn camel_of(name: Option<&v1::Spellings>) -> &str {
     name.map(|name| name.camel.as_str()).unwrap_or_default()
 }
 
-/// The SCREAMING_SNAKE spelling of one interface's declared name — the
-/// `snake_case` of ADR-0016 decision 1, upper-cased, which the lowering
-/// spells once as `Spellings.screaming`.
-fn screaming_of(interface: &v1::Interface) -> &str {
-    match interface.identity.as_ref() {
-        Some(v1::interface::Identity::Declared(name)) => name.screaming.as_str(),
-        _ => "",
-    }
-}
-
 /// The generated struct name of one induced tuple — the CamelCase of the path
 /// that reached it, which the lowering spells as `InducedName.rust`. Empty for
 /// a tuple no backend has a naming rule for.
@@ -832,13 +762,21 @@ pub(crate) fn class_backing(class: i32) -> ScalarBacking {
 
 /// The Rust type one scalar class is realized as (Appendix D language layer):
 /// unit and float back to `f64`, integer to `i64`.
+///
+/// Every primitive and every prelude type the backend writes at package scope
+/// is written by its `::core::` or `::std::` path, here and at every other
+/// site: a typl declaration may be named `i64`, `String` or `Vec` (nothing
+/// reserves those names), and that item would shadow the bare name in the
+/// module the generated code shares with it (the generated-name collision
+/// design, §4.2; driftsys/ridl#423). A `#[repr(..)]` keeps the bare name,
+/// because the attribute takes an identifier and not a path.
 fn class_tokens(class: i32) -> TokenStream {
     match class_backing(class) {
-        ScalarBacking::Float => quote! { f64 },
-        ScalarBacking::Integer => quote! { i64 },
-        ScalarBacking::Boolean => quote! { bool },
-        ScalarBacking::String => quote! { String },
-        ScalarBacking::Bytes => quote! { Vec<u8> },
+        ScalarBacking::Float => quote! { ::core::primitive::f64 },
+        ScalarBacking::Integer => quote! { ::core::primitive::i64 },
+        ScalarBacking::Boolean => quote! { ::core::primitive::bool },
+        ScalarBacking::String => quote! { ::std::string::String },
+        ScalarBacking::Bytes => quote! { ::std::vec::Vec<::core::primitive::u8> },
     }
 }
 
@@ -874,7 +812,7 @@ pub(crate) fn model_type_tokens(ctx: &Ctx, ty: &v1::Type) -> TokenStream {
                 let len = usize_tokens(array.min);
                 quote! { [#element; #len] }
             } else {
-                quote! { Vec<#element> }
+                quote! { ::std::vec::Vec<#element> }
             }
         }
         Some(v1::r#type::Kind::Map(map)) => {
@@ -888,7 +826,7 @@ pub(crate) fn model_type_tokens(ctx: &Ctx, ty: &v1::Type) -> TokenStream {
                 .as_deref()
                 .map(|value| model_type_tokens(ctx, value))
                 .unwrap_or_else(|| quote! { () });
-            quote! { Vec<(#key, #value)> }
+            quote! { ::std::vec::Vec<(#key, #value)> }
         }
         // A stream is an interaction-position type (ridl §12.3); it never
         // reaches a struct or tuple field in checked IR. Kept total.
@@ -896,21 +834,22 @@ pub(crate) fn model_type_tokens(ctx: &Ctx, ty: &v1::Type) -> TokenStream {
     };
 
     if ty.optional {
-        quote! { Option<#inner> }
+        quote! { ::core::option::Option<#inner> }
     } else {
         inner
     }
 }
 
 /// [`primitive_tokens`] over the model's own `PrimitiveType`, which restates
-/// the IR's values (design note §3.8).
+/// the IR's values (design note §3.8). Written by path, for the reason
+/// [`class_tokens`] gives.
 fn model_primitive_tokens(prim: i32) -> TokenStream {
     match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
-        v1::PrimitiveType::Boolean => quote! { bool },
-        v1::PrimitiveType::Integer => quote! { i64 },
-        v1::PrimitiveType::Float => quote! { f64 },
-        v1::PrimitiveType::String => quote! { String },
-        v1::PrimitiveType::Bytes => quote! { Vec<u8> },
+        v1::PrimitiveType::Boolean => quote! { ::core::primitive::bool },
+        v1::PrimitiveType::Integer => quote! { ::core::primitive::i64 },
+        v1::PrimitiveType::Float => quote! { ::core::primitive::f64 },
+        v1::PrimitiveType::String => quote! { ::std::string::String },
+        v1::PrimitiveType::Bytes => quote! { ::std::vec::Vec<::core::primitive::u8> },
         v1::PrimitiveType::Unspecified => quote! { () },
     }
 }
@@ -938,7 +877,11 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     let default_impl = defaults::decl_default_expr(ctx, decl)
         .map(|expr| {
             let name = ident(declared(decl.name.as_ref()));
-            quote! { impl Default for #name { fn default() -> Self { #expr } } }
+            quote! {
+                impl ::core::default::Default for #name {
+                    fn default() -> Self { #expr }
+                }
+            }
         })
         .unwrap_or_default();
 
@@ -1225,8 +1168,10 @@ fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> To
     // `<` opens a generic-argument list.
     if c.len_min.is_some() || c.len_max.is_some() {
         let len = match class_backing(sc.class) {
-            ScalarBacking::String => quote! { (#value.chars().count() as u64) },
-            _ => quote! { (#value.len() as u64) },
+            ScalarBacking::String => {
+                quote! { (#value.chars().count() as ::core::primitive::u64) }
+            }
+            _ => quote! { (#value.len() as ::core::primitive::u64) },
         };
         // A minimum of 0 is the default length bound of string and bytes
         // (typl §4.4, §4.5), and `(… as u64) < 0` is never true: rustc draws
@@ -1317,11 +1262,11 @@ fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> To
 /// each names the other for that reason.
 fn check_param_type(sc: &v1::Scalar) -> TokenStream {
     match class_backing(sc.class) {
-        ScalarBacking::Float => quote! { &f64 },
-        ScalarBacking::Integer => quote! { &i64 },
-        ScalarBacking::Boolean => quote! { &bool },
-        ScalarBacking::String => quote! { &str },
-        ScalarBacking::Bytes => quote! { &[u8] },
+        ScalarBacking::Float => quote! { &::core::primitive::f64 },
+        ScalarBacking::Integer => quote! { &::core::primitive::i64 },
+        ScalarBacking::Boolean => quote! { &::core::primitive::bool },
+        ScalarBacking::String => quote! { &::core::primitive::str },
+        ScalarBacking::Bytes => quote! { &[::core::primitive::u8] },
     }
 }
 
@@ -1349,12 +1294,12 @@ fn check_deref_shadow(sc: &v1::Scalar) -> TokenStream {
 fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> TokenStream {
     match class_backing(sc.class) {
         ScalarBacking::String => quote! {
-            #vis fn get(&self) -> &str { &self.0 }
-            #vis fn into_inner(self) -> String { self.0 }
+            #vis fn get(&self) -> &::core::primitive::str { &self.0 }
+            #vis fn into_inner(self) -> ::std::string::String { self.0 }
         },
         ScalarBacking::Bytes => quote! {
-            #vis fn get(&self) -> &[u8] { &self.0 }
-            #vis fn into_inner(self) -> Vec<u8> { self.0 }
+            #vis fn get(&self) -> &[::core::primitive::u8] { &self.0 }
+            #vis fn into_inner(self) -> ::std::vec::Vec<::core::primitive::u8> { self.0 }
         },
         _ => quote! {
             #vis const fn get(self) -> #inner { self.0 }
@@ -1412,7 +1357,7 @@ fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStre
         // the const holds the pattern a consumer can feed to a regex engine
         // (M1).
         Some(v1::constant::Typed::RegexBody(pattern)) => {
-            quote! { #attrs #vis const #name: &str = #pattern; }
+            quote! { #attrs #vis const #name: &::core::primitive::str = #pattern; }
         }
         // A named-type constant resolves through the type's backing. Only a
         // same-package named scalar is emitted: a reference into another
@@ -1450,7 +1395,7 @@ fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStre
                 }
                 ScalarBacking::String => {
                     let value = cd.value.as_str();
-                    quote! { #attrs #vis const #name: &str = #value; }
+                    quote! { #attrs #vis const #name: &::core::primitive::str = #value; }
                 }
                 ScalarBacking::Bytes => quote! {},
             }
@@ -1459,19 +1404,19 @@ fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStre
             match v1::PrimitiveType::try_from(*prim).unwrap_or(v1::PrimitiveType::Unspecified) {
                 v1::PrimitiveType::Integer => {
                     let value = numeric_tokens(&cd.value, false);
-                    quote! { #attrs #vis const #name: i64 = #value; }
+                    quote! { #attrs #vis const #name: ::core::primitive::i64 = #value; }
                 }
                 v1::PrimitiveType::Float => {
                     let value = numeric_tokens(&cd.value, true);
-                    quote! { #attrs #vis const #name: f64 = #value; }
+                    quote! { #attrs #vis const #name: ::core::primitive::f64 = #value; }
                 }
                 v1::PrimitiveType::Boolean => {
                     let value = bool_tokens(&cd.value);
-                    quote! { #attrs #vis const #name: bool = #value; }
+                    quote! { #attrs #vis const #name: ::core::primitive::bool = #value; }
                 }
                 v1::PrimitiveType::String => {
                     let value = cd.value.as_str();
-                    quote! { #attrs #vis const #name: &str = #value; }
+                    quote! { #attrs #vis const #name: &::core::primitive::str = #value; }
                 }
                 v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => quote! {},
             }
@@ -1520,11 +1465,13 @@ fn emit_struct(
 /// One struct field. The name is projected through the pinned transform
 /// (ADR-0016 decisions 1 and 2): a typl field name is camelCase (typl §15.1)
 /// and reaching generated Rust verbatim draws `non_snake_case` at every
-/// consumer. The `hint` below keeps `camel_case`, because it builds the type
-/// name of an induced tuple struct rather than a field name. That second
+/// consumer. The type name of an induced tuple struct is spelled from the
+/// field name through `camel_case` instead, by the lowering. That second
 /// projection reaches a namespace RIDL-149 does not check — two field names
 /// distinct under `snake_case` can induce one tuple type name — which is
-/// driftsys/ridl#453, recorded in ADR-0016's consequences.
+/// driftsys/ridl#453: by the generated-name collision design (ADR-0016's
+/// 2026-09-29 amendment) that collision is this backend's to refuse, from
+/// the claim table over the package module's type namespace.
 fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
     let field_name = ident(snake_of(field.name.as_ref()));
     let attrs = field_attrs(field);
@@ -1574,13 +1521,13 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
         }
 
         #allow_deprecated
-        impl ::core::convert::TryFrom<i64> for #name {
+        impl ::core::convert::TryFrom<::core::primitive::i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
             // The concrete type, not `Self::Error`: a variant named `Error`
             // would make that path ambiguous (rustc
             // `ambiguous_associated_items`, deny by default).
             fn try_from(
-                value: i64,
+                value: ::core::primitive::i64,
             ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
                 match value {
                     #(#arms,)*
@@ -1593,8 +1540,8 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
         }
 
         #allow_deprecated
-        impl ::core::convert::From<#name> for i64 {
-            fn from(value: #name) -> Self { value as i64 }
+        impl ::core::convert::From<#name> for ::core::primitive::i64 {
+            fn from(value: #name) -> Self { value as ::core::primitive::i64 }
         }
     }
 }
@@ -1669,18 +1616,20 @@ fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStrea
     quote! {
         #attrs
         #[repr(transparent)]
-        #vis struct #name(i64);
+        #vis struct #name(::core::primitive::i64);
         #allow_deprecated
         impl #name {
             #(#bits)*
         }
 
         #allow_deprecated
-        impl ::core::convert::TryFrom<i64> for #name {
+        impl ::core::convert::TryFrom<::core::primitive::i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
-            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+            fn try_from(
+                value: ::core::primitive::i64,
+            ) -> ::core::result::Result<Self, Self::Error> {
                 // The union of every declared bit.
-                const DECLARED_MASK: i64 = #mask_lit;
+                const DECLARED_MASK: ::core::primitive::i64 = #mask_lit;
                 if value & !DECLARED_MASK != 0 {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
@@ -1692,7 +1641,7 @@ fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStrea
         }
 
         #allow_deprecated
-        impl ::core::convert::From<#name> for i64 {
+        impl ::core::convert::From<#name> for ::core::primitive::i64 {
             fn from(value: #name) -> Self { value.0 }
         }
     }
@@ -1732,10 +1681,13 @@ fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> 
 ///
 /// A tuple field name is projected through the pinned transform, the same one
 /// [`emit_field`] applies to a declared struct's field (ADR-0016 decisions 1
-/// and 2). The `hint` below keeps `camel_case`, because it builds a nested
-/// tuple's type name rather than a field name. Neither namespace is checked:
-/// two tuple field names distinct in typl can spell one Rust field name, which
-/// rustc then rejects with E0124 — driftsys/ridl#449.
+/// and 2); a nested tuple's type name is spelled through `camel_case` by the
+/// lowering. Neither namespace is checked by RIDL-149: two tuple field names
+/// distinct in typl can spell one Rust field name, which rustc then rejects
+/// with E0124 — driftsys/ridl#449, which the generated-name collision design
+/// (ADR-0016's 2026-09-29 amendment) makes this backend's to refuse, from a
+/// claim table per induced tuple. A field name repeated verbatim is the
+/// language's, TYPL-215.
 fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
     let name = tuple_name(induced);
     let name_id = ident(name);
@@ -1759,7 +1711,13 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
     };
 
     let default_impl = defaults::tuple_default_expr(ctx, induced)
-        .map(|expr| quote! { impl Default for #name_id { fn default() -> Self { #expr } } })
+        .map(|expr| {
+            quote! {
+                impl ::core::default::Default for #name_id {
+                    fn default() -> Self { #expr }
+                }
+            }
+        })
         .unwrap_or_default();
 
     quote! { #struct_item #default_impl }
@@ -1788,7 +1746,9 @@ pub(crate) fn type_path(reference: &str) -> TokenStream {
 
 /// The Rust module-segment spelling of one typl package name segment: `mod`
 /// becomes `r#mod`, `crate` becomes `crate_`, and an ordinary segment is
-/// returned unchanged.
+/// returned unchanged. The escape is [`ident`]'s, injective included; a
+/// package segment is `[a-z][a-z0-9]*`, so no segment ends in an underscore
+/// and the tree meets only the first step of the escape.
 ///
 /// This exists so that the module tree `ridlc` writes for `--emit rust` and
 /// the paths [`type_path`] emits cannot drift apart. Both spell a package
@@ -1904,8 +1864,16 @@ pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
 /// A Rust identifier for a typl name. typl names are always character-valid
 /// identifiers (typl §2.3); the only conflict is a name that is a Rust keyword,
 /// escaped here as a raw identifier (`r#override`). The four keywords that
-/// cannot be raw identifiers (`crate`, `self`, `Self`, `super`) and the bare
-/// underscore are mangled with a trailing underscore.
+/// cannot be raw identifiers (`crate`, `self`, `Self`, `super`) take a
+/// trailing underscore instead, and so does the bare underscore.
+///
+/// The keyword escape is injective (the generated-name collision design,
+/// decision 7, driftsys/ridl#583): a name that is one of the four followed
+/// by zero or more underscores gets one more, so `self` is `self_` and
+/// `self_` is `self__`. Appending one underscore to `self` alone gave the
+/// names `self` and `self_` one spelling, which rustc refused wherever the
+/// two met — one enum set (E0592), one struct or tuple (E0124), one package
+/// (E0428).
 ///
 /// The call is total, per the codegen contract (ADR-0004 §5, and the
 /// never-panics guarantee `ridlc::compile` documents). A valid typl name is
@@ -1945,11 +1913,14 @@ pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
 /// gap, so a regression that makes a nameless field reachable is visible
 /// rather than silent.
 pub(crate) fn ident(name: &str) -> Ident {
+    // Before the parse, because `self_` parses as an identifier and must
+    // still be escaped, or it meets the escape of `self`.
+    let stem = name.trim_end_matches('_');
+    if matches!(stem, "crate" | "self" | "Self" | "super") || name == "_" {
+        return Ident::new(&format!("{name}_"), Span::call_site());
+    }
     if let Ok(parsed) = syn::parse_str::<Ident>(name) {
         return parsed;
-    }
-    if matches!(name, "crate" | "self" | "Self" | "super" | "_") {
-        return Ident::new(&format!("{name}_"), Span::call_site());
     }
     if name.is_empty() {
         // `Ident::new_raw("")` and `Ident::new("")` both panic; `Ident::new`

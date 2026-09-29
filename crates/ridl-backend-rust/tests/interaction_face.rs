@@ -101,7 +101,7 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
     // encoder returned and never `&buf[..len]`.
-    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut buf)
+    let bytes = Ref::<generated::Level, ::ridl_rt::encoding::FlatBuffers>::encode(&level, &mut buf)
         .expect("encode")
         .bytes();
     port.command(
@@ -518,9 +518,10 @@ fn round_trip_failing_require_settles_precondition_failed() {
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
     // encoder returned and never `&encode_buf[..len]`.
-    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut encode_buf)
-        .expect("encode")
-        .bytes();
+    let bytes =
+        Ref::<generated::Level, ::ridl_rt::encoding::FlatBuffers>::encode(&level, &mut encode_buf)
+            .expect("encode")
+            .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
@@ -738,11 +739,12 @@ fn the_encoded_bytes_are_not_a_prefix_of_the_buffer() {
     use ridl_rt::payload::{Payload, Ref};
 
     let level = generated::Level::new_unchecked(42);
-    let mut buf = [0u8; <generated::Level as Payload<generated::Wire>>::MAX_SIZE];
-    let encoded = Ref::<generated::Level, generated::Wire>::encode(&level, &mut buf)
-        .expect("encode")
-        .bytes()
-        .to_vec();
+    let mut buf = [0u8; <generated::Level as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE];
+    let encoded =
+        Ref::<generated::Level, ::ridl_rt::encoding::FlatBuffers>::encode(&level, &mut buf)
+            .expect("encode")
+            .bytes()
+            .to_vec();
 
     assert!(
         encoded.len() < buf.len(),
@@ -755,10 +757,10 @@ fn the_encoded_bytes_are_not_a_prefix_of_the_buffer() {
         "the encoder built at the tail, so the equally long prefix is not \
          the value"
     );
-    <generated::Level as Payload<generated::Wire>>::verify(&buf[..encoded.len()])
+    <generated::Level as Payload<::ridl_rt::encoding::FlatBuffers>>::verify(&buf[..encoded.len()])
         .expect_err("the prefix of the buffer is not a payload");
-    let checked =
-        Ref::<generated::Level, generated::Wire>::verify(&encoded).expect("the subslice is");
+    let checked = Ref::<generated::Level, ::ridl_rt::encoding::FlatBuffers>::verify(&encoded)
+        .expect("the subslice is");
     assert_eq!(checked.decode().get(), 42);
 }
 
@@ -826,9 +828,10 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
     // encoder returned and never `&encode_buf[..len]`.
-    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut encode_buf)
-        .expect("encode")
-        .bytes();
+    let bytes =
+        Ref::<generated::Level, ::ridl_rt::encoding::FlatBuffers>::encode(&level, &mut encode_buf)
+            .expect("encode")
+            .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
@@ -955,9 +958,10 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
     // encoder returned and never `&encode_buf[..len]`.
-    let bytes = Ref::<generated::Level, generated::Wire>::encode(&level, &mut encode_buf)
-        .expect("encode")
-        .bytes();
+    let bytes =
+        Ref::<generated::Level, ::ridl_rt::encoding::FlatBuffers>::encode(&level, &mut encode_buf)
+            .expect("encode")
+            .bytes();
     let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(

@@ -39,6 +39,45 @@ pub trait Payload<E: Encoding>: Sized {
     fn decode(r: Ref<'_, Self, E>) -> Self;
 }
 
+/// A view that holds the verified bytes it reads.
+///
+/// A generated view — the `<T>FbView<'a>` a FlatBuffers `Payload::verify`
+/// hands back — implements this trait rather than carrying `bytes` as an
+/// inherent method, so that a field whose accessor is named `bytes` does not
+/// meet it: a trait method has its own namespace. The accessor is inherent
+/// and wins the dot call; the buffer is reached through the trait's path.
+///
+/// ```
+/// use ridl_rt::payload::View;
+///
+/// struct Raw<'a> {
+///     buf: &'a [u8],
+/// }
+///
+/// impl<'a> Raw<'a> {
+///     /// A field accessor that happens to share the trait method's name.
+///     fn bytes(&self) -> usize {
+///         self.buf.len()
+///     }
+/// }
+///
+/// impl<'a> View<'a> for Raw<'a> {
+///     fn bytes(&self) -> &'a [u8] {
+///         self.buf
+///     }
+/// }
+///
+/// let raw = Raw { buf: &[1, 2, 3] };
+/// let count: usize = raw.bytes();
+/// let buffer: &[u8] = View::bytes(&raw);
+/// assert_eq!(count, 3);
+/// assert_eq!(buffer, &[1, 2, 3]);
+/// ```
+pub trait View<'a> {
+    /// The verified bytes this view reads.
+    fn bytes(&self) -> &'a [u8];
+}
+
 /// The result of [`Payload::encode`]: the bytes written and their view. It is
 /// data, not a proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

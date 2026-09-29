@@ -337,16 +337,16 @@ fn counter_decl() -> v2::Decl {
 }
 
 // ---------------------------------------------------------------------------
-// The `Wire` alias and a declaration that would collide with it (#476).
+// A declaration named `Wire`, which the retired alias collided with (#476,
+// #588).
 // ---------------------------------------------------------------------------
 
-/// A declaration named `Wire`, the collision #476 reports.
+/// A declaration named `Wire`, the collision #476 reported.
 ///
 /// The **width** is load-bearing, not a range: a named scalar with no declared
 /// width has no finite FlatBuffers bound, and both entry points then refuse it
-/// for that reason (K4's D-7 refusal) rather than for the collision — which
-/// would make the assertion below pass vacuously. This carries `Counter`'s
-/// width for that reason.
+/// for that reason (K4's D-7 refusal), which would make the face test below
+/// pass for the wrong reason. This carries `Counter`'s width for that reason.
 fn wire_named_decl() -> v2::Decl {
     public_decl(
         "Wire",
@@ -358,38 +358,26 @@ fn wire_named_decl() -> v2::Decl {
     )
 }
 
-/// A package declaring `Wire` is refused by the face entry point rather than
-/// emitting two items of that name.
+/// A package declaring `Wire` is accepted by the face entry point, and its
+/// output holds no `pub type Wire`.
 ///
-/// `generate_face` emits `pub type Wire` at package scope, and a typl
-/// declaration named `Wire` emits `pub struct Wire` at the same scope; rustc
-/// reports E0428 on the pair. The refusal names the declaration so the cause
-/// is the package's, not a line of generated source the author never wrote.
-/// E11.14 decision 5: the collision is in the package rather than in one
-/// interface, so it is a build error and not decision 2's per-interface skip.
+/// `generate_face` used to emit that alias at package scope, where a typl
+/// declaration named `Wire` emits `pub struct Wire`, and E11.14 decision 5
+/// refused the package over the pair. The alias is gone (the generated-name
+/// collision design, decision 5, driftsys/ridl#588): every site that named it
+/// writes `::ridl_rt::encoding::FlatBuffers`, so `Wire` is an ordinary
+/// declaration in a package with a face as it always was in one without.
 #[test]
-fn a_declaration_named_wire_is_refused_by_the_face() {
-    let error = generate_face(&package("veh.common", vec![wire_named_decl()]))
-        .expect_err("a declaration named `Wire` collides with the encoding alias");
-    // Asserting only that the message names `Wire` would be satisfied by an
-    // unrelated refusal that happens to carry the declaration's path — an
-    // unconstrained `integer` has no finite FlatBuffers bound and is refused
-    // by both entry points, which is why this fixture carries a range.
-    assert!(
-        error.message.contains("collide") || error.message.contains("alias"),
-        "the refusal must state the collision, got: {}",
-        error.message
-    );
-    assert!(
-        error.message.contains("Wire"),
-        "the refusal must name the declaration, got: {}",
-        error.message
-    );
+fn a_declaration_named_wire_generates_a_face_with_no_alias() {
+    let source = generate_face(&package("veh.common", vec![wire_named_decl()]))
+        .expect("a declaration named `Wire` collides with nothing")
+        .rust_source;
+    assert!(source.contains("pub struct Wire("), "got:\n{source}");
+    assert!(!source.contains("pub type Wire"), "got:\n{source}");
 }
 
-/// The plain entry point is unaffected: it emits no alias, so `Wire` is an
-/// ordinary declaration there. This is what keeps decision 5 scoped to the
-/// face rather than narrowing what `generate` accepts.
+/// The plain entry point never emitted the alias, so `Wire` was an ordinary
+/// declaration there before the alias was removed, and still is.
 #[test]
 fn a_declaration_named_wire_generates_without_a_face() {
     let source = generate(&package("veh.common", vec![wire_named_decl()]))
@@ -438,7 +426,7 @@ fn constrained_scalar_is_a_value_object() {
     let source = rust_for(vec![speed_decl()]);
     // The field is private: no `pub` inside the tuple struct.
     assert!(
-        source.contains("pub struct Speed(f64)"),
+        source.contains("pub struct Speed(::core::primitive::f64)"),
         "inner field must be private, got:\n{source}"
     );
     // The plan's Task 3 spells `Result`, `TryFrom` and `From` unqualified.
@@ -449,14 +437,14 @@ fn constrained_scalar_is_a_value_object() {
     // checked in two parts because prettyplease wraps it at its own width.
     assert!(source.contains("pub fn new("));
     assert!(source.contains(") -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {"));
-    assert!(source.contains("pub const fn new_unchecked(value: f64) -> Self"));
-    assert!(source.contains("pub const fn get(self) -> f64"));
-    assert!(source.contains("impl ::core::convert::TryFrom<f64> for Speed"));
-    assert!(source.contains("impl ::core::convert::From<Speed> for f64"));
+    assert!(source.contains("pub const fn new_unchecked(value: ::core::primitive::f64) -> Self"));
+    assert!(source.contains("pub const fn get(self) -> ::core::primitive::f64"));
+    assert!(source.contains("impl ::core::convert::TryFrom<::core::primitive::f64> for Speed"));
+    assert!(source.contains("impl ::core::convert::From<Speed> for ::core::primitive::f64"));
     // The infallible inbound conversion must never appear on a constrained type.
     assert!(
-        !source.contains("impl ::core::convert::From<f64> for Speed")
-            && !source.contains("impl From<f64> for Speed"),
+        !source.contains("impl ::core::convert::From<::core::primitive::f64> for Speed")
+            && !source.contains("impl From<::core::primitive::f64> for Speed"),
         "From<Inner> reintroduces unchecked construction"
     );
 }
@@ -472,19 +460,19 @@ fn vacuous_scalar_constructs_infallibly() {
         ),
     )];
     let source = rust_for(decls);
-    assert!(source.contains("pub const fn new(value: bool) -> Self"));
-    assert!(source.contains("impl ::core::convert::From<bool> for Enabled"));
-    assert!(source.contains("impl ::core::convert::From<Enabled> for bool"));
+    assert!(source.contains("pub const fn new(value: ::core::primitive::bool) -> Self"));
+    assert!(source.contains("impl ::core::convert::From<::core::primitive::bool> for Enabled"));
+    assert!(source.contains("impl ::core::convert::From<Enabled> for ::core::primitive::bool"));
     // No escape hatch is emitted: `new` already is one.
     assert!(
         !source.contains("Enabled::new_unchecked")
-            && !source.contains("fn new_unchecked(value: bool)"),
+            && !source.contains("fn new_unchecked(value: ::core::primitive::bool)"),
         "new_unchecked would duplicate new on a vacuous type, got:\n{source}"
     );
     // And no manual TryFrom, which would collide with core's blanket impl.
     assert!(
-        !source.contains("impl ::core::convert::TryFrom<bool> for Enabled")
-            && !source.contains("impl TryFrom<bool> for Enabled"),
+        !source.contains("impl ::core::convert::TryFrom<::core::primitive::bool> for Enabled")
+            && !source.contains("impl TryFrom<::core::primitive::bool> for Enabled"),
         "a manual TryFrom collides with core's blanket impl, got:\n{source}"
     );
 }
@@ -516,16 +504,16 @@ fn step_only_scalar_is_vacuous_and_still_names_the_gap() {
     )]);
     // The vacuous path: infallible `new`, no `new_unchecked`, no manual
     // `TryFrom`.
-    assert!(source.contains("pub const fn new(value: f64) -> Self"));
-    assert!(source.contains("impl ::core::convert::From<f64> for Rounded"));
+    assert!(source.contains("pub const fn new(value: ::core::primitive::f64) -> Self"));
+    assert!(source.contains("impl ::core::convert::From<::core::primitive::f64> for Rounded"));
     assert!(
         !source.contains("Rounded::new_unchecked")
-            && !source.contains("fn new_unchecked(value: f64)"),
+            && !source.contains("fn new_unchecked(value: ::core::primitive::f64)"),
         "new_unchecked would duplicate new on a vacuous type, got:\n{source}"
     );
     assert!(
-        !source.contains("impl ::core::convert::TryFrom<f64> for Rounded")
-            && !source.contains("impl TryFrom<f64> for Rounded"),
+        !source.contains("impl ::core::convert::TryFrom<::core::primitive::f64> for Rounded")
+            && !source.contains("impl TryFrom<::core::primitive::f64> for Rounded"),
         "a manual TryFrom collides with core's blanket impl, got:\n{source}"
     );
     // And the quantization gap is still named on the type, although `new`
@@ -616,8 +604,8 @@ fn a_string_length_bound_counts_characters() {
         bounded_text_type(v2::PrimitiveType::String, 1, 64),
     )]);
     for check in [
-        "if (value.chars().count() as u64) < 1 {",
-        "if (value.chars().count() as u64) > 64 {",
+        "if (value.chars().count() as ::core::primitive::u64) < 1 {",
+        "if (value.chars().count() as ::core::primitive::u64) > 64 {",
         "rule: ::ridl_rt::payload::Rule::Length,",
     ] {
         assert!(source.contains(check), "expected `{check}` in:\n{source}");
@@ -631,15 +619,15 @@ fn a_bytes_length_bound_counts_bytes() {
         bounded_text_type(v2::PrimitiveType::Bytes, 4, 32),
     )]);
     for check in [
-        "if (value.len() as u64) < 4 {",
-        "if (value.len() as u64) > 32 {",
+        "if (value.len() as ::core::primitive::u64) < 4 {",
+        "if (value.len() as ::core::primitive::u64) > 32 {",
     ] {
         assert!(source.contains(check), "expected `{check}` in:\n{source}");
     }
 }
 
 /// `[0..256]` is the default length bound of string and bytes (typl §4.4,
-/// §4.5), so a minimum of 0 is the common case. `(… as u64) < 0` is never
+/// §4.5), so a minimum of 0 is the common case. `(… as ::core::primitive::u64) < 0` is never
 /// true and draws rustc's `unused_comparisons` warning in the consumer's
 /// build, so the branch is not emitted.
 #[test]
@@ -1353,7 +1341,7 @@ fn a_struct_field_name_is_projected_to_snake_case() {
     ]);
     assert!(source.contains("pub sensor_id:"), "got:\n{source}");
     assert!(
-        source.contains("sensor_id: Speed::default()"),
+        source.contains("sensor_id: <Speed as ::core::default::Default>::default()"),
         "the `Default` initializer must name the projected field, got:\n{source}"
     );
     assert!(
@@ -1630,8 +1618,10 @@ fn enumset_standalone_form() {
 #[test]
 fn enum_converts_from_a_raw_discriminant() {
     let source = rust_for(vec![gear_position_decl()]);
-    assert!(source.contains("impl ::core::convert::TryFrom<i64> for GearPosition"));
-    assert!(source.contains("impl ::core::convert::From<GearPosition> for i64"));
+    assert!(
+        source.contains("impl ::core::convert::TryFrom<::core::primitive::i64> for GearPosition")
+    );
+    assert!(source.contains("impl ::core::convert::From<GearPosition> for ::core::primitive::i64"));
     assert!(source.contains("::ridl_rt::payload::Rule::Variant"));
     // Each arm carries the declared discriminant, not the variant's position.
     // Asserting one arm of the gap is what distinguishes the two: over a
@@ -1646,13 +1636,13 @@ fn enum_converts_from_a_raw_discriminant() {
 #[test]
 fn enum_set_rejects_bits_outside_the_declared_mask() {
     let source = rust_for(vec![features_decl()]);
-    assert!(source.contains("impl ::core::convert::TryFrom<i64> for Features"));
+    assert!(source.contains("impl ::core::convert::TryFrom<::core::primitive::i64> for Features"));
     // The declared bits are positions 0 to 3, so the mask is 0b1111. The
     // value is asserted rather than the constant's presence: a fold that
     // ORed the bit positions instead of shifting by them would still emit a
     // `DECLARED_MASK`, and would still pass a presence check.
     assert!(
-        source.contains("const DECLARED_MASK: i64 = 15"),
+        source.contains("const DECLARED_MASK: ::core::primitive::i64 = 15"),
         "the mask is the union of the declared bits, got:\n{source}"
     );
 }
@@ -1677,7 +1667,7 @@ fn a_bit_position_outside_the_int64_domain_does_not_panic_codegen() {
         }),
     )]);
     assert!(
-        source.contains("const DECLARED_MASK: i64 = 2"),
+        source.contains("const DECLARED_MASK: ::core::primitive::i64 = 2"),
         "only the in-domain bit reaches the mask, got:\n{source}"
     );
 }
@@ -1697,7 +1687,7 @@ fn the_highest_declared_bit_is_in_domain() {
         }),
     )]);
     assert!(
-        source.contains("const DECLARED_MASK: i64 = -9223372036854775808"),
+        source.contains("const DECLARED_MASK: ::core::primitive::i64 = -9223372036854775808"),
         "bit 63 is in the mask, got:\n{source}"
     );
 }
@@ -1909,7 +1899,7 @@ fn a_tuple_field_name_is_projected_to_snake_case() {
     let source = rust_for(decls);
     assert!(source.contains("pub min_speed:"), "got:\n{source}");
     assert!(
-        source.contains("min_speed: Speed::default()"),
+        source.contains("min_speed: <Speed as ::core::default::Default>::default()"),
         "the `Default` initializer must name the projected field, got:\n{source}"
     );
     assert!(
@@ -2334,7 +2324,7 @@ fn derivable_scalar_gets_default_with_derived_value() {
     });
     let source = rust_for(vec![public_decl("Warm", ranged)]);
     assert!(
-        source.contains("impl Default for Warm"),
+        source.contains("impl ::core::default::Default for Warm"),
         "a derivable scalar must get a Default impl, got:\n{source}"
     );
     assert!(
@@ -2378,11 +2368,11 @@ fn leaf_recursion_denies_default_through_a_composite_field() {
     ];
     let source = rust_for(decls);
     assert!(
-        !source.contains("impl Default for Inner"),
+        !source.contains("impl ::core::default::Default for Inner"),
         "Inner has a non-derivable leaf; it must not get a Default, got:\n{source}"
     );
     assert!(
-        !source.contains("impl Default for Outer"),
+        !source.contains("impl ::core::default::Default for Outer"),
         "Outer transitively contains a non-derivable leaf; it must not get a Default despite the one-level flag, got:\n{source}"
     );
 }
@@ -3073,7 +3063,7 @@ pub mod ridl {
         pub struct Label(pub String);
         #[derive(Debug, Clone, PartialEq)]
         pub struct Timestamp(pub i64);
-        impl Default for Timestamp {
+        impl ::core::default::Default for Timestamp {
             fn default() -> Self {
                 Timestamp(0)
             }
@@ -3256,7 +3246,7 @@ fn constructible_collections_compile() {
     let Generated { rust_source, .. } = generate(&package("veh.common", decls)).expect("generates");
 
     assert!(
-        rust_source.contains("impl Default for Bag"),
+        rust_source.contains("impl ::core::default::Default for Bag"),
         "Bag with derivable collection fields must get a Default, got:\n{rust_source}"
     );
 
@@ -3347,7 +3337,9 @@ fn recursive_struct_default_terminates() {
     ))
     .expect("a cyclic struct's Default derivation must terminate, not overflow");
     assert!(
-        !generated.rust_source.contains("impl Default for S"),
+        !generated
+            .rust_source
+            .contains("impl ::core::default::Default for S"),
         "a cyclic struct must get no Default, got:\n{}",
         generated.rust_source
     );
@@ -3375,7 +3367,7 @@ fn declared_string_init_becomes_the_default() {
     });
     let source = rust_for(vec![public_decl("Plate", plate)]);
     assert!(
-        source.contains("impl Default for Plate"),
+        source.contains("impl ::core::default::Default for Plate"),
         "a declared-init string type gets a Default, got:\n{source}"
     );
     assert!(
@@ -3412,7 +3404,7 @@ fn cross_package_declared_init_omits_the_default() {
         v2::decl::Kind::StructDef(struct_def),
     )]);
     assert!(
-        !source.contains("impl Default for Selection"),
+        !source.contains("impl ::core::default::Default for Selection"),
         "a struct with a cross-package declared-init field must get no Default, got:\n{source}"
     );
 }
@@ -3458,7 +3450,7 @@ fn selection_with_gear_index(range: Option<v2::Constraint>) -> String {
 fn same_package_declared_init_gets_the_correct_default() {
     let source = selection_with_gear_index(Some(constraint(Some("0"), Some("8"), None)));
     assert!(
-        source.contains("impl Default for Selection"),
+        source.contains("impl ::core::default::Default for Selection"),
         "the same-package equivalent gets a Default, got:\n{source}"
     );
     assert!(
@@ -3492,7 +3484,7 @@ fn regex_const_strips_its_delimiters() {
         }),
     )]);
     assert!(
-        source.contains("PLATE_PATTERN: &str = \"^[A-Z]{2}-[0-9]{3}$\""),
+        source.contains("PLATE_PATTERN: &::core::primitive::str = \"^[A-Z]{2}-[0-9]{3}$\""),
         "the regex const must emit its pattern without delimiters, got:\n{source}"
     );
     assert!(
@@ -3566,7 +3558,9 @@ fn generate_emits_an_empty_field_name_without_a_derivable_default() {
         generated.rust_source,
     );
     assert!(
-        !generated.rust_source.contains("impl Default for S"),
+        !generated
+            .rust_source
+            .contains("impl ::core::default::Default for S"),
         "the struct must not derive Default, got:\n{}",
         generated.rust_source,
     );
@@ -3838,6 +3832,40 @@ fn module_segment_spells_a_segment_the_way_type_path_does() {
     }
 }
 
+/// The escape of the four keywords that cannot be raw identifiers is
+/// injective (the generated-name collision design, decision 7,
+/// driftsys/ridl#583): a name that is one of them followed by zero or more
+/// underscores gets one more, so `self` and `self_` are `self_` and `self__`
+/// rather than `self_` twice. It holds in `ident`, which every emitted name
+/// passes through, and so in `module_segment`, which is `ident`. A package
+/// segment is `[a-z][a-z0-9]*` (`is_valid_name_segment`), so no segment ends
+/// in an underscore and the crate tree meets only the first row of each pair;
+/// a declaration, a field or an enum set bit meets both.
+#[test]
+fn the_keyword_escape_is_injective() {
+    for (name, expected) in [
+        ("crate", "crate_"),
+        ("crate_", "crate__"),
+        ("self", "self_"),
+        ("self_", "self__"),
+        ("self__", "self___"),
+        ("Self", "Self_"),
+        ("Self_", "Self__"),
+        ("super", "super_"),
+        ("super_", "super__"),
+        // A name that only starts with one of the four is not escaped.
+        ("selfie", "selfie"),
+        ("self_check", "self_check"),
+    ] {
+        assert_eq!(super::ident(name).to_string(), expected, "ident({name:?})");
+        assert_eq!(
+            super::module_segment(name),
+            expected,
+            "module_segment({name:?})"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Derives (design decision 7, Task 6).
 // ---------------------------------------------------------------------------
@@ -3895,7 +3923,7 @@ fn assert_always_derived(derived: &[String], header: &str) {
 #[test]
 fn float_backed_scalar_derives_partial_ord_but_not_ord() {
     let source = rust_for(vec![speed_decl()]);
-    let derived = derives_of(&source, "pub struct Speed(f64);");
+    let derived = derives_of(&source, "pub struct Speed(::core::primitive::f64);");
     assert_always_derived(&derived, "Speed");
     // Ord requires Eq, and f64 is neither Eq nor Hash.
     assert_eq!(
@@ -3907,7 +3935,7 @@ fn float_backed_scalar_derives_partial_ord_but_not_ord() {
 #[test]
 fn integer_backed_scalar_derives_the_full_ordering_set() {
     let source = rust_for(vec![counter_decl()]);
-    let derived = derives_of(&source, "pub struct Counter(i64);");
+    let derived = derives_of(&source, "pub struct Counter(::core::primitive::i64);");
     assert_always_derived(&derived, "Counter");
     assert_eq!(
         derived,
@@ -3931,7 +3959,7 @@ fn string_backed_scalar_is_not_copy() {
         bounded_string_type(init_value(true, Some(""))),
     )];
     let source = rust_for(decls);
-    let derived = derives_of(&source, "pub struct Label(String);");
+    let derived = derives_of(&source, "pub struct Label(::std::string::String);");
     assert_always_derived(&derived, "Label");
     // A String is Eq and Hash but not Copy, and a string backing is not
     // numeric, so it takes no ordering.
@@ -3996,7 +4024,7 @@ fn a_struct_takes_no_ordering() {
     // The positive companion: the numeric named scalar in the same package
     // does take both, so an emitter that never emits ordering at all cannot
     // pass this pair.
-    let scalar = derives_of(&source, "pub struct Counter(i64);");
+    let scalar = derives_of(&source, "pub struct Counter(::core::primitive::i64);");
     assert!(
         scalar.iter().any(|d| d == "PartialOrd") && scalar.iter().any(|d| d == "Ord"),
         "the numeric named scalar must take both, got {scalar:?}"
@@ -4212,7 +4240,7 @@ fn a_map_field_loses_copy() {
     );
     let source = rust_for(vec![counter_decl(), table]);
     assert!(
-        source.contains("Vec<(Counter, Counter)>"),
+        source.contains("::std::vec::Vec<(Counter, Counter)>"),
         "the map must emit the Vec form this test reasons about, got:\n{source}"
     );
     let derived = derives_of(&source, "pub struct Table {");
@@ -4268,7 +4296,7 @@ fn a_map_whose_key_reaches_a_float_loses_eq() {
     );
     let source = rust_for(vec![speed_decl(), counter_decl(), table]);
     assert!(
-        source.contains("Vec<(Speed, Counter)>"),
+        source.contains("::std::vec::Vec<(Speed, Counter)>"),
         "the fixture must emit the map shape it reasons about, got:\n{source}"
     );
     let derived = derives_of(&source, "pub struct KeyTable {");
@@ -4452,9 +4480,9 @@ fn default_is_never_derived() {
         outcome,
     ]);
     for header in [
-        "pub struct Speed(f64);",
-        "pub struct Counter(i64);",
-        "pub struct Features(i64);",
+        "pub struct Speed(::core::primitive::f64);",
+        "pub struct Counter(::core::primitive::i64);",
+        "pub struct Features(::core::primitive::i64);",
         "pub enum GearPosition {",
         "pub struct Tally {",
         "pub enum Outcome {",
@@ -4468,9 +4496,9 @@ fn default_is_never_derived() {
     // The positive companion: the Default the backend does emit is an impl
     // built from the init value, not a derive.
     for emitted in [
-        "impl Default for Speed",
-        "impl Default for GearPosition",
-        "impl Default for Tally",
+        "impl ::core::default::Default for Speed",
+        "impl ::core::default::Default for GearPosition",
+        "impl ::core::default::Default for Tally",
     ] {
         assert!(
             source.contains(emitted),
@@ -4562,7 +4590,7 @@ fn an_enum_set_in_a_struct_field_is_readable_through_a_shared_reference() {
         }),
     );
     let generated = rust_for(vec![features_decl(), warnings]);
-    let derived = derives_of(&generated, "pub struct Features(i64);");
+    let derived = derives_of(&generated, "pub struct Features(::core::primitive::i64);");
     assert_always_derived(&derived, "Features");
     assert!(
         derived.iter().any(|d| d == "Copy"),
@@ -5688,7 +5716,7 @@ fn generate_with_resolves_a_reference_into_another_package() {
 
     let alone = generate(&local).expect("the package generates").rust_source;
     assert!(
-        alone.contains("__RIDL_FB_NO_CODEC"),
+        alone.contains("__RIDL_FB_NO_CODEC_Line"),
         "without the other package the type is withheld a codec, got:\n{alone}"
     );
 

@@ -160,6 +160,39 @@ the 59 enums in every tracked `.ridl` and `.typl` file and in the book, no two
 values of one enum share an output, so the check is expected to reject nothing
 that exists.
 
+**Amendment (2026-09-29), from the generated-name collision design
+(driftsys/ridl#583, #587, #588, #423, #449, #453, #455).** The line between
+decision 3 and ADR-0017 decision 4 is stated for every backend. A collision is
+the language's, and `ridl-sem` refuses it, only when every backend that projects
+the names meets it: two names of one scope under a pinned transform every
+projecting backend applies in that scope (RIDL-149), or one name spelled twice
+in one scope (TYPL-215 and its siblings). Every other collision belongs to one
+target's namespaces and its backend removes it: by changing a name the backend
+chose, when one of the two names is the backend's own, or, when both are derived
+from ridl names and the target cannot hold both, by refusing the package with a
+message naming both sources.
+
+Applied here: TYPL-215 covers a tuple's fields, because a repeated tuple field
+fails in Rust and in TypeScript. A tuple field's `snake_case`, a struct field's
+and a member's `camel_case`, and an interface's `snake_case` are not RIDL-149
+scopes: of the in-tree backends, each is applied in that scope by the Rust
+backend alone (the wire backends name a tuple's fields by position), so those
+collisions are the Rust backend's to refuse at `ridl build`, and only for the
+items it emits. A declaration's `snake_case` is applied by the Rust backend, for
+internal names it now spells from the declared name, and by the proto backend,
+as an enum's value prefix; the FlatBuffers and TypeScript backends keep the
+declared name. So it is not a RIDL-149 scope either, and the proto backend keeps
+its own refusal under ADR-0017 decision 4. The consequences entries on
+driftsys/ridl#449, #453 and #455 are resolved by this, not by extending
+RIDL-149. When this amendment was recorded, neither the TYPL-215 extension nor
+the Rust backend's claim tables were built; those three issues stay open until
+they are.
+
+Open: RIDL-149 checks a union's arms under `camel_case` and an enum's values
+under `pascal_case`, and of the in-tree backends only the Rust backend applies
+either transform. By this amendment's line those two checks are the Rust
+backend's. They stay where they are until a change needs to move them.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what

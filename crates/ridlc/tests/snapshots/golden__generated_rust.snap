@@ -5,11 +5,11 @@ expression: output.rust_source
 /// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct Speed(f64);
+pub struct Speed(::core::primitive::f64);
 impl Speed {
     /// Constructs the value, enforcing its typl constraints.
     pub fn new(
-        value: f64,
+        value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
@@ -25,7 +25,7 @@ impl Speed {
     /// Whether this becomes `pub` is Epic 10's call, still open.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
-        value: &f64,
+        value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
         if value < 0.0 {
@@ -47,25 +47,27 @@ impl Speed {
     /// Safe: nothing here relies on the invariant for memory
     /// soundness. Use it only for a value already known to satisfy
     /// the contract.
-    pub const fn new_unchecked(value: f64) -> Self {
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
         Self(value)
     }
-    pub const fn get(self) -> f64 {
+    pub const fn get(self) -> ::core::primitive::f64 {
         self.0
     }
 }
-impl ::core::convert::TryFrom<f64> for Speed {
+impl ::core::convert::TryFrom<::core::primitive::f64> for Speed {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl ::core::convert::From<Speed> for f64 {
+impl ::core::convert::From<Speed> for ::core::primitive::f64 {
     fn from(value: Speed) -> Self {
         value.0
     }
 }
-impl Default for Speed {
+impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
     }
@@ -74,30 +76,31 @@ pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);
 /// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
-        __ridl_fb_decode_speed(self.buf, self.table)
+        __ridl_fb_decode_Speed(self.buf, self.table)
     }
 }
 /// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_speed(
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -111,7 +114,9 @@ pub(crate) fn __ridl_fb_encode_speed(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::F32(__s.get() as f32)
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
                 },
             },
         ];
@@ -119,34 +124,45 @@ pub(crate) fn __ridl_fb_encode_speed(
     })
 }
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_speed(
-    buf: &[u8],
-    table: usize,
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
-            buf,
-            table,
-            0u16,
-            4usize,
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        Speed::check(&(f64::from(__raw)))
-            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Speed::check(&(::core::primitive::f64::from(__raw)))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
     }
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_speed(buf: &[u8], table: usize) -> Speed {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
-        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-            Speed::new_unchecked(
-                f64::from(::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32)),
-            )
-        }
-        _ => Speed::new_unchecked(0.0f64),
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Speed {
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+            ),
+        )
     }
 }
 #[allow(deprecated)]
@@ -162,17 +178,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 46usize;
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
     type View<'a> = SpeedFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_speed(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Speed(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -181,7 +197,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -196,13 +212,13 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_speed(buf, table)?;
+        __ridl_fb_verify_Speed(buf, table)?;
         ::core::result::Result::Ok(SpeedFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_speed(__view.buf, __view.table)
+        __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }

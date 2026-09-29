@@ -10,10 +10,10 @@ pub enum Warning {
     DoorOpen = 2,
     Seatbelt = 3,
 }
-impl ::core::convert::TryFrom<i64> for Warning {
+impl ::core::convert::TryFrom<::core::primitive::i64> for Warning {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
-        value: i64,
+        value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         match value {
             0 => ::core::result::Result::Ok(Self::LowFuel),
@@ -29,29 +29,31 @@ impl ::core::convert::TryFrom<i64> for Warning {
         }
     }
 }
-impl ::core::convert::From<Warning> for i64 {
+impl ::core::convert::From<Warning> for ::core::primitive::i64 {
     fn from(value: Warning) -> Self {
-        value as i64
+        value as ::core::primitive::i64
     }
 }
-impl Default for Warning {
+impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning::LowFuel
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct WarningFlags(i64);
+pub struct WarningFlags(::core::primitive::i64);
 impl WarningFlags {
     pub const LOW_FUEL: WarningFlags = WarningFlags(1 << 0);
     pub const CHECK_ENGINE: WarningFlags = WarningFlags(1 << 1);
     pub const DOOR_OPEN: WarningFlags = WarningFlags(1 << 2);
     pub const SEATBELT: WarningFlags = WarningFlags(1 << 3);
 }
-impl ::core::convert::TryFrom<i64> for WarningFlags {
+impl ::core::convert::TryFrom<::core::primitive::i64> for WarningFlags {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
-        const DECLARED_MASK: i64 = 15;
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
+        const DECLARED_MASK: ::core::primitive::i64 = 15;
         if value & !DECLARED_MASK != 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "WarningFlags",
@@ -61,12 +63,12 @@ impl ::core::convert::TryFrom<i64> for WarningFlags {
         ::core::result::Result::Ok(Self(value))
     }
 }
-impl ::core::convert::From<WarningFlags> for i64 {
+impl ::core::convert::From<WarningFlags> for ::core::primitive::i64 {
     fn from(value: WarningFlags) -> Self {
         value.0
     }
 }
-impl Default for WarningFlags {
+impl ::core::default::Default for WarningFlags {
     fn default() -> Self {
         WarningFlags(0)
     }
@@ -74,30 +76,31 @@ impl Default for WarningFlags {
 /// An accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> WarningFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `Warning` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Warning {
-        __ridl_fb_decode_warning(self.buf, self.table)
+        __ridl_fb_decode_Warning(self.buf, self.table)
     }
 }
 /// Writes `Warning` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_warning(
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Warning(
     value: &Warning,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -111,7 +114,7 @@ pub(crate) fn __ridl_fb_encode_warning(
                 offset: 8u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
                 },
             },
         ];
@@ -119,35 +122,46 @@ pub(crate) fn __ridl_fb_encode_warning(
     })
 }
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_warning(
-    buf: &[u8],
-    table: usize,
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Warning(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
-            buf,
-            table,
-            0u16,
-            8usize,
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Warning as ::core::convert::TryFrom<i64>>::try_from(__raw)
-            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            <Warning as ::core::convert::TryFrom<
+                ::core::primitive::i64,
+            >>::try_from(__raw)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
     }
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_warning(buf: &[u8], table: usize) -> Warning {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
-        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-            <Warning as ::core::convert::TryFrom<
-                i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
-                .unwrap_or(Warning::LowFuel)
-        }
-        _ => Warning::LowFuel,
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Warning(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Warning {
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        <Warning as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            .unwrap_or(Warning::LowFuel)
     }
 }
 #[allow(deprecated)]
@@ -163,17 +177,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 50usize;
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, WarningFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_warning(self, &mut builder)?;
+        let __root = __ridl_fb_encode_Warning(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -182,7 +196,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WarningFbView<'_>, ::ridl_rt::payload::VerifyError> {
         if buf.len()
             > <Self as ::ridl_rt::payload::Payload<
@@ -197,43 +211,44 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_warning(buf, table)?;
+        __ridl_fb_verify_Warning(buf, table)?;
         ::core::result::Result::Ok(WarningFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_warning(__view.buf, __view.table)
+        __ridl_fb_decode_Warning(__view.buf, __view.table)
     }
 }
 /// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
 ///
 /// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// gives this declaration: one required `value` field. A
+/// buffer carrying no slot for it is `MissingRequired`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
-    pub(crate) buf: &'a [u8],
-    pub(crate) table: usize,
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningFlagsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
 }
 #[allow(deprecated)]
 impl<'a> WarningFlagsFbView<'a> {
-    /// The verified bytes this view reads.
-    pub fn bytes(&self) -> &'a [u8] {
-        self.buf
-    }
     /// The value the box carries. `WarningFlags` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> WarningFlags {
-        __ridl_fb_decode_warning_flags(self.buf, self.table)
+        __ridl_fb_decode_WarningFlags(self.buf, self.table)
     }
 }
 /// Writes `WarningFlags` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_encode_warning_flags(
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_encode_WarningFlags(
     value: &WarningFlags,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
@@ -247,7 +262,9 @@ pub(crate) fn __ridl_fb_encode_warning_flags(
                 offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::U8(i64::from(__s) as u8)
+                    ::ridl_rt::flatbuffers::Field::U8(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::u8,
+                    )
                 },
             },
         ];
@@ -255,37 +272,50 @@ pub(crate) fn __ridl_fb_encode_warning_flags(
     })
 }
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_verify_warning_flags(
-    buf: &[u8],
-    table: usize,
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_verify_WarningFlags(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
-            buf,
-            table,
-            0u16,
-            1usize,
-        )
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <WarningFlags as ::core::convert::TryFrom<i64>>::try_from(i64::from(__raw))
-            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::option::Option::Some(__p) => {
+            let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            <WarningFlags as ::core::convert::TryFrom<
+                ::core::primitive::i64,
+            >>::try_from(::core::primitive::i64::from(__raw))
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
     }
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated)]
-pub(crate) fn __ridl_fb_decode_warning_flags(buf: &[u8], table: usize) -> WarningFlags {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
-        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
-            <WarningFlags as ::core::convert::TryFrom<
-                i64,
-            >>::try_from(
-                    i64::from(::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8)),
-                )
-                .unwrap_or(WarningFlags(0i64))
-        }
-        _ => WarningFlags(0i64),
+#[allow(non_snake_case)]
+pub(crate) fn __ridl_fb_decode_WarningFlags(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> WarningFlags {
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        <WarningFlags as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                ),
+            )
+            .unwrap_or(WarningFlags(0i64))
     }
 }
 #[allow(deprecated)]
@@ -301,17 +331,17 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
     /// literal rather than an expression over the field types
     /// because that slack is not expressible in Rust's type
     /// system.
-    const MAX_SIZE: usize = 43usize;
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
     type View<'a> = WarningFlagsFbView<'a>;
     fn encode<'o>(
         &self,
-        out: &'o mut [u8],
+        out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
         ::ridl_rt::payload::Encoded<'o, WarningFlagsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_warning_flags(self, &mut builder)?;
+        let __root = __ridl_fb_encode_WarningFlags(self, &mut builder)?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
@@ -323,7 +353,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         })
     }
     fn verify(
-        buf: &[u8],
+        buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
         WarningFlagsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
@@ -341,13 +371,13 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_warning_flags(buf, table)?;
+        __ridl_fb_verify_WarningFlags(buf, table)?;
         ::core::result::Result::Ok(WarningFlagsFbView { buf, table })
     }
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_warning_flags(__view.buf, __view.table)
+        __ridl_fb_decode_WarningFlags(__view.buf, __view.table)
     }
 }

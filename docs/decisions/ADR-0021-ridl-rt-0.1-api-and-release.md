@@ -105,6 +105,15 @@ change that needs it is breaking; Sebastien confirmed the release and its
 publication on 2026-09-28. The design note is
 [`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
 
+**Amendment (2026-09-29) — decision 20: `payload::View`.** A generated view's
+`bytes` moves from an inherent method onto a trait in this crate, so that a
+field whose accessor is named `bytes` does not meet it (driftsys/ridl#587). An
+addition under decision 10, released with the workspace as 0.5.0 because the
+backend change that needs it breaks the generated API. The design note is the
+generated-name collision design (driftsys/ridl#583, #587, #588). The same note
+removes the generated `pub type Wire` alias decision 7's 2026-09-21 addendum
+describes; that addendum carries a dated note.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -316,6 +325,14 @@ trusted with no `unsafe` and no second verification pass.
    Restoring `&buf[..len]` in the emitter turns seven of the round-trip tests in
    `crates/ridl-backend-rust/tests/interaction_face.rs` red — applied and run,
    not inferred.
+
+   **Note (2026-09-29).** The `Wire` alias named above is gone: the
+   generated-name collision design (decision 5 of that note, driftsys/ridl#588)
+   removed `pub type Wire` from the generated package, because a declaration or
+   an interface named `Wire` collided with it, and the emitted code names the
+   encoding by its path, `::ridl_rt::encoding::FlatBuffers`, at every site that
+   named the alias. Nothing in this record depends on the alias; the paragraph
+   above describes what the emitter wrote at the time.
 
    The same amendment settles what `EncodeError::Capacity`'s `needed` means,
    which the FlatBuffers encoder is the first to make a question. An encoder
@@ -763,6 +780,41 @@ trusted with no `unsafe` and no second verification pass.
     crates.io. Sebastien confirmed the release and its publication on
     2026-09-28.
 
+20. **Amendment (2026-09-29) — `payload::View<'a>`: the trait a generated view
+    implements, and the 0.5.0 release that carries it.**
+    `pub trait View<'a> { fn bytes(&self) -> &'a [u8]; }` lives in the `payload`
+    module, ungated and `no_std` like the rest of that module. Every view the
+    FlatBuffers codec emits — a struct's, a tuple's, a union's and a box root's
+    `<T>FbView<'a>` — implements it, and `bytes` is no longer an inherent method
+    of the view. The reason is a name collision: a struct or tuple field whose
+    `snake_case` is `bytes` (spelled `Bytes` in the source, because `bytes` is a
+    typl keyword) gives the view an inherent accessor of that name beside the
+    fixed one, and rustc refuses two inherent items of one name (E0592,
+    driftsys/ridl#587). A trait method has its own namespace: the accessor stays
+    inherent and wins the dot call, and the buffer is reached through the
+    trait's path, `View::bytes(&view)`. This is the rule
+    [ADR-0023](ADR-0023-interaction-face-generation.md) decision 7 applied to
+    the face's fixed methods, applied here to the codec's one fixed view method.
+    The name `View` was checked against the crate's exports: the associated type
+    `Payload::View` is a trait item and does not conflict, and no other module
+    exports a `View`. The alternative, deleting `bytes` from the view because
+    `Ref::bytes` holds the same slice, was rejected: a function handed only a
+    nested view would lose the buffer.
+
+    **The release.** A trait in an existing module is an addition, not a
+    breaking change under decision 10. The crate is released as 0.5.0 with the
+    workspace all the same, for the reason decision 19 gave: the backend change
+    that needs it breaks the generated API (a consumer that calls `view.bytes()`
+    adds `use ridl_rt::payload::View;`, a consumer that named `<package>::Wire`
+    writes `ridl_rt::encoding::FlatBuffers`, and a source name `self_`, `Self_`,
+    `super_` or `crate_` now emits one more underscore), which at 0.x is a minor
+    bump, and the emitted manifest's caret requirement on `ridl-rt` accepts any
+    published line of one minor. The release commit moves the workspace version
+    to 0.5.0 and the literal in `crates/ridlc/src/lib.rs` to `"0.5"`, and
+    `cargo publish` of `ridl-rt` follows the tag, the order decision 19 used.
+    The release follows the last of the four pull requests the design splits the
+    work into.
+
 ## Alternatives considered
 
 | Question                   | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
@@ -878,6 +930,8 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-loopback` design record](../design/ridl-loopback.md)                                  | the claim section and the `forget` table state the offered claim (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                                             |
 | [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | the settlement table gains the `ShortClaim` row (decision 5's 2026-09-28 amendment)                                                                                                                                                                                                                                              |
 | `crates/ridl-rt/src/port.rs`                                                                     | `ReadError::ShortClaim`, its doc, and the `Handler::next_claim` and `Handler::settle` docs state decision 5's 2026-09-28 amendment                                                                                                                                                                                               |
+| [the `ridl-rt` design record](../design/ridl-rt.md), "The payload encodings and the proof type"  | the listing gains `payload::View` (decision 20)                                                                                                                                                                                                                                                                                  |
+| [the FlatBuffers codec design record](../design/flatbuffers-codec.md)                            | the view's `bytes` is a trait method, the `__ridl_fb_*` functions are spelled from the declared name, and the `Wire` alias is gone (decision 20 and the 2026-09-29 note on decision 7)                                                                                                                                           |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-09-28 amendment records `face` as the eighth unconditional module (decision 19)                                                                                                                                                                                                                                           |
 | [ADR-0023](ADR-0023-interaction-face-generation.md)                                              | its second 2026-09-28 amendment, decision 7, is the face built over decision 19's traits; the two records were amended together                                                                                                                                                                                                  |
 | [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table and a `face` section state decision 19                                                                                                                                                                                                                                                                          |

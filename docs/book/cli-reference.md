@@ -562,9 +562,11 @@ the program, which prints one round trip per interaction kind through the
 async client and the command and the query again through the blocking one.
 
 There is **no flag for the payload encoding**. A package emits the FlatBuffers
-codec, which is the only one built; the emitted `pub type Wire` names it in one
-line. A `--wire` flag belongs to the story that adds the second codec, and
-[ADR-0010][adr-0010] binds its spelling then rather than now.
+codec, which is the only one built; the emitted code names it as
+`::ridl_rt::encoding::FlatBuffers` at each site, and a consumer names the
+encoding from `ridl_rt::encoding`. A `--wire` flag belongs to the story that
+adds the second codec, and [ADR-0010][adr-0010] binds its spelling then rather
+than now.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages

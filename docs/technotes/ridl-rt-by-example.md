@@ -228,9 +228,9 @@ This is `Client::temperature`, with the error handling summarised:
 
 ```rust
 pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError> {
-    let mut buf = [0u8; <Temperature as Payload<Wire>>::MAX_SIZE];
+    let mut buf = [0u8; <Temperature as Payload<FlatBuffers>>::MAX_SIZE];
     let raw = self.port.read(Cabin::NUMBER, Ordinal(1u32), &mut buf)?;
-    match Ref::<Temperature, Wire>::verify(&buf[..raw.len]) {
+    match Ref::<Temperature, FlatBuffers>::verify(&buf[..raw.len]) {
         Ok(checked) => Ok(Sample { value: checked.decode(), /* raw's three fields */ }),
         Err(error)  => Ok(Sample {
             value: CabinTemperature::init(),
@@ -258,9 +258,9 @@ case the `Provenance` already models, so the generated code reports it as
 proceed with. The `ReadError` in the signature covers the read itself — the
 buffer was too short, or the runtime behind the port is gone.
 
-The `Payload`, `Ref` and `Wire` names are the encoding machinery. Step 3 covers
-them; for now, `verify` checks bytes and `decode` turns checked bytes into a
-value.
+The `Payload`, `Ref` and `FlatBuffers` names are the encoding machinery. Step 3
+covers them; for now, `verify` checks bytes and `decode` turns checked bytes
+into a value.
 
 ## Step 2 — publish one signal
 
@@ -370,10 +370,11 @@ valid when constructed, and the receiver's `verify` reports one that is not. The
 generated encode sites treat a capacity failure as `unreachable!` with a message
 naming the type, because a legal value cannot exceed its own `MAX_SIZE`.
 
-> `Wire` is the alias the generated package carries for its payload encoding,
-> `::ridl_rt::encoding::FlatBuffers` (E11.7's D-11). The `Payload`
-> implementations behind it are generated, not hand-written: the round-trip test
-> runs over the emitted codec.
+> `FlatBuffers` is `ridl_rt::encoding::FlatBuffers`, the payload encoding of the
+> generated package, which the generated code names by that path at each site
+> (E11.7's D-11; the `Wire` alias it once carried was removed on 2026-09-29).
+> The `Payload` implementations behind it are generated, not hand-written: the
+> round-trip test runs over the emitted codec.
 
 ## Step 4 — an event
 

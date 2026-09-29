@@ -27,8 +27,16 @@
 //! [`crate::type_path`] spells it everywhere else, and so they can read a
 //! generated type's private inner value the way any other item of that module
 //! can. Their names begin with `__ridl_fb_`, which no typl name collides with
-//! (typl §15.1 gives a declaration a CamelCase name and a constant a
-//! SCREAMING_SNAKE one).
+//! (no typl name begins with an underscore), and end with the declared name
+//! rather than its `snake_case`, so two declarations whose `snake_case`
+//! agrees (`HTTPServer` beside `HttpServer`, which TYPL-009 accepts) get two
+//! sets of functions rather than one name twice; each function allows the
+//! `non_snake_case` lint the CamelCase tail draws (the generated-name
+//! collision design, X-15).
+//!
+//! Every primitive and prelude type written at package scope is written by its
+//! `::core::` or `::std::` path, for the reason [`crate::class_tokens`] gives:
+//! a typl declaration may carry any of those names.
 //!
 //! # What is withheld, and what is refused
 //!
@@ -273,13 +281,15 @@ impl Scalar {
         let base = match &self.repr {
             Repr::Bool | Repr::Int | Repr::Float => quote! { #expr },
             Repr::Named(_) => quote! { #expr.get() },
-            Repr::Enum { .. } | Repr::EnumSet { .. } => quote! { i64::from(#expr) },
+            Repr::Enum { .. } | Repr::EnumSet { .. } => {
+                quote! { ::core::primitive::i64::from(#expr) }
+            }
         };
         match self.prim {
             Prim::Bool | Prim::I64 | Prim::F64 => base,
             other => {
                 let ty = format_ident!("{}", other.rust_name());
-                quote! { #base as #ty }
+                quote! { #base as ::core::primitive::#ty }
             }
         }
     }
@@ -300,9 +310,9 @@ impl Scalar {
     fn widen(&self, raw: TokenStream) -> TokenStream {
         match self.prim {
             Prim::Bool | Prim::I64 | Prim::F64 => raw,
-            Prim::U64 => quote! { #raw as i64 },
-            Prim::F32 => quote! { f64::from(#raw) },
-            _ => quote! { i64::from(#raw) },
+            Prim::U64 => quote! { #raw as ::core::primitive::i64 },
+            Prim::F32 => quote! { ::core::primitive::f64::from(#raw) },
+            _ => quote! { ::core::primitive::i64::from(#raw) },
         }
     }
 
@@ -387,14 +397,14 @@ impl Scalar {
                 let ty = type_path(name);
                 let variant = ident(first);
                 quote! {
-                    <#ty as ::core::convert::TryFrom<i64>>::try_from(#widened)
+                    <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
                         .unwrap_or(#ty::#variant)
                 }
             }
             Repr::EnumSet { name } => {
                 let ty = type_path(name);
                 quote! {
-                    <#ty as ::core::convert::TryFrom<i64>>::try_from(#widened)
+                    <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
                         .unwrap_or(#ty(0i64))
                 }
             }
@@ -524,16 +534,22 @@ fn view_ident(owner: &str) -> Ident {
     format_ident!("{}FbView", ident(owner))
 }
 
+/// The three function names of one owner, spelled from the declared name
+/// through [`crate::ident`] — the same spelling [`view_ident`] uses — rather
+/// than through `snake_case`, which is not injective over the names TYPL-009
+/// accepts. `format_ident!` strips a raw identifier's `r#`, so a keyword
+/// owner still spells a plain suffix, and the injective keyword escape keeps
+/// `Self` and `Self_` apart.
 fn encode_ident(owner: &str) -> Ident {
-    format_ident!("__ridl_fb_encode_{}", snake_case(owner))
+    format_ident!("__ridl_fb_encode_{}", ident(owner))
 }
 
 fn verify_ident(owner: &str) -> Ident {
-    format_ident!("__ridl_fb_verify_{}", snake_case(owner))
+    format_ident!("__ridl_fb_verify_{}", ident(owner))
 }
 
 fn decode_ident(owner: &str) -> Ident {
-    format_ident!("__ridl_fb_decode_{}", snake_case(owner))
+    format_ident!("__ridl_fb_decode_{}", ident(owner))
 }
 
 /// An owner as written at a *reference* site: the declared name for a type of
@@ -869,13 +885,15 @@ impl<'a> Codec<'a> {
     ///
     /// It is a `const` rather than a bare comment because `quote!` emits
     /// tokens, and a doc attribute is the only comment that survives into
-    /// `prettyplease`'s output. The name cannot collide with a typl constant:
-    /// typl §15.1 gives one a SCREAMING_SNAKE name, and no typl name begins
-    /// with an underscore.
+    /// `prettyplease`'s output. The name cannot collide with a typl constant,
+    /// because no typl name begins with an underscore, and it is spelled from
+    /// the declared name rather than its upper-cased `snake_case`, so two
+    /// withheld declarations whose `snake_case` agrees leave two notes; the
+    /// item allows the naming lint the CamelCase tail draws.
     fn withheld_note(&self, root: &v1::FbRoot) -> Result<TokenStream, GenerateError> {
         let decl = self.declaration_of(root)?;
         let owner = declared(decl.name.as_ref());
-        let name = format_ident!("__RIDL_FB_NO_CODEC_{}", snake_case(owner).to_uppercase());
+        let name = format_ident!("__RIDL_FB_NO_CODEC_{}", ident(owner));
         let members: &[String] = match root.bound.as_ref() {
             Some(v1::fb_root::Bound::Unbounded(unbounded)) => &unbounded.unjudgeable_members,
             _ => &[],
@@ -924,7 +942,7 @@ impl<'a> Codec<'a> {
             ///
             /// This is a silent omission in the sense ADR-0016 decision 6 and
             /// ADR-0017 decision 4 rule out, and it is deliberate for now.
-            #[allow(dead_code)]
+            #[allow(dead_code, non_upper_case_globals)]
             const #name: () = ();
         })
     }
@@ -1467,17 +1485,23 @@ impl<'a> Codec<'a> {
                 // builds it with a struct literal, which needs both fields where
                 // it stands. One crate per build, so this adds nothing to the
                 // crate's public surface.
-                pub(crate) buf: &'a [u8],
-                pub(crate) table: usize,
+                pub(crate) buf: &'a [::core::primitive::u8],
+                pub(crate) table: ::core::primitive::usize,
+            }
+
+            // `bytes` is a trait method and not an inherent one, so a field
+            // whose accessor is named `bytes` does not meet it: the accessor
+            // wins the dot call, and the buffer is reached through the
+            // trait's path (driftsys/ridl#587).
+            #[allow(deprecated)]
+            impl<'a> ::ridl_rt::payload::View<'a> for #view<'a> {
+                fn bytes(&self) -> &'a [::core::primitive::u8] {
+                    self.buf
+                }
             }
 
             #[allow(deprecated)]
             impl<'a> #view<'a> {
-                /// The verified bytes this view reads.
-                #vis fn bytes(&self) -> &'a [u8] {
-                    self.buf
-                }
-
                 #(#accessors)*
             }
         };
@@ -1510,7 +1534,7 @@ impl<'a> Codec<'a> {
         if slot.optional {
             Ok(quote! {
                 #[doc = #doc]
-                #vis fn #name(&self) -> Option<#inner_ty> {
+                #vis fn #name(&self) -> ::core::option::Option<#inner_ty> {
                     match ::ridl_rt::flatbuffers::field(self.buf, self.table, #id, #width) {
                         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                             ::core::option::Option::Some(#inner)
@@ -1550,8 +1574,8 @@ impl<'a> Codec<'a> {
     /// table and for a union.
     fn view_type(&self, wire: &Wire, ty: &v1::Type) -> TokenStream {
         match wire {
-            Wire::Text(_) => quote! { &'a str },
-            Wire::Bytes(_) => quote! { &'a [u8] },
+            Wire::Text(_) => quote! { &'a ::core::primitive::str },
+            Wire::Bytes(_) => quote! { &'a [::core::primitive::u8] },
             Wire::Table(name) | Wire::Union(name) => {
                 let view = view_path(name);
                 quote! { #view<'a> }
@@ -1607,7 +1631,8 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[doc = #doc]
             #[allow(deprecated)]
-            pub(crate) fn #name(
+            #[allow(non_snake_case)]
+                pub(crate) fn #name(
                 value: &#ty,
                 builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
             ) -> ::core::result::Result<
@@ -1745,13 +1770,14 @@ impl<'a> Codec<'a> {
                         // to `u8` first — one byte, matching `Prim::Bool`'s
                         // own width (driftsys/ridl#518).
                         let raw = match scalar.prim {
-                            Prim::Bool => quote! { #raw as u8 },
+                            Prim::Bool => quote! { #raw as ::core::primitive::u8 },
                             _ => raw,
                         };
                         quote! {
                             {
                                 let __c = #reference;
-                                let mut __bytes: Vec<u8> = Vec::with_capacity(__c.len() * #stride);
+                                let mut __bytes: ::std::vec::Vec<::core::primitive::u8> =
+                                    ::std::vec::Vec::with_capacity(__c.len() * #stride);
                                 for __e in __c.iter() {
                                     let __s = *__e;
                                     let __r = #raw;
@@ -1766,8 +1792,8 @@ impl<'a> Codec<'a> {
                         quote! {
                             {
                                 let __c = #reference;
-                                let mut __offsets: Vec<::ridl_rt::flatbuffers::Pos> =
-                                    Vec::with_capacity(__c.len());
+                                let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> =
+                                    ::std::vec::Vec::with_capacity(__c.len());
                                 for __e in __c.iter() {
                                     __offsets.push(#pos);
                                 }
@@ -1782,8 +1808,8 @@ impl<'a> Codec<'a> {
                 quote! {
                     {
                         let __c = #reference;
-                        let mut __offsets: Vec<::ridl_rt::flatbuffers::Pos> =
-                            Vec::with_capacity(__c.len());
+                        let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> =
+                            ::std::vec::Vec::with_capacity(__c.len());
                         for __e in __c.iter() {
                             __offsets.push({ #body }?);
                         }
@@ -1824,9 +1850,10 @@ impl<'a> Codec<'a> {
             ///   `match` written at the field, not through a named scalar)
             ///   is not checked here at all (driftsys/ridl#469).
             #[allow(deprecated)]
-            pub(crate) fn #name(
-                buf: &[u8],
-                table: usize,
+            #[allow(non_snake_case)]
+                pub(crate) fn #name(
+                buf: &[::core::primitive::u8],
+                table: ::core::primitive::usize,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
                 #body
                 ::core::result::Result::Ok(())
@@ -1879,7 +1906,7 @@ impl<'a> Codec<'a> {
                         quote! {
                             let __raw = #read
                                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                            <#ty as ::core::convert::TryFrom<i64>>::try_from(#widened)
+                            <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
                                 .map_err(::ridl_rt::payload::VerifyError::Contract)?;
                         }
                     }
@@ -2004,7 +2031,8 @@ impl<'a> Codec<'a> {
             /// value `verify` has already range-checked (`check`), so this
             /// never re-checks and never fails.
             #[allow(deprecated)]
-            pub(crate) fn #name(buf: &[u8], table: usize) -> #ty {
+            #[allow(non_snake_case)]
+                pub(crate) fn #name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                 #ty { #(#fields),* }
             }
         })
@@ -2057,7 +2085,9 @@ impl<'a> Codec<'a> {
             Wire::Scalar(scalar) => scalar.decode(buf, at),
             Wire::Text(named) => {
                 let text = quote! {
-                    String::from(::ridl_rt::flatbuffers::string(#buf, #at).unwrap_or(""))
+                    ::std::string::String::from(
+                        ::ridl_rt::flatbuffers::string(#buf, #at).unwrap_or(""),
+                    )
                 };
                 match named {
                     Some(named) => {
@@ -2110,7 +2140,7 @@ impl<'a> Codec<'a> {
                         {
                             let __v = ::ridl_rt::flatbuffers::vector(#buf, #at, #stride)
                                 .unwrap_or(::ridl_rt::flatbuffers::Vector { len: 0, first: 0 });
-                            let mut __out = Vec::with_capacity(__v.len);
+                            let mut __out = ::std::vec::Vec::with_capacity(__v.len);
                             for __i in 0..__v.len {
                                 let __at = __v.element(__i, #stride);
                                 __out.push(#inner);
@@ -2127,7 +2157,7 @@ impl<'a> Codec<'a> {
                     {
                         let __v = ::ridl_rt::flatbuffers::vector(#buf, #at, 4usize)
                             .unwrap_or(::ridl_rt::flatbuffers::Vector { len: 0, first: 0 });
-                        let mut __out = Vec::with_capacity(__v.len);
+                        let mut __out = ::std::vec::Vec::with_capacity(__v.len);
                         for __i in 0..__v.len {
                             let __t = ::ridl_rt::flatbuffers::follow(
                                 #buf,
@@ -2230,17 +2260,19 @@ impl<'a> Codec<'a> {
                     // builds it with a struct literal, which needs both fields where
                     // it stands. One crate per build, so this adds nothing to the
                     // crate's public surface.
-                    pub(crate) buf: &'a [u8],
-                    pub(crate) table: usize,
+                    pub(crate) buf: &'a [::core::primitive::u8],
+                    pub(crate) table: ::core::primitive::usize,
+                }
+
+                #[allow(deprecated)]
+                impl<'a> ::ridl_rt::payload::View<'a> for #view<'a> {
+                    fn bytes(&self) -> &'a [::core::primitive::u8] {
+                        self.buf
+                    }
                 }
 
                 #[allow(deprecated)]
                 impl<'a> #view<'a> {
-                    /// The verified bytes this view reads.
-                    #vis fn bytes(&self) -> &'a [u8] {
-                        self.buf
-                    }
-
                     #[doc = #value_doc]
                     #vis fn value(&self) -> #ty {
                         #decode_name(self.buf, self.table)
@@ -2249,6 +2281,7 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
+                #[allow(non_snake_case)]
                 pub(crate) fn #encode_name(
                     value: &#ty,
                     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2276,9 +2309,10 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
+                #[allow(non_snake_case)]
                 pub(crate) fn #verify_name(
-                    buf: &[u8],
-                    table: usize,
+                    buf: &[::core::primitive::u8],
+                    table: ::core::primitive::usize,
                 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
                     let __dp = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
                         .map_err(::ridl_rt::payload::VerifyError::Structure)?;
@@ -2306,7 +2340,8 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                pub(crate) fn #decode_name(buf: &[u8], table: usize) -> #ty {
+                #[allow(non_snake_case)]
+                pub(crate) fn #decode_name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                     let __d = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
                         .unwrap_or(::core::option::Option::None)
                         .map(|__p| ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8))
@@ -2497,7 +2532,7 @@ impl<'a> Codec<'a> {
     /// a bare scalar at a field position, so before ADR-0019 decision 8 none of
     /// them had a root and none of them carried a codec — which is what left
     /// the generated face on its `ReprC` placeholder (driftsys/ridl#470, closed
-    /// by stage K9b, which moved the face onto `Wire`). The
+    /// by stage K9b, which moved the face onto this codec). The
     /// box is `table <Name>Box { value: <resolved type> (id: 0); }`, the same
     /// table decision 2 gives a non-table union arm, so the three bodies are
     /// the same three [`Codec::union_arm`] writes for that arm — read at the
@@ -2577,17 +2612,19 @@ impl<'a> Codec<'a> {
                     // builds it with a struct literal, which needs both fields where
                     // it stands. One crate per build, so this adds nothing to the
                     // crate's public surface.
-                    pub(crate) buf: &'a [u8],
-                    pub(crate) table: usize,
+                    pub(crate) buf: &'a [::core::primitive::u8],
+                    pub(crate) table: ::core::primitive::usize,
+                }
+
+                #[allow(deprecated)]
+                impl<'a> ::ridl_rt::payload::View<'a> for #view<'a> {
+                    fn bytes(&self) -> &'a [::core::primitive::u8] {
+                        self.buf
+                    }
                 }
 
                 #[allow(deprecated)]
                 impl<'a> #view<'a> {
-                    /// The verified bytes this view reads.
-                    #vis fn bytes(&self) -> &'a [u8] {
-                        self.buf
-                    }
-
                     #[doc = #value_doc]
                     #vis fn value(&self) -> #ty {
                         #decode_name(self.buf, self.table)
@@ -2597,6 +2634,7 @@ impl<'a> Codec<'a> {
             quote! {
                 #[doc = #encode_doc]
                 #[allow(deprecated)]
+                #[allow(non_snake_case)]
                 pub(crate) fn #encode_name(
                     value: &#ty,
                     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2609,9 +2647,10 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
+                #[allow(non_snake_case)]
                 pub(crate) fn #verify_name(
-                    buf: &[u8],
-                    table: usize,
+                    buf: &[::core::primitive::u8],
+                    table: ::core::primitive::usize,
                 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
                     #verify_body
                     ::core::result::Result::Ok(())
@@ -2619,7 +2658,8 @@ impl<'a> Codec<'a> {
             },
             quote! {
                 #[allow(deprecated)]
-                pub(crate) fn #decode_name(buf: &[u8], table: usize) -> #ty {
+                #[allow(non_snake_case)]
+                pub(crate) fn #decode_name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                     #decode_body
                 }
             },
@@ -2664,7 +2704,7 @@ impl<'a> Codec<'a> {
                 /// literal rather than an expression over the field types
                 /// because that slack is not expressible in Rust's type
                 /// system.
-                const MAX_SIZE: usize = #max;
+                const MAX_SIZE: ::core::primitive::usize = #max;
 
                 type View<'a> = #view<'a>;
 
@@ -2673,7 +2713,7 @@ impl<'a> Codec<'a> {
                 // (rustc `ambiguous_associated_items`, deny by default).
                 fn encode<'o>(
                     &self,
-                    out: &'o mut [u8],
+                    out: &'o mut [::core::primitive::u8],
                 ) -> ::core::result::Result<
                     ::ridl_rt::payload::Encoded<'o, #view<'o>>,
                     ::ridl_rt::payload::EncodeError,
@@ -2690,7 +2730,7 @@ impl<'a> Codec<'a> {
                 }
 
                 fn verify(
-                    buf: &[u8],
+                    buf: &[::core::primitive::u8],
                 ) -> ::core::result::Result<#view<'_>, ::ridl_rt::payload::VerifyError> {
                     if buf.len()
                         > <Self as ::ridl_rt::payload::Payload<
