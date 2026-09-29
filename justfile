@@ -801,11 +801,20 @@ link-check root="":
             -u GIT_COMMON_DIR -u GIT_NAMESPACE -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
             git -C "$@"
     }
+    # `core.quotePath` is on by default, and it spells a path holding a byte
+    # outside ASCII as e.g. "na\303\257ve.md" rather than the bytes as they
+    # are on disk. Under that default the pathspec-filtered listing below and
+    # the whole-listing-plus-suffix-match expectation would disagree on any
+    # such file, and the gate would fail on a file with no broken link at
+    # all.
+    list_files() {
+        git_at "$1" -c core.quotePath=false ls-files "${@:2}"
+    }
     # The gate itself, over the repository at $1: every tracked `.md` file has
     # to resolve every relative link it writes.
     run_gate() (
         cd "$1"
-        if ! files="$(git_at . ls-files '*.md')"; then
+        if ! files="$(list_files . '*.md')"; then
             echo "link-check: git ls-files failed; the file list cannot be trusted." >&2
             exit 1
         fi
@@ -813,9 +822,9 @@ link-check root="":
         # expectation is derived from the whole listing and a suffix match
         # done in this shell, rather than trusted from the pathspec the call
         # above used, so a `git ls-files` that silently returns less — an
-        # empty listing, or a bogus flag accepted without error — cannot pass
-        # having checked nothing.
-        if ! all_files="$(git_at . ls-files)"; then
+        # empty listing, or an invalid flag accepted without error — cannot
+        # pass having checked nothing.
+        if ! all_files="$(list_files .)"; then
             echo "link-check: git ls-files failed; the file list cannot be trusted." >&2
             exit 1
         fi
@@ -868,6 +877,43 @@ link-check root="":
             cat "$report" >&2
             exit 1
         fi
+        # From here on the fixtures use git, and they run under a git
+        # environment that names a repository of their own. That is what the
+        # clearing in git_at is for, and it is pinned here: without it every
+        # call below acts on the decoy rather than on the directory it is
+        # given, the listings come back empty and the assertions below fail.
+        # It also keeps a call that escapes the clearing away from this
+        # repository, which is the accident that has to be made impossible —
+        # `just pre-push` runs from the pre-push hook, so an inherited
+        # GIT_DIR here is this repository's own.
+        decoy="$work/decoy"
+        mkdir -p "$decoy"
+        # The environment is set before the decoy repository is created, not
+        # after, so that the call creating it is covered as well: without the
+        # clearing that call reads GIT_DIR, and GIT_DIR has to name the decoy
+        # by then rather than this repository.
+        export GIT_DIR="$decoy/.git" GIT_WORK_TREE="$decoy"
+        git_at "$decoy" -c init.defaultBranch=main -c init.templateDir= init -q
+        # A tracked file holding a byte outside ASCII must come back from
+        # `list_files` in the spelling it has on disk, not `core.quotePath`'s
+        # escaped form — otherwise the pathspec-filtered listing and the
+        # whole-listing-plus-suffix-match expectation in `run_gate` disagree
+        # on that file and the gate fails it having found no broken link. The
+        # repository needs no commit, because git lists the index. Run under
+        # the hostile GIT_DIR set above, so a clearing that regresses fails
+        # this assertion rather than passing it against the decoy.
+        quoting="$work/quoting"
+        mkdir -p "$quoting"
+        git_at "$quoting" -c init.defaultBranch=main -c init.templateDir= init -q
+        name="na$(printf '\303\257')ve.md"
+        printf 'no link is cited here\n' > "$quoting/$name"
+        git_at "$quoting" -c core.excludesFile=/dev/null add -A
+        listed="$(list_files "$quoting")"
+        if [ "$listed" != "$name" ]; then
+            echo "link-check: the listing did not give the fixture's name as it is spelled on disk:" >&2
+            printf '%s\n' "$listed" >&2
+            exit 1
+        fi
         # The enforcement half. Driven as a child process — this recipe,
         # given a root, which is the form that runs the gate and nothing else
         # — over a repository built for it: first with its one link
@@ -877,10 +923,17 @@ link-check root="":
         # scanned by `doc-path-check`, and a literal citation of a path under
         # that name in a grep pattern below would be reported as a broken
         # citation against this recipe's own line.
+        #
+        # The tracked file with a byte outside ASCII in its name goes into
+        # this repository rather than only the isolated `list_files` check
+        # above: the bug the quoting fix corrects is in `run_gate`'s file-list
+        # comparison, not in `list_files` alone, so only running the whole
+        # recipe against such a filename proves that comparison still agrees.
         gate="$work/gate"
         mkdir -p "$gate/sub"
         printf '%s\n' '[present](present.md)' > "$gate/sub/a.md"
         : > "$gate/sub/present.md"
+        : > "$gate/sub/na$(printf '\303\257')ve.md"
         git_at "$gate" -c init.defaultBranch=main -c init.templateDir= init -q
         git_at "$gate" -c core.excludesFile=/dev/null add -A
         run="$work/run"
@@ -903,8 +956,9 @@ link-check root="":
         fi
     )
     # One call site, so the fixture above and the real run take the same
-    # line: a clause appended here disarms both, and the child process
-    # notices.
+    # line: a root argument here skips fixtures for both the top-level call
+    # and the recursive call the fixture above makes, which is how that
+    # recursive call avoids running fixtures again.
     root=.
     if [ -n "{{root}}" ]; then
         root="{{root}}"
