@@ -2814,11 +2814,32 @@ impl Checker<'_> {
                 let Some(literal) = bit.value() else {
                     continue;
                 };
-                let Some(value) = (match literal_kind(&literal) {
-                    LitKind::Number { value } => exact_to_i64(&value),
-                    _ => None,
-                }) else {
-                    continue;
+                // A position that does not lower is refused, never skipped
+                // in silence (issue #579).
+                let position = match literal_kind(&literal) {
+                    LitKind::Number { value } if value.0.is_integer() => exact_to_i64(&value)
+                        .ok_or((
+                            DiagCode::TYPL_111,
+                            "is outside the int64 domain (bits 0..63)",
+                        )),
+                    _ => Err((
+                        DiagCode::TYPL_219,
+                        "is not an integer — a bit position is an integer from 0 to 63 (typl §9.1)",
+                    )),
+                };
+                let value = match position {
+                    Ok(value) => value,
+                    Err((code, reason)) => {
+                        self.error(
+                            code,
+                            literal.syntax().text_range(),
+                            format!(
+                                "enumset bit `{name}` has position `{}`, which {reason}",
+                                literal.syntax().text()
+                            ),
+                        );
+                        continue;
+                    }
                 };
                 if bits.iter().any(|existing| existing.value == value) {
                     self.error(
@@ -6302,6 +6323,100 @@ mod tests {
     fn enumset_bit_past_63_is_typl_111() {
         let checked = check_source("app", "package app\nenumset W { A = 64 }\n");
         assert_eq!(codes(&checked), vec!["TYPL-111"]);
+    }
+
+    // --- TYPL-219: an enumset bit position that is not an integer ----------
+
+    /// The reproduction from driftsys/ridl#579: a string and a fractional
+    /// position passed the checker with no diagnostic, and both bits were
+    /// left out of the IR. Each bit now draws TYPL-219 on its position.
+    #[test]
+    fn typl_219_the_issue_reproduction_is_refused() {
+        let source = "package app\nenumset W {\n  A = \"x\"\n  B = 1.5\n}\n";
+        let checked = check_source("app", source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-219", "TYPL-219"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        for (diagnostic, (name, position)) in checked
+            .diagnostics
+            .iter()
+            .zip([("A", "\"x\""), ("B", "1.5")])
+        {
+            let start = source
+                .find(position)
+                .expect("the position is in the source");
+            assert_eq!(usize::from(diagnostic.primary.range.start()), start);
+            assert_eq!(
+                usize::from(diagnostic.primary.range.end()),
+                start + position.len()
+            );
+            assert!(
+                diagnostic.message.contains(&format!("`{name}`")),
+                "{}",
+                diagnostic.message
+            );
+        }
+    }
+
+    /// Every literal form that is not an integer draws TYPL-219, and only
+    /// TYPL-219.
+    #[test]
+    fn typl_219_refuses_every_position_that_is_not_an_integer() {
+        for position in ["\"x\"", "1.5", "true", "false"] {
+            let source = format!("package app\nenumset W {{ A = {position} }}\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-219"],
+                "{position}: got: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    /// `1.0` is an integer value written in decimal form, so it is a valid
+    /// position and draws nothing, as the enum path accepts it.
+    #[test]
+    fn typl_219_accepts_an_integer_written_with_a_fraction_of_zero() {
+        let checked = check_source("app", "package app\nenumset W { A = 1.0 }\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// An integer too large for `int64` was dropped by the same skip. It is
+    /// an integer, so it draws TYPL-111, the code for a bit position outside
+    /// the `int64` domain, and not TYPL-219.
+    #[test]
+    fn an_enumset_bit_position_past_int64_is_typl_111() {
+        let checked = check_source(
+            "app",
+            "package app\nenumset W { A = 9223372036854775808 }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-111"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// A refused bit is still left out of the IR: it has no position to
+    /// lower, and the valid bits beside it still lower.
+    #[test]
+    fn typl_219_leaves_the_valid_bits_in_the_ir() {
+        let checked = check_source("app", "package app\nenumset W { A = \"x\", B = 1 }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-219"]);
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "W").kind else {
+            panic!("W is an enumset def");
+        };
+        let bits: Vec<(&str, i64)> = def
+            .bits
+            .iter()
+            .map(|bit| (bit.name.as_str(), bit.value))
+            .collect();
+        assert_eq!(bits, vec![("B", 1)]);
     }
 
     #[test]

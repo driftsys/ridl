@@ -1,0 +1,11 @@
+// Enumset bit positions (typl §9.1, §16.3): TYPL-219. A standalone enumset bit
+// whose position is not an integer has no position to lower. It used to be
+// left out of the IR with no diagnostic (issue #579).
+
+package diag.ridl
+
+/// A bit position written as a string and one written as a fractional number.
+enumset NonIntegerBits {
+  NAMED      = "x"
+  FRACTIONAL = 1.5
+}
