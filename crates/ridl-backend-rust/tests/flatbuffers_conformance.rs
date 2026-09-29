@@ -1208,6 +1208,141 @@ fn main() {{
     );
 }
 
+/// **`ridl diff` calls an appended field compatible exactly when this codec
+/// reads a buffer of the old version** (driftsys/ridl#598).
+///
+/// Each `With*` struct of the evolution fixture gains one field from v1 to
+/// v2. `ridl_diff::diff_packages` classifies each append, and this codec,
+/// generated from v1, writes one buffer per struct, which the codec generated
+/// from v2 then verifies. For every struct the two must agree: a compatible
+/// append verifies, and a breaking one is refused with `MissingRequired`. The
+/// fixture covers each row of the rule — an optional field, a scalar, enum or
+/// enum set whose type allows 0, one whose type excludes 0, and a string,
+/// struct, union, array, tuple and map — so a row on which the diff and the
+/// codec disagree fails here.
+#[test]
+fn an_append_ridl_diff_calls_compatible_is_one_this_codec_reads() {
+    let v1 = ir::compile_fixture("flatbuffers_evolution_v1.ridl");
+    let v2 = ir::compile_fixture("flatbuffers_evolution_v2.ridl");
+    let report = ridl_diff::diff_packages(&v1, &v2);
+
+    let mut verdicts = std::collections::BTreeMap::new();
+    for change in &report.changes {
+        assert_eq!(
+            change.category,
+            ridl_diff::Category::DeclAdded,
+            "the fixture only appends fields, got {change:?}"
+        );
+        let [_, container, _] = change.path.split('/').collect::<Vec<_>>()[..] else {
+            panic!("an appended field's path is package/struct/field, got {change:?}");
+        };
+        verdicts.insert(container.to_string(), change.verdict);
+    }
+    assert_eq!(
+        verdicts.len(),
+        16,
+        "one append per `With*` struct: {verdicts:?}"
+    );
+    for verdict in [ridl_diff::Verdict::Compatible, ridl_diff::Verdict::Breaking] {
+        assert!(
+            verdicts.values().any(|seen| *seen == verdict),
+            "the fixture must reach both verdicts, got {verdicts:?}"
+        );
+    }
+
+    let writes: String = verdicts
+        .keys()
+        .map(|name| format!("    println!(\"{{}}\", hex(&{name} {{ a: count.clone() }}));\n"))
+        .collect();
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_append_v1",
+        &fixture_program(
+            "flatbuffers_evolution_v1.ridl",
+            &format!(
+                r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn hex<T: Payload<FlatBuffers>>(value: &T) -> String {{
+    let mut out = vec![0u8; T::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    bytes.iter().map(|byte| format!("{{byte:02x}}")).collect()
+}}
+
+fn main() {{
+    let count = Count::new_unchecked(7);
+{writes}}}
+"#
+            ),
+        ),
+    );
+    let buffers: Vec<&str> = transcript.lines().collect();
+    assert_eq!(
+        buffers.len(),
+        verdicts.len(),
+        "one buffer per struct: {transcript:?}"
+    );
+
+    let reads: String = verdicts
+        .keys()
+        .zip(&buffers)
+        .map(|(name, buffer)| format!("    read::<{name}>(\"{name}\", \"{buffer}\");\n"))
+        .collect();
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_append_v2",
+        &fixture_program(
+            "flatbuffers_evolution_v2.ridl",
+            &format!(
+                r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{{Malformed, Payload, Ref, VerifyError}};
+
+fn bytes(hex: &str) -> Vec<u8> {{
+    (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+        .collect()
+}}
+
+fn read<T: Payload<FlatBuffers>>(name: &str, hex: &str) {{
+    let buffer = bytes(hex);
+    match Ref::<'_, T, FlatBuffers>::verify(&buffer) {{
+        Ok(proof) => {{
+            let _ = proof.decode();
+            println!("{{name}} read");
+        }}
+        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{
+            println!("{{name}} refused");
+        }}
+        Err(other) => panic!("{{name}}: expected a read or MissingRequired, got {{other:?}}"),
+    }}
+}}
+
+fn main() {{
+{reads}}}
+"#
+            ),
+        ),
+    );
+    let mut outcomes = std::collections::BTreeMap::new();
+    for line in transcript.lines() {
+        let (name, outcome) = line.split_once(' ').expect("`<struct> <outcome>`");
+        outcomes.insert(name.to_string(), outcome.to_string());
+    }
+    for (name, verdict) in &verdicts {
+        let expected = match verdict {
+            ridl_diff::Verdict::Compatible => "read",
+            _ => "refused",
+        };
+        assert_eq!(
+            outcomes.get(name).map(String::as_str),
+            Some(expected),
+            "`ridl diff` calls the append to `{name}` {verdict:?}, so a v1 buffer of it \
+             must be {expected} by the v2 codec"
+        );
+    }
+}
+
 /// **Whether an absent field reads as 0 follows the field's own range, step
 /// and members** (driftsys/ridl#472, decision (a1)).
 ///

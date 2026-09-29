@@ -826,6 +826,7 @@ pub mod v2 {
 pub mod codegen;
 pub mod name;
 pub mod projection;
+pub mod zero;
 
 #[cfg(test)]
 mod v2_round_trip {

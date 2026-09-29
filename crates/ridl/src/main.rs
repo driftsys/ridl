@@ -1424,10 +1424,12 @@ enum MemberDrift {
         moved: Vec<String>,
     },
     /// A member declared after every ordinal the baseline assigns or
-    /// retires — compatible on its own — in an edit that also moved,
-    /// removed or inserted another member, which is what makes the
-    /// classifier report the addition as breaking. The warning stands for
-    /// the siblings it names.
+    /// retires, in an edit that also moved, removed or inserted another
+    /// member, which is what makes the classifier report the addition as
+    /// breaking. The warning stands for the siblings it names. An append
+    /// with none of those beside it draws no warning, even when the
+    /// classifier reports it breaking for the field's type
+    /// (driftsys/ridl#598): no ordinal moved.
     Appended {
         moved: Vec<String>,
         gone: Vec<String>,
@@ -1608,12 +1610,16 @@ fn member_drift(
                     })
                     .map(|(name, _)| name.clone())
                     .collect();
-                if moved.is_empty()
-                    && gone.is_empty()
-                    && inserted.is_empty()
-                    && (before.result || after.result)
-                {
+                let alone = moved.is_empty() && gone.is_empty() && inserted.is_empty();
+                if alone && (before.result || after.result) {
                     MemberDrift::ResultArm
+                } else if alone {
+                    // A struct field appended alone and still reported breaking
+                    // is breaking for its type: a reader of the new version
+                    // refuses an old payload, which does not carry the field
+                    // (driftsys/ridl#598). No ordinal moved, so it is not the
+                    // drift RIDL-407 reports; `ridl diff` gates it.
+                    return None;
                 } else {
                     MemberDrift::Appended {
                         moved,
@@ -1734,9 +1740,6 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             }
             if !inserted.is_empty() {
                 reasons.push(format!("{} was inserted", quoted_list(&inserted)));
-            }
-            if reasons.is_empty() {
-                reasons.push("the body changed".to_string());
             }
             format!(
                 "`{name}` is declared{in_shape} after every ordinal the published baseline \

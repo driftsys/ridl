@@ -296,9 +296,11 @@ pub(crate) fn frozen(interface: &ridl_ir::v2::Interface) -> bool {
 }
 
 /// Settles the verdict of every change the walk of one package pair produced.
-fn classify_all(changes: &mut [Change], old: &Package, new: &Package) {
+/// `new_set` is every package of the new snapshot, which resolves a reference
+/// to another package's declaration ([`classify::classify_in`]).
+fn classify_all(changes: &mut [Change], old: &Package, new: &Package, new_set: &[Package]) {
     for change in changes {
-        change.verdict = classify(change, old, new);
+        change.verdict = classify::classify_in(change, old, new, new_set);
     }
 }
 
@@ -322,7 +324,7 @@ pub(crate) fn report(changes: Vec<Change>) -> DiffReport {
 pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &mut changes);
-    classify_all(&mut changes, old, new);
+    classify_all(&mut changes, old, new, &[]);
     report(changes)
 }
 
@@ -344,7 +346,7 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
             Some(new_pkg) => {
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, new_pkg, &mut pair);
-                classify_all(&mut pair, old_pkg, new_pkg);
+                classify_all(&mut pair, old_pkg, new_pkg, new);
                 changes.append(&mut pair);
             }
             // A package present on one side only: the change classifies on its
@@ -358,7 +360,7 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
                     Some(format!("package {name}")),
                     None,
                 );
-                classify_all(&mut pair, old_pkg, old_pkg);
+                classify_all(&mut pair, old_pkg, old_pkg, &[]);
                 changes.append(&mut pair);
             }
         }
@@ -373,7 +375,7 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
                 None,
                 Some(format!("package {name}")),
             );
-            classify_all(&mut pair, new_pkg, new_pkg);
+            classify_all(&mut pair, new_pkg, new_pkg, &[]);
             changes.append(&mut pair);
         }
     }

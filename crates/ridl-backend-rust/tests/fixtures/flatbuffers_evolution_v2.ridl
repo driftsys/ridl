@@ -1,8 +1,12 @@
-// The second version of the evolution fixture (driftsys/ridl#472).
+// The second version of the evolution fixture (driftsys/ridl#472,
+// driftsys/ridl#598).
 //
-// `flatbuffers_evolution_v1.ridl` with one non-optional field appended to
-// each struct: a `Count`, whose FlatBuffers default 0 is legal, a `Level`,
-// whose range excludes 0, and a `Gear`, whose enum declares no zero member.
+// `flatbuffers_evolution_v1.ridl` with one field appended to each `With*`
+// struct. The appended types cover each row of the rule `ridl diff` applies:
+// an optional field; a scalar, enum or enum set whose type allows 0 (`Count`,
+// `integer [0..10]`, `Mode`, `Flags`); a scalar or enum whose type excludes 0
+// (`Level`, `integer [1..10]`, `Gear`); and a field with no default at all (a
+// string, a struct, a union, an array, a tuple and a map).
 
 package fb.evolution
 
@@ -18,6 +22,30 @@ enum Gear {
   DRIVE = 2
 }
 
+/// A mode; the enum declares its zero member second.
+enum Mode {
+  ON  = 1
+  OFF = 0
+}
+
+/// A set of flags; 0 is the empty set.
+enumset Flags {
+  LOW  = 0
+  HIGH = 1
+}
+
+/// A label; the empty string is a legal value.
+type Label : string [0..16]
+
+struct Inner {
+  x : Count
+}
+
+union Choice {
+  count : Count
+  inner : Inner
+}
+
 struct WithCount {
   a : Count
   b : Count
@@ -31,4 +59,69 @@ struct WithLevel {
 struct WithGear {
   a : Count
   g : Gear
+}
+
+struct WithMode {
+  a : Count
+  m : Mode
+}
+
+struct WithFlags {
+  a : Count
+  f : Flags
+}
+
+struct WithInlineZero {
+  a : Count
+  z : integer [0..10]
+}
+
+struct WithInlineRange {
+  a : Count
+  r : integer [1..10]
+}
+
+struct WithOptionalLevel {
+  a : Count
+  o : Level?
+}
+
+struct WithOptionalGear {
+  a : Count
+  o : Gear?
+}
+
+struct WithOptionalLabel {
+  a : Count
+  o : Label?
+}
+
+struct WithLabel {
+  a : Count
+  l : Label
+}
+
+struct WithInner {
+  a : Count
+  i : Inner
+}
+
+struct WithChoice {
+  a : Count
+  h : Choice
+}
+
+struct WithList {
+  a : Count
+  xs : [Count; 0..4]
+}
+
+struct WithTuple {
+  a : Count
+  t : (x: Count, y: Count)
+}
+
+struct WithMap {
+  a : Count
+  m : [Label : Count; 0..3]
 }

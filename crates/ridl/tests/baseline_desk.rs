@@ -941,6 +941,62 @@ fn check_is_silent_for_a_struct_field_or_union_arm_append() {
     }
 }
 
+/// A non-optional struct field appended at the end whose type excludes 0 —
+/// here `Level`, `[1..3]` — is breaking for its type: a reader of the new
+/// version refuses every payload of the old one, which does not carry the
+/// field (driftsys/ridl#598). `ridl diff` exits 1 on it, and the desk check
+/// stays silent, because no ordinal moved. Declared optional, the same field
+/// is compatible.
+#[test]
+fn an_appended_struct_field_whose_type_excludes_zero_fails_the_gate_and_not_the_desk() {
+    for (label, field, code_wanted, verdict) in [
+        ("append-level", "hinge: Level", 1, "breaking"),
+        ("append-optional-level", "hinge: Level?", 0, "compatible"),
+    ] {
+        let dir = TempDir::new(label);
+        let source = COMPOSITES.replacen(
+            "struct Report {",
+            "type Level: integer [1..3]\nstruct Report {",
+            1,
+        );
+        let root = package_workspace(&dir, &source);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &source.replacen(
+                "  latch: LatchState\n}\nunion",
+                &format!("  latch: LatchState\n  {field}\n}}\nunion"),
+                1,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert!(
+            diff.contains(&format!("[{verdict}] decl_added veh.cluster/Report/hinge")),
+            "{label}: the diff reports the appended field as {verdict}:\n{diff}",
+        );
+        assert_eq!(code, code_wanted, "{label}: the gate's exit code:\n{diff}");
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert!(
+            !stderr.contains("RIDL-407"),
+            "{label}: an append moves no ordinal, so it draws no desk warning:\n{stderr}",
+        );
+        assert_eq!(code, 0, "{label}: the desk check stays clean:\n{stderr}");
+    }
+
+    let (code, stdout, _) = ridl(&["diff".as_ref(), "--explain".as_ref(), "decl_added".as_ref()]);
+    assert_eq!(
+        code, 0,
+        "--explain decl_added prints the rule row:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("(`field : T?`)"),
+        "the rule row tells the author to declare the new field optional:\n{stdout}",
+    );
+}
+
 /// A `reserved` entry added above the live members shifts every ordinal
 /// after it while no declaration moves. `ridl diff` reports one
 /// `member_reordered` per shifted member; the desk check warns once for each

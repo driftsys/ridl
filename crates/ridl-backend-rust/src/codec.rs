@@ -621,93 +621,20 @@ fn decode_path(owner: &str) -> TokenStream {
 
 /// Whether 0 is a value of a numeric scalar's declared range and step,
 /// decided at generation time from the IR's exact decimal text
-/// (driftsys/ridl#472).
+/// (driftsys/ridl#472). No constraint at all holds 0.
 ///
-/// 0 must lie within `[min..max]`, and when a `step` is declared it must also
-/// be on the grid `min + n·step` for a whole `n` (typl §4.3):
-/// `[-1.5..1.5 step 1.0]` holds -1.5, -0.5, 0.5 and 1.5, and not 0. A `step`
-/// with no `min` has no anchor, and a bound that is not plain decimal text
-/// (`-`, digits, and an optional fractional part) is not read here; in both
-/// cases the answer is `false`, so an absent field is refused rather than
-/// read as a value that may not be legal. No constraint at all holds 0.
-///
-/// This is decided from the declaration, for a named type and for an inline
-/// constraint alike, and not by calling the type's `check`: `check` ignores
-/// `step` (driftsys/ridl#469), and an inline constraint has no `check`.
+/// The rule is [`ridl_ir::zero::range_holds_zero`], the one definition this
+/// codec and `ridl diff` share: `ridl diff` classifies appending a
+/// non-optional scalar field as compatible only when this answer is `true`
+/// for its type (driftsys/ridl#598).
 fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
-    let Some(constraint) = constraint else {
-        return true;
-    };
-    let read = |text: &Option<String>| -> Result<Option<Decimal>, ()> {
-        match text.as_deref() {
-            None => Ok(None),
-            Some(text) => Decimal::parse(text).map(Some).ok_or(()),
-        }
-    };
-    let (Ok(min), Ok(max), Ok(step)) = (
-        read(&constraint.min),
-        read(&constraint.max),
-        read(&constraint.step),
-    ) else {
-        return false;
-    };
-    if min.is_some_and(|min| min.units > 0) || max.is_some_and(|max| max.units < 0) {
-        return false;
-    }
-    match (step, min) {
-        (None, _) => true,
-        (Some(_), None) => false,
-        // 0 = min + n·step with a whole n: -min is a whole multiple of step.
-        (Some(step), Some(min)) => {
-            let scale = min.scale.max(step.scale);
-            match (min.rescaled(scale), step.rescaled(scale)) {
-                (Some(min), Some(step)) if step > 0 => min % step == 0,
-                _ => false,
-            }
-        }
-    }
-}
-
-/// An exact decimal read from the IR's canonical text: `units / 10^scale`.
-#[derive(Debug, Clone, Copy)]
-struct Decimal {
-    units: i128,
-    scale: u32,
-}
-
-impl Decimal {
-    /// Reads `-`, digits, and an optional `.` followed by digits. Anything
-    /// else, or more digits than an `i128` holds exactly, is `None`.
-    fn parse(text: &str) -> Option<Self> {
-        let (negative, unsigned) = match text.strip_prefix('-') {
-            Some(rest) => (true, rest),
-            None => (false, text),
-        };
-        let (whole, fraction) = match unsigned.split_once('.') {
-            Some((whole, fraction)) => (whole, fraction),
-            None => (unsigned, ""),
-        };
-        let digits_only = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
-        if whole.is_empty()
-            || !digits_only(whole)
-            || !digits_only(fraction)
-            || (unsigned.contains('.') && fraction.is_empty())
-            || whole.len() + fraction.len() > 30
-        {
-            return None;
-        }
-        let units: i128 = format!("{whole}{fraction}").parse().ok()?;
-        Some(Decimal {
-            units: if negative { -units } else { units },
-            scale: u32::try_from(fraction.len()).ok()?,
-        })
-    }
-
-    /// `units` at a larger `scale`, or `None` on overflow.
-    fn rescaled(self, scale: u32) -> Option<i128> {
-        self.units
-            .checked_mul(10i128.checked_pow(scale.checked_sub(self.scale)?)?)
-    }
+    constraint.is_none_or(|constraint| {
+        ridl_ir::zero::range_holds_zero(
+            constraint.min.as_deref(),
+            constraint.max.as_deref(),
+            constraint.step.as_deref(),
+        )
+    })
 }
 
 /// The `verify` statement for an absent field that carries no value: a
@@ -2840,40 +2767,24 @@ fn int_prim(width: i32) -> Option<Prim> {
 mod zero_tests {
     use super::{v1, zero_is_legal};
 
-    fn constraint(min: Option<&str>, max: Option<&str>, step: Option<&str>) -> v1::Constraint {
-        v1::Constraint {
-            min: min.map(String::from),
-            max: max.map(String::from),
+    /// The range and step table is `ridl_ir::zero`'s; this pins only that
+    /// the codec hands the constraint's three texts to it, and that no
+    /// constraint holds 0.
+    #[test]
+    fn zero_is_legal_reads_the_shared_predicate() {
+        let constraint = |min: &str, max: &str, step: Option<&str>| v1::Constraint {
+            min: Some(min.to_string()),
+            max: Some(max.to_string()),
             step: step.map(String::from),
             ..Default::default()
-        }
-    }
-
-    #[test]
-    fn zero_is_legal_follows_the_range_and_the_step() {
-        let cases = [
-            (None, None, None, true),
-            (Some("0"), Some("10"), None, true),
-            (Some("1"), Some("10"), None, false),
-            (Some("-10"), Some("-1"), None, false),
-            (Some("-1.5"), Some("1.5"), Some("1.0"), false),
-            (Some("-1.0"), Some("1.0"), Some("1.0"), true),
-            (Some("0.0"), Some("1.0"), Some("0.01"), true),
-            (Some("-0.25"), Some("1"), Some("0.125"), true),
-            (Some("-0.3"), Some("1"), Some("0.2"), false),
-            // A step with no lower bound has no anchor, so it is not decided.
-            (None, Some("10"), Some("1"), false),
-            // Text this reader does not accept is not decided either.
-            (Some("-1e3"), Some("10"), None, false),
-            (Some("-1."), Some("10"), None, false),
-        ];
-        for (min, max, step, legal) in cases {
-            assert_eq!(
-                zero_is_legal(Some(&constraint(min, max, step))),
-                legal,
-                "min {min:?}, max {max:?}, step {step:?}"
-            );
-        }
+        };
         assert!(zero_is_legal(None), "no constraint holds 0");
+        assert!(zero_is_legal(Some(&constraint("0", "10", None))));
+        assert!(!zero_is_legal(Some(&constraint("1", "10", None))));
+        assert!(!zero_is_legal(Some(&constraint(
+            "-1.5",
+            "1.5",
+            Some("1.0")
+        ))));
     }
 }

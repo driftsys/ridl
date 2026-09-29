@@ -24,7 +24,9 @@ other entry below is Accepted.
   authority for the interaction surface, IR v2 placement, the TypeScript second
   backend, `ridl diff` placement and its classifier rules, the `RIDL-`
   diagnostic allocations, a later amendment, decision 15, and six close-out
-  amendments, decisions 16 to 21).
+  amendments, decisions 16 to 21). Decision 14 amended 2026-09-30 from
+  driftsys/ridl#598: an appended non-optional struct field is breaking unless
+  its type is a scalar, enum or enum set that allows the value 0.
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.

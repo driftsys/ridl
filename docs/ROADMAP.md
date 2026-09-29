@@ -707,9 +707,10 @@ did not survive a foreign round trip — and was decided on 2026-09-29: the code
 reads an absent non-optional scalar or enum as the FlatBuffers default unless 0
 is not a legal value of its type, and an optional scalar or enum field projects
 with `= null` (ADR-0019 decision 9). Design note D-9's writer rule stands; its
-reader rule is amended. What remains is **driftsys/ridl#598**: `ridl diff` calls
-appending a non-optional field compatible where 0 is not a legal value, and the
-reader refuses the old buffers.
+reader rule is amended. Its remainder, **driftsys/ridl#598**, was decided on
+2026-09-30: `ridl diff` calls appending a non-optional field breaking unless it
+is a scalar, enum or enum set whose type allows 0, which is where the reader
+reads the old buffers (ADR-0008 decision 14 as amended).
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

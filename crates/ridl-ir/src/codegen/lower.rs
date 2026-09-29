@@ -1109,7 +1109,7 @@ fn enum_value(value: &v2::EnumValue) -> v1::EnumValue {
 /// The zero member and the init member (typl §5.8): the value 0 if declared,
 /// else the lowest declared value.
 fn enum_body(def: &v2::EnumDef) -> v1::Enum {
-    let zero = def.values.iter().position(|value| value.value == 0);
+    let zero = crate::zero::enum_zero_member(&def.values);
     let lowest = def
         .values
         .iter()

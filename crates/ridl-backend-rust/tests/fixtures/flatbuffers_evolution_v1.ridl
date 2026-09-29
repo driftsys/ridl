@@ -1,9 +1,11 @@
-// The first version of the evolution fixture (driftsys/ridl#472).
+// The first version of the evolution fixture (driftsys/ridl#472,
+// driftsys/ridl#598).
 //
-// Each struct carries one field. `flatbuffers_evolution_v2.ridl` appends one
-// non-optional field to each, so a buffer this version's codec writes is a
-// buffer in which the appended field is absent. The conformance test reads
-// those buffers with the second version's codec.
+// Each `With*` struct carries one field. `flatbuffers_evolution_v2.ridl`
+// appends one field to each, so a buffer this version's codec writes is a
+// buffer in which the appended field is absent. The conformance tests read
+// those buffers with the second version's codec, and compare what that codec
+// does with the verdict `ridl diff` gives each append.
 
 package fb.evolution
 
@@ -19,6 +21,30 @@ enum Gear {
   DRIVE = 2
 }
 
+/// A mode; the enum declares its zero member second.
+enum Mode {
+  ON  = 1
+  OFF = 0
+}
+
+/// A set of flags; 0 is the empty set.
+enumset Flags {
+  LOW  = 0
+  HIGH = 1
+}
+
+/// A label; the empty string is a legal value.
+type Label : string [0..16]
+
+struct Inner {
+  x : Count
+}
+
+union Choice {
+  count : Count
+  inner : Inner
+}
+
 struct WithCount {
   a : Count
 }
@@ -28,5 +54,57 @@ struct WithLevel {
 }
 
 struct WithGear {
+  a : Count
+}
+
+struct WithMode {
+  a : Count
+}
+
+struct WithFlags {
+  a : Count
+}
+
+struct WithInlineZero {
+  a : Count
+}
+
+struct WithInlineRange {
+  a : Count
+}
+
+struct WithOptionalLevel {
+  a : Count
+}
+
+struct WithOptionalGear {
+  a : Count
+}
+
+struct WithOptionalLabel {
+  a : Count
+}
+
+struct WithLabel {
+  a : Count
+}
+
+struct WithInner {
+  a : Count
+}
+
+struct WithChoice {
+  a : Count
+}
+
+struct WithList {
+  a : Count
+}
+
+struct WithTuple {
+  a : Count
+}
+
+struct WithMap {
   a : Count
 }
