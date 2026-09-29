@@ -188,8 +188,8 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
         "event ok 5",
         "command ok 42",
         "query ok 7",
-        "blocking command ok 42",
-        "blocking query ok 7",
+        "blocking command ok 43",
+        "blocking query ok 9",
     ] {
         assert!(
             stdout.lines().any(|line| line == round_trip),

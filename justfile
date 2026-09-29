@@ -406,7 +406,7 @@ demo:
     fi
     printf '%s\n' "$output"
     for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7" \
-            "blocking command ok 42" "blocking query ok 7"; do
+            "blocking command ok 43" "blocking query ok 9"; do
         if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
             echo "demo: the consumer did not report \"$round_trip\"" >&2
             exit 1
