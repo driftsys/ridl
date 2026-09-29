@@ -728,10 +728,26 @@ book-check root="":
 # fence character, zero to four spaces of indentation, fewer than three
 # backticks, trailing blanks and a carriage return) and fails unless exactly the
 # expected links come out.
-link-check:
+#
+# Given no argument, the gate runs over the repository this justfile is in, and
+# runs its own fixtures first, because a gate that cannot be shown to fail is
+# not a gate. Given a directory, it runs over the repository there and runs no
+# fixture: that is the form the fixtures invoke as a child process, and it is
+# what stops the recursion.
+link-check root="":
     #!/usr/bin/env bash
-    set -uo pipefail
+    set -euo pipefail
+    # Read the file first and separately from parsing it for links, so a read
+    # failure (permission denied, or the file no longer exists) cannot look
+    # like "this file cites no links." `-e ''` matches every line of a
+    # readable file; `-I` treats a binary file the same as no match, so only a
+    # genuine read error exits above 1.
     extract_links() {
+        local rq_status=0
+        grep -Iq -e '' "$1" >/dev/null 2>&1 || rq_status=$?
+        if [ "$rq_status" -gt 1 ]; then
+            return 1
+        fi
         awk '{
                 line = $0; sub(/\r$/, "", line); sub(/^(   |  | )/, "", line)
                 if (line !~ /^(```|~~~)/) { if (!f) print; next }
@@ -747,38 +763,155 @@ link-check:
             | sed -E 's/#.*$//' \
             | grep -v '^$' || true
     }
-    sample="$(mktemp)"
-    trap 'rm -f "$sample"' EXIT
-    printf '%s\n' '[a](before.md)' '````markdown' '```rsdl' '[b](nested.md)' '```' '````' \
-        ' ```text' '[c](one-space.md)' ' ```' '   ```text' '[d](three-spaces.md)' '   ```' \
-        '    ```' '[e](four-spaces.md)' \
-        '~~~' '[f](tilde.md)' '```' '[g](tilde-still.md)' '~~~' \
-        '````' '```' '[h](short-closer.md)' '`````' '[i](long-closer.md)' \
-        $'```crlf\r' $'[j](crlf.md)\r' $'```\r' \
-        '```' '[k](info.md)' '```text' '[l](info-still.md)' $'```  \t' '[m](trailing.md)' \
-        '``' '[n](two-backticks.md)' \
-        '[z](after.md)' > "$sample"
-    expected="before.md four-spaces.md long-closer.md trailing.md two-backticks.md after.md "
-    if [ "$(extract_links "$sample" | tr '\n' ' ')" != "$expected" ]; then
-        echo "link-check: the fence rules no longer give the expected links on the built-in sample:" >&2
-        extract_links "$sample" >&2
-        exit 1
+    # Report every extracted link that does not resolve under $1, over the
+    # file list on stdin. Returns 1 when any did not resolve, or when a file
+    # could not be read, and 0 only when every link resolved.
+    scan_links() {
+        local root="$1" broken=0 file dir target targets
+        while IFS= read -r file; do
+            if ! targets="$(extract_links "$root/$file")"; then
+                echo "link-check: cannot read '$file'." >&2
+                return 1
+            fi
+            dir="$(dirname "$file")"
+            if [ -n "$targets" ]; then
+                while IFS= read -r target; do
+                    [ -e "$root/$dir/$target" ] && continue
+                    echo "link-check: $file -> $target" >&2
+                    broken=$((broken + 1))
+                done <<<"$targets"
+            fi
+        done
+        if [ "$broken" -ne 0 ]; then
+            echo "link-check: $broken link(s) above do not resolve." >&2
+            return 1
+        fi
+        return 0
+    }
+    # A git call that ignores an inherited git environment.
+    #
+    # This recipe runs from inside a git hook: the pre-push hook invokes `just
+    # pre-push`, and a hook exports GIT_DIR. Under that environment `git -C <dir>`
+    # changes directory but still reads and writes the repository GIT_DIR names,
+    # so the fixture below would build its repository in this one's index rather
+    # than its own. Clearing the inherited variables makes every call here act
+    # on the directory it is given.
+    git_at() {
+        env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY \
+            -u GIT_COMMON_DIR -u GIT_NAMESPACE -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+            git -C "$@"
+    }
+    # The gate itself, over the repository at $1: every tracked `.md` file has
+    # to resolve every relative link it writes.
+    run_gate() (
+        cd "$1"
+        if ! files="$(git_at . ls-files '*.md')"; then
+            echo "link-check: git ls-files failed; the file list cannot be trusted." >&2
+            exit 1
+        fi
+        # The scanned list has to be exactly the tracked `.md` files. The
+        # expectation is derived from the whole listing and a suffix match
+        # done in this shell, rather than trusted from the pathspec the call
+        # above used, so a `git ls-files` that silently returns less — an
+        # empty listing, or a bogus flag accepted without error — cannot pass
+        # having checked nothing.
+        if ! all_files="$(git_at . ls-files)"; then
+            echo "link-check: git ls-files failed; the file list cannot be trusted." >&2
+            exit 1
+        fi
+        expected="$(printf '%s\n' "$all_files" | grep -E '\.md$' || true)"
+        if [ -z "$expected" ]; then
+            echo "link-check: no tracked Markdown files were found; the file list cannot be trusted." >&2
+            exit 1
+        fi
+        if [ "$files" != "$expected" ]; then
+            echo "link-check: the file list is not every tracked '*.md' file." >&2
+            echo "link-check: '<' would be scanned and should not be; '>' should be and would not:" >&2
+            diff <(printf '%s\n' "$files") <(printf '%s\n' "$expected") >&2 || true
+            exit 1
+        fi
+        tracked="$(printf '%s\n' "$files" | grep -c . || true)"
+        printf '%s\n' "$files" | scan_links .
+        echo "link-check: every relative Markdown link resolves, over $tracked tracked file(s)."
+    )
+    # The fixtures. Each one builds a case the gate has to pass or fail and
+    # fails this recipe when the gate does not. They run in a subshell, so the
+    # temporary tree and the git environment set below go no further.
+    fixtures() (
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        # The extraction half, unchanged from before this fix: the fence
+        # rules the awk script implements.
+        sample="$work/sample"
+        printf '%s\n' '[a](before.md)' '````markdown' '```rsdl' '[b](nested.md)' '```' '````' \
+            ' ```text' '[c](one-space.md)' ' ```' '   ```text' '[d](three-spaces.md)' '   ```' \
+            '    ```' '[e](four-spaces.md)' \
+            '~~~' '[f](tilde.md)' '```' '[g](tilde-still.md)' '~~~' \
+            '````' '```' '[h](short-closer.md)' '`````' '[i](long-closer.md)' \
+            $'```crlf\r' $'[j](crlf.md)\r' $'```\r' \
+            '```' '[k](info.md)' '```text' '[l](info-still.md)' $'```  \t' '[m](trailing.md)' \
+            '``' '[n](two-backticks.md)' \
+            '[z](after.md)' > "$sample"
+        expected="before.md four-spaces.md long-closer.md trailing.md two-backticks.md after.md "
+        if [ "$(extract_links "$sample" | tr '\n' ' ')" != "$expected" ]; then
+            echo "link-check: the fence rules no longer give the expected links on the built-in sample:" >&2
+            extract_links "$sample" >&2
+            exit 1
+        fi
+        # A file the list names but cannot be read fails the scan rather than
+        # being treated as "no links": a read failure and an empty result must
+        # not look the same.
+        report="$work/report"
+        if printf '%s\n' missing.md | scan_links "$work" 2>"$report" \
+            || ! grep -q -- "cannot read 'missing.md'" "$report"; then
+            echo "link-check: the scan no longer fails on a file it cannot read:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # The enforcement half. Driven as a child process — this recipe,
+        # given a root, which is the form that runs the gate and nothing else
+        # — over a repository built for it: first with its one link
+        # resolving, then with a second file added whose link does not.
+        # The directory is named "sub" rather than the name of this
+        # repository's own documentation tree: this justfile is itself
+        # scanned by `doc-path-check`, and a literal citation of a path under
+        # that name in a grep pattern below would be reported as a broken
+        # citation against this recipe's own line.
+        gate="$work/gate"
+        mkdir -p "$gate/sub"
+        printf '%s\n' '[present](present.md)' > "$gate/sub/a.md"
+        : > "$gate/sub/present.md"
+        git_at "$gate" -c init.defaultBranch=main -c init.templateDir= init -q
+        git_at "$gate" -c core.excludesFile=/dev/null add -A
+        run="$work/run"
+        if ! "{{just_executable()}}" link-check "$gate" >"$run" 2>&1; then
+            echo "link-check: the gate did not pass over a fixture whose link resolves:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        printf '%s\n' '[gone](gone.md)' > "$gate/sub/b.md"
+        git_at "$gate" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" link-check "$gate" >"$run" 2>&1; then
+            echo "link-check: the gate returned 0 over a fixture citing a link that does not resolve:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q -- "sub/b.md -> gone.md" "$run"; then
+            echo "link-check: the gate did not report the broken link in its fixture:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+    )
+    # One call site, so the fixture above and the real run take the same
+    # line: a clause appended here disarms both, and the child process
+    # notices.
+    root=.
+    if [ -n "{{root}}" ]; then
+        root="{{root}}"
+    else
+        fixtures
     fi
-    broken=0
-    while IFS= read -r file; do
-        dir="$(dirname "$file")"
-        while IFS= read -r target; do
-            [ -z "$target" ] && continue
-            [ -e "$dir/$target" ] && continue
-            echo "link-check: $file -> $target" >&2
-            broken=$((broken+1))
-        done < <(extract_links "$file")
-    done < <(git ls-files '*.md')
-    if [ "$broken" -ne 0 ]; then
-        echo "link-check: $broken link(s) above do not resolve." >&2
-        exit 1
-    fi
-    echo "link-check: every relative Markdown link resolves."
+    run_gate "$root"
 
 # Check that every `docs/…` file path named in a tracked file resolves.
 #
