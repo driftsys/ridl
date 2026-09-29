@@ -532,7 +532,11 @@ impl Filler<'_, '_> {
     }
 
     /// What one type position holds on the wire, and whether a field at that
-    /// position needs an explicit `= null` default (ADR-0019 decision 6).
+    /// position needs an explicit `= null` default: a field typed by an enum
+    /// with no zero member (ADR-0019 decision 6), and an optional field that
+    /// holds a scalar or an enum, the two kinds a FlatBuffers default applies
+    /// to (decision 9). An array's element drops its marker, because a vector
+    /// element carries no default.
     ///
     /// A reference into another package resolves to a table this package's
     /// schema does not declare, so no wire kind is stated for it; the
@@ -546,6 +550,22 @@ impl Filler<'_, '_> {
         let Some(ty) = ty else {
             return (None, false);
         };
+        let (wire, needs_null_default) = self.position_wire(home, ty, hint);
+        let holds_a_default = matches!(
+            wire.as_ref().and_then(|wire| wire.kind.as_ref()),
+            Some(v1::fb_wire::Kind::Scalar(_)) | Some(v1::fb_wire::Kind::Enum(_))
+        );
+        (wire, needs_null_default || (ty.optional && holds_a_default))
+    }
+
+    /// [`Filler::type_wire`] before the optional rule: the wire kind, and the
+    /// `= null` ADR-0019 decision 6 calls for.
+    fn position_wire(
+        &self,
+        home: &v2::Package,
+        ty: &v2::FieldType,
+        hint: &str,
+    ) -> (Option<v1::FbWire>, bool) {
         match ty.kind.as_ref() {
             Some(v2::field_type::Kind::Primitive(primitive)) => {
                 (Some(primitive_wire(*primitive)), false)

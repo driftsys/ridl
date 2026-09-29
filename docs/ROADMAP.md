@@ -680,7 +680,7 @@ ADR-0018 amendments.
 | ID     | Story                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
-| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation; it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9)                                                                  | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
 | E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
@@ -699,10 +699,16 @@ and `ridl-loopback`. Two narrower gaps are tracked beside it:
 **driftsys/ridl#467**, a type reaching a cross-package reference carried no
 codec — closed by E11.14 on 2026-09-21 — and **driftsys/ridl#469**, an anonymous
 inline constraint, a `step` and a map key's uniqueness are not checked by the
-generated `verify`. A fourth, **driftsys/ridl#472**, is a decided divergence
-rather than a gap: this codec refuses a buffer in which a conforming FlatBuffers
-writer omitted a default-valued non-optional field, which design note D-9 chose
-and the conformance suite measures.
+generated `verify`. A fourth, **driftsys/ridl#472**, was a decided divergence
+rather than a gap — this codec refused a buffer in which a conforming
+FlatBuffers writer omitted a default-valued non-optional field, and a present
+default-valued optional scalar did not survive a foreign round trip — and was
+decided on 2026-09-29: the codec reads an absent non-optional scalar or enum as
+the FlatBuffers default unless 0 is not a legal value of its type, and an
+optional scalar or enum field projects with `= null` (ADR-0019 decision 9).
+Design note D-9's writer rule stands; its reader rule is amended. What remains
+is **driftsys/ridl#598**: `ridl diff` calls appending a non-optional field
+compatible where 0 is not a legal value, and the reader refuses the old buffers.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

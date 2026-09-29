@@ -14,7 +14,7 @@ table Setpoint {
   // Speed — km/h [0..250 step 0.5]
   desired: float (id: 0);
   // Percent — [0..100]
-  tolerance: ubyte (id: 1);
+  tolerance: ubyte = null (id: 1);
   // Delta — [-100..100]
   trim: byte (id: 2);
   reserved_4: ubyte (id: 3, deprecated);

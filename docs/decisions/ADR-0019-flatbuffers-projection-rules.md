@@ -21,6 +21,16 @@ Decisions 1 to 7 are unchanged; decision 5's list of generated names gained
 decision 8's box, and Open item 3 records the one thing decision 8 deliberately
 did not settle. Decision 8 is FlatBuffers-scoped like the other seven.
 
+**Amended 2026-09-29 — decision 9, from the decision on driftsys/ridl#472.** A
+ninth decision was added: an optional table field that holds a scalar or an enum
+takes `= null`. It changes what the schema emitter writes for every such field.
+Decision 6 gained a dated note on where requiredness is held, because the codec
+now reads an absent non-optional scalar or enum as the FlatBuffers default when
+0 is a legal value of its type; the consequence that gave decision 8 a
+"root-level reach" is amended in place for the same reason, and two alternatives
+joined the table. Decisions 1 to 8 are otherwise unchanged. Decision 9 is
+FlatBuffers-scoped like the other eight.
+
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
 [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
@@ -195,6 +205,17 @@ refused.
    already not representable on this target, and surfacing absence beats
    inventing a value.
 
+   _Amended 2026-09-29, from driftsys/ridl#472._ Requiredness on this target is
+   held by the codec that reads the buffer, not by the schema, and #472 set what
+   the codec holds: an absent non-optional scalar or enum field reads as the
+   FlatBuffers default, 0, when 0 is a legal value of the field's type, and is
+   refused as a missing required field when it is not
+   ([`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)). A field
+   this decision gives `= null` is typed by an enum with no zero member, so 0 is
+   never legal for it: a non-optional one is still refused when absent, and an
+   optional one reads as absent. The rendering this decision chose does not
+   change.
+
 7. **A name that reaches a word the validity oracle reserves is emitted as-is,
    never refused.** `planus` 1.3.0 reserves nine words that `flatc` 25.12.19
    treats as contextual identifiers — `table`, `namespace`, `attribute`,
@@ -265,21 +286,72 @@ refused.
    it in its own projection record in its own terms, and nothing here decides
    for them.
 
+9. **An optional table field that holds a scalar or an enum takes `= null`** —
+   added 2026-09-29, from the decision on driftsys/ridl#472. A FlatBuffers
+   scalar or enum field has a default, 0 unless the schema states another, and a
+   conforming writer omits a field whose value equals it. Without `= null` the
+   schema gives a reader no way to tell a present 0 from an absent optional: a
+   `Some(0)` this projection's codec writes is read as `0` by a reader that
+   follows the schema, and that reader's re-encode omits the field, so a round
+   trip through another implementation turns `Some(0)` into `None` — measured
+   with `planus` 1.3.0 and `flatc` 25.12.19. `= null` is how FlatBuffers itself
+   states an optional scalar: a present 0 is written and read as present, and an
+   absent field reads as absent. This is
+   [ADR-0013](ADR-0013-codegen-backend-scope.md) decision 7's rule — a target
+   that can represent absence structurally does so — applied to the one field
+   kind this projection had left without it.
+
+   It applies in the three table positions where typl lets a field carry a `?`:
+   a struct field, a tuple field, and a map entry's value. It applies to every
+   kind a FlatBuffers default applies to: a primitive or inline scalar, a named
+   scalar backed by a number or a boolean, an enum set (an integer on the wire),
+   and an enum — including one with a zero member, which decision 6 leaves bare.
+   A string, bytes, table or union field is an offset, present or absent with no
+   default, so it takes no marker; nor does a vector element, which carries no
+   default, so an optional array element's marker is dropped as decision 6's is.
+   The schema emitter and the shared projection fact the codegen model carries
+   (`FbSlot.needs_null_default`) state the same rule. The Rust codec refuses an
+   optional map value outright, because it gives a map entry no absent half, so
+   that position reaches only a foreign consumer of the schema.
+
+   The reader rule this pairs with is the codec's, stated in
+   [`../design/flatbuffers-codec.md`](../design/flatbuffers-codec.md): an absent
+   non-optional scalar or enum reads as the default, 0, unless 0 is not a legal
+   value of its type. Together they give each field one reading for every
+   conforming writer. A field whose presence matters is declared optional, and
+   its presence now survives any conforming writer; a non-optional field at 0
+   may be omitted by any conforming writer and still reads as 0.
+
+   Two alternatives were rejected. **`= null` on every scalar and enum field**,
+   optional or not, keeps a missing non-optional field detectable, but it
+   realises absence for fields that never declared `?`, which ADR-0013 decision
+   7 reserves for a `?` the contract states and which
+   [ADR-0017](ADR-0017-proto3-projection-rules.md) decision 2 declined for
+   proto3 on the same ground; every scalar of a foreign consumer's generated
+   code becomes an optional value (in `planus`'s reader for the conformance
+   fixture, 77 `Option`s become 113); and a writer that follows the earlier
+   schema still omits a non-optional field at its default, so its buffer is
+   still refused. **Keeping the plain scalar and documenting the loss** leaves a
+   present 0 lost by every foreign round trip, with nothing a consumer could do
+   about it.
+
 ## Alternatives considered
 
-| Candidate                                                         | Verdict    | Reason                                                                                                                                                                                                           |
-| ----------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A native union in the ordinal-owned slot                          | rejected   | a union field owns two id slots, shifting every later field; `flatc` refuses the schema ("field id's must be consecutive from 0")                                                                                |
-| A hand-rolled discriminant-plus-arms table (note §4.4's remedy)   | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both) |
-| Refusing a named scalar, enum or enum set union arm               | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                        |
-| The FlatBuffers `struct` form for a `fixed_layout` struct         | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                              |
-| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — parked, not reopenable in a named story (see Open item 1, amended 2026-09-21)    |
-| Lifting `ridl-backend-proto`'s `SymbolScope`                      | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
-| Defaulting a zero-less enum field to its lowest declared value    | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
-| Refusing or escaping a name that reaches a `planus` reserved word | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                   |
-| A box table only for the declarations an interaction carries      | rejected   | a projection that depends on which interactions exist is context-sensitive: adding a signal would add a table and an implementation to a type that had none, against ADR-0016 decision 6's totality (decision 8) |
-| An induced per-interaction argument struct as the payload's root  | rejected   | it changes the face's payload types, which is an ADR-0023 change, and boxes one scalar once per use; an induced struct is a struct, so it composes with decision 8 if it ever comes                              |
-| A raw scalar root, with no table at all                           | rejected   | FlatBuffers has no root that is not a table; `planus` could not read one and the conformance suite would have nothing to compare (decision 8)                                                                    |
+| Candidate                                                             | Verdict    | Reason                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A native union in the ordinal-owned slot                              | rejected   | a union field owns two id slots, shifting every later field; `flatc` refuses the schema ("field id's must be consecutive from 0")                                                                                          |
+| A hand-rolled discriminant-plus-arms table (note §4.4's remedy)       | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both)           |
+| Refusing a named scalar, enum or enum set union arm                   | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                                  |
+| The FlatBuffers `struct` form for a `fixed_layout` struct             | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                                        |
+| Emitting `(key)` on the map entry's key field                         | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — parked, not reopenable in a named story (see Open item 1, amended 2026-09-21)              |
+| Lifting `ridl-backend-proto`'s `SymbolScope`                          | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                          |
+| Defaulting a zero-less enum field to its lowest declared value        | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                                       |
+| Refusing or escaping a name that reaches a `planus` reserved word     | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                             |
+| A box table only for the declarations an interaction carries          | rejected   | a projection that depends on which interactions exist is context-sensitive: adding a signal would add a table and an implementation to a type that had none, against ADR-0016 decision 6's totality (decision 8)           |
+| An induced per-interaction argument struct as the payload's root      | rejected   | it changes the face's payload types, which is an ADR-0023 change, and boxes one scalar once per use; an induced struct is a struct, so it composes with decision 8 if it ever comes                                        |
+| A raw scalar root, with no table at all                               | rejected   | FlatBuffers has no root that is not a table; `planus` could not read one and the conformance suite would have nothing to compare (decision 8)                                                                              |
+| `= null` on every scalar and enum field, optional or not              | rejected   | realises absence for fields that never declared `?` (ADR-0013 decision 7), makes every scalar of a foreign consumer's code optional, and still refuses a buffer from a writer that follows the earlier schema (decision 9) |
+| A plain scalar for an optional scalar field, with the loss documented | rejected   | a present 0 is lost by every round trip through another implementation, because the schema states no presence for the field (decision 9)                                                                                   |
 
 ## Consequences
 
@@ -330,6 +402,23 @@ refused.
   applies to: a string or a bytes box is a present offset whatever its length,
   so an empty one round-trips. Deciding otherwise is #472's, not decision 8's:
   it is the same question, met at a position where it is harder to ignore.
+
+  _Amended 2026-09-29, when driftsys/ridl#472 was decided._ The codec now reads
+  an absent box `value` as the FlatBuffers default, as it reads any absent
+  non-optional scalar or enum field, so a box of 0, or of an enum's zero member,
+  that another implementation wrote is read as that value. What is left of the
+  reach is a box whose type excludes 0 — a range, or a range and step, without
+  it, or an enum with no zero member — which has no slot only when the writer
+  wrote no value, and is refused, as the same field is at any other position.
+- **Positive — a present 0 in an optional field survives any conforming
+  writer.** Decision 9's `= null` states presence in the schema, so a reader
+  that follows it tells a present 0 from an absent optional.
+- **Negative — decision 9 changes a foreign consumer's generated code.** Every
+  optional scalar or enum field becomes an optional value in code generated from
+  the schema (`planus`: `Option<T>`), and a buffer a foreign writer produced
+  from the earlier schema, with such a field omitted at 0, now reads as absent
+  where it read as 0. This projection's codec already read that field as absent,
+  and the bytes it writes do not change.
 - **Negative — a map lookup is linear.** With no `(key)` there is no generated
   `LookupByKey` and no binary search. The Open item names the story that may
   restore it.
@@ -394,8 +483,9 @@ refused.
   — the reasoning trail, including the measurements each decision cites; read as
   a design, not as what shipped
 - [ADR-0013](ADR-0013-codegen-backend-scope.md) — the emit ceiling (decision 2),
-  the transport width layer (decision 4), and decision 6's width-floor
-  precondition, whose closure by E9.9 is recorded there as an amendment
+  the transport width layer (decision 4), decision 6's width-floor precondition,
+  whose closure by E9.9 is recorded there as an amendment, and decision 7
+  (absence realised structurally where the target can, which decision 9 applies)
 - [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) — decision 6
   (the four projection properties decisions 2 and 3 turn on)
 - [ADR-0017](ADR-0017-proto3-projection-rules.md) — decision 1 (the

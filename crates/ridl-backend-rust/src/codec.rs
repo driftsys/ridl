@@ -243,8 +243,13 @@ enum Repr {
     /// A named scalar over one of the three above.
     Named(NamedScalar),
     /// A generated `#[repr(i64)]` enum. `first` is the variant a discharged
-    /// read decodes to.
-    Enum { name: String, first: String },
+    /// read decodes to; `zero` is the variant whose value is 0, which is what
+    /// an absent field reads as, when the enum declares one.
+    Enum {
+        name: String,
+        first: String,
+        zero: Option<String>,
+    },
     /// A generated enum set: a `#[repr(transparent)]` newtype over `i64`.
     EnumSet { name: String },
 }
@@ -253,6 +258,13 @@ enum Repr {
 struct Scalar {
     prim: Prim,
     repr: Repr,
+    /// Whether 0, the FlatBuffers default, is a legal value of the type,
+    /// decided at generation time: an enum declares a zero member, an enum
+    /// set is always legal at 0 (the empty set), and a numeric scalar's
+    /// range and step hold 0 ([`zero_is_legal`]). An absent non-optional
+    /// field reads as 0 when this is true and is refused when it is not
+    /// (driftsys/ridl#472).
+    zero_legal: bool,
 }
 
 impl Scalar {
@@ -294,6 +306,71 @@ impl Scalar {
         }
     }
 
+    /// The domain value an absent non-optional field reads as: the
+    /// FlatBuffers default, 0, as its own type spells it (driftsys/ridl#472).
+    /// `verify` has already refused an absent field whose type excludes 0
+    /// ([`Scalar::verify_absent`]), so for an enum this is its zero member;
+    /// the first variant stands in only where `verify` makes the read
+    /// unreachable.
+    fn decode_default(&self) -> TokenStream {
+        let zero = self.domain_zero();
+        match &self.repr {
+            Repr::Bool | Repr::Int | Repr::Float => zero,
+            Repr::Named(named) => {
+                let ty = type_path(&named.name);
+                let ctor = format_ident!("{}", named.ctor);
+                quote! { #ty::#ctor(#zero) }
+            }
+            Repr::Enum { name, first, zero } => {
+                let ty = type_path(name);
+                let variant = ident(zero.as_ref().unwrap_or(first));
+                quote! { #ty::#variant }
+            }
+            Repr::EnumSet { name } => {
+                let ty = type_path(name);
+                quote! { #ty(0i64) }
+            }
+        }
+    }
+
+    /// The value of a non-optional field: `inner`, over the field's position
+    /// `__p`, when `field` — a `ridl_rt::flatbuffers::field` call — finds the
+    /// slot, and [`Scalar::decode_default`] when it does not. Shared by
+    /// `decode`, the view accessors and a box, which read an absent field the
+    /// same way.
+    fn read_or_default(&self, field: &TokenStream, inner: &TokenStream) -> TokenStream {
+        let default = self.decode_default();
+        quote! {
+            match #field {
+                ::core::result::Result::Ok(::core::option::Option::Some(__p)) => #inner,
+                _ => #default,
+            }
+        }
+    }
+
+    /// What `verify` does with an absent non-optional field
+    /// (driftsys/ridl#472): nothing when 0, the FlatBuffers default, is a
+    /// legal value of the field's type, and `MissingRequired` when it is not.
+    /// Which of the two is decided at generation time ([`Scalar::zero_legal`]),
+    /// so no check runs in the generated code.
+    fn verify_absent(&self) -> TokenStream {
+        if self.zero_legal {
+            quote! {}
+        } else {
+            missing_required()
+        }
+    }
+
+    /// 0 in the language layer's type: `i64`, `f64` or `bool`, the type
+    /// [`Scalar::widen`] produces.
+    fn domain_zero(&self) -> TokenStream {
+        match self.prim {
+            Prim::Bool => quote! { false },
+            Prim::F32 | Prim::F64 => quote! { 0.0f64 },
+            _ => quote! { 0i64 },
+        }
+    }
+
     /// The domain value, from bytes `verify` has already accepted.
     fn decode(&self, buf: &TokenStream, at: &TokenStream) -> TokenStream {
         let read = self.read(buf, at);
@@ -306,7 +383,7 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#widened) }
             }
-            Repr::Enum { name, first } => {
+            Repr::Enum { name, first, .. } => {
                 let ty = type_path(name);
                 let variant = ident(first);
                 quote! {
@@ -524,6 +601,142 @@ fn decode_path(owner: &str) -> TokenStream {
     let prefix = owner_prefix(package);
     let id = decode_ident(name);
     quote! { #prefix #id }
+}
+
+/// Whether 0 is a value of a numeric scalar's declared range and step,
+/// decided at generation time from the IR's exact decimal text
+/// (driftsys/ridl#472).
+///
+/// 0 must lie within `[min..max]`, and when a `step` is declared it must also
+/// be on the grid `min + n·step` for a whole `n` (typl §4.3):
+/// `[-1.5..1.5 step 1.0]` holds -1.5, -0.5, 0.5 and 1.5, and not 0. A `step`
+/// with no `min` has no anchor, and a bound that is not plain decimal text
+/// (`-`, digits, and an optional fractional part) is not read here; in both
+/// cases the answer is `false`, so an absent field is refused rather than
+/// read as a value that may not be legal. No constraint at all holds 0.
+///
+/// This is decided from the declaration, for a named type and for an inline
+/// constraint alike, and not by calling the type's `check`: `check` ignores
+/// `step` (driftsys/ridl#469), and an inline constraint has no `check`.
+fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
+    let Some(constraint) = constraint else {
+        return true;
+    };
+    let read = |text: &Option<String>| -> Result<Option<Decimal>, ()> {
+        match text.as_deref() {
+            None => Ok(None),
+            Some(text) => Decimal::parse(text).map(Some).ok_or(()),
+        }
+    };
+    let (Ok(min), Ok(max), Ok(step)) = (
+        read(&constraint.min),
+        read(&constraint.max),
+        read(&constraint.step),
+    ) else {
+        return false;
+    };
+    if min.is_some_and(|min| min.units > 0) || max.is_some_and(|max| max.units < 0) {
+        return false;
+    }
+    match (step, min) {
+        (None, _) => true,
+        (Some(_), None) => false,
+        // 0 = min + n·step with a whole n: -min is a whole multiple of step.
+        (Some(step), Some(min)) => {
+            let scale = min.scale.max(step.scale);
+            match (min.rescaled(scale), step.rescaled(scale)) {
+                (Some(min), Some(step)) if step > 0 => min % step == 0,
+                _ => false,
+            }
+        }
+    }
+}
+
+/// An exact decimal read from the IR's canonical text: `units / 10^scale`.
+#[derive(Debug, Clone, Copy)]
+struct Decimal {
+    units: i128,
+    scale: u32,
+}
+
+impl Decimal {
+    /// Reads `-`, digits, and an optional `.` followed by digits. Anything
+    /// else, or more digits than an `i128` holds exactly, is `None`.
+    fn parse(text: &str) -> Option<Self> {
+        let (negative, unsigned) = match text.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, text),
+        };
+        let (whole, fraction) = match unsigned.split_once('.') {
+            Some((whole, fraction)) => (whole, fraction),
+            None => (unsigned, ""),
+        };
+        let digits_only = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+        if whole.is_empty()
+            || !digits_only(whole)
+            || !digits_only(fraction)
+            || (unsigned.contains('.') && fraction.is_empty())
+            || whole.len() + fraction.len() > 30
+        {
+            return None;
+        }
+        let units: i128 = format!("{whole}{fraction}").parse().ok()?;
+        Some(Decimal {
+            units: if negative { -units } else { units },
+            scale: u32::try_from(fraction.len()).ok()?,
+        })
+    }
+
+    /// `units` at a larger `scale`, or `None` on overflow.
+    fn rescaled(self, scale: u32) -> Option<i128> {
+        self.units
+            .checked_mul(10i128.checked_pow(scale.checked_sub(self.scale)?)?)
+    }
+}
+
+/// The `verify` statement for an absent field that carries no value: a
+/// non-optional string, bytes, table, union or collection, or a scalar or
+/// enum whose type excludes 0 ([`Scalar::verify_absent`]).
+fn missing_required() -> TokenStream {
+    quote! {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+}
+
+/// What `verify` does when a non-optional field is absent. A scalar or an
+/// enum reads as the FlatBuffers default unless its type excludes 0
+/// ([`Scalar::verify_absent`], driftsys/ridl#472); anything else is an offset
+/// with no default, so its absence is `MissingRequired`.
+fn verify_absent(wire: &Wire) -> TokenStream {
+    match wire {
+        Wire::Scalar(scalar) => scalar.verify_absent(),
+        _ => missing_required(),
+    }
+}
+
+/// The `verify` statement for one field: `present` over the field's position
+/// `__p` when the slot is present, `absent` when it is not. An absent field
+/// that needs no statement is written as an `if let`, because a `match` with an
+/// empty arm is what clippy's `single_match` refuses in a consumer's build.
+fn verify_field(field: &TokenStream, present: &TokenStream, absent: &TokenStream) -> TokenStream {
+    if absent.is_empty() {
+        quote! {
+            if let ::core::option::Option::Some(__p) = #field {
+                #present
+            }
+        }
+    } else {
+        quote! {
+            match #field {
+                ::core::option::Option::Some(__p) => { #present }
+                ::core::option::Option::None => { #absent }
+            }
+        }
+    }
 }
 
 /// The typl constraint check for a named scalar's value, over a borrow
@@ -844,14 +1057,17 @@ impl<'a> Codec<'a> {
                     Some(v1::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::Bool,
                         repr: Repr::Bool,
+                        zero_legal: true,
                     })),
                     Some(v1::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::I64,
                         repr: Repr::Int,
+                        zero_legal: true,
                     })),
                     Some(v1::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
                         prim: Prim::F64,
                         repr: Repr::Float,
+                        zero_legal: true,
                     })),
                     // A bare `string` or `bytes` carries no length bound, so
                     // it has no finite bound and the type was refused before
@@ -883,6 +1099,8 @@ impl<'a> Codec<'a> {
                 let value = map.value.as_deref().ok_or_else(|| GenerateError {
                     message: "a map carries no value type".to_string(),
                 })?;
+                // Defence in depth: `ridl check` already refuses an optional
+                // map key (TYPL-209), so no checked source reaches this.
                 self.refuse_optional(key, "a map key")?;
                 self.refuse_optional(value, "a map value")?;
                 let entry = self.map_entry_table(
@@ -951,15 +1169,21 @@ impl<'a> Codec<'a> {
                         ),
                     });
                 };
+                let zero = def
+                    .zero_member
+                    .and_then(|index| def.values.get(index as usize))
+                    .map(|zero| pascal_of(zero.name.as_ref()));
                 Ok(Wire::Scalar(Scalar {
                     // Every typl enum is emitted at one underlying width,
                     // `long`, which is what the projection charges it.
                     prim: Prim::I64,
+                    zero_legal: zero.is_some(),
                     repr: Repr::Enum {
                         name: owner.clone(),
                         // The variant `emit_enum` declared, which is the
                         // pinned `pascal_case` spelling.
                         first: pascal_of(first.name.as_ref()),
+                        zero,
                     },
                 }))
             }
@@ -970,6 +1194,7 @@ impl<'a> Codec<'a> {
                 repr: Repr::EnumSet {
                     name: owner.clone(),
                 },
+                zero_legal: true,
             })),
             Some(v1::declaration::Kind::Struct(_)) => Ok(Wire::Table(owner.clone())),
             Some(v1::declaration::Kind::Union(_)) => Ok(Wire::Union(owner.clone())),
@@ -1010,6 +1235,7 @@ impl<'a> Codec<'a> {
                 Ok(Wire::Scalar(Scalar {
                     prim,
                     repr: scalar_repr(named, backing),
+                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 }))
             }
             Some(v1::scalar::Width::FloatWidth(width)) => {
@@ -1025,12 +1251,14 @@ impl<'a> Codec<'a> {
                 Ok(Wire::Scalar(Scalar {
                     prim,
                     repr: scalar_repr(named, backing),
+                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 }))
             }
             None => match backing {
                 ScalarBacking::Boolean => Ok(Wire::Scalar(Scalar {
                     prim: Prim::Bool,
                     repr: scalar_repr(named, backing),
+                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 })),
                 ScalarBacking::String => Ok(Wire::Text(named)),
                 ScalarBacking::Bytes => Ok(Wire::Bytes(named)),
@@ -1289,6 +1517,19 @@ impl<'a> Codec<'a> {
                         }
                         _ => ::core::option::Option::None,
                     }
+                }
+            })
+        } else if let Wire::Scalar(scalar) = &slot.wire {
+            // An absent scalar or enum reads as the FlatBuffers default
+            // (driftsys/ridl#472): there is no slot to read it from.
+            let read = scalar.read_or_default(
+                &quote! { ::ridl_rt::flatbuffers::field(self.buf, self.table, #id, #width) },
+                &inner,
+            );
+            Ok(quote! {
+                #[doc = #doc]
+                #vis fn #name(&self) -> #inner_ty {
+                    #read
                 }
             })
         } else {
@@ -1600,26 +1841,18 @@ impl<'a> Codec<'a> {
             let width = Literal::usize_suffixed(slot.wire.inline_width());
             let present = self.verify_at(owner, &slot.wire, &quote! { __p })?;
             let absent = if slot.optional {
-                quote! { ::core::option::Option::None => {} }
+                quote! {}
             } else {
-                quote! {
-                    ::core::option::Option::None => {
-                        return ::core::result::Result::Err(
-                            ::ridl_rt::payload::VerifyError::Structure(
-                                ::ridl_rt::payload::Malformed::MissingRequired,
-                            ),
-                        );
-                    }
-                }
+                verify_absent(&slot.wire)
             };
-            checks.push(quote! {
-                match ::ridl_rt::flatbuffers::field(buf, table, #id, #width)
-                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
-                {
-                    ::core::option::Option::Some(__p) => { #present }
-                    #absent
-                }
-            });
+            checks.push(verify_field(
+                &quote! {
+                    ::ridl_rt::flatbuffers::field(buf, table, #id, #width)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                },
+                &present,
+                &absent,
+            ));
         }
         Ok(quote! { #(#checks)* })
     }
@@ -1760,10 +1993,13 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[doc = #doc]
             ///
-            /// It cannot fail. A read that could is discharged with the
-            /// neutral value of its own type — zero, the empty string or
-            /// collection, the first declared enum variant — and `verify` is
-            /// what makes those branches unreachable. A named scalar is
+            /// It cannot fail. An absent non-optional scalar or enum field
+            /// reads as its FlatBuffers default — 0, or the enum's zero
+            /// member — which is a value `verify` accepted
+            /// (driftsys/ridl#472). Any other read that could fail is
+            /// discharged with the neutral value of its own type — zero, the
+            /// empty string or collection, the first declared enum variant —
+            /// and `verify` is what makes those branches unreachable. A named scalar is
             /// built with its unchecked constructor (`new_unchecked`) over a
             /// value `verify` has already range-checked (`check`), so this
             /// never re-checks and never fails.
@@ -1792,6 +2028,13 @@ impl<'a> Codec<'a> {
                     _ => ::core::option::Option::None,
                 }
             }
+        } else if let Wire::Scalar(scalar) = &slot.wire {
+            // An absent scalar or enum reads as the FlatBuffers default
+            // (driftsys/ridl#472): there is no slot to read it from.
+            scalar.read_or_default(
+                &quote! { ::ridl_rt::flatbuffers::field(#buf, #table, #id, #width) },
+                &inner,
+            )
         } else {
             quote! {
                 {
@@ -2087,8 +2330,8 @@ impl<'a> Codec<'a> {
     /// box idiom rather than minting a second shape, and this is where that is
     /// true of the code rather than only of the records: `union_arm`'s
     /// non-table branch and `root_box_items` both call it, and the slot, the
-    /// vtable width, the inline placement and the `MissingRequired` rule are
-    /// written once. `table` is the layout the projection hands over —
+    /// vtable width, the inline placement and the rule for an absent value
+    /// are written once. `table` is the layout the projection hands over —
     /// `union_arm_box_table` for an arm, `root_box_table` for a root — so the
     /// table this writes and the table `max_size` charges cannot be two
     /// different tables.
@@ -2139,6 +2382,24 @@ impl<'a> Codec<'a> {
         let field = self.encode_field(wire, value)?;
         let inner_verify = self.verify_at(owner, wire, &quote! { __p })?;
         let inner_decode = self.decode_expr(wire, &quote! { buf }, &quote! { __p })?;
+        let absent_verify = verify_absent(wire);
+        // An absent scalar or enum reads as the FlatBuffers default
+        // (driftsys/ridl#472); a string or a bytes box has no default, and
+        // `verify` has refused an absent one.
+        let decode = match wire {
+            Wire::Scalar(scalar) => scalar.read_or_default(
+                &quote! { ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit) },
+                &inner_decode,
+            ),
+            _ => quote! {
+                {
+                    let __p = ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
+                        .unwrap_or(::core::option::Option::None)
+                        .unwrap_or(0usize);
+                    #inner_decode
+                }
+            },
+        };
 
         Ok(BoxBodies {
             encode: quote! {
@@ -2151,30 +2412,19 @@ impl<'a> Codec<'a> {
                     builder.push_table(#size, #align, #slots, &__box)?
                 }
             },
-            // The box's one field is not optional, so a buffer with no slot
-            // for it carries no value at all.
-            verify: quote! {
-                match ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
-                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
-                {
-                    ::core::option::Option::Some(__p) => { #inner_verify }
-                    ::core::option::Option::None => {
-                        return ::core::result::Result::Err(
-                            ::ridl_rt::payload::VerifyError::Structure(
-                                ::ridl_rt::payload::Malformed::MissingRequired,
-                            ),
-                        );
-                    }
-                }
-            },
-            decode: quote! {
-                {
-                    let __p = ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
-                        .unwrap_or(::core::option::Option::None)
-                        .unwrap_or(0usize);
-                    #inner_decode
-                }
-            },
+            // The box's one field is not optional. A buffer with no slot for
+            // it holds the FlatBuffers default when that is a legal value of
+            // the box's type, and no value at all when it is not
+            // (driftsys/ridl#472).
+            verify: verify_field(
+                &quote! {
+                    ::ridl_rt::flatbuffers::field(buf, #at, #id_lit, #width_lit)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                },
+                &inner_verify,
+                &absent_verify,
+            ),
+            decode,
         })
     }
 
@@ -2315,8 +2565,10 @@ impl<'a> Codec<'a> {
                 #[doc = #doc]
                 ///
                 /// The buffer's root is the box table ADR-0019 decision 8
-                /// gives this declaration: one required `value` field. A
-                /// buffer carrying no slot for it is `MissingRequired`.
+                /// gives this declaration: one non-optional `value` field. A
+                /// buffer carrying no slot for it holds the FlatBuffers
+                /// default, 0, when 0 is a legal value of this type, and is
+                /// `MissingRequired` when it is not.
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {
@@ -2550,5 +2802,47 @@ fn int_prim(width: i32) -> Option<Prim> {
         v1::IntWidth::U64 => Some(Prim::U64),
         v1::IntWidth::I64 => Some(Prim::I64),
         v1::IntWidth::Unspecified => None,
+    }
+}
+
+#[cfg(test)]
+mod zero_tests {
+    use super::{v1, zero_is_legal};
+
+    fn constraint(min: Option<&str>, max: Option<&str>, step: Option<&str>) -> v1::Constraint {
+        v1::Constraint {
+            min: min.map(String::from),
+            max: max.map(String::from),
+            step: step.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn zero_is_legal_follows_the_range_and_the_step() {
+        let cases = [
+            (None, None, None, true),
+            (Some("0"), Some("10"), None, true),
+            (Some("1"), Some("10"), None, false),
+            (Some("-10"), Some("-1"), None, false),
+            (Some("-1.5"), Some("1.5"), Some("1.0"), false),
+            (Some("-1.0"), Some("1.0"), Some("1.0"), true),
+            (Some("0.0"), Some("1.0"), Some("0.01"), true),
+            (Some("-0.25"), Some("1"), Some("0.125"), true),
+            (Some("-0.3"), Some("1"), Some("0.2"), false),
+            // A step with no lower bound has no anchor, so it is not decided.
+            (None, Some("10"), Some("1"), false),
+            // Text this reader does not accept is not decided either.
+            (Some("-1e3"), Some("10"), None, false),
+            (Some("-1."), Some("10"), None, false),
+        ];
+        for (min, max, step, legal) in cases {
+            assert_eq!(
+                zero_is_legal(Some(&constraint(min, max, step))),
+                legal,
+                "min {min:?}, max {max:?}, step {step:?}"
+            );
+        }
+        assert!(zero_is_legal(None), "no constraint holds 0");
     }
 }

@@ -203,9 +203,11 @@ fn main() {
 ///
 /// The two optionals carry the whole force of this: `note` is `Some("")` and
 /// `spare` is `Some(0)`, and both are indistinguishable from `None` unless
-/// the encoder writes them. The non-optional fields carry the rest — an
-/// omitted one fails `verify` with `MissingRequired` rather than decoding
-/// wrongly, so this case fails either way if the encoder starts skipping.
+/// the encoder writes them. The non-optional fields carry none of it: an
+/// omitted one reads as its FlatBuffers default (driftsys/ridl#472), so this
+/// case cannot tell whether the encoder wrote them.
+/// `this_codec_writes_a_non_optional_field_at_its_default`, in the
+/// conformance test, reads the vtable to pin that.
 #[test]
 fn a_present_default_valued_field_survives_the_round_trip() {
     let main = format!(

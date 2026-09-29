@@ -1,0 +1,32 @@
+// The first version of the evolution fixture (driftsys/ridl#472).
+//
+// Each struct carries one field. `flatbuffers_evolution_v2.ridl` appends one
+// non-optional field to each, so a buffer this version's codec writes is a
+// buffer in which the appended field is absent. The conformance test reads
+// those buffers with the second version's codec.
+
+package fb.evolution
+
+/// A count; 0 is a legal value.
+type Count : integer [0..200]
+
+/// A level; 0 is not a legal value.
+type Level : integer [1..10]
+
+/// A gear; the enum declares no zero member.
+enum Gear {
+  PARK  = 1
+  DRIVE = 2
+}
+
+struct WithCount {
+  a : Count
+}
+
+struct WithLevel {
+  a : Count
+}
+
+struct WithGear {
+  a : Count
+}

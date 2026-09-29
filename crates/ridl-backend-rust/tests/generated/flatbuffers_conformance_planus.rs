@@ -1052,7 +1052,7 @@ mod root {
                 /// The field `note` in the table `Report`
                 pub note: ::core::option::Option<::planus::alloc::string::String>,
                 /// The field `spare` in the table `Report`
-                pub spare: u16,
+                pub spare: ::core::option::Option<u16>,
             }
 
             #[allow(clippy::derivable_impls)]
@@ -1078,7 +1078,7 @@ mod root {
                         points: ::core::default::Default::default(),
                         pair: ::core::default::Default::default(),
                         note: ::core::default::Default::default(),
-                        spare: 0,
+                        spare: ::core::default::Default::default(),
                     }
                 }
             }
@@ -1122,7 +1122,7 @@ mod root {
                     >,
                     field_pair: impl ::planus::WriteAsOptional<::planus::Offset<self::ReportPair>>,
                     field_note: impl ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-                    field_spare: impl ::planus::WriteAsDefault<u16, u16>,
+                    field_spare: impl ::planus::WriteAsOptional<u16>,
                 ) -> ::planus::Offset<Self> {
                     let prepared_id = field_id.prepare(builder, &0);
                     let prepared_name = field_name.prepare(builder);
@@ -1143,7 +1143,7 @@ mod root {
                     let prepared_points = field_points.prepare(builder);
                     let prepared_pair = field_pair.prepare(builder);
                     let prepared_note = field_note.prepare(builder);
-                    let prepared_spare = field_spare.prepare(builder, &0);
+                    let prepared_spare = field_spare.prepare(builder);
 
                     let mut table_writer: ::planus::table_writer::TableWriter<46> =
                         ::core::default::Default::default();
@@ -2187,7 +2187,7 @@ mod root {
                     T19,
                 )>
                 where
-                    T19: ::planus::WriteAsDefault<u16, u16>,
+                    T19: ::planus::WriteAsOptional<u16>,
                 {
                     let (
                         v0,
@@ -2216,10 +2216,10 @@ mod root {
                     ))
                 }
 
-                /// Sets the [`spare` field](Report#structfield.spare) to the default value.
+                /// Sets the [`spare` field](Report#structfield.spare) to null.
                 #[inline]
                 #[allow(clippy::type_complexity)]
-                pub fn spare_as_default(
+                pub fn spare_as_null(
                     self,
                 ) -> ReportBuilder<(
                     T0,
@@ -2241,9 +2241,9 @@ mod root {
                     T16,
                     T17,
                     T18,
-                    ::planus::DefaultValue,
+                    (),
                 )> {
-                    self.spare(::planus::DefaultValue)
+                    self.spare(())
                 }
             }
 
@@ -2326,7 +2326,7 @@ mod root {
                     >,
                     T17: ::planus::WriteAsOptional<::planus::Offset<self::ReportPair>>,
                     T18: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-                    T19: ::planus::WriteAsDefault<u16, u16>,
+                    T19: ::planus::WriteAsOptional<u16>,
                 > ::planus::WriteAs<::planus::Offset<Report>>
                 for ReportBuilder<(
                     T0,
@@ -2383,7 +2383,7 @@ mod root {
                     >,
                     T17: ::planus::WriteAsOptional<::planus::Offset<self::ReportPair>>,
                     T18: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-                    T19: ::planus::WriteAsDefault<u16, u16>,
+                    T19: ::planus::WriteAsOptional<u16>,
                 > ::planus::WriteAsOptional<::planus::Offset<Report>>
                 for ReportBuilder<(
                     T0,
@@ -2443,7 +2443,7 @@ mod root {
                     >,
                     T17: ::planus::WriteAsOptional<::planus::Offset<self::ReportPair>>,
                     T18: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
-                    T19: ::planus::WriteAsDefault<u16, u16>,
+                    T19: ::planus::WriteAsOptional<u16>,
                 > ::planus::WriteAsOffset<Report>
                 for ReportBuilder<(
                     T0,
@@ -2685,8 +2685,8 @@ mod root {
 
                 /// Getter for the [`spare` field](Report#structfield.spare).
                 #[inline]
-                pub fn spare(&self) -> ::planus::Result<u16> {
-                    ::core::result::Result::Ok(self.0.access(20, "Report", "spare")?.unwrap_or(0))
+                pub fn spare(&self) -> ::planus::Result<::core::option::Option<u16>> {
+                    self.0.access(20, "Report", "spare")
                 }
             }
 
@@ -2745,7 +2745,9 @@ mod root {
                     if let ::core::option::Option::Some(field_note) = self.note().transpose() {
                         f.field("note", &field_note);
                     }
-                    f.field("spare", &self.spare());
+                    if let ::core::option::Option::Some(field_spare) = self.spare().transpose() {
+                        f.field("spare", &field_spare);
+                    }
                     f.finish()
                 }
             }
@@ -2831,7 +2833,11 @@ mod root {
                             ::core::option::Option::None
                         },
                         note: value.note()?.map(::core::convert::Into::into),
-                        spare: ::core::convert::TryInto::try_into(value.spare()?)?,
+                        spare: if let ::core::option::Option::Some(spare) = value.spare()? {
+                            ::core::option::Option::Some(::core::convert::TryInto::try_into(spare)?)
+                        } else {
+                            ::core::option::Option::None
+                        },
                     })
                 }
             }

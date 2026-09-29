@@ -1574,9 +1574,10 @@ fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
                 declared.push(decl.name.clone());
                 let layout = projection::struct_table(&decl.name, def).expect("layout");
                 // ADR-0019 decision 6: a field typed by an enum that declares
-                // no zero member carries `= null`. That is a fact the codec
-                // reads too (design note D-9), so the schema is checked
-                // against it here rather than only against the ids.
+                // no zero member carries `= null`. Decision 9: so does an
+                // optional field holding a scalar or an enum. Both are facts
+                // the codec's readers depend on, so the schema is checked
+                // against them here rather than only against the ids.
                 let nulls: Vec<bool> = def
                     .members
                     .iter()
@@ -1585,6 +1586,7 @@ fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
                         v2::struct_member::Member::Field(field) => {
                             enum_behind(package, others, field.r#type.as_ref())
                                 .is_some_and(projection::enum_field_needs_null_default)
+                                || optional_scalar_or_enum(package, others, field.r#type.as_ref())
                         }
                         v2::struct_member::Member::Reserved(_) => false,
                     })
@@ -1786,6 +1788,45 @@ fn resolve_kind(
         .find(|decl| decl.name == name)?
         .kind
         .clone()
+}
+
+/// Whether `ty` is optional and holds a scalar or an enum, which is what
+/// ADR-0019 decision 9 gives `= null` — derived from the IR here, not from
+/// the emitter. A string or a bytes backing is an offset on the wire and
+/// holds no FlatBuffers default, so it answers `false`.
+fn optional_scalar_or_enum(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    ty: Option<&v2::FieldType>,
+) -> bool {
+    let Some(ty) = ty.filter(|ty| ty.optional) else {
+        return false;
+    };
+    let is_offset = |primitive: i32| {
+        matches!(
+            v2::PrimitiveType::try_from(primitive),
+            Ok(v2::PrimitiveType::String | v2::PrimitiveType::Bytes)
+        )
+    };
+    let backed_by_offset = |td: &v2::TypeDef| {
+        td.width.is_none()
+            && matches!(
+                td.backing.as_ref().and_then(|backing| backing.kind.as_ref()),
+                Some(v2::backing::Kind::Primitive(primitive)) if is_offset(*primitive)
+            )
+    };
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Primitive(primitive)) => !is_offset(*primitive),
+        Some(v2::field_type::Kind::InlineScalar(td)) => !backed_by_offset(td),
+        Some(v2::field_type::Kind::Named(reference)) => {
+            match resolve_kind(package, others, reference) {
+                Some(v2::decl::Kind::TypeDef(td)) => !backed_by_offset(&td),
+                Some(v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_)) => true,
+                _ => false,
+            }
+        }
+        _ => false,
+    }
 }
 
 /// The enum declaration behind a field's type, if its type is a reference to

@@ -1,0 +1,54 @@
+// Whether an absent field reads as 0 (driftsys/ridl#472).
+//
+// Every struct here has the shape of the round-trip fixture's `Inner`: a
+// scalar at id 0 and a `Label` at id 1. So one buffer planus writes for an
+// `Inner` whose `speed` is 0, which carries no slot at id 0, is read here as
+// each of them, and what differs is only the type of the absent field.
+
+package fb.zero
+
+/// A label, as in the round-trip fixture.
+type Label : string [0..16]
+
+/// A float whose grid is -1.5, -0.5, 0.5 and 1.5: 0 lies inside the range
+/// but not on the grid, so 0 is not a legal value.
+type Odd : float [-1.5..1.5 step 1.0]
+
+/// A float whose grid is -1.0, 0.0 and 1.0: 0 is on the grid.
+type Even : float [-1.0..1.0 step 1.0]
+
+/// An enum whose zero member is not its first.
+enum Mode {
+  ON  = 1
+  OFF = 0
+}
+
+/// An inline range that excludes 0.
+struct InnerRange {
+  speed : integer [1..10]
+  label : Label
+}
+
+/// An inline range that includes 0.
+struct InnerZero {
+  speed : integer [0..10]
+  label : Label
+}
+
+/// A named type whose step excludes 0.
+struct InnerOdd {
+  speed : Odd
+  label : Label
+}
+
+/// A named type whose step includes 0.
+struct InnerEven {
+  speed : Even
+  label : Label
+}
+
+/// An enum whose zero member is declared second.
+struct InnerMode {
+  speed : Mode
+  label : Label
+}
