@@ -118,13 +118,17 @@ at epic close) and cites these decisions by number.
     TYPL-403 are still unimplemented and still deferred; that remaining
     inventory is carried on the E2 debt issue #172 beside the E1 one (#135).
 
-    _Amended (2026-09-29)._ `regress` alone is not enough, because the Rust
-    backend's generated code compiles each pattern with the `regex` crate and
-    panics on one that crate refuses (issue #437). The checker now compiles a
-    pattern that `regress` accepts with `regex` as well, and a pattern `regex`
-    refuses is the new error TYPL-220. `regress` still decides TYPL-106, and a
-    typl pattern is the ECMA-262 syntax that `regex` also accepts (typl
-    reference §2.7).
+    _Amended (2026-09-29)._ `regress` alone is not enough. The Rust backend
+    emits a `match` on a `String`-backed type as a `regex::Regex::new` call in
+    the generated code, under the generated crate's `validate-pattern` feature,
+    and that call panics on a pattern the `regex` crate refuses (issue #437).
+    The checker now compiles a pattern that `regress` accepts with `regex` as
+    well, and a pattern `regex` refuses is the new error TYPL-220. `regress`
+    still decides TYPL-106, and a typl pattern is the ECMA-262 syntax that
+    `regex` also accepts (typl reference §2.7). TYPL-220 guarantees only that
+    the Rust output can compile the pattern, not that the checker, the Rust
+    output and another backend's output match the same strings with it (issue
+    #597).
 
 11. **The general form's attribute promotion is E2 scope.** E1 parses the typl
     profile per typl reference Appendix E, with `@labels` and `@deprecated` as

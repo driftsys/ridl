@@ -1448,16 +1448,25 @@ impl Checker<'_> {
     /// Validates a regex literal's pattern with the `regress` ECMA-262 engine
     /// (typl §2.7; ADR-0007 decision 10), emitting TYPL-106 on invalid syntax.
     /// A pattern `regress` accepts is then compiled with the Rust `regex`
-    /// crate, and one that crate refuses is TYPL-220: the Rust backend's
-    /// generated code compiles every pattern with that crate and panics if it
-    /// fails (issue #437). A typl regex literal carries its `/…/` delimiters;
-    /// both engines parse the body between them, which is also the text the
-    /// codegen lowering hands the backend.
+    /// crate, and one that crate refuses is TYPL-220: the Rust backend emits a
+    /// `match` on a `String`-backed type as a `regex::Regex::new(..).expect(..)`
+    /// call under the generated crate's `validate-pattern` feature, which
+    /// panics if the pattern fails (issue #437). A regex constant is emitted as
+    /// a `&str` and not compiled, but a `match` naming it is. TYPL-220 does
+    /// not make the two engines match the same strings with a pattern that
+    /// both compile (typl §2.7, issue #597). A typl regex literal carries its
+    /// `/…/` delimiters; both engines parse the body between them, which is
+    /// also the text the codegen lowering hands the backend.
     ///
     /// Every pattern that reaches a backend passes through here: an inline
     /// `match` pattern at its type or field, and a regex constant at its
     /// declaration, which is the text a `match` naming that constant carries.
     fn validate_regex(&mut self, raw: &str, range: TextRange) {
+        // The `regex` configuration below must equal the one the Rust backend
+        // emits in `constraint_checks` (`ridl-backend-rust`): `Regex::new`
+        // with the builder defaults, Unicode mode on, and the crate's default
+        // features. A different configuration here accepts or refuses other
+        // patterns than the generated code compiles.
         let body = regex_body(raw);
         if regress::Regex::new(body).is_err() {
             self.error(

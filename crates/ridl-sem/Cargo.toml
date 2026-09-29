@@ -17,12 +17,7 @@ num-rational.workspace = true
 # (ADR-0007 decision 5, the same discipline the fs/fetch gates follow). The
 # `std` feature is all the strategy builders and the test runner need.
 proptest = { workspace = true, features = ["std"], optional = true }
-# ridl-sem only uses ridl-core's db/diag/package/std_lib modules, none of
-# which sit behind the fs/fetch features, so the default features (fetch,
-# which implies fs) are turned off here. Leaving the default on would pull
-# `ureq` (and transitively `ring`) into the wasm32-unknown-unknown build
-# even with `--no-default-features` on ridl-sem itself (ADR-0007 decision 5,
-# E1.19).
+regress.workspace = true
 # A pattern is also compiled with `regex`, the crate the Rust backend's
 # generated code compiles it with, so a pattern that crate refuses is TYPL-220
 # rather than a panic in the consumer's process (issue #437). Not `regex-syntax`
@@ -31,7 +26,12 @@ proptest = { workspace = true, features = ["std"], optional = true }
 # they decide which Unicode classes compile. `regex` builds for
 # wasm32-unknown-unknown with them.
 regex.workspace = true
-regress.workspace = true
+# ridl-sem only uses ridl-core's db/diag/package/std_lib modules, none of
+# which sit behind the fs/fetch features, so the default features (fetch,
+# which implies fs) are turned off here. Leaving the default on would pull
+# `ureq` (and transitively `ring`) into the wasm32-unknown-unknown build
+# even with `--no-default-features` on ridl-sem itself (ADR-0007 decision 5,
+# E1.19).
 # Not `{ workspace = true, default-features = false }`: cargo refuses a
 # `default-features = false` override on a workspace-inherited dependency
 # outright, so this one dependency is declared directly instead. The version

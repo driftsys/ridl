@@ -943,8 +943,9 @@ fn pattern_check_is_feature_gated() {
 /// every other `rustc` compile proof, here and in
 /// `crates/ridlc/tests/rust_crate_emit.rs`, drives bare `rustc` with no
 /// `--cfg` for that feature, so the block is compiled out. `regex` is not a
-/// declared dependency of any workspace crate, so neither proof can link the
-/// real one; both link [`regex_stub_rlib`], a hand-written stand-in built the
+/// dependency of this crate (only `ridl-sem` depends on it, for TYPL-220), so
+/// a bare `rustc` proof here has no path to the real crate's rlib; both link
+/// [`regex_stub_rlib`], a hand-written stand-in built the
 /// same way [`ridl_rt_rlib`] builds `ridl-rt` (see its doc comment for why one
 /// `rustc` call is the whole build).
 ///
@@ -2851,9 +2852,10 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
 
 /// A hand-written stand-in for the `regex` crate, built as an rlib with plain
 /// `rustc` the same way [`ridl_rt_rlib`] builds `ridl-rt`. `regex` is not a
-/// declared dependency of any workspace crate (`validate-pattern` names it as
-/// an optional dependency only in the crate emitted for a consumer, never
-/// here), so the real crate cannot be linked; this stand-in exposes just
+/// dependency of this crate (`ridl-sem` depends on it, to check patterns for
+/// TYPL-220, and `validate-pattern` names it as an optional dependency of the
+/// crate emitted for a consumer), so a bare `rustc` proof here has no path to
+/// the real crate's rlib; this stand-in exposes just
 /// enough surface for the emitted `#[cfg(feature = "validate-pattern")]`
 /// block to type-check: a `Regex` with a fallible `new` and an `is_match`.
 ///
