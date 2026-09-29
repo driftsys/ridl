@@ -147,7 +147,7 @@ role handle satisfies a multi-trait bound (ADR-0021 decision 12, second
 amendment). It reaches a face by value, or as `&mut` under the forwarding impls
 of ADR-0021 decision 11.
 
-Three ways to obtain handles, each with one purpose:
+Four ways to obtain handles, each with one purpose:
 
 - `Loopback::new(catalog)` — the aggregate, with its six handles inside.
 - `Loopback::split(self)` — consumes the aggregate and hands out the six handles
@@ -158,9 +158,37 @@ Three ways to obtain handles, each with one purpose:
   `handler()` — an **additional** handle of that role on the same store, each
   with its own per handle state. This is how a test builds two callers on one
   provider, or two event sources of one event.
+- `Loopback::attach(&self)` — an **additional** aggregate on the same store,
+  whose six handles are opened as those six methods open one each. This is how
+  an application holds several faces over one runtime, each owning its own
+  aggregate: a `Client` and a `Publisher`, or two clients, one with a call in
+  flight while the other waits on `next_event`. A face holds its port for as
+  long as it lives, and a call's future and `next_event`'s future hold the
+  client's port for as long as they live, so one aggregate serves one face at a
+  time (driftsys/ridl#488).
 
 `advance`, `provision_fixed` and `fail_next_settle` are the aggregate's, not any
-role handle's: each acts on the runtime as a whole rather than through a port.
+role handle's: each acts on the runtime as a whole rather than through a port,
+so it has the same effect whichever aggregate of the store it is called on.
+
+What an attached aggregate shares follows from the next section's rule: what is
+in the store is shared, and what is on a handle is not carried over. It starts
+subscribed to nothing, with nothing staged, no call sent and nothing served, and
+dropping it closes only its own six handles.
+
+The alternative rejected is `Clone` on the aggregate and the role handles, which
+driftsys/ridl#488 first proposed. A derived `Clone` copies the per handle
+identity, and three handles close that identity in their `Drop`: dropping one
+copy would close the other's subscriptions, forget its calls, or return its
+claims, and two copies of one source would take each other's occurrences. A
+hand-written `Clone` that opens new identities is `attach` under a name that
+promises a copy it cannot make: a call's outcome belongs to the one caller that
+sent it and a claim to the one handler it was presented to, so neither can be
+carried to a second handle. A receiver type that holds a queue is commonly not
+`Clone` for the same reason (`tokio::sync::broadcast::Receiver` offers
+`resubscribe` instead). No code in this workspace bounds a port on `Clone`, and
+ADR-0021 decision 11 names a `Clone` handle only as one of the shapes a face
+accepts, not as one a runtime must provide.
 
 ## State on a handle, state in the store
 

@@ -36,6 +36,16 @@
 //! - `every_split_handle_carries_the_catalog` — a runtime's own API beyond
 //!   the factory: `Loopback::split`. The suite checks the catalog on the aggregate and on
 //!   the handles its factory makes.
+//! - `an_attached_aggregate_carries_the_catalog`,
+//!   `a_value_committed_through_one_aggregate_is_read_through_an_attached_one`,
+//!   `an_attached_aggregate_advances_the_one_clock`,
+//!   `an_attached_aggregate_starts_with_none_of_the_originals_handle_state`,
+//!   `an_attached_aggregate_has_its_own_subscriptions_and_queue`,
+//!   `a_call_sent_through_one_aggregate_is_served_through_an_attached_one`,
+//!   `dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions`
+//!   and `an_attached_aggregate_keeps_the_store_after_the_original_is_dropped`
+//!   — a runtime's own API beyond the factory: `Loopback::attach`
+//!   (driftsys/ridl#488).
 //! - `the_injected_settle_failure_is_too_large_with_no_capacity` — which
 //!   error the injected fault reports is left to a runtime. The suite asks
 //!   only for an error other than `UnknownClaim`.
@@ -150,7 +160,7 @@ use ridl_rt::port::{
     Attached, Caller, ClaimId, Clock, EventSink, EventSource, FixedReader, Handler, Interest,
     ReadError, SendError, SettleError, SignalReader, SignalWriter, Wakeable,
 };
-use ridl_rt::sample::{Duration, Freshness, Timestamp};
+use ridl_rt::sample::{Duration, Freshness, Provenance, Timestamp};
 
 const IFACE: InterfaceNo = InterfaceNo(1);
 const ORD: Ordinal = Ordinal(1);
@@ -325,6 +335,206 @@ fn every_split_handle_carries_the_catalog() {
     assert_eq!(*handles.sink.catalog(), catalog());
     assert_eq!(*handles.caller.catalog(), catalog());
     assert_eq!(*handles.handler.catalog(), catalog());
+}
+
+#[test]
+fn an_attached_aggregate_carries_the_catalog() {
+    let attached = runtime().attach();
+    // A handle made from the attached aggregate reads the aggregate's own
+    // catalog, not one of the six handles'.
+    assert_eq!(*attached.caller().catalog(), catalog());
+    let handles = attached.split();
+    assert_eq!(*handles.reader.catalog(), catalog());
+    assert_eq!(*handles.writer.catalog(), catalog());
+    assert_eq!(*handles.source.catalog(), catalog());
+    assert_eq!(*handles.sink.catalog(), catalog());
+    assert_eq!(*handles.caller.catalog(), catalog());
+    assert_eq!(*handles.handler.catalog(), catalog());
+}
+
+#[test]
+fn a_value_committed_through_one_aggregate_is_read_through_an_attached_one() {
+    // The published signals are in the store, and staging is on the writer
+    // handle: one aggregate's commit publishes only what that aggregate staged,
+    // and a value staged before the attach is not carried over.
+    let mut rt = runtime();
+    rt.set(IFACE, ORD, &[1]).expect("staged");
+    let mut attached = rt.attach();
+    attached.set(IFACE, OTHER, &[2]).expect("staged");
+    attached.commit();
+
+    let mut out = [0u8; 8];
+    let unpublished = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(unpublished.provenance, Provenance::Init);
+    let published = rt.read(IFACE, OTHER, &mut out).expect("read");
+    assert_eq!(&out[..published.len], &[2]);
+
+    rt.commit();
+    let sample = attached.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(&out[..sample.len], &[1]);
+}
+
+#[test]
+fn an_attached_aggregate_advances_the_one_clock() {
+    let rt = runtime();
+    let mut attached = rt.attach();
+    attached.advance(Duration(5));
+    assert_eq!(rt.now(), Timestamp(5));
+}
+
+#[test]
+fn an_attached_aggregate_starts_with_none_of_the_originals_handle_state() {
+    // Subscriptions, the served set and the sequence counters are on a handle,
+    // so an aggregate attached after the original used all of them starts with
+    // none of them.
+    let mut rt = runtime();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.set(IFACE, ORD, &[1]).expect("staged");
+    rt.commit();
+    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.command(IFACE, ORD, &[1]).expect("send");
+    let mut attached = rt.attach();
+
+    let mut out = [0u8; 8];
+    attached.set(IFACE, ORD, &[2]).expect("staged");
+    attached.commit();
+    let sample = attached.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(
+        sample.envelope.seq, 1,
+        "the attached writer's first publication"
+    );
+
+    attached.raise(IFACE, ORD, &[2]).expect("raise");
+    assert!(
+        attached.next(&mut out).expect("next").is_none(),
+        "the attached source is subscribed to nothing"
+    );
+    let mut raised = Vec::new();
+    while let Some(occurrence) = rt.next(&mut out).expect("next") {
+        raised.push(occurrence.envelope.seq);
+    }
+    assert_eq!(
+        raised,
+        vec![1, 1],
+        "each sink's first raise is its own seq 1"
+    );
+
+    attached.command(IFACE, ORD, &[2]).expect("send");
+    let mut sent = Vec::new();
+    while let Some(claim) = rt.next_claim(&mut out).expect("next_claim") {
+        sent.push(claim.envelope.seq);
+    }
+    assert_eq!(
+        sent,
+        vec![1, 1],
+        "each caller's first call is its own seq 1"
+    );
+
+    assert!(attached.split().handler.served().is_empty());
+}
+
+#[test]
+fn an_attached_aggregate_has_its_own_subscriptions_and_queue() {
+    let mut rt = runtime();
+    let mut attached = rt.attach();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    attached.raise(IFACE, ORD, &[1]).expect("raise");
+    let mut out = [0u8; 8];
+    assert!(
+        attached.next(&mut out).expect("next").is_none(),
+        "the attached aggregate's source is subscribed to nothing"
+    );
+
+    attached.subscribe(IFACE, &[ORD]).expect("subscribe");
+    attached.raise(IFACE, ORD, &[2]).expect("raise");
+    let mut drain = |port: &mut Loopback| {
+        let mut payloads = Vec::new();
+        while let Some(occurrence) = port.next(&mut out).expect("next") {
+            payloads.push(out[..occurrence.len].to_vec());
+        }
+        payloads
+    };
+    assert_eq!(drain(&mut rt), vec![vec![1], vec![2]]);
+    assert_eq!(drain(&mut attached), vec![vec![2]]);
+}
+
+#[test]
+fn a_call_sent_through_one_aggregate_is_served_through_an_attached_one() {
+    let mut rt = runtime();
+    let mut attached = rt.attach();
+    let sent = rt.command(IFACE, ORD, &[1]).expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = attached
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    attached.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(rt.ack(sent), Some(Ok(())));
+}
+
+#[test]
+fn dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions() {
+    // Each handle's `Drop` closes that handle's own identity in the store, and
+    // the handles of an attached aggregate have identities of their own: the
+    // original's claim stays the original's. The attached aggregate's own
+    // unclaimed call is withdrawn with it.
+    let mut rt = runtime();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    let sent = rt.command(IFACE, ORD, &[1]).expect("send");
+    let mut attached = rt.attach();
+    attached.subscribe(IFACE, &[ORD]).expect("subscribe");
+    attached.command(IFACE, ORD, &[2]).expect("send");
+    let mut out = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut out)
+        .expect("next_claim")
+        .expect("the original's call, sent first");
+    assert_eq!(out[0], 1);
+    drop(attached);
+
+    rt.raise(IFACE, ORD, &[3]).expect("raise");
+    let occurrence = rt.next(&mut out).expect("next").expect("subscribed");
+    assert_eq!(&out[..occurrence.len], &[3]);
+
+    rt.settle(claim.id, Ok(&[]))
+        .expect("the claim is still the original's");
+    assert_eq!(rt.ack(sent), Some(Ok(())));
+    assert!(
+        rt.next_claim(&mut out).expect("next_claim").is_none(),
+        "the dropped aggregate's call was withdrawn"
+    );
+}
+
+#[test]
+fn an_attached_aggregate_keeps_the_store_after_the_original_is_dropped() {
+    // The store outlives the original, and so do the attached aggregate's own
+    // subscription and call.
+    let mut rt = runtime();
+    let mut attached = rt.attach();
+    attached.subscribe(IFACE, &[ORD]).expect("subscribe");
+    let sent = attached.command(IFACE, ORD, &[5]).expect("send");
+    rt.set(IFACE, ORD, &[4]).expect("staged");
+    rt.commit();
+    drop(rt);
+
+    let mut out = [0u8; 8];
+    let sample = attached.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(&out[..sample.len], &[4]);
+
+    attached.raise(IFACE, ORD, &[6]).expect("raise");
+    let occurrence = attached.next(&mut out).expect("next").expect("subscribed");
+    assert_eq!(&out[..occurrence.len], &[6]);
+
+    let claim = attached
+        .next_claim(&mut out)
+        .expect("next_claim")
+        .expect("the attached aggregate's call");
+    assert_eq!(out[0], 5);
+    attached.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(attached.ack(sent), Some(Ok(())));
 }
 
 #[test]

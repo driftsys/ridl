@@ -1992,6 +1992,46 @@ const _: () = {
     assert_unpin::<generated::cabin::Serve<'static, ridl_loopback::HandlerHandle, TestProvider>>();
 };
 
+/// Two clients and a publisher over one runtime, each owning an aggregate
+/// that `Loopback::attach` made (driftsys/ridl#488). A call's future and
+/// `next_event`'s future each hold their client's port, so a command in
+/// flight while another task waits for an event needs two clients.
+#[test]
+fn two_clients_and_a_publisher_hold_one_runtime_at_once() {
+    let rt = loopback();
+    let mut provider = TestProvider::new(0);
+    let mut serve = generated::cabin::serve(rt.handler(), &mut provider);
+    let mut publisher = generated::cabin::Publisher::new(rt.attach());
+    let mut caller = generated::cabin::Client::new(rt.attach());
+    let mut listener = generated::cabin::Client::new(rt.attach());
+    listener.subscribe_warning().expect("subscribe");
+
+    let mut call = caller.set_level(generated::Level::new_unchecked(42));
+    let mut next = listener.next_event();
+    assert!(poll_once(&mut call).is_pending(), "nothing has served it");
+    assert!(poll_once(&mut next).is_pending(), "nothing was raised");
+
+    publisher
+        .warning(generated::Warning {
+            code: generated::Level::new_unchecked(5),
+            health: generated::Health::Warn,
+        })
+        .expect("raise");
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(poll_once(&mut call), Poll::Ready(Ok(())));
+    let Poll::Ready(event) = poll_once(&mut next) else {
+        panic!("the raise reached the listener's queue");
+    };
+    match event.expect("next_event") {
+        generated::cabin::Event::Warning(occurrence) => {
+            assert_eq!(occurrence.payload.expect("payload verifies").code.get(), 5);
+        }
+    }
+
+    drop(serve);
+    assert_eq!(provider.set_level_calls, vec![42]);
+}
+
 // ---------------------------------------------------------------------------
 // The blocking client and `blocking::serve` (story E11.21, second half; the
 // async face design, notes F-10, F-11 and F-14). Each blocking call is

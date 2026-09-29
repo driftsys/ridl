@@ -54,6 +54,8 @@
 //! one provider. [`ReaderHandle`] is `Send + Sync`; the other five are `Send`
 //! and driven by one thread each. Nothing here declares either: both follow
 //! from the fields, and the assertions at the bottom of this file pin them.
+//! [`Loopback::attach`] makes a second aggregate on the same store, for a
+//! program that holds several faces over one runtime, each owning its own.
 //!
 //! # What it reports, and what it cannot
 //!
@@ -199,7 +201,12 @@ impl Loopback {
     /// The catalog is carried, not checked: see the crate documentation.
     #[must_use]
     pub fn new(catalog: CatalogRef) -> Self {
-        let shared: Shared = Arc::new(Mutex::new(Store::new()));
+        Loopback::over(Arc::new(Mutex::new(Store::new())), catalog)
+    }
+
+    /// An aggregate of six new role handles on `shared`: what `new` and
+    /// `attach` both build, over a new store and over this one.
+    fn over(shared: Shared, catalog: CatalogRef) -> Self {
         let handles = Handles {
             reader: ReaderHandle::new(Arc::clone(&shared), catalog),
             writer: WriterHandle::new(Arc::clone(&shared), catalog),
@@ -221,6 +228,25 @@ impl Loopback {
     #[must_use]
     pub fn split(self) -> Handles {
         self.handles
+    }
+
+    /// An additional aggregate on the same store: six new role handles, made
+    /// the way [`reader`](Loopback::reader) to [`handler`](Loopback::handler)
+    /// make one each. This is how an application holds several faces over one
+    /// runtime — a `Client`, a `Publisher`, a second `Client` with a call of
+    /// its own in flight — each owning its own aggregate (driftsys/ridl#488).
+    ///
+    /// What is in the store is shared: the published signals, the `fixed`
+    /// values, the clock and the call table. What is on a handle is not
+    /// carried over: the attached aggregate starts subscribed to nothing, with
+    /// no value staged, no call sent and nothing served. Dropping it closes
+    /// only its own handles, and the store lives until the last handle of
+    /// every aggregate is dropped.
+    ///
+    /// Not `Clone`: `docs/design/ridl-loopback.md` records why.
+    #[must_use]
+    pub fn attach(&self) -> Loopback {
+        Loopback::over(Arc::clone(&self.shared), self.catalog)
     }
 
     /// An additional reader handle on the same store.
