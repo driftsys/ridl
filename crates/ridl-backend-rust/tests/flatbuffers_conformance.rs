@@ -469,9 +469,18 @@ fn vtable_entries(bytes: &[u8]) -> usize {
 /// a slot past the vtable's end is absent too, which is the other half of
 /// this function.
 fn voffset(bytes: &[u8], slot: usize) -> u16 {
-    let root = u32::from_le_bytes(bytes[0..4].try_into().expect("a root offset")) as usize;
-    let soffset = i32::from_le_bytes(bytes[root..root + 4].try_into().expect("a vtable offset"));
-    let vtable = (root as i64 - i64::from(soffset)) as usize;
+    voffset_in(bytes, root(bytes), slot)
+}
+
+/// The root table's position.
+fn root(bytes: &[u8]) -> usize {
+    u32::from_le_bytes(bytes[0..4].try_into().expect("a root offset")) as usize
+}
+
+/// [`voffset`] for the table at `table` rather than the root.
+fn voffset_in(bytes: &[u8], table: usize, slot: usize) -> u16 {
+    let soffset = i32::from_le_bytes(bytes[table..table + 4].try_into().expect("a vtable offset"));
+    let vtable = (table as i64 - i64::from(soffset)) as usize;
     let vtable_bytes =
         u16::from_le_bytes(bytes[vtable..vtable + 2].try_into().expect("a vtable size")) as usize;
     let entry = vtable + 4 + slot * 2;
@@ -481,60 +490,190 @@ fn voffset(bytes: &[u8], slot: usize) -> u16 {
     u16::from_le_bytes(bytes[entry..entry + 2].try_into().expect("a voffset"))
 }
 
+/// The position an offset field at `slot` of the table at `table` points to:
+/// a nested table, or a vector's length prefix.
+fn follow(bytes: &[u8], table: usize, slot: usize) -> usize {
+    let voffset = usize::from(voffset_in(bytes, table, slot));
+    assert_ne!(
+        voffset, 0,
+        "slot {slot} of the table at {table} must be present"
+    );
+    let at = table + voffset;
+    at + u32::from_le_bytes(bytes[at..at + 4].try_into().expect("an offset")) as usize
+}
+
+/// The table element `index` of the vector of tables at `slot` of `table`.
+fn element(bytes: &[u8], table: usize, slot: usize, index: usize) -> usize {
+    let at = follow(bytes, table, slot) + 4 + index * 4;
+    at + u32::from_le_bytes(bytes[at..at + 4].try_into().expect("an offset")) as usize
+}
+
 /// `Report.spare`'s vtable slot. The `.fbs` gives it `(id: 20)`, and a
 /// FlatBuffers slot is its id.
 const SPARE_SLOT: usize = 20;
 
-/// **The one disagreement, measured.** planus omits a non-optional scalar
-/// whose value equals its FlatBuffers default; this codec reads an omitted
-/// non-optional field as `Malformed::MissingRequired` (D-9), so it refuses
-/// that buffer.
+/// `Report`'s vtable slots, which are the `.fbs` ids, for the fields the
+/// default cases below set to 0.
+const ID_SLOT: usize = 0;
+const HEALTH_SLOT: usize = 5;
+const INNER_SLOT: usize = 7;
+const OUTCOME_SLOT: usize = 8;
+const RANGE_SLOT: usize = 9;
+const META_SLOT: usize = 12;
+
+/// **An absent non-optional field reads as its FlatBuffers default**
+/// (driftsys/ridl#472, decision (a1)).
 ///
-/// The value below differs from [`planus_value`] in one field: `Report.id`
-/// is 0, which is `ubyte`'s default, so planus writes no slot for it. Every
-/// other field is unchanged, so what this case measures is that one
-/// omission and nothing else.
+/// planus omits a non-optional scalar or enum field whose value equals its
+/// FlatBuffers default, 0, which is what a conforming FlatBuffers writer
+/// does. This codec accepts such a buffer and reads the field as 0, or as
+/// the enum's zero member, in every table position one can sit in: the root
+/// table, a nested table, a tuple's table, a map entry, and a union arm's
+/// box. Each buffer below differs from [`planus_value`] in one field, so
+/// each measures one omission and nothing else, and the omission is checked
+/// in the bytes before the codec reads them: planus wrote no slot for the
+/// field.
 ///
-/// This is a decided divergence rather than a defect — D-9 rejected omitting
-/// a default-valued field because it makes a present default
-/// indistinguishable from an absent optional, which typl distinguishes — but
-/// it means this codec cannot read every buffer a conforming FlatBuffers
-/// writer produces. driftsys/ridl#472 carries it.
+/// `verify`, `decode` and the view's accessors are all checked. `decode`
+/// and an accessor read an absent field with no offset to read from, so a
+/// reader that only relaxed `verify` would read some other byte of the
+/// buffer as the field.
 #[test]
-fn a_buffer_planus_wrote_omitting_a_default_is_refused() {
+fn a_buffer_planus_wrote_omitting_a_default_is_read_as_the_default() {
+    let write = |value: fb::Report| {
+        let mut builder = planus::Builder::new();
+        builder.finish(value, None).to_vec()
+    };
+
     let mut value = planus_value();
     value.id = 0;
-    let mut builder = planus::Builder::new();
-    let bytes = builder.finish(value, None).to_vec();
+    let root_field = write(value);
+    assert_eq!(voffset(&root_field, ID_SLOT), 0, "planus omits `id` at 0");
 
-    // The omission is real: planus wrote a buffer this codec's own encoder
-    // would have written one slot longer. Without this the case could pass
-    // for a reason unrelated to the default.
-    let read = <fb::ReportRef<'_> as planus::ReadAsRoot>::read_as_root(&bytes)
-        .expect("planus reads its own buffer");
+    let mut value = planus_value();
+    value.health = fb::Health::Ok;
+    let enum_field = write(value);
     assert_eq!(
-        read.id().expect("id reads"),
+        voffset(&enum_field, HEALTH_SLOT),
         0,
-        "planus reads back the default"
+        "planus omits `health` at its zero member"
     );
 
-    let hex = to_hex(&bytes);
+    let mut value = planus_value();
+    value.inner = Some(Box::new(planus_inner(0, "inner")));
+    let nested_field = write(value);
+    let inner = follow(&nested_field, root(&nested_field), INNER_SLOT);
+    assert_eq!(
+        voffset_in(&nested_field, inner, 0),
+        0,
+        "planus omits `inner.speed` at 0"
+    );
+
+    let mut value = planus_value();
+    value.range = Some(Box::new(fb::ReportRange {
+        field_1: 0,
+        field_2: 300,
+    }));
+    let tuple_field = write(value);
+    let range = follow(&tuple_field, root(&tuple_field), RANGE_SLOT);
+    assert_eq!(
+        voffset_in(&tuple_field, range, 0),
+        0,
+        "planus omits `range.min` at 0"
+    );
+
+    let mut value = planus_value();
+    if let Some(meta) = value.meta.as_mut() {
+        meta[0].value = 0;
+    }
+    let map_value = write(value);
+    let entry = element(&map_value, root(&map_value), META_SLOT, 0);
+    assert_eq!(
+        voffset_in(&map_value, entry, 1),
+        0,
+        "planus omits the first map entry's value at 0"
+    );
+
+    let mut value = planus_value();
+    value.outcome = Some(Box::new(fb::Outcome {
+        value: Some(fb::OutcomeUnion::Bad(Box::new(fb::OutcomeBadBox {
+            value: fb::Health::Ok,
+        }))),
+    }));
+    let arm_box = write(value);
+    let wrapper = follow(&arm_box, root(&arm_box), OUTCOME_SLOT);
+    let boxed = follow(&arm_box, wrapper, 1);
+    assert_eq!(
+        voffset_in(&arm_box, boxed, 0),
+        0,
+        "planus omits the arm box's `value` at its zero member"
+    );
+
+    let cases = [
+        ("root_field", root_field),
+        ("enum_field", enum_field),
+        ("nested_field", nested_field),
+        ("tuple_field", tuple_field),
+        ("map_value", map_value),
+        ("arm_box", arm_box),
+    ];
+    let constants: String = cases
+        .iter()
+        .map(|(name, bytes)| {
+            format!(
+                "const {}: &str = \"{}\";\n",
+                name.to_uppercase(),
+                to_hex(bytes)
+            )
+        })
+        .collect();
     let main = format!(
         r#"
 use ridl_rt::encoding::FlatBuffers;
-use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
+use ridl_rt::payload::Ref;
 
-const FOREIGN: &str = "{hex}";
+{constants}
+
+fn bytes(hex: &str) -> Vec<u8> {{
+    (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+        .collect()
+}}
 
 fn main() {{
-    let bytes: Vec<u8> = (0..FOREIGN.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
-        .collect();
-    match Ref::<'_, Report, FlatBuffers>::verify(&bytes) {{
-        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{}}
-        Err(other) => panic!("expected MissingRequired, got {{other:?}}"),
-        Ok(_) => panic!("an omitted non-optional field must not verify (D-9)"),
+    let mut root_field = conformance();
+    root_field.id = Count::new_unchecked(0);
+    let mut enum_field = conformance();
+    enum_field.health = Health::Ok;
+    let mut nested_field = conformance();
+    nested_field.inner.speed = Speed::new_unchecked(0);
+    let mut tuple_field = conformance();
+    tuple_field.range.min = Speed::new_unchecked(0);
+    let mut map_value = conformance();
+    map_value.meta[0].1 = Count::new_unchecked(0);
+    let mut arm_box = conformance();
+    arm_box.outcome = Outcome::Bad(Health::Ok);
+
+    let cases = [
+        ("root_field", ROOT_FIELD, root_field),
+        ("enum_field", ENUM_FIELD, enum_field),
+        ("nested_field", NESTED_FIELD, nested_field),
+        ("tuple_field", TUPLE_FIELD, tuple_field),
+        ("map_value", MAP_VALUE, map_value),
+        ("arm_box", ARM_BOX, arm_box),
+    ];
+    for (what, hex, expected) in cases {{
+        let bytes = bytes(hex);
+        let proof: Ref<'_, Report, FlatBuffers> = Ref::verify(&bytes)
+            .unwrap_or_else(|error| panic!("{{what}}: a default a writer omitted must verify, got {{error:?}}"));
+        let view = proof.view();
+        assert_eq!(view.id(), expected.id, "{{what}}: the `id` accessor");
+        assert_eq!(view.health(), expected.health, "{{what}}: the `health` accessor");
+        assert_eq!(view.inner().speed(), expected.inner.speed, "{{what}}: the `inner.speed` accessor");
+        assert_eq!(view.range().min(), expected.range.min, "{{what}}: the `range.min` accessor");
+        assert_eq!(view.meta(), expected.meta, "{{what}}: the `meta` accessor");
+        assert_eq!(proof.decode(), expected, "{{what}}: the decoded value");
     }}
 }}
 "#
@@ -732,63 +871,188 @@ fn main() {{
     rustc::run_program("fb_conformance_scalar_root_decode", &program(&main));
 }
 
-/// **A box root with no value slot is refused** (ADR-0019 decision 8).
+/// **A box root with no value slot reads as the default** (ADR-0019 decision
+/// 8, driftsys/ridl#472).
 ///
-/// The box's `value` field is not optional, so a buffer carrying no slot for
-/// it carries no value at all, and `verify` answers `MissingRequired`. Until
-/// this case existed the rule was pinned only as generated **text**: deleting
-/// the branch that enforces it turned fourteen snapshots red and left every
-/// round trip and every conformance case passing, because nothing constructed
-/// such a buffer. The review of 2026-09-21 found that, and this is the case
-/// that fails on the behaviour rather than on the spelling.
+/// A box's `value` is an ordinary non-optional field, so an absent one reads
+/// as the FlatBuffers default like any other: 0 for a named scalar, the zero
+/// member for an enum. At a root this matters more than at a field, because
+/// the payload is that one field, and planus writes a box of 0 as a table
+/// with no slot at all.
 ///
-/// The buffer comes from planus rather than from a hand-written byte string:
-/// planus omits a field equal to its FlatBuffers default, so writing a
-/// `SpeedBox` of 0 produces exactly the empty box this codec must refuse, laid
-/// out by a conforming writer.
-///
-/// **This is the root-level reach of the default-elision divergence**
-/// driftsys/ridl#472 carries. At a field position an omitted default costs one
-/// field; at a root it costs the whole payload, since the payload *is* that
-/// one field. The rule is decision 8's and D-9's together, and it is measured
-/// here rather than described.
+/// The buffers come from planus rather than from a hand-written byte string,
+/// and each is checked to carry no slot before the codec reads it. `verify`,
+/// `decode` and the view's `value()` accessor are all checked.
 #[test]
-fn a_box_root_with_no_value_slot_is_refused() {
+fn a_box_root_with_no_value_slot_reads_as_the_default() {
     let mut builder = planus::Builder::new();
-    let bytes = builder.finish(fb::SpeedBox { value: 0 }, None).to_vec();
-
-    // The omission is real: planus wrote a box with an empty vtable slot,
-    // which is what makes this a case about an absent field rather than
-    // about a zero.
+    let speed = builder.finish(fb::SpeedBox { value: 0 }, None).to_vec();
     assert_eq!(
-        voffset(&bytes, 0),
+        voffset(&speed, 0),
         0,
         "planus must omit the default-valued slot, or this case proves nothing \
          about an absent one"
     );
+    let mut builder = planus::Builder::new();
+    let health = builder
+        .finish(
+            fb::HealthBox {
+                value: fb::Health::Ok,
+            },
+            None,
+        )
+        .to_vec();
+    assert_eq!(
+        voffset(&health, 0),
+        0,
+        "planus must omit the zero member, or this case proves nothing about an \
+         absent one"
+    );
 
-    let hex = to_hex(&bytes);
+    let speed = to_hex(&speed);
+    let health = to_hex(&health);
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+const SPEED: &str = "{speed}";
+const HEALTH: &str = "{health}";
+
+fn bytes(hex: &str) -> Vec<u8> {{
+    (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+        .collect()
+}}
+
+fn main() {{
+    let speed = bytes(SPEED);
+    let proof: Ref<'_, Speed, FlatBuffers> =
+        Ref::verify(&speed).expect("a box of 0 another implementation wrote verifies");
+    assert_eq!(proof.view().value(), Speed::new_unchecked(0), "the `value` accessor");
+    assert_eq!(proof.decode(), Speed::new_unchecked(0), "the decoded value");
+
+    let health = bytes(HEALTH);
+    let proof: Ref<'_, Health, FlatBuffers> = Ref::verify(&health)
+        .expect("a box of the zero member another implementation wrote verifies");
+    assert_eq!(proof.view().value(), Health::Ok, "the `value` accessor");
+    assert_eq!(proof.decode(), Health::Ok, "the decoded value");
+}}
+"#
+    );
+    rustc::run_program("fb_conformance_empty_box", &program(&main));
+}
+
+/// **An absent field whose type excludes 0 is still refused**
+/// (driftsys/ridl#472, decision (a1)).
+///
+/// The FlatBuffers default of a scalar or an enum field is 0. When 0 is not a
+/// legal value of the field's type — a range that excludes it, or an enum
+/// with no zero member — reading the default would build a value the
+/// contract forbids, so `verify` answers `Malformed::MissingRequired`
+/// instead.
+///
+/// Two real writers produce the buffers. This codec, generated from
+/// `flatbuffers_evolution_v1.ridl`, writes three structs that each carry one
+/// field; `flatbuffers_evolution_v2.ridl` appends a second non-optional field
+/// to each, which is how an absent non-optional field reaches a reader in
+/// practice. The appended `Count` (0 is legal) reads as 0; the appended
+/// `Level` (`[1..10]`) and `Gear` (no zero member) are refused. planus
+/// writes the empty box, which is the same table whatever the box's type,
+/// and a `Level` or a `Gear` box read from it is refused too.
+#[test]
+fn an_absent_field_whose_type_excludes_zero_is_refused() {
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_evolution_v1",
+        &evolution_program(
+            "flatbuffers_evolution_v1.ridl",
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn hex<T: Payload<FlatBuffers>>(value: &T) -> String {
+    let mut out = vec![0u8; T::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn main() {
+    let count = Count::new_unchecked(7);
+    println!("{}", hex(&WithCount { a: count.clone() }));
+    println!("{}", hex(&WithLevel { a: count.clone() }));
+    println!("{}", hex(&WithGear { a: count }));
+}
+"#,
+        ),
+    );
+    let lines: Vec<&str> = transcript.lines().collect();
+    let [with_count, with_level, with_gear] = lines.as_slice() else {
+        panic!("the v1 program prints three buffers, got {transcript:?}");
+    };
+
+    let mut builder = planus::Builder::new();
+    let empty_box = to_hex(&builder.finish(fb::SpeedBox { value: 0 }, None).to_vec());
+
     let main = format!(
         r#"
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
 
-const FOREIGN: &str = "{hex}";
+const WITH_COUNT: &str = "{with_count}";
+const WITH_LEVEL: &str = "{with_level}";
+const WITH_GEAR: &str = "{with_gear}";
+const EMPTY_BOX: &str = "{empty_box}";
+
+fn bytes(hex: &str) -> Vec<u8> {{
+    (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+        .collect()
+}}
+
+fn refused<T>(what: &str, result: Result<T, VerifyError>) {{
+    match result {{
+        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{}}
+        Err(other) => panic!("{{what}}: expected MissingRequired, got {{other:?}}"),
+        Ok(_) => panic!("{{what}}: an absent field whose type excludes 0 must not verify"),
+    }}
+}}
 
 fn main() {{
-    let bytes: Vec<u8> = (0..FOREIGN.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(&FOREIGN[at..at + 2], 16).unwrap())
-        .collect();
-    match Ref::<'_, Speed, FlatBuffers>::verify(&bytes) {{
-        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{}}
-        Err(other) => panic!("expected MissingRequired, got {{other:?}}"),
-        Ok(_) => panic!("a box with no value slot must not verify"),
-    }}
+    let with_count = bytes(WITH_COUNT);
+    let proof: Ref<'_, WithCount, FlatBuffers> =
+        Ref::verify(&with_count).expect("an appended Count reads as 0");
+    assert_eq!(
+        proof.decode(),
+        WithCount {{ a: Count::new_unchecked(7), b: Count::new_unchecked(0) }},
+    );
+
+    let with_level = bytes(WITH_LEVEL);
+    refused("an appended Level", Ref::<'_, WithLevel, FlatBuffers>::verify(&with_level));
+    let with_gear = bytes(WITH_GEAR);
+    refused("an appended Gear", Ref::<'_, WithGear, FlatBuffers>::verify(&with_gear));
+
+    let empty_box = bytes(EMPTY_BOX);
+    refused("an empty Level box", Ref::<'_, Level, FlatBuffers>::verify(&empty_box));
+    refused("an empty Gear box", Ref::<'_, Gear, FlatBuffers>::verify(&empty_box));
 }}
 "#
     );
-    rustc::run_program("fb_conformance_empty_box", &program(&main));
+    rustc::run_program(
+        "fb_conformance_evolution_v2",
+        &evolution_program("flatbuffers_evolution_v2.ridl", &main),
+    );
+}
+
+/// The generated codec's source for one of the two evolution fixtures, with
+/// `main` appended.
+fn evolution_program(fixture: &str, main: &str) -> String {
+    let package = ir::compile_fixture(fixture);
+    let generated = ridl_backend_rust::generate(&package)
+        .expect("the fixture generates")
+        .rust_source;
+    format!("#![allow(dead_code)]\n{generated}\n{main}")
 }
 
 /// **An empty string box survives a foreign round trip**, which bounds how far

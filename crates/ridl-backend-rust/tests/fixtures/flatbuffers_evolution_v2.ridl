@@ -1,0 +1,34 @@
+// The second version of the evolution fixture (driftsys/ridl#472).
+//
+// `flatbuffers_evolution_v1.ridl` with one non-optional field appended to
+// each struct: a `Count`, whose FlatBuffers default 0 is legal, a `Level`,
+// whose range excludes 0, and a `Gear`, whose enum declares no zero member.
+
+package fb.evolution
+
+/// A count; 0 is a legal value.
+type Count : integer [0..200]
+
+/// A level; 0 is not a legal value.
+type Level : integer [1..10]
+
+/// A gear; the enum declares no zero member.
+enum Gear {
+  PARK  = 1
+  DRIVE = 2
+}
+
+struct WithCount {
+  a : Count
+  b : Count
+}
+
+struct WithLevel {
+  a : Count
+  c : Level
+}
+
+struct WithGear {
+  a : Count
+  g : Gear
+}
