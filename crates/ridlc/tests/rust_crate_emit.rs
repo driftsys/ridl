@@ -446,8 +446,8 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
     );
     assert_eq!(
         dependencies["regex"].version(),
-        "1",
-        "the regex requirement is the major version alone"
+        "1.13",
+        "the regex requirement is the checker's major and minor version (TYPL-220)"
     );
     assert!(
         !dependencies["ridl-rt"].optional(),

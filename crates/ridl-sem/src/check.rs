@@ -5293,9 +5293,13 @@ fn regex_body(raw: &str) -> &str {
 /// line, and an `error: ` line — and only the last is the reason.
 fn regex_crate_refusal(error: &regex::Error) -> String {
     match error {
-        regex::Error::CompiledTooBig(limit) => {
-            format!("the compiled pattern exceeds the crate's size limit of {limit} bytes")
-        }
+        // The usual cause is a Unicode class under a counted repetition:
+        // `^\w{1,256}$` is over the limit, `^[A-Za-z0-9_]{1,256}$` is not.
+        regex::Error::CompiledTooBig(limit) => format!(
+            "the compiled pattern exceeds the crate's size limit of {limit} bytes; in the Rust \
+             output `\\w`, `\\d` and `\\s` are Unicode classes, and an ASCII class such as \
+             `[A-Za-z0-9_]` is smaller"
+        ),
         other => {
             let rendered = other.to_string();
             rendered
