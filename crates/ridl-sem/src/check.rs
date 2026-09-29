@@ -8225,8 +8225,24 @@ mod tests {
         r"/^[^]$/",
         // A quantifier with no lower bound.
         r"/^a{,3}$/",
-        // A pattern over the `regex` crate's compiled-size limit.
+        // Patterns over the `regex` crate's compiled-size limit: an ordinary
+        // one, because `\w` is a Unicode class in that crate, and an
+        // artificial one.
+        r"/^\w{1,256}$/",
         r"/^(a{1000}){1000}$/",
+        // A backspace escape in a class, and a class escape as a range bound.
+        r"/^[\b]$/",
+        r"/^[\d-z]$/",
+        r"/^[\w-.]$/",
+        // An unescaped `[` inside a class.
+        r"/^[[]$/",
+        // A lone `{`, and a `{` that opens no complete quantifier.
+        r"/^{$/",
+        r"/^a{$/",
+        // An identity escape of a letter.
+        r"/^\e$/",
+        r"/^\Q$/",
+        r"/^\k$/",
     ];
 
     /// Patterns both engines accept: an ordinary one, and every `match` pattern
@@ -8305,9 +8321,54 @@ mod tests {
                     && !message.contains('\n'),
                 "{raw}: {message}"
             );
-            if raw.contains("{1000}") {
-                assert!(message.contains("size limit"), "{raw}: {message}");
-            }
+        }
+    }
+
+    /// The size-limit refusal names the likely cause. An ordinary pattern such
+    /// as `^\w{1,256}$` exceeds the limit because `\w` is a Unicode class in
+    /// the `regex` crate, so the message says so and names the ASCII class
+    /// that fits. The whole message is pinned, so the size-limit arm of
+    /// `regex_crate_refusal` cannot be removed without failing here.
+    #[test]
+    fn typl_220_size_limit_message_names_the_unicode_classes() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Word : string [1..256 match /^\\w{1,256}$/]\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-220", "TYPL-115"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "the Rust `regex` crate cannot compile this pattern: the compiled pattern exceeds \
+             the crate's size limit of 10485760 bytes; in the Rust output `\\w`, `\\d` and \
+             `\\s` are Unicode classes, and an ASCII class such as `[A-Za-z0-9_]` is smaller \
+             — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
+        );
+    }
+
+    /// The checker compiles a pattern with the same `regex` configuration the
+    /// Rust backend emits: `regex::Regex::new`, whose default builder options
+    /// are Unicode mode on. Under `RegexBuilder::unicode(false)` in the checker
+    /// alone, `\p{L}` and a `.` that may match a non-ASCII character do not
+    /// compile, so these would draw TYPL-220 while the generated code compiles
+    /// them.
+    #[test]
+    fn typl_220_uses_the_regex_configuration_the_rust_backend_emits() {
+        for raw in [r"/^\p{L}+$/", r"/^.+$/"] {
+            let checked = check_source(
+                "app",
+                &format!("package app\ntype T : string [1..32 match {raw}]\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-115"],
+                "{raw}: got: {:?}",
+                checked.diagnostics
+            );
         }
     }
 
