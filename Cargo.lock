@@ -1940,6 +1940,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "proptest",
+ "regex",
  "regress",
  "ridl-core",
  "ridl-ir",

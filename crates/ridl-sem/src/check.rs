@@ -8163,6 +8163,200 @@ mod tests {
         );
     }
 
+    // --- TYPL-220: a pattern the Rust `regex` crate cannot compile --------
+
+    /// Patterns that `regress` (ECMA-262, TYPL-106) accepts and the Rust
+    /// `regex` crate refuses, one per construct measured on driftsys/ridl#437.
+    /// The Rust backend emits a `match` pattern into
+    /// `regex::Regex::new(..).expect(..)`, so each of these drew no diagnostic
+    /// and panicked in the consumer's process on first use.
+    const REFUSED_BY_THE_REGEX_CRATE: &[&str] = &[
+        // Lookahead, negative lookahead, lookbehind, negative lookbehind.
+        r"/^(?=a)a$/",
+        r"/^(?!a)b$/",
+        r"/(?<=a)b/",
+        r"/(?<!a)b/",
+        // A numbered and a named backreference.
+        r"/^(a)\1$/",
+        r"/^(?<w>a)\k<w>$/",
+        // A control escape and the NUL escape.
+        r"/^\cJ$/",
+        r"/^\0$/",
+        // The empty class and the negated empty class.
+        r"/^a[]$/",
+        r"/^[^]$/",
+        // A quantifier with no lower bound.
+        r"/^a{,3}$/",
+        // A pattern over the `regex` crate's compiled-size limit.
+        r"/^(a{1000}){1000}$/",
+    ];
+
+    /// Patterns both engines accept: an ordinary one, and every `match` pattern
+    /// in `ridl.std`, which must keep drawing nothing.
+    fn accepted_by_both_engines() -> Vec<String> {
+        let std_patterns = ridl_core::std_lib::RIDL_STD_SOURCE
+            .lines()
+            .filter_map(|line| {
+                let start = line.find("match /")? + "match ".len();
+                let end = line.rfind("/]")? + 1;
+                Some(line[start..end].to_string())
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            std_patterns.len() >= 5,
+            "ridl.std's `match` patterns were not found: {std_patterns:?}"
+        );
+        std::iter::once(r"/^[A-Z]{2}$/".to_string())
+            .chain(std_patterns)
+            .collect()
+    }
+
+    /// Every `match` pattern in the codegen model the backends read, as the
+    /// backend receives it (delimiters already stripped by the lowering).
+    fn backend_patterns(checked: &CheckedPackage) -> Vec<String> {
+        use ridl_ir::codegen::v1;
+        ridl_ir::codegen::lower(&checked.ir, &[])
+            .declarations
+            .iter()
+            .filter_map(|declaration| match declaration.kind.as_ref() {
+                Some(v1::declaration::Kind::Scalar(scalar)) => {
+                    scalar.constraint.as_ref()?.pattern.clone()
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The probes are what they claim to be: ECMA-262 syntax that `regress`
+    /// accepts, so TYPL-106 stays silent, and that the `regex` crate refuses.
+    /// If a later `regex` release starts to accept one, this test names it.
+    #[test]
+    fn typl_220_probes_are_ecma_262_the_regex_crate_refuses() {
+        for raw in REFUSED_BY_THE_REGEX_CRATE {
+            let body = regex_body(raw);
+            assert!(
+                regress::Regex::new(body).is_ok(),
+                "{raw}: regress refuses it"
+            );
+            assert!(regex::Regex::new(body).is_err(), "{raw}: regex accepts it");
+        }
+    }
+
+    /// An inline `match` pattern the `regex` crate cannot compile is TYPL-220,
+    /// on the pattern literal. The `match`-typed type is TYPL-115 (info) as
+    /// for any pattern.
+    #[test]
+    fn typl_220_refuses_an_inline_match_pattern_the_regex_crate_cannot_compile() {
+        for raw in REFUSED_BY_THE_REGEX_CRATE {
+            let source = format!("package app\ntype T : string [1..10 match {raw}]\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-220", "TYPL-115"],
+                "{raw}: got: {:?}",
+                checked.diagnostics
+            );
+            let start = source.find(raw).expect("the pattern is in the source");
+            let range = checked.diagnostics[0].primary.range;
+            assert_eq!(usize::from(range.start()), start, "{raw}");
+            assert_eq!(usize::from(range.end()), start + raw.len(), "{raw}");
+        }
+    }
+
+    /// A regex constant the `regex` crate cannot compile is TYPL-220 at the
+    /// constant's declaration, and only there: the `match` that reuses it is
+    /// not reported a second time, as for TYPL-106.
+    #[test]
+    fn typl_220_refuses_a_regex_constant_the_regex_crate_cannot_compile() {
+        for raw in REFUSED_BY_THE_REGEX_CRATE {
+            let source = format!("package app\nconst P = {raw}\ntype T : string [1..10 match P]\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-220", "TYPL-115"],
+                "{raw}: got: {:?}",
+                checked.diagnostics
+            );
+            let start = source.find(raw).expect("the pattern is in the source");
+            let range = checked.diagnostics[0].primary.range;
+            assert_eq!(usize::from(range.start()), start, "{raw}");
+        }
+    }
+
+    /// A pattern that is not ECMA-262 is TYPL-106 alone: TYPL-220 is for a
+    /// pattern the reference's own syntax accepts, so the two never stack.
+    #[test]
+    fn typl_220_is_not_added_to_typl_106() {
+        let checked = check_source("app", "package app\nconst BAD = /(/\n");
+        assert_eq!(codes(&checked), vec!["TYPL-106"]);
+    }
+
+    /// An ordinary pattern and every `ridl.std` pattern draw nothing but the
+    /// TYPL-115 information that any `match`-typed type draws.
+    #[test]
+    fn typl_220_accepts_the_patterns_both_engines_accept() {
+        for raw in accepted_by_both_engines() {
+            let inline = check_source(
+                "app",
+                &format!("package app\ntype T : string [1..32 match {raw}]\n"),
+            );
+            assert_eq!(
+                codes(&inline),
+                vec!["TYPL-115"],
+                "{raw}: got: {:?}",
+                inline.diagnostics
+            );
+            let named = check_source("app", &format!("package app\nconst P = {raw}\n"));
+            assert!(
+                codes(&named).is_empty(),
+                "{raw}: got: {:?}",
+                named.diagnostics
+            );
+        }
+    }
+
+    /// The end-to-end claim TYPL-220 exists for (driftsys/ridl#437): every
+    /// `match` pattern that passes the checker reaches the backend as text the
+    /// real `regex` crate compiles, so the generated `Regex::new(..).expect(..)`
+    /// cannot panic on it. Each candidate is written inline and through a
+    /// regex constant, and the pattern is read from the codegen model the
+    /// Rust backend reads, not from the source.
+    #[test]
+    fn every_pattern_the_checker_passes_compiles_under_the_regex_crate() {
+        let candidates = REFUSED_BY_THE_REGEX_CRATE
+            .iter()
+            .map(|raw| raw.to_string())
+            .chain(accepted_by_both_engines())
+            .chain([r"/(/".to_string()]);
+        let mut compiled = 0;
+        for raw in candidates {
+            for source in [
+                format!("package app\ntype T : string [1..32 match {raw}]\n"),
+                format!("package app\nconst P = {raw}\ntype T : string [1..32 match P]\n"),
+            ] {
+                let checked = check_source("app", &source);
+                if checked
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.severity == Severity::Error)
+                {
+                    continue;
+                }
+                let patterns = backend_patterns(&checked);
+                assert_eq!(patterns.len(), 1, "{source}: {patterns:?}");
+                for pattern in patterns {
+                    assert!(
+                        regex::Regex::new(&pattern).is_ok(),
+                        "{source}: the checker passed `{pattern}`, which `regex` cannot compile"
+                    );
+                    compiled += 1;
+                }
+            }
+        }
+        // Not vacuous: every accepted pattern, in both forms, reached the check.
+        assert_eq!(compiled, 2 * accepted_by_both_engines().len());
+    }
+
     // --- TYPL-005: internal-type exposure ---------------------------------
 
     #[test]
