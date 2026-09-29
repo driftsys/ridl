@@ -2017,7 +2017,7 @@ impl Checker<'_> {
                     if let Some(name) = member_name(field.name()) {
                         let range = member_name_range(field.name(), field.syntax());
                         if let Some(first) = declared.get(&name).copied() {
-                            self.duplicate_field(&name, range, first);
+                            self.duplicate_field(&name, range, first, FieldContainer::Struct);
                         } else {
                             declared.insert(name.clone(), range);
                             let projection = snake_case(&name);
@@ -2398,13 +2398,32 @@ impl Checker<'_> {
             ast::FieldType::Path(path) => self.lower_named_type(path),
             ast::FieldType::Primitive(node) => self.lower_primitive_type(node, map_key),
             ast::FieldType::Tuple(tuple) => {
+                // TYPL-215: a tuple field name declared twice, exactly (issue
+                // #449), keyed on the raw source name as in a struct. Both
+                // fields still lower. Two names that are equal only under
+                // snake_case are not the language's collision: of the in-tree
+                // backends only the Rust backend applies snake_case to a tuple
+                // field, so the pair belongs to that backend (generated-name
+                // collisions design §4.2).
+                let mut declared: HashMap<String, TextRange> = HashMap::new();
                 let fields = tuple
                     .fields()
-                    .map(|field| v2::TupleField {
-                        name: member_name(field.name()).unwrap_or_default(),
-                        r#type: field
-                            .field_type()
-                            .map(|inner| self.lower_field_type(&inner, false).ty),
+                    .map(|field| {
+                        let name = member_name(field.name());
+                        if let Some(name) = &name {
+                            let range = member_name_range(field.name(), field.syntax());
+                            if let Some(first) = declared.get(name).copied() {
+                                self.duplicate_field(name, range, first, FieldContainer::Tuple);
+                            } else {
+                                declared.insert(name.clone(), range);
+                            }
+                        }
+                        v2::TupleField {
+                            name: name.unwrap_or_default(),
+                            r#type: field
+                                .field_type()
+                                .map(|inner| self.lower_field_type(&inner, false).ty),
+                        }
                     })
                     .collect();
                 LoweredType::plain(v2::FieldType {
@@ -3159,18 +3178,29 @@ impl Checker<'_> {
         );
     }
 
-    /// TYPL-215: a field name declared twice in one struct — the same source
-    /// name, not merely a collision after the projection (that is RIDL-149).
-    /// Unlike RIDL-402, neither declaration is dropped: both fields still
-    /// lower, so the message states the rule and points at the first
-    /// declaration without claiming a winner.
-    fn duplicate_field(&mut self, name: &str, range: TextRange, first: TextRange) {
+    /// TYPL-215: a field name declared twice in one struct or one tuple —
+    /// the same source name, not merely a collision after the projection
+    /// (that is RIDL-149, and struct fields only). Unlike RIDL-402, neither
+    /// declaration is dropped: both fields still lower, so the message states
+    /// the rule and points at the first declaration without claiming a
+    /// winner.
+    fn duplicate_field(
+        &mut self,
+        name: &str,
+        range: TextRange,
+        first: TextRange,
+        container: FieldContainer,
+    ) {
+        let (noun, section) = match container {
+            FieldContainer::Struct => ("struct", "§7"),
+            FieldContainer::Tuple => ("tuple", "§11"),
+        };
         self.error_with_label(
             DiagCode::TYPL_215,
             range,
             format!(
-                "`{name}` is already declared in this struct — a name identifies one field. \
-                 Rename or remove one of them (typl §7)"
+                "`{name}` is already declared in this {noun} — a name identifies one field. \
+                 Rename or remove one of them (typl {section})"
             ),
             first,
             format!("`{name}` is declared here"),
@@ -5398,6 +5428,14 @@ fn member_name_range(name: Option<ast::Name>, node: &ridl_syntax::SyntaxNode) ->
     }
 }
 
+/// The declaration whose field names TYPL-215 keeps unique: a struct
+/// (typl §7) or a tuple (typl §11).
+#[derive(Clone, Copy)]
+enum FieldContainer {
+    Struct,
+    Tuple,
+}
+
 /// The interaction kind an attribute block sits on, for the ridl §13
 /// predicate table and the gf §4.3 allow-list messages.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -7593,7 +7631,11 @@ mod tests {
             "got: {:?}",
             checked.diagnostics
         );
-        assert!(checked.diagnostics[0].message.contains("value"));
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "`value` is already declared in this struct — a name identifies one field. \
+             Rename or remove one of them (typl §7)"
+        );
     }
 
     /// Two field names distinct in source that only collide after the
@@ -7719,6 +7761,230 @@ mod tests {
                 "the primary span is the repeat, not the first declaration"
             );
         }
+    }
+
+    // --- TYPL-215: exact duplicate tuple field name (issue #449) ----------
+
+    /// A tuple's field names are unique within the tuple, as a struct's are
+    /// (typl §11): two fields named `a` draw TYPL-215, with the primary span
+    /// on the second `a` and the label on the first.
+    #[test]
+    fn typl_215_two_tuple_fields_with_the_same_name_are_refused() {
+        let source = "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (a : Speed, a : Speed)\n\
+             }\n";
+        let checked = check_source("app", source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-215"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source
+            .find("(a :")
+            .expect("the first field is in the source")
+            + 1;
+        let second = source
+            .find(", a :")
+            .expect("the second field is in the source")
+            + 2;
+        let diagnostic = &checked.diagnostics[0];
+        // Start and end: each span covers the field's name and nothing more.
+        let span = |range: TextRange| (usize::from(range.start()), usize::from(range.end()));
+        assert_eq!(
+            span(diagnostic.primary.range),
+            (second, second + 1),
+            "the primary span is the repeat's name"
+        );
+        assert_eq!(
+            span(diagnostic.labels[0].span.range),
+            (first, first + 1),
+            "the label is the first declaration's name"
+        );
+        assert_eq!(
+            diagnostic.message,
+            "`a` is already declared in this tuple — a name identifies one field. \
+             Rename or remove one of them (typl §11)"
+        );
+    }
+
+    /// Each tuple is a name scope of its own: a tuple field may share its
+    /// name with a field of the enclosing struct, and a nested tuple may
+    /// reuse the names of the tuple around it.
+    #[test]
+    fn typl_215_each_tuple_is_its_own_name_scope() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               a : Speed\n\
+               bounds : (a : Speed, b : (a : Speed, b : Speed))\n\
+               limits : (a : Speed, b : Speed)\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            Vec::<&str>::new(),
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// A tuple is checked wherever it is written: as an array's element, as
+    /// an optional's inner type, and nested inside another tuple.
+    #[test]
+    fn typl_215_a_duplicate_in_a_nested_tuple_is_refused() {
+        for field in [
+            "bounds : [(a : Speed, a : Speed); 4]",
+            "bounds : (a : Speed, a : Speed)?",
+            "bounds : (outer : (a : Speed, a : Speed), b : Speed)",
+        ] {
+            let checked = check_source(
+                "app",
+                &format!(
+                    "package app\n\
+                     type Speed : integer [0..250]\n\
+                     struct Reading {{\n  {field}\n}}\n"
+                ),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-215"],
+                "{field}: got {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    /// The comparison is exact and case-sensitive, as for a struct's fields:
+    /// `a` and `A` are two names.
+    #[test]
+    fn typl_215_tuple_field_names_that_differ_in_case_are_not_a_repeat() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (a : Speed, A : Speed)\n\
+             }\n",
+        );
+        assert!(
+            !codes(&checked).contains(&"TYPL-215"),
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// The same tuple field name three times reports twice, and both reports
+    /// point back at the first field: the tuple's map records the first
+    /// declaration and a later repeat never overwrites it.
+    #[test]
+    fn typl_215_reports_every_tuple_repeat_against_the_first_field() {
+        let source = "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (a : Speed, a : Speed, a : Speed)\n\
+             }\n";
+        let checked = check_source("app", source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-215", "TYPL-215"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source
+            .find("(a :")
+            .expect("the first field is in the source")
+            + 1;
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                usize::from(diagnostic.labels[0].span.range.start()),
+                first,
+                "every repeat points at the first field"
+            );
+        }
+    }
+
+    /// Two tuple field names that differ in source but agree under
+    /// snake_case are not the language's collision: of the in-tree backends
+    /// only the Rust backend applies snake_case to a tuple field, so the
+    /// collision belongs to that backend's claim table (generated-name
+    /// collisions design §4.2). This pins that `ridl check` still accepts the
+    /// source.
+    #[test]
+    fn a_snake_case_equal_tuple_field_pair_draws_no_diagnostic() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (minSpeed : Speed, min_speed : Speed)\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            Vec::<&str>::new(),
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// The duplicate tuple field is reported, not dropped: both fields still
+    /// lower, as they do in a struct. Asserted over the IR, because no
+    /// diagnostic can show it.
+    #[test]
+    fn typl_215_reports_a_duplicate_tuple_field_without_dropping_it() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (a : Speed, a : Speed)\n\
+             }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-215"]);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "Reading").members[0].member
+        else {
+            panic!("`bounds` is not a field");
+        };
+        let Some(v2::field_type::Kind::Tuple(tuple)) = &field.r#type.as_ref().unwrap().kind else {
+            panic!("`bounds` is not a tuple");
+        };
+        let names: Vec<&str> = tuple.fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["a", "a"],
+            "both fields still lower — this check reports and does not drop"
+        );
+    }
+
+    /// A query's tuple return lowers through the same code as a field's tuple
+    /// type, so an exact duplicate in it draws TYPL-215 too.
+    #[test]
+    fn typl_215_a_query_returning_a_duplicate_tuple_field_is_refused() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Svc {{\n  query range() : (a : Speed, a : Speed) @[..50ms]\n}}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-215"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .contains("in this tuple — a name identifies one field"),
+            "got: {}",
+            checked.diagnostics[0].message
+        );
     }
 
     // --- RIDL-413: exact duplicate parameter name (issue #244) -------------

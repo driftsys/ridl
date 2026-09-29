@@ -426,14 +426,14 @@ diag_codes! {
         TYPL_214 = "TYPL-214", Error,
             "`error union` contains a non-error-typed arm";
 
-        /// A field name declared twice in one struct (typl §7, §16.3). Distinct
-        /// from RIDL-149: that code fires when two distinct source names
-        /// collide only after a pinned name transform, and this one fires
-        /// when the two source names are already the same, before any
-        /// transform runs. Both fields still lower — this check reports and
-        /// does not drop.
+        /// A field name declared twice in one struct or one tuple (typl §7,
+        /// §11, §16.3). Distinct from RIDL-149: that code fires when two
+        /// distinct struct field names collide only after a pinned name
+        /// transform, and this one fires when the two source names are
+        /// already the same, before any transform runs. Both fields still
+        /// lower — this check reports and does not drop.
         TYPL_215 = "TYPL-215", Error,
-            "field name declared twice in one struct";
+            "field name declared twice in one struct or one tuple";
 
         /// An enum value name declared twice in one `enum` (typl §8, §16.3).
         /// Distinct from RIDL-149: that code fires when two distinct source
