@@ -1010,7 +1010,7 @@ fn main() {{
 fn an_absent_field_whose_type_excludes_zero_is_refused() {
     let transcript = rustc::run_program_capturing_stdout(
         "fb_conformance_evolution_v1",
-        &evolution_program(
+        &fixture_program(
             "flatbuffers_evolution_v1.ridl",
             r#"
 use ridl_rt::encoding::FlatBuffers;
@@ -1086,13 +1086,111 @@ fn main() {{
     );
     rustc::run_program(
         "fb_conformance_evolution_v2",
-        &evolution_program("flatbuffers_evolution_v2.ridl", &main),
+        &fixture_program("flatbuffers_evolution_v2.ridl", &main),
     );
 }
 
-/// The generated codec's source for one of the two evolution fixtures, with
-/// `main` appended.
-fn evolution_program(fixture: &str, main: &str) -> String {
+/// **Whether an absent field reads as 0 follows the field's own range, step
+/// and members** (driftsys/ridl#472, decision (a1)).
+///
+/// One buffer planus writes for an `Inner` whose `speed` is 0 carries no slot
+/// at id 0. `flatbuffers_zero_legality.ridl` declares five structs of that
+/// shape, which differ only in the type of the field at id 0, and the same
+/// bytes are read as each of them:
+///
+/// - `integer [0..10]` and `Even` (`[-1.0..1.0 step 1.0]`, whose grid holds 0)
+///   read as 0;
+/// - `Mode`, whose zero member `OFF` is declared after `ON`, reads as `OFF`,
+///   not as the first variant;
+/// - `integer [1..10]`, an inline range that excludes 0, and `Odd`
+///   (`[-1.5..1.5 step 1.0]`, whose grid is -1.5, -0.5, 0.5 and 1.5) are
+///   refused with `MissingRequired`: 0 is inside `Odd`'s range but is not one
+///   of its values.
+///
+/// An empty planus box, read as a `Mode`, an `Even` and an `Odd` box, is
+/// checked the same way.
+#[test]
+fn whether_an_absent_field_reads_as_zero_follows_its_type() {
+    let mut builder = planus::Builder::new();
+    let inner = builder.finish(planus_inner(0, "x"), None).to_vec();
+    assert_eq!(
+        voffset(&inner, 0),
+        0,
+        "planus must omit `speed` at 0, or this case proves nothing about an absent field"
+    );
+    let inner = to_hex(&inner);
+    let mut builder = planus::Builder::new();
+    let empty_box = to_hex(builder.finish(fb::SpeedBox { value: 0 }, None));
+
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
+
+const INNER: &str = "{inner}";
+const EMPTY_BOX: &str = "{empty_box}";
+
+fn bytes(hex: &str) -> Vec<u8> {{
+    (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+        .collect()
+}}
+
+fn refused<T>(what: &str, result: Result<T, VerifyError>) {{
+    match result {{
+        Err(VerifyError::Structure(Malformed::MissingRequired)) => {{}}
+        Err(other) => panic!("{{what}}: expected MissingRequired, got {{other:?}}"),
+        Ok(_) => panic!("{{what}}: an absent field whose type excludes 0 must not verify"),
+    }}
+}}
+
+fn main() {{
+    let inner = bytes(INNER);
+    let label = || Label::new_unchecked(String::from("x"));
+
+    let proof: Ref<'_, InnerMode, FlatBuffers> =
+        Ref::verify(&inner).expect("an absent Mode reads as its zero member");
+    assert_eq!(proof.view().speed(), Mode::Off, "the `speed` accessor of a Mode");
+    assert_eq!(proof.decode(), InnerMode {{ speed: Mode::Off, label: label() }});
+
+    let proof: Ref<'_, InnerZero, FlatBuffers> =
+        Ref::verify(&inner).expect("an absent integer [0..10] reads as 0");
+    assert_eq!(proof.view().speed(), 0, "the `speed` accessor of an integer [0..10]");
+    assert_eq!(proof.decode(), InnerZero {{ speed: 0, label: label() }});
+
+    let proof: Ref<'_, InnerEven, FlatBuffers> =
+        Ref::verify(&inner).expect("an absent Even reads as 0.0");
+    assert_eq!(proof.view().speed(), Even::new_unchecked(0.0), "the `speed` accessor of an Even");
+    assert_eq!(
+        proof.decode(),
+        InnerEven {{ speed: Even::new_unchecked(0.0), label: label() }},
+    );
+
+    refused("an absent integer [1..10]", Ref::<'_, InnerRange, FlatBuffers>::verify(&inner));
+    refused("an absent Odd", Ref::<'_, InnerOdd, FlatBuffers>::verify(&inner));
+
+    let empty_box = bytes(EMPTY_BOX);
+    let proof: Ref<'_, Mode, FlatBuffers> =
+        Ref::verify(&empty_box).expect("an empty Mode box reads as its zero member");
+    assert_eq!(proof.view().value(), Mode::Off, "the `value` accessor of a Mode box");
+    assert_eq!(proof.decode(), Mode::Off);
+    let proof: Ref<'_, Even, FlatBuffers> =
+        Ref::verify(&empty_box).expect("an empty Even box reads as 0.0");
+    assert_eq!(proof.decode(), Even::new_unchecked(0.0));
+    refused("an empty Odd box", Ref::<'_, Odd, FlatBuffers>::verify(&empty_box));
+}}
+"#
+    );
+    rustc::run_program(
+        "fb_conformance_zero_legality",
+        &fixture_program("flatbuffers_zero_legality.ridl", &main),
+    );
+}
+
+/// The generated codec's source for one of the fixtures other than the
+/// round-trip one, with `main` appended.
+fn fixture_program(fixture: &str, main: &str) -> String {
     let package = ir::compile_fixture(fixture);
     let generated = ridl_backend_rust::generate(&package)
         .expect("the fixture generates")
