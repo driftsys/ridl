@@ -2814,11 +2814,32 @@ impl Checker<'_> {
                 let Some(literal) = bit.value() else {
                     continue;
                 };
-                let Some(value) = (match literal_kind(&literal) {
-                    LitKind::Number { value } => exact_to_i64(&value),
-                    _ => None,
-                }) else {
-                    continue;
+                // A position that does not lower is refused, never skipped
+                // in silence (issue #579).
+                let position = match literal_kind(&literal) {
+                    LitKind::Number { value } if value.0.is_integer() => exact_to_i64(&value)
+                        .ok_or((
+                            DiagCode::TYPL_111,
+                            "is outside the int64 domain (bits 0..63)",
+                        )),
+                    _ => Err((
+                        DiagCode::TYPL_219,
+                        "is not a number with an integer value — a bit position is an integer from 0 to 63 (typl §9.1)",
+                    )),
+                };
+                let value = match position {
+                    Ok(value) => value,
+                    Err((code, reason)) => {
+                        self.error(
+                            code,
+                            literal.syntax().text_range(),
+                            format!(
+                                "enumset bit `{name}` has position `{}`, which {reason}",
+                                significant_text(literal.syntax())
+                            ),
+                        );
+                        continue;
+                    }
                 };
                 if bits.iter().any(|existing| existing.value == value) {
                     self.error(
@@ -6229,10 +6250,10 @@ mod tests {
         assert_eq!(codes(&checked), vec!["TYPL-218", "TYPL-207"]);
     }
 
-    /// A bit whose position is not an integer is skipped before it lowers,
-    /// but its name is still declared, so a later bit with the same name
-    /// draws TYPL-218. Only TYPL-218's presence is asserted: what the
-    /// non-integer position itself draws is not this rule's concern.
+    /// A bit whose position is not an integer draws TYPL-219 and does not
+    /// lower, but its name is still declared, so a later bit with the same
+    /// name draws TYPL-218. Only TYPL-218's presence is asserted here;
+    /// TYPL-219 has its own tests.
     #[test]
     fn typl_218_counts_a_bit_whose_position_is_not_an_integer() {
         for position in ["\"x\"", "1.5"] {
@@ -6302,6 +6323,172 @@ mod tests {
     fn enumset_bit_past_63_is_typl_111() {
         let checked = check_source("app", "package app\nenumset W { A = 64 }\n");
         assert_eq!(codes(&checked), vec!["TYPL-111"]);
+    }
+
+    // --- TYPL-219: an enumset bit position that is not an integer ----------
+
+    /// The reproduction from driftsys/ridl#579: a string and a fractional
+    /// position passed the checker with no diagnostic, and both bits were
+    /// left out of the IR. Each bit now draws TYPL-219 on its position.
+    #[test]
+    fn typl_219_the_issue_reproduction_is_refused() {
+        let source = "package app\nenumset W {\n  A = \"x\"\n  B = 1.5\n}\n";
+        let checked = check_source("app", source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-219", "TYPL-219"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        for (diagnostic, (name, position)) in checked
+            .diagnostics
+            .iter()
+            .zip([("A", "\"x\""), ("B", "1.5")])
+        {
+            let start = source
+                .find(position)
+                .expect("the position is in the source");
+            assert_eq!(usize::from(diagnostic.primary.range.start()), start);
+            assert_eq!(
+                usize::from(diagnostic.primary.range.end()),
+                start + position.len()
+            );
+            assert!(
+                diagnostic.message.contains(&format!("`{name}`")),
+                "{}",
+                diagnostic.message
+            );
+        }
+    }
+
+    /// Each literal form that is not a number with an integer value draws
+    /// TYPL-219, and only TYPL-219: a string, a boolean, a fraction of either sign, a regex,
+    /// and a constant reference, which is refused even when the constant is an
+    /// integer, as the enum path refuses it under TYPL-203.
+    #[test]
+    fn typl_219_refuses_every_position_that_is_not_an_integer() {
+        for position in ["\"x\"", "1.5", "-1.5", "true", "false", "/x/", "LIMIT"] {
+            let source =
+                format!("package app\nconst LIMIT : integer = 1\nenumset W {{ A = {position} }}\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-219"],
+                "{position}: got: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    /// `1.0` is an integer value written in decimal form, so it is a valid
+    /// position and draws nothing, as the enum path accepts it.
+    #[test]
+    fn typl_219_accepts_an_integer_written_with_a_fraction_of_zero() {
+        let checked = check_source("app", "package app\nenumset W { A = 1.0 }\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "W").kind else {
+            panic!("W is an enumset def");
+        };
+        let bits: Vec<(&str, i64)> = def
+            .bits
+            .iter()
+            .map(|bit| (bit.name.as_str(), bit.value))
+            .collect();
+        assert_eq!(bits, vec![("A", 1)]);
+    }
+
+    /// An integer too large for `int64`, in either direction, was dropped by
+    /// the same skip. It is an integer, so it draws TYPL-111, the code for a
+    /// bit position outside the `int64` domain, and not TYPL-219. The report
+    /// is placed on the position and names the bit, and the bit is left out
+    /// of the IR rather than lowered to a saturated position.
+    #[test]
+    fn an_enumset_bit_position_past_int64_is_typl_111() {
+        for position in ["9223372036854775808", "-9223372036854775809"] {
+            let source = format!("package app\nenumset W {{ A = {position}, B = 1 }}\n");
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-111"],
+                "{position}: got: {:?}",
+                checked.diagnostics
+            );
+            let diagnostic = &checked.diagnostics[0];
+            let start = source
+                .find(position)
+                .expect("the position is in the source");
+            assert_eq!(usize::from(diagnostic.primary.range.start()), start);
+            assert_eq!(
+                usize::from(diagnostic.primary.range.end()),
+                start + position.len()
+            );
+            assert!(
+                diagnostic.message.contains("`A`") && diagnostic.message.contains(position),
+                "{}",
+                diagnostic.message
+            );
+            let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "W").kind else {
+                panic!("W is an enumset def");
+            };
+            let bits: Vec<(&str, i64)> = def
+                .bits
+                .iter()
+                .map(|bit| (bit.name.as_str(), bit.value))
+                .collect();
+            assert_eq!(bits, vec![("B", 1)], "{position}");
+        }
+    }
+
+    /// The message quotes the position's significant text, so a sign written
+    /// apart from its digits is quoted as `-1.5`, not as the source spacing.
+    #[test]
+    fn typl_219_quotes_the_position_without_its_inner_spacing() {
+        let checked = check_source("app", "package app\nenumset W { A = - 1.5 }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-219"]);
+        let message = &checked.diagnostics[0].message;
+        assert!(message.contains("`-1.5`"), "{message}");
+    }
+
+    /// The issue asked whether the enum path has the same gap. It does not:
+    /// an enum value that is not a number with an integer value draws
+    /// TYPL-203 and is not lowered. Pinned here so the two paths stay in
+    /// step.
+    #[test]
+    fn typl_203_refuses_an_enum_value_that_is_not_an_integer() {
+        for value in ["\"x\"", "1.5", "true", "/x/", "LIMIT"] {
+            let source = format!(
+                "package app\nconst LIMIT : integer = 1\nenum E {{ A = {value}, B = 1 }}\n"
+            );
+            let checked = check_source("app", &source);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-203"],
+                "{value}: got: {:?}",
+                checked.diagnostics
+            );
+            let Some(v2::decl::Kind::EnumDef(def)) = &decl(&checked, "E").kind else {
+                panic!("E is an enum def");
+            };
+            let values: Vec<&str> = def.values.iter().map(|v| v.name.as_str()).collect();
+            assert_eq!(values, vec!["B"], "{value}");
+        }
+    }
+
+    /// A refused bit is still left out of the IR: it has no position to
+    /// lower, and the valid bits beside it still lower.
+    #[test]
+    fn typl_219_leaves_the_valid_bits_in_the_ir() {
+        let checked = check_source("app", "package app\nenumset W { A = \"x\", B = 1 }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-219"]);
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "W").kind else {
+            panic!("W is an enumset def");
+        };
+        let bits: Vec<(&str, i64)> = def
+            .bits
+            .iter()
+            .map(|bit| (bit.name.as_str(), bit.value))
+            .collect();
+        assert_eq!(bits, vec![("B", 1)]);
     }
 
     #[test]

@@ -568,6 +568,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("TYPL-216", Showcase),
     ("TYPL-217", Showcase),
     ("TYPL-218", Showcase),
+    ("TYPL-219", Showcase),
     ("TYPL-301", Showcase),
     (
         "TYPL-302",
@@ -1057,6 +1058,7 @@ fn showcase_pins_every_severity() {
         ("TYPL-216", Severity::Error),
         ("TYPL-217", Severity::Error),
         ("TYPL-218", Severity::Error),
+        ("TYPL-219", Severity::Error),
         ("TYPL-301", Severity::Error),
         ("TYPL-303", Severity::Error),
         ("TYPL-304", Severity::Error),

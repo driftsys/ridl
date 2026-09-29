@@ -846,6 +846,9 @@ enumset WarningFlags {
 - Bit positions unique (TYPL-207)
 - A bit name is unique within its enumset (TYPL-218): a name identifies one bit,
   so an enumset cannot declare two
+- A bit position is a number with an integer value (TYPL-219): a string, a
+  boolean, a fractional number, a regex, or a constant reference is refused,
+  `1.0` is accepted as bit 1, and a position outside bits 0..63 is TYPL-111
 
 ### 9.2 Derived Form
 
@@ -1167,6 +1170,7 @@ the family overview §7 and are not restated here.
 | TYPL-216 | enum value name declared twice in one enum                                                                 | error    |
 | TYPL-217 | union arm name declared twice in one union                                                                 | error    |
 | TYPL-218 | enumset bit name declared twice in one enumset                                                             | error    |
+| TYPL-219 | enumset bit position is not a number with an integer value                                                 | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
