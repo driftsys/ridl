@@ -492,14 +492,21 @@ impl<'a> Lowering<'a> {
     /// A resolved reference, flat: the declaring package, whether it is
     /// foreign, the index the declaration sits at, and its kind. A reference
     /// that names a constant is not resolved as a type.
+    ///
+    /// `foreign` and `index` follow one rule: the declaring package against
+    /// the package being lowered. The reference text cannot decide it, because
+    /// a foreign declaration is lowered with `home` set to its own package, so
+    /// a reference inside it is spelled bare while it names a declaration
+    /// outside the scope's package (driftsys/ridl#586). An unresolved
+    /// reference has no declaring package, so its flag is the only evidence
+    /// left: whether the text is dotted.
     fn type_ref(&mut self, home: &'a v2::Package, reference: &str) -> v1::TypeRef {
-        let foreign = is_foreign(reference);
         let Some((decl, declaring)) = self.scope.resolve(home, reference) else {
             return v1::TypeRef {
                 reference: reference.to_string(),
                 resolved: false,
                 package: String::new(),
-                foreign,
+                foreign: is_foreign(reference),
                 index: 0,
                 kind: v1::DeclKind::Unspecified as i32,
             };
@@ -519,7 +526,7 @@ impl<'a> Lowering<'a> {
             reference: reference.to_string(),
             resolved: kind != v1::DeclKind::Constant,
             package: declaring.name.clone(),
-            foreign,
+            foreign: !local,
             index,
             kind: kind as i32,
         }

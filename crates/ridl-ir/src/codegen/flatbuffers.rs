@@ -613,7 +613,9 @@ impl Filler<'_, '_> {
         match &decl.kind {
             Some(v2::decl::Kind::TypeDef(td)) => (Some(scalar_def_wire(td)), false),
             // A FlatBuffers enum field names the enum, and every typl enum is
-            // emitted at one underlying width, `long`.
+            // emitted at one underlying width, `long`. `foreign` and `index`
+            // follow the one rule `Lowering::type_ref` states: the declaring
+            // package against the package being lowered.
             Some(v2::decl::Kind::EnumDef(def)) => (
                 Some(v1::FbWire {
                     kind: Some(v1::fb_wire::Kind::Enum(v1::FbEnum {
@@ -621,7 +623,7 @@ impl Filler<'_, '_> {
                             reference: reference.to_string(),
                             resolved: true,
                             package: declaring.name.clone(),
-                            foreign: reference.contains('.'),
+                            foreign: !local,
                             index: self.declaration_index(declaring, &decl.name, local),
                             kind: v1::DeclKind::Enum as i32,
                         }),
