@@ -54,6 +54,8 @@
 //! one provider. [`ReaderHandle`] is `Send + Sync`; the other five are `Send`
 //! and driven by one thread each. Nothing here declares either: both follow
 //! from the fields, and the assertions at the bottom of this file pin them.
+//! [`Loopback::attach`] makes a second aggregate on the same store, for a
+//! program that holds several faces over one runtime, each owning its own.
 //!
 //! # What it reports, and what it cannot
 //!

@@ -36,6 +36,15 @@
 //! - `every_split_handle_carries_the_catalog` — a runtime's own API beyond
 //!   the factory: `Loopback::split`. The suite checks the catalog on the aggregate and on
 //!   the handles its factory makes.
+//! - `an_attached_aggregate_carries_the_catalog`,
+//!   `a_value_committed_through_one_aggregate_is_read_through_an_attached_one`,
+//!   `an_attached_aggregate_advances_the_one_clock`,
+//!   `an_attached_aggregate_has_its_own_subscriptions_and_queue`,
+//!   `a_call_sent_through_one_aggregate_is_served_through_an_attached_one`,
+//!   `dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions`
+//!   and `an_attached_aggregate_keeps_the_store_after_the_original_is_dropped`
+//!   — a runtime's own API beyond the factory: `Loopback::attach`
+//!   (driftsys/ridl#488).
 //! - `the_injected_settle_failure_is_too_large_with_no_capacity` — which
 //!   error the injected fault reports is left to a runtime. The suite asks
 //!   only for an error other than `UnknownClaim`.
