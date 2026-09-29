@@ -169,7 +169,7 @@ Four ways to obtain handles, each with one purpose:
 
 `advance`, `provision_fixed` and `fail_next_settle` are the aggregate's, not any
 role handle's: each acts on the runtime as a whole rather than through a port,
-so from whichever aggregate of the store it is called.
+so it has the same effect whichever aggregate of the store it is called on.
 
 What an attached aggregate shares follows from the next section's rule: what is
 in the store is shared, and what is on a handle is not carried over. It starts

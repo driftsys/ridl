@@ -238,10 +238,7 @@ impl Loopback {
     /// only its own handles, and the store lives until the last handle of
     /// every aggregate is dropped.
     ///
-    /// Not `Clone`, because a clone that shares none of its origin's
-    /// subscriptions, calls or claims is not a copy, and those cannot be
-    /// copied: a call's outcome belongs to the one caller that sent it, and a
-    /// claim to the one handler it was presented to.
+    /// Not `Clone`: `docs/design/ridl-loopback.md` records why.
     #[must_use]
     pub fn attach(&self) -> Loopback {
         Loopback {

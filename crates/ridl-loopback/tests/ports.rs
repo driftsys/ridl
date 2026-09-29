@@ -445,12 +445,12 @@ fn dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions()
 
 #[test]
 fn an_attached_aggregate_keeps_the_store_after_the_original_is_dropped() {
-    let rt = runtime();
-    let mut attached = rt.attach();
+    let mut rt = runtime();
+    let attached = rt.attach();
+    rt.set(IFACE, ORD, &[4]).expect("staged");
+    rt.commit();
     drop(rt);
 
-    attached.set(IFACE, ORD, &[4]).expect("staged");
-    attached.commit();
     let mut out = [0u8; 8];
     let sample = attached.read(IFACE, ORD, &mut out).expect("read");
     assert_eq!(&out[..sample.len], &[4]);
