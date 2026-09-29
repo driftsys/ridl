@@ -46,12 +46,20 @@
 //! handler from `Loopback::handler`. The store is shared, so what one round
 //! trip leaves in it is still there for the next: the temperature of round
 //! trip 1 stays published, and the async client stays subscribed to
-//! `warning` after round trip 2. Each round trip therefore asserts only what
-//! it put there itself — the one occurrence it raised, the one call it sent —
-//! and each call's future forgets its call when it takes the outcome, so no
-//! call is left waiting for the next round trip's `serve` to find. A call's
-//! future borrows its client until it is dropped, which is why each round
-//! trip is a block.
+//! `warning` after round trip 2. So the round trips are checked against what
+//! each one did, not only against what arrived. Round trip 2 checks that the
+//! occurrence it raised is the only one waiting. Each call is settled by the
+//! `serve` of its own round trip, so no call is left for a later one to
+//! find. The provider, which also lives for the whole program, keeps the
+//! level of every command, and the blocking round trips send and reply with
+//! values of their own (43 and 9, not the 42 and 7 of round trips 3 and 4),
+//! so a value left over from an earlier round trip is not mistaken for this
+//! one's.
+//!
+//! Round trips 1 to 4 are blocks, and 5 and 6 are `thread::scope` closures,
+//! so that each one's futures and borrows end with it: a call's future
+//! borrows its client, and a `serve` future borrows the handler and the
+//! provider, until it is dropped.
 //!
 //! Every value the program sends or replies with is built with `new`, which
 //! checks the type's typl constraints, never with `new_unchecked`, which is
@@ -179,6 +187,9 @@ fn main() {
                 warning.code.get()
             }
         };
+        drop(next);
+        // The occurrence taken above was the only one waiting.
+        assert!(poll_once(&mut client.next_event(), &mut cx).is_pending());
         println!("event ok {}", code);
     }
 
@@ -219,17 +230,19 @@ fn main() {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
         let _ends_the_loop = DoneOnDrop(&done);
         let acknowledged =
-            blocking_client.set_level(api::Level::new(42).expect("42 is inside Level's range"));
+            blocking_client.set_level(api::Level::new(43).expect("43 is inside Level's range"));
         done.store(true, Ordering::Release);
         assert_eq!(acknowledged, Ok(()));
         serving.join().expect("the serving thread does not panic")
     });
     assert_eq!(served, Ok(()));
     // The command of round trip 3 is the first entry; this one is the second.
-    assert_eq!(provider.levels, vec![42, 42]);
+    assert_eq!(provider.levels, vec![42, 43]);
     println!("blocking command ok {}", provider.levels[1]);
 
-    // 6 — query, through the blocking client.
+    // 6 — query, through the blocking client, with a reply other than
+    // round trip 4's.
+    provider.average = api::Average::new(9).expect("9 is inside Average's range");
     let done = AtomicBool::new(false);
     let (reply, served) = std::thread::scope(|scope| {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
@@ -242,6 +255,6 @@ fn main() {
     });
     assert_eq!(served, Ok(()));
     let reply = reply.expect("the query is served within the timeout");
-    assert_eq!(reply.get(), 7);
+    assert_eq!(reply.get(), 9);
     println!("blocking query ok {}", reply.get());
 }
