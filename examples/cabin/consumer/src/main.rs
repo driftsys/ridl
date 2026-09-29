@@ -32,7 +32,7 @@
 //! executor is involved: each round trip is a fixed sequence of polls, and
 //! the result of each poll is asserted, so a future that resolved on the
 //! wrong poll fails the proof the way a wrong value does. Round trips 5 and
-//! 6 make the same command and query through `blocking::Client`, which is
+//! 6 make the command and the query again through `blocking::Client`, which is
 //! `ridl_rt::task::block_on` over the async client and parks this thread
 //! until the outcome or its timeout; the provider side is `blocking::serve`
 //! on a second thread, called in a loop with a timeout, the way a thread
