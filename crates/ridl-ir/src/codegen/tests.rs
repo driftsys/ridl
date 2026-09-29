@@ -326,6 +326,11 @@ fn a_bare_unresolved_reference_is_not_foreign() {
     assert!(!reference.foreign, "the reference is bare");
     assert_eq!(reference.package, "");
     assert_eq!(reference.reference, "Temperature");
+    assert_eq!(
+        reference.index, 0,
+        "an unresolved reference indexes nothing"
+    );
+    assert_eq!(reference.kind, v1::DeclKind::Unspecified as i32);
 }
 
 /// Package `a`: a named scalar, an enum, and one declaration of each kind
@@ -633,6 +638,28 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
     );
     assert_eq!(qualified.package, "b");
     assert_eq!(qualified.index, 1, "`b.Own` indexes `Model.declarations`");
+
+    // The lowering states the same arm by the same rule, and copies nothing
+    // of the scope's own package into `Model.foreign`.
+    let v1::declaration::Kind::Union(pick) = model.declarations[0].kind.as_ref().expect("a kind")
+    else {
+        panic!("`Pick` is a union");
+    };
+    let lowered = pick.arms[2].r#type.as_ref().expect("an arm type");
+    assert!(lowered.resolved);
+    assert!(
+        !lowered.foreign,
+        "the lowered `b.Own` is declared by the scope's package"
+    );
+    assert_eq!(lowered.package, "b");
+    assert_eq!(
+        lowered.index, 1,
+        "the lowered `b.Own` indexes `Model.declarations`"
+    );
+    assert!(
+        model.foreign.iter().all(|foreign| foreign.package != "b"),
+        "no declaration of `b` is copied into `Model.foreign`"
+    );
 }
 
 /// The three encodings the model carries, over one lowered package.

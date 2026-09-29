@@ -62,8 +62,12 @@ impl<'a> Scope<'a> {
     }
 }
 
-/// A reference is cross-package exactly when it carries a dot — the IR's
-/// canonical form, not a property of what the scope happens to hold.
+/// Whether a reference is spelled with a package: the IR's canonical form
+/// writes a cross-package reference as `pkg.Name`, a same-package one as the
+/// bare `Name`. A text test, not a property of what the scope holds:
+/// `Lowering::type_ref` derives `TypeRef.foreign` from the declaring package
+/// for a resolved reference and uses this only for an unresolved one, which
+/// has no declaring package (driftsys/ridl#586).
 pub(crate) fn is_foreign(reference: &str) -> bool {
     reference.contains('.')
 }
