@@ -516,7 +516,10 @@ const SPARE_SLOT: usize = 20;
 /// `Report`'s vtable slots, which are the `.fbs` ids, for the fields the
 /// default cases below set to 0.
 const ID_SLOT: usize = 0;
+const RATIO_SLOT: usize = 3;
+const ENGAGED_SLOT: usize = 4;
 const HEALTH_SLOT: usize = 5;
+const FLAGS_SLOT: usize = 6;
 const INNER_SLOT: usize = 7;
 const OUTCOME_SLOT: usize = 8;
 const RANGE_SLOT: usize = 9;
@@ -530,7 +533,8 @@ const META_SLOT: usize = 12;
 /// does. This codec accepts such a buffer and reads the field as 0, or as
 /// the enum's zero member, in every table position one can sit in: the root
 /// table, a nested table, a tuple's table, a map entry, and a union arm's
-/// box. Each buffer below differs from [`planus_value`] in one field, so
+/// box; and for every scalar kind: an integer, a float, a boolean, an enum
+/// set and an enum. Each buffer below differs from [`planus_value`] in one field, so
 /// each measures one omission and nothing else, and the omission is checked
 /// in the bytes before the codec reads them: planus wrote no slot for the
 /// field.
@@ -550,6 +554,33 @@ fn a_buffer_planus_wrote_omitting_a_default_is_read_as_the_default() {
     value.id = 0;
     let root_field = write(value);
     assert_eq!(voffset(&root_field, ID_SLOT), 0, "planus omits `id` at 0");
+
+    let mut value = planus_value();
+    value.ratio = 0.0;
+    let float_field = write(value);
+    assert_eq!(
+        voffset(&float_field, RATIO_SLOT),
+        0,
+        "planus omits `ratio` at 0.0"
+    );
+
+    let mut value = planus_value();
+    value.engaged = false;
+    let bool_field = write(value);
+    assert_eq!(
+        voffset(&bool_field, ENGAGED_SLOT),
+        0,
+        "planus omits `engaged` at false"
+    );
+
+    let mut value = planus_value();
+    value.flags = 0;
+    let enum_set_field = write(value);
+    assert_eq!(
+        voffset(&enum_set_field, FLAGS_SLOT),
+        0,
+        "planus omits `flags` at the empty set"
+    );
 
     let mut value = planus_value();
     value.health = fb::Health::Ok;
@@ -612,6 +643,9 @@ fn a_buffer_planus_wrote_omitting_a_default_is_read_as_the_default() {
 
     let cases = [
         ("root_field", root_field),
+        ("float_field", float_field),
+        ("bool_field", bool_field),
+        ("enum_set_field", enum_set_field),
         ("enum_field", enum_field),
         ("nested_field", nested_field),
         ("tuple_field", tuple_field),
@@ -645,6 +679,12 @@ fn bytes(hex: &str) -> Vec<u8> {{
 fn main() {{
     let mut root_field = conformance();
     root_field.id = Count::new_unchecked(0);
+    let mut float_field = conformance();
+    float_field.ratio = Ratio::new_unchecked(0.0);
+    let mut bool_field = conformance();
+    bool_field.engaged = Engaged::new(false);
+    let mut enum_set_field = conformance();
+    enum_set_field.flags = WarningFlags::try_from(0i64).unwrap();
     let mut enum_field = conformance();
     enum_field.health = Health::Ok;
     let mut nested_field = conformance();
@@ -658,6 +698,9 @@ fn main() {{
 
     let cases = [
         ("root_field", ROOT_FIELD, root_field),
+        ("float_field", FLOAT_FIELD, float_field),
+        ("bool_field", BOOL_FIELD, bool_field),
+        ("enum_set_field", ENUM_SET_FIELD, enum_set_field),
         ("enum_field", ENUM_FIELD, enum_field),
         ("nested_field", NESTED_FIELD, nested_field),
         ("tuple_field", TUPLE_FIELD, tuple_field),
@@ -670,6 +713,9 @@ fn main() {{
             .unwrap_or_else(|error| panic!("{{what}}: a default a writer omitted must verify, got {{error:?}}"));
         let view = proof.view();
         assert_eq!(view.id(), expected.id, "{{what}}: the `id` accessor");
+        assert_eq!(view.ratio(), expected.ratio, "{{what}}: the `ratio` accessor");
+        assert_eq!(view.engaged(), expected.engaged, "{{what}}: the `engaged` accessor");
+        assert_eq!(view.flags(), expected.flags, "{{what}}: the `flags` accessor");
         assert_eq!(view.health(), expected.health, "{{what}}: the `health` accessor");
         assert_eq!(view.inner().speed(), expected.inner.speed, "{{what}}: the `inner.speed` accessor");
         assert_eq!(view.range().min(), expected.range.min, "{{what}}: the `range.min` accessor");
@@ -803,37 +849,107 @@ fn main() {{
 /// writing the field because a reader generated before driftsys/ridl#472
 /// refuses an absent one with `MissingRequired`: omitting it would break
 /// that reader. No round trip through this codec can see the difference any
-/// more, so the vtable is read instead: `Report.id` at 0 has a non-zero
-/// `voffset`.
+/// more, so the vtable is read instead.
+///
+/// Every non-optional field of `Report` is set to its default — every scalar
+/// kind at 0, false, the empty set or the zero member, every string, bytes
+/// and collection empty — and so are the scalars one table down: `inner`'s,
+/// the tuple `range`'s, a map entry's value, and the union arm's box. Each of
+/// those slots must carry a non-zero `voffset`. A `SpeedBox` root of 0 is
+/// checked the same way.
 #[test]
 fn this_codec_writes_a_non_optional_field_at_its_default() {
     let transcript = rustc::run_program_capturing_stdout(
-        "fb_conformance_id_zero",
+        "fb_conformance_defaults_written",
         &program(
             r#"
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::Payload;
 
+fn hex<T: Payload<FlatBuffers>>(value: &T) -> String {
+    let mut out = vec![0u8; T::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 fn main() {
+    let zero = || Speed::new_unchecked(0);
+    let empty = || Label::new_unchecked(String::new());
     let mut value = conformance();
     value.id = Count::new_unchecked(0);
-    let mut out = vec![0u8; <Report as Payload<FlatBuffers>>::MAX_SIZE];
-    let bytes = value.encode(&mut out).expect("encode").bytes;
-    let mut text = String::new();
-    for byte in bytes {
-        text.push_str(&format!("{byte:02x}"));
-    }
-    println!("{text}");
+    value.name = empty();
+    value.blob = Blob::new_unchecked(Vec::new());
+    value.ratio = Ratio::new_unchecked(0.0);
+    value.engaged = Engaged::new(false);
+    value.health = Health::Ok;
+    value.flags = WarningFlags::try_from(0i64).unwrap();
+    value.inner = inner(0, "");
+    value.outcome = Outcome::Bad(Health::Ok);
+    value.range = ReportRange { min: zero(), max: zero() };
+    value.readings = [zero(), zero(), zero()];
+    value.faults = Vec::new();
+    value.meta = vec![(empty(), Count::new_unchecked(0))];
+    value.names = Vec::new();
+    value.inners = Vec::new();
+    value.outcomes = Vec::new();
+    value.points = Vec::new();
+    println!("{}", hex(&value));
+    println!("{}", hex(&zero()));
 }
 "#,
         ),
     );
-    let ours = from_hex(&transcript);
+    let lines: Vec<&str> = transcript.lines().collect();
+    let [report, speed_box] = lines.as_slice() else {
+        panic!("the program prints two buffers, got {transcript:?}");
+    };
+    let ours = from_hex(report);
+    let root = root(&ours);
+
+    // Slots 0 to 16 are `Report`'s non-optional fields; 17 is the retired
+    // ordinal's placeholder and 18 to 20 are the optionals.
+    for slot in 0..=16 {
+        assert_ne!(
+            voffset(&ours, slot),
+            0,
+            "this codec must write `Report`'s slot {slot} at its default, or a \
+             reader generated before driftsys/ridl#472 refuses the buffer"
+        );
+    }
+    let inner = follow(&ours, root, INNER_SLOT);
     assert_ne!(
-        voffset(&ours, ID_SLOT),
+        voffset_in(&ours, inner, 0),
         0,
-        "this codec must write a non-optional field at its FlatBuffers default, \
-         or a reader generated before driftsys/ridl#472 refuses the buffer"
+        "`inner.speed` at 0 is written"
+    );
+    let range = follow(&ours, root, RANGE_SLOT);
+    assert_ne!(
+        voffset_in(&ours, range, 0),
+        0,
+        "`range.min` at 0 is written"
+    );
+    assert_ne!(
+        voffset_in(&ours, range, 1),
+        0,
+        "`range.max` at 0 is written"
+    );
+    let entry = element(&ours, root, META_SLOT, 0);
+    assert_ne!(
+        voffset_in(&ours, entry, 1),
+        0,
+        "a map value at 0 is written"
+    );
+    let wrapper = follow(&ours, root, OUTCOME_SLOT);
+    let boxed = follow(&ours, wrapper, 1);
+    assert_ne!(
+        voffset_in(&ours, boxed, 0),
+        0,
+        "the arm box's value at its zero member is written"
+    );
+    assert_ne!(
+        voffset(&from_hex(speed_box), 0),
+        0,
+        "a box root at 0 is written"
     );
 }
 
