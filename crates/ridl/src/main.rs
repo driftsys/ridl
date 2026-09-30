@@ -388,11 +388,16 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     // The verdict is the contracts' alone: the system's placement and
     // composition changes are listed under their headings with no verdict
     // (rsdl reference §14).
+    // No snapshot carries `ridl.std`, so it is passed as context: a struct
+    // field appended with a `ridl.std` type is then judged by that type's
+    // declaration rather than reported breaking as unresolved
+    // (driftsys/ridl#598).
     let report = ridl_diff::diff_workspaces(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
+        &[ridlc::std_ir()],
     );
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
@@ -1258,7 +1263,10 @@ fn desk_check(
         }
     };
 
-    let report = ridl_diff::diff_sets(&baseline, &current);
+    // `ridl.std` is context, as in `run_diff`, so the desk reads the verdict
+    // the gate gives (driftsys/ridl#598).
+    let std = [ridlc::std_ir()];
+    let report = ridl_diff::diff_sets_in(&baseline, &current, &std);
     let index = DeclIndex::build(entry);
     let mut warnings = Vec::new();
     for change in &report.changes {
@@ -1267,7 +1275,7 @@ fn desk_check(
         } else if MEMBER_CATEGORIES.contains(&change.category)
             && change.verdict == ridl_diff::Verdict::Breaking
         {
-            let Some(drift) = member_drift(change, &baseline, &current) else {
+            let Some(drift) = member_drift(change, &baseline, &current, &std) else {
                 continue;
             };
             member_message(change, drift)
@@ -1567,11 +1575,13 @@ fn composite_body(
 /// change is, or `None` when the path is not `<package>/<container>/<member>`
 /// with a struct or union at `<container>` on both sides. The one exception
 /// is a removal whose container is no longer a struct or union in the
-/// workspace: it is reported as a bare removal.
+/// workspace: it is reported as a bare removal. `std` is the built-in
+/// `ridl.std`, which a field type may name ([`ridl_diff::absence_refused`]).
 fn member_drift(
     change: &ridl_diff::Change,
     baseline: &[ridl_ir::v2::Package],
     current: &[ridl_ir::v2::Package],
+    std: &[ridl_ir::v2::Package],
 ) -> Option<MemberDrift> {
     let mut parts = change.path.split('/');
     let (Some(package), Some(container), Some(member), None) =
@@ -1629,7 +1639,7 @@ fn member_drift(
                         gone,
                         inserted,
                         refused_absent: ridl_diff::absence_refused(
-                            current, package, container, member,
+                            current, std, package, container, member,
                         ),
                     }
                 }

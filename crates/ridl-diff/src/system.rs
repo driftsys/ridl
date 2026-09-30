@@ -388,7 +388,7 @@ mod tests {
         new.deployments[0].placements[1].machine = "AdasHpc".to_string();
         new.components[1].external = true;
 
-        let report = crate::diff_workspaces(&[], Some(&old), &[], Some(&new));
+        let report = crate::diff_workspaces(&[], Some(&old), &[], Some(&new), &[]);
         assert_eq!(report.verdict, crate::Verdict::Identical);
         assert_eq!(
             crate::render_text(&report),
@@ -410,7 +410,7 @@ mod tests {
         );
         assert_eq!(json["composition_changed"][0]["after"], "true");
 
-        let one_side = crate::diff_workspaces(&[], None, &[], Some(&new));
+        let one_side = crate::diff_workspaces(&[], None, &[], Some(&new), &[]);
         assert!(one_side.system.is_empty());
         let json: serde_json::Value =
             serde_json::from_str(&crate::render_json(&one_side)).expect("the report is JSON");

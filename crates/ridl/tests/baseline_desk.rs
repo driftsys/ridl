@@ -997,6 +997,40 @@ fn an_appended_struct_field_whose_type_excludes_zero_fails_the_gate_and_not_the_
     );
 }
 
+/// A struct field appended with a `ridl.std` type is judged by that type's
+/// declaration, although no snapshot carries `ridl.std`: `ridl diff` resolves
+/// it against the built-in package (driftsys/ridl#598). `Timestamp` and
+/// `Duration` allow 0, so appending one is compatible; `Label` is a string,
+/// which has no default, so appending it is breaking.
+#[test]
+fn an_appended_struct_field_with_a_standard_type_is_judged_by_its_declaration() {
+    for (label, field, code_wanted, verdict) in [
+        ("append-timestamp", "stamp: Timestamp", 0, "compatible"),
+        ("append-duration", "stamp: Duration", 0, "compatible"),
+        ("append-label", "stamp: Label", 1, "breaking"),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(
+                "  latch: LatchState\n}\nunion",
+                &format!("  latch: LatchState\n  {field}\n}}\nunion"),
+                1,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert!(
+            diff.contains(&format!("[{verdict}] decl_added veh.cluster/Report/stamp")),
+            "{label}: the diff reports `{field}` as {verdict}:\n{diff}",
+        );
+        assert_eq!(code, code_wanted, "{label}: the gate's exit code:\n{diff}");
+    }
+}
+
 /// A `reserved` entry added above the live members shifts every ordinal
 /// after it while no declaration moves. `ridl diff` reports one
 /// `member_reordered` per shifted member; the desk check warns once for each

@@ -483,12 +483,14 @@ compatible. An appended non-optional scalar, enum or enum set is compatible when
 other appended non-optional field — a string, bytes, table, union or collection,
 or a scalar or enum whose type excludes 0, such as `c : Level [1..10]` — is
 breaking, because this codec refuses the old buffer with `MissingRequired` (case
-9). The codec and the diff read one definition of "0 is legal", `ridl_ir::zero`:
-`zero_is_legal` in `codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the
-lowering's enum zero member comes from `ridl_ir::zero::enum_zero_member`. Case
-12 ties the two together over one fixture. E11.8 meets the same reader rule in
-proto3 terms, where it is forced: proto3 gives a non-optional scalar no
-presence, so an absent one is 0.
+9). A type the diff cannot resolve is reported as breaking; `ridl diff` resolves
+types against the new snapshot and the built-in `ridl.std`. The codec and the
+diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
+`codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the lowering's enum zero
+member comes from `ridl_ir::zero::enum_zero_member`. Case 12 ties the two
+together over one fixture. E11.8 meets the same reader rule in proto3 terms,
+where it is forced: proto3 gives a non-optional scalar no presence, so an absent
+one is 0.
 
 **A foreign reader does not refuse.** The emitted `.fbs` gives a field such as
 `c : Level [1..10]` no default annotation — FlatBuffers has no way to mark a

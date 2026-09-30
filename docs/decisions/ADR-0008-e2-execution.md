@@ -609,15 +609,17 @@ disagreeing sources is the correct one.
     an enum with no zero member, or a type the classifier cannot resolve — is
     breaking, under the existing `decl_added` category, and
     `ridl diff --explain decl_added` tells the author to declare the new field
-    optional (`field : T?`). The rule is the one the Rust FlatBuffers codec
-    applies when it reads an absent field (driftsys/ridl#472, ADR-0019 decision
-    6 as amended on 2026-09-29), and the two share one definition of "0 is a
-    legal value", `ridl_ir::zero`. Every other change this decision lists keeps
-    its classification; typl §7.4 states the rule as the decoder rule for
-    backward compatibility. A second `ridl check` diagnostic for the same rule,
-    and an explicit field default in typl, were considered and not taken: the
-    first duplicates the gate, and the second needs new syntax and an IR change,
-    does not help a string or struct field, and cannot be carried by proto3.
+    optional (`field : T?`). The type is resolved against the new snapshot and
+    the built-in `ridl.std`, and a type the diff cannot resolve is reported as
+    breaking. The rule is the one the Rust FlatBuffers codec applies when it
+    reads an absent field (driftsys/ridl#472, ADR-0019 decision 6 as amended on
+    2026-09-29), and the two share one definition of "0 is a legal value",
+    `ridl_ir::zero`. Every other change this decision lists keeps its
+    classification; typl §7.4 states the rule as the decoder rule for backward
+    compatibility. A second `ridl check` diagnostic for the same rule, and an
+    explicit field default in typl, were considered and not taken: the first
+    duplicates the gate, and the second needs new syntax and an IR change, does
+    not help a string or struct field, and cannot be carried by proto3.
 
 15. **Amendment (2026-07-25) — `ridlc`'s workspace output carries the checker's
     resolution and the `ridl.std` IR.** `WorkspaceOutput` gains two fields:

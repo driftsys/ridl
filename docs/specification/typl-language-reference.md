@@ -838,7 +838,9 @@ target has none, as FlatBuffers does.
   read, and the decoder refuses the payload rather than invent one. So
   `ridl-diff` reports appending a non-optional field as breaking unless its type
   allows 0; the author declares the new field optional (`field : T?`) instead
-  (driftsys/ridl#598).
+  (driftsys/ridl#598). A type the diff cannot resolve is reported as breaking;
+  `ridl diff` resolves types against the new snapshot and the built-in
+  `ridl.std`.
 
 **Rationale.** Explicit proto-style tags were considered and rejected: they
 impose a per-field numbering ritual on every struct — including the majority

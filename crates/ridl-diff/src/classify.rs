@@ -36,18 +36,20 @@ mod classify_tests;
 /// from. For a package present on only one side the caller passes that package
 /// as both arguments — those changes classify on their category alone.
 ///
-/// A reference to a declaration of another package is not resolved here, so an
-/// appended struct field typed from another package classifies breaking.
-/// [`diff_sets`](crate::diff_sets) resolves such a reference against every
-/// package of the new snapshot.
+/// A reference to a declaration of another package is not resolved here, and a
+/// type the diff cannot resolve is reported as breaking: an appended struct
+/// field typed from another package classifies breaking.
+/// [`diff_sets_in`](crate::diff_sets_in) resolves such a reference against every
+/// package of the new snapshot and the context packages, such as `ridl.std`.
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     classify_in(change, old, new, &[])
 }
 
-/// [`classify`], with `new_set` — every package of the new snapshot — to
-/// resolve a reference to another package's declaration. Only the appended
-/// struct field reads it: whether its type is legal at 0 is decided by the
-/// declaration the new side names (driftsys/ridl#598).
+/// [`classify`], with `scope` — every package of the new snapshot, and the
+/// context packages such as `ridl.std` — to resolve a reference to another
+/// package's declaration. Only the appended struct field reads it: whether its
+/// type is legal at 0 is decided by the declaration the new side names
+/// (driftsys/ridl#598).
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
@@ -62,7 +64,7 @@ pub(crate) fn classify_in(
     change: &Change,
     old: &v2::Package,
     new: &v2::Package,
-    new_set: &[v2::Package],
+    scope: &[&v2::Package],
 ) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
@@ -112,7 +114,7 @@ pub(crate) fn classify_in(
 
         Category::VisibilityChanged => visibility(change, old, new),
         Category::InteractionAppended => appended(change, old, new),
-        Category::DeclAdded => added(change, old, new, new_set),
+        Category::DeclAdded => added(change, old, new, scope),
         Category::ConstraintChanged => constraint(change, old, new),
         Category::TimingChanged => timing(change, old, new),
         Category::RpcBoundChanged => rpc_bound(change, old, new),
@@ -246,12 +248,7 @@ fn appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
 ///
 /// An appended struct field must also be readable from an old payload, which
 /// does not carry it ([`absence_reads_as_legal`], driftsys/ridl#598).
-fn added(
-    change: &Change,
-    old: &v2::Package,
-    new: &v2::Package,
-    new_set: &[v2::Package],
-) -> Verdict {
+fn added(change: &Change, old: &v2::Package, new: &v2::Package, scope: &[&v2::Package]) -> Verdict {
     let Some((container, member)) = member_path(change) else {
         // One or two segments: a whole package, or a package-level decl,
         // interface, or service.
@@ -273,7 +270,7 @@ fn added(
                 &struct_slots(old_def),
                 &struct_reserved(old_def),
                 &struct_slots(new_def),
-            ) && absence_reads_as_legal(new_def, member, new, new_set)
+            ) && absence_reads_as_legal(new_def, member, new, scope)
         }
         (Some(Kind::UnionDef(old_def)), Some(Kind::UnionDef(new_def))) => {
             // A result union's arms are its transport identity (ADR-0008
@@ -310,20 +307,24 @@ fn added(
 /// Whether a reader built against `new_set` refuses a payload in which the
 /// field `member` of struct `container`, in package `package`, is absent —
 /// the rule that makes an appended field breaking for its type
-/// (driftsys/ridl#598). `false` when `container` is not a struct of that
-/// package. The `ridl check` desk check reads it to say so in its RIDL-407
-/// message for an append that also sits beside a moved sibling.
+/// (driftsys/ridl#598). `context` holds packages that references resolve
+/// against without being compared, such as `ridl.std`. `false` when
+/// `container` is not a struct of that package. The `ridl check` desk check
+/// reads it to say so in its RIDL-407 message for an append that also sits
+/// beside a moved sibling.
 pub fn absence_refused(
     new_set: &[v2::Package],
+    context: &[v2::Package],
     package: &str,
     container: &str,
     member: &str,
 ) -> bool {
+    let scope: Vec<&v2::Package> = new_set.iter().chain(context).collect();
     let Some(home) = new_set.iter().find(|candidate| candidate.name == package) else {
         return false;
     };
     match find_decl(home, container).and_then(|decl| decl.kind.as_ref()) {
-        Some(v2::decl::Kind::StructDef(def)) => !absence_reads_as_legal(def, member, home, new_set),
+        Some(v2::decl::Kind::StructDef(def)) => !absence_reads_as_legal(def, member, home, &scope),
         _ => false,
     }
 }
@@ -343,14 +344,15 @@ pub fn absence_refused(
 /// no legal value to read.
 ///
 /// A type the classifier cannot resolve reads as refused, following the module's
-/// unlisted-is-breaking rule. That includes a reference to another package when
-/// `new_set` does not hold it, which is always the case for `ridl.std`: no
-/// snapshot carries the built-in package.
+/// unlisted-is-breaking rule: a type the diff cannot resolve is reported as
+/// breaking. That includes a reference to another package when `scope` does
+/// not hold it. No snapshot carries `ridl.std`, so it resolves only when the
+/// caller passes it as context, as the `ridl` CLI does.
 fn absence_reads_as_legal(
     def: &v2::StructDef,
     member: &str,
     home: &v2::Package,
-    new_set: &[v2::Package],
+    scope: &[&v2::Package],
 ) -> bool {
     let Some(r#type) = def.members.iter().find_map(|slot| match &slot.member {
         Some(v2::struct_member::Member::Field(field)) if field.name == member => {
@@ -372,7 +374,7 @@ fn absence_reads_as_legal(
         Some(Kind::InlineScalar(def)) => scalar_holds_zero(def),
         Some(Kind::Named(reference)) => {
             use v2::decl::Kind as Decl;
-            match resolve(home, new_set, reference).and_then(|decl| decl.kind.as_ref()) {
+            match resolve(home, scope, reference).and_then(|decl| decl.kind.as_ref()) {
                 Some(Decl::TypeDef(def)) => scalar_holds_zero(def),
                 Some(Decl::EnumDef(def)) => ridl_ir::zero::enum_zero_member(&def.values).is_some(),
                 // An enum set at 0 is the empty set.
@@ -412,15 +414,15 @@ fn scalar_holds_zero(def: &v2::TypeDef) -> bool {
 
 /// The declaration a type reference names on the new side, in the IR's
 /// canonical form: a bare `Name` in `home`, and `pkg.Name` in the package of
-/// that name — `home` itself or one of `new_set`.
+/// that name — `home` itself or one of `scope`.
 fn resolve<'a>(
     home: &'a v2::Package,
-    new_set: &'a [v2::Package],
+    scope: &[&'a v2::Package],
     reference: &str,
 ) -> Option<&'a v2::Decl> {
     match reference.rsplit_once('.') {
         Some((package, name)) => std::iter::once(home)
-            .chain(new_set)
+            .chain(scope.iter().copied())
             .find(|candidate| candidate.name == package)
             .and_then(|candidate| find_decl(candidate, name)),
         None => find_decl(home, reference),
@@ -1091,8 +1093,8 @@ pub fn explain(category: Category) -> &'static str {
             "              non-optional struct field appended whose type does not allow\n",
             "              0 — a string, bytes, struct, union, tuple, array, or map, a\n",
             "              scalar whose range or step excludes 0, an enum with no zero\n",
-            "              member, or a type the classifier cannot resolve, which\n",
-            "              includes one from ridl.std. A reader of the new version\n",
+            "              member, or a type the diff cannot resolve (ridl diff\n",
+            "              resolves ridl.std types). A reader of the new version\n",
             "              refuses every payload of the old one, which does not carry\n",
             "              the field (typl 7.4). Declare the new field optional instead\n",
             "              (`field : T?`): an absent optional field reads as absent\n",

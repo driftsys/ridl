@@ -710,7 +710,8 @@ with `= null` (ADR-0019 decision 9). Design note D-9's writer rule stands; its
 reader rule is amended. Its remainder, **driftsys/ridl#598**, was decided on
 2026-09-30: `ridl diff` calls appending a non-optional field breaking unless it
 is a scalar, enum or enum set whose type allows 0, which is where the reader
-reads the old buffers (ADR-0008 decision 14 as amended).
+reads the old buffers (ADR-0008 decision 14 as amended). A type the diff cannot
+resolve is reported as breaking.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

@@ -2755,3 +2755,65 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
 fn an_unknown_category_word_has_no_rule_row() {
     assert_eq!(super::category_from_word("no_such_category"), None);
 }
+
+/// A package passed to [`diff_sets_in`](crate::diff_sets_in) as context — the
+/// `ridl` CLI passes the built-in `ridl.std`, which no snapshot carries —
+/// resolves an appended field's type without being compared. Without it the
+/// type is unresolved, and a type the diff cannot resolve is breaking.
+#[test]
+fn a_context_package_resolves_an_appended_field_type() {
+    let std = v2::Package {
+        name: "ridl.std".to_string(),
+        decls: vec![
+            scalar(
+                "Timestamp",
+                bounds(Some("0"), Some("9223372036854775807")),
+                v2::IntWidth::I64,
+            ),
+            backed(
+                "Label",
+                v2::PrimitiveType::String,
+                Some(v2::Constraint {
+                    len_min: Some(1),
+                    len_max: Some(64),
+                    ..bounds(None, None)
+                }),
+            ),
+        ],
+        interfaces: Vec::new(),
+        services: Vec::new(),
+        retired: Vec::new(),
+    };
+    let body = |appended: Option<&str>| -> v2::Package {
+        let mut members = vec![field("a", 1, "ridl.std.Timestamp")];
+        if let Some(appended) = appended {
+            members.push(field("b", 2, appended));
+        }
+        decl_pkg(vec![struct_decl("S", members)])
+    };
+    for (appended, with_context) in [
+        ("ridl.std.Timestamp", Verdict::Compatible),
+        ("ridl.std.Label", Verdict::Breaking),
+    ] {
+        let old = [body(None)];
+        let new = [body(Some(appended))];
+        let report = crate::diff_sets_in(&old, &new, std::slice::from_ref(&std));
+        assert_eq!(
+            row(&report, Category::DeclAdded).verdict,
+            with_context,
+            "`b : {appended}` with `ridl.std` as context"
+        );
+        assert_eq!(
+            report.changes.len(),
+            1,
+            "a context package is not compared: {:?}",
+            report.changes
+        );
+        let report = crate::diff_sets(&old, &new);
+        assert_eq!(
+            row(&report, Category::DeclAdded).verdict,
+            Verdict::Breaking,
+            "`b : {appended}` with no context is unresolved"
+        );
+    }
+}
