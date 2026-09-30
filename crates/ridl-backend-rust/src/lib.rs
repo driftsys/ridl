@@ -1763,13 +1763,9 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
 pub(crate) fn type_path(reference: &str) -> TokenStream {
     match reference.rsplit_once('.') {
         Some((package, name)) => {
-            let segments = package.split('.').map(ident);
             let name = ident(name);
-            if hidden_by_child_package(reference) {
-                quote! { crate #(:: #segments)* :: __ridl_package :: #name }
-            } else {
-                quote! { crate #(:: #segments)* :: #name }
-            }
+            let prefix = package_prefix(package, &name);
+            quote! { #prefix #name }
         }
         None => {
             let id = ident(reference);
@@ -1778,19 +1774,44 @@ pub(crate) fn type_path(reference: &str) -> TokenStream {
     }
 }
 
-/// Whether the build holds a package whose name is `reference` or starts with
-/// `reference.`: each of those puts a module named like the referenced type
-/// beside it in the crate tree (see [`type_path`]).
+/// `crate::<segments>::` for an item that package `package` defines at its
+/// own scope under the Rust name `item`, and
+/// `crate::<segments>::__ridl_package::` when a child package's module hides
+/// that name (see [`type_path`]). It is the one place a path into another
+/// package is spelled: [`type_path`] and the codec's `*_path` functions, which
+/// name a view or a codec function of a foreign owner, both call it, so the
+/// `__ridl_package` rule cannot apply to one kind of item and not to the
+/// other.
 ///
-/// The comparison is over the source spellings: the tree and the reference
-/// both spell a segment through [`ident`], whose escape is injective, so two
-/// source segments are equal exactly when their Rust spellings are.
-fn hidden_by_child_package(reference: &str) -> bool {
+/// The segments are spelled through [`ident`], which is the same spelling
+/// [`module_segment`] gives the module tree `ridlc` writes, so a path emitted
+/// here and the module it names cannot drift apart.
+pub(crate) fn package_prefix(package: &str, item: &Ident) -> TokenStream {
+    let segments = package.split('.').map(ident);
+    if hidden_by_child_package(package, item) {
+        quote! { crate #(:: #segments)* :: __ridl_package :: }
+    } else {
+        quote! { crate #(:: #segments)* :: }
+    }
+}
+
+/// Whether the build holds a package `<package>.<segment>` or
+/// `<package>.<segment>.…` whose `segment`, spelled as `ridlc` spells a
+/// module ([`module_segment`]), is `item`. Each of those puts a module named
+/// `item` beside `package`'s own items in the crate tree, and the module
+/// takes the name (see [`type_path`]).
+///
+/// The comparison is over the Rust spellings, because `item` may be a name
+/// the backend derived (a view is `<Name>FbView`) and not a source name.
+fn hidden_by_child_package(package: &str, item: &Ident) -> bool {
+    let item = item.to_string();
     BUILD_PACKAGES.with(|packages| {
-        packages.borrow().iter().any(|package| {
-            package
-                .strip_prefix(reference)
-                .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+        packages.borrow().iter().any(|other| {
+            other
+                .strip_prefix(package)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .and_then(|rest| rest.split('.').next())
+                .is_some_and(|segment| module_segment(segment) == item)
         })
     })
 }
@@ -1800,17 +1821,21 @@ thread_local! {
     /// over, read by [`type_path`].
     ///
     /// It is thread-local state rather than a parameter because [`type_path`]
-    /// is reached from about thirty sites in the codec, the descriptors and
-    /// the face, several of which (the face above all) carry no [`Ctx`], and
-    /// the list is fixed for the whole of one generation call. [`Ctx`] owns
-    /// the [`BuildPackages`] guard that sets it, so the list is exactly as
-    /// long-lived as the context every entry point builds first.
+    /// is called from 26 sites in the codec, the descriptors, the face, the
+    /// default derivation and this file, and [`package_prefix`] from the
+    /// codec's paths to a view or a codec function. Several of those sites,
+    /// the face's above all, carry no [`Ctx`], and the list is fixed for the
+    /// whole of one generation call. [`Ctx`] owns the [`BuildPackages`] guard
+    /// that sets it, so the list is exactly as long-lived as the context every
+    /// entry point builds first.
     static BUILD_PACKAGES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Sets [`BUILD_PACKAGES`] to one model's package names and restores the
 /// previous list when dropped, so a context built inside another one leaves
-/// the outer list in place when it ends.
+/// the outer list in place when it ends. The restore is correct only when
+/// contexts are dropped in the reverse order of their creation, which holds
+/// because every [`Ctx`] is a local of the function that builds it.
 struct BuildPackages {
     previous: Vec<String>,
 }

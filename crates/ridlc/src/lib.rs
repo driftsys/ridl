@@ -375,10 +375,11 @@ pub enum Emit {
     /// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write
     /// ([`crate_file_refusals`]).
     ///
-    /// A crate that is written is not a crate that compiles in every case:
-    /// issue #416 records a legal package naming case whose generated path
-    /// does not resolve — a package `veh.common` alongside a type named
-    /// `common` in package `veh` — which rustc reports as E0573.
+    /// A package `veh.common` alongside a type named `common` in package
+    /// `veh` is one legal naming case that needs a special path: the child
+    /// package's module hides the type at `veh::common`, so generated code
+    /// names the type as `crate::veh::__ridl_package::common`, and a consumer
+    /// can write the same path (driftsys/ridl#416).
     Rust,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`,
     /// and the lowered system to `<pkg.Name>.system.json`.

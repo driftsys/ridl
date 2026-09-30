@@ -148,6 +148,14 @@ struct Call<'a> {
 /// The face module of one interface, or `None` when the interface declares
 /// nothing the face carries. Reachable from the crate for the pipeline's
 /// per-interface walk (E11.14 decision 2).
+///
+/// The module is named by the interface's `snake_case`, so an interface
+/// `Climate` of package `veh` beside a package `veh.climate` gives a face
+/// module `climate` that the child package's module hides in the crate tree
+/// `ridlc` writes (driftsys/ridl#416): `veh::climate` names the child package.
+/// Generated code never names a face module by a path from another module,
+/// so the crate compiles, and a consumer reaches the face as
+/// `veh::__ridl_package::climate`.
 pub(crate) fn one_interface(
     interface: &v1::Interface,
 ) -> Result<Option<TokenStream>, GenerateError> {

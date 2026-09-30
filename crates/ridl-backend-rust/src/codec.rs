@@ -576,47 +576,37 @@ fn split_owner(owner: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// `crate::<segments>::` for a foreign owner, and nothing for a local one.
-///
-/// The segments are spelled through [`crate::ident`], which is the same
-/// spelling [`crate::module_segment`] gives the module tree `ridlc` writes, so
-/// a path emitted here and the module it names cannot drift apart.
-fn owner_prefix(package: Option<&str>) -> TokenStream {
+/// The path to the item `id(name)` of `owner`: the bare item for a local
+/// owner, and for a foreign one the item behind [`crate::package_prefix`],
+/// the prefix [`crate::type_path`] uses. So a view named like a child package
+/// (`<Name>FbView` beside a package `<pkg>.<Name>FbView`) is reached through
+/// `__ridl_package` as a type is (driftsys/ridl#416).
+fn owner_path(owner: &str, id: impl Fn(&str) -> Ident) -> TokenStream {
+    let (package, name) = split_owner(owner);
+    let id = id(name);
     match package {
         Some(package) => {
-            let segments = package.split('.').map(ident);
-            quote! { crate #(:: #segments)* :: }
+            let prefix = crate::package_prefix(package, &id);
+            quote! { #prefix #id }
         }
-        None => quote! {},
+        None => quote! { #id },
     }
 }
 
 fn view_path(owner: &str) -> TokenStream {
-    let (package, name) = split_owner(owner);
-    let prefix = owner_prefix(package);
-    let id = view_ident(name);
-    quote! { #prefix #id }
+    owner_path(owner, view_ident)
 }
 
 fn encode_path(owner: &str) -> TokenStream {
-    let (package, name) = split_owner(owner);
-    let prefix = owner_prefix(package);
-    let id = encode_ident(name);
-    quote! { #prefix #id }
+    owner_path(owner, encode_ident)
 }
 
 fn verify_path(owner: &str) -> TokenStream {
-    let (package, name) = split_owner(owner);
-    let prefix = owner_prefix(package);
-    let id = verify_ident(name);
-    quote! { #prefix #id }
+    owner_path(owner, verify_ident)
 }
 
 fn decode_path(owner: &str) -> TokenStream {
-    let (package, name) = split_owner(owner);
-    let prefix = owner_prefix(package);
-    let id = decode_ident(name);
-    quote! { #prefix #id }
+    owner_path(owner, decode_ident)
 }
 
 /// Whether 0 is a value of a numeric scalar's declared range and step,
