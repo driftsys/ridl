@@ -80,11 +80,13 @@ enum Command {
         /// Compare the checked workspace against a published baseline — a
         /// directory of `.ir.json` snapshots or one snapshot file — and warn
         /// (RIDL-407) on every interaction whose ordinal moved and every
-        /// struct field or union arm change `ridl diff` gates on: a member
-        /// inserted, one removed, one moved in an edit that added or removed
-        /// no member, and one appended beside such a change or to a result
-        /// union. Without the flag, `.ridl/baseline/` at the workspace root
-        /// is used when it exists.
+        /// struct field or union arm change `ridl diff` gates on that
+        /// concerns an ordinal: a member inserted, one removed, one moved in
+        /// an edit that added or removed no member, and one appended beside
+        /// such a change or to a result union. An append that is breaking
+        /// only for its field's type moves no ordinal and draws no warning.
+        /// Without the flag, `.ridl/baseline/` at the workspace root is used
+        /// when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -1488,7 +1490,9 @@ struct CompositeBody {
 
 impl CompositeBody {
     /// The highest ordinal the body assigns or retires — the classifier's
-    /// mark for an append: a new member above it is compatible on its own.
+    /// mark for an append: a new member above it keeps every ordinal, though
+    /// an appended non-optional struct field whose type excludes 0 is still
+    /// breaking on its own (driftsys/ridl#598).
     fn high_water(&self) -> Option<u32> {
         self.live
             .iter()

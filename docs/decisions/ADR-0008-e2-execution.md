@@ -6,7 +6,9 @@ Accepted (agent-taken, maintainer-reviewable); decisions 15 to 21 are later
 amendments, each dated in its own text. Decision 14 was amended in place on
 2026-09-30, from the decision on driftsys/ridl#598: an appended non-optional
 struct field is breaking unless its type is a scalar, enum or enum set that
-allows the value 0. Each numbered decision below was taken to unblock the epic
+allows the value 0. `ridl diff` resolves the field's type against the new
+snapshot and the built-in `ridl.std`, and any other type it cannot resolve is
+reported as breaking. Each numbered decision below was taken to unblock the epic
 E2 execution plan, which lives at
 `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` (moved from
 `docs/wip/` at epic close), and is reversible at the cost of a small refactor
