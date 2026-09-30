@@ -5818,3 +5818,26 @@ fn generate_with_resolves_a_reference_into_another_package() {
         "the foreign view is named by a path through the module tree, got:\n{with_others}"
     );
 }
+
+/// A declaration whose codec is withheld gets no view, so the claim table
+/// claims no view name for it (`codec::view_owners` keeps only roots with a
+/// finite bound). Here `Line` reaches a package `generate` is not handed, so
+/// its codec is withheld, and a declaration named `LineFbView`, which would
+/// meet `Line`'s view if one were emitted, builds.
+#[test]
+fn a_withheld_declaration_claims_no_view_name() {
+    let local = package(
+        "px.b",
+        vec![
+            struct_with_field("Line", "from", "px.a.Point"),
+            struct_with_field("LineFbView", "to", "px.a.Point"),
+        ],
+    );
+    let source = generate(&local)
+        .expect("a withheld declaration claims no view, so the package builds")
+        .rust_source;
+    assert!(
+        source.contains("__RIDL_FB_NO_CODEC_Line"),
+        "the codec of `Line` must be withheld, or this test proves nothing:\n{source}"
+    );
+}

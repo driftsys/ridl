@@ -5,8 +5,8 @@
 //!
 //! Each case is an experiment of that design's appendix. The source checks
 //! clean with `ridlc::check_source`, which runs no backend — so the refusal is
-//! the backend's, not the language's — and `generate_pipeline`, the entry point `ridl build --emit
-//! rust` calls, returns a `GenerateError` whose message holds the generated
+//! the backend's, not the language's — and `generate_pipeline`, the entry
+//! point `ridl build --emit rust` calls, returns a `GenerateError` whose message holds the generated
 //! name and each source. Without the claim tables every one of these sources
 //! emits a crate that rustc rejects (E0124 or E0428), except X-7a and X-7b,
 //! which the lowering's tuple collision already refused, and X-11, which the
@@ -18,7 +18,7 @@
 //! carries are refused (X-8c). X-8b's compile proof is in
 //! `name_collision_compile.rs`.
 
-use ridl_backend_rust::{WireEncoding, generate_pipeline};
+use ridl_backend_rust::{WireEncoding, generate, generate_face, generate_pipeline, generate_with};
 
 /// Requires that `source` checks with no error, and returns the message of
 /// the `GenerateError` the pipeline entry point returns for it, panicking
@@ -457,6 +457,318 @@ interface Cabin {
             "member `level`",
             "interface `Cabin`",
             "value namespace",
+        ],
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Each claim alone. The experiments above often meet in two namespaces at
+// once — a descriptor is a type and a value — so one claim can hide that
+// another is missing. Each source below meets its pair in one namespace only,
+// so dropping that one claim lets the package through and fails the test.
+// ---------------------------------------------------------------------------
+
+/// Requires that `source` checks clean and that the pipeline emits it, and
+/// returns the emitted source.
+fn builds(name: &str, source: &str) -> String {
+    let path = format!("{name}.ridl");
+    let checked = ridlc::check_source(&path, source);
+    let errors: Vec<_> = checked
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "{name}.ridl must check clean, got: {errors:?}"
+    );
+    let output = ridlc::compile(&path, source);
+    generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .unwrap_or_else(|err| panic!("{name}.ridl must build, got: {}", err.message))
+        .rust_source
+}
+
+/// A braced struct is a type and no value, so a struct named like a member's
+/// descriptor meets it in the type namespace only.
+#[test]
+fn a_struct_named_like_a_descriptor_is_refused_in_the_type_namespace() {
+    let message = refusal(
+        "struct_descriptor",
+        "package probe.structdesc
+
+type Level : integer [0..100]
+
+struct CabinTemperature {
+  level : Level
+}
+
+interface Cabin {
+  signal temperature : Level @10ms
+}
+",
+    );
+    names_all(
+        &message,
+        &[
+            "`CabinTemperature`",
+            "type namespace",
+            "declaration `CabinTemperature`",
+            "member `temperature`",
+        ],
+    );
+}
+
+/// An enum and a union are types and no value; each named like a member's
+/// descriptor is refused in the type namespace.
+#[test]
+fn an_enum_or_a_union_named_like_a_descriptor_is_refused() {
+    let enum_message = refusal(
+        "enum_descriptor",
+        "package probe.enumdesc
+
+type Level : integer [0..100]
+
+enum CabinMode {
+  OFF = 0
+  ON = 1
+}
+
+interface Cabin {
+  signal mode : Level @10ms
+}
+",
+    );
+    names_all(
+        &enum_message,
+        &["`CabinMode`", "type namespace", "declaration `CabinMode`"],
+    );
+
+    let union_message = refusal(
+        "union_descriptor",
+        "package probe.uniondesc
+
+type Level : integer [0..100]
+
+union CabinMode {
+  on : Level
+  off : Level
+}
+
+interface Cabin {
+  signal mode : Level @10ms
+}
+",
+    );
+    names_all(
+        &union_message,
+        &["`CabinMode`", "type namespace", "declaration `CabinMode`"],
+    );
+}
+
+/// An enum set is a tuple struct, a type and a value. A face module is a type
+/// only, so an enum set named like one is refused by the enum set's type
+/// claim alone.
+#[test]
+fn an_enum_set_named_like_a_face_module_is_refused() {
+    let message = refusal(
+        "enumset_module",
+        "package probe.enumsetmod
+
+type Level : integer [0..100]
+
+enumset cabin {
+  LOW = 0
+}
+
+interface Cabin {
+  signal level : Level @10ms
+}
+",
+    );
+    names_all(
+        &message,
+        &[
+            "`cabin`",
+            "type namespace",
+            "declaration `cabin`",
+            "the face module of interface `Cabin`",
+        ],
+    );
+}
+
+/// An induced tuple is a type and no value, and so is an interface's
+/// descriptor's meeting with it here: the tuple at `Ho.rn` is `HoRn`, the
+/// descriptor of interface `HoRn`. The tuple's type claim and the
+/// interface's type claim are each needed.
+#[test]
+fn a_tuple_named_like_an_interface_is_refused() {
+    let message = refusal(
+        "tuple_interface",
+        "package probe.tupleiface
+
+type Level : integer [0..100]
+
+struct Ho {
+  rn : (a : Level, b : Level)
+}
+
+interface HoRn {
+  signal level : Level @10ms
+}
+",
+    );
+    names_all(
+        &message,
+        &[
+            "`HoRn`",
+            "type namespace",
+            "the tuple at field path `Ho.rn`",
+            "the descriptor of interface `HoRn`",
+        ],
+    );
+}
+
+/// The view of the tuple at `Reading.bounds` is `ReadingBoundsFbView`, which a
+/// declaration already names.
+#[test]
+fn a_declaration_named_like_a_tuple_view_is_refused() {
+    let message = refusal(
+        "tuple_view",
+        "package probe.tupleview
+
+type Speed : integer [0..250]
+
+struct Reading {
+  bounds : (low : Speed, high : Speed)
+}
+
+struct ReadingBoundsFbView {
+  low : Speed
+}
+",
+    );
+    names_all(
+        &message,
+        &[
+            "`ReadingBoundsFbView`",
+            "declaration `ReadingBoundsFbView`",
+            "the FlatBuffers view of the tuple at field path `Reading.bounds`",
+            "`FbView`",
+        ],
+    );
+}
+
+/// A nested tuple's field path has every segment: `S.t.u`, not `S.u`.
+#[test]
+fn a_nested_tuple_is_named_by_its_whole_field_path() {
+    let message = refusal(
+        "nested_tuple",
+        "package probe.nested
+
+type Speed : integer [0..250]
+
+struct S {
+  t : (u : (minSpeed : Speed, min_speed : Speed), v : Speed)
+}
+",
+    );
+    names_all(
+        &message,
+        &["`min_speed`", "`STU`", "the tuple at field path `S.t.u`"],
+    );
+}
+
+/// `generate_face` emits every interface's descriptors and face, so it claims
+/// their names as the pipeline does.
+#[test]
+fn generate_face_claims_the_interfaces_it_emits() {
+    let output = ridlc::compile(
+        "face_entry.ridl",
+        "package probe.faceentry
+
+type Level : integer [0..100]
+
+interface Cabin {
+  signal XY : Level @10ms
+  signal x_y : Level @10ms
+}
+",
+    );
+    let err = generate_face(&output.package).expect_err("the pair is refused");
+    for part in ["`CabinXY`", "member `XY`", "member `x_y`"] {
+        assert!(
+            err.message.contains(part),
+            "must name {part:?}: {}",
+            err.message
+        );
+    }
+}
+
+/// `generate` and `generate_with` emit no descriptor and no face, so an
+/// interface's names claim nothing there, and the same source builds.
+#[test]
+fn generate_and_generate_with_claim_no_interface() {
+    let output = ridlc::compile(
+        "domain_entry.ridl",
+        "package probe.domainentry
+
+type Level : integer [0..100]
+
+interface Cabin {
+  signal XY : Level @10ms
+  signal x_y : Level @10ms
+}
+",
+    );
+    let alone = generate(&output.package).expect("generate emits no interface");
+    assert!(!alone.rust_source.contains("CabinXY"));
+    let with = generate_with(&output.package, &[]).expect("generate_with emits no interface");
+    assert!(!with.rust_source.contains("CabinXY"));
+}
+
+/// An interface whose members are all `fixed` has descriptors and no face
+/// module, so its face module name claims nothing and a declaration of that
+/// name builds.
+#[test]
+fn an_interface_with_no_face_module_claims_no_module_name() {
+    let emitted = builds(
+        "fixed_only",
+        "package probe.fixedonly
+
+type cabin : integer [0..100]
+
+interface Cabin {
+  fixed serial : cabin
+}
+",
+    );
+    assert!(
+        !emitted.contains("pub mod cabin"),
+        "the interface must emit no face module, or this test proves nothing:\n{emitted}"
+    );
+}
+
+/// An interface that declares only an event has a face module, which claims
+/// its name.
+#[test]
+fn an_event_only_interface_claims_its_module_name() {
+    let message = refusal(
+        "event_only",
+        "package probe.eventonly
+
+type cabin : integer [0..100]
+
+interface Cabin {
+  event warn : cabin @[100ms..1s]
+}
+",
+    );
+    names_all(
+        &message,
+        &[
+            "`cabin`",
+            "declaration `cabin`",
+            "the face module of interface `Cabin`",
         ],
     );
 }

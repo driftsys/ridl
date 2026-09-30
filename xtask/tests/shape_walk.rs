@@ -108,6 +108,12 @@ const ALLOWED: &[Allowed] = &[
               the reason the descriptor layer's is",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/src/claims.rs",
+        lines: 1,
+        why: "a test fixture: a unit test hands the claim table the one \
+              interface of a hand-written `ridl_ir::codegen::v1::Model`",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/src/lib.rs",
         lines: 2,
         why: "both reads are of `ridl_ir::codegen::v1::Model::interfaces`, \

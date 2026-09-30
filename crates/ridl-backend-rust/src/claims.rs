@@ -256,7 +256,8 @@ mod tests {
     //! two members that meet in either one have one `camel_case`, so their
     //! descriptors meet first in the package's table. These tests call the
     //! tables directly over a hand-written model, so that the tables stay
-    //! correct for the day an entry point reaches them.
+    //! correct for the day an entry point reaches them. The same holds for
+    //! an interface descriptor's value claim, for the reason its test gives.
 
     use super::face_module;
     use crate::face;
@@ -345,5 +346,36 @@ mod tests {
         ]);
         let module = face::module_ident(&iface);
         assert!(face_module(&iface, "Cabin", &module).is_ok());
+    }
+
+    /// An interface's descriptor is a unit struct, a value as well as a type.
+    /// The only name that meets it in the value namespace alone is a constant
+    /// of the interface's own name, which TYPL-009 refuses at check time, so
+    /// no source reaches this claim; the model here states the pair directly.
+    #[test]
+    fn an_interface_descriptor_claims_its_value() {
+        let model = v1::Model {
+            declarations: vec![v1::Declaration {
+                name: Some(spellings("Cabin")),
+                kind: Some(v1::declaration::Kind::Constant(Default::default())),
+                ..Default::default()
+            }],
+            interfaces: vec![interface(Vec::new())],
+            ..Default::default()
+        };
+        let ctx = crate::Ctx::over(&model);
+        let err = super::check(&ctx, &[&model.interfaces[0]]).expect_err("the pair is refused");
+        for part in [
+            "`Cabin`",
+            "value namespace",
+            "declaration `Cabin`",
+            "the descriptor of interface `Cabin`",
+        ] {
+            assert!(
+                err.message.contains(part),
+                "must name {part:?}: {}",
+                err.message
+            );
+        }
     }
 }
