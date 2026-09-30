@@ -1818,10 +1818,10 @@ fn hidden_by_child_package(package: &str, item: &Ident) -> bool {
 
 thread_local! {
     /// The package names of the model the innermost live [`Ctx`] was built
-    /// over, read by [`type_path`].
+    /// over, read by [`package_prefix`] for [`type_path`] and the codec.
     ///
     /// It is thread-local state rather than a parameter because [`type_path`]
-    /// is called from 26 sites in the codec, the descriptors, the face, the
+    /// is called from 27 sites in the codec, the descriptors, the face, the
     /// default derivation and this file, and [`package_prefix`] from the
     /// codec's paths to a view or a codec function. Several of those sites,
     /// the face's above all, carry no [`Ctx`], and the list is fixed for the

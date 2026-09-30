@@ -1235,7 +1235,7 @@ fn write_two_package_workspace(dir: &Path, source_a: &str, source_b: &str) -> Pa
 /// twice — once per field accessor of `Line`. The union is here for a
 /// different path: its arm reaches the foreign `__ridl_fb_*` free functions
 /// rather than a view literal, so it is what covers their `pub(crate)`.
-/// Emptying `owner_prefix` instead fails the path assertion below, not the
+/// Emptying the codec's `owner_path` prefix instead fails the path assertion below, not the
 /// compile, so the two assertions are independently load-bearing.
 #[test]
 fn a_cross_package_struct_or_union_reference_compiles() {

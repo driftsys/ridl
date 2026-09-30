@@ -3896,6 +3896,23 @@ fn type_path_writes_a_reference_a_child_package_hides_through_ridl_package() {
         "common",
         "a same-package reference stays bare"
     );
+
+    // The comparison is between Rust spellings: a type `loop` is `r#loop`
+    // and a type `self` is `self_`, and the child package segments `loop`
+    // and `self` are spelled the same way by `module_segment`, so each type
+    // is hidden and goes through `__ridl_package`.
+    let keywords = model("veh.loop", &["veh", "veh.self"]);
+    let _keywords = Ctx::over(&keywords);
+    assert_eq!(
+        super::type_path("veh.loop").to_string(),
+        "crate :: veh :: __ridl_package :: r#loop",
+        "a type `loop` beside a package `veh.loop` is hidden"
+    );
+    assert_eq!(
+        super::type_path("veh.self").to_string(),
+        "crate :: veh :: __ridl_package :: self_",
+        "a type `self` beside a package `veh.self` is hidden"
+    );
 }
 
 /// The escape of the four keywords that cannot be raw identifiers is
