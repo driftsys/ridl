@@ -193,6 +193,17 @@ under `pascal_case`, and of the in-tree backends only the Rust backend applies
 either transform. By this amendment's line those two checks are the Rust
 backend's. They stay where they are until a change needs to move them.
 
+The same line applies to the crate module tree that `ridlc` writes for
+`--emit rust` (driftsys/ridl#416). A type `common` of package `veh` and a child
+package `veh.common` are both legal, and in Rust the child package's module
+`veh::common` hides the type, because a module holds one type namespace. The
+module name is derived by the crate layout the backend chose, so the package is
+not refused: the Rust backend writes a reference to such a type through the
+module that package `veh`'s own file is loaded as,
+`crate::veh::__ridl_package::common`, and `ridlc` makes that module
+`#[doc(hidden)] pub` so that a consumer can name the type the same way. The type
+stays unreachable as `veh::common`, which names the module.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what
