@@ -3,11 +3,12 @@
 //! Rust namespace cannot hold are refused at `ridl build`, with one message
 //! that names the generated name and both sources.
 //!
-//! Each case is an experiment of that design's appendix. The source checks
-//! clean with `ridlc::check_source`, which runs no backend — so the refusal is
-//! the backend's, not the language's — and `generate_pipeline`, the entry
-//! point `ridl build --emit rust` calls, returns a `GenerateError` whose message holds the generated
-//! name and each source. Without the claim tables every one of these sources
+//! Each case in the first part is an experiment of that design's appendix.
+//! The source checks clean with `ridlc::check_source`, which runs no backend
+//! — so the refusal is the backend's, not the language's — and
+//! `generate_pipeline`, the entry point `ridl build --emit rust` calls,
+//! returns a `GenerateError` whose message holds the generated name and each
+//! source. Without the claim tables every one of these sources
 //! emits a crate that rustc rejects (E0124 or E0428), except X-7a and X-7b,
 //! which the lowering's tuple collision already refused, and X-11, which the
 //! FlatBuffers projection refused with a message that named neither source.
@@ -17,6 +18,12 @@
 //! claim nothing (X-8b builds), and the same members with a call the face
 //! carries are refused (X-8c). X-8b's compile proof is in
 //! `name_collision_compile.rs`.
+//!
+//! The second part is not from the appendix. It pins each claim on its own,
+//! and pins which interfaces each entry point claims for, so that dropping a
+//! claim, or claiming a name the backend does not emit, fails a test. Some of
+//! its cases expect a refusal and some expect a build, and a few call
+//! `generate`, `generate_with` or `generate_face` in place of the pipeline.
 
 use ridl_backend_rust::{WireEncoding, generate, generate_face, generate_pipeline, generate_with};
 
@@ -464,8 +471,11 @@ interface Cabin {
 // ---------------------------------------------------------------------------
 // Each claim alone. The experiments above often meet in two namespaces at
 // once — a descriptor is a type and a value — so one claim can hide that
-// another is missing. Each source below meets its pair in one namespace only,
-// so dropping that one claim lets the package through and fails the test.
+// another is missing. Each refused source below meets its pair in one
+// namespace only, so dropping that one claim lets the package through and
+// fails the test. The entry-point tests and the tests that expect a build
+// pin the other direction: a name the entry point does not emit is not
+// claimed.
 // ---------------------------------------------------------------------------
 
 /// Requires that `source` checks clean and that the pipeline emits it, and
@@ -596,10 +606,11 @@ interface Cabin {
     );
 }
 
-/// An induced tuple is a type and no value, and so is an interface's
-/// descriptor's meeting with it here: the tuple at `Ho.rn` is `HoRn`, the
-/// descriptor of interface `HoRn`. The tuple's type claim and the
-/// interface's type claim are each needed.
+/// An induced tuple is a type and no value. The tuple at `Ho.rn` is `HoRn`,
+/// which is also the name of the descriptor of interface `HoRn`. That
+/// descriptor is a type and a value, so the two meet in the type namespace
+/// only, and the tuple's type claim and the interface's type claim are each
+/// needed.
 #[test]
 fn a_tuple_named_like_an_interface_is_refused() {
     let message = refusal(
@@ -739,6 +750,72 @@ type cabin : integer [0..100]
 
 interface Cabin {
   fixed serial : cabin
+}
+",
+    );
+    assert!(
+        !emitted.contains("pub mod cabin"),
+        "the interface must emit no face module, or this test proves nothing:\n{emitted}"
+    );
+}
+
+/// An interface that declares only a command, or only a query, has a face
+/// module, which claims its name.
+#[test]
+fn a_call_only_interface_claims_its_module_name() {
+    let command_message = refusal(
+        "command_only",
+        "package probe.commandonly
+
+type cabin : integer [0..100]
+
+interface Cabin {
+  command set(level: cabin) @[..50ms]
+}
+",
+    );
+    names_all(
+        &command_message,
+        &[
+            "`cabin`",
+            "declaration `cabin`",
+            "the face module of interface `Cabin`",
+        ],
+    );
+
+    let query_message = refusal(
+        "query_only",
+        "package probe.queryonly
+
+type cabin : integer [0..100]
+
+interface Cabin {
+  query read(level: cabin): cabin @[..50ms]
+}
+",
+    );
+    names_all(
+        &query_message,
+        &[
+            "`cabin`",
+            "declaration `cabin`",
+            "the face module of interface `Cabin`",
+        ],
+    );
+}
+
+/// An interface that declares no member has descriptors and no face module,
+/// so its face module name claims nothing and a declaration of that name
+/// builds.
+#[test]
+fn an_interface_with_no_member_claims_no_module_name() {
+    let emitted = builds(
+        "no_member",
+        "package probe.nomember
+
+type cabin : integer [0..100]
+
+interface Cabin {
 }
 ",
     );
