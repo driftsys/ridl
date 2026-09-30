@@ -35,6 +35,21 @@ mod classify_tests;
 /// path is resolved against them to recover the typed IR the direction is read
 /// from. For a package present on only one side the caller passes that package
 /// as both arguments — those changes classify on their category alone.
+///
+/// A reference to a declaration of another package is not resolved here, and a
+/// type the diff cannot resolve is reported as breaking: an appended struct
+/// field typed from another package classifies breaking.
+/// [`diff_sets_in`](crate::diff_sets_in) resolves such a reference against every
+/// package of the new snapshot and the context packages, such as `ridl.std`.
+pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+    classify_in(change, old, new, &[])
+}
+
+/// [`classify`], with `scope` — every package of the new snapshot, and the
+/// context packages such as `ridl.std` — to resolve a reference to another
+/// package's declaration. Only the appended struct field reads it: whether its
+/// type is legal at 0 is decided by the declaration the new side names
+/// (driftsys/ridl#598).
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
@@ -45,7 +60,12 @@ mod classify_tests;
     clippy::wildcard_enum_match_arm,
     clippy::match_wildcard_for_single_variants
 )]
-pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+pub(crate) fn classify_in(
+    change: &Change,
+    old: &v2::Package,
+    new: &v2::Package,
+    scope: &[&v2::Package],
+) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
         // Every one of these is breaking in either direction.
@@ -94,7 +114,7 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
 
         Category::VisibilityChanged => visibility(change, old, new),
         Category::InteractionAppended => appended(change, old, new),
-        Category::DeclAdded => added(change, old, new),
+        Category::DeclAdded => added(change, old, new, scope),
         Category::ConstraintChanged => constraint(change, old, new),
         Category::TimingChanged => timing(change, old, new),
         Category::RpcBoundChanged => rpc_bound(change, old, new),
@@ -225,7 +245,10 @@ fn appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
 /// append-only rule ("new fields are added at the end of the struct or union"),
 /// and an enum value appends by taking a number above every live and every
 /// retired one.
-fn added(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+///
+/// An appended struct field must also be readable from an old payload, which
+/// does not carry it ([`absence_reads_as_legal`], driftsys/ridl#598).
+fn added(change: &Change, old: &v2::Package, new: &v2::Package, scope: &[&v2::Package]) -> Verdict {
     let Some((container, member)) = member_path(change) else {
         // One or two segments: a whole package, or a package-level decl,
         // interface, or service.
@@ -236,18 +259,19 @@ fn added(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         return Verdict::Breaking;
     };
 
-    // The member name is not needed: the append test is a property of the whole
-    // body, and reading the body is what catches a *surviving* member whose slot
-    // moved — which the walk does not report alongside an addition.
-    let _ = member;
-
+    // The append test is a property of the whole body, and reading the body is
+    // what catches a *surviving* member whose slot moved — which the walk does
+    // not report alongside an addition. The member name is read only for a
+    // struct field, whose type decides whether an old payload stays readable.
     use v2::decl::Kind;
     let appended = match (&old_decl.kind, &new_decl.kind) {
-        (Some(Kind::StructDef(old_def)), Some(Kind::StructDef(new_def))) => appended_slot(
-            &struct_slots(old_def),
-            &struct_reserved(old_def),
-            &struct_slots(new_def),
-        ),
+        (Some(Kind::StructDef(old_def)), Some(Kind::StructDef(new_def))) => {
+            appended_slot(
+                &struct_slots(old_def),
+                &struct_reserved(old_def),
+                &struct_slots(new_def),
+            ) && absence_reads_as_legal(new_def, member, new, scope)
+        }
         (Some(Kind::UnionDef(old_def)), Some(Kind::UnionDef(new_def))) => {
             // A result union's arms are its transport identity (ADR-0008
             // decision 4): any arm change flips it.
@@ -277,6 +301,131 @@ fn added(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         Verdict::Compatible
     } else {
         Verdict::Breaking
+    }
+}
+
+/// Whether a reader built against `new_set` refuses a payload in which the
+/// field `member` of struct `container`, in package `package`, is absent —
+/// the rule that makes an appended field breaking for its type
+/// (driftsys/ridl#598). `context` holds packages that references resolve
+/// against without being compared, such as `ridl.std`. `false` when
+/// `container` is not a struct of that package. The `ridl check` desk check
+/// reads it to say so in its RIDL-407 message for an append that also sits
+/// beside a moved sibling.
+pub fn absence_refused(
+    new_set: &[v2::Package],
+    context: &[v2::Package],
+    package: &str,
+    container: &str,
+    member: &str,
+) -> bool {
+    let scope: Vec<&v2::Package> = new_set.iter().chain(context).collect();
+    let Some(home) = new_set.iter().find(|candidate| candidate.name == package) else {
+        return false;
+    };
+    match find_decl(home, container).and_then(|decl| decl.kind.as_ref()) {
+        Some(v2::decl::Kind::StructDef(def)) => !absence_reads_as_legal(def, member, home, &scope),
+        _ => false,
+    }
+}
+
+/// Whether a reader built against the new struct body accepts a payload the old
+/// body wrote, in which the appended field `member` is absent
+/// (driftsys/ridl#598).
+///
+/// An optional field reads as absent. A non-optional field reads as the
+/// FlatBuffers default, 0, when its type is a scalar, an enum or an enum set and
+/// 0 is a legal value of that type. That is the condition under which the
+/// FlatBuffers codec of `ridl-backend-rust` reads the absent field instead of
+/// refusing it as a missing required field (driftsys/ridl#472), and the two
+/// share its definition, [`ridl_ir::zero`]. Every other absent non-optional
+/// field is refused: a string, bytes, struct, union, tuple, array or map field
+/// is an offset with no default, and a scalar or enum whose type excludes 0 has
+/// no legal value to read.
+///
+/// A type the classifier cannot resolve reads as refused, following the module's
+/// unlisted-is-breaking rule: a type the diff cannot resolve is reported as
+/// breaking. That includes a reference to another package when `scope` does
+/// not hold it. No snapshot carries `ridl.std`, so it resolves only when the
+/// caller passes it as context, as the `ridl` CLI does.
+fn absence_reads_as_legal(
+    def: &v2::StructDef,
+    member: &str,
+    home: &v2::Package,
+    scope: &[&v2::Package],
+) -> bool {
+    let Some(r#type) = def.members.iter().find_map(|slot| match &slot.member {
+        Some(v2::struct_member::Member::Field(field)) if field.name == member => {
+            field.r#type.as_ref()
+        }
+        _ => None,
+    }) else {
+        return false;
+    };
+    if r#type.optional {
+        return true;
+    }
+    use v2::field_type::Kind;
+    match &r#type.kind {
+        Some(Kind::Primitive(primitive)) => matches!(
+            v2::PrimitiveType::try_from(*primitive),
+            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
+        ),
+        Some(Kind::InlineScalar(def)) => scalar_holds_zero(def),
+        Some(Kind::Named(reference)) => {
+            use v2::decl::Kind as Decl;
+            match resolve(home, scope, reference).and_then(|decl| decl.kind.as_ref()) {
+                Some(Decl::TypeDef(def)) => scalar_holds_zero(def),
+                Some(Decl::EnumDef(def)) => ridl_ir::zero::enum_zero_member(&def.values).is_some(),
+                // An enum set at 0 is the empty set.
+                Some(Decl::EnumSetDef(_)) => true,
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Whether a named or inline scalar is legal at 0: a boolean, integer, float or
+/// unit backing whose constraint holds 0. A string or bytes backing has no
+/// default at all.
+fn scalar_holds_zero(def: &v2::TypeDef) -> bool {
+    let numeric = match def
+        .backing
+        .as_ref()
+        .and_then(|backing| backing.kind.as_ref())
+    {
+        Some(v2::backing::Kind::Unit(_)) => true,
+        Some(v2::backing::Kind::Primitive(primitive)) => matches!(
+            v2::PrimitiveType::try_from(*primitive),
+            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
+        ),
+        None => false,
+    };
+    numeric
+        && def.constraint.as_ref().is_none_or(|constraint| {
+            ridl_ir::zero::range_holds_zero(
+                constraint.min.as_deref(),
+                constraint.max.as_deref(),
+                constraint.step.as_deref(),
+            )
+        })
+}
+
+/// The declaration a type reference names on the new side, in the IR's
+/// canonical form: a bare `Name` in `home`, and `pkg.Name` in the package of
+/// that name — `home` itself or one of `scope`.
+fn resolve<'a>(
+    home: &'a v2::Package,
+    scope: &[&'a v2::Package],
+    reference: &str,
+) -> Option<&'a v2::Decl> {
+    match reference.rsplit_once('.') {
+        Some((package, name)) => std::iter::once(home)
+            .chain(scope.iter().copied())
+            .find(|candidate| candidate.name == package)
+            .and_then(|candidate| find_decl(candidate, name)),
+        None => find_decl(home, reference),
     }
 }
 
@@ -934,11 +1083,21 @@ pub fn explain(category: Category) -> &'static str {
             "A declaration, interface, or service present only in the new snapshot.\n",
             "  compatible  a new package-level decl, interface, or service; an enum\n",
             "              value appended above every live and retired number; a\n",
-            "              struct field or union arm appended at the end of the body\n",
-            "              (typl 7.4, append-only)\n",
+            "              union arm appended at the end of the body (typl 7.4,\n",
+            "              append-only); a struct field appended at the end of the body\n",
+            "              when it is optional, or when it is a scalar, enum, or enum set\n",
+            "              whose type allows the value 0\n",
             "  breaking    a member inserted below the highest slot ever used, a member\n",
             "              taking a retired number, any addition that moves a surviving\n",
-            "              member's slot, or any arm of a result union (ADR-0008 d4)\n",
+            "              member's slot, or any arm of a result union (ADR-0008 d4); a\n",
+            "              non-optional struct field appended whose type does not allow\n",
+            "              0 — a string, bytes, struct, union, tuple, array, or map, a\n",
+            "              scalar whose range or step excludes 0, an enum with no zero\n",
+            "              member, or a type the diff cannot resolve (ridl diff\n",
+            "              resolves ridl.std types). A reader of the new version\n",
+            "              refuses every payload of the old one, which does not carry\n",
+            "              the field (typl 7.4). Declare the new field optional instead\n",
+            "              (`field : T?`): an absent optional field reads as absent\n",
             "  note        an interface is matched by its interfaces.lock number (lock\n",
             "              design 7): a frozen number the old side never held is a new\n",
             "              interface, and so is every provisional one — a declaration\n",

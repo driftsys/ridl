@@ -362,7 +362,7 @@ follows the wrong `.fbs`. What this suite proves is that the codec's bytes are
 FlatBuffers and agree with the emitted schema; agreement between the emitted
 schema and ADR-0019 rests on the schema backend's own snapshots.
 
-Ten cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
+Thirteen cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
 
 1. bytes this codec writes are read by planus and compare equal field by field;
 2. bytes planus writes are accepted by `verify` and decode to the same value;
@@ -396,7 +396,16 @@ Ten cases, in `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`:
     type — `integer [0..10]` and `[-1.0..1.0 step 1.0]` read as 0, an enum whose
     zero member is declared second reads as that member, and `integer [1..10]`
     and `[-1.5..1.5 step 1.0]` (a grid without 0) are refused; an empty planus
-    box is read the same way.
+    box is read the same way;
+12. `ridl diff` calls an append compatible **exactly** when this codec reads a
+    buffer of the old version: over the evolution fixture, whose sixteen structs
+    each gain one field — optional, legal at 0, excluding 0, or with no default
+    at all — every append `ridl_diff::diff_packages` calls compatible verifies,
+    and every one it calls breaking is refused with `MissingRequired`
+    (driftsys/ridl#598);
+13. the emitted `.fbs` gives a field whose type excludes 0 — `c : Level`
+    (`[1..10]`) and `r : integer [1..10]` — no default annotation, while the
+    enum with no zero member carries `= null` (ADR-0019 decision 6).
 
 Cases 4, 5, 7, 9 and 11 are the default rule of driftsys/ridl#472, below: case 4
 is the reader rule at each table position and for each scalar kind, case 7 the
@@ -418,7 +427,8 @@ with its own schema is exactly what a round trip through itself cannot see.
 Turning a short vtable into an error in `ridl-rt` leaves the round-trip suite
 passing and fails five conformance cases — 3, 4, 7, 9 and 11, each of which
 reads a buffer that planus or an earlier version of a type wrote without a
-trailing slot.
+trailing slot. Re-measured on 2026-09-30, after case 12 was added, it fails six:
+case 12 reads such a buffer for every struct of the evolution fixture.
 
 **What the cases do not reach.** An empty vector, a multi-byte UTF-8 string, and
 any assertion about alignment. A default-valued scalar inside a nested table was
@@ -464,13 +474,37 @@ enum field become an optional value (`planus`: `Option<T>`), and reads a buffer
 a foreign writer produced from the earlier schema, with such a field omitted at
 0, as absent where it read 0; this codec already read that field as absent.
 
-**What stays open.** `ridl diff` calls appending a non-optional field
-compatible, and under this rule that is true where 0 is a legal value of the
-field's type. Where it is not — `c : Level [1..10]`, or an enum with no zero
-member — a reader of the new version refuses every buffer of the old one, which
-case 9 measures. That is **driftsys/ridl#598**, a `ridl diff` question rather
-than a codec one. E11.8 meets the same reader rule in proto3 terms, where it is
-forced: proto3 gives a non-optional scalar no presence, so an absent one is 0.
+**Appending a field (driftsys/ridl#598, decided 2026-09-30).** A reader of a new
+version meets a buffer of the old one with every appended field absent, so
+`ridl diff` classifies an append by what this reader does with that absence
+(ADR-0008 decision 14 as amended, typl §7.4). An appended optional field is
+compatible. An appended non-optional scalar, enum or enum set is compatible when
+0 is a legal value of its type, which is when this codec reads it as 0. Every
+other appended non-optional field — a string, bytes, table, union or collection,
+or a scalar or enum whose type excludes 0, such as `c : Level [1..10]` — is
+breaking, because this codec refuses the old buffer with `MissingRequired` (case
+9). A type the diff cannot resolve is reported as breaking; `ridl diff` resolves
+types against the new snapshot and the built-in `ridl.std`. The codec and the
+diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
+`codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the lowering's enum zero
+member comes from `ridl_ir::zero::enum_zero_member`. Case 12 ties the two
+together over one fixture. E11.8 meets the same reader rule in proto3 terms,
+where it is forced: proto3 gives a non-optional scalar no presence, so an absent
+one is 0.
+
+**A foreign reader does not refuse.** The emitted `.fbs` gives a field such as
+`c : Level [1..10]` no default annotation — FlatBuffers has no way to mark a
+scalar field required (ADR-0019 decision 6) — so a foreign reader generated from
+it, planus or `flatc`, reads an absent `c` as 0, a value outside the field's
+range, where this codec refuses the buffer. This codec writes every non-optional
+field, so under the rule above such an absence reaches a reader only from an
+append `ridl diff` reports as breaking, or from a foreign writer that left the
+field out; a foreign consumer that must reject it checks the range itself. Case
+13 pins the schema half: the emitted field carries no default annotation, so its
+default is the implicit 0. What a foreign reader then does with an absent field
+is what the FlatBuffers format specifies for an absent scalar, and is not
+measured here: that would need a second checked-in planus reader, generated from
+the evolution fixture.
 
 ## `wasm32`
 
@@ -490,11 +524,10 @@ the test already performs over the emitter's live output.
 
 ## Known gaps
 
-| Gap                                                                                                                                                           | Issue             |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify`                                                                  | driftsys/ridl#469 |
-| Appending a non-optional field whose type excludes 0 is called compatible by `ridl diff`, and a reader of the new version refuses every buffer of the old one | driftsys/ridl#598 |
-| A union-arm retirement would shift wire discriminants silently                                                                                                | driftsys/ridl#302 |
+| Gap                                                                                          | Issue             |
+| -------------------------------------------------------------------------------------------- | ----------------- |
+| An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify` | driftsys/ridl#469 |
+| A union-arm retirement would shift wire discriminants silently                               | driftsys/ridl#302 |
 
 **driftsys/ridl#467 is closed by E11.14 (2026-09-21).** It was the widest of
 these: ten of the corpus's fifteen payload types were withheld a codec, every
@@ -513,7 +546,9 @@ which is what it now says.
 a gap — a conforming writer's omitted default was refused, and a present
 default-valued optional scalar was lost by a foreign round trip — and it is
 closed by the reader rule and ADR-0019 decision 9, as "A default and presence"
-above records. Its one remainder is driftsys/ridl#598, in the table.
+above records. Its one remainder, driftsys/ridl#598, was decided on 2026-09-30:
+`ridl diff` now calls an append breaking where this codec refuses the old buffer
+("Appending a field" above).
 
 ## Trace
 

@@ -941,6 +941,96 @@ fn check_is_silent_for_a_struct_field_or_union_arm_append() {
     }
 }
 
+/// A non-optional struct field appended at the end whose type excludes 0 —
+/// here `Level`, `[1..3]` — is breaking for its type: a reader of the new
+/// version refuses every payload of the old one, which does not carry the
+/// field (driftsys/ridl#598). `ridl diff` exits 1 on it, and the desk check
+/// stays silent, because no ordinal moved. Declared optional, the same field
+/// is compatible.
+#[test]
+fn an_appended_struct_field_whose_type_excludes_zero_fails_the_gate_and_not_the_desk() {
+    for (label, field, code_wanted, verdict) in [
+        ("append-level", "hinge: Level", 1, "breaking"),
+        ("append-optional-level", "hinge: Level?", 0, "compatible"),
+    ] {
+        let dir = TempDir::new(label);
+        let source = COMPOSITES.replacen(
+            "struct Report {",
+            "type Level: integer [1..3]\nstruct Report {",
+            1,
+        );
+        let root = package_workspace(&dir, &source);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &source.replacen(
+                "  latch: LatchState\n}\nunion",
+                &format!("  latch: LatchState\n  {field}\n}}\nunion"),
+                1,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert!(
+            diff.contains(&format!("[{verdict}] decl_added veh.cluster/Report/hinge")),
+            "{label}: the diff reports the appended field as {verdict}:\n{diff}",
+        );
+        assert_eq!(code, code_wanted, "{label}: the gate's exit code:\n{diff}");
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert!(
+            !stderr.contains("RIDL-407"),
+            "{label}: an append moves no ordinal, so it draws no desk warning:\n{stderr}",
+        );
+        assert_eq!(code, 0, "{label}: the desk check stays clean:\n{stderr}");
+    }
+
+    let (code, stdout, _) = ridl(&["diff".as_ref(), "--explain".as_ref(), "decl_added".as_ref()]);
+    assert_eq!(
+        code, 0,
+        "--explain decl_added prints the rule row:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("(`field : T?`)"),
+        "the rule row tells the author to declare the new field optional:\n{stdout}",
+    );
+}
+
+/// A struct field appended with a `ridl.std` type is judged by that type's
+/// declaration, although no snapshot carries `ridl.std`: `ridl diff` resolves
+/// it against the built-in package (driftsys/ridl#598). `Timestamp` and
+/// `Duration` allow 0, so appending one is compatible; `Label` is a string,
+/// which has no default, so appending it is breaking.
+#[test]
+fn an_appended_struct_field_with_a_standard_type_is_judged_by_its_declaration() {
+    for (label, field, code_wanted, verdict) in [
+        ("append-timestamp", "stamp: Timestamp", 0, "compatible"),
+        ("append-duration", "stamp: Duration", 0, "compatible"),
+        ("append-label", "stamp: Label", 1, "breaking"),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replacen(
+                "  latch: LatchState\n}\nunion",
+                &format!("  latch: LatchState\n  {field}\n}}\nunion"),
+                1,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert!(
+            diff.contains(&format!("[{verdict}] decl_added veh.cluster/Report/stamp")),
+            "{label}: the diff reports `{field}` as {verdict}:\n{diff}",
+        );
+        assert_eq!(code, code_wanted, "{label}: the gate's exit code:\n{diff}");
+    }
+}
+
 /// A `reserved` entry added above the live members shifts every ordinal
 /// after it while no declaration moves. `ridl diff` reports one
 /// `member_reordered` per shifted member; the desk check warns once for each
@@ -1171,29 +1261,43 @@ fn check_names_the_baseline_holder_of_an_inserted_member_ordinal() {
     }
 }
 
-/// A member appended at the end is compatible on its own, but `ridl diff`
-/// reports the addition as breaking when another member moved or left the
-/// body in the same edit, and reports no reorder beside an addition or a
-/// removal. The desk check warns on the appended member, says it is at the
-/// end, and names the sibling change the verdict stands for.
+/// `ridl diff` reports a member appended at the end as breaking when another
+/// member moved or left the body in the same edit, and reports no reorder
+/// beside an addition or a removal. The desk check warns on the appended
+/// member, says it is at the end, and names the sibling change the verdict
+/// stands for. When the appended struct field is also breaking on its own —
+/// its type does not allow 0, so a reader of the new version refuses a
+/// payload of the baseline (driftsys/ridl#598) — the message says so and
+/// tells the author to declare it optional; otherwise it does not.
 #[test]
 fn check_explains_an_append_the_gate_reports_as_breaking() {
-    for (label, body, warnings, reason, location) in [
+    for (label, body, warnings, reason, field, by_type) in [
         (
             "swap-and-append",
             "struct Report {\n  latch: LatchState\n  door: DoorState\n  hinge: DoorState\n}",
             1,
             "because `latch` and `door` changed ordinal in the same edit",
-            "cluster.ridl:7:3",
+            "hinge: DoorState",
+            false,
         ),
         (
             "retire-and-append",
             "struct Report {\n  door: DoorState\n  reserved latch\n  hinge: DoorState\n}",
             2,
             "because `latch` is no longer declared in the same edit",
-            "cluster.ridl:7:3",
+            "hinge: DoorState",
+            false,
+        ),
+        (
+            "swap-and-append-excluding-zero",
+            "struct Report {\n  latch: LatchState\n  door: DoorState\n  hinge: integer [1..3]\n}",
+            1,
+            "because `latch` and `door` changed ordinal in the same edit",
+            "hinge: integer [1..3]",
+            true,
         ),
     ] {
+        let location = "cluster.ridl:7:3";
         let dir = TempDir::new(label);
         let root = package_workspace(&dir, COMPOSITES);
         let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
@@ -1232,7 +1336,14 @@ fn check_explains_an_append_the_gate_reports_as_breaking() {
             !block.contains("takes ordinal") && block.contains("this one stays at the end"),
             "{label}: an append is not told to move:\n{stderr}",
         );
-        assert_underlines(block, "hinge: DoorState", location, &stderr);
+        assert_eq!(
+            block.contains("`hinge` is also breaking on its own")
+                && block.contains("declare it optional, with `?` after its type"),
+            by_type,
+            "{label}: the message says the field is breaking for its type exactly when it \
+             is:\n{stderr}",
+        );
+        assert_underlines(block, field, location, &stderr);
         assert_eq!(
             code, 0,
             "{label}: the warnings leave the exit code alone:\n{stderr}",

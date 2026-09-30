@@ -24,7 +24,10 @@ other entry below is Accepted.
   authority for the interaction surface, IR v2 placement, the TypeScript second
   backend, `ridl diff` placement and its classifier rules, the `RIDL-`
   diagnostic allocations, a later amendment, decision 15, and six close-out
-  amendments, decisions 16 to 21).
+  amendments, decisions 16 to 21). Decision 14 amended 2026-09-30 from
+  driftsys/ridl#598: an appended non-optional struct field is breaking unless
+  its type is a scalar, enum or enum set that allows the value 0. A type the
+  diff cannot resolve is reported as breaking.
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
@@ -179,7 +182,9 @@ other entry below is Accepted.
   `table <Name>Box { value: … (id: 0); }`. Decision 8 is FlatBuffers-scoped like
   the other seven. Amended 2026-09-29, adding decision 9 from driftsys/ridl#472:
   an optional table field that holds a scalar or an enum takes `= null`, so a
-  present 0 survives a round trip through another implementation.
+  present 0 survives a round trip through another implementation. Amended
+  2026-09-30 from driftsys/ridl#598: decision 3's premise that every struct
+  field append is compatible is qualified, and its rule does not change.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a

@@ -80,11 +80,13 @@ enum Command {
         /// Compare the checked workspace against a published baseline — a
         /// directory of `.ir.json` snapshots or one snapshot file — and warn
         /// (RIDL-407) on every interaction whose ordinal moved and every
-        /// struct field or union arm change `ridl diff` gates on: a member
-        /// inserted, one removed, one moved in an edit that added or removed
-        /// no member, and one appended beside such a change or to a result
-        /// union. Without the flag, `.ridl/baseline/` at the workspace root
-        /// is used when it exists.
+        /// struct field or union arm change `ridl diff` gates on that
+        /// concerns an ordinal: a member inserted, one removed, one moved in
+        /// an edit that added or removed no member, and one appended beside
+        /// such a change or to a result union. An append that is breaking
+        /// only for its field's type moves no ordinal and draws no warning.
+        /// Without the flag, `.ridl/baseline/` at the workspace root is used
+        /// when it exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -388,11 +390,16 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     // The verdict is the contracts' alone: the system's placement and
     // composition changes are listed under their headings with no verdict
     // (rsdl reference §14).
+    // No snapshot carries `ridl.std`, so it is passed as context: a struct
+    // field appended with a `ridl.std` type is then judged by that type's
+    // declaration rather than reported breaking as unresolved
+    // (driftsys/ridl#598).
     let report = ridl_diff::diff_workspaces(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
+        &[ridlc::std_ir()],
     );
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
@@ -1258,7 +1265,10 @@ fn desk_check(
         }
     };
 
-    let report = ridl_diff::diff_sets(&baseline, &current);
+    // `ridl.std` is context, as in `run_diff`, so the desk reads the verdict
+    // the gate gives (driftsys/ridl#598).
+    let std = [ridlc::std_ir()];
+    let report = ridl_diff::diff_sets_in(&baseline, &current, &std);
     let index = DeclIndex::build(entry);
     let mut warnings = Vec::new();
     for change in &report.changes {
@@ -1267,7 +1277,7 @@ fn desk_check(
         } else if MEMBER_CATEGORIES.contains(&change.category)
             && change.verdict == ridl_diff::Verdict::Breaking
         {
-            let Some(drift) = member_drift(change, &baseline, &current) else {
+            let Some(drift) = member_drift(change, &baseline, &current, &std) else {
                 continue;
             };
             member_message(change, drift)
@@ -1424,14 +1434,19 @@ enum MemberDrift {
         moved: Vec<String>,
     },
     /// A member declared after every ordinal the baseline assigns or
-    /// retires — compatible on its own — in an edit that also moved,
-    /// removed or inserted another member, which is what makes the
-    /// classifier report the addition as breaking. The warning stands for
-    /// the siblings it names.
+    /// retires, in an edit that also moved, removed or inserted another
+    /// member, which makes the classifier report the addition as breaking.
+    /// The warning stands for the siblings it names. `refused_absent` says
+    /// the member is a struct field that is breaking on its own too: a
+    /// reader of this version refuses a payload of the baseline, which does
+    /// not carry the field (driftsys/ridl#598). An append with none of those
+    /// siblings beside it draws no warning, even when it is breaking for its
+    /// type: no ordinal moved.
     Appended {
         moved: Vec<String>,
         gone: Vec<String>,
         inserted: Vec<String>,
+        refused_absent: bool,
     },
     /// An arm appended to a union that is, or becomes, a result union, with
     /// no other change: breaking because a result union's arms are its
@@ -1475,7 +1490,9 @@ struct CompositeBody {
 
 impl CompositeBody {
     /// The highest ordinal the body assigns or retires — the classifier's
-    /// mark for an append: a new member above it is compatible on its own.
+    /// mark for an append: a new member above it keeps every ordinal, though
+    /// an appended non-optional struct field whose type excludes 0 is still
+    /// breaking on its own (driftsys/ridl#598).
     fn high_water(&self) -> Option<u32> {
         self.live
             .iter()
@@ -1562,11 +1579,13 @@ fn composite_body(
 /// change is, or `None` when the path is not `<package>/<container>/<member>`
 /// with a struct or union at `<container>` on both sides. The one exception
 /// is a removal whose container is no longer a struct or union in the
-/// workspace: it is reported as a bare removal.
+/// workspace: it is reported as a bare removal. `std` is the built-in
+/// `ridl.std`, which a field type may name ([`ridl_diff::absence_refused`]).
 fn member_drift(
     change: &ridl_diff::Change,
     baseline: &[ridl_ir::v2::Package],
     current: &[ridl_ir::v2::Package],
+    std: &[ridl_ir::v2::Package],
 ) -> Option<MemberDrift> {
     let mut parts = change.path.split('/');
     let (Some(package), Some(container), Some(member), None) =
@@ -1608,17 +1627,24 @@ fn member_drift(
                     })
                     .map(|(name, _)| name.clone())
                     .collect();
-                if moved.is_empty()
-                    && gone.is_empty()
-                    && inserted.is_empty()
-                    && (before.result || after.result)
-                {
+                let alone = moved.is_empty() && gone.is_empty() && inserted.is_empty();
+                if alone && (before.result || after.result) {
                     MemberDrift::ResultArm
+                } else if alone {
+                    // A struct field appended alone and still reported breaking
+                    // is breaking for its type: a reader of the new version
+                    // refuses an old payload, which does not carry the field
+                    // (driftsys/ridl#598). No ordinal moved, so it is not the
+                    // drift RIDL-407 reports; `ridl diff` gates it.
+                    return None;
                 } else {
                     MemberDrift::Appended {
                         moved,
                         gone,
                         inserted,
+                        refused_absent: ridl_diff::absence_refused(
+                            current, std, package, container, member,
+                        ),
                     }
                 }
             })
@@ -1724,6 +1750,7 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             moved,
             gone,
             inserted,
+            refused_absent,
         } => {
             let mut reasons = Vec::new();
             if !moved.is_empty() {
@@ -1735,16 +1762,23 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             if !inserted.is_empty() {
                 reasons.push(format!("{} was inserted", quoted_list(&inserted)));
             }
-            if reasons.is_empty() {
-                reasons.push("the body changed".to_string());
-            }
+            let by_type = if refused_absent {
+                format!(
+                    ". `{name}` is also breaking on its own: its type does not allow the value \
+                     0, so a reader built against this version refuses a payload of the \
+                     baseline, which does not carry the field (typl §7.4) — declare it \
+                     optional, with `?` after its type"
+                )
+            } else {
+                String::new()
+            };
             format!(
                 "`{name}` is declared{in_shape} after every ordinal the published baseline \
                  assigns or retires, and `ridl diff` still reports the addition as breaking \
                  because {} in the same edit. The diff reports no reorder beside an addition or \
                  a removal, so this warning stands for that change: a struct field or union arm \
                  keeps its ordinal for ever (typl §7.4) — put the other members back where the \
-                 baseline has them; this one stays at the end",
+                 baseline has them; this one stays at the end{by_type}",
                 reasons.join(" and "),
             )
         }

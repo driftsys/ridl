@@ -826,10 +826,13 @@ diag_codes! {
         /// `reserved` entries; a member whose ordinal moved in an edit that
         /// added or removed none, by a reorder or by a `reserved` entry
         /// added, moved or removed above it; and a member appended beside
-        /// any of those, which the diff reports as breaking although the
-        /// append is compatible on its own. An append alone draws nothing,
-        /// except an arm added to a result union, whose arms are its
-        /// transport identity (ADR-0008 decision 4).
+        /// any of those, which the diff reports as breaking for that
+        /// sibling change — the message also says when the appended struct
+        /// field is breaking for its type, and tells the author to declare it
+        /// optional (driftsys/ridl#598). An append alone draws nothing, not
+        /// even one breaking for its type, which moves no ordinal, except an
+        /// arm added to a result union, whose arms are its transport
+        /// identity (ADR-0008 decision 4).
         /// The diff reports no reorder beside an addition or a removal, so
         /// the warning for an added or removed member names the siblings
         /// whose ordinal changed. An enum value's or enum-set bit's reorder

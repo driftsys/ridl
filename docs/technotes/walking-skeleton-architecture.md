@@ -121,7 +121,9 @@ that.
   goes through `prost-reflect` over a descriptor pool that `build.rs` writes to
   `OUT_DIR` and `lib.rs` embeds, from the same compilation that generates the
   types; binary needs neither. JSON is the form `ridl baseline` writes and
-  `ridl diff` reads.
+  `ridl diff` reads. `ridl_ir::zero` holds the one definition of whether the
+  value 0 is legal for a type, which the Rust FlatBuffers codec and
+  `ridl-diff`'s classifier both call (driftsys/ridl#598).
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and

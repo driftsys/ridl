@@ -1793,6 +1793,7 @@ dependencies = [
  "quote",
  "ridl-backend-flatbuffers",
  "ridl-core",
+ "ridl-diff",
  "ridl-ir",
  "ridl-loopback",
  "ridl-rt",

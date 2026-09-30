@@ -32,7 +32,7 @@ mod classify;
 pub mod system;
 mod walk;
 
-pub use classify::{category_from_word, classify, explain};
+pub use classify::{absence_refused, category_from_word, classify, explain};
 pub use system::{SystemChange, SystemHeading, diff_systems};
 
 #[cfg(test)]
@@ -296,9 +296,11 @@ pub(crate) fn frozen(interface: &ridl_ir::v2::Interface) -> bool {
 }
 
 /// Settles the verdict of every change the walk of one package pair produced.
-fn classify_all(changes: &mut [Change], old: &Package, new: &Package) {
+/// `scope` is every package a reference to another package's declaration
+/// resolves against ([`classify::classify_in`]).
+fn classify_all(changes: &mut [Change], old: &Package, new: &Package, scope: &[&Package]) {
     for change in changes {
-        change.verdict = classify(change, old, new);
+        change.verdict = classify::classify_in(change, old, new, scope);
     }
 }
 
@@ -319,18 +321,37 @@ pub(crate) fn report(changes: Vec<Change>) -> DiffReport {
 
 /// Compares two resolved packages. Matched packages share a name; the new
 /// package's name is used as the path prefix.
+///
+/// Only the pair is in hand, so a type from another package does not resolve,
+/// and a type the diff cannot resolve is reported as breaking: a struct field
+/// appended with such a type classifies breaking (driftsys/ridl#598).
+/// [`diff_sets_in`] resolves it.
 pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &mut changes);
-    classify_all(&mut changes, old, new);
+    classify_all(&mut changes, old, new, &[]);
     report(changes)
 }
 
 /// Compares two sets of resolved packages, matching by package name. A package
 /// present only on one side is a [`Category::DeclRemoved`] or
 /// [`Category::DeclAdded`]; matched packages are walked pairwise.
+///
+/// [`diff_sets_in`] with no context: a type from a package outside `new`, such
+/// as `ridl.std`, which no snapshot carries, does not resolve, and a type the
+/// diff cannot resolve is reported as breaking.
 pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
+    diff_sets_in(old, new, &[])
+}
+
+/// [`diff_sets`], with `context`: packages that a type reference resolves
+/// against without being compared. The `ridl` CLI passes the built-in
+/// `ridl.std` here, so a struct field appended with a `ridl.std` type is judged
+/// by that type's declaration (driftsys/ridl#598).
+pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
     use std::collections::BTreeMap;
+
+    let scope: Vec<&Package> = new.iter().chain(context).collect();
 
     let old_by: BTreeMap<&str, &Package> = old.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
     let new_by: BTreeMap<&str, &Package> = new.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
@@ -344,7 +365,7 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
             Some(new_pkg) => {
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, new_pkg, &mut pair);
-                classify_all(&mut pair, old_pkg, new_pkg);
+                classify_all(&mut pair, old_pkg, new_pkg, &scope);
                 changes.append(&mut pair);
             }
             // A package present on one side only: the change classifies on its
@@ -358,7 +379,7 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
                     Some(format!("package {name}")),
                     None,
                 );
-                classify_all(&mut pair, old_pkg, old_pkg);
+                classify_all(&mut pair, old_pkg, old_pkg, &[]);
                 changes.append(&mut pair);
             }
         }
@@ -373,7 +394,7 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
                 None,
                 Some(format!("package {name}")),
             );
-            classify_all(&mut pair, new_pkg, new_pkg);
+            classify_all(&mut pair, new_pkg, new_pkg, &[]);
             changes.append(&mut pair);
         }
     }
@@ -385,13 +406,16 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 /// carry a lowered system — the system's placement and composition changes,
 /// which carry no verdict. A system on one side only is not compared: there is
 /// nothing to compare it against.
+///
+/// `context` is passed to [`diff_sets_in`].
 pub fn diff_workspaces(
     old: &[Package],
     old_system: Option<&System>,
     new: &[Package],
     new_system: Option<&System>,
+    context: &[Package],
 ) -> DiffReport {
-    let mut report = diff_sets(old, new);
+    let mut report = diff_sets_in(old, new, context);
     if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
         report.system = diff_systems(old_system, new_system);
     }

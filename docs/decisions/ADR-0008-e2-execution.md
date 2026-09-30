@@ -3,8 +3,13 @@
 ## Status
 
 Accepted (agent-taken, maintainer-reviewable); decisions 15 to 21 are later
-amendments, each dated in its own text. Each numbered decision below was taken
-to unblock the epic E2 execution plan, which lives at
+amendments, each dated in its own text. Decision 14 was amended in place on
+2026-09-30, from the decision on driftsys/ridl#598: an appended non-optional
+struct field is breaking unless its type is a scalar, enum or enum set that
+allows the value 0. `ridl diff` resolves the field's type against the new
+snapshot and the built-in `ridl.std`, and any other type it cannot resolve is
+reported as breaking. Each numbered decision below was taken to unblock the epic
+E2 execution plan, which lives at
 `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` (moved from
 `docs/wip/` at epic close), and is reversible at the cost of a small refactor
 before a later epic builds on it. This ADR follows the pattern of ADR-0006 (E0)
@@ -595,6 +600,28 @@ disagreeing sources is the correct one.
     facade, not in `ridlc`, consistent with decision 9. Contract clauses are
     carried in IR v2 as their canonical source text; a full expression tree
     arrives when the E5.1 function layer restructures the representation.
+
+    **Amended (2026-09-30), from the decision on driftsys/ridl#598:** an
+    appended struct field is compatible only when a reader of the new version
+    still reads a payload of the old one, in which the field is absent. It is
+    compatible when the field is optional, or when it is a scalar, an enum or an
+    enum set whose type allows the value 0 — the absent field reads as the wire
+    default, 0. Any other appended non-optional field — a string, bytes, struct,
+    union, tuple, array or map field, a scalar whose range or step excludes 0,
+    an enum with no zero member, or a type the classifier cannot resolve — is
+    breaking, under the existing `decl_added` category, and
+    `ridl diff --explain decl_added` tells the author to declare the new field
+    optional (`field : T?`). The type is resolved against the new snapshot and
+    the built-in `ridl.std`, and a type the diff cannot resolve is reported as
+    breaking. The rule is the one the Rust FlatBuffers codec applies when it
+    reads an absent field (driftsys/ridl#472, ADR-0019 decision 6 as amended on
+    2026-09-29), and the two share one definition of "0 is a legal value",
+    `ridl_ir::zero`. Every other change this decision lists keeps its
+    classification; typl §7.4 states the rule as the decoder rule for backward
+    compatibility. A second `ridl check` diagnostic for the same rule, and an
+    explicit field default in typl, were considered and not taken: the first
+    duplicates the gate, and the second needs new syntax and an IR change, does
+    not help a string or struct field, and cannot be carried by proto3.
 
 15. **Amendment (2026-07-25) — `ridlc`'s workspace output carries the checker's
     resolution and the `ridl.std` IR.** `WorkspaceOutput` gains two fields:

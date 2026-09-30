@@ -813,8 +813,9 @@ target has none, as FlatBuffers does.
 
 - **`ridl-diff` is the enforcement point.** Ordinals are fully derivable from
   source — no sidecar state, no lockfile-assigned numbers. The CI plane
-  (`ridl-diff` against the previous IR snapshot) rejects reorder, insertion, and
-  un-tombstoned deletion in published packages.
+  (`ridl-diff` against the previous IR snapshot) rejects reorder, insertion,
+  un-tombstoned deletion, and an append that the backward-compatibility decoder
+  rule below cannot read, in published packages.
 
 - **Decoder rule for forward compatibility.** The flip side of append-only: a
   decoder built against version _n_ of a struct, receiving a payload from a
@@ -824,6 +825,22 @@ target has none, as FlatBuffers does.
   length-prefixed framing (SOME/IP TLV) or is simply unavailable (CAN) — where
   unavailable, mixed-version communication is a deployment error rsdl must
   surface (§17.9).
+
+- **Decoder rule for backward compatibility.** The other direction: a decoder
+  built against version _n+k_ of a struct, receiving a payload from a version
+  _n_ encoder, finds every field appended since _n_ absent. An absent optional
+  field reads as absent. An absent non-optional field reads as the transport's
+  default, 0, only when the field is a scalar, an enum or an enum set whose type
+  allows the value 0: a range and `step` that hold 0 (§4.3), an enum that
+  declares a member with the value 0, or any enum set (0 is the empty set). Any
+  other absent non-optional field — a string, bytes, struct, union, tuple, array
+  or map field, or a scalar or enum whose type excludes 0 — has no value to
+  read, and the decoder refuses the payload rather than invent one. So
+  `ridl-diff` reports appending a non-optional field as breaking unless its type
+  allows 0; the author declares the new field optional (`field : T?`) instead
+  (driftsys/ridl#598). A type the diff cannot resolve is reported as breaking;
+  `ridl diff` resolves types against the new snapshot and the built-in
+  `ridl.std`.
 
 **Rationale.** Explicit proto-style tags were considered and rejected: they
 impose a per-field numbering ritual on every struct — including the majority

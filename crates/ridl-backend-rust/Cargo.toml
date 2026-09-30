@@ -80,6 +80,11 @@ ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "std"] }
 # decision 9's rule that a backend is not a library other crates link is
 # about the shipped graph, not about a test binary.
 ridl-backend-flatbuffers = { path = "../ridl-backend-flatbuffers" }
+# The conformance test that ties the codec's reading of an absent field to the
+# verdict `ridl diff` gives the append that makes the field absent
+# (driftsys/ridl#598) runs the crate that owns that verdict. A dev-dependency
+# only, as it is for `ridl-backend-flatbuffers`'s stability property.
+ridl-diff = { path = "../ridl-diff" }
 planus.workspace = true
 planus-codegen.workspace = true
 planus-translation.workspace = true

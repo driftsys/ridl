@@ -1825,12 +1825,543 @@ fn a_union_arm_appended_to_a_result_union_is_breaking() {
 
 #[test]
 fn a_struct_field_appended_at_the_end_is_compatible() {
-    let old = decl_pkg(vec![struct_decl("S", vec![field("a", 1, "A")])]);
-    let new = decl_pkg(vec![struct_decl(
-        "S",
-        vec![field("a", 1, "A"), field("b", 2, "B")],
-    )]);
+    let a = scalar("A", bounds(Some("0"), Some("10")), v2::IntWidth::U8);
+    let b = scalar("B", bounds(Some("0"), Some("10")), v2::IntWidth::U8);
+    let old = decl_pkg(vec![
+        a.clone(),
+        b.clone(),
+        struct_decl("S", vec![field("a", 1, "A")]),
+    ]);
+    let new = decl_pkg(vec![
+        a,
+        b,
+        struct_decl("S", vec![field("a", 1, "A"), field("b", 2, "B")]),
+    ]);
     assert_row(&old, &new, Category::DeclAdded, Verdict::Compatible);
+}
+
+// --------------------------------------------------------------------------
+// An appended struct field, read from the side of a reader built against the
+// new version that receives a payload of the old one (driftsys/ridl#598). The
+// field is absent from that payload. An optional field reads as absent. A
+// non-optional scalar, enum or enum set reads as 0 when 0 is a legal value of
+// its type. Any other absent non-optional field is refused as a missing
+// required field, so appending it is breaking.
+// --------------------------------------------------------------------------
+
+/// A field of any type at `ordinal`.
+fn typed_field(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
+    v2::StructMember {
+        member: Some(v2::struct_member::Member::Field(v2::Field {
+            name: name.to_string(),
+            ordinal,
+            r#type: Some(r#type),
+            declared_init: None,
+            init: None,
+            doc: String::new(),
+            labels: Vec::new(),
+            deprecated: None,
+        })),
+    }
+}
+
+fn optional(mut r#type: v2::FieldType) -> v2::FieldType {
+    r#type.optional = true;
+    r#type
+}
+
+fn kind(kind: v2::field_type::Kind) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(kind),
+    }
+}
+
+fn primitive(primitive: v2::PrimitiveType) -> v2::FieldType {
+    kind(v2::field_type::Kind::Primitive(primitive as i32))
+}
+
+fn inline(constraint: v2::Constraint) -> v2::FieldType {
+    kind(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::Integer as i32,
+            )),
+        }),
+        constraint: Some(constraint),
+        declared_init: None,
+        init: None,
+        width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+    })))
+}
+
+/// A named scalar over `backing` with no width, the shape of a boolean, a
+/// string or a bytes type.
+fn backed(name: &str, backing: v2::PrimitiveType, constraint: Option<v2::Constraint>) -> v2::Decl {
+    decl(
+        name,
+        0,
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(backing as i32)),
+            }),
+            constraint,
+            declared_init: None,
+            init: None,
+            width: None,
+        }),
+    )
+}
+
+fn stepped(min: &str, max: &str, step: &str) -> v2::Constraint {
+    let mut constraint = bounds(Some(min), Some(max));
+    constraint.step = Some(step.to_string());
+    constraint
+}
+
+/// A named float scalar over `backing` — the `float` primitive or a unit —
+/// with a range.
+fn float_scalar(name: &str, backing: v2::backing::Kind, min: &str, max: &str) -> v2::Decl {
+    decl(
+        name,
+        0,
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(backing),
+            }),
+            constraint: Some(bounds(Some(min), Some(max))),
+            declared_init: None,
+            init: None,
+            width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
+        }),
+    )
+}
+
+fn enum_set_decl(name: &str) -> v2::Decl {
+    decl(
+        name,
+        0,
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("A", 0), enum_value("B", 1)],
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )
+}
+
+/// The declarations every append case below can name: `Count` holds 0,
+/// `Level` does not, `Gear` declares no zero member, `Mode` declares its zero
+/// member second.
+fn append_decls() -> Vec<v2::Decl> {
+    vec![
+        scalar("Count", bounds(Some("0"), Some("200")), v2::IntWidth::U8),
+        scalar("Level", bounds(Some("1"), Some("10")), v2::IntWidth::U8),
+        scalar("Below", bounds(Some("-10"), Some("-1")), v2::IntWidth::I8),
+        unconstrained("Free", v2::IntWidth::I64),
+        scalar("Even", stepped("-1.0", "1.0", "1.0"), v2::IntWidth::I8),
+        scalar("Odd", stepped("-1.5", "1.5", "1.0"), v2::IntWidth::I8),
+        enum_decl(
+            "Gear",
+            vec![enum_value("PARK", 1), enum_value("DRIVE", 2)],
+            vec![],
+        ),
+        enum_decl(
+            "Mode",
+            vec![enum_value("ON", 1), enum_value("OFF", 0)],
+            vec![],
+        ),
+        enum_set_decl("Flags"),
+        backed("Flag", v2::PrimitiveType::Boolean, None),
+        float_scalar(
+            "Ratio",
+            v2::backing::Kind::Primitive(v2::PrimitiveType::Float as i32),
+            "0.0",
+            "1.0",
+        ),
+        float_scalar(
+            "Upper",
+            v2::backing::Kind::Primitive(v2::PrimitiveType::Float as i32),
+            "0.5",
+            "1.0",
+        ),
+        float_scalar(
+            "Speed",
+            v2::backing::Kind::Unit("km/h".to_string()),
+            "0.0",
+            "300.0",
+        ),
+        float_scalar(
+            "Moving",
+            v2::backing::Kind::Unit("km/h".to_string()),
+            "10.0",
+            "300.0",
+        ),
+        backed(
+            "Label",
+            v2::PrimitiveType::String,
+            Some(v2::Constraint {
+                len_min: Some(1),
+                len_max: Some(64),
+                ..bounds(None, None)
+            }),
+        ),
+        backed(
+            "Blob",
+            v2::PrimitiveType::Bytes,
+            Some(v2::Constraint {
+                len_min: Some(1),
+                len_max: Some(64),
+                ..bounds(None, None)
+            }),
+        ),
+        struct_decl("Inner", vec![field("x", 1, "Count")]),
+        union_decl("Choice", vec![union_arm("count", 1, "Count")], false),
+    ]
+}
+
+/// The verdict of appending `b : <appended>` to `struct S { a : Count }`,
+/// over the declarations of [`append_decls`].
+#[track_caller]
+fn append_verdict(appended: v2::FieldType) -> Verdict {
+    let old = decl_pkg(
+        append_decls()
+            .into_iter()
+            .chain([struct_decl("S", vec![field("a", 1, "Count")])])
+            .collect(),
+    );
+    let new = decl_pkg(
+        append_decls()
+            .into_iter()
+            .chain([struct_decl(
+                "S",
+                vec![field("a", 1, "Count"), typed_field("b", 2, appended)],
+            )])
+            .collect(),
+    );
+    let report = diff_packages(&old, &new);
+    let change = row(&report, Category::DeclAdded);
+    assert_eq!(change.path, "veh.cluster/S/b");
+    assert_eq!(
+        report.verdict, change.verdict,
+        "the append is the only change, so it is the report verdict: {:?}",
+        report.changes
+    );
+    change.verdict
+}
+
+#[test]
+fn an_appended_optional_field_is_compatible_whatever_its_type() {
+    for name in [
+        "Level", "Gear", "Label", "Blob", "Inner", "Choice", "Missing",
+    ] {
+        assert_eq!(
+            append_verdict(optional(named(name))),
+            Verdict::Compatible,
+            "an appended `b : {name}?` reads as absent from an old payload"
+        );
+    }
+    let array = kind(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+        element: Some(Box::new(named("Count"))),
+        min: 0,
+        max: 4,
+    })));
+    assert_eq!(append_verdict(optional(array)), Verdict::Compatible);
+}
+
+#[test]
+fn an_appended_scalar_whose_type_holds_zero_is_compatible() {
+    for name in ["Count", "Free", "Even", "Flag", "Ratio", "Speed"] {
+        assert_eq!(
+            append_verdict(named(name)),
+            Verdict::Compatible,
+            "an absent `b : {name}` reads as 0, a legal value of its type"
+        );
+    }
+    for primitive_type in [
+        v2::PrimitiveType::Boolean,
+        v2::PrimitiveType::Integer,
+        v2::PrimitiveType::Float,
+    ] {
+        assert_eq!(
+            append_verdict(primitive(primitive_type)),
+            Verdict::Compatible,
+            "an absent `b : {primitive_type:?}` reads as 0"
+        );
+    }
+    assert_eq!(
+        append_verdict(inline(bounds(Some("0"), Some("10")))),
+        Verdict::Compatible,
+        "an absent `b : integer [0..10]` reads as 0"
+    );
+}
+
+/// `Odd` is `[-1.5..1.5 step 1.0]`: 0 lies inside the range and is not on its
+/// grid -1.5, -0.5, 0.5, 1.5.
+#[test]
+fn an_appended_scalar_whose_type_excludes_zero_is_breaking() {
+    for name in ["Level", "Below", "Odd", "Upper", "Moving"] {
+        assert_eq!(
+            append_verdict(named(name)),
+            Verdict::Breaking,
+            "an absent `b : {name}` is refused: 0 is not a legal value of its type"
+        );
+    }
+    assert_eq!(
+        append_verdict(inline(bounds(Some("1"), Some("10")))),
+        Verdict::Breaking,
+        "an absent `b : integer [1..10]` is refused"
+    );
+}
+
+#[test]
+fn an_appended_enum_follows_its_zero_member() {
+    assert_eq!(
+        append_verdict(named("Gear")),
+        Verdict::Breaking,
+        "an enum with no zero member refuses an absent field"
+    );
+    assert_eq!(
+        append_verdict(named("Mode")),
+        Verdict::Compatible,
+        "an enum that declares a zero member, in any position, reads an absent field as it"
+    );
+}
+
+/// An enum set at 0 is the empty set, which is always a legal value.
+#[test]
+fn an_appended_enum_set_is_compatible() {
+    assert_eq!(append_verdict(named("Flags")), Verdict::Compatible);
+}
+
+#[test]
+fn an_appended_string_or_bytes_field_is_breaking() {
+    for name in ["Label", "Blob"] {
+        assert_eq!(
+            append_verdict(named(name)),
+            Verdict::Breaking,
+            "an absent `b : {name}` is an absent offset, which has no default"
+        );
+    }
+    for primitive_type in [v2::PrimitiveType::String, v2::PrimitiveType::Bytes] {
+        assert_eq!(
+            append_verdict(primitive(primitive_type)),
+            Verdict::Breaking,
+            "an absent `b : {primitive_type:?}` has no default"
+        );
+    }
+}
+
+#[test]
+fn an_appended_table_or_union_field_is_breaking() {
+    for name in ["Inner", "Choice"] {
+        assert_eq!(
+            append_verdict(named(name)),
+            Verdict::Breaking,
+            "an absent `b : {name}` is an absent offset, which has no default"
+        );
+    }
+}
+
+#[test]
+fn an_appended_collection_or_tuple_field_is_breaking() {
+    let array = kind(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+        element: Some(Box::new(named("Count"))),
+        min: 0,
+        max: 4,
+    })));
+    let map = kind(v2::field_type::Kind::Map(Box::new(v2::MapType {
+        key: Some(Box::new(primitive(v2::PrimitiveType::String))),
+        value: Some(Box::new(named("Count"))),
+        min: 0,
+        max: 4,
+    })));
+    let tuple = kind(v2::field_type::Kind::Tuple(v2::TupleType {
+        fields: vec![v2::TupleField {
+            name: "x".to_string(),
+            r#type: Some(named("Count")),
+        }],
+    }));
+    for (what, appended) in [("an array", array), ("a map", map), ("a tuple", tuple)] {
+        assert_eq!(
+            append_verdict(appended),
+            Verdict::Breaking,
+            "{what} absent from an old payload has no default, even with a minimum of 0"
+        );
+    }
+}
+
+/// A type the classifier cannot find is not read as legal at 0: unlisted is
+/// breaking.
+#[test]
+fn an_appended_field_of_an_unresolved_type_is_breaking() {
+    assert_eq!(append_verdict(named("Missing")), Verdict::Breaking);
+}
+
+/// A field typed from another package is judged by that package's
+/// declaration, which [`diff_sets`](crate::diff_sets) holds and
+/// [`diff_packages`] does not: over one package pair the type is unresolved,
+/// and so breaking.
+#[test]
+fn an_appended_field_typed_from_another_package_is_judged_by_its_declaration() {
+    let units = v2::Package {
+        name: "veh.units".to_string(),
+        decls: append_decls(),
+        interfaces: Vec::new(),
+        services: Vec::new(),
+        retired: Vec::new(),
+    };
+    let body = |appended: &str| -> v2::Package {
+        let mut members = vec![field("a", 1, "veh.units.Count")];
+        if !appended.is_empty() {
+            members.push(field("b", 2, appended));
+        }
+        decl_pkg(vec![struct_decl("S", members)])
+    };
+    for (appended, verdict) in [
+        ("veh.units.Count", Verdict::Compatible),
+        ("veh.units.Level", Verdict::Breaking),
+        ("veh.units.Gear", Verdict::Breaking),
+        ("veh.units.Flags", Verdict::Compatible),
+    ] {
+        let report = crate::diff_sets(&[units.clone(), body("")], &[units.clone(), body(appended)]);
+        let change = row(&report, Category::DeclAdded);
+        assert_eq!(change.verdict, verdict, "`b : {appended}` across packages");
+    }
+    assert_eq!(
+        diff_packages(&body(""), &body("veh.units.Count")).verdict,
+        Verdict::Breaking,
+        "one package pair cannot resolve `veh.units.Count`"
+    );
+}
+
+/// Two fields appended in one edit are judged each by its own type: the
+/// classifier looks the appended field up by name, not by position.
+#[test]
+fn two_fields_appended_in_one_edit_are_judged_each_by_its_own_type() {
+    for (first, second) in [("Level", "Count"), ("Count", "Level")] {
+        let old = decl_pkg(
+            append_decls()
+                .into_iter()
+                .chain([struct_decl("S", vec![field("a", 1, "Count")])])
+                .collect(),
+        );
+        let new = decl_pkg(
+            append_decls()
+                .into_iter()
+                .chain([struct_decl(
+                    "S",
+                    vec![
+                        field("a", 1, "Count"),
+                        field("b", 2, first),
+                        field("c", 3, second),
+                    ],
+                )])
+                .collect(),
+        );
+        let report = diff_packages(&old, &new);
+        let verdict_of = |path: &str| {
+            report
+                .changes
+                .iter()
+                .find(|change| change.path == path)
+                .map(|change| change.verdict)
+        };
+        let expected = |name: &str| {
+            Some(if name == "Level" {
+                Verdict::Breaking
+            } else {
+                Verdict::Compatible
+            })
+        };
+        assert_eq!(
+            verdict_of("veh.cluster/S/b"),
+            expected(first),
+            "`b : {first}`"
+        );
+        assert_eq!(
+            verdict_of("veh.cluster/S/c"),
+            expected(second),
+            "`c : {second}`"
+        );
+    }
+}
+
+/// A field whose type is declared in the same edit is judged by the new
+/// package's declaration: the old package does not hold the type at all.
+#[test]
+fn an_appended_field_whose_type_is_new_in_the_same_edit_is_judged_by_the_new_package() {
+    for (fresh, verdict) in [
+        (
+            scalar("Fresh", bounds(Some("0"), Some("5")), v2::IntWidth::U8),
+            Verdict::Compatible,
+        ),
+        (
+            scalar("Fresh", bounds(Some("1"), Some("5")), v2::IntWidth::U8),
+            Verdict::Breaking,
+        ),
+    ] {
+        let old = decl_pkg(vec![
+            scalar("Count", bounds(Some("0"), Some("200")), v2::IntWidth::U8),
+            struct_decl("S", vec![field("a", 1, "Count")]),
+        ]);
+        let new = decl_pkg(vec![
+            scalar("Count", bounds(Some("0"), Some("200")), v2::IntWidth::U8),
+            fresh,
+            struct_decl("S", vec![field("a", 1, "Count"), field("b", 2, "Fresh")]),
+        ]);
+        let report = diff_packages(&old, &new);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.path == "veh.cluster/S/b")
+            .expect("the appended field is reported");
+        assert_eq!(change.verdict, verdict, "{:?}", report.changes);
+    }
+}
+
+/// `diff_sets` resolves a type of another package against the **new**
+/// snapshot's packages. Here the old `veh.units` declares `Count` over
+/// `[1..10]` and the new one over `[0..10]`, so the old declaration would
+/// give the opposite verdict.
+#[test]
+fn diff_sets_resolves_a_foreign_field_type_against_the_new_snapshot() {
+    let units = |min: &str| v2::Package {
+        name: "veh.units".to_string(),
+        decls: vec![scalar(
+            "Count",
+            bounds(Some(min), Some("10")),
+            v2::IntWidth::U8,
+        )],
+        interfaces: Vec::new(),
+        services: Vec::new(),
+        retired: Vec::new(),
+    };
+    let body = |appended: bool| -> v2::Package {
+        let mut members = vec![field("a", 1, "veh.units.Count")];
+        if appended {
+            members.push(field("b", 2, "veh.units.Count"));
+        }
+        decl_pkg(vec![struct_decl("S", members)])
+    };
+    for (old_min, new_min, verdict) in [
+        ("1", "0", Verdict::Compatible),
+        ("0", "1", Verdict::Breaking),
+    ] {
+        let report = crate::diff_sets(
+            &[units(old_min), body(false)],
+            &[units(new_min), body(true)],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.path == "veh.cluster/S/b")
+            .expect("the appended field is reported");
+        assert_eq!(
+            change.verdict, verdict,
+            "`Count` from [{old_min}..10] to [{new_min}..10]: {:?}",
+            report.changes
+        );
+    }
 }
 
 /// The classifier is the **only** line of defence here, so this is the module's
@@ -2223,4 +2754,66 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
 #[test]
 fn an_unknown_category_word_has_no_rule_row() {
     assert_eq!(super::category_from_word("no_such_category"), None);
+}
+
+/// A package passed to [`diff_sets_in`](crate::diff_sets_in) as context — the
+/// `ridl` CLI passes the built-in `ridl.std`, which no snapshot carries —
+/// resolves an appended field's type without being compared. Without it the
+/// type is unresolved, and a type the diff cannot resolve is breaking.
+#[test]
+fn a_context_package_resolves_an_appended_field_type() {
+    let std = v2::Package {
+        name: "ridl.std".to_string(),
+        decls: vec![
+            scalar(
+                "Timestamp",
+                bounds(Some("0"), Some("9223372036854775807")),
+                v2::IntWidth::I64,
+            ),
+            backed(
+                "Label",
+                v2::PrimitiveType::String,
+                Some(v2::Constraint {
+                    len_min: Some(1),
+                    len_max: Some(64),
+                    ..bounds(None, None)
+                }),
+            ),
+        ],
+        interfaces: Vec::new(),
+        services: Vec::new(),
+        retired: Vec::new(),
+    };
+    let body = |appended: Option<&str>| -> v2::Package {
+        let mut members = vec![field("a", 1, "ridl.std.Timestamp")];
+        if let Some(appended) = appended {
+            members.push(field("b", 2, appended));
+        }
+        decl_pkg(vec![struct_decl("S", members)])
+    };
+    for (appended, with_context) in [
+        ("ridl.std.Timestamp", Verdict::Compatible),
+        ("ridl.std.Label", Verdict::Breaking),
+    ] {
+        let old = [body(None)];
+        let new = [body(Some(appended))];
+        let report = crate::diff_sets_in(&old, &new, std::slice::from_ref(&std));
+        assert_eq!(
+            row(&report, Category::DeclAdded).verdict,
+            with_context,
+            "`b : {appended}` with `ridl.std` as context"
+        );
+        assert_eq!(
+            report.changes.len(),
+            1,
+            "a context package is not compared: {:?}",
+            report.changes
+        );
+        let report = crate::diff_sets(&old, &new);
+        assert_eq!(
+            row(&report, Category::DeclAdded).verdict,
+            Verdict::Breaking,
+            "`b : {appended}` with no context is unresolved"
+        );
+    }
 }
