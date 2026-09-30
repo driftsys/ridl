@@ -588,6 +588,9 @@ pub(crate) struct Ctx<'a> {
     /// forever (C1b). The recursion inserts a name on entry and removes it on
     /// exit, so between top-level declarations the set is empty.
     visiting: RefCell<HashSet<String>>,
+    /// Makes this model's package names what [`type_path`] reads while the
+    /// context lives (driftsys/ridl#416).
+    _build_packages: BuildPackages,
 }
 
 impl<'a> Ctx<'a> {
@@ -617,6 +620,7 @@ impl<'a> Ctx<'a> {
         Ctx {
             model,
             visiting: RefCell::new(HashSet::new()),
+            _build_packages: BuildPackages::install(model),
         }
     }
 
@@ -1734,13 +1738,125 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
 /// sibling modules rooted at the crate — `crate::veh::common::Speed` resolves
 /// from any module, whereas a bare `veh::common::Speed` only resolves from the
 /// crate root (I4).
+///
+/// **A type named like a child package** (driftsys/ridl#416, the
+/// generated-name collision design, X-18). When package `veh` declares a type
+/// `common` and the build also holds a package `veh.common` (or any package
+/// under `veh.common.`), the crate tree `ridlc` writes declares a module
+/// `common` inside `mod veh`. Rust has one type namespace per module, and an
+/// explicit `pub mod common` takes the name before the type that
+/// `pub use __ridl_package::*;` re-exports, so `crate::veh::common` names the
+/// module and rustc refuses a type position there with E0573. Such a reference
+/// is therefore written through the module that package `veh`'s own file is
+/// loaded as, `crate::veh::__ridl_package::common`, which `ridlc` makes
+/// `#[doc(hidden)] pub` so that a consumer can write the same path. The type
+/// stays unreachable as `veh::common`: that path names the module, and no
+/// spelling of the crate tree changes that while both names are Rust
+/// identifiers in one module.
+///
+/// Whether a reference is hidden is decided from the package names the model
+/// was lowered over (`Scope.package` and `Scope.others`), which
+/// [`BuildPackages`] makes visible here. `ridlc` passes every package of the
+/// crate it writes as `others`, so the list is the crate tree's; a caller
+/// that composes the generated packages itself must lay out `__ridl_package`
+/// the same way for a reference this function writes through it.
 pub(crate) fn type_path(reference: &str) -> TokenStream {
-    if reference.contains('.') {
-        let segments = reference.split('.').map(ident);
-        quote! { crate #(:: #segments)* }
+    match reference.rsplit_once('.') {
+        Some((package, name)) => {
+            let name = ident(name);
+            let prefix = package_prefix(package, &name);
+            quote! { #prefix #name }
+        }
+        None => {
+            let id = ident(reference);
+            quote! { #id }
+        }
+    }
+}
+
+/// `crate::<segments>::` for an item that package `package` defines at its
+/// own scope under the Rust name `item`, and
+/// `crate::<segments>::__ridl_package::` when a child package's module hides
+/// that name (see [`type_path`]). It is the one place a path into another
+/// package is spelled: [`type_path`] and the codec's `*_path` functions, which
+/// name a view or a codec function of a foreign owner, both call it, so the
+/// `__ridl_package` rule cannot apply to one kind of item and not to the
+/// other.
+///
+/// The segments are spelled through [`ident`], which is the same spelling
+/// [`module_segment`] gives the module tree `ridlc` writes, so a path emitted
+/// here and the module it names cannot drift apart.
+pub(crate) fn package_prefix(package: &str, item: &Ident) -> TokenStream {
+    let segments = package.split('.').map(ident);
+    if hidden_by_child_package(package, item) {
+        quote! { crate #(:: #segments)* :: __ridl_package :: }
     } else {
-        let id = ident(reference);
-        quote! { #id }
+        quote! { crate #(:: #segments)* :: }
+    }
+}
+
+/// Whether the build holds a package `<package>.<segment>` or
+/// `<package>.<segment>.…` whose `segment`, spelled as `ridlc` spells a
+/// module ([`module_segment`]), is `item`. Each of those puts a module named
+/// `item` beside `package`'s own items in the crate tree, and the module
+/// takes the name (see [`type_path`]).
+///
+/// The comparison is over the Rust spellings, because `item` may be a name
+/// the backend derived (a view is `<Name>FbView`) and not a source name.
+fn hidden_by_child_package(package: &str, item: &Ident) -> bool {
+    let item = item.to_string();
+    BUILD_PACKAGES.with(|packages| {
+        packages.borrow().iter().any(|other| {
+            other
+                .strip_prefix(package)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .and_then(|rest| rest.split('.').next())
+                .is_some_and(|segment| module_segment(segment) == item)
+        })
+    })
+}
+
+thread_local! {
+    /// The package names of the model the innermost live [`Ctx`] was built
+    /// over, read by [`package_prefix`] for [`type_path`] and the codec.
+    ///
+    /// It is thread-local state rather than a parameter because [`type_path`]
+    /// is called from 27 sites in the codec, the descriptors, the face, the
+    /// default derivation and this file, and [`package_prefix`] from the
+    /// codec's paths to a view or a codec function. Several of those sites,
+    /// the face's above all, carry no [`Ctx`], and the list is fixed for the
+    /// whole of one generation call. [`Ctx`] owns the [`BuildPackages`] guard
+    /// that sets it, so the list is exactly as long-lived as the context every
+    /// entry point builds first.
+    static BUILD_PACKAGES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Sets [`BUILD_PACKAGES`] to one model's package names and restores the
+/// previous list when dropped, so a context built inside another one leaves
+/// the outer list in place when it ends. The restore is correct only when
+/// contexts are dropped in the reverse order of their creation, which holds
+/// because every [`Ctx`] is a local of the function that builds it.
+struct BuildPackages {
+    previous: Vec<String>,
+}
+
+impl BuildPackages {
+    fn install(model: &v1::Model) -> Self {
+        let names = model
+            .scope
+            .iter()
+            .flat_map(|scope| std::iter::once(&scope.package).chain(&scope.others))
+            .cloned()
+            .collect();
+        let previous = BUILD_PACKAGES.with(|packages| packages.replace(names));
+        BuildPackages { previous }
+    }
+}
+
+impl Drop for BuildPackages {
+    fn drop(&mut self) {
+        let previous = std::mem::take(&mut self.previous);
+        BUILD_PACKAGES.with(|packages| packages.replace(previous));
     }
 }
 

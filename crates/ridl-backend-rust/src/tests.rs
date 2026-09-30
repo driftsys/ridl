@@ -3832,6 +3832,89 @@ fn module_segment_spells_a_segment_the_way_type_path_does() {
     }
 }
 
+/// A reference to a type that a child package's module hides is written
+/// through `__ridl_package` (driftsys/ridl#416, X-18), and only such a
+/// reference. `ridlc`'s crate tree declares a module `veh::common` for a
+/// package `veh.common` and also for a package under it, `veh.common.x`,
+/// with no `veh.common` itself; a package `veh.commonx` declares
+/// `veh::commonx`, which hides nothing. The list is the one the innermost
+/// live `Ctx` installed, and it is restored when that context is dropped.
+#[test]
+fn type_path_writes_a_reference_a_child_package_hides_through_ridl_package() {
+    use ridl_ir::codegen::v1;
+    fn model(package: &str, others: &[&str]) -> v1::Model {
+        v1::Model {
+            scope: Some(v1::Scope {
+                package: package.to_owned(),
+                others: others.iter().map(|other| (*other).to_owned()).collect(),
+            }),
+            ..Default::default()
+        }
+    }
+    let through = "crate :: veh :: __ridl_package :: common";
+    let direct = "crate :: veh :: common";
+    let render = || super::type_path("veh.common").to_string();
+
+    assert_eq!(render(), direct, "no context, no package list");
+
+    let child = model("veh.common", &["veh"]);
+    let ctx = Ctx::over(&child);
+    assert_eq!(
+        render(),
+        through,
+        "the scope's own package is a child package"
+    );
+    {
+        let grandchild = model("other", &["veh", "veh.common.x"]);
+        let _inner = Ctx::over(&grandchild);
+        assert_eq!(
+            render(),
+            through,
+            "a package under `veh.common` declares `veh::common`"
+        );
+        let sibling = model("other", &["veh", "veh.commonx"]);
+        let _innermost = Ctx::over(&sibling);
+        assert_eq!(
+            render(),
+            direct,
+            "`veh.commonx` declares `veh::commonx`, not `veh::common`"
+        );
+    }
+    assert_eq!(
+        render(),
+        through,
+        "the inner contexts restore the outer list"
+    );
+    drop(ctx);
+    assert_eq!(
+        render(),
+        direct,
+        "the outer context restores the empty list"
+    );
+    assert_eq!(
+        super::type_path("common").to_string(),
+        "common",
+        "a same-package reference stays bare"
+    );
+
+    // The comparison is between Rust spellings: a type `loop` is `r#loop`
+    // and a type `self` is `self_`, and the child package segments `loop`
+    // and `self` are spelled the same way by `module_segment`, so each type
+    // is hidden and goes through `__ridl_package`.
+    let keywords = model("veh.loop", &["veh", "veh.self"]);
+    let _keywords = Ctx::over(&keywords);
+    assert_eq!(
+        super::type_path("veh.loop").to_string(),
+        "crate :: veh :: __ridl_package :: r#loop",
+        "a type `loop` beside a package `veh.loop` is hidden"
+    );
+    assert_eq!(
+        super::type_path("veh.self").to_string(),
+        "crate :: veh :: __ridl_package :: self_",
+        "a type `self` beside a package `veh.self` is hidden"
+    );
+}
+
 /// The escape of the four keywords that cannot be raw identifiers is
 /// injective (the generated-name collision design, decision 7,
 /// driftsys/ridl#583): a name that is one of them followed by zero or more

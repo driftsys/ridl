@@ -3,14 +3,14 @@
 //! the per-package `.rs` files, so the flat emitted files resolve at the
 //! `crate::…` paths `ridl_backend_rust::type_path` already generates.
 //!
-//! The property has three exceptions, each tested below rather than assumed
+//! The property has two exceptions, each tested below rather than assumed
 //! away. A build that draws an error-severity diagnostic writes neither file,
 //! and a build whose output directory already holds a `lib.rs` or a
 //! `Cargo.toml` that ridlc did not write writes nothing at all. Neither is a
-//! crate that fails to compile — both are the absence of one. The third is:
-//! issue #416 records a legal package naming case whose generated path does
-//! not resolve — a package `veh.common` alongside a type named `common` in
-//! package `veh` — which rustc reports as E0573.
+//! crate that fails to compile — both are the absence of one. A package
+//! `veh.common` alongside a type named `common` in package `veh`, which
+//! rustc refused with E0573 until driftsys/ridl#416, compiles: the type is
+//! named through `crate::veh::__ridl_package::common`.
 
 use std::path::{Path, PathBuf};
 
@@ -105,7 +105,7 @@ fn emitted_package_sources(dir: &Path) -> Vec<String> {
 /// is exactly two segments, and each fixture declares one package, so no
 /// existing test ever produces a package that is also the parent of another.
 /// That is the one branch `render_lib_rs` builds by hand, the one that loads
-/// `veh`'s own file as a private module and re-exports it.
+/// `veh`'s own file as the module `__ridl_package` and re-exports it.
 ///
 /// `veh.common` names a type from `veh`, so the crate root must make
 /// `crate::veh::Speed` resolve as well as `crate::veh::common::Reading`.
@@ -261,7 +261,7 @@ fn every_emitted_file_is_named_exactly_once_in_the_crate_root() {
 /// The invariant again, over the one package shape no corpus fixture has: a
 /// package that is also the parent of another (`veh` alongside `veh.common`).
 /// That shape is the only thing that reaches the branch `render_lib_rs` builds
-/// by hand — the private `__ridl_package` module and its `pub use` — so over
+/// by hand — the `__ridl_package` module and its `pub use` — so over
 /// the two-segment, one-package-each fixtures every other test uses, deleting
 /// that branch outright changes nothing any assertion can see.
 ///
@@ -270,10 +270,13 @@ fn every_emitted_file_is_named_exactly_once_in_the_crate_root() {
 /// tree, which is what deleting the whole branch does. `rustc` catches
 /// `crate::veh::Speed` failing to resolve, which is what deleting the `pub use`
 /// does — the crate root still parses and still names every file. The third is
-/// the module's own visibility: `__ridl_package` is not a path any generated
-/// reference uses, and a `pub` one would put a second public path to every item
-/// in package `veh` into the crate's API, which neither of the other two
-/// notices.
+/// the module's own visibility: `__ridl_package` is `pub`, because a reference
+/// to a type named like a child package is written through it
+/// (driftsys/ridl#416, pinned by
+/// [`a_type_named_like_its_child_package_is_named_through_ridl_package`]), and
+/// `#[doc(hidden)]`, because it is a second path to every item in package `veh`
+/// and not one the crate's documented API offers. Neither of the other two
+/// checks notices that attribute.
 #[test]
 fn a_package_that_is_also_a_parent_is_named_once_and_re_exported() {
     let fixture = tempfile::tempdir().expect("temp fixture dir");
@@ -317,9 +320,9 @@ fn a_package_that_is_also_a_parent_is_named_once_and_re_exported() {
          `veh.common`'s reference to `Speed` uses; lib.rs was:\n{lib}"
     );
     assert!(
-        !lib.contains("pub mod __ridl_package;"),
-        "the module the parent's file is loaded under is an implementation detail and stays \
-         private; lib.rs was:\n{lib}"
+        lib.contains("#[doc(hidden)]\n    pub mod __ridl_package;"),
+        "the module the parent's file is loaded under is public for a path through it and \
+         hidden from the documentation; lib.rs was:\n{lib}"
     );
 
     compile_crate_root(out.path());
@@ -1232,7 +1235,7 @@ fn write_two_package_workspace(dir: &Path, source_a: &str, source_b: &str) -> Pa
 /// twice — once per field accessor of `Line`. The union is here for a
 /// different path: its arm reaches the foreign `__ridl_fb_*` free functions
 /// rather than a view literal, so it is what covers their `pub(crate)`.
-/// Emptying `owner_prefix` instead fails the path assertion below, not the
+/// Emptying the codec's `owner_path` prefix instead fails the path assertion below, not the
 /// compile, so the two assertions are independently load-bearing.
 #[test]
 fn a_cross_package_struct_or_union_reference_compiles() {
@@ -1485,6 +1488,194 @@ fn packages_named_self_and_self_underscore_both_reach_the_crate_tree() {
     );
 
     lib.push_str("\nfn consumer(_a: p::self_::A, _b: p::self__::B) {}\n");
+    std::fs::write(out.path().join("lib.rs"), &lib).expect("the consumer is appended");
+    compile_crate_root(out.path());
+}
+
+/// Writes a single package manifested `veh` that declares a type `common`,
+/// with a subdirectory `common/` that becomes the package `veh.common` — the
+/// shape of X-18, the generated-name collision design's appendix
+/// (driftsys/ridl#416). Package `veh.common` names the type `veh.common`
+/// two ways: as a struct field, and as an interface's signal payload, so the
+/// codec, the descriptors and the face name it too. A constant of that type
+/// is not used: `emit_const` emits no constant whose type is another
+/// package's named type, so it would name the type nowhere.
+fn write_type_named_like_child_package(dir: &Path) -> PathBuf {
+    let root = dir.join("veh");
+    std::fs::create_dir_all(root.join("common")).expect("the common directory is created");
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        root.join("veh.ridl"),
+        "package veh\n\ntype common : integer [0..100]\n",
+    )
+    .expect("veh's source is written");
+    std::fs::write(
+        root.join("common/common.ridl"),
+        "package veh.common\n\nimport veh.common as Common\n\n\
+         struct Uses {\n  c : Common\n}\n\n\
+         interface Gauge {\n  signal level : Common @10ms\n}\n",
+    )
+    .expect("veh.common's source is written");
+    root
+}
+
+/// A type named like its child package builds, the emitted crate compiles, and
+/// a consumer names the type through `__ridl_package` (the generated-name
+/// collision design, §8, X-18, driftsys/ridl#416).
+///
+/// Rust keeps one type namespace per module, and the child package module
+/// `veh::common` is declared there explicitly, so it hides the type `common`
+/// that `pub use __ridl_package::*;` re-exports under the same name. Before
+/// this fix every reference to the type was written `crate::veh::common` and
+/// rustc refused the crate with E0573 (expected type, found module). The
+/// reference is now written through the package's own module,
+/// `crate::veh::__ridl_package::common`, and that module is
+/// `#[doc(hidden)] pub` so the consumer below can write the same path.
+#[test]
+fn a_type_named_like_its_child_package_is_named_through_ridl_package() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_type_named_like_child_package(dir.path());
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let mut lib = std::fs::read_to_string(out.path().join("lib.rs")).expect("lib.rs is written");
+    lib.push_str("\npub fn consumer(_c: veh::__ridl_package::common, _u: veh::common::Uses) {}\n");
+    std::fs::write(out.path().join("lib.rs"), &lib).expect("the consumer is appended");
+    compile_crate_root(out.path());
+
+    let source = std::fs::read_to_string(out.path().join("veh.common.rs"))
+        .expect("veh.common.rs is written");
+    assert!(
+        source.contains("crate::veh::__ridl_package::common"),
+        "a reference to the type `veh.common` is written through `__ridl_package`, got:\n{source}"
+    );
+    assert!(
+        !source.contains("crate::veh::common"),
+        "no reference names the type as `crate::veh::common`, which is the child module, \
+         got:\n{source}"
+    );
+}
+
+/// Writes a single package manifested `veh` that declares a struct `Reading`,
+/// with a subdirectory `ReadingFbView/` that becomes the package
+/// `veh.ReadingFbView`, whose own struct holds a `veh.Reading`. The codec
+/// reads that field through the view `ReadingFbView` of package `veh`, which
+/// is the name the child package's module takes in the crate tree.
+fn write_view_named_like_child_package(dir: &Path) -> PathBuf {
+    let root = dir.join("veh");
+    std::fs::create_dir_all(root.join("ReadingFbView")).expect("the child directory is created");
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        root.join("veh.ridl"),
+        "package veh\n\ntype Level : integer [0..100]\n\nstruct Reading {\n  level : Level\n}\n",
+    )
+    .expect("veh's source is written");
+    std::fs::write(
+        root.join("ReadingFbView/child.ridl"),
+        "package veh.ReadingFbView\n\nimport veh.Reading\n\nstruct Uses {\n  r : Reading\n}\n",
+    )
+    .expect("veh.ReadingFbView's source is written");
+    root
+}
+
+/// The codec names another package's view through the same prefix as a type,
+/// so a view hidden by a child package module is reached through
+/// `__ridl_package` too (driftsys/ridl#416, found by the review of the pull
+/// request that fixed it). Before, the codec wrote
+/// `crate::veh::ReadingFbView`, which names the module, and rustc refused the
+/// crate.
+#[test]
+fn a_view_named_like_a_child_package_is_named_through_ridl_package() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_view_named_like_child_package(dir.path());
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    compile_crate_root(out.path());
+
+    let source = std::fs::read_to_string(out.path().join("veh.ReadingFbView.rs"))
+        .expect("veh.ReadingFbView.rs is written");
+    assert!(
+        source.contains("crate::veh::__ridl_package::ReadingFbView"),
+        "the view of `veh.Reading` is named through `__ridl_package`, got:\n{source}"
+    );
+    assert!(
+        source.contains("crate::veh::Reading"),
+        "the type `veh.Reading` itself is hidden by nothing and keeps its direct path, \
+         got:\n{source}"
+    );
+}
+
+/// Writes a single package manifested `veh` that declares an interface
+/// `Climate`, whose face module is `climate`, with a subdirectory `climate/`
+/// that becomes the package `veh.climate`.
+fn write_face_named_like_child_package(dir: &Path) -> PathBuf {
+    let root = dir.join("veh");
+    std::fs::create_dir_all(root.join("climate")).expect("the child directory is created");
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        root.join("veh.ridl"),
+        "package veh\n\ntype Level : integer [0..100]\n\n\
+         interface Climate {\n  signal level : Level @10ms\n}\n",
+    )
+    .expect("veh's source is written");
+    std::fs::write(
+        root.join("climate/climate.ridl"),
+        "package veh.climate\n\ntype Mode : integer [0..3]\n",
+    )
+    .expect("veh.climate's source is written");
+    root
+}
+
+/// A face module named like a child package is hidden at `veh::climate`,
+/// which names the child package's module, and is reachable as
+/// `veh::__ridl_package::climate` (driftsys/ridl#416). Generated code never
+/// names a face module by a path from another module, so the crate compiles
+/// with no change; this pins the path a consumer writes instead.
+#[test]
+fn a_face_module_named_like_a_child_package_is_reachable_through_ridl_package() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_face_named_like_child_package(dir.path());
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let mut lib = std::fs::read_to_string(out.path().join("lib.rs")).expect("lib.rs is written");
+    lib.push_str(
+        "\npub use veh::__ridl_package::climate::Client as ClimateClient;\n\
+         pub fn consumer(_m: veh::climate::Mode) {}\n",
+    );
     std::fs::write(out.path().join("lib.rs"), &lib).expect("the consumer is appended");
     compile_crate_root(out.path());
 }

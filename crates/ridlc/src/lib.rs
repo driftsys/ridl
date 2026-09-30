@@ -375,10 +375,11 @@ pub enum Emit {
     /// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write
     /// ([`crate_file_refusals`]).
     ///
-    /// A crate that is written is not a crate that compiles in every case:
-    /// issue #416 records a legal package naming case whose generated path
-    /// does not resolve — a package `veh.common` alongside a type named
-    /// `common` in package `veh` — which rustc reports as E0573.
+    /// A package `veh.common` alongside a type named `common` in package
+    /// `veh` is one legal naming case that needs a special path: the child
+    /// package's module hides the type at `veh::common`, so generated code
+    /// names the type as `crate::veh::__ridl_package::common`, and a consumer
+    /// can write the same path (driftsys/ridl#416).
     Rust,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`,
     /// and the lowered system to `<pkg.Name>.system.json`.
@@ -1056,19 +1057,36 @@ fn render_lib_rs(package_names: &[String]) -> String {
                         // nested under its own name: generated code names a
                         // type in package `veh` as `crate::veh::Speed`, not
                         // `crate::veh::veh::Speed`, so the file is loaded as
-                        // a private module and re-exported, which puts its
-                        // items at the path the references use.
+                        // a module and re-exported, which puts its items at
+                        // the path the references use.
                         //
-                        // The private module's name is the one place this
-                        // shape is not total over names: a package `veh`
+                        // The re-export loses one name: a package `veh`
                         // declaring a type called `common` alongside a
-                        // package `veh.common` would have that type shadowed
-                        // by the module (issue #416; rustc reports E0573, so
-                        // it fails loudly). `__ridl_package` cannot be a typl
-                        // package segment, so the private module itself
-                        // collides with nothing.
+                        // package `veh.common` has that type hidden by the
+                        // explicit `pub mod common` below, because Rust has
+                        // one type namespace per module (driftsys/ridl#416).
+                        // `ridl_backend_rust::type_path` writes a reference
+                        // to such a type as `crate::veh::__ridl_package::common`,
+                        // so the module is `pub` for a consumer to write the
+                        // same path, and `#[doc(hidden)]` because it is a
+                        // second path to every item of `veh` and not one to
+                        // use otherwise.
+                        //
+                        // No ridl name reaches `__ridl_package`. MANI-006
+                        // holds only a manifest's own `[package] name` to
+                        // `[a-z][a-z0-9]*`; a segment that comes from a
+                        // subdirectory is not checked by it. But every file
+                        // of a package declares that package's full name
+                        // (TYPL-002), and the lexer reads each segment of a
+                        // `package` declaration as an identifier, which
+                        // starts with a letter, so a directory named
+                        // `__ridl_package` never becomes a package. A
+                        // declaration name is lexed the same way, and the
+                        // keyword escape only appends `_`, so neither a type
+                        // of `veh` nor a child package spells this module.
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
-                        out.push_str(&format!("{pad}    mod __ridl_package;\n"));
+                        out.push_str(&format!("{pad}    #[doc(hidden)]\n"));
+                        out.push_str(&format!("{pad}    pub mod __ridl_package;\n"));
                         out.push_str(&format!("{pad}    pub use __ridl_package::*;\n"));
                     }
                     render(child, depth + 1, out);
