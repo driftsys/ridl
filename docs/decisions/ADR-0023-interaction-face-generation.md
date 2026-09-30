@@ -640,6 +640,18 @@ argument for it in the command case.
   `Clock` and `Wakeable` of its port, so a role handle for `Caller` alone no
   longer builds one — `ridl-loopback`'s `CallerHandle` gains both roles in stage
   F3.
+- Neutral — added 2026-09-30: the names the face spells from a member through
+  `camel_case` — the descriptor `<Interface><Member>` at package scope, and in
+  the face module the `<Member>Call`, `<Member>Phase` and `<Member>Correlation`
+  types and the `Event` variant — are claimed by the Rust backend's claim tables
+  (the generated-name collision design, stage (c)). Two members whose
+  `camel_case` agrees, such as `XY` and `x_y`, emitted two items of one name
+  (E0428, driftsys/ridl#455); `ridl build` now refuses the package with a
+  message that names the generated name and both members. An interface whose
+  face is skipped under decision 2's consequence note claims nothing, so such a
+  pair in it is refused only when its face is emitted. Decision 7's rule for a
+  member against a fixed name of the face is unchanged: nothing is refused and
+  nothing is renamed.
 
 ## References
 

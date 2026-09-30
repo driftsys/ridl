@@ -463,3 +463,31 @@ interface XmlParser {
 "#,
     );
 }
+
+/// X-8b of the design: two members equal under `camel_case` beside a call
+/// the face cannot carry. The pipeline skips the interface's face and
+/// descriptors (E11.14 decision 2), so neither `CabinXY` is emitted and the
+/// claim table claims nothing for the interface (decision 13). The crate
+/// compiles, as it did before the claim tables; `name_collision_claims.rs`
+/// pins the refusal of the same members once the face is emitted (X-8c).
+#[test]
+fn a_skipped_face_with_members_equal_under_camel_case_compiles() {
+    let emitted = pipeline_compiles(
+        "skipped_face_members",
+        r#"
+package probe.x08b
+
+type Level : integer [0..100]
+
+interface Cabin {
+  signal XY : Level @10ms
+  signal x_y : Level @10ms
+  command set(a: Level, b: Level) @[..50ms]
+}
+"#,
+    );
+    assert!(
+        emitted.contains("__RIDL_NO_FACE_Cabin"),
+        "the face must be skipped, or this test proves nothing:\n{emitted}"
+    );
+}

@@ -1881,8 +1881,8 @@ fn tuple_field_generates_named_struct() {
 /// negative assertion is that the written name reaches no generated site.
 ///
 /// Two tuple field names distinct in typl can still project to one Rust field
-/// name. That is unchecked, and rustc rejects the result with E0124 —
-/// driftsys/ridl#449.
+/// name (driftsys/ridl#449). The backend's claim table refuses that pair
+/// before anything is emitted; `tests/name_collision_claims.rs` pins it.
 #[test]
 fn a_tuple_field_name_is_projected_to_snake_case() {
     let bounds = shaped_field("range", 1, tuple_of(&[("minSpeed", "Speed")]));

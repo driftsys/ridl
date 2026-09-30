@@ -30,6 +30,7 @@ use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
+mod claims;
 mod clauses;
 mod codec;
 mod contract;
@@ -83,7 +84,7 @@ pub struct GenerateError {
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    render(package_items(&ctx)?)
+    render(package_items(&ctx, &[])?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
@@ -134,7 +135,10 @@ pub fn generate_face_with(
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
     wire.check_emitted();
-    let mut items = package_items(&ctx)?;
+    // This entry point refuses rather than skips, so every named interface's
+    // descriptors and face are emitted, and each one claims its names.
+    let interfaces: Vec<&v1::Interface> = model.interfaces.iter().collect();
+    let mut items = package_items(&ctx, &interfaces)?;
     items.extend(descriptors::interface_items(&ctx)?);
     items.extend(face::interface_items(&model)?);
     render(items)
@@ -156,7 +160,7 @@ pub fn generate_with(
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
-    render(package_items(&ctx)?)
+    render(package_items(&ctx, &[])?)
 }
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
@@ -214,16 +218,26 @@ pub(crate) fn generate_pipeline_over(
 ) -> Result<Generated, GenerateError> {
     let ctx = Ctx::over(model);
     wire.check_emitted();
-    let mut items = package_items(&ctx)?;
+    // Each interface is built before the package's own items, so that the
+    // claim table, which runs before the codec, knows which interfaces are
+    // emitted and which are skipped: a skipped one claims nothing (the
+    // generated-name collision design, decision 13).
+    let mut faced: Vec<&v1::Interface> = Vec::new();
+    let mut interface_items: Vec<TokenStream> = Vec::new();
     for interface in &model.interfaces {
         if descriptors::declared_name(interface).is_none() {
             continue;
         }
         match faced_interface(&ctx, interface) {
-            Ok(produced) => items.extend(produced),
-            Err(err) => items.push(skipped_interface_note(interface, &err)),
+            Ok(produced) => {
+                faced.push(interface);
+                interface_items.extend(produced);
+            }
+            Err(err) => interface_items.push(skipped_interface_note(interface, &err)),
         }
     }
+    let mut items = package_items(&ctx, &faced)?;
+    items.extend(interface_items);
     render(items)
 }
 
@@ -345,7 +359,16 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
 /// There is one codec emitter and one call to it, which is why the face
 /// compiles over the codec `generate` emits rather than over one written for
 /// it (design note D-11, stage K9b).
-fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
+///
+/// The claim tables run first, before the domain types and the codec
+/// (`claims::check`). `interfaces` are the interfaces whose descriptors and
+/// face the caller emits beside these items, so that their names are claimed
+/// too; a caller that emits no interface passes none.
+fn package_items(
+    ctx: &Ctx,
+    interfaces: &[&v1::Interface],
+) -> Result<Vec<TokenStream>, GenerateError> {
+    claims::check(ctx, interfaces)?;
     let mut items = domain_items(ctx)?;
     items.extend(codec::package_items(ctx)?);
     Ok(items)
@@ -407,9 +430,6 @@ impl WireEncoding {
 /// points: the codec is `generate`'s output (design note D-1 as amended), and
 /// the face compiles over that same output (D-11, stage K9b).
 fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
-    if let Some(collision) = ctx.model.tuple_collisions.first() {
-        return Err(tuple_collision(collision));
-    }
     let mut items: Vec<TokenStream> = Vec::new();
     for decl in &ctx.model.declarations {
         items.push(emit_decl(ctx, decl));
@@ -452,6 +472,12 @@ fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
 /// fact; the message is this backend's own. The two shapes are named because
 /// the mangled name cannot distinguish them — that is the whole defect — and
 /// the field lists are what a reader greps for.
+///
+/// The claim tables (`claims::check`, the generated-name collision design)
+/// report this refusal first, before any claim of their own, with this
+/// message unchanged. Their own claims cover the pairs the lowering does not
+/// find: a tuple against a declaration, a view or a descriptor, and two
+/// fields of one tuple.
 fn tuple_collision(collision: &v1::TupleCollision) -> GenerateError {
     GenerateError {
         message: format!(
@@ -1472,10 +1498,13 @@ fn emit_struct(
 /// consumer. The type name of an induced tuple struct is spelled from the
 /// field name through `camel_case` instead, by the lowering. That second
 /// projection reaches a namespace RIDL-149 does not check — two field names
-/// distinct under `snake_case` can induce one tuple type name — which is
-/// driftsys/ridl#453: by the generated-name collision design (ADR-0016's
-/// 2026-09-29 amendment) that collision is this backend's to refuse, from
-/// the claim table over the package module's type namespace.
+/// distinct under `snake_case` can induce one tuple type name
+/// (driftsys/ridl#453). By the generated-name collision design (ADR-0016's
+/// 2026-09-29 amendment) that collision is this backend's, and it is refused
+/// before anything is emitted: two tuples of different shapes are the
+/// lowering's tuple collision, and a tuple named like a declaration is
+/// refused by the claim table over the package module's type namespace
+/// (`claims::check`).
 fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
     let field_name = ident(snake_of(field.name.as_ref()));
     let attrs = field_attrs(field);
@@ -1687,11 +1716,12 @@ fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> 
 /// [`emit_field`] applies to a declared struct's field (ADR-0016 decisions 1
 /// and 2); a nested tuple's type name is spelled through `camel_case` by the
 /// lowering. Neither namespace is checked by RIDL-149: two tuple field names
-/// distinct in typl can spell one Rust field name, which rustc then rejects
-/// with E0124 — driftsys/ridl#449, which the generated-name collision design
-/// (ADR-0016's 2026-09-29 amendment) makes this backend's to refuse, from a
-/// claim table per induced tuple. A field name repeated verbatim is the
-/// language's, TYPL-215.
+/// distinct in typl can spell one Rust field name, which rustc would reject
+/// with E0124 (driftsys/ridl#449). The generated-name collision design
+/// (ADR-0016's 2026-09-29 amendment) makes that this backend's to refuse, and
+/// the claim table per induced tuple refuses it before this runs
+/// (`claims::check`). A field name repeated verbatim is the language's,
+/// TYPL-215.
 fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
     let name = tuple_name(induced);
     let name_id = ident(name);
