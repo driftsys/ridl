@@ -35,8 +35,11 @@
 //!   `NAME = 0`.
 //! - interfaces use the same brace-body layout; value and callable interactions
 //!   have tight type colons, comma-separated parameter lists, spaced fallible
-//!   returns and tight stream types and timing annotations. Members carrying
-//!   attribute blocks retain their text until attribute layout is implemented.
+//!   returns and tight stream types and timing annotations;
+//! - timing precedes an interaction's attribute block. Inline attributes have
+//!   bracket padding and comma separators; predicates force one attribute per
+//!   line. Binary expression operators have spaces, prefixes and member access
+//!   stay tight, and source parentheses remain. Attribute value lists can break.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
@@ -57,8 +60,9 @@
 //! # What order is *not* changed
 //!
 //! Source order is wire identity (typl reference §7.4): a formatter must never
-//! change ordinals. This formatter normalises whitespace and separators only —
-//! it never reorders declarations, imports, fields, enum values, or union arms.
+//! change ordinals. This formatter normalises whitespace and separators, and
+//! places timing before attributes in an interaction annotation pair (D-4).
+//! It never reorders declarations, imports, fields, enum values, or union arms.
 //! Input whose first item is not the `package` declaration is a missing-package
 //! parse error (FORM-104), so it is returned untouched and never reformatted;
 //! the never-reorder guarantee applies to the inputs that do format.
@@ -191,92 +195,35 @@ fn layout_container(
     options: &FormatOptions,
 ) -> Vec<String> {
     let ind = indent_str(indent);
-    let mut blocks: Vec<Block> = Vec::new();
-    // Comments seen since the last block, waiting to lead the next node.
-    let mut pending: Vec<PendingComment> = Vec::new();
-    // Newlines in the whitespace run since the last non-whitespace element.
-    let mut nl_run = 0usize;
-    // Whether a comment on the current line would trail an existing block.
-    let mut can_trail = false;
-
-    for element in elements {
-        match element {
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
-                nl_run += token.text().matches('\n').count();
-            }
-            NodeOrToken::Token(token) if is_comment(token.kind()) => {
-                let text = token.text().trim_end().to_string();
-                if can_trail && nl_run == 0 && pending.is_empty() {
-                    if let Some(last) = blocks.last_mut()
-                        && let Some(line) = last.lines.last_mut()
-                    {
-                        line.push(' ');
-                        line.push_str(&text);
-                    }
-                } else {
-                    pending.push(PendingComment {
-                        blank_before: nl_run >= 2,
-                        text,
-                    });
-                    can_trail = false;
-                }
-                nl_run = 0;
-            }
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
-                // A separator comma is dropped; the previous member keeps a
-                // trailing comment on its line.
-                nl_run = 0;
-            }
-            NodeOrToken::Node(node) => {
-                let kind = block_kind(node.kind());
-                let gap_blank = match pending.first() {
-                    Some(first) => first.blank_before,
-                    None => nl_run >= 2,
-                };
-                let mut lines = Vec::new();
-                for (i, comment) in pending.iter().enumerate() {
-                    if i > 0 && comment.blank_before {
-                        lines.push(String::new());
-                    }
-                    lines.push(format!("{ind}{}", comment.text));
-                }
-                if !pending.is_empty() && nl_run >= 2 {
+    let blocks: Vec<Block> = collect_container(elements)
+        .into_iter()
+        .map(|block| {
+            let mut lines = Vec::new();
+            for (i, comment) in block.leading.iter().enumerate() {
+                if i > 0 && comment.blank_before {
                     lines.push(String::new());
                 }
-                lines.extend(format_element(node, indent, options));
-                blocks.push(Block {
-                    kind,
-                    gap_blank,
-                    lines,
-                });
-                pending.clear();
-                nl_run = 0;
-                can_trail = true;
+                lines.push(format!("{ind}{}", comment.text));
             }
-            _ => {
-                // No other token appears as a direct container child: the file
-                // holds only nodes and trivia, a brace block holds members,
-                // separator commas, and trivia.
-                nl_run = 0;
-            }
-        }
-    }
-
-    if !pending.is_empty() {
-        let gap_blank = pending[0].blank_before;
-        let mut lines = Vec::new();
-        for (i, comment) in pending.iter().enumerate() {
-            if i > 0 && comment.blank_before {
+            if block.blank_before_node {
                 lines.push(String::new());
             }
-            lines.push(format!("{ind}{}", comment.text));
-        }
-        blocks.push(Block {
-            kind: BlockKind::CommentOnly,
-            gap_blank,
-            lines,
-        });
-    }
+            if let Some(node) = &block.node {
+                lines.extend(format_element(node, indent, options));
+            }
+            for comment in &block.trailing {
+                if let Some(line) = lines.last_mut() {
+                    line.push(' ');
+                    line.push_str(comment);
+                }
+            }
+            Block {
+                kind: block.kind,
+                gap_blank: block.gap_blank,
+                lines,
+            }
+        })
+        .collect();
 
     let mut out: Vec<String> = Vec::new();
     for (i, block) in blocks.iter().enumerate() {
@@ -289,6 +236,75 @@ fn layout_container(
         out.extend(block.lines.iter().cloned());
     }
     out
+}
+
+/// One source container unit before its node is rendered. Attribute bodies and
+/// brace bodies share this collector, including leading and trailing comments.
+struct ContainerBlock {
+    kind: BlockKind,
+    gap_blank: bool,
+    leading: Vec<PendingComment>,
+    blank_before_node: bool,
+    node: Option<SyntaxNode>,
+    trailing: Vec<String>,
+}
+
+fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
+    let mut blocks: Vec<ContainerBlock> = Vec::new();
+    let mut pending: Vec<PendingComment> = Vec::new();
+    let mut nl_run = 0usize;
+    let mut can_trail = false;
+    for element in elements {
+        match element {
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
+                nl_run += token.text().matches('\n').count();
+            }
+            NodeOrToken::Token(token) if is_comment(token.kind()) => {
+                let text = token.text().trim_end().to_string();
+                if can_trail && nl_run == 0 && pending.is_empty() {
+                    if let Some(last) = blocks.last_mut() {
+                        last.trailing.push(text);
+                    }
+                } else {
+                    pending.push(PendingComment {
+                        blank_before: nl_run >= 2,
+                        text,
+                    });
+                    can_trail = false;
+                }
+                nl_run = 0;
+            }
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
+                nl_run = 0;
+            }
+            NodeOrToken::Node(node) => {
+                let gap_blank = pending.first().map_or(nl_run >= 2, |c| c.blank_before);
+                let blank_before_node = !pending.is_empty() && nl_run >= 2;
+                blocks.push(ContainerBlock {
+                    kind: block_kind(node.kind()),
+                    gap_blank,
+                    leading: std::mem::take(&mut pending),
+                    blank_before_node,
+                    node: Some(node.clone()),
+                    trailing: Vec::new(),
+                });
+                nl_run = 0;
+                can_trail = true;
+            }
+            _ => nl_run = 0,
+        }
+    }
+    if !pending.is_empty() {
+        blocks.push(ContainerBlock {
+            kind: BlockKind::CommentOnly,
+            gap_blank: pending[0].blank_before,
+            leading: pending,
+            blank_before_node: false,
+            node: None,
+            trailing: Vec::new(),
+        });
+    }
+    blocks
 }
 
 /// A comment waiting to lead the next node, with whether the source placed a
@@ -372,13 +388,8 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         | SyntaxKind::EventDef
         | SyntaxKind::FixedDef
         | SyntaxKind::CommandDef
-        | SyntaxKind::QueryDef => {
-            if child_node(node, SyntaxKind::AttrBlock).is_some() {
-                line(node.text().to_string())
-            } else {
-                render_layout(&format_interaction(node), indent, options)
-            }
-        }
+        | SyntaxKind::QueryDef => render_layout(&format_interaction(node), indent, options),
+        SyntaxKind::AttrBlock => render_layout(&format_attr_block(node), indent, options),
         SyntaxKind::FieldDef => render_layout(&format_field_def(node), indent, options),
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
@@ -543,12 +554,20 @@ fn split_brace_line_comment(elements: &[SyntaxElement]) -> (Option<String>, &[Sy
 /// The container children strictly between the block's first `{` and its
 /// closing `}` — member nodes, separator commas, and trivia.
 fn elements_between_braces(node: &SyntaxNode) -> Vec<SyntaxElement> {
+    elements_between_delimiters(node, SyntaxKind::LBrace, SyntaxKind::RBrace)
+}
+
+fn elements_between_delimiters(
+    node: &SyntaxNode,
+    open: SyntaxKind,
+    close: SyntaxKind,
+) -> Vec<SyntaxElement> {
     let mut out = Vec::new();
     let mut inside = false;
     for element in node.children_with_tokens() {
         match &element {
-            NodeOrToken::Token(t) if t.kind() == SyntaxKind::LBrace && !inside => inside = true,
-            NodeOrToken::Token(t) if t.kind() == SyntaxKind::RBrace => break,
+            NodeOrToken::Token(t) if t.kind() == open && !inside => inside = true,
+            NodeOrToken::Token(t) if t.kind() == close => break,
             _ if inside => out.push(element),
             _ => {}
         }
@@ -596,7 +615,7 @@ fn format_union_arm(node: &SyntaxNode) -> String {
 
 // --- interface members ---------------------------------------------------
 
-/// The value or callable member, without an attribute block. Each parser
+/// The value or callable member, with timing before attributes. Each parser
 /// accepted slot is retained, including slots narrowed by the checker.
 fn format_interaction(node: &SyntaxNode) -> Layout {
     let (keyword, callable) = match node.kind() {
@@ -632,6 +651,10 @@ fn format_interaction(node: &SyntaxNode) -> Layout {
     }
     if let Some(timing) = child_node(node, SyntaxKind::Timing) {
         parts.push(Layout::Text(format!(" {}", tight_text(&timing))));
+    }
+    if let Some(attrs) = child_node(node, SyntaxKind::AttrBlock) {
+        parts.push(Layout::Text(" ".into()));
+        parts.push(format_attr_block(&attrs));
     }
     Layout::Concat(parts)
 }
@@ -671,6 +694,135 @@ fn format_return_type(node: &SyntaxNode) -> Layout {
     }
 }
 
+// --- attributes and predicate expressions --------------------------------
+
+fn format_attr_block(node: &SyntaxNode) -> Layout {
+    let force_block = node.children().any(|attr| {
+        has_token(&attr, SyntaxKind::RequireKw) || has_token(&attr, SyntaxKind::EnsureKw)
+    });
+    if !force_block && contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    let elements = elements_between_delimiters(node, SyntaxKind::LBracket, SyntaxKind::RBracket);
+    let blocks = collect_container(&elements)
+        .into_iter()
+        .map(|block| AttributeLayout {
+            gap_blank: block.gap_blank,
+            leading: block.leading,
+            blank_before_node: block.blank_before_node,
+            layout: block.node.as_ref().map(format_attribute),
+            trailing: block.trailing,
+        })
+        .collect();
+    Layout::Attributes {
+        blocks,
+        force_block,
+    }
+}
+
+fn format_attribute(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    if has_token(node, SyntaxKind::RequireKw) || has_token(node, SyntaxKind::EnsureKw) {
+        let keyword = if has_token(node, SyntaxKind::RequireKw) {
+            "require"
+        } else {
+            "ensure"
+        };
+        let expr = node
+            .children()
+            .next()
+            .map(|n| format_expr(&n))
+            .unwrap_or_default();
+        return Layout::Text(format!("{keyword} {expr}"));
+    }
+    let key = node
+        .children()
+        .filter(|n| n.kind() == SyntaxKind::Name)
+        .map(|n| tight_text(&n))
+        .collect::<Vec<_>>()
+        .join(".");
+    match child_node(node, SyntaxKind::AttrValue) {
+        Some(value) => Layout::Concat(vec![
+            Layout::Text(format!("{key} = ")),
+            format_attr_value(&value),
+        ]),
+        None => Layout::Text(key),
+    }
+}
+
+fn format_attr_value(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    if has_token(node, SyntaxKind::LParen) {
+        Layout::Tuple(
+            node.children()
+                .filter(|n| n.kind() == SyntaxKind::AttrValue)
+                .map(|n| format_attr_value(&n))
+                .collect(),
+        )
+    } else {
+        Layout::Text(tight_text(node))
+    }
+}
+
+/// Synthesize only spacing: every source expression node and parenthesis stays.
+fn format_expr(node: &SyntaxNode) -> String {
+    match node.kind() {
+        SyntaxKind::BinaryExpr => {
+            let mut children = node.children();
+            let left = children.next().map(|n| format_expr(&n)).unwrap_or_default();
+            let right = children.next().map(|n| format_expr(&n)).unwrap_or_default();
+            let operator = node
+                .children_with_tokens()
+                .filter_map(NodeOrToken::into_token)
+                .find(|t| !t.kind().is_trivia())
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            format!("{left} {operator} {right}")
+        }
+        SyntaxKind::PrefixExpr => {
+            let operator = node
+                .children_with_tokens()
+                .filter_map(NodeOrToken::into_token)
+                .find(|t| !t.kind().is_trivia())
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            let operand = node
+                .children()
+                .next()
+                .map(|n| format_expr(&n))
+                .unwrap_or_default();
+            format!("{operator}{operand}")
+        }
+        SyntaxKind::MemberExpr => {
+            let left = node
+                .children()
+                .next()
+                .map(|n| format_expr(&n))
+                .unwrap_or_default();
+            let member = node
+                .children_with_tokens()
+                .filter_map(NodeOrToken::into_token)
+                .find(|t| t.kind() == SyntaxKind::Ident)
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            format!("{left}.{member}")
+        }
+        SyntaxKind::ParenExpr => {
+            let inner = node
+                .children()
+                .next()
+                .map(|n| format_expr(&n))
+                .unwrap_or_default();
+            format!("({inner})")
+        }
+        _ => tight_text(node),
+    }
+}
+
 // --- field types ---------------------------------------------------------
 
 /// The first field-type child of `node`, with tuple break positions retained.
@@ -700,6 +852,18 @@ enum Layout {
     Text(String),
     Concat(Vec<Layout>),
     Tuple(Vec<Layout>),
+    Attributes {
+        blocks: Vec<AttributeLayout>,
+        force_block: bool,
+    },
+}
+
+struct AttributeLayout {
+    gap_blank: bool,
+    leading: Vec<PendingComment>,
+    blank_before_node: bool,
+    layout: Option<Layout>,
+    trailing: Vec<String>,
 }
 
 /// An outermost unbroken tuple on a rendered physical line. Inner tuples are
@@ -715,12 +879,36 @@ struct Rendering {
     line: usize,
     next_id: usize,
     candidates: Vec<BreakCandidate>,
+    code_columns: std::collections::HashMap<usize, usize>,
 }
 
 impl Rendering {
     fn push(&mut self, text: &str) {
         self.line += text.matches('\n').count();
         self.text.push_str(text);
+    }
+
+    fn current_indent(&self) -> usize {
+        self.text
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .take_while(|c| *c == ' ')
+            .count()
+    }
+
+    fn trailing_comment(&mut self, comment: &str) {
+        let columns = self
+            .text
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count();
+        self.code_columns.entry(self.line).or_insert(columns);
+        self.push(" ");
+        self.push(comment);
     }
 
     fn layout(&mut self, layout: &Layout, broken: &HashSet<usize>, inside_inline: bool) {
@@ -731,18 +919,66 @@ impl Rendering {
                     self.layout(part, broken, inside_inline);
                 }
             }
+            Layout::Attributes {
+                blocks,
+                force_block,
+            } => {
+                let id = self.next_id;
+                self.next_id += 1;
+                if *force_block || broken.contains(&id) {
+                    let indent = self.current_indent();
+                    self.push("[");
+                    for (index, block) in blocks.iter().enumerate() {
+                        if index > 0 && block.gap_blank {
+                            self.push("\n");
+                        }
+                        for (i, comment) in block.leading.iter().enumerate() {
+                            if i > 0 && comment.blank_before {
+                                self.push("\n");
+                            }
+                            self.push("\n");
+                            self.push(&" ".repeat(indent + 2));
+                            self.push(&comment.text);
+                        }
+                        if block.blank_before_node {
+                            self.push("\n");
+                        }
+                        if let Some(item) = &block.layout {
+                            self.push("\n");
+                            self.push(&" ".repeat(indent + 2));
+                            self.layout(item, broken, false);
+                        }
+                        for comment in &block.trailing {
+                            self.trailing_comment(comment);
+                        }
+                    }
+                    self.push("\n");
+                    self.push(&" ".repeat(indent));
+                    self.push("]");
+                } else {
+                    if !inside_inline && !blocks.is_empty() {
+                        self.candidates.push(BreakCandidate {
+                            id,
+                            line: self.line,
+                        });
+                    }
+                    self.push("[ ");
+                    for (i, block) in blocks.iter().enumerate() {
+                        if i > 0 {
+                            self.push(", ");
+                        }
+                        if let Some(item) = &block.layout {
+                            self.layout(item, broken, true);
+                        }
+                    }
+                    self.push(" ]");
+                }
+            }
             Layout::Tuple(items) => {
                 let id = self.next_id;
                 self.next_id += 1;
                 if broken.contains(&id) {
-                    let indent = self
-                        .text
-                        .rsplit('\n')
-                        .next()
-                        .unwrap_or_default()
-                        .chars()
-                        .take_while(|c| *c == ' ')
-                        .count();
+                    let indent = self.current_indent();
                     self.push("(");
                     for (i, item) in items.iter().enumerate() {
                         self.push("\n");
@@ -791,7 +1027,13 @@ fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec
                 .split('\n')
                 .enumerate()
                 .find_map(|(line, text)| {
-                    if text.chars().count() <= width {
+                    if rendered
+                        .code_columns
+                        .get(&line)
+                        .copied()
+                        .unwrap_or_else(|| text.chars().count())
+                        <= width
+                    {
                         return None;
                     }
                     rendered
@@ -1010,11 +1252,16 @@ fn is_single_line_element(node: &SyntaxNode) -> bool {
         SyntaxKind::StructDef
         | SyntaxKind::EnumDef
         | SyntaxKind::UnionDef
-        | SyntaxKind::InterfaceDef => false,
+        | SyntaxKind::InterfaceDef
+        | SyntaxKind::AttrBlock => false,
         SyntaxKind::EnumSetDef => !has_token(node, SyntaxKind::LBrace),
         _ => true,
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/invariants.rs"]
+mod test_invariants;
 
 #[cfg(test)]
 mod tests {
@@ -1408,11 +1655,264 @@ mod tests {
     }
 
     #[test]
-    fn ridl_attribute_members_remain_verbatim_until_task_seven() {
+    fn ridl_attribute_member_uses_timing_then_predicate_block() {
         assert_ridl_member(
             "query  q ( ) : T [ require result>0 ] @ 10ms",
-            "query  q ( ) : T [ require result>0 ] @ 10ms",
+            "query q(): T @10ms [\n    require result > 0\n  ]",
         );
+    }
+
+    #[test]
+    fn ridl_inline_attribute_padding_assignments_and_flags() {
+        assert_ridl_member(
+            "signal  target : T [seed=LIMIT,persist,]",
+            "signal target: T [ seed = LIMIT, persist ]",
+        );
+    }
+
+    #[test]
+    fn ridl_annotation_pair_has_one_canonical_order() {
+        for source in [
+            "query q():T [ persist ] @[ .. 5s ]",
+            "query q():T @[ .. 5s ] [ persist ]",
+        ] {
+            assert_ridl_member(source, "query q(): T @[..5s] [ persist ]");
+        }
+    }
+
+    #[test]
+    fn ridl_attribute_values_include_nested_and_empty_lists() {
+        assert_ridl_member(
+            "query q():T [labels=(A,(B,C,),(),),persist]",
+            "query q(): T [ labels = (A, (B, C), ()), persist ]",
+        );
+    }
+
+    #[test]
+    fn ridl_predicates_space_every_operator_and_preserve_parentheses() {
+        assert_ridl_member(
+            "command set(position:P)[require position!=GearPosition.PARK||currentSpeed==0.0]",
+            "command set(position: P) [\n    require position != GearPosition.PARK || currentSpeed == 0.0\n  ]",
+        );
+        assert_ridl_member(
+            "query q():T[require (!engaged&&((a+b*c-d/e%f)>=-1.0))||x==y ensure (result).min+1<=MAX&&status!=State.BAD&&v>0&&w<9]",
+            "query q(): T [\n    require (!engaged && ((a + b * c - d / e % f) >= -1.0)) || x == y\n    ensure (result).min + 1 <= MAX && status != State.BAD && v > 0 && w < 9\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_predicate_expression_is_unbreakable() {
+        let name = "A".repeat(120);
+        assert_ridl_member(
+            &format!("query q():T [require {name}>0]"),
+            &format!("query q(): T [\n    require {name} > 0\n  ]"),
+        );
+    }
+
+    #[test]
+    fn ridl_block_attribute_comments_follow_the_container_rules() {
+        assert_ridl_member(
+            "query q():T [require x>0, // trailing\n\n // next\n ensure x>=0\n // end\n]",
+            "query q(): T [\n    require x > 0 // trailing\n\n    // next\n    ensure x >= 0\n    // end\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_comment_inside_an_attribute_keeps_that_attribute_verbatim() {
+        assert_ridl_member(
+            "query q():T [require  x /* predicate */ >0 ensure result>=0]",
+            "query q(): T [\n    require  x /* predicate */ >0\n    ensure result >= 0\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_inline_attribute_and_value_comments_remain_verbatim() {
+        assert_ridl_member(
+            "query q():T [persist, /* block */ labels=(A,B,),]",
+            "query q(): T [persist, /* block */ labels=(A,B,),]",
+        );
+        assert_ridl_member(
+            "query q():T [labels=(A, // value\n B)]",
+            "query q(): T [labels=(A, // value\n B)]",
+        );
+    }
+
+    #[test]
+    fn ridl_inline_attribute_width_boundaries() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                let name = "a".repeat(columns - "  signal s: T [  ]".chars().count());
+                let inline = format!("  signal s: T [ {name} ]");
+                assert_eq!(inline.chars().count(), columns);
+                let member = if columns <= width {
+                    inline.clone()
+                } else {
+                    format!("  signal s: T [\n    {name}\n  ]")
+                };
+                assert_profile_format(
+                    &format!("package p\ninterface I {{\n{inline}\n}}\n"),
+                    &format!("package p\n\ninterface I {{\n{member}\n}}\n"),
+                    Profile::Ridl,
+                    &options,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ridl_attribute_value_list_width_boundaries() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                let name = "A".repeat(columns - "    labels = (, B)".chars().count());
+                let inline = format!("    labels = ({name}, B)");
+                assert_eq!(inline.chars().count(), columns);
+                let value = if columns <= width {
+                    inline.clone()
+                } else {
+                    format!("    labels = (\n      {name},\n      B\n    )")
+                };
+                assert_profile_format(
+                    &format!(
+                        "package p\ninterface I {{\n  query q():T [require ready\n{inline}\n]\n}}\n"
+                    ),
+                    &format!(
+                        "package p\n\ninterface I {{\n  query q(): T [\n    require ready\n{value}\n  ]\n}}\n"
+                    ),
+                    Profile::Ridl,
+                    &options,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ridl_nested_attribute_value_lists_break_outer_then_inner() {
+        let name = "A".repeat(40);
+        assert_profile_format(
+            &format!(
+                "package p\ninterface I {{ query q():T[require ready labels=(({name},B),C)] }}\n"
+            ),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T [\n    require ready\n    labels = (\n      (\n        {name},\n        B\n      ),\n      C\n    )\n  ]\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_full_width_example_breaks_attributes_then_return_and_stops() {
+        assert_profile_format(
+            "package p\ninterface I { query getSpeedHistory(window: Duration, mode: Mode): (min: Speed, max: Speed, avg: Speed) @[..100ms] [ labels = (A, B) ] }\n",
+            "package p\n\ninterface I {\n  query getSpeedHistory(window: Duration, mode: Mode): (\n    min: Speed,\n    max: Speed,\n    avg: Speed\n  ) @[..100ms] [\n    labels = (A, B)\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(60),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_trailing_comments_do_not_force_value_breaks() {
+        let comment = "x".repeat(120);
+        assert_profile_format(
+            &format!(
+                "package p\ninterface I {{ query q():T [require ready\nlabels=(A,B) // {comment}\n] }}\n"
+            ),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T [\n    require ready\n    labels = (A, B) // {comment}\n  ]\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_unlimited_width_keeps_attribute_and_value_lists_inline() {
+        let name = "A".repeat(180);
+        assert_profile_format(
+            &format!("package p\ninterface I {{ query q():T[labels=({name},B),persist] }}\n"),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T [ labels = ({name}, B), persist ]\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: None,
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_width_one_keeps_the_tree_and_fixed_point() {
+        assert_profile_format(
+            "package p\ninterface I { query q():T[labels=(A,B)] }\n",
+            "package p\n\ninterface I {\n  query q(): T [\n    labels = (\n      A,\n      B\n    )\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(1),
+            },
+        );
+    }
+
+    #[test]
+    fn rsdl_attribute_renderer_tightens_dotted_keys_before_body_routing() {
+        let input = "package p\ncomponent C [ linux . realtime, linux . cpuset=(2,3,), ] {}\n";
+        let expected_attributes = "[ linux.realtime, linux.cpuset = (2, 3) ]";
+        let render = |source: &str| {
+            let parse = ridl_syntax::parse(source, Profile::Rsdl);
+            assert!(parse.errors().is_empty(), "{:?}", parse.errors());
+            let attributes = parse
+                .syntax()
+                .descendants()
+                .find(|n| n.kind() == SyntaxKind::AttrBlock)
+                .unwrap();
+            format_element(&attributes, 0, &FormatOptions::default()).join("\n")
+        };
+        assert_eq!(render(input), expected_attributes);
+        let expected = format!("package p\ncomponent C {expected_attributes} {{}}\n");
+        assert_eq!(
+            render(&expected),
+            expected_attributes,
+            "attribute fixed point"
+        );
+        assert_eq!(
+            crate::test_invariants::syntax_structure(input, Profile::Rsdl),
+            crate::test_invariants::syntax_structure(&expected, Profile::Rsdl)
+        );
+        assert_eq!(
+            crate::test_invariants::content_tokens(input, Profile::Rsdl),
+            crate::test_invariants::content_tokens(&expected, Profile::Rsdl)
+        );
+    }
+
+    #[test]
+    fn ridl_broken_attribute_block_returns_parse_errors() {
+        assert!(matches!(
+            format(
+                "package p\ninterface I { query q():T [ require ] }\n",
+                Profile::Ridl,
+                &FormatOptions::default()
+            ),
+            FormatOutcome::ParseErrors(_)
+        ));
     }
 
     #[test]
@@ -1425,6 +1925,16 @@ mod tests {
             ),
             FormatOutcome::ParseErrors(_)
         ));
+    }
+
+    #[test]
+    fn ridl_attributes_golden_preserves_structure_and_comments() {
+        assert_profile_format(
+            include_str!("../test_data/input/attributes.ridl"),
+            include_str!("../test_data/formatted/attributes.ridl"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
     }
 
     #[test]
@@ -1516,43 +2026,16 @@ mod tests {
             outcome,
             "not a fixed point"
         );
-        let structure = |text: &str| {
-            let parse = ridl_syntax::parse(text, profile);
-            assert!(
-                parse.errors().is_empty(),
-                "width fixture must parse: {:?}",
-                parse.errors()
-            );
-            parse
-                .syntax()
-                .preorder_with_tokens()
-                .filter_map(|event| match event {
-                    rowan::WalkEvent::Enter(NodeOrToken::Node(n)) => {
-                        Some((true, n.kind(), String::new()))
-                    }
-                    rowan::WalkEvent::Leave(NodeOrToken::Node(n)) => {
-                        Some((false, n.kind(), String::new()))
-                    }
-                    rowan::WalkEvent::Enter(NodeOrToken::Token(t))
-                        if !t.kind().is_trivia() && t.kind() != SyntaxKind::Comma =>
-                    {
-                        Some((true, t.kind(), t.text().to_string()))
-                    }
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-        };
-        let content = |text: &str| {
-            ridl_syntax::parse(text, profile)
-                .syntax()
-                .descendants_with_tokens()
-                .filter_map(|e| e.into_token())
-                .filter(|t| !matches!(t.kind(), SyntaxKind::Whitespace | SyntaxKind::Comma))
-                .map(|t| (t.kind(), t.text().trim_end().to_string()))
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(structure(input), structure(expected), "structure changed");
-        assert_eq!(content(input), content(expected), "content changed");
+        assert_eq!(
+            crate::test_invariants::syntax_structure(input, profile),
+            crate::test_invariants::syntax_structure(expected, profile),
+            "structure changed"
+        );
+        assert_eq!(
+            crate::test_invariants::content_tokens(input, profile),
+            crate::test_invariants::content_tokens(expected, profile),
+            "content changed"
+        );
     }
 
     #[test]

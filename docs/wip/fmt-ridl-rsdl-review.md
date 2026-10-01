@@ -12,7 +12,7 @@ with all required CI checks successful at the initial remote inspection.
 | ---- | ----------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
 | 5    | Caller changes in open PR                       | `e515b2e`, `f887c78`, `d31f4b9`, `8b85871`; PR #632 / `docs/387-fmt-book-width` | CLI, LSP and formatter tests passed | Two full passes complete; remaining coverage debt #633; CI passed at `8b85871` |
 | 6    | Implemented locally; #625 tests pass            | `3e6e9bf`; grouped PR forthcoming / PR #632                                     | Formatter and LSP acceptance passed | QUICK complete, docs corrected; grouped full review after Task 8               |
-| 7    | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| 7    | Implemented locally; acceptance passed          | None                                                                            | Not run                             | Not run                                                                        |
 | 8    | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
 | 9    | Pending, including deferred rsdl CLI width test | None                                                                            | Not run                             | Not run                                                                        |
 | 10   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
@@ -71,5 +71,6 @@ stash `8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
 `On feat/387-fmt-editorconfig: Task 5 caller tests and width plumbing pending rsdl test sequencing`,
 remains intact, as do all other stashes. Task 5 is complete with recorded review
 debt. Task 6 acceptance and QUICK review are complete; current book and
-test-module claims are corrected. Continue with Task 7, then Task 8, before the
+test-module claims are corrected. Task 7 attribute layout and invariant
+acceptance pass; its QUICK review follows. Continue with Task 8 before the
 grouped PR and two full reviews.

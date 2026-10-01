@@ -1,0 +1,18 @@
+package veh.fmt
+
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  signal targetSpeed: Speed = SPEED_LIMIT_EU @[20ms..500ms]
+  event doorOpened: DoorPayload @[50ms..500ms]
+
+  command setGear(position: GearPosition) @[..50ms] [
+    // Parking requires a stationary vehicle.
+    require position != GearPosition.PARK || currentSpeed == 0.0
+  ]
+  query getSpeedHistory(window: Duration): (min: Speed, max: Speed) @[..100ms]
+  query calibrate(axle: Axle): CalReport | CalError @[..5s]
+  query streamFaults(filter: DiagFilter): <FaultCode> @[..1s]
+  command uploadFirmware(data: <FwBlock>) @[..1s]
+  fixed capabilities: [Label; 0..32]
+  reserved legacyChecksum // was ordinal 2
+}

@@ -326,3 +326,30 @@ append-only. Implementation status and verification are in
 - Commit and PR: Task 6 `3e6e9bf`; documentation correction follows it; grouped
   PR after Task 8, based on PR #632.
 - Maintainer action: review the grouped PR; no additional decision is needed.
+
+## D-H12 — Task 7 shared attribute layout and invariant normalization
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice and approved existing rule.
+- Question or observed case: predicate attributes require brace-body comment
+  placement, while width breaking must consider attributes and their value lists
+  in the same order as parameters and tuple returns.
+- Chosen action: reuse the single forward container collector for attribute
+  blocks, and add attribute layout to the existing rendering tree. Measure code
+  before trailing attribute comments. Render expression spacing recursively from
+  the CST, preserving parentheses. Normalize only the sibling timing/attribute
+  pair in both test invariant comparisons.
+- Reason and alternatives considered: eagerly rendering attributes with their
+  own width loop would prevent last-to-first breaking across a whole member. A
+  separate comment pass would duplicate the existing container rules. Broad
+  token sorting would hide member or comment loss; the narrow shared test
+  normalization leaves those identities and all other order intact.
+- Authority: design sections 3.2, 5, 6 and 9; D-2 through D-6 and D-13.
+- Affected files and behavior: formatter layouts, unit tests and shared
+  test-only invariant helpers; no grammar, checker or configuration changes.
+- Verification: normalization test failed before the helper and passed after it;
+  comment/member removal, literal changes and member reordering remain detected.
+  Layout RED: 14 failures and one malformed-input control passed; all RIDL tests
+  also run before production changes. Logs under the Task 7 evidence directory.
+- Commit and PR: Task 7 follows `4a65b45` in the Tasks 6–8 grouped branch.
+- Maintainer action: review the grouped PR; no additional approval is needed.
