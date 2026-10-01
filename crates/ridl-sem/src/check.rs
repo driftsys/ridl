@@ -7330,11 +7330,14 @@ mod tests {
 
     /// Three values, `A`, `A`, `a`, in that order: the second `A` is an
     /// exact duplicate of the first (TYPL-216), and `a` is a transform-only
-    /// collision against the first `A` under `pascal_case`. The code list
-    /// pins that the second `A` never reaches the projection map: if it did,
-    /// it would draw a RIDL-149 of its own. The label pins that `a` is
-    /// compared against the first `A`. `a` is lower case, so searching for
-    /// `A` cannot match it.
+    /// collision against the first `A` under `pascal_case`. The check keeps
+    /// one projection map, keyed on the `pascal_case` projection. The code
+    /// list pins that the second `A` is not sent through the projection
+    /// check: if it were, it would draw a RIDL-149 of its own. The label pins
+    /// that the second `A` is not inserted into the map either: an
+    /// overwriting insert of it would replace the first `A`'s entry, leave
+    /// the code list unchanged, and move the label to the second `A`. `a` is
+    /// lower case, so searching for `A` cannot match it.
     #[test]
     fn typl_216_and_ridl_149_both_report_in_declaration_order() {
         let source = enum_source_3("A", "A", "a");
@@ -7679,10 +7682,14 @@ mod tests {
             checked.diagnostics
         );
         // Which `value` RIDL-149 points at is the whole ordering guarantee,
-        // and the code set alone does not pin it: inserting the exact
-        // duplicate into the projection map would leave the set unchanged and
-        // move this label to the second `value`. `Value` is capitalised, so
-        // searching for `value` cannot match it.
+        // and the code set alone does not pin it. The check keeps one
+        // projection map, keyed on the `snake_case` projection. An
+        // overwriting insert of the repeat into that map (one that replaced
+        // the first `value`'s entry) would leave the code set unchanged and
+        // move this label to the second `value`. A repeat sent through the
+        // projection check instead would draw a RIDL-149 of its own, which
+        // the code list catches. `Value` is capitalised, so searching for
+        // `value` cannot match it.
         let first = source
             .find("value")
             .expect("the first field is in the source");
@@ -10873,12 +10880,13 @@ interface I {\n\
     }
 
     /// A type path that names no visible declaration draws TYPL-011 on the
-    /// path (driftsys/ridl#543), in six positions that take a type reference:
-    /// a struct field, a parameter, a query return, a stream element, a
-    /// signal payload, and an event payload. The span covers the written
-    /// path, a bare name and a qualified one alike.
+    /// path (driftsys/ridl#543), in nine positions that take a type
+    /// reference: a struct field, a parameter, a query return, a stream
+    /// element, a signal payload, an event payload, a fixed payload, a union
+    /// arm, and an enumset backing enum (driftsys/ridl#567). The span covers
+    /// the written path, a bare name and a qualified one alike.
     #[test]
-    fn typl_011_unresolved_type_path_in_six_type_reference_positions() {
+    fn typl_011_unresolved_type_path_in_nine_type_reference_positions() {
         let positions = [
             ("field", "struct S {\n  x: Missing\n}\n", "Missing"),
             (
@@ -10904,6 +10912,21 @@ interface I {\n\
             (
                 "stream element",
                 "interface I {\n  query q(): <Missing> @[..50ms]\n}\n",
+                "Missing",
+            ),
+            (
+                "fixed payload",
+                "interface I {\n  fixed f : Missing\n}\n",
+                "Missing",
+            ),
+            (
+                "union arm",
+                "union U { ok : Speed, err : Missing }\n",
+                "Missing",
+            ),
+            (
+                "enumset backing enum",
+                "enumset Flags : Missing\n",
                 "Missing",
             ),
         ];
@@ -10949,6 +10972,57 @@ interface I {\n\
         assert_eq!(
             messages(&checked),
             vec!["unknown type name `veh.common.Hidden`"],
+        );
+    }
+
+    /// An import that names another package's `internal` declaration binds
+    /// nothing (typl §3.3), so a use of the imported name draws TYPL-011 at
+    /// the use: the name is written in an import, but no visible
+    /// declaration stands behind it (driftsys/ridl#567).
+    #[test]
+    fn typl_011_on_a_name_an_import_names_but_does_not_bind() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\ninternal type Hidden: km/h [0.0..300.0 step 0.5]\n",
+        );
+        let source =
+            "package app\nimport veh.common.Hidden\ninterface I {\n  signal s : Hidden @10ms\n}\n";
+        let app = ridl_package(&db, "app", source);
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        let unresolved: Vec<_> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::TYPL_011)
+            .collect();
+        assert_eq!(unresolved.len(), 1, "got: {:?}", checked.diagnostics);
+        assert_eq!(unresolved[0].message, "unknown type name `Hidden`");
+        let range = unresolved[0].primary.range;
+        let use_start = source.find(": Hidden").expect("the use is in the fixture") + 2;
+        assert_eq!(usize::from(range.start()), use_start);
+        assert_eq!(usize::from(range.end()), use_start + "Hidden".len());
+    }
+
+    /// A qualified reference to an `internal` declaration of the checked
+    /// package itself is visible (typl §3.3 hides an `internal` declaration
+    /// from other packages only), so it draws no diagnostic. The struct is
+    /// `internal` too, so TYPL-005 does not apply. This pins the
+    /// same-package half of the visibility guard in `lookup_path_in`: a guard
+    /// that hid every `internal` declaration would report TYPL-011 here
+    /// (driftsys/ridl#567).
+    #[test]
+    fn a_qualified_reference_to_a_same_package_internal_type_resolves() {
+        let checked = check_ridl(
+            "app",
+            "package app\ninternal type Hidden: km/h [0.0..300.0 step 0.5]\ninternal struct S {\n  x: app.Hidden\n}\n",
+        );
+        assert!(
+            checked.diagnostics.is_empty(),
+            "got: {:?}",
+            checked.diagnostics
         );
     }
 
