@@ -5,7 +5,7 @@
 //! through an in-memory connection instead, which cannot show that the
 //! subcommand wires the stdio transport at all.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdout, Command as StdCommand, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -459,14 +459,34 @@ fn ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends() {
     assert_lsp_handshake_and_clean_shutdown(&["--clientProcessId", "4242"]);
 }
 
-/// Stdio is the only transport: a client asking for a pipe is refused with
-/// exit 2 rather than served over stdio, where it would never connect.
+/// Stdio is the only transport: a client asking for a pipe or a socket is
+/// refused with exit 2 rather than served over stdio, where it would never
+/// connect. Exit 2 alone does not prove the refusal, because an accepted flag
+/// followed by stdin closing before `initialize` also exits 2, so the test
+/// also reads the refusal on stderr.
 #[test]
 fn ridl_lsp_refuses_a_transport_other_than_stdio() {
-    let mut child = spawn_lsp(&["--pipe=ridl-test-pipe"]);
-    drop(child.stdin.take().expect("piped stdin"));
-    let status = wait_for_exit(&mut child, "ridl lsp --pipe");
-    assert_eq!(status.code(), Some(2), "an unsupported transport exits 2");
+    for flag in ["--pipe=ridl-test-pipe", "--socket=7777"] {
+        let mut child = spawn_lsp(&[flag]);
+        drop(child.stdin.take().expect("piped stdin"));
+        let status = wait_for_exit(&mut child, "ridl lsp");
+        let mut stderr = String::new();
+        child
+            .stderr
+            .take()
+            .expect("piped stderr")
+            .read_to_string(&mut stderr)
+            .expect("read stderr");
+        assert_eq!(
+            status.code(),
+            Some(2),
+            "{flag}: an unsupported transport exits 2"
+        );
+        assert!(
+            stderr.contains("unexpected argument"),
+            "{flag}: refused as an argument, not served: {stderr}"
+        );
+    }
 }
 
 /// Runs `ridl lsp` with `args` through the `initialize` handshake and a

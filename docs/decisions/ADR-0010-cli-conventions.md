@@ -134,8 +134,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    client's process id. `--clientProcessId` keeps the specification's spelling,
    because that is what clients send. Any other transport flag (`--pipe`,
    `--socket`) is still refused with exit 2. Checked by
-   `ridl_lsp_accepts_the_stdio_flag_an_editor_client_passes` and
-   `ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends` in
+   `ridl_lsp_accepts_the_stdio_flag_an_editor_client_passes`,
+   `ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends` and
+   `ridl_lsp_refuses_a_transport_other_than_stdio` in
    `crates/ridl/tests/servers.rs`.
 
    **`ridl lock` earned its row on 2026-09-15, when it was added and checked**
