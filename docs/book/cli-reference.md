@@ -872,9 +872,10 @@ The formatter has no layout rules for the rsdl declarations, so it keeps each
 one as written, as it does a ridl `interface` or `service`.
 
 **Layout and line width.** Formatted blocks use two spaces per indentation
-level. Tuple types break into one field per line, with commas between fields,
-when their code line exceeds 100 characters. Width counts Unicode scalar
-values, including indentation. Trailing comments do not count towards the
+level. Tuple types in declarations that the formatter lays out break into one
+field per line, with commas between fields, when their code line exceeds 100
+characters. Width counts Unicode scalar values, including indentation.
+Trailing comments do not count towards the
 limit, and unbreakable code can exceed it. A comment embedded inside a
 single-line construct keeps that construct's source layout.
 
