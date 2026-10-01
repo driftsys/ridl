@@ -302,3 +302,27 @@ append-only. Implementation status and verification are in
   `task-06-red-init-comment.log`; base `8b858710` plus Task 6 diff.
 - Commit and PR: included in this Task 6 change on `feat/387-fmt-ridl`.
 - Maintainer action: inspect the comment regression in the grouped PR.
+
+## D-H11 — Task 6 quick-review documentation corrections
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice and approved existing rule.
+- Question or observed case: QUICK review of `3e6e9bf` found two live claims
+  that interfaces remain verbatim, and a stale pending paragraph in the review
+  report. It also cited the design/plan's historical initial-state descriptions.
+- Chosen action: correct the book, rsdl test module comment and review report;
+  record the completed Task 6 commit and acceptance. Retain historical initial
+  state in the design/plan, with later dated execution records authoritative.
+- Reason and alternatives considered: current user-facing behavior must match
+  the code; rewriting historical baseline text would obscure the starting point
+  that the handoff explicitly preserves. No normative design rule changes.
+- Authority: QUICK code-to-prose review and the handoff's state-verification
+  instruction about historical wording and later dated entries.
+- Affected files and behavior: documentation only; no executable change.
+- Verification: all three seats used actual Terra; tests/docs and bugs wrapper
+  high, built-in bugs worker medium. Six changed paths matched the commit.
+  Formatter acceptance passed on `3e6e9bf`; correction documentation checks
+  follow. See [Task 6 evidence](fmt-ridl-rsdl-evidence/task-06.md).
+- Commit and PR: Task 6 `3e6e9bf`; documentation correction follows it; grouped
+  PR after Task 8, based on PR #632.
+- Maintainer action: review the grouped PR; no additional decision is needed.

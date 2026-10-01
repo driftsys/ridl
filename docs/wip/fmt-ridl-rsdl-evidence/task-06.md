@@ -56,9 +56,9 @@ Local `task-06-red-tests.diff` records the test diff on the base.
   also breaks the parameter list. Each fixture checks structure and fixed point.
 
 `cargo test -p ridl-lsp --locked` exited 0: 17 library and 65 server tests
-passed, including the unchanged canonical ridl rendering. Quick review,
-committed-head checks and the grouped PR are forthcoming. Full local logs are
-excluded from commits and retained in this directory.
+passed, including the unchanged canonical ridl rendering. The grouped PR follows
+Task 8. Full local logs are excluded from commits and retained in this
+directory.
 
 Initializer comment correction: a new fixture exposed loss of
 `/* initializer */` in the first interaction renderer.
@@ -79,3 +79,25 @@ DEFAULT`: the parser excludes trivia before `=` from
 `InitValue`. Adding the canonical space before the verbatim initializer repairs
 that separate spacing assertion. Intermediate log:
 `task-06-intermediate-init-spacing.log`.
+
+## Task commit and QUICK review
+
+Task 6 commit: `3e6e9bf`. `cargo test -p ridl-fmt --locked` exited 0 again on
+this exact commit. Three fresh QUICK contexts reviewed `8b858710..3e6e9bf`:
+actual Terra/high for tests, docs and the general-purpose bugs wrapper;
+Terra/medium for the native built-in bugs worker. Every seat named the six exact
+changed files. The supported native fallback is not a literal
+`/code-review medium` slash invocation; no nested client ran in a restricted
+worker. Tests reported no effectiveness finding; bugs reported no actionable
+issue. Docs identified two live claims that interfaces are emitted verbatim, in
+the book and the rsdl test module; both are corrected. The stale Task 6
+review-report paragraph noted by tests is corrected too.
+
+The design/plan's initial-state descriptions are historical snapshots,
+explicitly identified as such by the handoff. They are retained; dated execution
+records supersede them. The QUICK pass does not review its own documentation
+corrections. The grouped PR will receive the two full passes after Task 8.
+
+Documentation correction checks: `just book-check`, `just link-check`,
+`just doc-path-check` and `just check` each exited 0. The corrections change
+only prose and a Rust module comment; executable lines changed: zero.

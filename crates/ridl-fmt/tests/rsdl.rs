@@ -1,7 +1,7 @@
 //! The formatter over rsdl files (rsdl reference v0.2). It has no layout rules
 //! of its own for the five rsdl declarations: it lays out the file — the
 //! header, one blank line between declarations, the comments — and emits each
-//! declaration as written, as it does a ridl `interface` or `service`. These
+//! declaration as written. These
 //! tests hold that to two properties over the reference's own examples, and pin
 //! what the layout changes.
 
