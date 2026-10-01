@@ -260,7 +260,10 @@ therefore cannot use, include:
 - lookaround: `(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`
 - a backreference, numbered (`\1`) or named (`\k<name>`)
 - the control escape `\cX`, the NUL escape `\0`, and an identity escape of a
-  letter, such as `\e`, `\Q` or `\k`
+  letter the `regex` crate gives no meaning, such as `\e`, `\Q` or `\k`. An
+  identity escape of a letter the crate does give a meaning, such as `\a`, `\A`,
+  `\z` or `\pL`, compiles in both engines, with the different meanings the table
+  below records
 - the empty class `[]`, the negated empty class `[^]`, and an unescaped `[`
   inside a class, as in `[[]`
 - the backspace escape inside a class, `[\b]`

@@ -967,7 +967,9 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// `regex` crate the checker compiles every `match` pattern with (TYPL-220).
 /// An older `regex` could refuse a pattern the checker accepted, and the
 /// generated `Regex::new(..).expect(..)` would then panic. A guard test in
-/// `crates/ridlc/tests/` keeps it equal to the workspace's `regex` version.
+/// `crates/ridlc/tests/` keeps its major and minor numbers equal to those of
+/// the `regex` version the workspace's `Cargo.lock` resolves, which is the
+/// version the checker links.
 ///
 /// The `ridl-rt = "0.5"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
