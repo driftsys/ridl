@@ -3752,7 +3752,7 @@ impl Checker<'_> {
             range,
             format!(
                 "`{name}` and `{first}` both become {cause}. Rename one of them \
-                 (ridl §11, §16.4; ADR-0016 decision 3)"
+                 (ridl §16.4; ADR-0016 decision 3)"
             ),
             first_range,
             label,
@@ -7168,8 +7168,8 @@ mod tests {
             diagnostic.message,
             "`CHECK__ENGINE` and `CHECK_ENGINE` both become `CheckEngine` under the \
              pascal_case name transform, so a target whose namespace is PascalCase would \
-             carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 \
-             decision 3)"
+             carry one identifier twice. Rename one of them (ridl §16.4; ADR-0016 decision \
+             3)"
         );
         assert_eq!(
             only_label(diagnostic),
