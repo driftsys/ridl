@@ -879,8 +879,20 @@ Trailing comments do not count towards the
 limit, and unbreakable code can exceed it. A comment embedded inside a
 single-line construct keeps that construct's source layout.
 
+**EditorConfig example.** Editors that support these properties can use this
+section in `.editorconfig` for the family's source files:
+
+```ini
+[*.{typl,ridl,rmdl,rsdl,rxdl}]
+indent_style = space
+indent_size = 2
+max_line_length = 100
+```
+
 The CLI and language server currently use this fixed 100-character limit.
 Their width and indentation are not configured through `.editorconfig`.
+Compiler profiles for `.rmdl` and `.rxdl` are still pending; the glob includes
+them for editor settings.
 
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without
