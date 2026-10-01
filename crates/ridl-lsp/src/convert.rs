@@ -46,9 +46,15 @@ pub fn line_index(text: &str) -> LineIndex {
 
 impl LineIndex {
     /// The LSP position of byte `offset`, in UTF-16 code units. An offset past
-    /// the end of the text clamps to the end.
+    /// the end of the text clamps to the end. The offset of the `\n` in a
+    /// `\r\n` pair maps to the position of its `\r`, because a position cannot
+    /// point between the two.
     pub fn position(&self, offset: TextSize) -> lt::Position {
-        let offset = offset.min(TextSize::of(self.text.as_str()));
+        let mut offset = offset.min(TextSize::of(self.text.as_str()));
+        let at = usize::from(offset);
+        if at > 0 && self.text.as_bytes()[at - 1..].starts_with(b"\r\n") {
+            offset -= TextSize::from(1);
+        }
         let line = self.line_starts.partition_point(|start| *start <= offset) - 1;
         let start = self.line_starts[line];
         let character: usize = self.text[usize::from(start)..usize::from(offset)]
@@ -325,6 +331,24 @@ mod tests {
     /// `a\rb\r\nc\nd` — one of each ending. Bytes: `a`=0, `\r`=1, `b`=2,
     /// `\r`=3, `\n`=4, `c`=5, `\n`=6, `d`=7. Lines start at 0, 2, 5 and 7.
     const MIXED: &str = "a\rb\r\nc\nd";
+
+    #[test]
+    fn an_empty_line_between_two_bare_carriage_returns() {
+        // `a\r\rb`: line 0 is `a`, line 1 is empty, line 2 is `b`.
+        let index = line_index("a\r\rb");
+        assert_eq!(index.position(size(2)), pos(1, 0));
+        assert_eq!(index.position(size(3)), pos(2, 0));
+        assert_eq!(index.offset(pos(1, 0)), size(2));
+        assert_eq!(index.offset(pos(1, 5)), size(2), "clamps on the empty line");
+    }
+
+    #[test]
+    fn the_lf_of_a_crlf_pair_maps_to_the_position_of_its_cr() {
+        // `MIXED`: bytes 3..5 are the `\r\n` that ends line 1 (`b`).
+        let index = line_index(MIXED);
+        assert_eq!(index.position(size(3)), pos(1, 1));
+        assert_eq!(index.position(size(4)), pos(1, 1));
+    }
 
     #[test]
     fn a_bare_carriage_return_ends_a_line() {
