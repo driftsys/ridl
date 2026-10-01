@@ -1183,6 +1183,13 @@ namespaces no profile owns — `FORM-` (surface syntax: lexical, parse, and the
 attribute-block rules) and `MANI-` (the manifest). Both are tabulated once in
 the family overview §7 and are not restated here.
 
+A `.typl` file also draws one `RIDL-` code, RIDL-149: two names in one scope
+that collide after a pinned name transform (ADR-0016). Three of its scopes are
+typl declarations — the fields of one struct, the arms of one union, and the
+values of one enum — so `LEVEL_10` beside `LEVEL10` in one enum is refused, as
+both become `Level10`. Its row, with the transform each scope is checked under,
+is in ridl §16.4.
+
 ### 16.1 Module (TYPL-0xx)
 
 | Code     | Rule                                                         | Severity |
