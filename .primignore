@@ -5,6 +5,9 @@
 # git-std generates CHANGELOG.md; prim must not reflow generated content.
 CHANGELOG.md
 
+# Upstream licence text is carried without reformatting.
+THIRD-PARTY-NOTICES.txt
+
 # mdBook build output.
 book/
 

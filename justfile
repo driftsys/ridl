@@ -1746,6 +1746,8 @@ vscode-verify:
 package-vsix vsce-target="":
     #!/usr/bin/env bash
     set -euo pipefail
+    mkdir -p editors/vscode/bin
+    cp THIRD-PARTY-NOTICES.txt editors/vscode/bin/
     cd editors/vscode
     npm ci
     npm run compile

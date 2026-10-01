@@ -42,6 +42,10 @@
 //! only after their enclosing tuple. Trailing comments never cause a break;
 //! unbreakable text stays over the limit. `None` disables line breaking.
 //! The formatter reads no files or environment.
+//! With the default `editorconfig` feature, `FormatOptions::for_path` reads
+//! only `max_line_length` from the matching EditorConfig files. An integer sets
+//! the width, `off` disables it, and missing, unset, or invalid values use 100.
+//! Indentation settings are ignored. The pure entry point still reads no file.
 //!
 //! # What order is *not* changed
 //!
@@ -73,6 +77,9 @@ use ridl_syntax::{
 };
 use rowan::NodeOrToken;
 use std::collections::HashSet;
+
+#[cfg(feature = "editorconfig")]
+mod editorconfig;
 
 /// Options for the pure formatter.
 #[derive(Debug, Clone, PartialEq, Eq)]

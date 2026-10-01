@@ -6,6 +6,11 @@ license.workspace = true
 repository.workspace = true
 description = "The CST-based formatter for the typl surface, behind the `ridl fmt` command."
 
+[features]
+default = ["editorconfig"]
+editorconfig = ["dep:ec4rs"]
+
 [dependencies]
+ec4rs = { workspace = true, optional = true }
 ridl-syntax.workspace = true
 rowan.workspace = true

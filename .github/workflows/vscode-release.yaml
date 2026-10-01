@@ -147,8 +147,9 @@ jobs:
           COPYFILE_DISABLE: 1
         run: |
           out_dir="target/${{ matrix.target }}/release"
-          tar czf "ridl-${{ matrix.target }}.tar.gz" -C "$out_dir" "${{ matrix.binary }}"
-          tar czf "ridlc-${{ matrix.target }}.tar.gz" -C "$out_dir" "${{ matrix.ridlc-binary }}"
+          cp LICENSE THIRD-PARTY-NOTICES.txt "$out_dir/"
+          tar czf "ridl-${{ matrix.target }}.tar.gz" -C "$out_dir" "${{ matrix.binary }}" LICENSE THIRD-PARTY-NOTICES.txt
+          tar czf "ridlc-${{ matrix.target }}.tar.gz" -C "$out_dir" "${{ matrix.ridlc-binary }}" LICENSE THIRD-PARTY-NOTICES.txt
           if command -v sha256sum >/dev/null; then
             sha256sum "ridl-${{ matrix.target }}.tar.gz" > "ridl-${{ matrix.target }}.tar.gz.sha256"
             sha256sum "ridlc-${{ matrix.target }}.tar.gz" > "ridlc-${{ matrix.target }}.tar.gz.sha256"
