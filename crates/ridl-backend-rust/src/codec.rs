@@ -31,8 +31,7 @@
 //! rather than its `snake_case`, so two declarations whose `snake_case`
 //! agrees (`HTTPServer` beside `HttpServer`, which TYPL-009 accepts) get two
 //! sets of functions rather than one name twice; each function allows the
-//! `non_snake_case` lint the CamelCase tail draws (the generated-name
-//! collision design, X-15).
+//! `non_snake_case` lint the CamelCase tail draws (`docs/technotes/rust-backend-name-collisions.md`, X-15).
 //!
 //! Every primitive and prelude type written at package scope is written by its
 //! `::core::` or `::std::` path, for the reason [`crate::class_tokens`] gives:

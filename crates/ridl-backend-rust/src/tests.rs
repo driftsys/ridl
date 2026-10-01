@@ -363,8 +363,7 @@ fn wire_named_decl() -> v2::Decl {
 ///
 /// `generate_face` used to emit that alias at package scope, where a typl
 /// declaration named `Wire` emits `pub struct Wire`, and E11.14 decision 5
-/// refused the package over the pair. The alias is gone (the generated-name
-/// collision design, decision 5, driftsys/ridl#588): every site that named it
+/// refused the package over the pair. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it
 /// writes `::ridl_rt::encoding::FlatBuffers`, so `Wire` is an ordinary
 /// declaration in a package with a face as it always was in one without.
 #[test]
@@ -3916,7 +3915,7 @@ fn type_path_writes_a_reference_a_child_package_hides_through_ridl_package() {
 }
 
 /// The escape of the four keywords that cannot be raw identifiers is
-/// injective (the generated-name collision design, decision 7,
+/// injective (`docs/technotes/rust-backend-name-collisions.md`, decision 7,
 /// driftsys/ridl#583): a name that is one of them followed by zero or more
 /// underscores gets one more, so `self` and `self_` are `self_` and `self__`
 /// rather than `self_` twice. It holds in `ident`, which every emitted name

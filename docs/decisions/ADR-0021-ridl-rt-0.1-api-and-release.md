@@ -110,9 +110,11 @@ publication on 2026-09-28. The design note is
 field whose accessor is named `bytes` does not meet it (driftsys/ridl#587). An
 addition under decision 10, to be released with the workspace as 0.5.0 because
 the backend change that needs it breaks the generated API. The design note is
-the generated-name collision design (driftsys/ridl#583, #587, #588). The same
-note removes the generated `pub type Wire` alias decision 7's 2026-09-21
-addendum describes; that addendum carries a dated note.
+the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)
+(driftsys/ridl#583, #587, #588). The same note removes the generated
+`pub type Wire` alias decision 7's 2026-09-21 addendum describes; that addendum
+carries a dated note.
 
 ## Context
 
@@ -327,12 +329,13 @@ trusted with no `unsafe` and no second verification pass.
    not inferred.
 
    **Note (2026-09-29).** The `Wire` alias named above is gone: the
-   generated-name collision design (decision 5 of that note, driftsys/ridl#588)
-   removed `pub type Wire` from the generated package, because a declaration or
-   an interface named `Wire` collided with it, and the emitted code names the
-   encoding by its path, `::ridl_rt::encoding::FlatBuffers`, at every site that
-   named the alias. Nothing in this record depends on the alias; the paragraph
-   above describes what the emitter wrote at the time.
+   [generated-name collision design](../technotes/rust-backend-name-collisions.md)
+   (decision 5 of that note, driftsys/ridl#588) removed `pub type Wire` from the
+   generated package, because a declaration or an interface named `Wire`
+   collided with it, and the emitted code names the encoding by its path,
+   `::ridl_rt::encoding::FlatBuffers`, at every site that named the alias.
+   Nothing in this record depends on the alias; the paragraph above describes
+   what the emitter wrote at the time.
 
    The same amendment settles what `EncodeError::Capacity`'s `needed` means,
    which the FlatBuffers encoder is the first to make a question. An encoder

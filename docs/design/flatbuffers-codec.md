@@ -19,10 +19,11 @@ and its plan
 interaction face moving off its `ReprC` placeholder and onto this codec, landed
 by stage K9b: the face names `::ridl_rt::encoding::FlatBuffers` at every buffer
 it sizes and every `Ref` it builds (through a per-package `pub type Wire` alias
-until 2026-09-29, when the generated-name collision design removed it,
-driftsys/ridl#588), and the hand-written `Payload<ReprC>` implementations its
-fixture carried are deleted. The projection decision that had blocked it,
-**driftsys/ridl#470**, is
+until 2026-09-29, when the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)
+removed it, driftsys/ridl#588), and the hand-written `Payload<ReprC>`
+implementations its fixture carried are deleted. The projection decision that
+had blocked it, **driftsys/ridl#470**, is
 [ADR-0019 decision 8](../decisions/ADR-0019-flatbuffers-projection-rules.md):
 every declaration has a root table, and a named scalar, an enum and an enum set
 are rooted in a box. What the face does with this codec is
@@ -84,16 +85,18 @@ type's private inner value the way any other item of that module can, which is
 what lets `decode` build an enum set that publishes no constructor. The
 `__ridl_fb_` prefix collides with no typl name, because no typl name begins with
 an underscore, and the tail is the declared name rather than its `snake_case`
-(since 2026-09-29, the generated-name collision design): `snake_case` is not
-injective over the names TYPL-009 accepts, so `type HTTPServer` beside
-`type HttpServer` gave one function name twice (E0428). Each function carries
-`#[allow(non_snake_case)]` for the CamelCase tail. The view's `bytes`, which
-hands back the verified buffer, is a method of `ridl_rt::payload::View<'a>`
-(ADR-0021 decision 20) and not an inherent method, so a field whose accessor is
-named `bytes` does not meet it: the accessor is inherent and wins the dot call,
-and a consumer reaches the buffer through `View::bytes(&view)`. Every primitive
-and prelude type the codec writes at package scope is written by its `::core::`
-or `::std::` path, because a declaration may carry any of those names.
+(since 2026-09-29, the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)):
+`snake_case` is not injective over the names TYPL-009 accepts, so
+`type HTTPServer` beside `type HttpServer` gave one function name twice (E0428).
+Each function carries `#[allow(non_snake_case)]` for the CamelCase tail. The
+view's `bytes`, which hands back the verified buffer, is a method of
+`ridl_rt::payload::View<'a>` (ADR-0021 decision 20) and not an inherent method,
+so a field whose accessor is named `bytes` does not meet it: the accessor is
+inherent and wins the dot call, and a consumer reaches the buffer through
+`View::bytes(&view)`. Every primitive and prelude type the codec writes at
+package scope is written by its `::core::` or `::std::` path, because a
+declaration may carry any of those names.
 
 A `Payload<FlatBuffers>` implementation is written for every declaration
 `ridl_ir::projection::flatbuffers::root_table` names a root for, which is every
@@ -243,8 +246,9 @@ The face names the encoding by its full path at each site: `MAX_BUFFER_SIZE`,
 builds name `::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload`
 implementations do. From stage K9b to 2026-09-29 they named it through a
 per-package alias, `pub type Wire`, which a declaration or an interface named
-`Wire` collided with; the generated-name collision design removed the alias
-(driftsys/ridl#588). The encoding is stated by
+`Wire` collided with; the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)
+removed the alias (driftsys/ridl#588). The encoding is stated by
 `ridl_backend_rust::WireEncoding`, which defaults to `FlatBuffers` and reaches
 the entry points through `generate_face_with(package, wire)` and
 `generate_pipeline`; `generate_face(package)` is the defaulted form. The entry

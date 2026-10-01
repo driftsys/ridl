@@ -1273,8 +1273,7 @@ fn a_cross_package_struct_or_union_reference_compiles() {
 ///
 /// The descriptor emitter writes `pub struct <Interface>;` at package scope,
 /// which is where the `pub type Wire` alias used to land, so E11.14 decision 5
-/// refused this package. The alias is gone (the generated-name collision
-/// design, decision 5, driftsys/ridl#588): every site that named it writes
+/// refused this package. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it writes
 /// `::ridl_rt::encoding::FlatBuffers`, so the interface's identity struct
 /// collides with nothing and no name is reserved.
 #[test]
@@ -1420,7 +1419,7 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
 /// Writes a single package manifested `p`, whose subdirectories `self/` and
 /// `self_/` become the packages `p.self` and `p.self_` under the
 /// package↔directory law (`load_package_tree`, ADR-0002 §1) — the shape of
-/// X-1f, the generated-name collision design's appendix: a package name whose
+/// X-1f, `docs/technotes/rust-backend-name-collisions.md`: a package name whose
 /// last segment is a keyword-escape target (`self`) alongside one whose last
 /// segment is that target with a trailing underscore already on it
 /// (`self_`). MANI-006 (`is_valid_package_name`) checks only the manifest's
@@ -1449,7 +1448,7 @@ fn write_self_package(dir: &Path) -> PathBuf {
 }
 
 /// Packages `p.self` and `p.self_` both build and both reach the crate tree
-/// (the generated-name collision design, decision 7, X-1f, driftsys/ridl#583).
+/// (`docs/technotes/rust-backend-name-collisions.md`, decision 7, X-1f, driftsys/ridl#583).
 ///
 /// `module_segment("self")` and `module_segment("self_")` are `self_` and
 /// `self__` — the same injective escape [`the_keyword_escape_is_injective`]
@@ -1494,7 +1493,7 @@ fn packages_named_self_and_self_underscore_both_reach_the_crate_tree() {
 
 /// Writes a single package manifested `veh` that declares a type `common`,
 /// with a subdirectory `common/` that becomes the package `veh.common` — the
-/// shape of X-18, the generated-name collision design's appendix
+/// shape of X-18, `docs/technotes/rust-backend-name-collisions.md`
 /// (driftsys/ridl#416). Package `veh.common` names the type `veh.common`
 /// two ways: as a struct field, and as an interface's signal payload, so the
 /// codec, the descriptors and the face name it too. A constant of that type
@@ -1524,8 +1523,7 @@ fn write_type_named_like_child_package(dir: &Path) -> PathBuf {
 }
 
 /// A type named like its child package builds, the emitted crate compiles, and
-/// a consumer names the type through `__ridl_package` (the generated-name
-/// collision design, §8, X-18, driftsys/ridl#416).
+/// a consumer names the type through `__ridl_package` (`docs/technotes/rust-backend-name-collisions.md`, X-18, driftsys/ridl#416).
 ///
 /// Rust keeps one type namespace per module, and the child package module
 /// `veh::common` is declared there explicitly, so it hides the type `common`

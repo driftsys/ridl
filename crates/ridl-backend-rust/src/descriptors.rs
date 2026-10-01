@@ -260,8 +260,7 @@ fn interaction_item(
             // override — the fixture's case. A declared init override is a
             // follow-up; the payload type derives `Default` here. The call
             // is the trait's path rather than `T::default()`, which an enum
-            // set bit named `default` would capture (the generated-name
-            // collision design, X-16).
+            // set bit named `default` would capture (`docs/technotes/rust-backend-name-collisions.md`, X-16).
             quote! {
                 impl ::ridl_rt::contract::Signal for #struct_ident {
                     type Payload = #payload;
@@ -400,7 +399,7 @@ fn payload_info(type_name: &str) -> TokenStream {
 /// rather than by a number this emitter would have to keep equal to it. The
 /// encoding is named by its full path at each site, as the codec names it in
 /// its own implementations; the package carries no alias for it (the
-/// generated-name collision design, decision 5).
+/// `docs/technotes/rust-backend-name-collisions.md`, decision 5).
 fn max_size_path(type_name: &str) -> TokenStream {
     let path = type_path(type_name);
     quote! {

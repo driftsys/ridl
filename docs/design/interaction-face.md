@@ -597,7 +597,8 @@ second set written for it, and the checked-in fixture stays a single `include!`.
 `pub type Wire = ::ridl_rt::encoding::FlatBuffers;`, emitted once per package at
 package scope. An unprefixed item at package scope is a name a declaration or an
 interface can carry, and `Wire` collided with both (driftsys/ridl#476, #588);
-E11.14 decision 5 refused such a package. The generated-name collision design
+E11.14 decision 5 refused such a package. The
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)
 removed the alias instead (its decision 5), because a name the backend chose
 never refuses a package: every site that named `Wire` writes the full path,
 `refuse_wire_collision` is deleted, and no name is reserved. The codec's free
@@ -807,11 +808,13 @@ written as prose.
    is over `shapes()`, the complete set of interface bodies, and skips a
    service's inline shape, for which no identity struct is emitted.
 
-   _Superseded on 2026-09-29 by the generated-name collision design, decision 5
-   (driftsys/ridl#588): the alias is removed, every site that named it writes
-   `::ridl_rt::encoding::FlatBuffers`, `refuse_wire_collision` is deleted, and a
-   package whose declaration or interface is named `Wire` builds and compiles.
-   The rule is that a name the backend chose never refuses a package._
+   _Superseded on 2026-09-29 by the
+   [generated-name collision design](../technotes/rust-backend-name-collisions.md),
+   decision 5 (driftsys/ridl#588): the alias is removed, every site that named
+   it writes `::ridl_rt::encoding::FlatBuffers`, `refuse_wire_collision` is
+   deleted, and a package whose declaration or interface is named `Wire` builds
+   and compiles. The rule is that a name the backend chose never refuses a
+   package._
 
 6. **The proof runs what the CLI wrote.** `crates/ridlc/tests/cabin_example.rs`
    builds `examples/cabin/`, compiles the emitted crate and
@@ -887,7 +890,8 @@ It read "`dispatch` binding the ridl parameter name beside its own locals";
 compiled to rustc E0592 until 2026-09-28, when driftsys/ridl#580 moved the fixed
 and derived methods behind traits (ADR-0023 decision 7, the section "The
 consumer face" above). Two collisions of the same class outside the face were
-closed on 2026-09-29 by the generated-name collision design:
+closed on 2026-09-29 by the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md):
 `<Struct>FbView::bytes` against a field whose accessor is `bytes`
 (driftsys/ridl#587) — `bytes` is a method of `ridl_rt::payload::View`, ADR-0021
 decision 20 — and the package module's `Wire` against a type or an interface

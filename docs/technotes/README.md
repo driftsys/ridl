@@ -26,3 +26,9 @@ it — for decisions that bind downstream work, see
   the crate as built see [`../design/ridl-rt.md`](../design/ridl-rt.md); for the
   generated face see
   [`../design/interaction-face.md`](../design/interaction-face.md).
+- **rust-backend-name-collisions.md** — how the Rust backend keeps the names it
+  generates from colliding: the rule for which collisions the language refuses
+  and which the backend owns, the per-namespace map of what each one does
+  (qualify, rename, move to a trait, remove, or claim and refuse), the claim
+  tables, the numbered decisions the code comments cite, the rejected
+  alternatives, and the test that holds each experiment.

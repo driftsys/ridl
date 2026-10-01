@@ -550,7 +550,8 @@ argument for it in the command case.
    the same class outside the face — `<Struct>FbView::bytes` against a field
    named `bytes` (E0592), and the package module's fixed `Wire` against a type
    or an interface named `Wire` (E0428) — were driftsys/ridl#587 and
-   driftsys/ridl#588, not this decision's; the generated-name collision design
+   driftsys/ridl#588, not this decision's; the
+   [generated-name collision design](../technotes/rust-backend-name-collisions.md)
    (2026-09-29) closed both by the same rule: `bytes` is a method of
    `ridl_rt::payload::View` ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)
    decision 20), and the `Wire` alias is removed, the emitted code naming
@@ -644,14 +645,15 @@ argument for it in the command case.
   `camel_case` — the descriptor `<Interface><Member>` at package scope, and in
   the face module the `<Member>Call`, `<Member>Phase` and `<Member>Correlation`
   types and the `Event` variant — are claimed by the Rust backend's claim tables
-  (the generated-name collision design, stage (c)). Two members whose
-  `camel_case` agrees, such as `XY` and `x_y`, emitted two items of one name
-  (E0428, driftsys/ridl#455); `ridl build` now refuses the package with a
-  message that names the generated name and both members. An interface whose
-  face is skipped under decision 2's consequence note claims nothing, so such a
-  pair in it is refused only when its face is emitted. Decision 7's rule for a
-  member against a fixed name of the face is unchanged: nothing is refused and
-  nothing is renamed.
+  (the
+  [generated-name collision design](../technotes/rust-backend-name-collisions.md),
+  stage (c)). Two members whose `camel_case` agrees, such as `XY` and `x_y`,
+  emitted two items of one name (E0428, driftsys/ridl#455); `ridl build` now
+  refuses the package with a message that names the generated name and both
+  members. An interface whose face is skipped under decision 2's consequence
+  note claims nothing, so such a pair in it is refused only when its face is
+  emitted. Decision 7's rule for a member against a fixed name of the face is
+  unchanged: nothing is refused and nothing is renamed.
 
 ## References
 

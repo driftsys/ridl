@@ -1,5 +1,5 @@
 //! The claim tables: one per Rust namespace a ridl-derived name reaches
-//! (the generated-name collision design, 2026-09-29, §4.1 step 2.2 and §4.2;
+//! (`docs/technotes/rust-backend-name-collisions.md`, rule step 2 and the per-namespace table;
 //! driftsys/ridl#449, #453, #455).
 //!
 //! Two names the backend derives from two ridl names can be equal in one Rust
@@ -14,7 +14,7 @@
 //! generated name and both sources.
 //!
 //! A name the backend chose is not claimed here. Such a name is changed so
-//! that no ridl name reaches it (§4.1 step 2.1): the internal `__ridl_fb_*`
+//! that no ridl name reaches it (rule step 1): the internal `__ridl_fb_*`
 //! and `__RIDL_*` items start with an underscore, which no ridl identifier
 //! does, and the face module's fixed names (`Client`, `Event`, `Serve`, …)
 //! end with none of the suffixes a member's call types carry.
@@ -23,7 +23,7 @@
 //! interfaces whose descriptors and face are emitted, so an interface whose
 //! face the pipeline skips (E11.14 decision 2) claims nothing, and a pair of
 //! its members is refused by the change that makes its face emittable
-//! (decision 13 of the design; experiments X-8b and X-8c). The views are the
+//! (decision 13; experiments X-8b and X-8c). The views are the
 //! ones the codec emits ([`codec::view_owners`]).
 //!
 //! The tables run before the codec, so a tuple named like a declaration is
@@ -197,7 +197,7 @@ pub(crate) fn check(ctx: &Ctx, interfaces: &[&v1::Interface]) -> Result<(), Gene
 /// Two members that meet in either table have one `camel_case`, so their
 /// descriptors `<Interface><Member>` met first in the package's table; these
 /// two are kept so that each namespace the face writes a member-derived name
-/// into has its table (the design's §4.2, last row).
+/// into has its table (the per-namespace table, last row).
 fn face_module(
     interface: &v1::Interface,
     iface_name: &str,
