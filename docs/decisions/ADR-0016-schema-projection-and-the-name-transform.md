@@ -163,7 +163,8 @@ the 59 enums in every tracked `.ridl` and `.typl` file and in the book, no two
 values of one enum share an output, so the check is expected to reject nothing
 that exists.
 
-**Amendment (2026-09-29), from the generated-name collision design
+**Amendment (2026-09-29), from the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)
 (driftsys/ridl#583, #587, #588, #423, #449, #453, #455).** The line between
 decision 3 and ADR-0017 decision 4 is stated for every backend. A collision is
 the language's, and `ridl-sem` refuses it, only when every backend that projects
@@ -201,7 +202,8 @@ under `pascal_case`, and of the in-tree backends only the Rust backend applies
 either transform. By this amendment's line those two checks are the Rust
 backend's. They stay where they are until a change needs to move them.
 
-**Amendment (2026-09-30), from the generated-name collision design
+**Amendment (2026-09-30), from the
+[generated-name collision design](../technotes/rust-backend-name-collisions.md)
 (driftsys/ridl#416).** The line of the 2026-09-29 amendment applies to the crate
 module tree as well. A type `common` of package `veh` and a child package
 `veh.common` are both legal, and in the crate that `ridlc` writes for

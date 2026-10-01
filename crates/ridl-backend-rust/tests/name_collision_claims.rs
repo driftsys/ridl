@@ -1,4 +1,4 @@
-//! The claim tables of the generated-name collision design (stage (c),
+//! The claim tables of `docs/technotes/rust-backend-name-collisions.md` (stage (c),
 //! driftsys/ridl#449, #453, #455): two names derived from ridl names that one
 //! Rust namespace cannot hold are refused at `ridl build`, with one message
 //! that names the generated name and both sources.

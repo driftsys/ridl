@@ -361,3 +361,19 @@ provenance. Nothing here is normative — the current references live in
   §5 line numbers and its §6 pin literal record what was true when it was
   written. Read it for the reasoning and the experiments, cited from the records
   it became, not as a second description of the as-built face.
+- **2026-09-29-generated-name-collisions-design.md** — the design note for the
+  Rust backend's generated-name collisions (driftsys/ridl#583, #587, #588, #423,
+  #449, #453, #455, #416 and #424). Its §2 inventories every Rust namespace a
+  ridl name reaches, its appendix holds the experiments (X-n) as `ridl build`
+  workspaces with the rustc result of each, its §7 records the alternatives, and
+  its §10 the thirteen decisions taken on Sebastien's behalf. The gardened
+  record is
+  [the name-collisions technote](../technotes/rust-backend-name-collisions.md),
+  with the binding parts in the 2026-09-29 and 2026-09-30 amendments of
+  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 20
+  and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision
+  7's note. Its §5, §6 and §9 plan the pull requests and the 0.5.0 release, and
+  its line numbers record what was true when it was written. Read it for the
+  reasoning and the experiments, not as a second description of the as-built
+  names.

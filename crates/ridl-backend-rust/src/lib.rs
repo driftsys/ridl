@@ -123,7 +123,7 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 /// as the full path `::ridl_rt::encoding::FlatBuffers`, the way the prelude
 /// names are written (driftsys/ridl#420).
 ///
-/// Until the generated-name collision design (2026-09-29, driftsys/ridl#588)
+/// Until `docs/technotes/rust-backend-name-collisions.md` (2026-09-29, driftsys/ridl#588)
 /// the encoding reached the output as one alias, `pub type Wire`, emitted
 /// here at package scope, and a declaration or an interface named `Wire`
 /// was refused (E11.14 decision 5). The alias is gone and no name is
@@ -221,7 +221,7 @@ pub(crate) fn generate_pipeline_over(
     // Each interface is built before the package's own items, so that the
     // claim table, which runs before the codec, knows which interfaces are
     // emitted and which are skipped: a skipped one claims nothing (the
-    // generated-name collision design, decision 13).
+    // `docs/technotes/rust-backend-name-collisions.md`, decision 13).
     let mut faced: Vec<&v1::Interface> = Vec::new();
     let mut interface_items: Vec<TokenStream> = Vec::new();
     for interface in &model.interfaces {
@@ -263,7 +263,7 @@ fn faced_interface(
 /// and is spelled from the interface's declared name rather than its
 /// `snake_case`, so two skipped interfaces whose `snake_case` agrees
 /// (`HTTPServer` beside `HttpServer`) leave two notes rather than one name
-/// twice (the generated-name collision design, X-14c). The declared name is
+/// twice (`docs/technotes/rust-backend-name-collisions.md`, X-14c). The declared name is
 /// CamelCase, so the item allows the naming lint it would otherwise draw.
 fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> TokenStream {
     let iface_name = descriptors::declared_name(interface).unwrap_or_default();
@@ -393,7 +393,7 @@ fn package_items(
 /// codec's `Payload` implementations, the descriptors' buffer constants and
 /// the face's `Ref`s — rather than through a `pub type Wire` alias at package
 /// scope, which a declaration or an interface named `Wire` collided with
-/// (driftsys/ridl#588; the generated-name collision design, decision 5).
+/// (driftsys/ridl#588; `docs/technotes/rust-backend-name-collisions.md`, decision 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum WireEncoding {
@@ -473,7 +473,7 @@ fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
 /// the mangled name cannot distinguish them — that is the whole defect — and
 /// the field lists are what a reader greps for.
 ///
-/// The claim tables (`claims::check`, the generated-name collision design)
+/// The claim tables (`claims::check`, `docs/technotes/rust-backend-name-collisions.md`)
 /// report this refusal first, before any claim of their own, with this
 /// message unchanged. Their own claims cover the pairs the lowering does not
 /// find: a tuple against a declaration, a view or a descriptor, and two
@@ -797,8 +797,7 @@ pub(crate) fn class_backing(class: i32) -> ScalarBacking {
 /// is written by its `::core::` or `::std::` path, here and at every other
 /// site: a typl declaration may be named `i64`, `String` or `Vec` (nothing
 /// reserves those names), and that item would shadow the bare name in the
-/// module the generated code shares with it (the generated-name collision
-/// design, §4.2; driftsys/ridl#423). A `#[repr(..)]` keeps the bare name,
+/// module the generated code shares with it (`docs/technotes/rust-backend-name-collisions.md`, per-namespace table; driftsys/ridl#423). A `#[repr(..)]` keeps the bare name,
 /// because the attribute takes an identifier and not a path.
 fn class_tokens(class: i32) -> TokenStream {
     match class_backing(class) {
@@ -1499,7 +1498,7 @@ fn emit_struct(
 /// field name through `camel_case` instead, by the lowering. That second
 /// projection reaches a namespace RIDL-149 does not check — two field names
 /// distinct under `snake_case` can induce one tuple type name
-/// (driftsys/ridl#453). By the generated-name collision design (ADR-0016's
+/// (driftsys/ridl#453). By `docs/technotes/rust-backend-name-collisions.md` (ADR-0016's
 /// 2026-09-29 amendment) that collision is this backend's, and it is refused
 /// before anything is emitted: two tuples of different shapes are the
 /// lowering's tuple collision, and a tuple named like a declaration is
@@ -1717,7 +1716,7 @@ fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> 
 /// and 2); a nested tuple's type name is spelled through `camel_case` by the
 /// lowering. Neither namespace is checked by RIDL-149: two tuple field names
 /// distinct in typl can spell one Rust field name, which rustc would reject
-/// with E0124 (driftsys/ridl#449). The generated-name collision design
+/// with E0124 (driftsys/ridl#449). The `docs/technotes/rust-backend-name-collisions.md`
 /// (ADR-0016's 2026-09-29 amendment) makes that this backend's to refuse, and
 /// the claim table per induced tuple refuses it before this runs
 /// (`claims::check`). A field name repeated verbatim is the language's,
@@ -1770,7 +1769,7 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
 /// crate root (I4).
 ///
 /// **A type named like a child package** (driftsys/ridl#416, the
-/// generated-name collision design, X-18). When package `veh` declares a type
+/// `docs/technotes/rust-backend-name-collisions.md`, X-18). When package `veh` declares a type
 /// `common` and the build also holds a package `veh.common` (or any package
 /// under `veh.common.`), the crate tree `ridlc` writes declares a module
 /// `common` inside `mod veh`. Rust has one type namespace per module, and an
@@ -2017,7 +2016,7 @@ pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
 /// cannot be raw identifiers (`crate`, `self`, `Self`, `super`) take a
 /// trailing underscore instead, and so does the bare underscore.
 ///
-/// The keyword escape is injective (the generated-name collision design,
+/// The keyword escape is injective (`docs/technotes/rust-backend-name-collisions.md`,
 /// decision 7, driftsys/ridl#583): a name that is one of the four followed
 /// by zero or more underscores gets one more, so `self` is `self_` and
 /// `self_` is `self__`. Appending one underscore to `self` alone gave the

@@ -309,7 +309,7 @@ fn the_pipeline_generate_carries_the_flatbuffers_codec() {
 }
 
 /// Neither entry point emits a `Wire` alias. The face entry point used to emit
-/// one per package (design note D-11); the generated-name collision design
+/// one per package (design note D-11); `docs/technotes/rust-backend-name-collisions.md`
 /// removed it (decision 5, driftsys/ridl#588), and every site that named it
 /// writes `::ridl_rt::encoding::FlatBuffers`, so a declaration or an interface
 /// named `Wire` collides with nothing.

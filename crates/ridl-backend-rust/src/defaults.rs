@@ -137,7 +137,7 @@ pub(crate) fn tuple_default_expr(ctx: &Ctx, tuple: &v1::InducedTuple) -> Option<
 /// Every prelude name and every `default()` call is written by path, for the
 /// reason `crate::class_tokens` gives and one more: a path call
 /// `T::default()` resolves an inherent item first, so an enum set bit named
-/// `default` would capture it (the generated-name collision design, X-16).
+/// `default` would capture it (`docs/technotes/rust-backend-name-collisions.md`, X-16).
 /// `<T as ::core::default::Default>::default()` reaches the trait method.
 fn slot_default(ctx: &Ctx, ft: &v1::Type, slot: &Slot) -> Option<TokenStream> {
     if ft.optional {

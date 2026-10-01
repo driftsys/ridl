@@ -2403,8 +2403,7 @@ impl Checker<'_> {
                 // fields still lower. Two names that are equal only under
                 // snake_case are not the language's collision: of the in-tree
                 // backends only the Rust backend applies snake_case to a tuple
-                // field, so the pair belongs to that backend (generated-name
-                // collisions design §4.2).
+                // field, so the pair belongs to that backend (`docs/technotes/rust-backend-name-collisions.md`, per-namespace table).
                 let mut declared: HashMap<String, TextRange> = HashMap::new();
                 let fields = tuple
                     .fields()
@@ -7911,8 +7910,7 @@ mod tests {
     /// Two tuple field names that differ in source but agree under
     /// snake_case are not the language's collision: of the in-tree backends
     /// only the Rust backend applies snake_case to a tuple field, so the
-    /// collision belongs to that backend's claim table (generated-name
-    /// collisions design §4.2). This pins that `ridl check` still accepts the
+    /// collision belongs to that backend's claim table (`docs/technotes/rust-backend-name-collisions.md`, per-namespace table). This pins that `ridl check` still accepts the
     /// source.
     #[test]
     fn a_snake_case_equal_tuple_field_pair_draws_no_diagnostic() {

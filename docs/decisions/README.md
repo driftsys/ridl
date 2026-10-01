@@ -146,12 +146,16 @@ other entry below is Accepted.
   pinned transforms and spells the Rust backend's enum variants (`CHECK_ENGINE`
   becomes `CheckEngine`), and an enum's values join RIDL-149's checked
   namespaces under `pascal_case` alone, because its collision set contains
-  `snake_case`'s. Amended 2026-09-29 (the generated-name collision design): a
-  collision is the language's only when every backend that projects the names
+  `snake_case`'s. Amended 2026-09-29 (the
+  [generated-name collision design](../technotes/rust-backend-name-collisions.md)):
+  a collision is the language's only when every backend that projects the names
   meets it; every other collision is one target's, and its backend removes it by
   changing a name it chose or by refusing the package with both sources named.
   TYPL-215 covers a tuple's fields; the `snake_case` and `camel_case` collisions
-  of driftsys/ridl#449, #453 and #455 are the Rust backend's.
+  of driftsys/ridl#449, #453 and #455 are the Rust backend's, and its claim
+  tables refuse them at `ridl build`. Amended 2026-09-30 (driftsys/ridl#416):
+  the rule reaches the crate module tree, so a type named like its child package
+  is written through the hidden `__ridl_package` module and not refused.
 
 - **ADR-0017 — The proto3 projection.** The rules the first wire backend needed
   that no earlier record supplied: how a foreign reference projects, where

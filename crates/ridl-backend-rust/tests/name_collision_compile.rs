@@ -1,5 +1,5 @@
 //! Compile proofs that a ridl name equal to a name the backend chose does not
-//! stop the emitted crate from compiling (the generated-name collision design,
+//! stop the emitted crate from compiling (`docs/technotes/rust-backend-name-collisions.md`,
 //! driftsys/ridl#583, #587, #588, #423, #424).
 //!
 //! Each test is one namespace of that design's inventory. The source is
@@ -147,7 +147,7 @@ interface Cabin {{
 /// A package may declare a type named like a prelude item the backend writes
 /// unqualified — `Default`, `String`, `Vec`, `Option`, `Some`, `None` — and the
 /// emitted crate compiles, because every such name is written by its
-/// `::core::` or `::std::` path at package scope (design §4.2). `Result`, `Ok`,
+/// `::core::` or `::std::` path at package scope (the technote's per-namespace table). `Result`, `Ok`,
 /// `Err`, `From` and `TryFrom` compiled before and are kept as the control.
 /// This is driftsys/ridl#424's recipe over the pipeline entry point.
 #[test]
@@ -178,7 +178,7 @@ fn declarations_named_like_prelude_names_compile() {
 }
 
 /// A package may declare a type named like a primitive the backend writes —
-/// the thirteen of design §4.2 — and the emitted crate compiles, because the
+/// the thirteen of the technote's per-namespace table — and the emitted crate compiles, because the
 /// backend writes `::core::primitive::<name>` at package scope. The base
 /// reaches every integer width, so the codec writes every primitive it can
 /// write; a width it does not reach would leave that primitive's sites
