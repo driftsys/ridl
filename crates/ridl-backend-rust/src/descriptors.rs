@@ -172,6 +172,21 @@ fn one_interface(
     Ok(())
 }
 
+/// The name of one interaction's descriptor, `<Interface><Member>`: the
+/// interface's identifier followed by the member's `camel_case`. The face
+/// names the descriptor through this function too, and the claim table
+/// (`crate::claims`) claims the name it returns, so the three cannot spell it
+/// differently.
+pub(crate) fn descriptor_ident(
+    iface_ident: &proc_macro2::Ident,
+    interaction: &v1::Interaction,
+) -> proc_macro2::Ident {
+    ident(&format!(
+        "{iface_ident}{}",
+        camel(interaction.name.as_ref())
+    ))
+}
+
 /// The `Member` row for one interaction.
 fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, GenerateError> {
     let ordinal = Literal::u32_unsuffixed(slot);
@@ -234,10 +249,7 @@ fn interaction_item(
     event_sizes: &mut Vec<TokenStream>,
 ) -> Result<TokenStream, GenerateError> {
     let member = declared(interaction.name.as_ref());
-    let struct_ident = ident(&format!(
-        "{iface_ident}{}",
-        camel(interaction.name.as_ref())
-    ));
+    let struct_ident = descriptor_ident(iface_ident, interaction);
     let index = Literal::usize_unsuffixed(row_index);
 
     let kind_impl = match interaction.shape.as_ref() {

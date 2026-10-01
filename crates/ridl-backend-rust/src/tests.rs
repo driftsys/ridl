@@ -1881,8 +1881,8 @@ fn tuple_field_generates_named_struct() {
 /// negative assertion is that the written name reaches no generated site.
 ///
 /// Two tuple field names distinct in typl can still project to one Rust field
-/// name. That is unchecked, and rustc rejects the result with E0124 —
-/// driftsys/ridl#449.
+/// name (driftsys/ridl#449). The backend's claim table refuses that pair
+/// before anything is emitted; `tests/name_collision_claims.rs` pins it.
 #[test]
 fn a_tuple_field_name_is_projected_to_snake_case() {
     let bounds = shaped_field("range", 1, tuple_of(&[("minSpeed", "Speed")]));
@@ -5816,5 +5816,28 @@ fn generate_with_resolves_a_reference_into_another_package() {
         with_others.contains("crate :: px :: a :: PointFbView")
             || with_others.contains("crate::px::a::PointFbView"),
         "the foreign view is named by a path through the module tree, got:\n{with_others}"
+    );
+}
+
+/// A declaration whose codec is withheld gets no view, so the claim table
+/// claims no view name for it (`codec::view_owners` keeps only roots with a
+/// finite bound). Here `Line` reaches a package `generate` is not handed, so
+/// its codec is withheld, and a declaration named `LineFbView`, which would
+/// meet `Line`'s view if one were emitted, builds.
+#[test]
+fn a_withheld_declaration_claims_no_view_name() {
+    let local = package(
+        "px.b",
+        vec![
+            struct_with_field("Line", "from", "px.a.Point"),
+            struct_with_field("LineFbView", "to", "px.a.Point"),
+        ],
+    );
+    let source = generate(&local)
+        .expect("a withheld declaration claims no view, so the package builds")
+        .rust_source;
+    assert!(
+        source.contains("__RIDL_FB_NO_CODEC_Line"),
+        "the codec of `Line` must be withheld, or this test proves nothing:\n{source}"
     );
 }

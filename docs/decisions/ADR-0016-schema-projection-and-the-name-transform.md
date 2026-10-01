@@ -74,7 +74,9 @@ Neither `camel_case` namespace is checked, and the amendment does not extend to
 either. The struct-field residual is recorded below and on driftsys/ridl#453;
 the member residual on driftsys/ridl#455, which was reached only through
 `generate_face` until E11.14 put the face in the pipeline on 2026-09-21, and is
-now on the path `ridl build --emit rust` takes.
+now on the path `ridl build --emit rust` takes. **(2026-09-30: both residuals
+are closed without a check in `ridl-sem`. By the 2026-09-29 amendment they are
+the Rust backend's, and its claim tables refuse either pair at `ridl build`.)**
 
 The cost is stated where it falls. A package whose arms collide under
 `camel_case` only was already broken — the Rust backend emitted E0428 — so the
@@ -132,10 +134,11 @@ refusal under [ADR-0017](ADR-0017-proto3-projection-rules.md) decision 4. The
 message names `pascal_case`. A `reserved` value emits no variant and is not in
 the namespace. A value name repeated verbatim is not a transform collision and
 is held out of the check, as a union arm's is; the exact-duplicate rule is
-TYPL-216 (driftsys/ridl#554), the sibling of TYPL-215 for struct fields and
-RIDL-413 for parameters. A union's arms have their own exact-duplicate rule,
-TYPL-217 (driftsys/ridl#452), and so do a standalone enumset's bits, TYPL-218
-(driftsys/ridl#565); a bit name is not projected through the transform.
+TYPL-216 (driftsys/ridl#554), the sibling of TYPL-215 for struct and tuple
+fields and RIDL-413 for parameters. A union's arms have their own
+exact-duplicate rule, TYPL-217 (driftsys/ridl#452), and so do a standalone
+enumset's bits, TYPL-218 (driftsys/ridl#565); a bit name is not projected
+through the transform.
 
 The TypeScript, proto and FlatBuffers backends keep their spelling. None of them
 has the defect, and a wire schema's value names are read by peers in other
@@ -184,9 +187,14 @@ as an enum's value prefix; the FlatBuffers and TypeScript backends keep the
 declared name. So it is not a RIDL-149 scope either, and the proto backend keeps
 its own refusal under ADR-0017 decision 4. The consequences entries on
 driftsys/ridl#449, #453 and #455 are resolved by this, not by extending
-RIDL-149. The TYPL-215 extension was built by driftsys/ridl#606. When this
-amendment was recorded, the Rust backend's claim tables were not built;
-driftsys/ridl#449, #453 and #455 stay open until they are.
+RIDL-149. The TYPL-215 extension was built by driftsys/ridl#606. The Rust
+backend's claim tables were built on 2026-09-30, and they close
+driftsys/ridl#449, #453 and #455: one table per Rust namespace a ridl-derived
+name reaches (the package module's types and its values, the fields of each
+induced tuple, and each face module's types and its `Event` variants), run
+before the codec, claiming only the items the backend emits, and refusing a
+second claim of one name with a message that names the generated name and both
+sources.
 
 Open: RIDL-149 checks a union's arms under `camel_case` and an enum's values
 under `pascal_case`, and of the in-tree backends only the Rust backend applies
@@ -450,11 +458,11 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   distinct in source, and `lower_union` deliberately holds a verbatim repeat out
   of the projection maps rather than report a collision the transform did not
   cause. The exact-duplicate rule for a union's arms is TYPL-217, the sibling of
-  TYPL-215 for struct fields, TYPL-216 for enum values, TYPL-218 for enumset
-  bits and RIDL-413 for parameters; it refuses that input at check time, which
-  closes the residual. Recorded on driftsys/ridl#452.
+  TYPL-215 for struct and tuple fields, TYPL-216 for enum values, TYPL-218 for
+  enumset bits and RIDL-413 for parameters; it refuses that input at check time,
+  which closes the residual. Recorded on driftsys/ridl#452.
 - **Negative — a tuple field name is projected through the pinned transform but
-  is in no checked namespace.** typl §15.1 makes a tuple field name camelCase
+  was in no checked namespace.** typl §15.1 makes a tuple field name camelCase
   exactly as it makes a struct field name one, and the Rust backend writes it as
   a Rust field name, so decision 1 applies to it and the 2026-09-20 change
   projects it (`emit_tuple_struct` and `defaults::tuple_default_expr`). RIDL-149
@@ -463,7 +471,15 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   rustc rejects with E0124. The failure is a refusal rather than wrong output,
   and the same namespace already admitted two _identical_ tuple field names
   before the transform, so projecting adds no silent failure mode. Extending
-  RIDL-149 to a tuple's fields is recorded on driftsys/ridl#449.
+  RIDL-149 to a tuple's fields is recorded on driftsys/ridl#449. **(2026-09-30:
+  closed, without extending RIDL-149, by the 2026-09-29 amendment's line. A
+  tuple field name spelled twice is refused by TYPL-215 at check time since
+  driftsys/ridl#606, so the namespace no longer admits two identical names. Two
+  tuple field names that differ in source and agree under `snake_case`, such as
+  `minSpeed` and `min_speed`, pass `ridlc check` and are refused at `ridl build`
+  by the Rust backend's claim table for that tuple, with both field names and
+  the tuple's field path in the message; the wire backends name a tuple's fields
+  by position and do not meet the pair.)**
 - **Negative — a third transform, `crates/ridl-backend-rust/src/face.rs`'s
   private `snake_case`, is still not the pinned one.** It names the generated
   face's modules and methods, and a declared parameter through
@@ -489,6 +505,12 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   package with such a pair now emits a crate that does not compile. The defect
   is unchanged and is still driftsys/ridl#455's; what changed is that it is
   reachable from the CLI rather than from `generate_face` alone.)**
+  **(2026-09-30: closed by the 2026-09-29 amendment's line, without extending
+  RIDL-149. The Rust backend's claim tables refuse the pair at `ridl build`: the
+  two descriptors `<Interface><Member>` meet in the package module's type
+  namespace, and the message names the generated name and both members. An
+  interface whose face the pipeline skips emits neither descriptor, so it claims
+  nothing and such a pair in it builds until its face is emitted.)**
 - **Negative — a struct field name also reaches `camel_case`, and that namespace
   is unchecked.** Decision 4 puts struct fields in RIDL-149 under `snake_case`,
   which is the Rust field name and the wire symbol. The Rust backend also spells
@@ -499,7 +521,12 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   two field names are distinct under `snake_case` and identical under
   `camel_case`. The refusal is clean rather than non-compiling output, so this
   is a question of where the diagnostic belongs, not an unsoundness. Recorded on
-  driftsys/ridl#453.
+  driftsys/ridl#453. **(2026-09-30: closed by the 2026-09-29 amendment's line:
+  the diagnostic belongs to the Rust backend, and `ridlc check` keeps accepting
+  the pair. The lowering's refusal of two tuples of different shapes under one
+  name stays, with its message; the claim table over the package module's type
+  namespace adds the pairs the lowering does not see, a tuple named like a
+  declaration, a view or a descriptor, each refused with both sources named.)**
 
 ## Documents amended
 

@@ -78,7 +78,8 @@
 //! its future, and `blocking` the `blocking` module.
 
 use crate::descriptors::{
-    declared_name, interactions, query_param_type, query_reply_type, single_param_type,
+    declared_name, descriptor_ident, interactions, query_param_type, query_reply_type,
+    single_param_type,
 };
 use crate::{GenerateError, camel_of, declared, ident, snake_of, type_path};
 use proc_macro2::{Ident, Literal, TokenStream};
@@ -161,7 +162,7 @@ pub(crate) fn one_interface(
 ) -> Result<Option<TokenStream>, GenerateError> {
     let iface_name = declared_name(interface).unwrap_or_default();
     let iface = ident(iface_name);
-    let module = ident(interface_snake(interface));
+    let module = module_ident(interface);
 
     // Payload type names are kept beside each member, because the face names
     // the declared type directly (M3 emits no induced argument struct).
@@ -179,7 +180,7 @@ pub(crate) fn one_interface(
             },
             method: ident(snake_of(interaction.name.as_ref())),
             descriptor: {
-                let ident = ident(&format!("{iface}{}", camel_of(interaction.name.as_ref())));
+                let ident = descriptor_ident(&iface, interaction);
                 quote! { super::#ident }
             },
             declared: name,
@@ -267,7 +268,7 @@ pub(crate) fn one_interface(
 
 /// The name of one call's correlation newtype, `<Name>Correlation`.
 fn correlation_type(call: &Call) -> Ident {
-    ident(&format!("{}Correlation", call.member.camel))
+    call_type_ident(call.member.camel, CALL_SUFFIXES[2])
 }
 
 /// One `Copy` correlation newtype per command and per query, `pub(crate)`
@@ -639,12 +640,51 @@ fn prelude(
 
 /// The name of one call's future type, `<Name>Call`.
 fn future_type(call: &Call) -> Ident {
-    ident(&format!("{}Call", call.member.camel))
+    call_type_ident(call.member.camel, CALL_SUFFIXES[0])
 }
 
 /// The name of one call's phase enum, `<Name>Phase`, private to the module.
 fn phase_type(call: &Call) -> Ident {
-    ident(&format!("{}Phase", call.member.camel))
+    call_type_ident(call.member.camel, CALL_SUFFIXES[1])
+}
+
+/// The suffixes of the three types the face module holds per command and per
+/// query: the future `<Name>Call`, the phase enum `<Name>Phase` and the
+/// correlation newtype `<Name>Correlation`. No fixed type name of the face
+/// module ends with one of them, so a name spelled here can meet only another
+/// name spelled here.
+pub(crate) const CALL_SUFFIXES: [&str; 3] = ["Call", "Phase", "Correlation"];
+
+/// One call's type of the face module: the member's `camel_case` followed by
+/// one of [`CALL_SUFFIXES`]. The claim table (`crate::claims`) claims the
+/// names it returns.
+pub(crate) fn call_type_ident(camel: &str, suffix: &str) -> Ident {
+    ident(&format!("{camel}{suffix}"))
+}
+
+/// The interaction kinds the face module carries: a signal, an event, a
+/// command and a query. An interface that declares at least one live member
+/// of those kinds gets a face module when its face is emitted, and one that
+/// declares none (only `fixed` members, or no member) gets none, which is
+/// when [`one_interface`] returns `None`.
+pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
+    interactions(interface).iter().any(|(_, interaction)| {
+        matches!(
+            interaction.shape.as_ref(),
+            Some(
+                v1::interaction::Shape::Signal(_)
+                    | v1::interaction::Shape::Event(_)
+                    | v1::interaction::Shape::Command(_)
+                    | v1::interaction::Shape::Query(_)
+            )
+        )
+    })
+}
+
+/// The name of an interface's face module: the pinned `snake_case` of the
+/// interface's declared name, through [`ident`].
+pub(crate) fn module_ident(interface: &v1::Interface) -> Ident {
+    ident(interface_snake(interface))
 }
 
 /// The name of one call's internal send, `send_<name>`.

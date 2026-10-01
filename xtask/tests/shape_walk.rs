@@ -108,12 +108,21 @@ const ALLOWED: &[Allowed] = &[
               the reason the descriptor layer's is",
     },
     Allowed {
-        path: "crates/ridl-backend-rust/src/lib.rs",
+        path: "crates/ridl-backend-rust/src/claims.rs",
         lines: 1,
-        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, for \
-              the reason the descriptor layer's is: the pipeline's \
-              per-interface walk (the encoding alias's collision check, the \
-              second read, was retired with the alias on 2026-09-29)",
+        why: "a test fixture: a unit test hands the claim table the one \
+              interface of a hand-written `ridl_ir::codegen::v1::Model`",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/src/lib.rs",
+        lines: 2,
+        why: "both reads are of `ridl_ir::codegen::v1::Model::interfaces`, \
+              for the reason the descriptor layer's is: the pipeline's \
+              per-interface walk, and `generate_face_with` handing every \
+              interface to the claim table, which skips an inline shape as \
+              the descriptor layer does (the encoding alias's collision \
+              check, an earlier second read, was retired with the alias on \
+              2026-09-29)",
     },
     Allowed {
         path: "crates/ridl-backend-rust/src/tests.rs",

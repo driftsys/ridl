@@ -93,6 +93,37 @@ pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError
     Codec { ctx }.items()
 }
 
+/// The owners of the views [`package_items`] emits, which the claim table
+/// (`crate::claims`) claims before the codec runs: the declarations whose
+/// root has a finite bound, by index into `Model.declarations`, and the
+/// induced tuples reachable from them, by index into `Model.tuples`. A
+/// declaration whose codec is withheld, and a tuple only it reaches, get no
+/// view, so they claim none.
+pub(crate) struct ViewOwners {
+    pub(crate) declarations: Vec<u32>,
+    pub(crate) tuples: Vec<u32>,
+}
+
+/// See [`ViewOwners`]. The selection is the one `Codec::items` makes, read
+/// from the same two places: a root's `bound` and `Codec::reachable_tuples`.
+pub(crate) fn view_owners(ctx: &Ctx) -> ViewOwners {
+    let codec = Codec { ctx };
+    let roots: Vec<&v1::FbRoot> = codec
+        .projection()
+        .map(|projection| {
+            projection
+                .roots
+                .iter()
+                .filter(|root| matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_))))
+                .collect()
+        })
+        .unwrap_or_default();
+    ViewOwners {
+        declarations: roots.iter().map(|root| root.declaration).collect(),
+        tuples: codec.reachable_tuples(&roots),
+    }
+}
+
 struct Codec<'a> {
     ctx: &'a Ctx<'a>,
 }
@@ -530,7 +561,10 @@ fn place(widths: &[usize]) -> (Vec<u16>, usize, usize) {
     (offsets, cursor.max(4), align)
 }
 
-fn view_ident(owner: &str) -> Ident {
+/// The name of the view of `owner`, a declared name or an induced tuple's
+/// name: `<Owner>FbView`. The claim table (`crate::claims`) claims the name
+/// this returns.
+pub(crate) fn view_ident(owner: &str) -> Ident {
     format_ident!("{}FbView", ident(owner))
 }
 
