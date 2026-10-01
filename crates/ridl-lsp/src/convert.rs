@@ -22,13 +22,19 @@ pub struct LineIndex {
     line_starts: Vec<TextSize>,
 }
 
-/// Builds the [`LineIndex`] for `text`. Lines are separated by `\n` (a `\r\n`
-/// separator leaves the `\r` at the end of the line, which never affects
-/// column arithmetic before it).
+/// Builds the [`LineIndex`] for `text`. As in the LSP specification, a line
+/// ends at `\n`, `\r\n` or `\r`; a `\r\n` pair is one line break.
 pub fn line_index(text: &str) -> LineIndex {
+    let bytes = text.as_bytes();
     let mut line_starts = vec![TextSize::from(0)];
-    for (offset, byte) in text.bytes().enumerate() {
-        if byte == b'\n' {
+    for (offset, byte) in bytes.iter().enumerate() {
+        let ends_line = match byte {
+            b'\n' => true,
+            // The `\n` of a `\r\n` pair ends the line, not the `\r`.
+            b'\r' => bytes.get(offset + 1) != Some(&b'\n'),
+            _ => false,
+        };
+        if ends_line {
             line_starts.push(TextSize::from(offset as u32 + 1));
         }
     }
@@ -64,8 +70,17 @@ impl LineIndex {
             return TextSize::of(self.text.as_str());
         };
         let line_end = match self.line_starts.get(position.line as usize + 1) {
-            // Exclude the `\n`, so a clamped character stays on its line.
-            Some(next_start) => usize::from(*next_start) - 1,
+            // Exclude the whole terminator (`\n`, `\r\n` or `\r`), so a
+            // clamped character stays on its line and never lands between a
+            // `\r` and its `\n`.
+            Some(next_start) => {
+                let next_start = usize::from(*next_start);
+                if self.text[..next_start].ends_with("\r\n") {
+                    next_start - 2
+                } else {
+                    next_start - 1
+                }
+            }
             None => self.text.len(),
         };
         let mut units = 0u32;
@@ -301,6 +316,103 @@ mod tests {
         assert_eq!(lsp_range.start, pos(0, 1));
         assert_eq!(lsp_range.end, pos(0, 4));
         assert_eq!(index.text_range(lsp_range), byte_range);
+    }
+
+    /// `ab\rcd\ref` — bare `\r` endings; the last line has no terminator.
+    /// Lines start at bytes 0, 3 and 6.
+    const BARE_CR: &str = "ab\rcd\ref";
+
+    /// `a\rb\r\nc\nd` — one of each ending. Bytes: `a`=0, `\r`=1, `b`=2,
+    /// `\r`=3, `\n`=4, `c`=5, `\n`=6, `d`=7. Lines start at 0, 2, 5 and 7.
+    const MIXED: &str = "a\rb\r\nc\nd";
+
+    #[test]
+    fn a_bare_carriage_return_ends_a_line() {
+        let index = line_index(BARE_CR);
+        assert_eq!(index.position(size(2)), pos(0, 2), "on the `\\r`");
+        assert_eq!(index.position(size(3)), pos(1, 0), "after the first `\\r`");
+        assert_eq!(index.position(size(4)), pos(1, 1));
+        assert_eq!(index.position(size(6)), pos(2, 0), "after the second `\\r`");
+        assert_eq!(index.position(size(8)), pos(2, 2), "end of text");
+        assert_eq!(index.offset(pos(1, 1)), size(4));
+        assert_eq!(index.offset(pos(2, 0)), size(6));
+    }
+
+    #[test]
+    fn a_crlf_pair_is_one_line_break() {
+        let index = line_index("ab\r\ncd");
+        assert_eq!(index.position(size(4)), pos(1, 0), "after `\\r\\n`");
+        assert_eq!(index.position(size(6)), pos(1, 2), "end of text");
+        assert_eq!(index.offset(pos(1, 0)), size(4));
+        assert_eq!(index.offset(pos(1, 2)), size(6));
+        // Two lines only: line 2 is past the last line.
+        assert_eq!(index.offset(pos(2, 0)), size(6));
+    }
+
+    #[test]
+    fn mixed_line_endings_each_end_one_line() {
+        let index = line_index(MIXED);
+        assert_eq!(index.position(size(2)), pos(1, 0), "after `\\r`");
+        assert_eq!(index.position(size(5)), pos(2, 0), "after `\\r\\n`");
+        assert_eq!(index.position(size(7)), pos(3, 0), "after `\\n`");
+        assert_eq!(index.position(size(8)), pos(3, 1), "end of text");
+        for (line, start) in [(0, 0), (1, 2), (2, 5), (3, 7)] {
+            assert_eq!(index.offset(pos(line, 0)), size(start), "line {line}");
+        }
+    }
+
+    #[test]
+    fn offset_clamps_before_the_whole_line_terminator() {
+        // `MIXED`: line 0 ends with `\r` at byte 1, line 1 with `\r\n` at
+        // bytes 3..5, line 2 with `\n` at byte 6; line 3 has no terminator.
+        let index = line_index(MIXED);
+        assert_eq!(index.offset(pos(0, 99)), size(1), "before `\\r`");
+        assert_eq!(
+            index.offset(pos(1, 99)),
+            size(3),
+            "before `\\r\\n`, not between"
+        );
+        assert_eq!(index.offset(pos(2, 99)), size(6), "before `\\n`");
+        assert_eq!(index.offset(pos(3, 99)), size(8), "end of text");
+        // `BARE_CR`: the last line has no terminator and clamps to the end.
+        let index = line_index(BARE_CR);
+        assert_eq!(index.offset(pos(0, 99)), size(2));
+        assert_eq!(index.offset(pos(1, 99)), size(5));
+        assert_eq!(index.offset(pos(2, 99)), size(8));
+    }
+
+    #[test]
+    fn utf16_units_after_a_bare_carriage_return() {
+        // `x\ré🚀y`: `x`=0, `\r`=1, `é`=2 (2 bytes, 1 unit), `🚀`=4 (4 bytes,
+        // 2 units), `y`=8.
+        let text = "x\r\u{e9}\u{1F680}y";
+        let index = line_index(text);
+        assert_eq!(index.position(size(2)), pos(1, 0));
+        assert_eq!(index.position(size(4)), pos(1, 1), "after `é`");
+        assert_eq!(index.position(size(8)), pos(1, 3), "after `🚀`");
+        assert_eq!(index.position(size(9)), pos(1, 4), "end of text");
+        assert_eq!(index.offset(pos(1, 1)), size(4));
+        assert_eq!(index.offset(pos(1, 2)), size(8), "mid-pair rounds up");
+        assert_eq!(index.offset(pos(1, 3)), size(8));
+        assert_eq!(index.offset(pos(1, 99)), size(9));
+    }
+
+    #[test]
+    fn offset_and_position_round_trip_across_mixed_endings() {
+        let index = line_index(MIXED);
+        for (offset, _) in MIXED.char_indices() {
+            // Byte 4 is the `\n` of a `\r\n` pair: a position cannot point
+            // between the two, so it has no round trip.
+            if offset == 4 {
+                continue;
+            }
+            let offset = size(offset as u32);
+            assert_eq!(
+                index.offset(index.position(offset)),
+                offset,
+                "round trip at byte {offset:?}",
+            );
+        }
     }
 
     #[test]
