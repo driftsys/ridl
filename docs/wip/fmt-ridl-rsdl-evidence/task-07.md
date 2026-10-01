@@ -43,3 +43,40 @@ routing before Task 9.
 `just check` initially exited 1 because the appended decision entry needed prim
 formatting. It is repaired before commit. No parser or checker changes. QUICK
 review and exact commit verification follow.
+
+## Exact head, QUICK review and checkpoint
+
+Implemented Task 7 head: `ae3ddbf405301a7126e0355ae799a3c713408062`.
+`cargo test -p ridl-fmt --locked` exited 0 again on this exact head; log:
+`task-07-exact-head.log`.
+`cargo clippy -p ridl-fmt --all-targets --locked --
+-D warnings` exited 0; log:
+`task-07-clippy.log`. `just check` exited 0 after prim formatting repaired the
+decision entry.
+
+All three fresh QUICK seats completed successfully over
+`4a65b45e4cd0c8afc8a0dbe0f4f3f935b03a14ca..ae3ddbf405301a7126e0355ae799a3c713408062`.
+Tests, code-to-prose-only docs and the general-purpose bugs wrapper actually ran
+`gpt-5.6-terra` with high effort. The wrapper invoked the supported native
+built-in review with `gpt-5.6-terra` and explicit medium effort; its startup
+metadata confirms both. This is the supported native fallback, not a literal
+`/code-review medium` invocation. Each seat reported the nine exact changed
+paths; no refuters, ledger or GitHub review comments were used.
+
+Docs found no falsified code-to-prose statement. Tests and bugs independently
+reported the direct-comment guard preventing timing-first order for
+`query q(): T [persist] /* note */ @10ms`. Their shared issue and the missing
+exact-output coverage are **awaiting the maintainer's rendering decision**
+(D-H13), not marked fixed or dismissed. A temporary unit probe confirmed the
+input parses, the current output keeps attribute-first order, and current
+comment/tree preservation and fixed point hold. The probe was removed after
+verification. No production correction is applied pending approval.
+
+The branch has not been pushed and the grouped Tasks 6–8 PR has not been opened.
+Full review, full PR gate and CI for that group are pending. Task 8 has not
+started; Tasks 9–13 remain pending. Checkpoint changes are documentation only.
+
+Checkpoint documentation checks: `just book-check`, `just link-check`,
+`just doc-path-check` and `just check` each exited 0. Logs:
+`task-07-checkpoint-<recipe>.log`. These later edits change zero executable
+lines; QUICK fixes and checkpoint records receive no QUICK pass of their own.

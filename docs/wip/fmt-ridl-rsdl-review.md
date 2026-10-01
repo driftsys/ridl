@@ -8,17 +8,17 @@ Tasks 1–4 are merged in [PR #626](https://github.com/driftsys/ridl/pull/626) a
 [PR #630](https://github.com/driftsys/ridl/pull/630) remains open at `769b541`,
 with all required CI checks successful at the initial remote inspection.
 
-| Task | Implementation                                  | Commit and PR/base                                                              | Acceptance                          | Review and CI                                                                  |
-| ---- | ----------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
-| 5    | Caller changes in open PR                       | `e515b2e`, `f887c78`, `d31f4b9`, `8b85871`; PR #632 / `docs/387-fmt-book-width` | CLI, LSP and formatter tests passed | Two full passes complete; remaining coverage debt #633; CI passed at `8b85871` |
-| 6    | Implemented locally; #625 tests pass            | `3e6e9bf`; grouped PR forthcoming / PR #632                                     | Formatter and LSP acceptance passed | QUICK complete, docs corrected; grouped full review after Task 8               |
-| 7    | Implemented locally; acceptance passed          | None                                                                            | Not run                             | Not run                                                                        |
-| 8    | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
-| 9    | Pending, including deferred rsdl CLI width test | None                                                                            | Not run                             | Not run                                                                        |
-| 10   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
-| 11   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
-| 12   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
-| 13   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| Task | Implementation                                  | Commit and PR/base                                                              | Acceptance                                   | Review and CI                                                                  |
+| ---- | ----------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------ |
+| 5    | Caller changes in open PR                       | `e515b2e`, `f887c78`, `d31f4b9`, `8b85871`; PR #632 / `docs/387-fmt-book-width` | CLI, LSP and formatter tests passed          | Two full passes complete; remaining coverage debt #633; CI passed at `8b85871` |
+| 6    | Implemented locally; #625 tests pass            | `3e6e9bf`; grouped PR forthcoming / PR #632                                     | Formatter and LSP acceptance passed          | QUICK complete, docs corrected; grouped full review after Task 8               |
+| 7    | Implemented locally; rendering approval pending | `ae3ddbf`; grouped PR pending / PR #632                                         | Exact-head formatter tests and Clippy passed | QUICK tests/bugs raised annotation-comment case; D-H13 pending; no group CI    |
+| 8    | Pending                                         | None                                                                            | Not run                                      | Not run                                                                        |
+| 9    | Pending, including deferred rsdl CLI width test | None                                                                            | Not run                                      | Not run                                                                        |
+| 10   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                        |
+| 11   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                        |
+| 12   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                        |
+| 13   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                        |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).
 D-H1 preserves the approved design. D-H2 records explicit approval of Task 5
@@ -72,5 +72,45 @@ stash `8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
 remains intact, as do all other stashes. Task 5 is complete with recorded review
 debt. Task 6 acceptance and QUICK review are complete; current book and
 test-module claims are corrected. Task 7 attribute layout and invariant
-acceptance pass; its QUICK review follows. Continue with Task 8 before the
-grouped PR and two full reviews.
+acceptance pass, and all three QUICK seats are complete. Work is paused at the
+D-H13 rendering decision before Task 8 and the grouped PR.
+
+## Approval checkpoint and resume point
+
+Tasks 6 and 7 are implemented locally on `feat/387-fmt-ridl`; they are not
+published, merged or CI-verified. Task 7 acceptance passes at
+`ae3ddbf405301a7126e0355ae799a3c713408062`. QUICK tests and bugs independently
+identified this minimal input:
+
+```text
+package p
+interface I { query q(): T [persist] /* note */ @10ms }
+```
+
+The current formatter produces:
+
+```text
+package p
+
+interface I {
+  query q(): T [persist] /* note */ @10ms
+}
+```
+
+It reparses, preserves comments and structure, and is a fixed point. The direct
+comment guard preserves the whole member, leaving attributes before timing. D-4
+requires timing first; design section 5 requires verbatim rendering of a
+commented one-line construct. The pending question is whether this whole member
+is a verbatim exception, or timing must move with the comment placed after the
+attribute block or between timing and attributes. This is a required stop under
+plan section 7, recorded as
+[D-H13](fmt-ridl-rsdl-decisions.md#d-h13--task-7-intervening-annotation-comment-approval-checkpoint).
+
+After the answer, add the approved exact-output regression, resolve the QUICK
+finding, rerun Task 7 acceptance and proceed to Task 8. Tasks 8–13 have not
+started. The grouped Tasks 6–8 PR, its full reviews, full gate and CI remain
+pending. No approval is inferred from the earlier Task 5 sequencing answer. The
+original worktree and every stash remain intact. The implementation worktree has
+only checkpoint documentation changes after `ae3ddbf`; the temporary probe is
+removed. [Task 7 evidence](fmt-ridl-rsdl-evidence/task-07.md) records the
+exact-head tests, mutation and fresh actual-model review results.

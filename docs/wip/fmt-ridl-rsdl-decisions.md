@@ -353,3 +353,40 @@ append-only. Implementation status and verification are in
   also run before production changes. Logs under the Task 7 evidence directory.
 - Commit and PR: Task 7 follows `4a65b45` in the Tasks 6–8 grouped branch.
 - Maintainer action: review the grouped PR; no additional approval is needed.
+
+## D-H13 — Task 7 intervening annotation comment: approval checkpoint
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: awaiting approval.
+- Question or observed case: QUICK tests and bugs seats independently found
+  `query q(): T [persist] /* note */ @10ms` remains attribute-first. The
+  existing direct-comment guard emits the whole member verbatim. D-4 states
+  timing first regardless of source order; section 5 preserves a commented
+  one-line construct verbatim, without specifying this comment's attachment when
+  the annotation pair moves.
+- Chosen action or proposal: pause Tasks 8–13 and request an explicit choice:
+  retain the commented member verbatim, or put timing first with the comment
+  either after the attribute block or between timing and attributes. Retaining
+  the whole member is the recommended proposal, not an approved exception.
+- Reason and alternatives considered: automatically relocating the comment or
+  inventing an exception would settle a rendering that the handoff reserves for
+  the maintainer. The reviewer finding does not itself authorize a design
+  change.
+- Authority: handoff stop conditions and plan section 7: "the note does not
+  settle a case — an input whose rendering or break position the note does not
+  determine". Design sections 3.2 and 5 are the rules needing precedence here.
+- Affected files and behavior: no correction applied pending the answer. Task 7
+  production remains at `ae3ddbf`; the probe was temporary and restored.
+- Verification: the minimal whole-file probe parses without errors, preserves
+  structure and comments, and is a fixed point while retaining attribute-first
+  order.
+  `cargo test -p ridl-fmt --lib
+  pending_intervening_annotation_comment_probe --locked -- --nocapture`
+  exited 0 on `ae3ddbf` plus the temporary probe. Log:
+  `task-07-intervening-comment-probe.log`. All three QUICK contexts completed,
+  with matching nine-file scope. See Task 7 evidence for actual model metadata.
+- Commit and PR: Task 7 `ae3ddbf405301a7126e0355ae799a3c713408062`, stacked on
+  Task 6 in `feat/387-fmt-ridl`; grouped Tasks 6–8 PR is not open.
+- Maintainer action: answer the pending rendering question. Then add the
+  approved exact-output regression, rerun acceptance, record the disposition and
+  resume Task 8. No parser or grammar change is proposed.
