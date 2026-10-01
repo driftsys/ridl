@@ -142,3 +142,28 @@ append-only. Implementation status and verification are in
   `f887c780`.
 - Commit and PR: correction commit pending; PR #632, base PR #630.
 - Maintainer action: review the stacked PR; no approval or merge requested here.
+
+## D-H7 — Task 5 review cap and final checkpoint
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: approved existing rule and implementation choice.
+- Question or observed case: full pass 2 retained two further LSP coverage gaps;
+  no production defect was identified. The checkpoint still named the correction
+  commit as pending when written before that commit.
+- Chosen action: record `d31f4b9` as the completed correction, its passing gates
+  and CI, and defer both remaining coverage findings to debt #633, milestone E1
+  — typl + Tooling Spine. Preserve D-H6 as the historical decision.
+- Reason and alternatives considered: the active review workflow caps full
+  review at two passes and requires noncritical second-pass findings to be
+  recorded as debt. A third implementation/review cycle would violate the cap.
+  The docs finding about committed logs was independently refuted: the handoff
+  permits local logs, which substantiate the committed summaries.
+- Authority: handoff review instructions and the active review command's “Pass
+  2, and the stop” rule; routine checkpoint placement.
+- Affected files and behavior: decision, review and evidence records only.
+- Verification: `just verify`, enabled pre-push hook and all CI checks passed on
+  `d31f4b9062bf77139c8d4053d9f91156ba12d588`; four mutations fail the new tests.
+  See [Task 5 evidence](fmt-ridl-rsdl-evidence/task-05.md).
+- Commit and PR: corrections `d31f4b9`, PR #632 based on PR #630. This metadata
+  checkpoint follows the tested correction; its required gates run before push.
+- Maintainer action: review PR #632 and debt #633. No merge is authorized.

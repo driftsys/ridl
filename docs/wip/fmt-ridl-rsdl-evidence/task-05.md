@@ -151,4 +151,29 @@ Correction checks on the working diff:
   actual failures. Production files are restored and the acceptance targets
   passed.
 
-Full pass 2 and correction-head gates are pending.
+Full pass 2 reviewed `f887c780..d31f4b9062bf77139c8d4053d9f91156ba12d588`.
+Actual models: tests/docs Sol/high; compliance and each independent refuter
+Terra/high. Every seat/refuter verified the five changed paths. Compliance
+reported no findings. The docs claim that logs must be committed was refuted at
+confidence 5: the handoff permits local logs and the reviewer inspected them.
+Two independently confirmed LSP test gaps (confidence 92 each) are deferred to
+[debt #633](https://github.com/driftsys/ridl/issues/633), milestone E1 — typl +
+Tooling Spine: exact finite-width boundaries and formatting an earlier opened
+document after opening documents with other widths. The active workflow's
+second-pass rule requires noncritical findings to be filed as debt. The two-pass
+cap is reached; no third full review will run.
+
+`just verify` exited 0 on `d31f4b9062bf77139c8d4053d9f91156ba12d588` before
+`git push`, which exited 0 with `just pre-push` and hooks enabled. This includes
+all eight required push gates and the full build. All CI checks passed on this
+head: book, ci, commit-lint, markdown, rust and wasm; Pages was skipped. Local
+logs: `task-05-correction-verify.log` and `task-05-correction-push.log`.
+
+The commit-triggered QUICK review over `f887c780..d31f4b9` used actual
+Terra/high for tests, docs and the fresh general-purpose bugs wrapper; the
+native built-in bugs worker used Terra/medium. Docs and bugs found no issues;
+tests found no coverage defect and noted pending checkpoint metadata, which this
+update resolves. Startup headers are the model/effort evidence; reviewers'
+generic self-reported model names were not used. No quick review of these
+metadata fixes runs. This metadata checkpoint follows the tested correction
+head; its required push-gate logs remain locally available.
