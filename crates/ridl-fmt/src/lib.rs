@@ -34,6 +34,10 @@
 //! - initialisers ` = value` spaced on both sides of `=`, likewise enum values
 //!   `NAME = 0`.
 //!
+//! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
+//! code width. Options are passed through layout; line breaking is not applied
+//! yet. The formatter reads no files or environment.
+//!
 //! # What order is *not* changed
 //!
 //! Source order is wire identity (typl reference §7.4): a formatter must never
@@ -62,6 +66,21 @@ use ridl_syntax::{
 };
 use rowan::NodeOrToken;
 
+/// Options for the pure formatter. Width is not applied to layout yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormatOptions {
+    /// Maximum code characters per line, or `None` for no limit.
+    pub max_line_length: Option<usize>,
+}
+
+impl Default for FormatOptions {
+    fn default() -> Self {
+        Self {
+            max_line_length: Some(100),
+        }
+    }
+}
+
 /// The outcome of formatting one source text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormatOutcome {
@@ -85,7 +104,7 @@ pub enum FormatOutcome {
 /// A syntactically valid input yields [`FormatOutcome::Formatted`]; an input
 /// with any parse error yields [`FormatOutcome::ParseErrors`] and is not
 /// rewritten.
-pub fn format(text: &str, profile: Profile) -> FormatOutcome {
+pub fn format(text: &str, profile: Profile, options: &FormatOptions) -> FormatOutcome {
     let parse = ridl_syntax::parse(text, profile);
     if !parse.errors().is_empty() {
         return FormatOutcome::ParseErrors(parse.errors().to_vec());
@@ -95,7 +114,7 @@ pub fn format(text: &str, profile: Profile) -> FormatOutcome {
         // returning the input unchanged is the honest fallback.
         return FormatOutcome::Formatted(text.to_string());
     };
-    FormatOutcome::Formatted(format_source_file(&file))
+    FormatOutcome::Formatted(format_source_file(&file, options))
 }
 
 // --- vertical layout -----------------------------------------------------
@@ -127,9 +146,9 @@ struct Block {
 
 /// Formats the whole file: the container laid out at indent zero, joined with
 /// exactly one trailing newline and no leading blank line.
-fn format_source_file(file: &SourceFile) -> String {
+fn format_source_file(file: &SourceFile, options: &FormatOptions) -> String {
     let elements: Vec<_> = file.syntax().children_with_tokens().collect();
-    let lines = layout_container(&elements, 0, true);
+    let lines = layout_container(&elements, 0, true, options);
     let mut out = lines.join("\n");
     out.push('\n');
     out
@@ -147,6 +166,7 @@ fn layout_container(
     elements: &[SyntaxElement],
     indent: usize,
     is_source_file: bool,
+    options: &FormatOptions,
 ) -> Vec<String> {
     let ind = indent_str(indent);
     let mut blocks: Vec<Block> = Vec::new();
@@ -201,7 +221,7 @@ fn layout_container(
                 if !pending.is_empty() && nl_run >= 2 {
                     lines.push(String::new());
                 }
-                lines.extend(format_element(node, indent));
+                lines.extend(format_element(node, indent, options));
                 blocks.push(Block {
                     kind,
                     gap_blank,
@@ -294,7 +314,7 @@ fn block_kind(kind: SyntaxKind) -> BlockKind {
 type SyntaxElement = NodeOrToken<SyntaxNode, ridl_syntax::SyntaxToken>;
 
 /// Formats one structural node into its physical lines, indented at `indent`.
-fn format_element(node: &SyntaxNode, indent: usize) -> Vec<String> {
+fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> Vec<String> {
     let ind = indent_str(indent);
     let line = |s: String| vec![format!("{ind}{s}")];
     // A comment wedged directly among a single-line element's own tokens (for
@@ -316,14 +336,14 @@ fn format_element(node: &SyntaxNode, indent: usize) -> Vec<String> {
         SyntaxKind::ConstDef => line(format_const_def(node)),
         SyntaxKind::EnumSetDef => {
             if has_token(node, SyntaxKind::LBrace) {
-                format_block_def(node, indent, "enumset")
+                format_block_def(node, indent, "enumset", options)
             } else {
                 line(format_enumset_derived(node))
             }
         }
-        SyntaxKind::StructDef => format_block_def(node, indent, "struct"),
-        SyntaxKind::EnumDef => format_block_def(node, indent, "enum"),
-        SyntaxKind::UnionDef => format_block_def(node, indent, "union"),
+        SyntaxKind::StructDef => format_block_def(node, indent, "struct", options),
+        SyntaxKind::EnumDef => format_block_def(node, indent, "enum", options),
+        SyntaxKind::UnionDef => format_block_def(node, indent, "union", options),
         SyntaxKind::FieldDef => line(format_field_def(node)),
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
@@ -409,12 +429,17 @@ fn format_enumset_derived(node: &SyntaxNode) -> String {
 /// the members laid out at the next indent, and the closing brace. An empty
 /// body renders as `{}` on the header line. A comment on the opening-brace line
 /// stays on that line; a comment in the header region is preserved verbatim.
-fn format_block_def(node: &SyntaxNode, indent: usize, keyword: &str) -> Vec<String> {
+fn format_block_def(
+    node: &SyntaxNode,
+    indent: usize,
+    keyword: &str,
+    options: &FormatOptions,
+) -> Vec<String> {
     let ind = indent_str(indent);
     let header_prefix = block_header_prefix(node, keyword);
     let all_members = elements_between_braces(node);
     let (brace_comment, members) = split_brace_line_comment(&all_members);
-    let member_lines = layout_container(members, indent + 1, false);
+    let member_lines = layout_container(members, indent + 1, false, options);
 
     if member_lines.is_empty() && brace_comment.is_none() {
         return vec![format!("{ind}{header_prefix} {{}}")];
@@ -775,8 +800,13 @@ fn is_single_line_element(node: &SyntaxNode) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn default_options_use_a_hundred_column_limit() {
+        assert_eq!(FormatOptions::default().max_line_length, Some(100));
+    }
+
     fn formatted(input: &str) -> String {
-        match format(input, Profile::Typl) {
+        match format(input, Profile::Typl, &FormatOptions::default()) {
             FormatOutcome::Formatted(s) => s,
             FormatOutcome::ParseErrors(errors) => {
                 panic!("expected a formatted result, got parse errors: {errors:?}")
@@ -787,7 +817,7 @@ mod tests {
     #[test]
     fn broken_input_returns_parse_errors_untouched() {
         // A missing `package` is FORM-104; a broken file is never rewritten.
-        let outcome = format("type 123 :: [\n", Profile::Typl);
+        let outcome = format("type 123 :: [\n", Profile::Typl, &FormatOptions::default());
         let FormatOutcome::ParseErrors(errors) = outcome else {
             panic!("expected parse errors for broken input");
         };
@@ -797,7 +827,11 @@ mod tests {
     #[test]
     fn missing_package_is_a_parse_error_not_a_format() {
         assert!(matches!(
-            format("type Speed: km/h\n", Profile::Typl),
+            format(
+                "type Speed: km/h\n",
+                Profile::Typl,
+                &FormatOptions::default()
+            ),
             FormatOutcome::ParseErrors(_)
         ));
     }

@@ -163,7 +163,7 @@ wasm-check:
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
             -p ridl-backend-proto -p ridl-backend-flatbuffers \
             -p ridl-backend-rust -p ridl-backend-ts \
-            -p ridl-rt \
+            -p ridl-rt -p ridl-fmt \
             --no-default-features
         # And once more with the encoding features on. ADR-0020 decision 2
         # makes the generated Rust compiled to wasm32 the codec a TypeScript
