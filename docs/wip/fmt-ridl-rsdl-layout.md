@@ -566,9 +566,14 @@ parameter list would have broken the same way, `(` ending the header line and
 | service shape list (§3.3)           | none; the break follows `:` | a shape           | the required comma after every shape but the last |
 
 A tuple inside an array or map type breaks as a tuple; the brackets around it
-are not breakable, so `readings: [(a: A, b: B); 8]` breaks to `readings:
-[(`,
-the fields, `); 8]`.
+are not breakable:
+
+```typl,ignore
+readings: [(
+  a: A,
+  b: B
+); 8]
+```
 
 Everything else is unbreakable: a name, a qualified name, a literal, a string, a
 regex, a duration, a timing annotation (`@[20ms..100ms]`), a constraint
