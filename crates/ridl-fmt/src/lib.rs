@@ -1258,6 +1258,28 @@ mod tests {
     }
 
     #[test]
+    fn only_the_last_independent_tuple_breaks_when_that_is_enough() {
+        assert_width_format(
+            "package p\nstruct S { pairs: [(a: A, b: B): (c: C, d: D); 8] }\n",
+            "package p\n\nstruct S {\n  pairs: [(a: A, b: B): (\n    c: C,\n    d: D\n  ); 8]\n}\n",
+            &FormatOptions {
+                max_line_length: Some(30),
+            },
+        );
+    }
+
+    #[test]
+    fn a_trailing_comment_follows_the_broken_tuple_closer() {
+        assert_width_format(
+            "package p\nstruct S { pair: (a: A, b: B) // pair detail\n}\n",
+            "package p\n\nstruct S {\n  pair: (\n    a: A,\n    b: B\n  ) // pair detail\n}\n",
+            &FormatOptions {
+                max_line_length: Some(19),
+            },
+        );
+    }
+
+    #[test]
     fn trailing_comments_do_not_cause_tuple_breaks() {
         let comment = "note".repeat(40);
         let input = format!("package p\nstruct S {{ pair: (a: A, b: B) // {comment}\n}}\n");
