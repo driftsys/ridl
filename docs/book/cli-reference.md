@@ -871,6 +871,16 @@ file takes the file layout (the header, one blank line between declarations).
 The formatter has no layout rules for the rsdl declarations, so it keeps each
 one as written, as it does a ridl `interface` or `service`.
 
+**Layout and line width.** Formatted blocks use two spaces per indentation
+level. Tuple types break into one field per line, with commas between fields,
+when their code line exceeds 100 characters. Width counts Unicode scalar
+values, including indentation. Trailing comments do not count towards the
+limit, and unbreakable code can exceed it. A comment embedded inside a
+single-line construct keeps that construct's source layout.
+
+The CLI and language server currently use this fixed 100-character limit.
+Their width and indentation are not configured through `.editorconfig`.
+
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without
 writing it. Starting from `speed.typl` holding
