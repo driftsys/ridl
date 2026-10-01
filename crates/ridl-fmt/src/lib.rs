@@ -1,4 +1,4 @@
-//! `ridl fmt` — the CST-based formatter for the typl surface
+//! `ridl fmt` — the CST-based formatter for typl and ridl interface members
 //! (docs/ROADMAP.md epic E1.14, general form §5, typl reference §15.2).
 //!
 //! The formatter parses `text` with [`ridl_syntax::parse`] and rewrites the
@@ -33,11 +33,15 @@
 //!   colon; tuples `(min: Speed, max: Speed)` — comma then space;
 //! - initialisers ` = value` spaced on both sides of `=`, likewise enum values
 //!   `NAME = 0`.
+//! - interfaces use the same brace-body layout; value and callable interactions
+//!   have tight type colons, comma-separated parameter lists, spaced fallible
+//!   returns and tight stream types and timing annotations. Members carrying
+//!   attribute blocks retain their text until attribute layout is implemented.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
-//! types break one field per line, with commas between fields, when their code
-//! line exceeds the width. The last breakable construct on an overlong line
+//! types and parameter lists break one item per line, with commas between items,
+//! when their code line exceeds the width. The last breakable construct on an overlong line
 //! breaks first; lines are measured again after each break. Nested tuples break
 //! only after their enclosing tuple. Trailing comments never cause a break;
 //! unbreakable text stays over the limit. `None` disables line breaking.
@@ -322,7 +326,8 @@ fn block_kind(kind: SyntaxKind) -> BlockKind {
         | SyntaxKind::StructDef
         | SyntaxKind::EnumDef
         | SyntaxKind::EnumSetDef
-        | SyntaxKind::UnionDef => BlockKind::Def,
+        | SyntaxKind::UnionDef
+        | SyntaxKind::InterfaceDef => BlockKind::Def,
         _ => BlockKind::Member,
     }
 }
@@ -362,12 +367,24 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::StructDef => format_block_def(node, indent, "struct", options),
         SyntaxKind::EnumDef => format_block_def(node, indent, "enum", options),
         SyntaxKind::UnionDef => format_block_def(node, indent, "union", options),
+        SyntaxKind::InterfaceDef => format_block_def(node, indent, "interface", options),
+        SyntaxKind::SignalDef
+        | SyntaxKind::EventDef
+        | SyntaxKind::FixedDef
+        | SyntaxKind::CommandDef
+        | SyntaxKind::QueryDef => {
+            if child_node(node, SyntaxKind::AttrBlock).is_some() {
+                line(node.text().to_string())
+            } else {
+                render_layout(&format_interaction(node), indent, options)
+            }
+        }
         SyntaxKind::FieldDef => render_layout(&format_field_def(node), indent, options),
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
-        // A declaration with no layout rules here — a ridl `interface` or
-        // `service`, or one of the five rsdl declarations — is emitted as
+        // A declaration with no layout rules here — a ridl `service`, or
+        // one of the five rsdl declarations — is emitted as
         // written, so no source is lost.
         _ => line(node.text().to_string()),
     }
@@ -443,8 +460,8 @@ fn format_enumset_derived(node: &SyntaxNode) -> String {
 
 // --- brace-block definitions --------------------------------------------
 
-/// Formats a `struct` / `enum` / `union` / standalone `enumset` — the header,
-/// the members laid out at the next indent, and the closing brace. An empty
+/// Formats a `struct`, `enum`, `union`, standalone `enumset`, or `interface`:
+/// the header, the members at the next indent, and the closing brace. An empty
 /// body renders as `{}` on the header line. A comment on the opening-brace line
 /// stays on that line; a comment in the header region is preserved verbatim.
 fn format_block_def(
@@ -577,6 +594,83 @@ fn format_union_arm(node: &SyntaxNode) -> String {
     )
 }
 
+// --- interface members ---------------------------------------------------
+
+/// The value or callable member, without an attribute block. Each parser
+/// accepted slot is retained, including slots narrowed by the checker.
+fn format_interaction(node: &SyntaxNode) -> Layout {
+    let (keyword, callable) = match node.kind() {
+        SyntaxKind::SignalDef => ("signal", false),
+        SyntaxKind::EventDef => ("event", false),
+        SyntaxKind::FixedDef => ("fixed", false),
+        SyntaxKind::CommandDef => ("command", true),
+        SyntaxKind::QueryDef => ("query", true),
+        _ => return Layout::Text(node.text().to_string()),
+    };
+    let mut parts = vec![Layout::Text(format!(
+        "{keyword} {}",
+        child_tight(node, SyntaxKind::Name)
+    ))];
+    if callable {
+        if let Some(params) = child_node(node, SyntaxKind::ParamList) {
+            parts.push(format_param_list(&params));
+        }
+        if let Some(result) = child_node(node, SyntaxKind::ReturnType) {
+            parts.push(Layout::Text(": ".into()));
+            parts.push(format_return_type(&result));
+        }
+    } else {
+        parts.push(Layout::Text(": ".into()));
+        parts.push(field_type(node));
+    }
+    if let Some(init) = child_node(node, SyntaxKind::InitValue) {
+        if contains_comment(&init) {
+            parts.push(Layout::Text(format!(" {}", init.text())));
+        } else if let Some(literal) = child_node(&init, SyntaxKind::Literal) {
+            parts.push(Layout::Text(format!(" = {}", tight_text(&literal))));
+        }
+    }
+    if let Some(timing) = child_node(node, SyntaxKind::Timing) {
+        parts.push(Layout::Text(format!(" {}", tight_text(&timing))));
+    }
+    Layout::Concat(parts)
+}
+
+fn format_param_list(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    Layout::Tuple(
+        node.children()
+            .filter(|n| n.kind() == SyntaxKind::Param)
+            .map(|param| {
+                Layout::Concat(vec![
+                    Layout::Text(format!("{}: ", child_tight(&param, SyntaxKind::Name))),
+                    field_type(&param),
+                ])
+            })
+            .collect(),
+    )
+}
+
+fn format_return_type(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    if let Some(fallible) = child_node(node, SyntaxKind::FallibleType) {
+        let mut parts = Vec::new();
+        for (index, path) in fallible.children().enumerate() {
+            if index > 0 {
+                parts.push(Layout::Text(" | ".into()));
+            }
+            parts.push(Layout::Text(tight_text(&path)));
+        }
+        Layout::Concat(parts)
+    } else {
+        field_type(node)
+    }
+}
+
 // --- field types ---------------------------------------------------------
 
 /// The first field-type child of `node`, with tuple break positions retained.
@@ -596,6 +690,7 @@ fn is_field_type(kind: SyntaxKind) -> bool {
             | SyntaxKind::ArrayType
             | SyntaxKind::MapType
             | SyntaxKind::OptionalType
+            | SyntaxKind::StreamType
     )
 }
 
@@ -723,7 +818,7 @@ fn format_field_type(node: &SyntaxNode) -> Layout {
         return Layout::Text(node.text().to_string());
     }
     match node.kind() {
-        SyntaxKind::PathType => Layout::Text(tight_text(node)),
+        SyntaxKind::PathType | SyntaxKind::StreamType => Layout::Text(tight_text(node)),
         SyntaxKind::PrimitiveType => {
             let mut out = primitive_keyword(node);
             if let Some(constraint) = child_node(node, SyntaxKind::Constraint) {
@@ -909,10 +1004,13 @@ fn has_direct_comment(node: &SyntaxNode) -> bool {
 
 /// Whether `node` is a definition or member that renders on a single line —
 /// everything except a brace-block definition (`struct`, `enum`, `union`, or a
-/// standalone `enumset`), whose direct comment children are handled elsewhere.
+/// standalone `enumset` or `interface`), whose direct comment children are handled elsewhere.
 fn is_single_line_element(node: &SyntaxNode) -> bool {
     match node.kind() {
-        SyntaxKind::StructDef | SyntaxKind::EnumDef | SyntaxKind::UnionDef => false,
+        SyntaxKind::StructDef
+        | SyntaxKind::EnumDef
+        | SyntaxKind::UnionDef
+        | SyntaxKind::InterfaceDef => false,
         SyntaxKind::EnumSetDef => !has_token(node, SyntaxKind::LBrace),
         _ => true,
     }
@@ -1145,18 +1243,281 @@ mod tests {
         );
     }
 
+    fn assert_ridl_member(input: &str, expected: &str) {
+        assert_profile_format(
+            &format!("package p\ninterface I {{ {input} }}\n"),
+            &format!("package p\n\ninterface I {{\n  {expected}\n}}\n"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_struct_preserves_direct_and_array_stream_types() {
+        assert_profile_format(
+            "package p\nstruct Streams { a: <T> b: [<T>; 1..2] }\n",
+            "package p\n\nstruct Streams {\n  a: <T>\n  b: [<T>; 1..2]\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_streams_render_in_nested_collection_and_optional_positions() {
+        assert_profile_format(
+            "package p\nstruct S { a : < veh.T >? b : [<K>:<bytes>;1 .. 2] c : (a:<string>,b:[<T>?;2]) }\n",
+            "package p\n\nstruct S {\n  a: <veh.T>?\n  b: [<K>: <bytes>; 1..2]\n  c: (a: <string>, b: [<T>?; 2])\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_stream_comment_keeps_the_type_verbatim() {
+        assert_profile_format(
+            "package p\nstruct S { a : < T /* element */ > }\n",
+            "package p\n\nstruct S {\n  a: < T /* element */ >\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_interface_header_comment_is_preserved() {
+        assert_profile_format(
+            "package p\ninterface   I /* header */ { signal s : T }\n",
+            "package p\n\ninterface   I /* header */ {\n  signal s: T\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_signal_payload_init_and_four_timing_forms() {
+        for (input, expected) in [
+            (
+                "signal  speed : Speed = LIMIT @ 10ms",
+                "signal speed: Speed = LIMIT @10ms",
+            ),
+            (
+                "signal raw : <SensorFrame> @[ 20ms .. 100ms ]",
+                "signal raw: <SensorFrame> @[20ms..100ms]",
+            ),
+            (
+                "signal maximum : integer[0..10] @[ .. 5s ]",
+                "signal maximum: integer [0..10] @[..5s]",
+            ),
+            (
+                "signal optional : Speed? @[20ms .. ]",
+                "signal optional: Speed? @[20ms..]",
+            ),
+        ] {
+            assert_ridl_member(input, expected);
+        }
+    }
+
+    #[test]
+    fn ridl_event_keeps_lenient_stream_and_init_slots() {
+        assert_ridl_member(
+            "event  calibrated : <bytes> = DEFAULT_CAL @[ 1ms .. 2ms ]",
+            "event calibrated: <bytes> = DEFAULT_CAL @[1ms..2ms]",
+        );
+    }
+
+    #[test]
+    fn ridl_fixed_keeps_lenient_stream_init_and_timing_slots() {
+        assert_ridl_member(
+            "fixed  region : <string> = REGION_EU @ 1s",
+            "fixed region: <string> = REGION_EU @1s",
+        );
+    }
+
+    #[test]
+    fn ridl_command_parameters_optional_return_and_timing() {
+        assert_ridl_member(
+            "command  upload ( data : <FwBlock>, span : (min:A,max:B), ) : Ack @[ .. 1s ]",
+            "command upload(data: <FwBlock>, span: (min: A, max: B)): Ack @[..1s]",
+        );
+        assert_ridl_member("command  reset ( ) @ 50ms", "command reset() @50ms");
+    }
+
+    #[test]
+    fn ridl_query_four_return_shapes() {
+        for (input, expected) in [
+            ("query a ( ) : Speed", "query a(): Speed"),
+            (
+                "query b( ): (min : Speed,max : Speed,)",
+                "query b(): (min: Speed, max: Speed)",
+            ),
+            ("query c( ): < veh.LogLine >", "query c(): <veh.LogLine>"),
+            (
+                "query d( ) : CalReport|CalError",
+                "query d(): CalReport | CalError",
+            ),
+        ] {
+            assert_ridl_member(input, expected);
+        }
+    }
+
+    #[test]
+    fn ridl_reserved_members_keep_order_and_comments() {
+        assert_profile_format(
+            "package p\ninterface I { reserved  legacy, // first\n reserved 3 }\n",
+            "package p\n\ninterface I {\n  reserved legacy // first\n  reserved 3\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_empty_internal_interface_and_between_member_comments() {
+        assert_profile_format(
+            "package p\ninternal   interface Hidden { }\ninterface I { // body\n signal  zebra : A,\n\n // next\n event  alpha : B // trailing\n // end\n}\n",
+            "package p\n\ninternal interface Hidden {}\n\ninterface I { // body\n  signal zebra: A\n\n  // next\n  event alpha: B // trailing\n  // end\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_parameter_return_and_timing_comments_remain_verbatim() {
+        assert_ridl_member(
+            "command upload(data : A, /* preserve */ more:B,)",
+            "command upload(data : A, /* preserve */ more:B,)",
+        );
+        assert_ridl_member(
+            "command c(a:A, // parameter\n b : B)",
+            "command c(a:A, // parameter\n b : B)",
+        );
+        assert_ridl_member(
+            "query q(): (a:A, /* return */ b : B)",
+            "query q(): (a:A, /* return */ b : B)",
+        );
+        assert_ridl_member(
+            "signal s:T @[1ms /* timing */ .. 2ms]",
+            "signal s: T @[1ms /* timing */ .. 2ms]",
+        );
+    }
+
+    #[test]
+    fn ridl_initializer_comment_is_preserved() {
+        assert_ridl_member(
+            "signal  s : T = /* initializer */ DEFAULT",
+            "signal s: T = /* initializer */ DEFAULT",
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_members_remain_verbatim_until_task_seven() {
+        assert_ridl_member(
+            "query  q ( ) : T [ require result>0 ] @ 10ms",
+            "query  q ( ) : T [ require result>0 ] @ 10ms",
+        );
+    }
+
+    #[test]
+    fn ridl_broken_interface_returns_parse_errors() {
+        assert!(matches!(
+            format(
+                "package p\ninterface I { signal s: T\n",
+                Profile::Ridl,
+                &FormatOptions::default()
+            ),
+            FormatOutcome::ParseErrors(_)
+        ));
+    }
+
+    #[test]
+    fn ridl_interface_golden_preserves_structure_and_comments() {
+        assert_profile_format(
+            include_str!("../test_data/input/interface.ridl"),
+            include_str!("../test_data/formatted/interface.ridl"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_parameter_and_tuple_return_width_boundaries() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                for is_return in [false, true] {
+                    let prefix = if is_return {
+                        "  query q(): "
+                    } else {
+                        "  command c"
+                    };
+                    let fixed = format!("{prefix}(a: , b: B)");
+                    let name = "A".repeat(columns - fixed.chars().count());
+                    let inline = format!("{prefix}(a: {name}, b: B)");
+                    assert_eq!(inline.chars().count(), columns);
+                    let member = if columns <= width {
+                        inline.clone()
+                    } else {
+                        format!("{prefix}(\n    a: {name},\n    b: B\n  )")
+                    };
+                    assert_profile_format(
+                        &format!("package p\ninterface I {{\n{inline}\n}}\n"),
+                        &format!("package p\n\ninterface I {{\n{member}\n}}\n"),
+                        Profile::Ridl,
+                        &options,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ridl_breaks_tuple_return_before_parameters_and_remeasures() {
+        let input = "package p\ninterface I { query getSpeedHistory(window: Duration, mode: Mode): (min: Speed, max: Speed, avg: Speed) @[..100ms] }\n";
+        let expected = "package p\n\ninterface I {\n  query getSpeedHistory(window: Duration, mode: Mode): (\n    min: Speed,\n    max: Speed,\n    avg: Speed\n  ) @[..100ms]\n}\n";
+        assert_profile_format(
+            input,
+            expected,
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(60),
+            },
+        );
+        let expected = "package p\n\ninterface I {\n  query getSpeedHistory(\n    window: Duration,\n    mode: Mode\n  ): (\n    min: Speed,\n    max: Speed,\n    avg: Speed\n  ) @[..100ms]\n}\n";
+        assert_profile_format(
+            input,
+            expected,
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
     /// Every width fixture pins its rendering, fixed point, and full tree and
     /// content streams. Comments participate in the content stream only.
     fn assert_width_format(input: &str, expected: &str, options: &FormatOptions) {
-        let outcome = format(input, Profile::Typl, options);
+        assert_profile_format(input, expected, Profile::Typl, options);
+    }
+
+    fn assert_profile_format(
+        input: &str,
+        expected: &str,
+        profile: Profile,
+        options: &FormatOptions,
+    ) {
+        let outcome = format(input, profile, options);
         assert_eq!(outcome, FormatOutcome::Formatted(expected.to_string()));
         assert_eq!(
-            format(expected, Profile::Typl, options),
+            format(expected, profile, options),
             outcome,
             "not a fixed point"
         );
         let structure = |text: &str| {
-            let parse = ridl_syntax::parse(text, Profile::Typl);
+            let parse = ridl_syntax::parse(text, profile);
             assert!(
                 parse.errors().is_empty(),
                 "width fixture must parse: {:?}",
@@ -1182,7 +1543,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         let content = |text: &str| {
-            ridl_syntax::parse(text, Profile::Typl)
+            ridl_syntax::parse(text, profile)
                 .syntax()
                 .descendants_with_tokens()
                 .filter_map(|e| e.into_token())

@@ -220,3 +220,85 @@ append-only. Implementation status and verification are in
   again before push. See [CI evidence](fmt-ridl-rsdl-evidence/pr-630-ci.md).
 - Commit and PR: review corrections follow `d011d56` on PR #630's branch.
 - Maintainer action: inspect the focused correction; no merge is authorized.
+## D-H8 — Tasks 6–8 branch and PR grouping
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: interface members, attributes, and inline service
+  bodies use the same member and width layout; each later task depends on the
+  preceding one.
+- Chosen action: implement Tasks 6, 7 and 8 sequentially, with separate task
+  commits, evidence and quick reviews, in one stacked PR on `feat/387-fmt-ridl`,
+  based on Task 5's `feat/387-fmt-callers` at
+  `8b8587106e164a8b2b7ffb5a42fbe2463f0da42f`. Run the full PR reviews after the
+  group is implemented. Fetch confirmed main remains `9f0b953c`.
+- Reason and alternatives considered: the small consecutive group provides the
+  complete ridl member and service layout in one reviewable change while keeping
+  each task's tests and implementation distinct. Separate PRs would expose the
+  intentionally temporary attribute-member fallback as a PR boundary.
+- Authority: handoff task-loop step 9 permits a justified small consecutive
+  group; design sections 3.1–3.3 and the existing task order remain unchanged.
+- Affected files and behavior: `ridl-fmt` layout, tests, goldens and records.
+- Verification: the reused worktree completed bootstrap before Task 5; Task 5's
+  final checkpoint passed all eight push gates, pre-push and all CI.
+- Commit and PR: Task 6 commit and grouped PR pending; base PR #632.
+- Maintainer action: review the later stacked PR after PR #632; no merge is
+  authorized.
+
+## D-H9 — Task 6 shared interaction and stream rendering
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: the old formatter drops a direct struct stream and
+  an array stream, and emits interface declarations without canonical member or
+  width layout.
+- Chosen action: route interfaces through `format_block_def`, exclude them from
+  single-line comment routing, reuse `Layout::Tuple` for parameters and tuple
+  returns, and add stream recognition to the shared field-type renderer. Keep
+  attribute members verbatim until Task 7. Share value/callable slot assembly,
+  preserving the parser's lenient slots and spaced fallible returns.
+- Reason and alternatives considered: shared type recognition preserves streams
+  in direct, optional, tuple, array and map positions as well as interaction
+  payloads, parameters and returns. A payload-only patch would leave issue #625.
+  A separate breaking engine would duplicate the approved layout algorithm.
+- Authority: Task 6; design sections 3.1, 3.2, 5 and 6. No parser, checker,
+  grammar or diagnostic changes.
+- Affected files and behavior: `ridl-fmt` module and the new interface golden.
+  Generalize the existing test assertion helper to a profile parameter so each
+  new fixture checks its second pass, structure and comment/content streams.
+- Verification: direct/array stream regression failed with the documented
+  dropped text; all 17 new ridl tests produced one passing malformed-input
+  control and 16 expected layout/preservation failures. All fixtures parsed.
+  `cargo test -p ridl-fmt --locked` then passed, including 48 unit tests and
+  corpus invariants at widths 100, 60 and 40. Tested base `8b858710` plus the
+  local Task 6 diff; committed-head checks follow this task commit.
+- Commit and PR: this Task 6 change is on `feat/387-fmt-ridl`; the grouped PR
+  follows Task 8.
+- Maintainer action: review the stream regression and the grouped PR when open.
+
+## D-H10 — Task 6 initializer comments
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: the first interaction renderer extracted only an
+  initializer's literal, dropping a comment between `=` and the literal. Input
+  `signal s: T = /* initializer */ DEFAULT` lost that comment.
+- Chosen action: add a failing fixture first, then retain the entire `InitValue`
+  text when it contains a comment, with one space before it. Keep normal
+  initializer spacing for comment-free values.
+- Reason and alternatives considered: verbatim initializer rendering preserves
+  its comment while allowing the rest of the member to use canonical layout.
+  Returning the whole member verbatim would also suppress unrelated formatting.
+- Authority: design section 5's construct-comment rule and the no-comment-loss
+  invariant; formatter-only correction within Task 6.
+- Affected files and behavior: interaction initializer rendering and one unit
+  regression; no parser or checker changes.
+- Verification:
+  `cargo test -p ridl-fmt ridl_initializer_comment_is_preserved
+  --locked`
+  exited 101 with the dropped comment; `cargo test -p ridl-fmt
+  --locked` then
+  passed all 49 unit tests and the corpus/invariant suites. Local log
+  `task-06-red-init-comment.log`; base `8b858710` plus Task 6 diff.
+- Commit and PR: included in this Task 6 change on `feat/387-fmt-ridl`.
+- Maintainer action: inspect the comment regression in the grouped PR.

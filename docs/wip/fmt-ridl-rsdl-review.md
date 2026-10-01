@@ -8,17 +8,17 @@ Tasks 1–4 are merged in [PR #626](https://github.com/driftsys/ridl/pull/626) a
 [PR #630](https://github.com/driftsys/ridl/pull/630) remains open at `769b541`,
 with all required CI checks successful at the initial remote inspection.
 
-| Task | Implementation                                  | Commit and PR/base                                                   | Acceptance                          | Review and CI                                                                  |
-| ---- | ----------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
-| 5    | Caller changes in open PR                       | `e515b2e`, `f887c78`, `d31f4b9`; PR #632 / `docs/387-fmt-book-width` | CLI, LSP and formatter tests passed | Two full passes complete; remaining coverage debt #633; CI passed at `d31f4b9` |
-| 6    | Pending, including #625                         | None                                                                 | Not run                             | Not run                                                                        |
-| 7    | Pending                                         | None                                                                 | Not run                             | Not run                                                                        |
-| 8    | Pending                                         | None                                                                 | Not run                             | Not run                                                                        |
-| 9    | Pending, including deferred rsdl CLI width test | None                                                                 | Not run                             | Not run                                                                        |
-| 10   | Pending                                         | None                                                                 | Not run                             | Not run                                                                        |
-| 11   | Pending                                         | None                                                                 | Not run                             | Not run                                                                        |
-| 12   | Pending                                         | None                                                                 | Not run                             | Not run                                                                        |
-| 13   | Pending                                         | None                                                                 | Not run                             | Not run                                                                        |
+| Task | Implementation                                  | Commit and PR/base                                                              | Acceptance                          | Review and CI                                                                  |
+| ---- | ----------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
+| 5    | Caller changes in open PR                       | `e515b2e`, `f887c78`, `d31f4b9`, `8b85871`; PR #632 / `docs/387-fmt-book-width` | CLI, LSP and formatter tests passed | Two full passes complete; remaining coverage debt #633; CI passed at `8b85871` |
+| 6    | Implemented locally; #625 tests pass            | Commit/PR forthcoming on `feat/387-fmt-ridl` / PR #632                          | Formatter and LSP acceptance passed | Quick review next; grouped full review after Task 8                            |
+| 7    | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| 8    | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| 9    | Pending, including deferred rsdl CLI width test | None                                                                            | Not run                             | Not run                                                                        |
+| 10   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| 11   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| 12   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
+| 13   | Pending                                         | None                                                                            | Not run                             | Not run                                                                        |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).
 D-H1 preserves the approved design. D-H2 records explicit approval of Task 5
@@ -58,7 +58,11 @@ Suggested merge order: PR #630, then Task 5, then each subsequent task PR in
 order. Later tasks will be stacked on their immediate unmerged predecessor.
 Nothing in this execution authorizes merging any PR.
 
-Work is on `feat/387-fmt-callers` in the sibling `ridl-fmt-remaining` worktree.
+Task 5 is published at `8b8587106e164a8b2b7ffb5a42fbe2463f0da42f`, with all
+eight required push gates, pre-push and CI successful. Tasks 6–8 will form one
+consecutive stacked PR, with separate task commits and evidence.
+
+Work is now on `feat/387-fmt-ridl` in the sibling `ridl-fmt-remaining` worktree.
 The original book branch and untracked handoff are preserved. The owned Task 5
 stash `8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
 `On feat/387-fmt-editorconfig: Task 5 caller tests and width plumbing pending rsdl test sequencing`,
