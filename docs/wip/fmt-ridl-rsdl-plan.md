@@ -36,11 +36,13 @@ expression across lines (note §6.3); reading `indent_size` or `indent_style`
   `format` (the entry point), `layout_container` (one pass over a body: blocks,
   comments, blank lines), `blanks_between`, `block_kind`, `format_element` (the
   dispatch by node kind; its last arm, `_ => line(node.text().to_string())`, is
-  the verbatim fallback the seven declarations reach today), `format_block_def`,
-  `block_header_prefix`, `split_brace_line_comment`, `format_field_type`,
-  `format_constraint`, `format_reserved_entry`, `tight_text`,
-  `is_single_line_element`, `has_direct_comment`. The module documentation at
-  the top states the rules in force.
+  the verbatim fallback six of the seven declarations reach today; a `machine`
+  occurs only inside a `deployment` and is emitted as part of its text),
+  `format_block_def`, `block_header_prefix`, `split_brace_line_comment`,
+  `field_type`, `is_field_type`, `format_field_type`, `format_constraint`,
+  `format_reserved_entry`, `tight_text`, `is_single_line_element`,
+  `has_direct_comment`. The module documentation at the top states the rules in
+  force.
 - `crates/ridl-fmt/tests/` — `corpus.rs` (golden pairs in
   `crates/ridl-fmt/test_data/input` and `formatted`, `.typl` only today),
   `properties.rs` (`content_tokens`,
@@ -65,7 +67,13 @@ expression across lines (note §6.3); reading `indent_size` or `indent_style`
   of `ridl_fmt::format`.
 - `crates/ridl/tests/facade.rs` — the CLI `ridl fmt` tests
   (`fmt_formats_an_rsdl_file` and its neighbours).
-- `crates/ridl-lsp/tests/server.rs` — the LSP tests.
+- `crates/ridl-lsp/tests/server.rs` — the LSP tests, among them
+  `formatting_replaces_the_document_with_the_ridl_fmt_rendering` and its
+  `tabs()` and `four_spaces()` options.
+- `crates/ridl/tests/baseline_desk.rs` — two tests pin the text of
+  `crates/ridl/tests/baseline-corpus/cluster.ridl`
+  (`check_reports_ordinal_drift_against_the_committed_baseline`,
+  `inline_shape_removal_spans_the_service_name`).
 - `crates/ridl/tests/book_examples.rs` — `fenced_blocks` (extracts the book
   fences with mdBook's options, `MDBOOK_OPTIONS`) and `book_examples_compile`
   (compiles every verified fence).
@@ -146,9 +154,12 @@ of §5.
 ### Task 4 — the `.editorconfig` reader
 
 - Build: a default cargo feature `editorconfig` in `crates/ridl-fmt/Cargo.toml`,
-  an optional dependency on `ec4rs` 1.2 with its default features off (no
-  `language-tags`), added to `[workspace.dependencies]` in the root
-  `Cargo.toml`, and a feature-gated module with one function,
+  an optional dependency on `ec4rs` `"1.2"` (release 1.2.0; `rust-version` 1.56,
+  below the workspace's edition-2024 floor of 1.85 and the pinned toolchain
+  1.98.1) with its default features off (no `language-tags`), added to
+  `[workspace.dependencies]` in the root `Cargo.toml`. Before you commit the
+  dependency, stop and ask the maintainer how its Apache-2.0 licence text is
+  carried (§7); and a feature-gated module with one function,
   `FormatOptions::for_path(path: &Path) -> FormatOptions` (note §6.6, "What is
   honoured"). Only `max_line_length` is read: an integer is the width, `off` is
   `None`, absent, `unset` or any other value is `Some(100)`. `format` itself
@@ -174,9 +185,15 @@ of §5.
 - Tests first: in `crates/ridl/tests/facade.rs`, the `.editorconfig` override
   tests of note §11, using a typl tuple field (the only construct that breaks so
   far) for the line that breaks at 60 and not at 100; in
-  `crates/ridl-lsp/tests/server.rs`, a formatting request with
-  `FormattingOptions { tabSize: 4, insertSpaces: false }` that receives
-  two-space indentation.
+  `crates/ridl-lsp/tests/server.rs`, the LSP test of note §11: a document in a
+  temporary directory whose `.editorconfig` holds `root = true` and
+  `[*.typl] max_line_length = 60`, `indent_size = 4`, `indent_style = tab`, with
+  an 80-column tuple field line, receives the tuple broken at 60 and two-space
+  indentation. It fails before the handler reads the file, because the handler
+  then formats at 100. Do not add a test of the client's `FormattingOptions`
+  alone: `formatting_replaces_the_document_with_the_ridl_fmt_rendering` already
+  formats under `tabs()` and `four_spaces()` and asserts two-space indentation,
+  so such a test would pass on its first run.
 - Acceptance: `cargo test -p ridl-cli --test facade`, `cargo test -p ridl-lsp`.
 
 ### Task 6 — `interface` members, without attribute blocks
@@ -187,15 +204,37 @@ of §5.
   parameter list, the four return shapes with `T | E` spaced (D-8), the init
   value, the four timing spellings. Breaking (§6.3): the parameter list and the
   tuple return, with commas (D-13). A member that carries an attribute block
-  stays on the verbatim path until Task 7.
+  stays on the verbatim path until Task 7. Render every slot the parser accepts
+  (note §3.1 table, `lenient_overapprox.ridl`), not only the slots of
+  `family.ungram`: a stream payload and an init value on `signal`, `event` and
+  `fixed`, a timing on `fixed`, a return on `command`.
+- Stream type: add `StreamType` to `is_field_type` and a tight `StreamType` arm
+  to `format_field_type` (note §3.1, "The stream type in a payload position").
+  Without it `field_type()` returns an empty string for a stream payload, and
+  today it already drops a stream in a `.ridl` struct field or array element.
+- Block routing: when `InterfaceDef` goes through `format_block_def`, add it to
+  the brace-block kinds for which `is_single_line_element` returns `false`
+  (`StructDef`, `EnumDef`, `UnionDef` today). Otherwise `format_element` sees
+  the between-member comments of the body as direct comment children
+  (`has_direct_comment`) and emits the whole interface verbatim. The same
+  applies to a `ServiceDef` with a brace body (Task 8) and to `SystemDef`,
+  `ComponentDef`, `DistributionDef`, `DeploymentDef` and `MachineDef` (Tasks 9
+  and 10): each task adds its kinds, and adds a test of a body with a comment
+  between two members.
 - Files: `crates/ridl-fmt/src/lib.rs`; new `.ridl` pairs in
   `crates/ridl-fmt/test_data/input` and `formatted` (the §3.1 interface in the
   aligned style, without its `require` block).
 - Tests first: one unit test per rule (note §11, "Unit tests"); the §6.2 worked
   example's parameter-list and tuple-return breaks at width 60; the 99/100/101
   boundary for both constructs; a comment inside a parameter list emits the list
-  verbatim (note §5); `internal interface Hidden {}`.
-- Acceptance: `cargo test -p ridl-fmt`.
+  verbatim (note §5); `internal interface Hidden {}`; an interface with a
+  comment between two members, which is laid out and not emitted verbatim; each
+  lenient slot of `lenient_overapprox.ridl` without an attribute block; a
+  `.ridl` struct with a field `a: <T>` and a field `b: [<T>; 1..2]`, which keeps
+  both streams.
+- Acceptance: `cargo test -p ridl-fmt`; `cargo test -p ridl-lsp` (the `.ridl`
+  case of `formatting_replaces_the_document_with_the_ridl_fmt_rendering` is
+  already canonical and must not change).
 
 ### Task 7 — attribute blocks and expressions
 
@@ -239,16 +278,42 @@ of §5.
   always (D-1), the member line with its inline attribute block, `offers` and
   `requires` with one space and no padding, the header attribute block between
   the name and `{`, and the block form with the brace on the closer's line when
-  the header does not fit (§6.4). Reuse the attribute block of Task 7.
-- Files: `crates/ridl-fmt/src/lib.rs`, `crates/ridl-fmt/tests/rsdl.rs` (rewrite
-  `an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written` to
-  the §4 renderings), `.rsdl` goldens (the issue's `component`,
-  `rsdl_attribute_positions.rsdl`).
+  the header does not fit (§6.4). Reuse the attribute block of Task 7. Extend
+  `block_header_prefix` to render the header attribute block, and keep its
+  verbatim path for a comment that is a direct token of the header (note §5).
+  Add `SystemDef`, `ComponentDef` and `DistributionDef` to the kinds for which
+  `is_single_line_element` returns `false` (Task 6).
+- Files: `crates/ridl-fmt/src/lib.rs`; `crates/ridl-fmt/tests/rsdl.rs`;
+  `crates/ridl/tests/facade.rs`; `crates/ridl-lsp/tests/server.rs`; `.rsdl`
+  goldens (the issue's `component`, `rsdl_attribute_positions.rsdl`).
+- Tests that this task breaks, and how each changes (note §8 D-1 and §11):
+  - `crates/ridl-fmt/tests/rsdl.rs`:
+    `an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written`
+    is rewritten to the §4 renderings; `tokens()` filters out
+    `SyntaxKind::Comma` tokens as well as trivia, because D-1 removes the
+    separator commas of the reference fences that
+    `the_reference_rsdl_examples_format_idempotently_and_keep_every_token`
+    reads; the module documentation, which says each rsdl declaration is emitted
+    as written, is rewritten.
+  - `crates/ridl/tests/facade.rs`, `fmt_formats_an_rsdl_file`: the expected
+    output becomes
+    `"package veh.topology\n\ncomponent Cruise {}\n\nsystem Vehicle {\n  Cruise\n}\n"`,
+    and its doc comment no longer says each declaration is kept as written.
+    `fmt_check_walks_into_rsdl_files` does not change (it still exits 1).
+  - `crates/ridl-lsp/tests/server.rs`,
+    `formatting_replaces_the_document_with_the_ridl_fmt_rendering`, the `.rsdl`
+    case (request id 18): the expected `new_text` becomes
+    `"package solo\n\ncomponent Door {\n  offers solo.door\n}\n"`. Its `.ridl`
+    case is already canonical and does not change.
 - Tests first: each before/after of §4.1, §4.2 and §4.4; the §4.4 header at
-  width 100 (block form) and at width 140 (one line); an empty body `{}`; a
-  dotted key; a comment on the opening-brace line.
-- Acceptance: `cargo test -p ridl-fmt`; the `.rsdl` files of the parser `ok`
-  corpus pass the Task 2 checks at the three widths.
+  width 143 (block form) and at width 144 (one line: the joined header is 144
+  columns, measured); an empty body `{}`; a dotted key; a comment on the
+  opening-brace line; a comment between two members of a `component`; a comment
+  between the name and the header attribute block (header verbatim) and one
+  inside it (attribute-block rules).
+- Acceptance: `cargo test -p ridl-fmt`, `cargo test -p ridl-cli --test facade`,
+  `cargo test -p ridl-lsp`; the `.rsdl` files of the parser `ok` corpus pass the
+  Task 2 checks at the three widths.
 
 ### Task 10 — `deployment` and nested `machine` blocks
 
@@ -285,6 +350,43 @@ of §5.
   references, out of scope). To reformat a fence, copy its text to a temporary
   file with the matching extension, run `ridl fmt` on it, and paste the result
   back.
+- Tests the sweep breaks, and how each changes (note §11, "Round trips"):
+  reformatting `cluster.ridl` tightens its `name : Type` colons and inserts a
+  blank line between its three `type` declarations, so every later line moves
+  down by two. In `crates/ridl/tests/baseline_desk.rs`,
+  `check_reports_ordinal_drift_against_the_committed_baseline` expects the
+  aligned source lines of `tyrePressure`, `legacyWheelPhase`, `doorOpened` and
+  `doorClosed` (for example `"event tyrePressure : DoorState @[100ms..1s]"`):
+  each becomes the tight form (`"event tyrePressure: DoorState @[100ms..1s]"`).
+  `inline_shape_removal_spans_the_service_name` expects `cluster.ridl:46:9`: it
+  becomes the `service` line's new number (48 with today's blank-line rule; read
+  it with `grep -n '^service' cluster.ridl` after the sweep), column 9. The
+  committed `.ridl/baseline/corpus.baseline.ir.json` holds no source position
+  and does not change.
+- Book prose the sweep makes false, corrected in the same commit (note §8 D-10):
+  - `docs/book/getting-started.md`: the inline code at line 136
+    (`type Speed : km/h [0.0..250.0 step 0.5]`), line 164
+    (`signal currentSpeed : Speed @10ms`), lines 204-205
+    (`fixed doorCount : integer [1..8]`, `type DoorCount : integer [1..8]`) and
+    lines 479-480 (`hasCruise : Enabled`, `hasCruise : boolean`) take the tight
+    colon; the `text` fence at lines 182-188 is regenerated by running
+    `ridl check` on the reformatted `types.ridl` with the bounds swapped (the
+    location becomes `./veh/common/types.ridl:4:18` and the quoted line
+    `type Speed: km/h [250.0..0.0 step 0.5]`); the paragraph "`ridl fmt` has its
+    own canonical layout" at lines 818-820, which says the listings use the
+    aligned layout, is rewritten to say they are in the formatter's layout.
+  - `docs/book/cli-reference.md` lines 869-872: the sentences saying the
+    formatter has no layout rules for the rsdl declarations and keeps each one,
+    and a ridl `interface` or `service`, as written are replaced by a short
+    statement of the new rules, the 100-column default and the `max_line_length`
+    key of `.editorconfig`.
+  - Leave `docs/book/getting-started.md` line 214 (it quotes the typl
+    reference's own `frame : bytes [8]`, which is out of scope) and the
+    diagnostics of `cli-reference.md`, whose sources are not in any verified
+    fence.
+  - Before committing, grep `docs/book/` again for inline code with a space
+    before a colon and for `ridl fmt`, and check every hit against the
+    reformatted fences.
 - Tests first: a fixed-point test over `examples/` and the book fences (note
   §11, "Round trips") — every verified fence, extracted with `fenced_blocks` in
   `crates/ridl/tests/book_examples.rs`, formats to itself; the same for
@@ -293,17 +395,23 @@ of §5.
 - Acceptance: `cargo test -p ridl-cli --test book_examples` (the book harness
   still compiles every fence with its `allow=` markers), `just demo`,
   `cargo test -p ridl-cli --test baseline_desk --test baseline_gate`,
-  `just book-check`.
+  `cargo test --workspace --locked`, `just book-check`, `just link-check`.
 
 ### Task 13 — documentation
 
 - Build: the `crates/ridl-fmt` entry of
   `docs/technotes/walking-skeleton-architecture.md` (the formatter now lays out
-  every declaration of the three profiles and reads the width);
-  `crates/ridl/src/main.rs` line 6, which still says `ridl fmt` formats `.typl`
-  files only; the `description` in `crates/ridl-fmt/Cargo.toml` ("the typl
-  surface"); a final read of the `crates/ridl-fmt/src/lib.rs` module
-  documentation against the note.
+  every declaration of the three profiles and reads the width; its lines 189-192
+  also omit `.rsdl` from the files `ridl fmt` reads); `crates/ridl/src/main.rs`
+  line 6, which still says `ridl fmt` formats `.typl` files only; the
+  `description` in `crates/ridl-fmt/Cargo.toml` line 7 ("the typl surface"); the
+  first line of the `crates/ridl-fmt/src/lib.rs` module documentation, which
+  says the formatter is "for the typl surface"; the comment above the fallback
+  arm of `format_element` (`crates/ridl-fmt/src/lib.rs` lines 331-333), which
+  says the five rsdl declarations reach that arm although a `machine` reaches it
+  only inside its `deployment` — Task 10 removes the declarations from the arm,
+  so check that the comment left there no longer names them; a final read of the
+  `crates/ridl-fmt/src/lib.rs` module documentation against the note.
 - Acceptance: `just link-check`, `just doc-path-check`, `just check`,
   `cargo doc -p ridl-fmt --no-deps`.
 
@@ -401,5 +509,7 @@ Stop, describe the case with a minimal input, and ask before going further when:
 - a check of §4 fails on an input and the fix is not in the formatter;
 - the note and the code disagree on a fact (a function name, a file path, a test
   name);
-- the `ec4rs` dependency needs a licence notice: the note says its licence text
-  ships with the binary's notices, and the repository has no notices file today.
+- at Task 4, before committing the `ec4rs` dependency: ask how its Apache-2.0
+  licence text is carried with the distributed binary. The maintainer decides;
+  the repository has no notices file or notices tooling today, and the note does
+  not settle it.

@@ -18,7 +18,9 @@ Part of #387.
 file: the header block, one blank line between declarations, comments
 re-anchored to what they precede. A node it has no rule for takes the fallback
 arm of `format_element` (`_ => line(node.text().to_string())`) and is emitted
-exactly as written. Seven declarations reach that arm:
+exactly as written. Six declarations reach that arm as nodes of their own; the
+seventh, `machine`, occurs only inside a `deployment`, so the formatter never
+dispatches on it and it is emitted as part of its deployment's text:
 
 | Node kind                                                                  | Body holds (grammar: `crates/ridl-syntax/family.ungram`)                       |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -148,19 +150,49 @@ interface VehicleStatus {
 
 The member forms and their canonical line:
 
-| Member     | Grammar                                                  | Canonical rendering                                 |
-| ---------- | -------------------------------------------------------- | --------------------------------------------------- |
-| `signal`   | `'signal' Name ':' FieldType InitValue? annotations`     | `signal name: Type = INIT @timing [ attrs ]`        |
-| `event`    | `'event' Name ':' FieldType annotations`                 | `event name: Type @timing [ attrs ]`                |
-| `fixed`    | `'fixed' Name ':' FieldType annotations`                 | `fixed name: Type @timing [ attrs ]`                |
-| `command`  | `'command' Name ParamList (':' ReturnType)? annotations` | `command name(p: P, q: Q) @timing [ attrs ]`        |
-| `query`    | `'query' Name ParamList ':' ReturnType annotations`      | `query name(p: P): Return @timing [ attrs ]`        |
-| `reserved` | `'reserved' (Name \| Literal)`                           | `reserved name` — `format_reserved_entry`, as today |
+The grammar column gives what the parser accepts (`value_interaction` and
+`callable_interaction` in `crates/ridl-syntax/src/parser.rs`), which is wider
+than `family.ungram`: the parser takes a stream payload, an init value, a timing
+and an attribute block on every value interaction and leaves the narrowing to
+the checker (RIDL-106, RIDL-201, RIDL-301).
+`crates/ridl-syntax/test_data/parser/ok/lenient_overapprox.ridl` holds each of
+these shapes. A file that draws only a checker diagnostic has no parse error, so
+the formatter formats it, and every slot below needs a rendering.
 
-Every slot after the name is optional except where the grammar requires it, and
-absent slots are skipped with no extra space. An empty interface renders as
-`interface Empty {}`; `internal interface Hidden {}` keeps its modifier.
-Separator commas between members are removed, as in a `struct`.
+| Member     | Slots the parser accepts                                             | Canonical rendering                                 |
+| ---------- | -------------------------------------------------------------------- | --------------------------------------------------- |
+| `signal`   | `'signal' Name ':' (FieldType \| StreamType) InitValue? annotations` | `signal name: Type = INIT @timing [ attrs ]`        |
+| `event`    | `'event' Name ':' (FieldType \| StreamType) InitValue? annotations`  | `event name: Type = INIT @timing [ attrs ]`         |
+| `fixed`    | `'fixed' Name ':' (FieldType \| StreamType) InitValue? annotations`  | `fixed name: Type = INIT @timing [ attrs ]`         |
+| `command`  | `'command' Name ParamList (':' ReturnType)? annotations`             | `command name(p: P, q: Q): R @timing [ attrs ]`     |
+| `query`    | `'query' Name ParamList ':' ReturnType annotations`                  | `query name(p: P): Return @timing [ attrs ]`        |
+| `reserved` | `'reserved' (Name \| Literal)`                                       | `reserved name` — `format_reserved_entry`, as today |
+
+`annotations` is at most one `Timing` and at most one `AttrBlock`, in either
+order. Examples of the lenient slots, as the formatter renders them:
+`signal rawFeed: <SensorFrame>`, `event calibrated: CalPayload = DEFAULT_CAL`,
+`fixed region: Region = REGION_EU`, `fixed buildId: BuildId @1s`,
+`command setMode(mode: DriveMode): AckState`.
+
+Every slot after the name is optional except where the parser requires it, and
+absent slots are skipped with no extra space.
+
+**The stream type in a payload position.** A stream payload is a `StreamType`
+node where a `FieldType` would stand. `field_type()` in
+`crates/ridl-fmt/src/lib.rs` finds the first child whose kind `is_field_type`
+accepts, and `is_field_type` does not list `StreamType`, so today it returns an
+empty string for a stream. The formatter must render a `StreamType` tight
+(`<SensorFrame>`, `<bytes>`) wherever the parser builds one: add `StreamType` to
+`is_field_type` and a `StreamType` arm to `format_field_type`, which reaches
+every type position at once — a value interaction's payload, a parameter, a
+return, and an array or map element. The same gap exists today outside the seven
+declarations: in a `.ridl` file the parser accepts a stream as a struct field's
+type or as a collection element with no parse error (TYPL-301 is emitted in a
+`.typl` parse only), and `ridl fmt` currently rewrites the struct field `a: <T>`
+to `a:` and a space, and `[<T>; 1..2]` to `[; 1..2]`, dropping the stream
+(reproduced 2026-10-01). The same `is_field_type` change fixes that. An empty
+interface renders as `interface Empty {}`; `internal interface Hidden {}` keeps
+its modifier. Separator commas between members are removed, as in a `struct`.
 
 ### 3.2 The interaction pieces
 
@@ -456,11 +488,13 @@ component Cruise [
 }
 ```
 
-The joined header would be 134 columns, over the default width of 100, so the
-block takes the block form: `component Cruise [`, one attribute per line with no
-commas, and `] {` — the brace on the closing bracket's line (§6.4). At a width
-of 140 the same declaration is one header line. A block that fits, such as
-`component Backend [ external ] {`, stays inline.
+The joined header would be 144 columns (measured: the line
+`component Cruise [ instances = (primary, backup), deprecated = "use Cruise2", rust.crate = "cruise", someip.serviceId = 4660, linux.realtime ] {`),
+over the default width of 100, so the block takes the block form:
+`component Cruise [`, one attribute per line with no commas, and `] {` — the
+brace on the closing bracket's line (§6.4). At a width of 144 or more the same
+declaration is one header line; at 143 it takes the block form. A block that
+fits, such as `component Backend [ external ] {`, stays inline.
 
 ## 5. Comments
 
@@ -472,9 +506,17 @@ positions.
 - An inline trailing comment stays on its line, one space after the member; a
   comment on the opening-brace line stays on that line
   (`split_brace_line_comment`).
-- A comment inside the header region of a block (between the keyword and `{`)
-  emits the header verbatim (`block_header_prefix`) — the `for` clause and the
-  attribute block of an rsdl declaration included.
+- A comment that is a direct token of the header region of a block (between the
+  keyword and `{`, outside any child node — for example between the name and
+  `[`, or between `for` and the system's reference) emits the header verbatim,
+  as `block_header_prefix` does today for a typl block. Today
+  `block_header_prefix` looks at direct-child tokens only and renders nothing
+  but the modifiers, the keyword and the name; for the rsdl declarations it is
+  extended to render the `for` clause and the header's attribute block when
+  there is no such comment, and to include them in the verbatim text when there
+  is one. A comment inside the header's attribute block is not a direct token of
+  the declaration: it follows the attribute-block rules of the next two bullets,
+  as it does on a member line.
 - A comment among the tokens of a one-line construct — a parameter list, a tuple
   return, an inline attribute block, an attribute value list, a timing range, an
   expression, a service's shape list — emits that construct verbatim, as a
@@ -623,17 +665,26 @@ so the gate holds the promise.
 **One crate reads `.editorconfig`: `ridl-fmt`, behind a default cargo feature
 `editorconfig`.** The feature adds a module with one function,
 `FormatOptions::for_path(path) -> FormatOptions`, over the `ec4rs` dependency,
-version 1.2. Checked 2026-10-01 on crates.io: licence Apache-2.0, compatible
-with the workspace's MIT (a permissive dependency of a permissive crate; its
-licence text ships with the binary's notices); latest release 2026-07-21, Rust
-1.79 minimum, one optional dependency (`language-tags`, left off); the Rust core
-library editorconfig.org links; not in `Cargo.lock` today. The alternatives are
-`editorconfig` 1.0.0 (MIT, last release 2017, a binding to the C core) and
-`editorconfig-rs` 0.2.3 (MIT, 2025, also a binding to the C core, which needs
-the system library); neither is pure Rust. A small parser of our own was
-rejected (§10): the glob language and the precedence rules are the whole
-difficulty, and a reimplementation would diverge from the editors that read the
-same file.
+release 1.2.0. Checked 2026-10-01 on crates.io: 1.2.0 was released 2025-04-19
+under Apache-2.0, a permissive licence compatible with the workspace's MIT; its
+`rust-version` is 1.56, below the workspace's floor (`edition = "2024"` needs
+Rust 1.85; the workspace sets no `rust-version`, and only `ridl-rt` sets one,
+1.83) and below the pinned toolchain 1.98.1 in `rust-toolchain.toml`; it has one
+optional dependency, `language-tags`, which no default feature enables and which
+stays off. Its API covers what this section needs: `ec4rs::properties_of(path)`
+runs the upward search, and the `ec4rs::property::MaxLineLen` property is
+`Value(usize)` or `Off`. A later release line exists — 2.0.0-rc.1, 2026-07-21,
+`rust-version` 1.79, different optional dependencies — and is not used: it is a
+release candidate, and 1.2.0 does what is needed. How the Apache-2.0 licence
+text is carried with the distributed binary is the maintainer's decision, taken
+at plan Task 4 (the plan's stop-and-ask list): the repository has no notices
+file or notices tooling today. `ec4rs` is the Rust core library editorconfig.org
+links, and it is not in `Cargo.lock` today. The alternatives are `editorconfig`
+1.0.0 (MIT, last release 2017, a binding to the C core) and `editorconfig-rs`
+0.2.3 (MIT, 2025, also a binding to the C core, which needs the system library);
+neither is pure Rust. A small parser of our own was rejected (§10): the glob
+language and the precedence rules are the whole difficulty, and a
+reimplementation would diverge from the editors that read the same file.
 
 **What is honoured.** Everything the EditorConfig specification defines, as
 `ec4rs` implements it: the search from the file's directory upward to a file
@@ -708,17 +759,28 @@ smallest diff when a member is added); and (c) would have to reach `struct` and
 `enum` too to stay one rule, which changes the typl goldens. The width never
 reads a body; a member line that exceeds breaks on its own (§6.4). Consequence:
 every one-line `system`, `distribution`, `component` and `machine` expands, and
-the test
+four tests that pin today's one-line rendering change with it:
 `an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written` in
-`crates/ridl-fmt/tests/rsdl.rs` is rewritten to the new layout.
+`crates/ridl-fmt/tests/rsdl.rs` is rewritten to the new layout; the `tokens()`
+helper of the same file stops comparing `Comma` tokens, because the separator
+commas of the reference fences it reads (`system Vehicle { Cruise, Lane, … }`)
+are removed; `fmt_formats_an_rsdl_file` in `crates/ridl/tests/facade.rs` expects
+`system Vehicle {\n  Cruise\n}`; and the `.rsdl` case of
+`formatting_replaces_the_document_with_the_ridl_fmt_rendering` in
+`crates/ridl-lsp/tests/server.rs` expects
+`component Door {\n  offers solo.door\n}`.
 
 **D-2 — the block form of an attribute block. DECIDED 2026-10-01: (a) by kind
 and by width** — a block with at least one predicate takes the block form, and
 so does a block whose inline form makes its line exceed the width (§6.2); every
 other block is inline. Rejected: (b) by source (a line break after `[`); (c) by
 width alone, which would put a one-predicate contract on the member's line, as
-no example in the family does. Reason: it matches every example in the general
-form, the two references and the book, and gives one rendering per declaration.
+one example in the family does: the callable-declaration fence of general form
+§2, Shape 2 (`docs/wip/family-general-form.md` line 85,
+`command setGear(…) [ require … ]` on one line), which the D-10 follow-up
+reformats. Reason: it matches every other example in the general form and every
+example in the two references and the book, and gives one rendering per
+declaration.
 
 **D-3 — inline attribute block padding. DECIDED 2026-10-01: padded,
 `[ a, b ]`.** Rejected: `[a, b]`. Reason: every example in the family writes it
@@ -733,8 +795,10 @@ order; the block form reads better with `]` last. Costs: the crate doc's
 "whitespace and separators only" sentence gains an exception, and the tests of
 §9 compare the two annotation nodes after normalising their order. Erratum: ridl
 reference Appendix C writes `attr_block? timing?` for `command` and `query`, the
-opposite of R5, and `docs/book/getting-started.md` has two members in that
-order; the book members are rewritten by the sweep, Appendix C by the D-10
+opposite of R5, and `docs/book/getting-started.md` has six members in that order
+(`setTargetSpeed`, `getSpeedHistory`, `requestStart`, `setGear`,
+`setClimateTarget`, `getDriverState`, each with the attribute block before the
+timing); the book members are rewritten by the sweep, Appendix C by the D-10
 follow-up.
 
 **D-5 — the space after `require` and `ensure`. DECIDED 2026-10-01: one space.**
@@ -776,6 +840,32 @@ formatter rewrites. Reason: the book is what a reader copies, and the
 fixed-point test of §11 then holds it to the canonical style; the references are
 long, and general form §5's errata note allows them to be touched
 opportunistically.
+
+Consequences of (b), all in the implementation's sweep. The book prose that
+quotes a reformatted fence or describes the formatter becomes false and is
+corrected with the fences: in `docs/book/getting-started.md`, the inline code
+`type Speed : km/h [0.0..250.0 step 0.5]` (line 136),
+`signal currentSpeed : Speed @10ms` (line 164),
+`fixed doorCount : integer [1..8]` and `type DoorCount : integer [1..8]` (lines
+204-205), `hasCruise : Enabled` and `hasCruise : boolean` (lines 479-480), all
+of which take the tight colon; the `text` fence at lines 182-188, which quotes
+`./veh/common/types.ridl:4:19` and the line `type Speed : km/h […]` of the
+reformatted fence, and is regenerated by running `ridl check` on the reformatted
+source (the column becomes 18); and the paragraph "`ridl fmt` has its own
+canonical layout" at lines 818-820, which says the listings use the aligned
+layout and is rewritten to say they are in the formatter's layout. In
+`docs/book/cli-reference.md`, the `ridl fmt` paragraph at lines 869-872, which
+says the formatter has no layout rules for the rsdl declarations and keeps a
+ridl `interface` or `service` as written, is rewritten to the new rules and
+gains the width and its `.editorconfig` source (§6.6). Not changed:
+`docs/book/getting-started.md` line 214 quotes the typl reference's own
+`frame : bytes [8]`, which stays true until the follow-up reformats that
+reference, and the follow-up updates it then; the `demo.ridl` and `broken.typl`
+diagnostics of `cli-reference.md` quote files that the chapter does not hold in
+any `ridl`, `typl` or `rsdl` fence (it has none), so the sweep does not reach
+them. The fixture `crates/ridl/tests/baseline-corpus/cluster.ridl` is pinned by
+two tests of `crates/ridl/tests/baseline_desk.rs` whose expected strings the
+sweep changes (§11, "Round trips").
 
 **D-11 — blank lines between `machine` blocks. DECIDED 2026-10-01: (a) preserved
 where the source had one**, as between any two members. Rejected: (b) always
@@ -898,19 +988,52 @@ comparison is added beside `content_tokens`.
 
 **Reference examples** (`crates/ridl-fmt/tests/rsdl.rs`): the existing
 idempotence-and-tokens test over the rsdl reference's §3 and Appendix A fences
-stays; the as-written test is replaced by the §4 renderings. The ridl
-reference's Appendix A gets the same treatment in a `ridl.rs` sibling.
+stays, with one change: its `tokens()` helper keeps every non-trivia token,
+`Comma` included, and D-1 removes the separator commas of those fences
+(`system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }` and five
+other bodies), so `tokens()` must also skip `Comma` tokens, as `content_tokens`
+in `properties.rs` already does. The as-written test is replaced by the §4
+renderings, and the module documentation of `rsdl.rs`, which says the formatter
+emits each rsdl declaration as written, is rewritten. The ridl reference's
+Appendix A gets the same treatment in a `ridl.rs` sibling.
+
+**Tests outside `ridl-fmt` that pin today's rendering.** Two pin the one-line
+rsdl body that D-1 expands: `fmt_formats_an_rsdl_file` in
+`crates/ridl/tests/facade.rs` (input
+`component   Cruise {}\nsystem Vehicle { Cruise }`; the expected output becomes
+`component Cruise {}\n\nsystem Vehicle {\n  Cruise\n}`, and its doc comment,
+which says each rsdl declaration is kept as written, is rewritten) and the
+`.rsdl` case of `formatting_replaces_the_document_with_the_ridl_fmt_rendering`
+in `crates/ridl-lsp/tests/server.rs` (input
+`component Door { offers solo.door }`; the expected edit becomes
+`component Door {\n  offers solo.door\n}`). The `.ridl` case of the same LSP
+test (`interface Door {\n  signal open: boolean\n}`) is already canonical and
+does not change, and `fmt_check_walks_into_rsdl_files` still exits 1. Two tests
+of `crates/ridl/tests/baseline_desk.rs` pin the text of `cluster.ridl`, which
+the D-10 sweep reformats (see "Round trips").
 
 **Round trips.** Each of these formats idempotently and keeps its structure (§9,
 invariants 2 to 4), and after the D-10 sweep each is a fixed point:
-`examples/cabin/cabin.ridl`; `crates/ridl/tests/baseline-corpus/cluster.ridl`
-(the desk check compares `.ir.json` snapshots, so a whitespace change there is
-safe); every verified `ridl`, `typl` and `rsdl` fence of `docs/book/`, extracted
-with the `fenced_blocks` function of `crates/ridl/tests/book_examples.rs` — the
-same `pulldown-cmark` options mdBook uses, so the set is exactly the set the
-compile harness verifies. A fence marked `ignore` is skipped; a fence with an
-`allow=` marker still round trips, because the formatter does not read
-diagnostics.
+`examples/cabin/cabin.ridl`; `crates/ridl/tests/baseline-corpus/cluster.ridl`;
+every verified `ridl`, `typl` and `rsdl` fence of `docs/book/`, extracted with
+the `fenced_blocks` function of `crates/ridl/tests/book_examples.rs` — the same
+`pulldown-cmark` options mdBook uses, so the set is exactly the set the compile
+harness verifies. A fence marked `ignore` is skipped; a fence with an `allow=`
+marker still round trips, because the formatter does not read diagnostics.
+
+`cluster.ridl` is not only compared through its `.ir.json` baseline snapshot,
+which holds no source position: two tests of
+`crates/ridl/tests/baseline_desk.rs` pin its text, and the sweep changes both.
+Reformatting it (measured 2026-10-01 with today's formatter, which already
+formats its typl lines) tightens every `name : Type` colon and inserts a blank
+line between the three `type` declarations, so every later line moves down by
+two. `check_reports_ordinal_drift_against_the_committed_baseline` asserts that
+the spans of `tyrePressure`, `legacyWheelPhase`, `doorOpened` and `doorClosed`
+quote the aligned source lines (`event tyrePressure : DoorState @[100ms..1s]`
+and three others); each expected string takes the tight colon.
+`inline_shape_removal_spans_the_service_name` asserts `cluster.ridl:46:9`; the
+`service` line moves from 46 to 48, and the column stays 9. The `.ir.json`
+snapshot does not change.
 
 **The book harness still passes.** `book_examples_compile` runs `ridl check`
 over the staged fences; the sweep changes whitespace, separators and (under D-4)
@@ -945,10 +1068,17 @@ breaks a 80-column member that the default leaves alone; `[*.{typl,ridl,rsdl}]`
 matches an `.rsdl` file; `max_line_length = off` leaves a 200-column line alone;
 a nested directory's `.editorconfig` with `root = true` stops the walk, so the
 outer file's value is not seen; a file with no `.editorconfig` above it formats
-at 100. One LSP test in `crates/ridl-lsp/tests/server.rs` sends
-`FormattingOptions { tabSize: 4, insertSpaces: false }` and receives two-space
-indentation, pinning D-12. `just wasm-check` builds `ridl-fmt` with
-`--no-default-features`, pinning the purity claim of §6.6.
+at 100. The client-options half of D-12 is already pinned:
+`formatting_replaces_the_document_with_the_ridl_fmt_rendering` in
+`crates/ridl-lsp/tests/server.rs` formats under `tabs()` (`tab_size: 8`,
+`insert_spaces: false`) and `four_spaces()` and asserts two-space indentation
+under both. One new LSP test pins what the plumbing adds and fails before it: a
+document whose path is in a temporary directory with an `.editorconfig` holding
+`root = true` and `[*.typl] max_line_length = 60`, `indent_size = 4` and
+`indent_style = tab`, whose typl tuple field line is 80 columns, receives an
+edit with the tuple broken at 60 and two-space indentation — the width read from
+the file, the indent keys ignored (D-12). `just wasm-check` builds `ridl-fmt`
+with `--no-default-features`, pinning the purity claim of §6.6.
 
 **The gate.** No new `just` recipe: the fixed-point tests over `examples/` and
 the book fences are the gate that keeps the examples canonical, and `just test`
