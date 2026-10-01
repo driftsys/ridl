@@ -214,13 +214,13 @@ of §5.
   today it already drops a stream in a `.ridl` struct field or array element.
 - Block routing: when `InterfaceDef` goes through `format_block_def`, add it to
   the brace-block kinds for which `is_single_line_element` returns `false`
-  (`StructDef`, `EnumDef`, `UnionDef` today). Otherwise `format_element` sees
-  the between-member comments of the body as direct comment children
-  (`has_direct_comment`) and emits the whole interface verbatim. The same
-  applies to a `ServiceDef` with a brace body (Task 8) and to `SystemDef`,
-  `ComponentDef`, `DistributionDef`, `DeploymentDef` and `MachineDef` (Tasks 9
-  and 10): each task adds its kinds, and adds a test of a body with a comment
-  between two members.
+  (`StructDef`, `EnumDef`, `UnionDef`, and an `EnumSetDef` that has a `{`
+  today). Otherwise `format_element` sees the between-member comments of the
+  body as direct comment children (`has_direct_comment`) and emits the whole
+  interface verbatim. The same applies to a `ServiceDef` with a brace body
+  (Task 8) and to `SystemDef`, `ComponentDef`, `DistributionDef`,
+  `DeploymentDef` and `MachineDef` (Tasks 9 and 10): each task adds its kinds,
+  and adds a test of a body with a comment between two members.
 - Files: `crates/ridl-fmt/src/lib.rs`; new `.ridl` pairs in
   `crates/ridl-fmt/test_data/input` and `formatted` (the §3.1 interface in the
   aligned style, without its `require` block).
@@ -375,11 +375,11 @@ of §5.
     `type Speed: km/h [250.0..0.0 step 0.5]`); the paragraph "`ridl fmt` has its
     own canonical layout" at lines 818-820, which says the listings use the
     aligned layout, is rewritten to say they are in the formatter's layout.
-  - `docs/book/cli-reference.md` lines 869-872: the sentences saying the
-    formatter has no layout rules for the rsdl declarations and keeps each one,
-    and a ridl `interface` or `service`, as written are replaced by a short
-    statement of the new rules, the 100-column default and the `max_line_length`
-    key of `.editorconfig`.
+  - `docs/book/cli-reference.md` lines 871-872 (in the paragraph at lines
+    868-872): the sentences saying the formatter has no layout rules for the
+    rsdl declarations and keeps each one, and a ridl `interface` or `service`,
+    as written are replaced by a short statement of the new rules, the
+    100-column default and the `max_line_length` key of `.editorconfig`.
   - Leave `docs/book/getting-started.md` line 214 (it quotes the typl
     reference's own `frame : bytes [8]`, which is out of scope) and the
     diagnostics of `cli-reference.md`, whose sources are not in any verified
