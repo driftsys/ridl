@@ -1183,76 +1183,83 @@ namespaces no profile owns — `FORM-` (surface syntax: lexical, parse, and the
 attribute-block rules) and `MANI-` (the manifest). Both are tabulated once in
 the family overview §7 and are not restated here.
 
+A `.typl` file also draws one `RIDL-` code, RIDL-149: two names in one scope
+that collide after a pinned name transform (ADR-0016). Three of its scopes are
+typl declarations — the fields of one struct, the arms of one union, and the
+values of one enum — so `LEVEL_10` beside `LEVEL10` in one enum is refused, as
+both become `Level10`. Its row, with the transform each scope is checked under,
+is in ridl §16.4.
+
 ### 16.1 Module (TYPL-0xx)
 
 | Code     | Rule                                                         | Severity |
 | -------- | ------------------------------------------------------------ | -------- |
-| TYPL-001 | more than one `package` declaration per file                 | error    |
-| TYPL-002 | package name does not mirror directory path                  | error    |
+| TYPL-001 | more than one `package` declaration in a file                | error    |
+| TYPL-002 | package name does not mirror the directory path              | error    |
 | TYPL-003 | wildcard, relative, or re-exporting import                   | error    |
 | TYPL-004 | circular package imports                                     | error    |
-| TYPL-005 | public declaration exposes an `internal` type                | error    |
-| TYPL-006 | conflicting imports without alias                            | error    |
+| TYPL-005 | a public declaration exposes an `internal` type              | error    |
+| TYPL-006 | conflicting imports without an alias                         | error    |
 | TYPL-007 | unused import                                                | warning  |
-| TYPL-008 | alias without an actual collision                            | warning  |
+| TYPL-008 | import alias without an actual collision                     | warning  |
 | TYPL-009 | duplicate definition of the same name in a package           | error    |
 | TYPL-010 | package name is reserved for a package the compiler provides | error    |
 | TYPL-011 | type reference names no visible declaration (§3.2, §3.3)     | error    |
 
 ### 16.2 Scalars and Constants (TYPL-1xx)
 
-| Code     | Rule                                                                                                       | Severity                                           |
-| -------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| TYPL-101 | `integer` without range                                                                                    | warning; error if active profile requires          |
-| TYPL-102 | `float` without range + `step`                                                                             | warning; error if active profile requires          |
-| TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                      | warning; error if active profile requires          |
-| TYPL-104 | range `min > max`                                                                                          | error                                              |
-| TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                               | error                                              |
-| TYPL-106 | invalid regex syntax in `match` or `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220    | error                                              |
-| TYPL-107 | regex contradicts declared character bound                                                                 | warning                                            |
-| TYPL-108 | `const` value violates its declared type constraints                                                       | error                                              |
-| TYPL-109 | init (`= value`) incompatible with the type/field constraints                                              | error                                              |
-| TYPL-110 | unknown or malformed UCUM unit expression                                                                  | error                                              |
-| TYPL-111 | integer range bound outside the `int64` domain `[-2⁶³..2⁶³−1]`                                             | error                                              |
-| TYPL-112 | a concrete wire-width name (`uint8` … `float64`) written in source — width is inferred, not written (§5.6) | error                                              |
-| TYPL-115 | type has no derivable init value and no declared `= value` (§5.8)                                          | info — escalated by consumers that require an init |
+| Code     | Rule                                                                                                            | Severity                                           |
+| -------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| TYPL-101 | `integer` without a range constraint                                                                            | warning; error if active profile requires          |
+| TYPL-102 | `float` without both a range and a `step`                                                                       | warning; error if active profile requires          |
+| TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                           | warning; error if active profile requires          |
+| TYPL-104 | range `min > max`                                                                                               | error                                              |
+| TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                                    | error                                              |
+| TYPL-106 | invalid regex syntax in `match` or a regex `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220 | error                                              |
+| TYPL-107 | regex contradicts declared character bound                                                                      | warning                                            |
+| TYPL-108 | `const` value violates its declared type constraints                                                            | error                                              |
+| TYPL-109 | init `= value` incompatible with the type or field constraints                                                  | error                                              |
+| TYPL-110 | unknown or malformed UCUM unit expression                                                                       | error                                              |
+| TYPL-111 | integer range bound outside the `int64` domain (`[-2⁶³..2⁶³−1]`)                                                | error                                              |
+| TYPL-112 | a concrete wire-width name (`uint8` … `float64`) written in source — width is inferred, not written (§5.6)      | error                                              |
+| TYPL-115 | type has no derivable init value and no declared `= value` (§5.8)                                               | info — escalated by consumers that require an init |
 
 ### 16.3 Composites (TYPL-2xx)
 
-| Code     | Rule                                                                                                       | Severity |
-| -------- | ---------------------------------------------------------------------------------------------------------- | -------- |
-| TYPL-201 | array without explicit bounds                                                                              | error    |
-| TYPL-202 | map without explicit bounds                                                                                | error    |
-| TYPL-203 | enum values not unique / not explicitly assigned                                                           | error    |
-| TYPL-204 | union arm with primitive type                                                                              | error    |
-| TYPL-205 | same tuple shape used in multiple places                                                                   | warning  |
-| TYPL-206 | recursive composite reference (direct or transitive)                                                       | error    |
-| TYPL-207 | enumset bit positions not unique                                                                           | error    |
-| TYPL-208 | `string`/`bytes` used directly as field type                                                               | error    |
-| TYPL-209 | map key is not a named string type or primitive                                                            | error    |
-| TYPL-210 | field, arm, or enum value re-declared under a `reserved` name or value                                     | error    |
-| TYPL-211 | duplicate or dangling `reserved` entry (name/value never previously used)                                  | warning  |
-| TYPL-212 | `error` modifier on a declaration other than `enum`, `struct`, `union`                                     | error    |
-| TYPL-213 | union mixing error and non-error arms without the result-union shape (exactly one success + one error arm) | error    |
-| TYPL-214 | `error union` containing a non-error-typed arm                                                             | error    |
-| TYPL-215 | field name declared twice in one struct or one tuple                                                       | error    |
-| TYPL-216 | enum value name declared twice in one enum                                                                 | error    |
-| TYPL-217 | union arm name declared twice in one union                                                                 | error    |
-| TYPL-218 | enumset bit name declared twice in one enumset                                                             | error    |
-| TYPL-219 | enumset bit position is not a number with an integer value                                                 | error    |
-| TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite   | error    |
+| Code     | Rule                                                                                                                                                                           | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| TYPL-201 | array without explicit bounds                                                                                                                                                  | error    |
+| TYPL-202 | map without explicit bounds                                                                                                                                                    | error    |
+| TYPL-203 | enum values not unique or not explicitly assigned                                                                                                                              | error    |
+| TYPL-204 | union arm with a primitive type                                                                                                                                                | error    |
+| TYPL-205 | same tuple shape used in multiple places                                                                                                                                       | warning  |
+| TYPL-206 | recursive composite reference, direct or transitive                                                                                                                            | error    |
+| TYPL-207 | enumset bit positions not unique                                                                                                                                               | error    |
+| TYPL-208 | `string`/`bytes` used directly as a field type                                                                                                                                 | error    |
+| TYPL-209 | map key is not a named string type or a primitive                                                                                                                              | error    |
+| TYPL-210 | field, arm, or enum value re-declared under a `reserved` entry (a name or a value)                                                                                             | error    |
+| TYPL-211 | duplicate `reserved` entry — a dangling entry (a name or value never previously used) falls under this rule too, but its check needs the previous IR snapshot and is not built | warning  |
+| TYPL-212 | `error` modifier on a declaration other than `enum`, `struct`, `union`                                                                                                         | error    |
+| TYPL-213 | union mixes error and non-error arms without the result-union shape (exactly one success + one error arm)                                                                      | error    |
+| TYPL-214 | `error union` contains a non-error-typed arm                                                                                                                                   | error    |
+| TYPL-215 | field name declared twice in one struct or one tuple                                                                                                                           | error    |
+| TYPL-216 | enum value name declared twice in one enum                                                                                                                                     | error    |
+| TYPL-217 | union arm name declared twice in one union                                                                                                                                     | error    |
+| TYPL-218 | enumset bit name declared twice in one enumset                                                                                                                                 | error    |
+| TYPL-219 | enumset bit position is not a number with an integer value                                                                                                                     | error    |
+| TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite                                                                       | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
 Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 `ridl.toml`) contains constructs of a higher layer:
 
-| Code     | Rule                                                           | Severity |
-| -------- | -------------------------------------------------------------- | -------- |
-| TYPL-301 | stream type `<T>` in typl context                              | error    |
-| TYPL-302 | timing annotation or duration literal in typl context          | error    |
-| TYPL-303 | `require`/`ensure` attribute in typl context                   | error    |
-| TYPL-304 | interaction/behaviour/architecture declaration in typl context | error    |
+| Code     | Rule                                                                                                                                                                                                                   | Severity |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| TYPL-301 | stream type `<T>` outside interaction position — in a typl context, and in a ridl file anywhere but a parameter or a query return, such as a struct field, a collection, a type definition or a union arm (ridl §12.3) | error    |
+| TYPL-302 | timing annotation or duration literal in a typl context                                                                                                                                                                | error    |
+| TYPL-303 | `require`/`ensure` attribute in a typl context                                                                                                                                                                         | error    |
+| TYPL-304 | interaction declaration in a typl context — one of the ridl interaction words at declaration start; an rmdl or rsdl word there is FORM-102                                                                             | error    |
 
 ### 16.5 Documentation (TYPL-4xx)
 
@@ -1261,8 +1268,8 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 | TYPL-401 | unresolved `[TypeName]` reference in doc comment      | warning  |
 | TYPL-402 | `@labels` identifier not recognised by active profile | info     |
 | TYPL-403 | `@labels` combination invalid per active profile      | error    |
-| TYPL-404 | blank line between doc comment and definition         | warning  |
-| TYPL-405 | `@deprecated` without reason string                   | warning  |
+| TYPL-404 | blank line between a doc comment and its definition   | warning  |
+| TYPL-405 | `@deprecated` doc tag without a reason string         | warning  |
 
 ---
 

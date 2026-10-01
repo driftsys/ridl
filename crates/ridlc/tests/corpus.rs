@@ -63,7 +63,7 @@
 //! directory `cargo test` sets), so the file paths that appear in the rendered
 //! diagnostics stay portable across machines.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use ridl_core::db::InputFile;
@@ -960,6 +960,102 @@ fn rsdl_profile_codes_match_the_reference_table() {
             "{code}: the catalogue severity differs from the rsdl reference §16.1 table",
         );
     }
+}
+
+/// The rows of a language reference's `## 16. Diagnostics` tables whose code
+/// starts with `prefix`, each mapped to its rule cell and its severity cell. A
+/// `\|` inside a cell is an escaped pipe, not a column border, and reads as `|`.
+fn reference_diagnostic_rows(file: &str, prefix: &str) -> BTreeMap<String, (String, String)> {
+    let path = repository_root().join("docs/specification").join(file);
+    let reference = std::fs::read_to_string(&path).expect("the reference is readable");
+    let section = reference
+        .split("## 16. Diagnostics")
+        .nth(1)
+        .and_then(|rest| rest.split("## 17.").next())
+        .unwrap_or_else(|| panic!("{file} has a §16 Diagnostics section"));
+    let mut rows = BTreeMap::new();
+    for line in section.lines() {
+        let cells: Vec<String> = line
+            .replace("\\|", "\u{0}")
+            .split('|')
+            .map(|cell| cell.trim().replace('\u{0}', "|"))
+            .collect();
+        let [_, code, rule, severity, _] = cells.as_slice() else {
+            continue;
+        };
+        if !code.starts_with(prefix) {
+            continue;
+        }
+        let previous = rows.insert(code.clone(), (rule.clone(), severity.clone()));
+        assert!(previous.is_none(), "{file}: {code} has two rows in §16");
+    }
+    rows
+}
+
+/// Every TYPL and RIDL catalogue entry has a row in its language reference's
+/// §16 tables, the row gives the catalogue severity, and the row's rule starts
+/// with the catalogue summary. The rule may go on after the summary, but only
+/// past a parenthesis (` (`), an explanation (` — `) or a clause (`, `), so
+/// the summary is a whole leading phrase of the rule and not a fragment of
+/// one. A row with no catalogue entry is allowed: the references specify codes
+/// the checker does not emit yet, and the codes the lock retired.
+#[test]
+fn typl_and_ridl_catalogue_entries_match_the_reference_tables() {
+    let tables = [
+        (
+            "typl-language-reference.md",
+            "TYPL-",
+            ridl_core::diag::TYPL_CATALOG,
+        ),
+        (
+            "ridl-language-reference.md",
+            "RIDL-",
+            ridl_core::diag::RIDL_CATALOG,
+        ),
+    ];
+    let mut mismatches = Vec::new();
+    for (file, prefix, catalogue) in tables {
+        let rows = reference_diagnostic_rows(file, prefix);
+        for entry in catalogue {
+            let code = entry.code.as_str();
+            let Some((rule, severity)) = rows.get(code) else {
+                mismatches.push(format!("{code}: no row in {file} §16"));
+                continue;
+            };
+            let expected = match entry.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+                Severity::Info => "info",
+            };
+            // A row may qualify the default severity after it: "warning; error
+            // if active profile requires".
+            let tabled = severity
+                .split(|c: char| !c.is_ascii_alphabetic())
+                .next()
+                .unwrap_or_default();
+            if tabled != expected {
+                mismatches.push(format!(
+                    "{code}: the catalogue severity is {expected}, {file} §16 gives `{severity}`"
+                ));
+            }
+            let summary = entry.summary;
+            let leads = rule == summary
+                || [" (", " — ", ", "]
+                    .iter()
+                    .any(|separator| rule.starts_with(&format!("{summary}{separator}")));
+            if !leads {
+                mismatches.push(format!(
+                    "{code}: the {file} §16 rule does not start with the catalogue summary\n    \
+                     summary: {summary}\n    rule:    {rule}"
+                ));
+            }
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "the TYPL and RIDL catalogues disagree with the reference tables:\n  {}",
+        mismatches.join("\n  ")
+    );
 }
 
 /// The rsdl showcase emits every `RSDL-` code at the severity the reference

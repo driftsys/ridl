@@ -1113,3 +1113,29 @@ fn the_model_backend_writes_the_model_back() {
     assert!(super::has_error(&response));
     assert!(response.files.is_empty());
 }
+
+/// Every `Spellings` field keeps its field number. A field number is the wire
+/// identity a plugin built against an earlier model decodes by, so
+/// renumbering one (`pascal = 5` to `pascal = 9`, say) breaks every such
+/// plugin while every other test of this workspace still passes: the encoder
+/// and the decoder here are generated from the one renumbered schema.
+#[test]
+fn spellings_field_numbers_are_pinned() {
+    let spellings = v2::codegen_model_descriptor()
+        .parent_pool()
+        .get_message_by_name("ridl.codegen.v1.Spellings")
+        .expect("model.proto declares Spellings");
+    let fields: Vec<(String, u32)> = spellings
+        .fields()
+        .map(|field| (field.name().to_string(), field.number()))
+        .collect();
+    let expected = [
+        ("declared", 1),
+        ("snake", 2),
+        ("camel", 3),
+        ("screaming", 4),
+        ("pascal", 5),
+    ]
+    .map(|(name, number)| (name.to_string(), number));
+    assert_eq!(fields, expected);
+}

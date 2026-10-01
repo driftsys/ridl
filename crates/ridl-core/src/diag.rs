@@ -686,7 +686,7 @@ diag_codes! {
             "the same interface named twice in one service";
 
         /// Two names in one scope that collide after a pinned name transform
-        /// (ridl §11, §16.4; ADR-0016 decision 3). Neither transform is
+        /// (ridl §16.4; ADR-0016 decision 3). Neither transform is
         /// injective and no case-folding transform can be, so
         /// `parseHTTPResponse` and `parseHttpResponse` both project to
         /// `parse_http_response` and a target whose namespace is snake_case
