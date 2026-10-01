@@ -27,6 +27,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
@@ -1462,11 +1463,12 @@ impl Checker<'_> {
     /// `match` pattern at its type or field, and a regex constant at its
     /// declaration, which is the text a `match` naming that constant carries.
     fn validate_regex(&mut self, raw: &str, range: TextRange) {
-        // The `regex` configuration below must equal the one the Rust backend
-        // emits in `constraint_checks` (`ridl-backend-rust`): `Regex::new`
-        // with the builder defaults, Unicode mode on, and the crate's default
-        // features. A different configuration here accepts or refuses other
-        // patterns than the generated code compiles.
+        // The `regex` configuration in `regex_crate_verdict` must equal the
+        // one the Rust backend emits in `constraint_checks`
+        // (`ridl-backend-rust`): `Regex::new` with the builder defaults,
+        // Unicode mode on, and the crate's default features. A different
+        // configuration here accepts or refuses other patterns than the
+        // generated code compiles.
         let body = regex_body(raw);
         if regress::Regex::new(body).is_err() {
             self.error(
@@ -1474,14 +1476,13 @@ impl Checker<'_> {
                 range,
                 "invalid regular expression syntax".to_string(),
             );
-        } else if let Err(error) = regex::Regex::new(body) {
+        } else if let Some(reason) = regex_crate_verdict(body) {
             self.error(
                 DiagCode::TYPL_220,
                 range,
                 format!(
-                    "the Rust `regex` crate cannot compile this pattern: {} — a typl pattern is \
-                     ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
-                    regex_crate_refusal(&error),
+                    "the Rust `regex` crate cannot compile this pattern: {reason} — a typl \
+                     pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)"
                 ),
             );
         }
@@ -5326,6 +5327,55 @@ fn regex_body(raw: &str) -> &str {
         .unwrap_or(raw)
 }
 
+/// The `regex` crate's verdict on every pattern body compiled so far, keyed
+/// on the pattern text: `None` when the crate compiles the pattern, the
+/// [`regex_crate_refusal`] reason when it does not (TYPL-220). A full
+/// `regex::Regex::new` compile of a pattern with a Unicode class under a
+/// counted repetition costs tens of milliseconds, and the language server
+/// runs [`check_package`] again on each edit, so the verdict is kept across
+/// checks, process-wide, rather than in the [`Checker`] that one check builds
+/// (issue #603). The verdict is a function of the pattern text and the
+/// `regex` version this binary links, and of nothing else, so a recorded
+/// verdict is the one the crate would give again. The record keeps the
+/// verdict and not the compiled regex, and it is emptied when it reaches
+/// [`REGEX_CRATE_VERDICTS_BOUND`] entries, so a long-running process cannot
+/// grow it without limit.
+static REGEX_CRATE_VERDICTS: LazyLock<Mutex<HashMap<String, Option<String>>>> =
+    LazyLock::new(Mutex::default);
+
+/// The number of verdicts [`REGEX_CRATE_VERDICTS`] holds before it is
+/// emptied: more patterns than a workspace declares, and small enough that
+/// the pattern texts and reasons it holds stay under a few hundred kilobytes.
+const REGEX_CRATE_VERDICTS_BOUND: usize = 1024;
+
+/// The reason the `regex` crate refuses `body`, or `None` when the crate
+/// compiles it — read from [`REGEX_CRATE_VERDICTS`] when the pattern was
+/// compiled before, and compiled with `regex::Regex::new` and recorded there
+/// otherwise. The compile runs outside the lock, so a slow pattern on one
+/// thread does not hold up a lookup on another; two threads that compile the
+/// same pattern at once record the same verdict twice, which changes nothing.
+fn regex_crate_verdict(body: &str) -> Option<String> {
+    let recorded = REGEX_CRATE_VERDICTS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(body)
+        .cloned();
+    if let Some(verdict) = recorded {
+        return verdict;
+    }
+    let verdict = regex::Regex::new(body)
+        .err()
+        .map(|error| regex_crate_refusal(&error));
+    let mut verdicts = REGEX_CRATE_VERDICTS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if verdicts.len() >= REGEX_CRATE_VERDICTS_BOUND {
+        verdicts.clear();
+    }
+    verdicts.insert(body.to_string(), verdict.clone());
+    verdict
+}
+
 /// The reason the `regex` crate gives for refusing a pattern, on one line
 /// (TYPL-220). A syntax error renders as several lines — the pattern, a caret
 /// line, and an `error: ` line — and only the last is the reason.
@@ -8629,6 +8679,61 @@ mod tests {
              cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller \
              — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
         );
+    }
+
+    /// The `regex` crate's verdict on a pattern is kept across checks, keyed
+    /// on the pattern text, so the language server's repeated `check_package`
+    /// runs do not compile a Unicode pattern again on every edit (issue
+    /// #603). A verdict already recorded is answered without asking the crate,
+    /// which is what `validate_regex` reads, a new verdict is recorded under
+    /// the pattern text, and the record is emptied when it reaches its bound,
+    /// so it cannot grow without limit.
+    #[test]
+    fn typl_220_keeps_the_regex_crate_verdict_across_checks() {
+        // A pattern no other test compiles, recorded with a verdict the crate
+        // would not give: the check reports the recorded verdict.
+        let seeded = "^seeded-for-issue-603$";
+        REGEX_CRATE_VERDICTS
+            .lock()
+            .unwrap()
+            .insert(seeded.to_string(), Some("seeded verdict".to_string()));
+        assert_eq!(
+            regex_crate_verdict(seeded),
+            Some("seeded verdict".to_string())
+        );
+        let checked = check_source(
+            "app",
+            &format!("package app\ntype T : string [1..32 match /{seeded}/]\n"),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-220", "TYPL-115"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[0].message.contains("seeded verdict"),
+            "{}",
+            checked.diagnostics[0].message
+        );
+
+        // A verdict the crate gives is recorded under the pattern text.
+        let compiled = "^[a-z]{603}$";
+        let refused = "^(?=a)a{603}$";
+        assert_eq!(regex_crate_verdict(compiled), None);
+        assert!(regex_crate_verdict(refused).is_some());
+        {
+            let verdicts = REGEX_CRATE_VERDICTS.lock().unwrap();
+            assert_eq!(verdicts.get(compiled), Some(&None));
+            assert!(matches!(verdicts.get(refused), Some(Some(_))));
+        }
+
+        // The record is emptied at its bound.
+        for n in 0..=REGEX_CRATE_VERDICTS_BOUND {
+            regex_crate_verdict(&format!("^a{{{n}}}$"));
+        }
+        let len = REGEX_CRATE_VERDICTS.lock().unwrap().len();
+        assert!(len <= REGEX_CRATE_VERDICTS_BOUND, "{len} verdicts recorded");
     }
 
     /// The checker compiles a pattern with the same `regex` configuration the

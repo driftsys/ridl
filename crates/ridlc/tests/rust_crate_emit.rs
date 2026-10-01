@@ -1136,43 +1136,50 @@ fn ridl_rt_version_requirement_matches_the_crate() {
 }
 
 /// The `regex` requirement in the emitted manifest and the `regex` version the
-/// checker compiles patterns with (TYPL-220, the workspace root's
-/// `[workspace.dependencies]`) must agree on major and minor. A consumer that
-/// resolves an older `regex` than the checker's could refuse a pattern the
-/// checker accepted, and the generated `Regex::new(..).expect(..)` would
-/// panic: `regex` before 1.8 refuses `(?<name>…)` and `\/`, which TYPL-220
-/// passes. `ridlc` cannot read the workspace manifest at run time, so the
-/// emitted requirement is a literal and this test keeps the two together.
+/// checker compiles patterns with (TYPL-220) must agree on major and minor.
+/// The checker's version is the one the workspace's `Cargo.lock` resolves,
+/// not the requirement in `[workspace.dependencies]`: a `cargo update` can
+/// move the lockfile to a later minor and leave the requirement as it is
+/// (driftsys/ridl#605). A consumer that resolves an older `regex` than the
+/// checker's could refuse a pattern the checker accepted, and the generated
+/// `Regex::new(..).expect(..)` would panic: `regex` before 1.8 refuses
+/// `(?<name>…)` and `\/`, which TYPL-220 passes. `ridlc` cannot read the
+/// workspace lockfile at run time, so the emitted requirement is a literal
+/// and this test keeps the two together.
 #[test]
 fn regex_version_requirement_matches_the_checker() {
     #[derive(serde::Deserialize)]
-    struct RootManifest {
-        workspace: RootWorkspace,
+    struct Lockfile {
+        package: Vec<LockedPackage>,
     }
     #[derive(serde::Deserialize)]
-    struct RootWorkspace {
-        dependencies: std::collections::BTreeMap<String, toml::Value>,
+    struct LockedPackage {
+        name: String,
+        version: String,
     }
 
-    let root_manifest_text =
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml"))
-            .expect("the workspace root Cargo.toml must exist");
-    let root_manifest: RootManifest = toml::from_str(&root_manifest_text)
-        .expect("the workspace root Cargo.toml must be valid TOML");
-    let version = match root_manifest.workspace.dependencies.get("regex") {
-        Some(toml::Value::String(version)) => version.clone(),
-        Some(toml::Value::Table(table)) => table
-            .get("version")
-            .and_then(toml::Value::as_str)
-            .expect("the workspace `regex` dependency names a version")
-            .to_string(),
-        other => panic!("the workspace declares no `regex` dependency: {other:?}"),
+    let lockfile_text =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.lock"))
+            .expect("the workspace Cargo.lock must exist");
+    let lockfile: Lockfile =
+        toml::from_str(&lockfile_text).expect("the workspace Cargo.lock must be valid TOML");
+    let versions: Vec<&str> = lockfile
+        .package
+        .iter()
+        .filter(|package| package.name == "regex")
+        .map(|package| package.version.as_str())
+        .collect();
+    let [version] = versions[..] else {
+        panic!(
+            "the workspace Cargo.lock must resolve exactly one `regex` crate, the one the \
+             checker links; got: {versions:?}"
+        )
     };
     let mut segments = version.split('.');
     let major = segments.next().expect("a version has a major segment");
     let minor = segments
         .next()
-        .expect("the workspace `regex` version names a minor segment");
+        .expect("the locked `regex` version names a minor segment");
     let expected = format!("regex = {{ version = \"{major}.{minor}\"");
 
     let out = tempfile::tempdir().expect("temp dir");
