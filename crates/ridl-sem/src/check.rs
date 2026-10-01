@@ -8728,12 +8728,26 @@ mod tests {
             assert!(matches!(verdicts.get(refused), Some(Some(_))));
         }
 
-        // The record is emptied at its bound.
-        for n in 0..=REGEX_CRATE_VERDICTS_BOUND {
-            regex_crate_verdict(&format!("^a{{{n}}}$"));
+        // The record is emptied, not trimmed, once it holds the bound: with
+        // the bound filled, the next verdict recorded is the only one left.
+        // Another test may record a verdict in the meantime, which only
+        // makes the record fuller.
+        {
+            let mut verdicts = REGEX_CRATE_VERDICTS.lock().unwrap();
+            verdicts.clear();
+            for n in 0..REGEX_CRATE_VERDICTS_BOUND {
+                verdicts.insert(format!("^filler-603-{n}$"), None);
+            }
         }
-        let len = REGEX_CRATE_VERDICTS.lock().unwrap().len();
-        assert!(len <= REGEX_CRATE_VERDICTS_BOUND, "{len} verdicts recorded");
+        let newest = "^newest-for-issue-603$";
+        assert_eq!(regex_crate_verdict(newest), None);
+        let verdicts = REGEX_CRATE_VERDICTS.lock().unwrap();
+        assert_eq!(verdicts.get(newest), Some(&None));
+        let fillers = verdicts
+            .keys()
+            .filter(|key| key.starts_with("^filler-603-"))
+            .count();
+        assert_eq!(fillers, 0, "{} verdicts recorded", verdicts.len());
     }
 
     /// The checker compiles a pattern with the same `regex` configuration the
