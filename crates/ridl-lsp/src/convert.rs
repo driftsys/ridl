@@ -348,6 +348,8 @@ mod tests {
         let index = line_index(MIXED);
         assert_eq!(index.position(size(3)), pos(1, 1));
         assert_eq!(index.position(size(4)), pos(1, 1));
+        // A `\r\n` at the start of the text: its `\n` maps to (0, 0).
+        assert_eq!(line_index("\r\nx").position(size(1)), pos(0, 0));
     }
 
     #[test]
