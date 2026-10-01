@@ -59,6 +59,8 @@
 //! enclosing construct is emitted verbatim from source instead of being
 //! re-synthesised. That keeps every comment in place, leaves the node structure
 //! and the non-trivia token set unchanged, and stays idempotent.
+//! The property harness checks all three implemented profiles at widths 100,
+//! 60 and 40, comparing node entry and exit, token identity, and comment text.
 
 use ridl_syntax::{
     Profile, SyntaxKind, SyntaxNode,
@@ -822,6 +824,18 @@ mod tests {
             panic!("expected parse errors for broken input");
         };
         assert!(!errors.is_empty());
+        for (input, profile) in [
+            ("package p\ninterface Broken {\n", Profile::Ridl),
+            (
+                "package p\ncomponent Broken { requires A B }\n",
+                Profile::Rsdl,
+            ),
+        ] {
+            assert!(matches!(
+                format(input, profile, &FormatOptions::default()),
+                FormatOutcome::ParseErrors(_)
+            ));
+        }
     }
 
     #[test]
@@ -907,6 +921,21 @@ mod tests {
             formatted(input),
             "package p\n\ntype Zebra: integer [0..1]\n\ntype Alpha: integer [0..1]\n",
         );
+        for (input, profile) in [
+            (
+                "package p\n\ninterface I {\n  signal zebra: A\n  signal alpha: B\n}\n",
+                Profile::Ridl,
+            ),
+            (
+                "package p\n\nsystem S {\n  Zebra\n  Alpha\n}\n",
+                Profile::Rsdl,
+            ),
+        ] {
+            assert_eq!(
+                format(input, profile, &FormatOptions::default()),
+                FormatOutcome::Formatted(input.to_string())
+            );
+        }
     }
 
     #[test]
