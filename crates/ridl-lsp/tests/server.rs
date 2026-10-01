@@ -3120,3 +3120,256 @@ fn a_duplicate_service_name_publishes_ridl_140() {
 fn a_lock_in_an_earlier_package_does_not_move_ridl_140() {
     assert_ridl_140_on_b(true);
 }
+
+/// Opens a standalone overlay from `text` and returns the server's answer to
+/// `textDocument/formatting` on it, requested with `options`.
+fn open_and_format(
+    client: &Connection,
+    id: i32,
+    uri: &lt::Uri,
+    text: &str,
+    options: lt::FormattingOptions,
+) -> Option<Vec<lt::TextEdit>> {
+    let (_, language_id) = uri
+        .as_str()
+        .rsplit_once('.')
+        .expect("a synthetic path with an extension");
+    notify::<lt::notification::DidOpenTextDocument>(
+        client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: uri.clone(),
+                language_id: language_id.to_string(),
+                version: 0,
+                text: text.to_string(),
+            },
+        },
+    );
+    format_request(client, id, uri, options)
+}
+
+/// Sends `textDocument/formatting` for `uri` and returns the server's answer.
+fn format_request(
+    client: &Connection,
+    id: i32,
+    uri: &lt::Uri,
+    options: lt::FormattingOptions,
+) -> Option<Vec<lt::TextEdit>> {
+    request::<lt::request::Formatting>(
+        client,
+        id,
+        lt::DocumentFormattingParams {
+            text_document: lt::TextDocumentIdentifier { uri: uri.clone() },
+            options,
+            work_done_progress_params: Default::default(),
+        },
+    );
+    let response = next_response(client);
+    assert_eq!(response.id, RequestId::from(id));
+    serde_json::from_value(response.response_result.expect("formatting succeeds"))
+        .expect("a valid formatting result")
+}
+
+/// Formatting options that differ from the canonical style: eight-column
+/// tabs.
+fn tabs() -> lt::FormattingOptions {
+    lt::FormattingOptions {
+        tab_size: 8,
+        insert_spaces: false,
+        ..Default::default()
+    }
+}
+
+/// Formatting options that differ from the canonical style: four spaces.
+fn four_spaces() -> lt::FormattingOptions {
+    lt::FormattingOptions {
+        tab_size: 4,
+        insert_spaces: true,
+        ..Default::default()
+    }
+}
+
+/// `textDocument/formatting` returns the `ridl fmt` rendering as one edit over
+/// the whole document, picks the parse profile from the file extension,
+/// returns no edit for a document already in canonical form, and returns
+/// `null` for a document with parse errors. The client's `tabSize` and
+/// `insertSpaces` do not change the output.
+#[test]
+fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    let capabilities = initialize(&client, None);
+    assert_eq!(
+        capabilities.document_formatting_provider,
+        Some(lt::OneOf::Left(true))
+    );
+
+    // A `.typl` document: the edit spans the whole input, up to the position
+    // after the final newline.
+    let typl = path_to_uri("/ridl-lsp-fmt/solo.typl").expect("an absolute synthetic path");
+    let edits = open_and_format(
+        &client,
+        10,
+        &typl,
+        "package solo\ntype   Widget :integer[0..10]\n",
+        tabs(),
+    )
+    .expect("a valid document is formatted");
+    assert_eq!(
+        edits,
+        vec![lt::TextEdit {
+            range: range((0, 0), (2, 0)),
+            new_text: "package solo\n\ntype Widget: integer [0..10]\n".to_string(),
+        }]
+    );
+
+    // A document already in canonical form needs no edit.
+    let canonical =
+        path_to_uri("/ridl-lsp-fmt/canonical.typl").expect("an absolute synthetic path");
+    for (id, options) in [(11, tabs()), (15, four_spaces())] {
+        let edits = open_and_format(
+            &client,
+            id,
+            &canonical,
+            "package solo\n\ntype Widget: integer [0..10]\n",
+            options,
+        );
+        assert_eq!(edits, Some(Vec::new()));
+    }
+
+    // A document with no final newline and non-ASCII text on its last line:
+    // the edit ends at that line's end in UTF-16 code units (`é` is one unit,
+    // `😀` is two), not at a byte offset and not on a following line.
+    let unicode = path_to_uri("/ridl-lsp-fmt/unicode.typl").expect("an absolute synthetic path");
+    let edits = open_and_format(
+        &client,
+        16,
+        &unicode,
+        "package solo\ntype   Widget :integer[0..10] // é😀",
+        tabs(),
+    )
+    .expect("a valid document is formatted");
+    assert_eq!(
+        edits,
+        vec![lt::TextEdit {
+            range: range((0, 0), (1, 36)),
+            new_text: "package solo\n\ntype Widget: integer [0..10] // é😀\n".to_string(),
+        }]
+    );
+
+    // A `.ridl` document parses under the ridl profile: `interface` is not a
+    // typl declaration, so a typl parse would report errors and return `null`.
+    let ridl = path_to_uri("/ridl-lsp-fmt/door.ridl").expect("an absolute synthetic path");
+    let text = "package solo\ninterface Door {\n  signal open: boolean\n}\n";
+    // The rendering indents `signal` with two spaces under either set of
+    // client options.
+    for (id, options) in [(12, tabs()), (19, four_spaces())] {
+        let edits =
+            open_and_format(&client, id, &ridl, text, options).expect("a valid ridl document");
+        assert_eq!(
+            edits,
+            vec![lt::TextEdit {
+                range: range((0, 0), (4, 0)),
+                new_text: "package solo\n\ninterface Door {\n  signal open: boolean\n}\n"
+                    .to_string(),
+            }]
+        );
+    }
+
+    // The same text in a `.typl` document parses under the typl profile, where
+    // `interface` is an error, so the result is `null`.
+    let typl_interface =
+        path_to_uri("/ridl-lsp-fmt/door.typl").expect("an absolute synthetic path");
+    assert_eq!(
+        open_and_format(&client, 17, &typl_interface, text, tabs()),
+        None
+    );
+
+    // A `.rsdl` document parses under the rsdl profile: `component` is an
+    // error under the typl and ridl profiles.
+    let rsdl = path_to_uri("/ridl-lsp-fmt/door.rsdl").expect("an absolute synthetic path");
+    let edits = open_and_format(
+        &client,
+        18,
+        &rsdl,
+        "package solo\ncomponent Door { offers solo.door }\n",
+        tabs(),
+    )
+    .expect("a valid rsdl document");
+    assert_eq!(
+        edits,
+        vec![lt::TextEdit {
+            range: range((0, 0), (2, 0)),
+            new_text: "package solo\n\ncomponent Door { offers solo.door }\n".to_string(),
+        }]
+    );
+
+    // A document with parse errors is left alone.
+    let broken = path_to_uri("/ridl-lsp-fmt/broken.typl").expect("an absolute synthetic path");
+    assert_eq!(open_and_format(&client, 13, &broken, BROKEN, tabs()), None);
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Formatting reads the edited buffer of a workspace file, not the text
+/// loaded from disk: after a `didChange`, the edit renders the new buffer, and
+/// a later `didChange` that breaks the file makes the result `null`.
+#[test]
+fn formatting_reads_the_edited_buffer() {
+    let dir = TempDir::new("format-buffer");
+    let (_, app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    notify::<lt::notification::DidOpenTextDocument>(
+        &client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: app.clone(),
+                language_id: "typl".to_string(),
+                version: 0,
+                text: APP.to_string(),
+            },
+        },
+    );
+    let replace_buffer = |version: i32, text: &str| {
+        notify::<lt::notification::DidChangeTextDocument>(
+            &client,
+            lt::DidChangeTextDocumentParams {
+                text_document: lt::VersionedTextDocumentIdentifier {
+                    uri: app.clone(),
+                    version,
+                },
+                content_changes: vec![lt::TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: text.to_string(),
+                }],
+            },
+        );
+    };
+
+    // Format the loaded text first, so the server caches a line table for the
+    // file. `APP` has three lines, so the edit ends at (3, 0).
+    let loaded = format_request(&client, 23, &app, tabs()).expect("APP is valid");
+    assert_eq!(
+        loaded.iter().map(|edit| edit.range).collect::<Vec<_>>(),
+        vec![range((0, 0), (3, 0))]
+    );
+
+    // The new buffer has two lines: an edit that ends at (2, 0) shows that the
+    // cached line table was replaced on `didChange`.
+    replace_buffer(1, "package app\ntype   Widget :integer[0..10]\n");
+    assert_eq!(
+        format_request(&client, 20, &app, tabs()),
+        Some(vec![lt::TextEdit {
+            range: range((0, 0), (2, 0)),
+            new_text: "package app\n\ntype Widget: integer [0..10]\n".to_string(),
+        }])
+    );
+
+    replace_buffer(2, BROKEN);
+    assert_eq!(format_request(&client, 21, &app, tabs()), None);
+
+    shut_down(&client, 22);
+    server.join().expect("thread joins").expect("clean exit");
+}

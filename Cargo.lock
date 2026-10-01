@@ -1902,6 +1902,7 @@ dependencies = [
  "lsp-server",
  "lsp-types",
  "ridl-core",
+ "ridl-fmt",
  "ridl-ir",
  "ridl-sem",
  "ridl-syntax",
