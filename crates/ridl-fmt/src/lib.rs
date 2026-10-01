@@ -35,8 +35,13 @@
 //!   `NAME = 0`.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
-//! code width. Options are passed through layout; line breaking is not applied
-//! yet. The formatter reads no files or environment.
+//! code width, measured in Unicode scalar values including indentation. Tuple
+//! types break one field per line, with commas between fields, when their code
+//! line exceeds the width. The last breakable construct on an overlong line
+//! breaks first; lines are measured again after each break. Nested tuples break
+//! only after their enclosing tuple. Trailing comments never cause a break;
+//! unbreakable text stays over the limit. `None` disables line breaking.
+//! The formatter reads no files or environment.
 //!
 //! # What order is *not* changed
 //!
@@ -67,8 +72,9 @@ use ridl_syntax::{
     ast::{AstNode, SourceFile},
 };
 use rowan::NodeOrToken;
+use std::collections::HashSet;
 
-/// Options for the pure formatter. Width is not applied to layout yet.
+/// Options for the pure formatter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormatOptions {
     /// Maximum code characters per line, or `None` for no limit.
@@ -346,7 +352,7 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::StructDef => format_block_def(node, indent, "struct", options),
         SyntaxKind::EnumDef => format_block_def(node, indent, "enum", options),
         SyntaxKind::UnionDef => format_block_def(node, indent, "union", options),
-        SyntaxKind::FieldDef => line(format_field_def(node)),
+        SyntaxKind::FieldDef => render_layout(&format_field_def(node), indent, options),
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
@@ -525,19 +531,17 @@ fn elements_between_braces(node: &SyntaxNode) -> Vec<SyntaxElement> {
 
 // --- members -------------------------------------------------------------
 
-fn format_field_def(node: &SyntaxNode) -> String {
-    let mut out = format!(
-        "{}: {}",
-        child_tight(node, SyntaxKind::Name),
-        field_type(node)
-    );
+fn format_field_def(node: &SyntaxNode) -> Layout {
+    let mut parts = vec![
+        Layout::Text(format!("{}: ", child_tight(node, SyntaxKind::Name))),
+        field_type(node),
+    ];
     if let Some(init) = child_node(node, SyntaxKind::InitValue)
         && let Some(literal) = child_node(&init, SyntaxKind::Literal)
     {
-        out.push_str(" = ");
-        out.push_str(&tight_text(&literal));
+        parts.push(Layout::Text(format!(" = {}", tight_text(&literal))));
     }
-    out
+    Layout::Concat(parts)
 }
 
 fn format_reserved_entry(node: &SyntaxNode) -> String {
@@ -565,12 +569,12 @@ fn format_union_arm(node: &SyntaxNode) -> String {
 
 // --- field types ---------------------------------------------------------
 
-/// The first field-type child of `node`, rendered inline.
-fn field_type(node: &SyntaxNode) -> String {
+/// The first field-type child of `node`, with tuple break positions retained.
+fn field_type(node: &SyntaxNode) -> Layout {
     node.children()
         .find(|c| is_field_type(c.kind()))
         .map(|c| format_field_type(&c))
-        .unwrap_or_default()
+        .unwrap_or_else(|| Layout::Text(String::new()))
 }
 
 fn is_field_type(kind: SyntaxKind) -> bool {
@@ -585,69 +589,175 @@ fn is_field_type(kind: SyntaxKind) -> bool {
     )
 }
 
-/// Renders a field, tuple-field, or collection-element type inline, recursing
-/// through tuples, arrays, maps, and optionals. A type carrying a comment is
-/// emitted verbatim so the comment survives (the never-drop-a-comment rule).
-fn format_field_type(node: &SyntaxNode) -> String {
+/// A canonical text fragment, concatenation, or breakable tuple. Text also
+/// carries verbatim constructs: comments inside a type disable synthesis.
+enum Layout {
+    Text(String),
+    Concat(Vec<Layout>),
+    Tuple(Vec<Layout>),
+}
+
+/// An outermost unbroken tuple on a rendered physical line. Inner tuples are
+/// exposed only when their parent breaks, so each decision follows the tree.
+struct BreakCandidate {
+    id: usize,
+    line: usize,
+}
+
+#[derive(Default)]
+struct Rendering {
+    text: String,
+    line: usize,
+    next_id: usize,
+    candidates: Vec<BreakCandidate>,
+}
+
+impl Rendering {
+    fn push(&mut self, text: &str) {
+        self.line += text.matches('\n').count();
+        self.text.push_str(text);
+    }
+
+    fn layout(&mut self, layout: &Layout, broken: &HashSet<usize>, inside_inline: bool) {
+        match layout {
+            Layout::Text(text) => self.push(text),
+            Layout::Concat(parts) => {
+                for part in parts {
+                    self.layout(part, broken, inside_inline);
+                }
+            }
+            Layout::Tuple(items) => {
+                let id = self.next_id;
+                self.next_id += 1;
+                if broken.contains(&id) {
+                    let indent = self
+                        .text
+                        .rsplit('\n')
+                        .next()
+                        .unwrap_or_default()
+                        .chars()
+                        .take_while(|c| *c == ' ')
+                        .count();
+                    self.push("(");
+                    for (i, item) in items.iter().enumerate() {
+                        self.push("\n");
+                        self.push(&" ".repeat(indent + 2));
+                        self.layout(item, broken, false);
+                        if i + 1 < items.len() {
+                            self.push(",");
+                        }
+                    }
+                    self.push("\n");
+                    self.push(&" ".repeat(indent));
+                    self.push(")");
+                } else {
+                    if !inside_inline && !items.is_empty() {
+                        self.candidates.push(BreakCandidate {
+                            id,
+                            line: self.line,
+                        });
+                    }
+                    self.push("(");
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            self.push(", ");
+                        }
+                        self.layout(item, broken, true);
+                    }
+                    self.push(")");
+                }
+            }
+        }
+    }
+}
+
+/// Start with the inline rendering. Break the last available construct on an
+/// overlong line, render again, and stop when no overlong line can break.
+/// Trailing comments are attached later by the container, so never count here.
+fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
+    let mut broken = HashSet::new();
+    loop {
+        let mut rendered = Rendering::default();
+        rendered.push(&indent_str(indent));
+        rendered.layout(layout, &broken, false);
+        let candidate = options.max_line_length.and_then(|width| {
+            rendered
+                .text
+                .split('\n')
+                .enumerate()
+                .find_map(|(line, text)| {
+                    if text.chars().count() <= width {
+                        return None;
+                    }
+                    rendered
+                        .candidates
+                        .iter()
+                        .rev()
+                        .find(|c| c.line == line)
+                        .map(|c| c.id)
+                })
+        });
+        match candidate {
+            Some(id) => {
+                broken.insert(id);
+            }
+            None => return rendered.text.split('\n').map(str::to_string).collect(),
+        }
+    }
+}
+
+/// Renders a field, tuple-field, or collection-element type, recursing through
+/// tuples, arrays, maps, and optionals. Comments retain the whole type verbatim.
+fn format_field_type(node: &SyntaxNode) -> Layout {
     if contains_comment(node) {
-        return node.text().to_string();
+        return Layout::Text(node.text().to_string());
     }
     match node.kind() {
-        SyntaxKind::PathType => tight_text(node),
+        SyntaxKind::PathType => Layout::Text(tight_text(node)),
         SyntaxKind::PrimitiveType => {
             let mut out = primitive_keyword(node);
             if let Some(constraint) = child_node(node, SyntaxKind::Constraint) {
                 out.push(' ');
                 out.push_str(&format_constraint(&constraint));
             }
-            out
+            Layout::Text(out)
         }
         SyntaxKind::OptionalType => {
-            let inner = node
-                .children()
-                .find(|c| is_field_type(c.kind()))
-                .map(|c| format_field_type(&c))
-                .unwrap_or_default();
-            format!("{inner}?")
+            Layout::Concat(vec![field_type(node), Layout::Text("?".into())])
         }
-        SyntaxKind::TupleType => {
-            let fields: Vec<String> = node
-                .children()
+        SyntaxKind::TupleType => Layout::Tuple(
+            node.children()
                 .filter(|c| c.kind() == SyntaxKind::TupleField)
                 .map(|f| {
-                    format!(
-                        "{}: {}",
-                        child_tight(&f, SyntaxKind::Name),
-                        f.children()
-                            .find(|c| is_field_type(c.kind()))
-                            .map(|c| format_field_type(&c))
-                            .unwrap_or_default(),
-                    )
+                    Layout::Concat(vec![
+                        Layout::Text(format!("{}: ", child_tight(&f, SyntaxKind::Name))),
+                        field_type(&f),
+                    ])
                 })
-                .collect();
-            format!("({})", fields.join(", "))
-        }
-        SyntaxKind::ArrayType => {
-            let element = node
-                .children()
-                .find(|c| is_field_type(c.kind()))
-                .map(|c| format_field_type(&c))
-                .unwrap_or_default();
-            format!("[{element}; {}]", child_tight(node, SyntaxKind::Bound))
-        }
+                .collect(),
+        ),
+        SyntaxKind::ArrayType => Layout::Concat(vec![
+            Layout::Text("[".into()),
+            field_type(node),
+            Layout::Text(format!("; {}]", child_tight(node, SyntaxKind::Bound))),
+        ]),
         SyntaxKind::MapType => {
             let mut types = node.children().filter(|c| is_field_type(c.kind()));
-            let key = types
-                .next()
-                .map(|c| format_field_type(&c))
-                .unwrap_or_default();
-            let value = types
-                .next()
-                .map(|c| format_field_type(&c))
-                .unwrap_or_default();
-            format!("[{key}: {value}; {}]", child_tight(node, SyntaxKind::Bound))
+            let mut next = || {
+                types
+                    .next()
+                    .map(|c| format_field_type(&c))
+                    .unwrap_or_else(|| Layout::Text(String::new()))
+            };
+            Layout::Concat(vec![
+                Layout::Text("[".into()),
+                next(),
+                Layout::Text(": ".into()),
+                next(),
+                Layout::Text(format!("; {}]", child_tight(node, SyntaxKind::Bound))),
+            ])
         }
-        _ => tight_text(node),
+        _ => Layout::Text(tight_text(node)),
     }
 }
 
@@ -1023,5 +1133,228 @@ mod tests {
             formatted(input),
             "package p\n\nunion R { // result union\n  ok: A\n  err: B\n}\n",
         );
+    }
+
+    /// Every width fixture pins its rendering, fixed point, and full tree and
+    /// content streams. Comments participate in the content stream only.
+    fn assert_width_format(input: &str, expected: &str, options: &FormatOptions) {
+        let outcome = format(input, Profile::Typl, options);
+        assert_eq!(outcome, FormatOutcome::Formatted(expected.to_string()));
+        assert_eq!(
+            format(expected, Profile::Typl, options),
+            outcome,
+            "not a fixed point"
+        );
+        let structure = |text: &str| {
+            let parse = ridl_syntax::parse(text, Profile::Typl);
+            assert!(
+                parse.errors().is_empty(),
+                "width fixture must parse: {:?}",
+                parse.errors()
+            );
+            parse
+                .syntax()
+                .preorder_with_tokens()
+                .filter_map(|event| match event {
+                    rowan::WalkEvent::Enter(NodeOrToken::Node(n)) => {
+                        Some((true, n.kind(), String::new()))
+                    }
+                    rowan::WalkEvent::Leave(NodeOrToken::Node(n)) => {
+                        Some((false, n.kind(), String::new()))
+                    }
+                    rowan::WalkEvent::Enter(NodeOrToken::Token(t))
+                        if !t.kind().is_trivia() && t.kind() != SyntaxKind::Comma =>
+                    {
+                        Some((true, t.kind(), t.text().to_string()))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let content = |text: &str| {
+            ridl_syntax::parse(text, Profile::Typl)
+                .syntax()
+                .descendants_with_tokens()
+                .filter_map(|e| e.into_token())
+                .filter(|t| !matches!(t.kind(), SyntaxKind::Whitespace | SyntaxKind::Comma))
+                .map(|t| (t.kind(), t.text().trim_end().to_string()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(structure(input), structure(expected), "structure changed");
+        assert_eq!(content(input), content(expected), "content changed");
+    }
+
+    #[test]
+    fn tuple_width_boundaries_include_indentation() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                // The fixed part of this line has 19 characters, without A.
+                let name = "A".repeat(columns - 19);
+                let inline = format!("  pair: (a: {name}, b: B)");
+                assert_eq!(inline.chars().count(), columns);
+                let input = format!("package p\nstruct S {{\n{inline}\n}}\n");
+                let field = if columns <= width {
+                    inline
+                } else {
+                    format!("  pair: (\n    a: {name},\n    b: B\n  )")
+                };
+                let expected = format!("package p\n\nstruct S {{\n{field}\n}}\n");
+                assert_width_format(&input, &expected, &options);
+            }
+        }
+    }
+
+    #[test]
+    fn collection_tuples_break_and_keep_the_collection_suffix() {
+        let options = FormatOptions {
+            max_line_length: Some(20),
+        };
+        for (input, expected) in [
+            (
+                "package p\nstruct S { readings: [(a: A, b: B); 8] }\n",
+                "package p\n\nstruct S {\n  readings: [(\n    a: A,\n    b: B\n  ); 8]\n}\n",
+            ),
+            (
+                "package p\nstruct S { readings: [Key: (a: A, b: B); 8] }\n",
+                "package p\n\nstruct S {\n  readings: [Key: (\n    a: A,\n    b: B\n  ); 8]\n}\n",
+            ),
+            (
+                "package p\nstruct S { readings: (a: A, b: B)? }\n",
+                "package p\n\nstruct S {\n  readings: (\n    a: A,\n    b: B\n  )?\n}\n",
+            ),
+        ] {
+            assert_width_format(input, expected, &options);
+        }
+    }
+
+    #[test]
+    fn nested_tuples_break_outer_first_and_measure_again() {
+        let input = "package p\nstruct S { pair: (inner: (a: A, b: B), tail: C) }\n";
+        for (width, expected) in [
+            (
+                28,
+                "package p\n\nstruct S {\n  pair: (\n    inner: (a: A, b: B),\n    tail: C\n  )\n}\n",
+            ),
+            (
+                20,
+                "package p\n\nstruct S {\n  pair: (\n    inner: (\n      a: A,\n      b: B\n    ),\n    tail: C\n  )\n}\n",
+            ),
+        ] {
+            assert_width_format(
+                input,
+                expected,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn trailing_comments_do_not_cause_tuple_breaks() {
+        let comment = "note".repeat(40);
+        let input = format!("package p\nstruct S {{ pair: (a: A, b: B) // {comment}\n}}\n");
+        let expected = format!("package p\n\nstruct S {{\n  pair: (a: A, b: B) // {comment}\n}}\n");
+        assert_width_format(
+            &input,
+            &expected,
+            &FormatOptions {
+                max_line_length: Some(20),
+            },
+        );
+    }
+
+    #[test]
+    fn unbreakable_strings_are_left_over_the_limit() {
+        let value = "x".repeat(120);
+        let input = format!("package p\nconst TEXT: string = \"{value}\"\n");
+        let expected = format!("package p\n\nconst TEXT: string = \"{value}\"\n");
+        assert_width_format(
+            &input,
+            &expected,
+            &FormatOptions {
+                max_line_length: Some(60),
+            },
+        );
+    }
+
+    #[test]
+    fn no_width_limit_keeps_a_two_hundred_column_tuple_line() {
+        let name = "A".repeat(181);
+        let line = format!("  pair: (a: {name}, b: B)");
+        assert_eq!(line.chars().count(), 200);
+        let input = format!("package p\nstruct S {{\n{line}\n}}\n");
+        let expected = format!("package p\n\nstruct S {{\n{line}\n}}\n");
+        assert_width_format(
+            &input,
+            &expected,
+            &FormatOptions {
+                max_line_length: None,
+            },
+        );
+    }
+
+    #[test]
+    fn width_one_breaks_every_tuple_and_keeps_the_tree() {
+        assert_width_format(
+            "package p\nstruct S { pair: (inner: (a: A, b: B), tail: C) }\n",
+            "package p\n\nstruct S {\n  pair: (\n    inner: (\n      a: A,\n      b: B\n    ),\n    tail: C\n  )\n}\n",
+            &FormatOptions {
+                max_line_length: Some(1),
+            },
+        );
+    }
+
+    #[test]
+    fn tuple_comments_keep_the_construct_verbatim_at_small_widths() {
+        assert_width_format(
+            "package p\nstruct S { pair: (a: A, /* note */ b: B) }\n",
+            "package p\n\nstruct S {\n  pair: (a: A, /* note */ b: B)\n}\n",
+            &FormatOptions {
+                max_line_length: Some(1),
+            },
+        );
+    }
+
+    #[test]
+    fn tuple_width_counts_unicode_scalars_in_the_initializer() {
+        let input = "package p\nstruct S { pair: (a: A, b: B) = \"ééééé\" }\n";
+        assert_width_format(
+            input,
+            "package p\n\nstruct S {\n  pair: (a: A, b: B) = \"ééééé\"\n}\n",
+            &FormatOptions {
+                max_line_length: Some(30),
+            },
+        );
+        assert_width_format(
+            input,
+            "package p\n\nstruct S {\n  pair: (\n    a: A,\n    b: B\n  ) = \"ééééé\"\n}\n",
+            &FormatOptions {
+                max_line_length: Some(29),
+            },
+        );
+    }
+
+    #[test]
+    fn a_broken_tuple_is_left_unformatted_at_every_width() {
+        for width in [100, 60, 1] {
+            assert!(matches!(
+                format(
+                    "package p\nstruct S { pair: (a: A }\n",
+                    Profile::Typl,
+                    &FormatOptions {
+                        max_line_length: Some(width)
+                    }
+                ),
+                FormatOutcome::ParseErrors(_)
+            ));
+        }
     }
 }
