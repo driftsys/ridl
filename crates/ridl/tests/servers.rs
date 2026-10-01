@@ -451,10 +451,22 @@ fn ridl_lsp_accepts_the_stdio_flag_an_editor_client_passes() {
 
 /// The LSP specification (3.17, "Implementation Considerations") recommends
 /// that a server accept `--clientProcessId` next to the transport flag. The
-/// server ignores the value: `initialize` carries the same process id.
+/// server ignores the value: `initialize` carries the same process id. Each
+/// flag is accepted without the other, and the value in either clap form.
 #[test]
 fn ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends() {
     assert_lsp_handshake_and_clean_shutdown(&["--stdio", "--clientProcessId=4242"]);
+    assert_lsp_handshake_and_clean_shutdown(&["--clientProcessId", "4242"]);
+}
+
+/// Stdio is the only transport: a client asking for a pipe is refused with
+/// exit 2 rather than served over stdio, where it would never connect.
+#[test]
+fn ridl_lsp_refuses_a_transport_other_than_stdio() {
+    let mut child = spawn_lsp(&["--pipe=ridl-test-pipe"]);
+    drop(child.stdin.take().expect("piped stdin"));
+    let status = wait_for_exit(&mut child, "ridl lsp --pipe");
+    assert_eq!(status.code(), Some(2), "an unsupported transport exits 2");
 }
 
 /// Runs `ridl lsp` with `args` through the `initialize` handshake and a
