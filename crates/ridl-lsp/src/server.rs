@@ -116,6 +116,7 @@ pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result
 /// (E1.15b), completion and rename (E1.15c), and inlay hints (E1.16). Rename
 /// advertises `prepareProvider` so the client validates the cursor and the new
 /// name before applying an edit. Inlay hints close the E1 LSP feature set.
+/// Whole-document formatting runs the `ridl fmt` engine.
 fn server_capabilities() -> lt::ServerCapabilities {
     lt::ServerCapabilities {
         text_document_sync: Some(lt::TextDocumentSyncCapability::Options(
@@ -145,6 +146,7 @@ fn server_capabilities() -> lt::ServerCapabilities {
             work_done_progress_options: Default::default(),
         })),
         inlay_hint_provider: Some(lt::OneOf::Left(true)),
+        document_formatting_provider: Some(lt::OneOf::Left(true)),
         ..Default::default()
     }
 }
@@ -438,6 +440,16 @@ impl ServerState {
             lt::request::InlayHintRequest::METHOD => {
                 match serde_json::from_value::<lt::InlayHintParams>(request.params) {
                     Ok(params) => Response::new_ok(request.id, self.inlay_hints(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::Formatting::METHOD => {
+                match serde_json::from_value::<lt::DocumentFormattingParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.formatting(&params)),
                     Err(err) => Response::new_err(
                         request.id,
                         ErrorCode::InvalidParams as i32,
@@ -921,6 +933,31 @@ impl ServerState {
             document_changes: None,
             change_annotations: None,
         }
+    }
+
+    /// `textDocument/formatting`: the `ridl fmt` rendering of the buffer, as one
+    /// edit that replaces the whole document. An empty list when the buffer is
+    /// already in canonical form; `None` (a `null` result) when it has parse
+    /// errors, which `ridl fmt` also leaves untouched. The client's formatting
+    /// options are ignored: the style is canonical.
+    fn formatting(&mut self, params: &lt::DocumentFormattingParams) -> Option<Vec<lt::TextEdit>> {
+        let path = convert::uri_to_path(&params.text_document.uri)?;
+        let (file, _) = self.locate(&path)?;
+        let text = file.text(&self.db);
+        let ridl_fmt::FormatOutcome::Formatted(formatted) =
+            ridl_fmt::format(text, profile_of_path(&path))
+        else {
+            return None;
+        };
+        if formatted == *text {
+            return Some(Vec::new());
+        }
+        let whole = TextRange::up_to(rowan::TextSize::of(text.as_str()));
+        let range = self.line_index_of(file).range(whole);
+        Some(vec![lt::TextEdit {
+            range,
+            new_text: formatted,
+        }])
     }
 
     /// The input and package for a document path: an overlay file, or a loaded

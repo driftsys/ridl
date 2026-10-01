@@ -303,7 +303,9 @@ quick-fix code actions derived from diagnostic fix-its, hover (units and
 ranges), goto-definition, find-references, completion, rename with prepare
 support, and inlay hints (field ordinals and unit expansion). E2 taught all of
 them `.ridl` — interaction hovers, resolved timing, and interaction ordinals in
-the inlay hints.
+the inlay hints. Whole-document formatting runs the `ridl-fmt` engine on the
+open buffer: one edit that replaces the document, no edit when the buffer is
+already canonical, and a `null` result when it has parse errors.
 
 ## What E1 closed from the E0 note
 

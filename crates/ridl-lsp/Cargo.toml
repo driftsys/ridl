@@ -16,6 +16,7 @@ description = "The RIDL language server: a synchronous lsp-server loop over the 
 lsp-server.workspace = true
 lsp-types.workspace = true
 ridl-core.workspace = true
+ridl-fmt.workspace = true
 ridl-ir.workspace = true
 ridl-sem.workspace = true
 ridl-syntax.workspace = true
