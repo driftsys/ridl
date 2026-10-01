@@ -1069,12 +1069,16 @@ each width.
 `ridl fmt` tests such as `fmt_formats_an_rsdl_file`, through the CLI): a
 temporary directory with `root = true` and `[*.ridl] max_line_length = 60`
 breaks a 80-column member that the default leaves alone; `[*.{typl,ridl,rsdl}]`
-matches an `.rsdl` file; `max_line_length = off` leaves a 200-column line alone;
-a nested directory's `.editorconfig` with `root = true` stops the walk, so the
-outer file's value is not seen; a file with no `.editorconfig` above it formats
-at 100. The client-options half of D-12 is already pinned:
-`formatting_replaces_the_document_with_the_ridl_fmt_rendering` in
-`crates/ridl-lsp/tests/server.rs` formats under `tabs()` (`tab_size: 8`,
+matches a `.typl` tuple fixture in Task 5. Approved 2026-10-01: Task 4 retains
+the `.rsdl` reader-level brace-glob test; Task 9 adds the CLI width test using a
+valid `.rsdl` attribute block or value list at different widths and a second
+`--check` run. A `.rsdl` struct tuple fixture draws RSDL-604, and breakable rsdl
+declarations are introduced in Task 9. `max_line_length = off` leaves a
+200-column line alone; a nested directory's `.editorconfig` with `root = true`
+stops the walk, so the outer file's value is not seen; a file with no
+`.editorconfig` above it formats at 100. The client-options half of D-12 is
+already pinned: `formatting_replaces_the_document_with_the_ridl_fmt_rendering`
+in `crates/ridl-lsp/tests/server.rs` formats under `tabs()` (`tab_size: 8`,
 `insert_spaces: false`) and `four_spaces()` and asserts two-space indentation
 under both. One new LSP test pins what the plumbing adds and fails before it: a
 document whose path is in a temporary directory with an `.editorconfig` holding

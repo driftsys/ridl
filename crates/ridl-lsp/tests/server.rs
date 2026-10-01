@@ -3312,6 +3312,62 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+#[test]
+fn formatting_reads_editorconfig_width_and_keeps_two_space_indentation() {
+    let dir = TempDir::new("fmt-editorconfig");
+    dir.write(
+        ".editorconfig",
+        "root = true\n[*.typl]\nmax_line_length = 60\nindent_size = 4\nindent_style = tab\n",
+    );
+    let first = "a".repeat(25);
+    let second = "b".repeat(25);
+    let line = format!("  pair: ({first}: integer, {second}: boolean)");
+    assert_eq!(line.chars().count(), 80);
+    let source = format!("package p\nstruct S {{ pair: ({first}:integer,{second}:boolean) }}\n");
+    let disk = "package p\nstruct OnDisk { value: integer }\n";
+    let file = dir.write("types.typl", disk);
+    let uri = uri_of(&file);
+    let expected = format!(
+        "package p\n\nstruct S {{\n  pair: (\n    {first}: integer,\n    {second}: boolean\n  )\n}}\n"
+    );
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    let edits = open_and_format(&client, 10, &uri, &source, tabs()).expect("valid source");
+    assert_eq!(
+        edits,
+        vec![lt::TextEdit {
+            range: range((0, 0), (2, 0)),
+            new_text: expected.clone(),
+        }]
+    );
+    notify::<lt::notification::DidChangeTextDocument>(
+        &client,
+        lt::DidChangeTextDocumentParams {
+            text_document: lt::VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 1,
+            },
+            content_changes: vec![lt::TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: expected,
+            }],
+        },
+    );
+    assert_eq!(
+        format_request(&client, 11, &uri, four_spaces()),
+        Some(Vec::new())
+    );
+    assert_eq!(
+        std::fs::read_to_string(file).unwrap(),
+        disk,
+        "formatting returns edits without writing the file"
+    );
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// A document whose lines end with a bare `\r` has one line per `\r`, as the
 /// LSP specification counts lines: the formatting edit ends on the line after
 /// the last `\r`, not at a large character offset on line 0.

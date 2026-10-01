@@ -889,8 +889,11 @@ indent_size = 2
 max_line_length = 100
 ```
 
-The CLI and language server currently use this fixed 100-character limit.
-Their width and indentation are not configured through `.editorconfig`.
+The CLI resolves `max_line_length` from `.editorconfig` for each file. The
+language server resolves it from the document path and formats the current
+buffer. An integer sets the width, `off` disables breaking, and absent, `unset`
+or invalid effective values use 100. Indentation remains two spaces; the
+formatter ignores `indent_size`, `indent_style` and client formatting options.
 Compiler profiles for `.rmdl` and `.rxdl` are still pending; the glob includes
 them for editor settings.
 

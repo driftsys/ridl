@@ -184,7 +184,10 @@ of §5.
 - Files: `crates/ridl/src/main.rs`, `crates/ridl-lsp/src/server.rs`.
 - Tests first: in `crates/ridl/tests/facade.rs`, the `.editorconfig` override
   tests of note §11, using a typl tuple field (the only construct that breaks so
-  far) for the line that breaks at 60 and not at 100; in
+  far) for the line that breaks at 60 and not at 100. Approved 2026-10-01: use a
+  `.typl` tuple for the CLI brace-glob width test, retain Task 4's `.rsdl`
+  reader test, and defer the valid `.rsdl` CLI width test to Task 9; a struct
+  tuple fixture under the Rsdl profile draws RSDL-604. In
   `crates/ridl-lsp/tests/server.rs`, the LSP test of note §11: a document in a
   temporary directory whose `.editorconfig` holds `root = true` and
   `[*.typl] max_line_length = 60`, `indent_size = 4`, `indent_style = tab`, with
@@ -310,7 +313,10 @@ of §5.
   columns, measured); an empty body `{}`; a dotted key; a comment on the
   opening-brace line; a comment between two members of a `component`; a comment
   between the name and the header attribute block (header verbatim) and one
-  inside it (attribute-block rules).
+  inside it (attribute-block rules). Add the `.rsdl` CLI brace-glob width test
+  deferred from Task 5 by the maintainer's 2026-10-01 approval: use a valid
+  attribute block or value list at different widths, and run `--check` again
+  after formatting.
 - Acceptance: `cargo test -p ridl-fmt`, `cargo test -p ridl-cli --test facade`,
   `cargo test -p ridl-lsp`; the `.rsdl` files of the parser `ok` corpus pass the
   Task 2 checks at the three widths.

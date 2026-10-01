@@ -191,6 +191,94 @@ fn fmt_rewrites_in_place() {
     );
 }
 
+fn tuple_width_fixture(width: usize) -> (String, String, String) {
+    let names = width - "  pair: (: integer, : boolean)".chars().count();
+    let first = "a".repeat(names / 2);
+    let second = "b".repeat(names - names / 2);
+    let line = format!("  pair: ({first}: integer, {second}: boolean)");
+    assert_eq!(line.chars().count(), width);
+    (
+        format!("package p\nstruct S {{ pair: ({first}:integer,{second}:boolean) }}\n"),
+        format!("package p\n\nstruct S {{\n{line}\n}}\n"),
+        format!(
+            "package p\n\nstruct S {{\n  pair: (\n    {first}: integer,\n    {second}: boolean\n  )\n}}\n"
+        ),
+    )
+}
+
+fn fmt_directory_and_recheck(dir: &TempDir) {
+    let (code, stderr) = ridl(&["fmt".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    let (code, stderr) = ridl(&["fmt".as_ref(), "--check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(code, 0, "the resolved rendering is a fixed point: {stderr}");
+}
+
+#[test]
+fn fmt_editorconfig_resolves_the_width_for_each_file() {
+    let dir = TempDir::new("fmt-width-files");
+    dir.write(
+        ".editorconfig",
+        "root = true\n[*.ridl]\nmax_line_length = 60\n",
+    );
+    let (source, inline, broken) = tuple_width_fixture(80);
+    let ridl_file = dir.write("types.ridl", &source);
+    let typl_file = dir.write("types.typl", &source);
+    fmt_directory_and_recheck(&dir);
+    assert_eq!(std::fs::read_to_string(ridl_file).unwrap(), broken);
+    assert_eq!(std::fs::read_to_string(typl_file).unwrap(), inline);
+}
+
+#[test]
+fn fmt_editorconfig_brace_glob_matches_a_typl_file() {
+    let dir = TempDir::new("fmt-width-brace-glob");
+    dir.write(
+        ".editorconfig",
+        "root = true\n[*.{typl,ridl,rsdl}]\nmax_line_length = 60\n",
+    );
+    let (source, _, broken) = tuple_width_fixture(80);
+    let file = dir.write("types.typl", &source);
+    fmt_directory_and_recheck(&dir);
+    assert_eq!(std::fs::read_to_string(file).unwrap(), broken);
+}
+
+#[test]
+fn fmt_editorconfig_off_keeps_a_two_hundred_column_line() {
+    let dir = TempDir::new("fmt-width-off");
+    dir.write(".editorconfig", "root = true\n[*]\nmax_line_length = off\n");
+    let (source, inline, _) = tuple_width_fixture(200);
+    let file = dir.write("types.typl", &source);
+    fmt_directory_and_recheck(&dir);
+    assert_eq!(std::fs::read_to_string(file).unwrap(), inline);
+}
+
+#[test]
+fn fmt_editorconfig_nested_root_hides_the_outer_width() {
+    let dir = TempDir::new("fmt-width-root");
+    dir.write(".editorconfig", "root = true\n[*]\nmax_line_length = 60\n");
+    dir.write(
+        "nested/.editorconfig",
+        "root = true\n[*]\nindent_size = 4\n",
+    );
+    let (source, inline, broken) = tuple_width_fixture(80);
+    let outer = dir.write("outer.typl", &source);
+    let nested = dir.write("nested/types.typl", &source);
+    fmt_directory_and_recheck(&dir);
+    assert_eq!(std::fs::read_to_string(outer).unwrap(), broken);
+    assert_eq!(std::fs::read_to_string(nested).unwrap(), inline);
+}
+
+#[test]
+fn fmt_editorconfig_absence_uses_one_hundred_columns() {
+    let dir = TempDir::new("fmt-width-default");
+    let (source, inline, _) = tuple_width_fixture(100);
+    let at_limit = dir.write("limit.typl", &source);
+    let (source, _, broken) = tuple_width_fixture(101);
+    let over_limit = dir.write("over.typl", &source);
+    fmt_directory_and_recheck(&dir);
+    assert_eq!(std::fs::read_to_string(at_limit).unwrap(), inline);
+    assert_eq!(std::fs::read_to_string(over_limit).unwrap(), broken);
+}
+
 /// `ridl fmt --check` detects a file that would change: exit 1, no rewrite.
 #[test]
 fn fmt_check_detects_and_does_not_write() {

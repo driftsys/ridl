@@ -939,7 +939,8 @@ impl ServerState {
     /// edit that replaces the whole document. An empty list when the buffer is
     /// already in canonical form; `None` (a `null` result) when it has parse
     /// errors, which `ridl fmt` also leaves untouched. The client's formatting
-    /// options are ignored: the style is canonical.
+    /// options are ignored: the style is canonical. EditorConfig contributes
+    /// only the width, resolved from the document's path.
     fn formatting(&mut self, params: &lt::DocumentFormattingParams) -> Option<Vec<lt::TextEdit>> {
         let path = convert::uri_to_path(&params.text_document.uri)?;
         let (file, _) = self.locate(&path)?;
@@ -947,7 +948,7 @@ impl ServerState {
         let ridl_fmt::FormatOutcome::Formatted(formatted) = ridl_fmt::format(
             text,
             profile_of_path(&path),
-            &ridl_fmt::FormatOptions::default(),
+            &ridl_fmt::FormatOptions::for_path(std::path::Path::new(&path)),
         ) else {
             return None;
         };
