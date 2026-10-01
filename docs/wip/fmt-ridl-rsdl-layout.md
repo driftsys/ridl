@@ -4,8 +4,9 @@ Status: design note, written 2026-10-01 for driftsys/ridl#387. It fixes the
 canonical layout `ridl fmt` gives the seven declarations it currently emits as
 written — ridl `interface` and `service`, and rsdl `system`, `component`,
 `distribution`, `deployment` and `machine`. Nothing here is implemented. The
-decisions in §7 belong to the maintainer; implementation starts after they are
-taken.
+decisions in §8 belong to the maintainer; implementation starts after they are
+taken. Updated 2026-10-01: D-9 is decided — the formatter gets a line width —
+and §6 carries the breaking rules it needs.
 
 Part of #387.
 
@@ -168,7 +169,8 @@ Separator commas between members are removed, as in a `struct`.
 
 **Parameter list.** `(` tight to the name, parameters joined by a comma and a
 space, `)` tight, `()` when empty: `setRange(min: Speed, max: Speed)`. The list
-always renders on one line, trailing comma removed, separator commas normalised.
+renders on one line when the line fits the width, one parameter per line
+otherwise (§6.3); trailing comma removed, separator commas normalised.
 
 **Return type.** A colon and a space, then one of the four shapes, with one
 space on each side of `|` (D-8):
@@ -241,9 +243,11 @@ written. An expression never breaks across lines.
 
 **Named form.** `service` then the dotted name tight, then the tight colon of
 the relation (general form §5, "relations"), then the shapes joined by a comma
-and a space on one line, the optional trailing comma removed (D-7). The commas
-are required by the grammar (ADR-0015 decision 13), so they stay — this is the
-one list whose commas the formatter writes rather than removes.
+and a space on one line when the line fits the width, the optional trailing
+comma removed (D-7). A list that does not fit breaks after the colon, one shape
+per line at the next indent, each but the last followed by its comma (§6.3). The
+commas are required by the grammar (ADR-0015 decision 13), so they stay — this
+is the one list whose commas the formatter writes rather than removes.
 
 ```ridl,ignore
 service veh.adas.cruise      : CruiseControl
@@ -412,10 +416,11 @@ deployment Production for Vehicle {
 ### 4.4 The attribute block
 
 An rsdl attribute block holds flags and assignments only — no rsdl key takes the
-predicate form (rsdl reference §5) — so under D-2 it always takes the inline
-form, on a declaration and on a line alike, whatever its length. A multi-line
-block in the source is joined; its separator commas become a comma and a space
-and the trailing comma goes. The dotted backend key is tight.
+predicate form (rsdl reference §5) — so under D-2 it takes the inline form
+whenever its line fits the width, on a declaration and on a line alike, and the
+block form when it does not (§6.2). A multi-line block in the source is joined
+when it fits; its separator commas become a comma and a space and the trailing
+comma goes. The dotted backend key is tight.
 
 Before (`crates/ridl-syntax/test_data/parser/ok/rsdl_attribute_positions.rsdl`):
 
@@ -436,18 +441,24 @@ component Cruise [
 After:
 
 ```rsdl,ignore
-component Cruise [ instances = (primary, backup), deprecated = "use Cruise2", rust.crate = "cruise", someip.serviceId = 4660, linux.realtime ] {
+component Cruise [
+  instances = (primary, backup)
+  deprecated = "use Cruise2"
+  rust.crate = "cruise"
+  someip.serviceId = 4660
+  linux.realtime
+] {
   /// The service this component offers.
   offers veh.adas.cruise [ someip.instanceId = 1 ]
   requires veh.adas.LaneAssist [ dds.reliable ]
 }
 ```
 
-The 134-column header is the cost of D-2's recommendation; D-2's alternative (b)
-keeps that block multi-line because the author broke it, and D-9 is where a
-column limit would be decided. A declaration's block in the block form would
-read `component Cruise [`, one attribute per line, `] {` — the `{` on the
-closing bracket's line — if (b) is taken.
+The joined header would be 134 columns, over the default width of 100, so the
+block takes the block form: `component Cruise [`, one attribute per line with no
+commas, and `] {` — the brace on the closing bracket's line (§6.4). At a width
+of 140 the same declaration is one header line. A block that fits, such as
+`component Backend [ external ] {`, stays inline.
 
 ## 5. Comments
 
@@ -477,9 +488,178 @@ positions.
   end of the body (`BlockKind::CommentOnly`).
 
 Nothing in this note moves a comment to a different member, and no rule drops
-one; §8 states the test.
+one; §9 states the test.
 
-## 6. Where each rule comes from
+## 6. Line width and line breaking
+
+### 6.1 The rule (D-9, decided 2026-10-01)
+
+A physical line of formatted output holds at most `W` characters, where `W` is
+100 by default and the value of `max_line_length` in `.editorconfig` when one
+applies to the file (§6.6). `max_line_length = off` removes the limit. A
+character is one Unicode scalar value; the indentation counts; the output never
+holds a tab.
+
+Three qualifications, each a rule rather than a decision:
+
+- **A trailing comment does not count.** The width applies to the code of a
+  line. A comment never causes a break — breaking code to make room for a
+  comment would move the comment off the code it annotates, which §5 forbids —
+  so a line whose code fits and whose comment runs past `W` is canonical.
+- **An unbreakable token longer than the width stays as it is.** A long string
+  literal, regex, qualified name or duration makes a line that exceeds `W`; the
+  formatter emits it, draws no diagnostic, and `ridl fmt --check` accepts the
+  file, because the output is a fixed point.
+- **Only line breaks read the width.** Spacing, the order of tokens, the blank
+  lines and the comment placement are the same at every width.
+
+### 6.2 How a line is broken
+
+Every construct renders on one line first, as §3 and §4 state. When a physical
+line exceeds `W`, the breakable constructs on that line (§6.3) are broken one at
+a time, starting from the last one on the line and moving toward its start;
+after each break the resulting lines are measured again, and the loop stops when
+every line fits or no breakable construct is left. A construct nested inside
+another is therefore broken only after the outer one — it then sits on a line of
+its own that still exceeds.
+
+A broken construct is laid out as a block: its opener ends the line it was on,
+one item per line at the next indent level (two spaces more than the line the
+opener is on), and its closer starts a line at the opener's line indent,
+followed by whatever came after the construct on the original line. The layout
+is a function of the parse tree and `W` only, so it is idempotent by
+construction: the second run recomputes the same one-line renderings from the
+same tree and takes the same decisions.
+
+At a width of 60, for illustration:
+
+```ridl,ignore
+query getSpeedHistory(window: Duration, mode: Mode): (min: Speed, max: Speed, avg: Speed) @[..100ms] [ labels = (A, B) ]
+```
+
+The last breakable construct is the attribute block; it takes the block form of
+§3.2. The first line still exceeds, and its last breakable construct is now the
+tuple return:
+
+```ridl,ignore
+query getSpeedHistory(window: Duration, mode: Mode): (
+  min: Speed,
+  max: Speed,
+  avg: Speed
+) @[..100ms] [
+  labels = (A, B)
+]
+```
+
+Every line fits, so the parameter list stays on one line. Had it not fitted, the
+parameter list would have broken the same way, `(` ending the header line and
+`): (` opening the next.
+
+### 6.3 The breakable constructs
+
+| Construct                           | Opener and closer           | One item per line | Separators                                        |
+| ----------------------------------- | --------------------------- | ----------------- | ------------------------------------------------- |
+| parameter list                      | `(` … `)`                   | a parameter       | a comma after every item but the last (D-13)      |
+| tuple type (return, field, element) | `(` … `)`                   | a tuple field     | as above (D-13)                                   |
+| inline attribute block              | `[` … `]`                   | an attribute      | none — the block form of §3.2                     |
+| attribute value list, nested or not | `(` … `)`                   | a value           | a comma after every item but the last (D-13)      |
+| service shape list (§3.3)           | none; the break follows `:` | a shape           | the required comma after every shape but the last |
+
+A tuple inside an array or map type breaks as a tuple; the brackets around it
+are not breakable, so `readings: [(a: A, b: B); 8]` breaks to `readings:
+[(`,
+the fields, `); 8]`.
+
+Everything else is unbreakable: a name, a qualified name, a literal, a string, a
+regex, a duration, a timing annotation (`@[20ms..100ms]`), a constraint
+(`[0..250 step 1]`), a stream type, a fallible pair `T | E`, a declaration
+header (`interface Name {`, `deployment Name for System {`), a member with no
+list (`signal name: Type @10ms`, `offers X`, `reserved x`, `NAME = 0`), a
+`package` or `import` line, and an **expression**. A predicate longer than the
+width stays on one line: breaking an expression needs precedence-aware
+continuation rules, and no contract in the corpus comes near the width. Reopen
+when one does.
+
+### 6.4 The rsdl declarations under the width
+
+A body is never on one line (D-1), so the width reaches only a header and a
+member line, and the one breakable construct on either is the attribute block
+with its value lists. A declaration's block in the block form puts the brace on
+the closer's line — `component Cruise [`, one attribute per line, `] {` — which
+is what the §4.4 example renders to at the default width. A `for` clause and a
+reference are unbreakable.
+
+### 6.5 The typl declarations
+
+The typl rules of §2 gain the width and nothing else. The one typl construct
+that can break is a tuple type (a field's, or an array's or map's element): it
+breaks one field per line as §6.3 states. Every other token on a typl line — a
+constraint, a literal, a regex, a unit expression, a qualified name, an enum
+value, a block header — is unbreakable, so a `type`, `const`, `import`,
+`reserved`, enum value, enumset bit or union arm line is the same at every
+width. No line in the parser corpus, the fmt goldens,
+`examples/cabin/cabin.ridl`, the baseline corpus or the book fences exceeds 100
+columns (measured 2026-10-01), so the existing goldens do not change at the
+default width.
+
+### 6.6 Where the width comes from
+
+**The formatter stays pure.** `ridl_fmt::format(text, profile)` becomes
+`format(text, profile, &FormatOptions)`, with
+`FormatOptions { max_line_length: Option<usize> }` — `Some(100)` by `Default`,
+`None` for no limit. The function reads no file and no environment, so it is the
+same function on every target; the core of the crate takes no new dependency and
+keeps building for wasm32 with `--no-default-features`. `ridl-fmt` is not in
+`just wasm-check`'s crate list today; the implementation pull request adds it,
+so the gate holds the promise.
+
+**One crate reads `.editorconfig`: `ridl-fmt`, behind a default cargo feature
+`editorconfig`.** The feature adds a module with one function,
+`FormatOptions::for_path(path) -> FormatOptions`, over the `ec4rs` dependency,
+version 1.2. Checked 2026-10-01 on crates.io: licence Apache-2.0, compatible
+with the workspace's MIT (a permissive dependency of a permissive crate; its
+licence text ships with the binary's notices); latest release 2026-07-21, Rust
+1.79 minimum, one optional dependency (`language-tags`, left off); the Rust core
+library editorconfig.org links; not in `Cargo.lock` today. The alternatives are
+`editorconfig` 1.0.0 (MIT, last release 2017, a binding to the C core) and
+`editorconfig-rs` 0.2.3 (MIT, 2025, also a binding to the C core, which needs
+the system library); neither is pure Rust. A small parser of our own was
+rejected (§10): the glob language and the precedence rules are the whole
+difficulty, and a reimplementation would diverge from the editors that read the
+same file.
+
+**What is honoured.** Everything the EditorConfig specification defines, as
+`ec4rs` implements it: the search from the file's directory upward to a file
+with `root = true` or the filesystem root; every `[glob]` section whose pattern
+matches the path — `*`, `**`, `?`, `[…]`, `[!…]`, `{a,b}`, `{1..3}` and a
+`/`-anchored pattern — with later files and later sections winning, so `[*]`,
+`[*.ridl]` and `[*.{typl,ridl,rsdl}]` all apply when they match. One key is
+read: `max_line_length` — an integer is the width, `off` removes the limit,
+absent or `unset` gives 100, and any other value is ignored and gives 100.
+`indent_size` and `indent_style` are not read (D-12): the indentation is
+canonical at two spaces.
+
+**The callers.** `ridl fmt` (`run_fmt` in `crates/ridl/src/main.rs`) resolves
+the options per file, because two files of one run may sit under different
+`.editorconfig` files. `ridl lsp`'s `formatting` handler resolves them from the
+document's path (`convert::uri_to_path`); an untitled document has no path and
+the handler already returns `None` for it. The client's `FormattingOptions` —
+`tabSize`, `insertSpaces` and the rest — stay ignored, as the handler's
+documentation states today.
+
+**The repository's own `.editorconfig`** gains, in the implementation pull
+request:
+
+```ini
+[*.{typl,ridl,rsdl}]
+indent_size = 2
+max_line_length = 100
+```
+
+so that the file and the default agree, an editor shows the ruler at 100, and
+the `[*]` section's `indent_size = 4` no longer describes the family's files.
+
+## 7. Where each rule comes from
 
 | Rule                                                                | Source                                                                        |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -499,39 +679,49 @@ one; §8 states the test.
 | expression spacing                                                  | **D-6** (new)                                                                 |
 | `T \| E` spaced                                                     | general form §2 Shape 2 and §6.1 examples; **D-8**                            |
 | `<T>` tight                                                         | atoms tight (`tight_text`); every ridl reference §12 example                  |
-| parameter list `(p: P, q: Q)`, one line                             | the tuple rule of the crate doc; **D-9** (no column limit)                    |
+| parameter list `(p: P, q: Q)`, one line when it fits                | the tuple rule of the crate doc; **D-9** (decided: width 100, §6)             |
+| line width 100, `.editorconfig` override, the breaks of §6          | **D-9** (decided 2026-10-01); **D-12**, **D-13** for the two open points      |
 | service list on one line, comma-space separators, no trailing comma | ADR-0015 decision 13 for the commas; **D-7** for the line                     |
 | `deployment Name for System [ attrs ] {`                            | general form R5 (clause before attributes), §4.4 (attributes before `{`)      |
 | nested `machine` blocks, blank lines preserved                      | `format_block_def` one level down; **D-11**                                   |
 | comment placement                                                   | crate doc ("Comments are never dropped"); the two new positions in §5         |
 
-## 7. Decisions for the maintainer
+## 8. Decisions for the maintainer
 
 General form §5 settles the colon and forbids alignment; it says nothing about
-the choices below. Each one is open until the maintainer takes it, and the
-implementation starts from the taken set.
+the choices below. D-9 is taken (2026-10-01). Each of the others is open until
+the maintainer takes it, and the implementation starts from the taken set.
 
 **D-1 — rsdl bodies: one member per line, always?** Options: (a) always one
 member per line, as every typl brace body is today; (b) a body the source wrote
 on one line (`{` and `}` on the same line) stays on one line, with comma-space
-separators, and a body the source broke takes one member per line; (c) a column
-limit decides. Recommendation: (a). It is the rule the formatter already has,
-general form §5 item 4 argues for it (one line per member gives the smallest
-diff when a member is added), and rustfmt expands a struct definition the same
-way. The cost is visible: every one-line `system`, `distribution`, `component`
-and `machine` in the references, the book and the parser corpus expands, and the
-existing test
+separators, and a body the source broke takes one member per line; (c) the width
+decides — a body on one line when it fits, one member per line otherwise. D-9
+makes (c) implementable, and it is the option the width changes: the decision is
+now between one rule for every body and a width rule for rsdl bodies alone.
+Recommendation: still (a). It is the rule the formatter already has, general
+form §5 item 4 argues for it (one line per member gives the smallest diff when a
+member is added), and rustfmt expands a struct definition the same way; (c)
+would have to reach `struct` and `enum` too to stay one rule, and that changes
+the typl goldens. Under (a) the width never reads a body; a member line that
+exceeds breaks on its own (§6.4). The cost is visible: every one-line `system`,
+`distribution`, `component` and `machine` in the references, the book and the
+parser corpus expands, and the existing test
 `an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written` is
 rewritten to the new layout.
 
 **D-2 — when does an attribute block take the block form?** Options: (a) by kind
-— a block with at least one predicate is block form, every other block is
-inline; (b) by source — a line break between `[` and the first attribute makes
-it block form; (c) by column limit. Recommendation: (a). It matches every
-example in the general form, the two references and the book, needs no
-source-sensitivity beyond the blank-line rule the formatter already has, and
-gives one rendering per declaration. The cost is §4.4's 134-column header for a
-block of five backend keys.
+and by width — a block with at least one predicate is block form, and so is a
+block whose inline form makes its line exceed the width (§6.2); every other
+block is inline; (b) by source — a line break between `[` and the first
+attribute makes it block form; (c) by width alone — a predicate block that fits
+stays inline. Recommendation: (a). It matches every example in the general form,
+the two references and the book, needs no source-sensitivity beyond the
+blank-line rule the formatter already has, and gives one rendering per
+declaration. The width removes the cost the earlier draft named: §4.4's
+134-column header now breaks to the block form at the default width. (c) would
+put a one-predicate contract on the member's line, which no example in the
+family does.
 
 **D-3 — inline attribute block padding: `[ a, b ]` or `[a, b]`?**
 Recommendation: padded. Every example in the family writes it so, and the
@@ -545,7 +735,7 @@ block, whatever the source order; (b) keep the source order. Recommendation:
 lenient, so the formatter would emit the conforming order rather than invent
 one, and the block form reads better with `]` last. Two costs: the crate doc's
 "whitespace and separators only" sentence gains an exception, and the structural
-test of §8 compares the two annotation nodes as a set rather than in order.
+test of §9 compares the two annotation nodes as a set rather than in order.
 Erratum either way: ridl reference Appendix C writes `attr_block? timing?` for
 `command` and `query`, the opposite of R5, and `docs/book/getting-started.md`
 has two members in that order.
@@ -562,22 +752,25 @@ rule would leave `a<b` and `a < b` as two renderings of one expression. The
 renderer is one function over the six expression node kinds; it never
 reassociates and never touches parentheses.
 
-**D-7 — the service shape list: always one line?** Options: (a) one line,
-trailing comma removed; (b) keep a list the source broke after `:` on one shape
-per line, each with its required comma. Recommendation: (a). A list is a short
-set of interface names, and (b) would be the only place the formatter keeps a
-trailing comma.
+**D-7 — the service shape list: one line when it fits?** Options: (a) one line
+when the line fits the width, trailing comma removed, and one shape per line
+after the colon when it does not (§6.3), the required comma after every shape
+but the last; (b) keep a list the source broke after `:` on one shape per line,
+each with its required comma. Recommendation: (a). The width now gives the long
+list a defined layout, which the earlier draft had to leave to the author; (b)
+would be the only place the formatter keeps a trailing comma, and the only list
+laid out from the source rather than from the tree.
 
 **D-8 — the fallible return: `T | E` or `T|E`?** Recommendation: spaced. The
 general form §2 Shape 2 and §6.1 examples write it spaced; the `T|E` spelling
 appears only in ADR-0008's prose.
 
-**D-9 — a column limit?** Options: (a) none — a parameter list, a tuple, a shape
-list, an inline attribute block and an attribute value list always render on one
-line; (b) a limit such as 100 columns, with a breaking rule per construct.
-Recommendation: (a) now. The formatter has no width logic, and a width rule is a
-design of its own (where each construct breaks, and how it re-joins). Reopen
-when a real file produces a line a reviewer objects to.
+**D-9 — a column limit? Decided 2026-10-01 by the maintainer: yes.** `ridl fmt`
+gets a line width. The default is 100 columns; when `.editorconfig` sets
+`max_line_length` for the file being formatted, that value replaces the default.
+§6 holds the rule, the breaking algorithm, the breakable constructs of every
+declaration (the typl ones included), and where the width is resolved. The
+earlier draft recommended no limit; that recommendation is withdrawn.
 
 **D-10 — the scope of the reformatting sweep.** General form §5's errata note
 says the examples are reformatted "mechanically once `ridl fmt` exists".
@@ -585,7 +778,7 @@ Options: (a) the test fixtures and `examples/` only; (b) also every verified
 fence in `docs/book/`; (c) also the fences of the two language references and
 the general form. Recommendation: (b) in the implementation pull request, (c) as
 a follow-up pull request of its own. The book is what a reader copies, and the
-fixed-point test of §10 then holds it to the canonical style; the references are
+fixed-point test of §11 then holds it to the canonical style; the references are
 long and the §5 note already allows them to be touched opportunistically.
 
 **D-11 — blank lines between `machine` blocks inside a deployment.** Options:
@@ -593,7 +786,28 @@ long and the §5 note already allows them to be touched opportunistically.
 one, as between top-level declarations. Recommendation: (a), the existing body
 rule; a `machine` is a member.
 
-## 8. Invariants and how the tests check them
+**D-12 — honour `indent_size` from `.editorconfig`?** Options: (a) no — the
+indentation stays canonical at two spaces, and `.editorconfig` contributes the
+width only; (b) yes — `indent_size` sets the indent step, `indent_style = tab`
+emits tabs. Recommendation: (a). A canonical style has one indent, as it has one
+colon; every example in the family is at two spaces; the LSP handler already
+ignores the client's `tabSize` for the same reason; and (b) would make the
+output depend on a second file setting that the book fences, the fixtures and
+the goldens cannot carry. The repository's `.editorconfig` states
+`indent_size = 2` for the family's files (§6.6) so that editors agree with the
+formatter, not so that the formatter reads it.
+
+**D-13 — commas in a broken parenthesised list.** When a parameter list, a tuple
+type or an attribute value list breaks (§6.3), the items are one per line.
+Options: (a) keep the commas — one after every item but the last, the Rust,
+Kotlin and TypeScript rendering; (b) drop them, as a brace body and the
+block-form attribute block do. Recommendation: (a). A brace body and an
+attribute block list declarations, and the family writes those without commas; a
+parenthesised list is a list of items, and every language the §5 heritage names
+writes a broken one with commas. The block-form attribute block keeps its
+no-comma rendering, settled by the general form §4.4 example.
+
+## 9. Invariants and how the tests check them
 
 The four invariants are the crate's existing ones; the tests extend the existing
 harnesses to the two new profiles.
@@ -609,7 +823,7 @@ harnesses to the two new profiles.
    `crates/ridl-fmt/tests/properties.rs`, extended from `.typl` files to the
    `.ridl` and `.rsdl` files of `crates/ridl-syntax/test_data/parser/ok`, each
    parsed under the profile of its extension; the same check over every fixture
-   §10 lists.
+   §11 lists.
 3. **No comment lost.** Every comment token of the input is in the output, in
    order, with the same text (trailing whitespace trimmed). Test:
    `content_tokens` in `properties.rs` already compares every non-whitespace,
@@ -630,15 +844,29 @@ A mutation check closes the loop on 3 and 4: a test that deletes one comment
 token and one member from the formatted output must fail the comparison
 (`content_tokens_detect_a_dropped_comment_and_a_mutated_literal` is the model).
 
-## 9. Alternatives considered
+## 10. Alternatives considered
 
 - **Keep the fallback arm.** Rejected: it is what #387 reports, and the issue's
   example shows the alignment general form §5 forbids surviving a format.
-- **A width-driven layout, as rustfmt.** Rejected for now (D-9): no width logic
-  exists in the crate, every construct would need a breaking rule, and the
-  family's lines are short in every example. It can be added later without
-  changing any rule here, because every rule here is a one-line rendering that a
-  width rule would break at defined points.
+- **No column limit.** The earlier draft recommended it (every construct on one
+  line, no width logic in the crate). Rejected by the maintainer's D-9 decision
+  of 2026-10-01; §6 is the width rule that replaces it. The one-line renderings
+  of §3 and §4 are unchanged — the width breaks them at the points §6.3 names.
+- **A width-driven layout for every body, as rustfmt lays out a call.** Rejected
+  (D-1 (c), D-2 (c)): a body stays one member per line at every width, and a
+  predicate block stays block form at every width, so that the examples of the
+  general form, the references and the book keep their shape.
+- **Breaking expressions at operators.** Rejected for now (§6.3): it needs
+  precedence-aware continuation rules, and no contract in the corpus comes near
+  the width.
+- **A small `.editorconfig` parser of our own.** Rejected (§6.6): the glob
+  language and the precedence rules are the whole of the problem, and a second
+  implementation would disagree with the editors reading the same file; `ec4rs`
+  is pure Rust, maintained, and one optional dependency away from none.
+- **Reading `.editorconfig` inside `ridl_fmt::format`.** Rejected (§6.6): the
+  function would then touch the filesystem, which makes it impure and breaks the
+  wasm32 build; the reader is a separate feature-gated function that produces
+  the options the pure function takes.
 - **Source-sensitive line breaking, as prettier does for object literals.**
   Rejected as the default (D-1 (b), D-2 (b)): the typl declarations are not
   formatted that way, and two authors would then produce two canonical forms of
@@ -653,7 +881,7 @@ token and one member from the formatted output must fail the comparison
   then show the style the formatter rewrites, and the §5 errata note asks for
   the sweep.
 
-## 10. Test plan
+## 11. Test plan
 
 **Unit tests** in `crates/ridl-fmt/src/lib.rs`, one per rule, each a
 before/after string pair taken from §3 and §4 of this note, including: every
@@ -673,7 +901,7 @@ the profile from the extension instead of listing `.typl` only. Every golden is
 a fixed point.
 
 **Properties** (`crates/ridl-fmt/tests/properties.rs`): both tests run over the
-`.ridl` and `.rsdl` files of the parser `ok` corpus, and the §8 structure
+`.ridl` and `.rsdl` files of the parser `ok` corpus, and the §9 structure
 comparison is added beside `content_tokens`.
 
 **Reference examples** (`crates/ridl-fmt/tests/rsdl.rs`): the existing
@@ -681,7 +909,7 @@ idempotence-and-tokens test over the rsdl reference's §3 and Appendix A fences
 stays; the as-written test is replaced by the §4 renderings. The ridl
 reference's Appendix A gets the same treatment in a `ridl.rs` sibling.
 
-**Round trips.** Each of these formats idempotently and keeps its structure (§8,
+**Round trips.** Each of these formats idempotently and keeps its structure (§9,
 invariants 2 to 4), and after the D-10 sweep each is a fixed point:
 `examples/cabin/cabin.ridl`; `crates/ridl/tests/baseline-corpus/cluster.ridl`
 (the desk check compares `.ir.json` snapshots, so a whitespace change there is
@@ -697,6 +925,37 @@ over the staged fences; the sweep changes whitespace, separators and (under D-4)
 the annotation order only, none of which a diagnostic reads, and the `allow=`
 markers are untouched. `just demo` compiles `examples/cabin` the same way. Both
 run in `just build`.
+
+**Width** (unit tests in `crates/ridl-fmt/src/lib.rs`, one group per breakable
+construct of §6.3): for each construct, three inputs whose one-line rendering is
+99, 100 and 101 characters long at the default width — the first two stay on one
+line, the third breaks as §6.2 states, so the boundary is pinned on both sides;
+the same three at `max_line_length = 60` through `FormatOptions`, which pins
+that the option is read rather than the constant; the §6.2 worked example at 60,
+which pins the last-to-first order and the re-measure; a line with two breakable
+constructs where breaking the last one is enough, which pins that the loop
+stops; a tuple inside an array type; a trailing comment past the width that
+causes no break; an unbreakable 120-character string literal that stays as it
+is; `max_line_length` of `None` leaving a 200-column line alone; a width of 1,
+where every breakable construct breaks and the output still parses to the same
+tree.
+
+**Idempotence of broken lines**: every width test formats its output a second
+time and asserts equality, and `formatting_is_idempotent_over_the_ok_corpus`
+runs at widths 100, 60 and 40 over the whole corpus — the small widths force
+breaks in files whose lines fit at 100 — with the §9 structure comparison at
+each width.
+
+**`.editorconfig` override** (`crates/ridl/tests/fmt.rs`, through the CLI): a
+temporary directory with `root = true` and `[*.ridl] max_line_length = 60`
+breaks a 80-column member that the default leaves alone; `[*.{typl,ridl,rsdl}]`
+matches an `.rsdl` file; `max_line_length = off` leaves a 200-column line alone;
+a nested directory's `.editorconfig` with `root = true` stops the walk, so the
+outer file's value is not seen; a file with no `.editorconfig` above it formats
+at 100. One LSP test in `crates/ridl-lsp/tests/server.rs` sends
+`FormattingOptions { tabSize: 4, insertSpaces: false }` and receives two-space
+indentation, pinning D-12. `just wasm-check` builds `ridl-fmt` with
+`--no-default-features`, pinning the purity claim of §6.6.
 
 **The gate.** No new `just` recipe: the fixed-point tests over `examples/` and
 the book fences are the gate that keeps the examples canonical, and `just test`
@@ -714,7 +973,9 @@ already runs them.
   decision 2 (the init position); typl reference §15.2 (separators); rsdl
   reference §3 to §5 and Appendix A; ridl reference §14 and Appendix C (its
   annotation order is the erratum D-4 names); roadmap story E6.15, where #387
-  was found.
-- Disposition: when the implementation lands, the decisions of §7 are gardened
+  was found; the EditorConfig specification (editorconfig.org) and `ec4rs` 1.2
+  (<https://github.com/TheDaemoness/ec4rs>) for §6.6; ADR-0009 for the
+  `just wasm-check` gate the implementation extends.
+- Disposition: when the implementation lands, the decisions of §8 are gardened
   into the crate documentation and a dated amendment of general form §5, and
   this note moves to `docs/archive/`.

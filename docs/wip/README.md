@@ -181,9 +181,11 @@ design note, from the archive.
 - **fmt-ridl-rsdl-layout.md** — the canonical `ridl fmt` layout of the seven
   declarations the formatter still emits as written (driftsys/ridl#387): ridl
   `interface` and `service`, and the five rsdl declarations. Every member form
-  with its rendering, the rules general form §5 settles and the eleven choices
-  it does not, the invariants and the test plan. A recommendation for
-  Sebastien's decisions; implementation starts after they are taken.
+  with its rendering, the rules general form §5 settles and the thirteen choices
+  it does not, the line width rule (D-9, decided 2026-10-01: 100 columns,
+  `.editorconfig` overrides) with the breaking rules it needs, the invariants
+  and the test plan. A recommendation for Sebastien's remaining decisions;
+  implementation starts after they are taken.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
