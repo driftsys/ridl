@@ -43,6 +43,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 pulldown-cmark.workspace = true
+sha2.workspace = true
 # The end-to-end server tests speak MCP to a spawned `ridl mcp`: `client` is
 # the caller half of the SDK, `transport-child-process` the child-process
 # transport that spawns the binary and frames JSON-RPC over its stdio.

@@ -1720,10 +1720,14 @@ vscode-verify:
         chmod +x bin/ridl
         staged=1
     fi
-    npx vsce package --out "$scratch/ridl-lang.vsix"
+    just package-vsix "" "$scratch/ridl-lang.vsix"
     listing="$(npx vsce ls)"
     if ! grep -qx 'bin/ridl' <<<"$listing"; then
         echo "vscode-verify: bin/ridl is missing from the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
+    if ! grep -qx 'bin/THIRD-PARTY-NOTICES.txt' <<<"$listing"; then
+        echo "vscode-verify: third-party notices are missing from the VSIX" >&2
         exit 1
     fi
     if grep -q '^src/' <<<"$listing"; then
@@ -1742,18 +1746,24 @@ vscode-verify:
 # vsce platform identifier, e.g. darwin-arm64), `vsce package --target
 # <vsce-target> --out ridl-lang-<vsce-target>.vsix`, which is what the
 # release workflow's package-vsix job runs per target after staging that
-# target's binary. Not a member of `build`.
-package-vsix vsce-target="":
+# target's binary. An optional output path lets verification use the same
+# notice staging and packaging. Not a member of `build`.
+package-vsix vsce-target="" output="":
     #!/usr/bin/env bash
     set -euo pipefail
+    mkdir -p editors/vscode/bin
+    cp THIRD-PARTY-NOTICES.txt editors/vscode/bin/
     cd editors/vscode
     npm ci
     npm run compile
-    if [ -z "{{ vsce-target }}" ]; then
-        npx vsce package
-    else
-        npx vsce package --target "{{ vsce-target }}" --out "ridl-lang-{{ vsce-target }}.vsix"
+    set --
+    if [ -n "{{ vsce-target }}" ]; then set -- "$@" --target "{{ vsce-target }}"; fi
+    if [ -n "{{ output }}" ]; then
+        set -- "$@" --out "{{ output }}"
+    elif [ -n "{{ vsce-target }}" ]; then
+        set -- "$@" --out "ridl-lang-{{ vsce-target }}.vsix"
     fi
+    npx vsce package "$@"
 
 # Build the extension for this machine: a release build of ridl copied into
 # editors/vscode/bin/, then `just package-vsix` for the packaging half. Local
