@@ -184,8 +184,11 @@ design note, from the archive.
   with its rendering, the rules general form §5 settles and the thirteen choices
   it does not, the line width rule (D-9, decided 2026-10-01: 100 columns,
   `.editorconfig` overrides) with the breaking rules it needs, the invariants
-  and the test plan. A recommendation for Sebastien's remaining decisions;
-  implementation starts after they are taken.
+  and the test plan. All thirteen decisions taken 2026-10-01 (the recommended
+  option of each). Not implemented.
+- **fmt-ridl-rsdl-plan.md** — the thirteen-task implementation plan for that
+  note, written for a coding agent that starts with only the repository and the
+  file. Not started.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
