@@ -49,7 +49,7 @@ mod property;
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
 use ridl_core::interface_lock::LockKey;
-use ridl_fmt::{FormatOutcome, format};
+use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::plugin::PluginSpec;
 use ridlc::{CliRun, Emit};
@@ -2710,7 +2710,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
             }
         };
         let profile = ridl_core::profile_of_path(&file.to_string_lossy());
-        match format(&text, profile) {
+        match format(&text, profile, &FormatOptions::default()) {
             FormatOutcome::Formatted(formatted) => {
                 if formatted != text {
                     any_would_change = true;

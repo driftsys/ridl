@@ -944,9 +944,11 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document.uri)?;
         let (file, _) = self.locate(&path)?;
         let text = file.text(&self.db);
-        let ridl_fmt::FormatOutcome::Formatted(formatted) =
-            ridl_fmt::format(text, profile_of_path(&path))
-        else {
+        let ridl_fmt::FormatOutcome::Formatted(formatted) = ridl_fmt::format(
+            text,
+            profile_of_path(&path),
+            &ridl_fmt::FormatOptions::default(),
+        ) else {
             return None;
         };
         if formatted == *text {

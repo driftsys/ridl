@@ -5,7 +5,7 @@
 //! tests hold that to two properties over the reference's own examples, and pin
 //! what the layout changes.
 
-use ridl_fmt::{FormatOutcome, format};
+use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::{Profile, SyntaxKind, parse};
 
 /// The rsdl reference, read at test time so that the examples are its own.
@@ -60,7 +60,7 @@ fn tokens(text: &str) -> Vec<(SyntaxKind, String)> {
 }
 
 fn formatted(text: &str) -> String {
-    match format(text, Profile::Rsdl) {
+    match format(text, Profile::Rsdl, &FormatOptions::default()) {
         FormatOutcome::Formatted(out) => out,
         FormatOutcome::ParseErrors(errors) => panic!("the example parses: {errors:?}\n{text}"),
     }
