@@ -969,7 +969,7 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// generated `Regex::new(..).expect(..)` would then panic. A guard test in
 /// `crates/ridlc/tests/` keeps it equal to the workspace's `regex` version.
 ///
-/// The `ridl-rt = "0.4"` requirement is a literal, not read from
+/// The `ridl-rt = "0.5"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
@@ -990,7 +990,7 @@ validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
-ridl-rt = {{ version = "0.4", features = ["flatbuffers"] }}
+ridl-rt = {{ version = "0.5", features = ["flatbuffers"] }}
 regex = {{ version = "1.13", optional = true }}
 
 [lib]

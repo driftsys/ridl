@@ -1,5 +1,121 @@
 # Changelog
 
+## [0.5.0] (2026-10-01)
+
+### Features
+
+- **ridl-backend-rust:** refuse two ridl-derived names that one Rust namespace
+  cannot hold ([#612]) ([0df98ff]), closes [#449], [#453], [#455]
+- **ridl-backend-rust:** rename backend-chosen names a ridl name could reach
+  ([#608]) ([b325a38]), closes [#583], [#587], [#588], [#423]
+- **ridl-loopback:** add Loopback::attach, a second aggregate on the same store
+  ([#593]) ([c3cb412]), refs [#488], [#488], [#488], [#488], [#488]
+
+### Refactoring
+
+- **repo:** run the cabin example over one runtime with long-lived faces
+  ([#599]) ([b859634]), closes [#488], [#484]
+
+### Bug Fixes
+
+- **ridl-backend-rust:** name a type hidden by its child package through
+  __ridl_package ([#611]) ([02b3401]), closes 416
+Part of #424
+- **ridl-diff:** classify an appended field breaking unless an old payload stays
+  readable ([#609]) ([1efc4e6]), closes [#598]
+- **ridl-sem:** refuse a tuple field name declared twice (TYPL-215) ([#606])
+  ([623975c]), refs [#449]
+- **ridl-backend-flatbuffers:** read an omitted FlatBuffers default as the
+  default and give an optional scalar `= null` ([#604]) ([ea92239])
+- **ridl-sem:** refuse a match pattern the Rust regex crate cannot compile
+  (TYPL-220) ([#601]) ([a776736]), refs [#437], closes [#437], refs [#437],
+  [#437], [#437]
+- **ridl-ir:** measure Closure.reaches_foreign from Scope.package ([#600])
+  ([c624bd2])
+- **ridl-ir:** set TypeRef.foreign from the declaring package, not the reference
+  text ([#592]) ([255938e]), closes [#586]
+- **ridl-sem:** refuse a non-integer enumset bit position (TYPL-219) ([#591])
+  ([68e0c57]), closes [#579]
+- **ci:** make link-check fail closed on a broken or empty file listing ([#595])
+  ([4045f74]), closes 427.
+
+### Documentation
+
+- **repo:** garden the generated-name collision design ([#613]) ([73e37cc])
+- **ridl-backend-rust:** design the generated-name collision fix ([#596])
+  ([fd87978]), refs [#583], [#587], [#588], [#423], [#449], [#453], [#455],
+  [#416], [#424]
+
+### BREAKING CHANGES
+
+- `ridl diff` now exits 1 on a non-optional struct field
+appended whose type does not allow the value 0 (a string, bytes, struct,
+union, tuple, array or map field, a scalar whose range or step excludes
+0, an enum with no zero member, or an unresolved type). Such a diff
+exited 0 before. Declare the new field optional to keep it compatible.
+- a consumer that calls `view.bytes()` on a generated
+FlatBuffers view adds `use ridl_rt::payload::View;`. The `Wire` alias is
+removed; a consumer writes `ridl_rt::encoding::FlatBuffers`. A source name
+`self_`, `Self_`, `super_` or `crate_` now emits one more `_` (`self__`).
+- `ridl check` and `ridl build` now refuse a tuple that
+declares the same field name twice, such as `(a : Speed, a : Speed)`.
+The generated Rust (E0124) and TypeScript (TS2300) for such a source
+already failed to compile, but `ridl build --emit proto`, `--emit
+flatbuffers` and `--emit ir-json` succeeded, because those backends
+name a tuple's fields by position. Rename one of the two fields.
+- the emitted `.fbs` text changes for every optional
+scalar or enum field. Code a foreign consumer generates from the schema
+reads such a field as an optional value (planus: `Option<T>`), and
+reads an old buffer whose field was omitted at 0 as absent rather than
+as 0. The bytes this codec writes do not change.
+
+[0.5.0]: https://github.com/driftsys/ridl/compare/v0.4.0...v0.5.0
+[0df98ff]: https://github.com/driftsys/ridl/commit/0df98ff
+[#612]: https://github.com/driftsys/ridl/issues/612
+[#449]: https://github.com/driftsys/ridl/issues/449
+[#453]: https://github.com/driftsys/ridl/issues/453
+[#455]: https://github.com/driftsys/ridl/issues/455
+[b325a38]: https://github.com/driftsys/ridl/commit/b325a38
+[#608]: https://github.com/driftsys/ridl/issues/608
+[#583]: https://github.com/driftsys/ridl/issues/583
+[#587]: https://github.com/driftsys/ridl/issues/587
+[#588]: https://github.com/driftsys/ridl/issues/588
+[#423]: https://github.com/driftsys/ridl/issues/423
+[c3cb412]: https://github.com/driftsys/ridl/commit/c3cb412
+[#593]: https://github.com/driftsys/ridl/issues/593
+[#488]: https://github.com/driftsys/ridl/issues/488
+[b859634]: https://github.com/driftsys/ridl/commit/b859634
+[#599]: https://github.com/driftsys/ridl/issues/599
+[#484]: https://github.com/driftsys/ridl/issues/484
+[02b3401]: https://github.com/driftsys/ridl/commit/02b3401
+[#611]: https://github.com/driftsys/ridl/issues/611
+[1efc4e6]: https://github.com/driftsys/ridl/commit/1efc4e6
+[#609]: https://github.com/driftsys/ridl/issues/609
+[#598]: https://github.com/driftsys/ridl/issues/598
+[623975c]: https://github.com/driftsys/ridl/commit/623975c
+[#606]: https://github.com/driftsys/ridl/issues/606
+[ea92239]: https://github.com/driftsys/ridl/commit/ea92239
+[#604]: https://github.com/driftsys/ridl/issues/604
+[a776736]: https://github.com/driftsys/ridl/commit/a776736
+[#601]: https://github.com/driftsys/ridl/issues/601
+[#437]: https://github.com/driftsys/ridl/issues/437
+[c624bd2]: https://github.com/driftsys/ridl/commit/c624bd2
+[#600]: https://github.com/driftsys/ridl/issues/600
+[255938e]: https://github.com/driftsys/ridl/commit/255938e
+[#592]: https://github.com/driftsys/ridl/issues/592
+[#586]: https://github.com/driftsys/ridl/issues/586
+[68e0c57]: https://github.com/driftsys/ridl/commit/68e0c57
+[#591]: https://github.com/driftsys/ridl/issues/591
+[#579]: https://github.com/driftsys/ridl/issues/579
+[4045f74]: https://github.com/driftsys/ridl/commit/4045f74
+[#595]: https://github.com/driftsys/ridl/issues/595
+[73e37cc]: https://github.com/driftsys/ridl/commit/73e37cc
+[#613]: https://github.com/driftsys/ridl/issues/613
+[fd87978]: https://github.com/driftsys/ridl/commit/fd87978
+[#596]: https://github.com/driftsys/ridl/issues/596
+[#416]: https://github.com/driftsys/ridl/issues/416
+[#424]: https://github.com/driftsys/ridl/issues/424
+
 ## [0.4.0] (2026-09-28)
 
 ### Refactoring
