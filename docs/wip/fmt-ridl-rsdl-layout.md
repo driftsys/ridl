@@ -3,10 +3,12 @@
 Status: design note, written 2026-10-01 for driftsys/ridl#387. It fixes the
 canonical layout `ridl fmt` gives the seven declarations it currently emits as
 written — ridl `interface` and `service`, and rsdl `system`, `component`,
-`distribution`, `deployment` and `machine`. Nothing here is implemented. The
-decisions in §8 belong to the maintainer; implementation starts after they are
-taken. Updated 2026-10-01: D-9 is decided — the formatter gets a line width —
-and §6 carries the breaking rules it needs.
+`distribution`, `deployment` and `machine`. Nothing here is implemented. Updated
+2026-10-01: D-9 is decided — the formatter gets a line width — and §6 carries
+the breaking rules it needs. Updated the same day: the maintainer took the
+recommended option of every other decision, so all thirteen decisions of §8 are
+decided and the implementation can start. The implementation plan is
+[`fmt-ridl-rsdl-plan.md`](fmt-ridl-rsdl-plan.md).
 
 Part of #387.
 
@@ -88,7 +90,7 @@ the rule.
   each (`modifiers_prefix`).
 - **Source order is never changed**: no declaration, member, parameter,
   attribute or list item moves (crate doc, "What order is not changed"). The one
-  exception this note proposes is the annotation pair of §3.2, decision D-4.
+  exception is the annotation pair of §3.2, decision D-4.
 - **Comments are never dropped**; the placement rules are in §5 of this note
   (crate doc, "Comments are never dropped").
 
@@ -197,9 +199,9 @@ form of the attribute block that puts `]` last on the member, so a member ends
 where its contract ends.
 
 **Attribute block, inline form.** One space, the opening bracket, a space, the
-attributes joined by a comma and a space, a space, the closing bracket. The
-padding inside the brackets is D-3. A block whose attributes are all flags or
-assignments takes this form:
+attributes joined by a comma and a space, a space, the closing bracket (the
+padding is D-3). A block whose attributes are all flags or assignments takes
+this form when its line fits the width:
 
 ```ridl,ignore
 signal targetSpeed: Speed [ seed = SPEED_LIMIT_EU, persist ]
@@ -684,133 +686,118 @@ the `[*]` section's `indent_size = 4` no longer describes the family's files.
 | expression spacing                                                  | **D-6** (new)                                                                 |
 | `T \| E` spaced                                                     | general form §2 Shape 2 and §6.1 examples; **D-8**                            |
 | `<T>` tight                                                         | atoms tight (`tight_text`); every ridl reference §12 example                  |
-| parameter list `(p: P, q: Q)`, one line when it fits                | the tuple rule of the crate doc; **D-9** (decided: width 100, §6)             |
-| line width 100, `.editorconfig` override, the breaks of §6          | **D-9** (decided 2026-10-01); **D-12**, **D-13** for the two open points      |
+| parameter list `(p: P, q: Q)`, one line when it fits                | the tuple rule of the crate doc; **D-9** (width 100, §6)                      |
+| line width 100, `.editorconfig` override, the breaks of §6          | **D-9**; **D-12** (indent not read), **D-13** (commas in a broken list)       |
 | service list on one line, comma-space separators, no trailing comma | ADR-0015 decision 13 for the commas; **D-7** for the line                     |
 | `deployment Name for System [ attrs ] {`                            | general form R5 (clause before attributes), §4.4 (attributes before `{`)      |
 | nested `machine` blocks, blank lines preserved                      | `format_block_def` one level down; **D-11**                                   |
 | comment placement                                                   | crate doc ("Comments are never dropped"); the two new positions in §5         |
 
-## 8. Decisions for the maintainer
+## 8. Decisions
 
 General form §5 settles the colon and forbids alignment; it says nothing about
-the choices below. D-9 is taken (2026-10-01). Each of the others is open until
-the maintainer takes it, and the implementation starts from the taken set.
+the choices below. The maintainer decided D-9 on 2026-10-01 and, the same day,
+took the recommended option of every other decision. Each entry gives the chosen
+option, the alternatives that were rejected, and the reason in short.
 
-**D-1 — rsdl bodies: one member per line, always?** Options: (a) always one
-member per line, as every typl brace body is today; (b) a body the source wrote
-on one line (`{` and `}` on the same line) stays on one line, with comma-space
-separators, and a body the source broke takes one member per line; (c) the width
-decides — a body on one line when it fits, one member per line otherwise. D-9
-makes (c) implementable, and it is the option the width changes: the decision is
-now between one rule for every body and a width rule for rsdl bodies alone.
-Recommendation: still (a). It is the rule the formatter already has, general
-form §5 item 4 argues for it (one line per member gives the smallest diff when a
-member is added), and rustfmt expands a struct definition the same way; (c)
-would have to reach `struct` and `enum` too to stay one rule, and that changes
-the typl goldens. Under (a) the width never reads a body; a member line that
-exceeds breaks on its own (§6.4). The cost is visible: every one-line `system`,
-`distribution`, `component` and `machine` in the references, the book and the
-parser corpus expands, and the existing test
-`an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written` is
-rewritten to the new layout.
+**D-1 — rsdl bodies. DECIDED 2026-10-01: (a) always one member per line**, as
+every typl brace body is today. Rejected: (b) keep a body the source wrote on
+one line on one line; (c) one line when the body fits the width. Reason: it is
+the rule the formatter already has; general form §5 item 4 argues for it (the
+smallest diff when a member is added); and (c) would have to reach `struct` and
+`enum` too to stay one rule, which changes the typl goldens. The width never
+reads a body; a member line that exceeds breaks on its own (§6.4). Consequence:
+every one-line `system`, `distribution`, `component` and `machine` expands, and
+the test
+`an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written` in
+`crates/ridl-fmt/tests/rsdl.rs` is rewritten to the new layout.
 
-**D-2 — when does an attribute block take the block form?** Options: (a) by kind
-and by width — a block with at least one predicate is block form, and so is a
-block whose inline form makes its line exceed the width (§6.2); every other
-block is inline; (b) by source — a line break between `[` and the first
-attribute makes it block form; (c) by width alone — a predicate block that fits
-stays inline. Recommendation: (a). It matches every example in the general form,
-the two references and the book, needs no source-sensitivity beyond the
-blank-line rule the formatter already has, and gives one rendering per
-declaration. The width removes the cost the earlier draft named: §4.4's
-134-column header now breaks to the block form at the default width. (c) would
-put a one-predicate contract on the member's line, which no example in the
-family does.
+**D-2 — the block form of an attribute block. DECIDED 2026-10-01: (a) by kind
+and by width** — a block with at least one predicate takes the block form, and
+so does a block whose inline form makes its line exceed the width (§6.2); every
+other block is inline. Rejected: (b) by source (a line break after `[`); (c) by
+width alone, which would put a one-predicate contract on the member's line, as
+no example in the family does. Reason: it matches every example in the general
+form, the two references and the book, and gives one rendering per declaration.
 
-**D-3 — inline attribute block padding: `[ a, b ]` or `[a, b]`?**
-Recommendation: padded. Every example in the family writes it so, and the
-padding is what tells an attribute block apart from a typl constraint `[0..1]`
-at a glance (general form R3 distinguishes them by position only).
+**D-3 — inline attribute block padding. DECIDED 2026-10-01: padded,
+`[ a, b ]`.** Rejected: `[a, b]`. Reason: every example in the family writes it
+so, and the padding tells an attribute block apart from a typl constraint
+`[0..1]` (general form R3 distinguishes them by position only).
 
-**D-4 — the timing and the attribute block: normalise to the R5 order, or keep
-the source order?** Options: (a) emit the timing first, then the attribute
-block, whatever the source order; (b) keep the source order. Recommendation:
-(a). General form R5 makes `@timing → [ attrs ]` normative and the parser is
-lenient, so the formatter would emit the conforming order rather than invent
-one, and the block form reads better with `]` last. Two costs: the crate doc's
-"whitespace and separators only" sentence gains an exception, and the structural
-test of §9 compares the two annotation nodes as a set rather than in order.
-Erratum either way: ridl reference Appendix C writes `attr_block? timing?` for
-`command` and `query`, the opposite of R5, and `docs/book/getting-started.md`
-has two members in that order.
+**D-4 — the timing and the attribute block. DECIDED 2026-10-01: (a) emit the
+timing first, then the attribute block, whatever the source order.** Rejected:
+(b) keep the source order. Reason: general form R5 makes `@timing → [ attrs ]`
+normative and the parser is lenient, so the formatter emits the conforming
+order; the block form reads better with `]` last. Costs: the crate doc's
+"whitespace and separators only" sentence gains an exception, and the tests of
+§9 compare the two annotation nodes after normalising their order. Erratum: ridl
+reference Appendix C writes `attr_block? timing?` for `command` and `query`, the
+opposite of R5, and `docs/book/getting-started.md` has two members in that
+order; the book members are rewritten by the sweep, Appendix C by the D-10
+follow-up.
 
-**D-5 — one space after `require` and `ensure`, or the two-space alignment of
-the §5 and §4.4 examples?** Recommendation: one space. The heading rule of §5
-forbids alignment; the two examples are amended when the sweep (D-10) reaches
-them.
+**D-5 — the space after `require` and `ensure`. DECIDED 2026-10-01: one space.**
+Rejected: the two-space alignment of the general form §5 and §4.4 examples.
+Reason: the heading rule of §5 forbids alignment. The two examples are corrected
+in the D-10 follow-up.
 
-**D-6 — expression layout: canonical spacing, or the source text with whitespace
-runs collapsed?** Recommendation: canonical spacing as §3.2 states — binary
-operators spaced, prefix and member access tight, parentheses kept. A verbatim
-rule would leave `a<b` and `a < b` as two renderings of one expression. The
-renderer is one function over the six expression node kinds; it never
-reassociates and never touches parentheses.
+**D-6 — expression layout. DECIDED 2026-10-01: canonical spacing** as §3.2
+states — binary operators spaced, prefix and member access tight, parentheses
+kept. Rejected: the source text with whitespace runs collapsed, which leaves
+`a<b` and `a < b` as two renderings of one expression. The renderer is one
+function over the six expression node kinds; it never reassociates and never
+adds or removes parentheses.
 
-**D-7 — the service shape list: one line when it fits?** Options: (a) one line
-when the line fits the width, trailing comma removed, and one shape per line
-after the colon when it does not (§6.3), the required comma after every shape
-but the last; (b) keep a list the source broke after `:` on one shape per line,
-each with its required comma. Recommendation: (a). The width now gives the long
-list a defined layout, which the earlier draft had to leave to the author; (b)
-would be the only place the formatter keeps a trailing comma, and the only list
-laid out from the source rather than from the tree.
+**D-7 — the service shape list. DECIDED 2026-10-01: (a) one line when the line
+fits the width**, trailing comma removed, and one shape per line after the colon
+when it does not (§6.3), the required comma after every shape but the last.
+Rejected: (b) keep a list the source broke after `:`. Reason: (b) would be the
+only place the formatter keeps a trailing comma, and the only list laid out from
+the source rather than from the tree.
 
-**D-8 — the fallible return: `T | E` or `T|E`?** Recommendation: spaced. The
-general form §2 Shape 2 and §6.1 examples write it spaced; the `T|E` spelling
-appears only in ADR-0008's prose.
+**D-8 — the fallible return. DECIDED 2026-10-01: spaced, `T | E`.** Rejected:
+`T|E`. Reason: the general form §2 Shape 2 and §6.1 examples write it spaced;
+`T|E` appears only in ADR-0008's prose.
 
-**D-9 — a column limit? Decided 2026-10-01 by the maintainer: yes.** `ridl fmt`
-gets a line width. The default is 100 columns; when `.editorconfig` sets
-`max_line_length` for the file being formatted, that value replaces the default.
-§6 holds the rule, the breaking algorithm, the breakable constructs of every
-declaration (the typl ones included), and where the width is resolved. The
-earlier draft recommended no limit; that recommendation is withdrawn.
+**D-9 — a column limit. DECIDED 2026-10-01: yes.** The default is 100 columns;
+when `.editorconfig` sets `max_line_length` for the file being formatted, that
+value replaces the default. §6 holds the rule, the breaking algorithm, the
+breakable constructs of every declaration (the typl ones included), and where
+the width is resolved. Rejected: no limit, which the earlier draft recommended.
 
-**D-10 — the scope of the reformatting sweep.** General form §5's errata note
-says the examples are reformatted "mechanically once `ridl fmt` exists".
-Options: (a) the test fixtures and `examples/` only; (b) also every verified
-fence in `docs/book/`; (c) also the fences of the two language references and
-the general form. Recommendation: (b) in the implementation pull request, (c) as
-a follow-up pull request of its own. The book is what a reader copies, and the
+**D-10 — the scope of the reformatting sweep. DECIDED 2026-10-01: (b) in the
+implementation, (c) as a follow-up pull request of its own.** The implementation
+reformats the test fixtures, `examples/` and every verified fence in
+`docs/book/`; the follow-up reformats the fences of the language references and
+the general form, and is out of scope for #387's implementation. Rejected: (a)
+the fixtures and `examples/` only, which leaves the book showing the style the
+formatter rewrites. Reason: the book is what a reader copies, and the
 fixed-point test of §11 then holds it to the canonical style; the references are
-long and the §5 note already allows them to be touched opportunistically.
+long, and general form §5's errata note allows them to be touched
+opportunistically.
 
-**D-11 — blank lines between `machine` blocks inside a deployment.** Options:
-(a) preserved where the source had one, as between any two members; (b) always
-one, as between top-level declarations. Recommendation: (a), the existing body
-rule; a `machine` is a member.
+**D-11 — blank lines between `machine` blocks. DECIDED 2026-10-01: (a) preserved
+where the source had one**, as between any two members. Rejected: (b) always
+one, as between top-level declarations. Reason: a `machine` is a member.
 
-**D-12 — honour `indent_size` from `.editorconfig`?** Options: (a) no — the
-indentation stays canonical at two spaces, and `.editorconfig` contributes the
-width only; (b) yes — `indent_size` sets the indent step, `indent_style = tab`
-emits tabs. Recommendation: (a). A canonical style has one indent, as it has one
-colon; every example in the family is at two spaces; the LSP handler already
-ignores the client's `tabSize` for the same reason; and (b) would make the
-output depend on a second file setting that the book fences, the fixtures and
+**D-12 — `indent_size` from `.editorconfig`. DECIDED 2026-10-01: (a) not read**
+— the indentation stays canonical at two spaces, and `.editorconfig` contributes
+the width only. Rejected: (b) `indent_size` sets the indent step and
+`indent_style = tab` emits tabs. Reason: a canonical style has one indent, as it
+has one colon; the LSP handler already ignores the client's `tabSize`; and (b)
+would make the output depend on a file setting the book fences, the fixtures and
 the goldens cannot carry. The repository's `.editorconfig` states
 `indent_size = 2` for the family's files (§6.6) so that editors agree with the
 formatter, not so that the formatter reads it.
 
-**D-13 — commas in a broken parenthesised list.** When a parameter list, a tuple
-type or an attribute value list breaks (§6.3), the items are one per line.
-Options: (a) keep the commas — one after every item but the last, the Rust,
-Kotlin and TypeScript rendering; (b) drop them, as a brace body and the
-block-form attribute block do. Recommendation: (a). A brace body and an
-attribute block list declarations, and the family writes those without commas; a
-parenthesised list is a list of items, and every language the §5 heritage names
-writes a broken one with commas. The block-form attribute block keeps its
-no-comma rendering, settled by the general form §4.4 example.
+**D-13 — commas in a broken parenthesised list. DECIDED 2026-10-01: (a) kept**,
+one after every item but the last, when a parameter list, a tuple type or an
+attribute value list breaks (§6.3). Rejected: (b) dropped, as in a brace body.
+Reason: a brace body and an attribute block list declarations, which the family
+writes without commas; a parenthesised list is a list of items, and Rust, Kotlin
+and TypeScript write a broken one with commas. The block-form attribute block
+keeps its no-comma rendering, settled by the general form §4.4 example.
 
 ## 9. Invariants and how the tests check them
 
@@ -951,7 +938,8 @@ runs at widths 100, 60 and 40 over the whole corpus — the small widths force
 breaks in files whose lines fit at 100 — with the §9 structure comparison at
 each width.
 
-**`.editorconfig` override** (`crates/ridl/tests/fmt.rs`, through the CLI): a
+**`.editorconfig` override** (`crates/ridl/tests/facade.rs`, beside the existing
+`ridl fmt` tests such as `fmt_formats_an_rsdl_file`, through the CLI): a
 temporary directory with `root = true` and `[*.ridl] max_line_length = 60`
 breaks a 80-column member that the default leaves alone; `[*.{typl,ridl,rsdl}]`
 matches an `.rsdl` file; `max_line_length = off` leaves a 200-column line alone;
