@@ -67,7 +67,7 @@ Commands:
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
   lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
-  lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
+  lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   help      Print this message or the help of the given subcommand(s)
 
@@ -83,7 +83,8 @@ checks the exit code or reads the right stream.
 
 `ridl lsp` and `ridl mcp` are the two stdio servers this binary hosts — the
 language server an editor drives, and the Model Context Protocol server an
-agent drives. Neither takes an argument or a flag; each is documented in its
+agent drives. `ridl mcp` takes no argument or flag; `ridl lsp` takes only the
+two flags editor clients pass, which change nothing. Each is documented in its
 own section below, [`ridl lsp`](#ridl-lsp) and [`ridl mcp`](#ridl-mcp), and
 each exits 0 when the client shuts it down and 2 when the transport ends
 before the handshake or otherwise fails.
@@ -1437,17 +1438,26 @@ ridl lsp --help
 ```
 
 ```text
-Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
+Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
 
-Usage: ridl lsp
+Usage: ridl lsp [OPTIONS]
 
 Options:
-  -h, --help  Print help
+      --stdio                  Select the stdio transport. Accepted because editor clients pass it, as the LSP specification recommends; omitting it changes nothing
+      --clientProcessId <PID>  The editor's process id, which the LSP specification recommends a server accept. Ignored: the `initialize` request carries it too
+  -h, --help                   Print help
 ```
 
 `ridl lsp` hosts the language server: behavior lives in `crates/ridl-lsp`, and
 this subcommand only wires the stdio transport. An editor spawns it and speaks
 the Language Server Protocol over its stdin and stdout.
+
+**Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change
+nothing. The LSP specification (3.17, "Implementation Considerations")
+recommends that a server accept both, and editor clients pass them: the VS
+Code client runs the server as `ridl lsp --stdio`. Stdio is the only
+transport, so `--pipe` and `--socket` are refused with exit 2. The client's
+process id also arrives in the `initialize` request.
 
 **Exit codes.** 0 on a clean shutdown — the client sends `shutdown` then
 `exit`. 2 when the transport ends before the `initialize` handshake, or fails

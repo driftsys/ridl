@@ -77,7 +77,9 @@ warning that names the change. It still spawns the configured path, so the
 warning explains the spawn failure that follows rather than preventing it.
 
 The same resolved command backs both roles: `ridl lsp` for the language client
-and `ridl mcp` for the MCP server definition the extension registers.
+and `ridl mcp` for the MCP server definition the extension registers. The
+language client appends `--stdio`, so the server runs as `ridl lsp --stdio`
+(ADR-0010).
 
 ## "Install ridl to PATH"
 
