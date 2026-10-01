@@ -511,5 +511,6 @@ Stop, describe the case with a minimal input, and ask before going further when:
   name);
 - at Task 4, before committing the `ec4rs` dependency: ask how its Apache-2.0
   licence text is carried with the distributed binary. The maintainer decides;
-  the repository has no notices file or notices tooling today, and the note does
-  not settle it.
+  the repository had no notices file or notices tooling when this plan was
+  written. The maintainer decided on 2026-10-01 to keep MIT and ship
+  `THIRD-PARTY-NOTICES.txt`; that decision is recorded in note §6.6.

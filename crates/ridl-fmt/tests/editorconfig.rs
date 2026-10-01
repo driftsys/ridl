@@ -3,15 +3,19 @@
 #![cfg(feature = "editorconfig")]
 
 use ridl_fmt::FormatOptions;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct TestDir(PathBuf);
 
 impl TestDir {
     fn new() -> Self {
+        Self::new_in(&std::env::temp_dir())
+    }
+
+    fn new_in(parent: &Path) -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let path = std::env::temp_dir().join(format!(
+        let path = parent.join(format!(
             "ridl-fmt-editorconfig-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
@@ -30,6 +34,35 @@ impl TestDir {
     fn width(&self, relative: &str) -> Option<usize> {
         FormatOptions::for_path(&self.0.join(relative)).max_line_length
     }
+}
+
+#[test]
+fn relative_and_absolute_paths_match_the_same_directory_glob() {
+    let dir = TestDir::new_in(Path::new("."));
+    dir.write(
+        "nested/.editorconfig",
+        "root = true\n[models/*.ridl]\nmax_line_length = 60\n",
+    );
+    let relative = dir.0.join("nested/models/file.ridl");
+    assert!(relative.is_relative());
+    let absolute = std::env::current_dir().unwrap().join(&relative);
+    assert_eq!(FormatOptions::for_path(&absolute).max_line_length, Some(60));
+    assert_eq!(FormatOptions::for_path(&relative).max_line_length, Some(60));
+}
+
+#[test]
+fn a_configuration_parse_error_uses_the_default() {
+    let dir = TestDir::new();
+    let config = dir.write(
+        ".editorconfig",
+        "root = true\n[*]\nmax_line_length = 60\ninvalid line\n",
+    );
+    let file = config.parent().unwrap().join("file.ridl");
+    assert!(
+        ec4rs::properties_of(&file).is_err(),
+        "fixture must reach the error path"
+    );
+    assert_eq!(FormatOptions::for_path(&file).max_line_length, Some(100));
 }
 
 impl Drop for TestDir {

@@ -7,9 +7,14 @@ use std::path::Path;
 impl FormatOptions {
     /// Resolve `max_line_length` for a file using EditorConfig precedence.
     ///
-    /// Missing, unset, invalid, or unreadable configuration uses the default.
+    /// Missing, unset, or invalid effective widths and resolution errors use
+    /// the default. Unreadable files are skipped by ec4rs, so a readable
+    /// ancestor's width can still apply.
     /// Indentation always remains canonical; no other property is read.
     pub fn for_path(path: &Path) -> Self {
+        let Ok(path) = std::path::absolute(path) else {
+            return Self::default();
+        };
         let width = ec4rs::properties_of(path)
             .ok()
             .and_then(|properties| properties.get::<MaxLineLen>().ok());

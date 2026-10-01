@@ -681,10 +681,10 @@ release candidate, and 1.2.0 does what is needed. Decided by the maintainer at
 plan Task 4 on 2026-10-01: RIDL remains MIT; `THIRD-PARTY-NOTICES.txt` carries
 the dependency licence text and any applicable upstream notices in every binary
 release archive, including the bundled binary in the VS Code extension. `ec4rs`
-is the Rust core library editorconfig.org links, and it is not in `Cargo.lock`
-today. The alternatives are `editorconfig` 1.0.0 (MIT, last release 2017, a
-binding to the C core) and `editorconfig-rs` 0.2.3 (MIT, 2025, also a binding to
-the C core, which needs the system library); neither is pure Rust. A small
+is the Rust core library editorconfig.org links; Task 4 adds version 1.2.0 to
+`Cargo.lock`. The alternatives are `editorconfig` 1.0.0 (MIT, last release 2017,
+a binding to the C core) and `editorconfig-rs` 0.2.3 (MIT, 2025, also a binding
+to the C core, which needs the system library); neither is pure Rust. A small
 parser of our own was rejected (§10): the glob language and the precedence rules
 are the whole difficulty, and a reimplementation would diverge from the editors
 that read the same file.

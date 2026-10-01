@@ -1842,6 +1842,7 @@ dependencies = [
  "rmcp",
  "rowan",
  "serde_json",
+ "sha2",
  "tokio",
 ]
 

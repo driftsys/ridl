@@ -1,0 +1,2 @@
+# Preserve the upstream licence text when checking out binary-release notices.
+THIRD-PARTY-NOTICES.txt text eol=lf
