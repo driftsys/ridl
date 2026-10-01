@@ -118,3 +118,27 @@ append-only. Implementation status and verification are in
   reviews `e515b2e` alone, not this advisory correction.
 - Commit and PR: implementation `e515b2e`; correction commit pending.
 - Maintainer action: none.
+
+## D-H6 — Task 5 full-review coverage corrections
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: full pass 1 retained four caller-test gaps. A
+  constant LSP width, ignored LSP `off`, a shifted CLI limit and direct-file
+  defaults all survived the initial suite in isolated mutations.
+- Chosen action: add LSP width 60/100/off cases in one session and CLI
+  direct-file cases at configured 60/61 boundaries, including second formatting
+  passes.
+- Reason and alternatives considered: caller-boundary tests pin the externally
+  promised behavior; testing only the reader would not detect caller mutations.
+  Existing tests remain to retain the approved fixtures and indentation
+  coverage.
+- Authority: design sections 6 and 11; handoff task-loop review corrections;
+  routine test placement judgment. No rendering or production behavior changes.
+- Affected files and behavior: CLI facade and LSP server integration tests.
+- Verification: both acceptance targets passed; four isolated mutations failed
+  the new tests, then production files were restored. See
+  [Task 5 evidence](fmt-ridl-rsdl-evidence/task-05.md). Tested base is
+  `f887c780`.
+- Commit and PR: correction commit pending; PR #632, base PR #630.
+- Maintainer action: review the stacked PR; no approval or merge requested here.

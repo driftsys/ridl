@@ -78,7 +78,8 @@ effort `medium`. Tests reported no findings; docs and built-in review reported
 the same two fixed-width book claims. Both claims are corrected. Native Codex
 review was invoked directly from the unrestricted parent because Terra is absent
 from the sub-agent allowlist; no nested native client ran inside a restricted
-worker sandbox. Full review and required push/PR gates pending.
+worker sandbox. Full pass 1 completed; results and correction evidence are
+below.
 
 Documentation correction checks: `just book-check`, `just link-check`,
 `just doc-path-check`, and `just check` each exited 0. The initial combined
@@ -86,3 +87,68 @@ invocation `just book-check link-check doc-path-check check` exited 1 because
 `book-check` interpreted `link-check` as its root argument; it was replaced with
 the four separate recipe invocations above. This was an invocation error, not a
 repository behavior or environment failure.
+
+## Committed-head gate and PR
+
+Tested head: `f887c780c0d4b58fdcddd3a94f82117b6be8616e`. `just verify` exited 0
+before pushing and opening [PR #632](https://github.com/driftsys/ridl/pull/632),
+based on `docs/387-fmt-book-width`. Its full build invokes `toolchain-check`,
+`gate-parity`, `install-check`, `fmt-check`, `book-check`, `link-check`,
+`doc-path-check`, `compile`, `test`, `lint`, `wasm-check`, `compat-check`,
+`demo`, and `check`; commit lint also passed. Thus all eight required push
+recipes passed on this exact head. The cabin demo produced all six matched round
+trips: signal 21, event 5, command 42, query 7, blocking command 43, blocking
+query 9.
+
+`git push -u origin feat/387-fmt-callers` exited 0 with hooks enabled;
+`just pre-push` passed.
+`gh pr create --base docs/387-fmt-book-width --head
+feat/387-fmt-callers --title <title> --body-file <body-file>`
+exited 0. No PR has been merged. All CI checks passed on this head: book, ci,
+commit-lint, markdown, rust and wasm; Pages was skipped.
+
+Local logs normalize user-specific tool, checkout and temporary-directory paths;
+no credentials or unrelated native-client startup output is included.
+
+## Full pass 1 corrections
+
+Full pass 1 reviewed `769b541..f887c780` in fresh contexts. Compliance, tests
+and docs used actual `gpt-6.1-sol/high`; the compliance shadow and one refuter
+per finding used actual `gpt-5.6-terra/high`. The fresh native bugs wrapper used
+Sol/high and its built-in worker used Sol/xhigh. The native fallback is not a
+literal `/code-review max` invocation; that slash command is unavailable. All
+seats and refuters confirmed the exact 13 changed paths. Compliance, docs, bugs
+and shadow reported no actionable findings. Tests reported four gaps,
+independently confirmed at confidence 97, 94, 96 and 90:
+
+| Finding                                                   | Correction                                                                  |
+| --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| F1, constant LSP width 60 survives                        | Format the same 80-column tuple under 60 and 100 in one server session.     |
+| F2, CLI width 60 resolved as 61 survives                  | Check configured widths 60 and 61 at their exact limit and one column over. |
+| F3, explicit-file arguments use default options unnoticed | Run the new boundary cases through direct file arguments.                   |
+| F4, LSP `off` has no caller coverage                      | Format a 200-column tuple under `off`.                                      |
+
+Both new tests check their second formatting pass. The LSP test uses overlays
+that differ from disk and verifies disk is unchanged. No production behavior
+changed. An initial LSP test setup run exited 101 because its temporary helper
+does not create subdirectories; explicitly creating each configuration directory
+repaired this fixture error before mutation testing.
+
+Correction checks on the working diff:
+
+- `cargo test -p ridl-cli --test facade --locked`: exit 0, 18 passed.
+- `cargo test -p ridl-lsp --locked`: exit 0, 17 library and 65 server tests.
+- Four isolated mutations were applied and restored sequentially. Each targeted
+  test exited 101 with an assertion failure: LSP fixed width 60; LSP `off`
+  replaced with 60; CLI 60 replaced with 61; CLI explicit-file default options.
+  Commands were
+  `cargo test -p ridl-lsp --test server
+  formatting_resolves_distinct_widths_and_off_for_document_paths --locked`
+  for the two LSP mutations and
+  `cargo test -p ridl-cli --test facade
+  fmt_editorconfig_exact_width_applies_to_explicit_file_arguments --locked`
+  for the two CLI mutations. Local `task-05-mutation-*.log` files retain the
+  actual failures. Production files are restored and the acceptance targets
+  passed.
+
+Full pass 2 and correction-head gates are pending.

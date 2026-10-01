@@ -214,6 +214,33 @@ fn fmt_directory_and_recheck(dir: &TempDir) {
 }
 
 #[test]
+fn fmt_editorconfig_exact_width_applies_to_explicit_file_arguments() {
+    let dir = TempDir::new("fmt-width-explicit-files");
+    for width in [60, 61] {
+        dir.write(
+            ".editorconfig",
+            &format!("root = true\n[*.typl]\nmax_line_length = {width}\n"),
+        );
+        for columns in [width, width + 1] {
+            let (source, inline, broken) = tuple_width_fixture(columns);
+            let file = dir.write(&format!("width-{width}-columns-{columns}.typl"), &source);
+            let (code, stderr) = ridl(&["fmt".as_ref(), file.as_os_str()]);
+            assert_eq!(code, 0, "{stderr}");
+            assert_eq!(
+                std::fs::read_to_string(&file).unwrap(),
+                if columns <= width { inline } else { broken },
+                "configured width {width}, line length {columns}"
+            );
+            let (code, stderr) = ridl(&["fmt".as_ref(), "--check".as_ref(), file.as_os_str()]);
+            assert_eq!(
+                code, 0,
+                "explicit-file formatting must be a fixed point: {stderr}"
+            );
+        }
+    }
+}
+
+#[test]
 fn fmt_editorconfig_resolves_the_width_for_each_file() {
     let dir = TempDir::new("fmt-width-files");
     dir.write(
