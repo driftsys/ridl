@@ -3312,6 +3312,31 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A document whose lines end with a bare `\r` has one line per `\r`, as the
+/// LSP specification counts lines: the formatting edit ends on the line after
+/// the last `\r`, not at a large character offset on line 0.
+#[test]
+fn formatting_counts_a_bare_carriage_return_as_a_line_break() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    let uri = path_to_uri("/ridl-lsp-fmt/bare-cr.typl").expect("an absolute synthetic path");
+    let edits = open_and_format(
+        &client,
+        10,
+        &uri,
+        "package solo\rtype   Widget :integer[0..10]\r",
+        tabs(),
+    )
+    .expect("a valid document is formatted");
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].range, range((0, 0), (2, 0)));
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Formatting reads the edited buffer of a workspace file, not the text
 /// loaded from disk: after a `didChange`, the edit renders the new buffer, and
 /// a later `didChange` that breaks the file makes the result `null`.
