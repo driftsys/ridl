@@ -143,8 +143,8 @@ the others are choices of the Rust backend.
    allowed.
 10. driftsys/ridl#416 and #424 are in scope: the first by the `__ridl_package`
     path, the second by the prelude-name compile test.
-11. The next release is 0.5.0, with `ridl-rt` carrying `payload::View`; the
-    workspace version is still 0.4.0 until it is cut.
+11. The four changes ship in one breaking release, with `ridl-rt` carrying
+    `payload::View`.
 12. Four pull requests: (a) TYPL-215 over a tuple's fields, driftsys/ridl#606;
     (b) the renames of names the backend chose, driftsys/ridl#608; (c) the claim
     tables, driftsys/ridl#612; (d) the `__ridl_package` path, driftsys/ridl#611.
