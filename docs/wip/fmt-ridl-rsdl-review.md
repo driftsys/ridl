@@ -8,17 +8,17 @@ Tasks 1–4 are merged in [PR #626](https://github.com/driftsys/ridl/pull/626) a
 [PR #630](https://github.com/driftsys/ridl/pull/630) remains open at `769b541`,
 with all required CI checks successful at the initial remote inspection.
 
-| Task | Implementation                                  | Commit and PR/base                                 | Acceptance                          | Review and CI                                             |
-| ---- | ----------------------------------------------- | -------------------------------------------------- | ----------------------------------- | --------------------------------------------------------- |
-| 5    | Caller changes implemented locally              | Pending; base `docs/387-fmt-book-width`, `769b541` | CLI, LSP and formatter tests passed | Quick tests/docs: no findings; full review and CI pending |
-| 6    | Pending, including #625                         | None                                               | Not run                             | Not run                                                   |
-| 7    | Pending                                         | None                                               | Not run                             | Not run                                                   |
-| 8    | Pending                                         | None                                               | Not run                             | Not run                                                   |
-| 9    | Pending, including deferred rsdl CLI width test | None                                               | Not run                             | Not run                                                   |
-| 10   | Pending                                         | None                                               | Not run                             | Not run                                                   |
-| 11   | Pending                                         | None                                               | Not run                             | Not run                                                   |
-| 12   | Pending                                         | None                                               | Not run                             | Not run                                                   |
-| 13   | Pending                                         | None                                               | Not run                             | Not run                                                   |
+| Task | Implementation                                  | Commit and PR/base                                   | Acceptance                          | Review and CI                                                                            |
+| ---- | ----------------------------------------------- | ---------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| 5    | Caller changes implemented locally              | `e515b2e`; base `docs/387-fmt-book-width`, `769b541` | CLI, LSP and formatter tests passed | Three-seat QUICK complete; two book claims corrected locally; full review and CI pending |
+| 6    | Pending, including #625                         | None                                                 | Not run                             | Not run                                                                                  |
+| 7    | Pending                                         | None                                                 | Not run                             | Not run                                                                                  |
+| 8    | Pending                                         | None                                                 | Not run                             | Not run                                                                                  |
+| 9    | Pending, including deferred rsdl CLI width test | None                                                 | Not run                             | Not run                                                                                  |
+| 10   | Pending                                         | None                                                 | Not run                             | Not run                                                                                  |
+| 11   | Pending                                         | None                                                 | Not run                             | Not run                                                                                  |
+| 12   | Pending                                         | None                                                 | Not run                             | Not run                                                                                  |
+| 13   | Pending                                         | None                                                 | Not run                             | Not run                                                                                  |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).
 D-H1 preserves the approved design. D-H2 records explicit approval of Task 5

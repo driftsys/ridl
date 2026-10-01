@@ -96,3 +96,25 @@ append-only. Implementation status and verification are in
   tests then passed. See [Task 5 evidence](fmt-ridl-rsdl-evidence/task-05.md).
 - Commit and PR: pending; tested working diff on `769b541`.
 - Maintainer action: none.
+
+## D-H5 — Task 5 quick documentation findings
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: the independent docs review found unconditional
+  100-character tuple thresholds in both book chapters, falsified by caller
+  configuration support. The initial committed review summary incorrectly
+  reported no docs findings.
+- Chosen action: describe the configurable width and its default of 100 in both
+  places; correct the review and evidence summaries explicitly.
+- Reason and alternatives considered: changing only the EditorConfig paragraph
+  left nearby behavior descriptions inconsistent. The review record must report
+  the actual finding and disposition.
+- Authority: Task 5 book update requirement and independent quick review.
+- Affected files and behavior: book CLI reference and getting-started chapter;
+  review report and evidence. No executable changes.
+- Verification: acceptance passed on the implementation tree; documentation
+  gates will be rerun after this correction. The commit-triggered QUICK pass
+  reviews `e515b2e` alone, not this advisory correction.
+- Commit and PR: implementation `e515b2e`; correction commit pending.
+- Maintainer action: none.

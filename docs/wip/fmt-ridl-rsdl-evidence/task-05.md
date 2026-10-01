@@ -3,7 +3,7 @@
 Date: 2026-10-01, Europe/Paris.
 
 Base: `769b541d49ac93b0ecb6dd04a08d59518b04e64e` (PR #630). Implementation
-commit: pending. Initial results below are from the working diff on this base.
+commit: `e515b2e`. Initial results below are from the working diff on this base.
 Full logs are retained locally in this directory and excluded from commits;
 summaries contain the commands, results and relevant evidence.
 
@@ -68,5 +68,21 @@ pair: (aaaaaaaaaaaaaaaaaaaaaaaaa: integer, bbbbbbbbbbbbbbbbbbbbbbbbb: boolean)
 
 Quick review completed in two independent native Codex contexts. Both startup
 headers confirm actual model `gpt-5.6-terra`, effort `high`, read-only
-execution. The tests and docs seats reported no findings over their specified
-Task 5 files. Full review and required push/PR gates pending.
+execution. The tests seat reported no findings. The docs seat reported two stale
+fixed-width claims in the book, corrected in the working diff after `e515b2e`.
+The first committed evidence summary incorrectly recorded the docs review as
+clean; this paragraph corrects that record. The commit-triggered QUICK pass
+completed over `e515b2e` alone. All three startup headers confirm
+`gpt-5.6-terra`: tests and docs at effort `high`, native built-in code review at
+effort `medium`. Tests reported no findings; docs and built-in review reported
+the same two fixed-width book claims. Both claims are corrected. Native Codex
+review was invoked directly from the unrestricted parent because Terra is absent
+from the sub-agent allowlist; no nested native client ran inside a restricted
+worker sandbox. Full review and required push/PR gates pending.
+
+Documentation correction checks: `just book-check`, `just link-check`,
+`just doc-path-check`, and `just check` each exited 0. The initial combined
+invocation `just book-check link-check doc-path-check check` exited 1 because
+`book-check` interpreted `link-check` as its root argument; it was replaced with
+the four separate recipe invocations above. This was an invocation error, not a
+repository behavior or environment failure.
