@@ -1254,12 +1254,12 @@ is in ridl §16.4.
 Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 `ridl.toml`) contains constructs of a higher layer:
 
-| Code     | Rule                                                                                                                                       | Severity |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| TYPL-301 | stream type `<T>` outside interaction position — in a typl context, and in a struct field or a collection of a ridl file (ridl §12.3)      | error    |
-| TYPL-302 | timing annotation or duration literal in a typl context                                                                                    | error    |
-| TYPL-303 | `require`/`ensure` attribute in a typl context                                                                                             | error    |
-| TYPL-304 | interaction declaration in a typl context — one of the ridl interaction words at declaration start; an rmdl or rsdl word there is FORM-102 | error    |
+| Code     | Rule                                                                                                                                                                                                                   | Severity |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| TYPL-301 | stream type `<T>` outside interaction position — in a typl context, and in a ridl file anywhere but a parameter or a query return, such as a struct field, a collection, a type definition or a union arm (ridl §12.3) | error    |
+| TYPL-302 | timing annotation or duration literal in a typl context                                                                                                                                                                | error    |
+| TYPL-303 | `require`/`ensure` attribute in a typl context                                                                                                                                                                         | error    |
+| TYPL-304 | interaction declaration in a typl context — one of the ridl interaction words at declaration start; an rmdl or rsdl word there is FORM-102                                                                             | error    |
 
 ### 16.5 Documentation (TYPL-4xx)
 
