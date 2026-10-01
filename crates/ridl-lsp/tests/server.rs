@@ -3130,10 +3130,9 @@ fn open_and_format(
     text: &str,
     options: lt::FormattingOptions,
 ) -> Option<Vec<lt::TextEdit>> {
-    let language_id = uri
+    let (_, language_id) = uri
         .as_str()
-        .rsplit('.')
-        .next()
+        .rsplit_once('.')
         .expect("a synthetic path with an extension");
     notify::<lt::notification::DidOpenTextDocument>(
         client,
@@ -3262,14 +3261,20 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
     // typl declaration, so a typl parse would report errors and return `null`.
     let ridl = path_to_uri("/ridl-lsp-fmt/door.ridl").expect("an absolute synthetic path");
     let text = "package solo\ninterface Door {\n  signal open: boolean\n}\n";
-    let edits = open_and_format(&client, 12, &ridl, text, tabs()).expect("a valid ridl document");
-    assert_eq!(
-        edits,
-        vec![lt::TextEdit {
-            range: range((0, 0), (4, 0)),
-            new_text: "package solo\n\ninterface Door {\n  signal open: boolean\n}\n".to_string(),
-        }]
-    );
+    // The rendering indents `signal` with two spaces under either set of
+    // client options.
+    for (id, options) in [(12, tabs()), (19, four_spaces())] {
+        let edits =
+            open_and_format(&client, id, &ridl, text, options).expect("a valid ridl document");
+        assert_eq!(
+            edits,
+            vec![lt::TextEdit {
+                range: range((0, 0), (4, 0)),
+                new_text: "package solo\n\ninterface Door {\n  signal open: boolean\n}\n"
+                    .to_string(),
+            }]
+        );
+    }
 
     // The same text in a `.typl` document parses under the typl profile, where
     // `interface` is an error, so the result is `null`.
@@ -3343,6 +3348,16 @@ fn formatting_reads_the_edited_buffer() {
         );
     };
 
+    // Format the loaded text first, so the server caches a line table for the
+    // file. `APP` has three lines, so the edit ends at (3, 0).
+    let loaded = format_request(&client, 23, &app, tabs()).expect("APP is valid");
+    assert_eq!(
+        loaded.iter().map(|edit| edit.range).collect::<Vec<_>>(),
+        vec![range((0, 0), (3, 0))]
+    );
+
+    // The new buffer has two lines: an edit that ends at (2, 0) shows that the
+    // cached line table was replaced on `didChange`.
     replace_buffer(1, "package app\ntype   Widget :integer[0..10]\n");
     assert_eq!(
         format_request(&client, 20, &app, tabs()),
