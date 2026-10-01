@@ -20,9 +20,11 @@ export type BinarySource = "setting" | "bundled" | "path";
 
 export const BINARY_NAME = "ridl";
 
-// The subcommand each role runs the binary as. The contract that the `ridl`
-// binary accepts these subcommands is verified end to end, against the real
-// binary, in crates/ridl/tests/servers.rs.
+// The subcommand each role runs the binary as. For the language server,
+// vscode-languageclient appends `--stdio` to LSP_ARGS, because extension.ts
+// sets `TransportKind.stdio`, so the binary runs as `ridl lsp --stdio`. The
+// contract that the `ridl` binary accepts both command lines is verified end
+// to end, against the real binary, in crates/ridl/tests/servers.rs.
 export const LSP_ARGS = ["lsp"] as const;
 export const MCP_ARGS = ["mcp"] as const;
 

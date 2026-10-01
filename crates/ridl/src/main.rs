@@ -191,8 +191,18 @@ enum Command {
         sub: Option<LockCommand>,
     },
     /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
-    /// transport error. Editors spawn this; it takes no flag of its own.
-    Lsp,
+    /// transport error. Editors spawn this. Stdio is the only transport.
+    Lsp {
+        /// Select the stdio transport. Accepted because editor clients pass
+        /// it, as the LSP specification recommends; omitting it changes
+        /// nothing.
+        #[arg(long)]
+        stdio: bool,
+        /// The editor's process id, which the LSP specification recommends a
+        /// server accept. Ignored: the `initialize` request carries it too.
+        #[arg(long = "clientProcessId", value_name = "PID")]
+        client_process_id: Option<u32>,
+    },
     /// Run the MCP server over stdio for an agent host: exit 0 on a clean
     /// shutdown, 2 on a transport error. It takes no flag of its own.
     Mcp,
@@ -301,7 +311,7 @@ fn main() -> ExitCode {
             retire,
             sub: None,
         } => lock::run_lock(&path, &rename, &retire),
-        Command::Lsp => run_lsp(),
+        Command::Lsp { .. } => run_lsp(),
         Command::Mcp => run_mcp(),
     }
 }

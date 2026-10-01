@@ -373,10 +373,12 @@ fn ridl_mcp_exits_two_when_stdin_closes_before_initialize() {
 // `ridl lsp`
 // ---------------------------------------------------------------------------
 
-/// Spawns `ridl lsp` with all three standard streams piped.
-fn spawn_lsp() -> Child {
+/// Spawns `ridl lsp` followed by `args`, with all three standard streams
+/// piped.
+fn spawn_lsp(args: &[&str]) -> Child {
     StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
         .arg("lsp")
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -434,7 +436,32 @@ fn wait_for_exit(child: &mut Child, what: &str) -> ExitStatus {
 
 #[test]
 fn ridl_lsp_serves_the_handshake_and_exits_zero_on_shutdown() {
-    let mut child = spawn_lsp();
+    assert_lsp_handshake_and_clean_shutdown(&[]);
+}
+
+/// The command line the VS Code client builds: `vscode-languageclient`
+/// appends `--stdio` to the server's arguments whenever the transport is
+/// `TransportKind.stdio`, which is what `editors/vscode/src/extension.ts`
+/// sets. Before `ridl lsp` accepted the flag, clap refused it with exit 2 and
+/// the extension never had a server to talk to.
+#[test]
+fn ridl_lsp_accepts_the_stdio_flag_an_editor_client_passes() {
+    assert_lsp_handshake_and_clean_shutdown(&["--stdio"]);
+}
+
+/// The LSP specification (3.17, "Implementation Considerations") recommends
+/// that a server accept `--clientProcessId` next to the transport flag. The
+/// server ignores the value: `initialize` carries the same process id.
+#[test]
+fn ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends() {
+    assert_lsp_handshake_and_clean_shutdown(&["--stdio", "--clientProcessId=4242"]);
+}
+
+/// Runs `ridl lsp` with `args` through the `initialize` handshake and a
+/// `shutdown`/`exit` pair, and asserts the server answers as itself and
+/// exits 0.
+fn assert_lsp_handshake_and_clean_shutdown(args: &[&str]) {
+    let mut child = spawn_lsp(args);
     let mut stdin = child.stdin.take().expect("piped stdin");
     let messages = read_messages(child.stdout.take().expect("piped stdout"));
 
@@ -493,7 +520,7 @@ fn ridl_lsp_serves_the_handshake_and_exits_zero_on_shutdown() {
 
 #[test]
 fn ridl_lsp_exits_two_when_stdin_closes_before_initialize() {
-    let mut child = spawn_lsp();
+    let mut child = spawn_lsp(&[]);
     // Close stdin without sending a request: the server must notice the
     // transport ending and exit, not hang.
     drop(child.stdin.take().expect("piped stdin"));
