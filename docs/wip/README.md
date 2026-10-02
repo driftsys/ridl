@@ -185,10 +185,12 @@ design note, from the archive.
   rule (D-9, decided 2026-10-01: 100 columns, `.editorconfig` overrides) with
   the breaking rules it needs, the invariants and the test plan. All thirteen
   decisions taken 2026-10-01 (the recommended option of each). Tasks 1–5 are
-  merged; Tasks 6–8 implement interfaces, attributes and services in
-  [PR #634](https://github.com/driftsys/ridl/pull/634), whose review corrections
-  are in progress. Tasks 9–13 remain pending. The
-  [review report](fmt-ridl-rsdl-review.md) records current status and approvals.
+  merged; Tasks 6–8 are merged in
+  [PR #634](https://github.com/driftsys/ridl/pull/634). Annotation-comment
+  corrections are under review in
+  [PR #635](https://github.com/driftsys/ridl/pull/635). Tasks 9–13 remain
+  pending. The [review report](fmt-ridl-rsdl-review.md) records current status
+  and approvals.
 - **fmt-ridl-rsdl-plan.md** — the thirteen-task implementation plan for that
   note, written for a coding agent that starts with only the repository and the
   file. Follow the review report for execution status; the plan retains its

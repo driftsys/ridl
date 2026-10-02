@@ -97,7 +97,8 @@ The independent correction commit is `82b761f`; formatter/LSP acceptance and
 `just verify` passed on that exact head. QUICK review completed with actual
 Terra models and the correct scope. Its two test suggestions are applied; the
 bug seat found nothing and the restricted docs seat found no falsified prose.
-Full pass 2 follows publication of the approved collision correction.
+The approved collision correction is published in PR #635; D-H23 records its
+fresh review sequence.
 
 D-H19 records the maintainer's explicit approval of D-H16's narrow verbatim
 exception. The collision regression failed on valid input before correction;
@@ -107,7 +108,18 @@ continue to use timing first. No rendering approval remains pending.
 
 D-H22 records the maintainer merge and restacking of the remaining correction
 onto main `c9c7c0e` in `fix/387-fmt-annotation-comments`. The original `91d1e6d`
-correction tree is preserved at `a41cddd`. Open a correction PR after
-actual-head gates, then run the remaining full pass 2 on that open PR with BASE
-`700d116`, preserving the original fix diff and two-pass cap. Tasks 9–13 follow
-in order. Original worktree, untracked handoff and all stashes are preserved.
+correction tree is preserved at `a41cddd`. The correction is published in
+[PR #635](https://github.com/driftsys/ridl/pull/635), based on main. Its head
+`2287d03` passed `just verify`, enabled push hooks and every CI check.
+
+D-H23 supersedes D-H22's review scheduling: the active FULL trigger required a
+fresh pass 1 for PR #635. That review retained two independently confirmed test
+coverage findings. D-H24 adds regressions for timing-first documentation line
+comments and inline-service collisions. Both specified mutations fail with the
+new assertions; restored formatter/LSP acceptance passes. Production behavior is
+unchanged. See [PR #635 evidence](fmt-ridl-rsdl-evidence/pr-635.md).
+
+Actual-head gates and publication precede the final pass 2, with BASE `2287d03`
+and only the correction diff in scope. Tasks 9–13 follow in order. Original
+worktree, untracked handoff and all stashes are preserved. No approval question
+remains pending.

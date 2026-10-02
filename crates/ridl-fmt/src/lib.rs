@@ -1967,6 +1967,42 @@ mod tests {
     }
 
     #[test]
+    fn review_timing_doc_line_comment_keeps_attributes_on_the_next_line() {
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                "package p\ninterface I {\n  query  q():T @ 10ms /// timing\n  [persist] // member\n}\n",
+                "package p\n\ninterface I {\n  query q(): T @10ms /// timing\n  [ persist ] // member\n}\n",
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn review_inline_service_colliding_comments_keep_the_member_verbatim() {
+        for width in [100, 60, 40] {
+            for annotation in ["// attribute", "/// attribute"] {
+                for trailing in ["// member", "/* member */", "/* member\nmore */"] {
+                    assert_profile_format(
+                        &format!(
+                            "package p\nservice veh.control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
+                        ),
+                        &format!(
+                            "package p\n\nservice veh.control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
+                        ),
+                        Profile::Ridl,
+                        &FormatOptions {
+                            max_line_length: Some(width),
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn ridl_moved_annotation_comment_does_not_force_attribute_breaking() {
         let comment = "x".repeat(120);
         assert_profile_format(

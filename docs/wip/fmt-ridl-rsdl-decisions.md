@@ -645,3 +645,48 @@ append-only. Implementation status and verification are in
 - Affected files and behavior: review/decision records and branch base only.
 - Maintainer action: review the correction PR. Task 9 follows full pass 2 and
   will stack on the immediate unmerged correction branch.
+
+## D-H23 — fresh review of the open correction PR
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: review execution requirement; supersedes D-H22's proposed scheduling.
+- Observed state: opening PR #635 triggered the active FULL review instruction,
+  requiring a fresh pass 1 on that open PR. PR #634 had already been merged by
+  the maintainer after its first pass.
+- Decision: run fresh pass 1 on PR #635, then pass 2 over its correction diff
+  with BASE `2287d0368d16294369b920c62a77cdabd0843f72`. Keep the two-pass cap
+  per PR. Do not run the D-H22 continuity proposal or a third full pass.
+- Reason and alternatives considered: the active review trigger binds the new
+  open PR. Reusing the old PR's pass number would omit its required first pass.
+- Authority: active FULL review instruction and the review workflow's fresh
+  contexts, open-PR requirement and two-pass cap.
+- Affected files and behavior: review records only; no rendering changes.
+- Verification: fresh pass 1 reviewed main `c9c7c0e` through `2287d03`; all
+  seats matched the five changed paths. Two coverage findings were independently
+  confirmed. All CI checks passed on `2287d03`.
+- Commit and PR: PR #635, based on main; evidence in `pr-635.md`.
+- Maintainer action: review PR #635; no merge authorization is inferred.
+
+## D-H24 — pin the two confirmed annotation-comment coverage gaps
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice within approved D-H19 and D-H21 behavior.
+- Observed case: changing annotation newline checks to accept only ordinary line
+  comments passed existing tests while losing a timing-first `///` newline.
+  Bypassing collision protection only in inline services also passed existing
+  tests while merging their two comment tokens.
+- Decision: add exact-output tests for timing-first documentation line comments
+  and inline-service collisions at widths 100, 60 and 40. Include ordinary and
+  documentation annotation line comments and all three trailing comment forms in
+  inline services. Reuse the structure, content and fixed-point assertions.
+- Reason and alternatives considered: existing interface collision fixtures
+  cannot detect a service-only regression, and their verbatim path does not
+  exercise documentation line comments in the annotation renderer. No production
+  correction is needed for either confirmed test gap.
+- Authority: design sections 3.2, 3.3, 5 and 9; PR #635 pass 1 findings F1/F2.
+- Affected files and behavior: formatter tests and review records only.
+- Verification: both specified mutations exit 101 with the new tests; restored
+  production passes formatter and LSP acceptance. Logs and exact commands are
+  recorded in `fmt-ridl-rsdl-evidence/pr-635.md`.
+- Commit and PR: coverage correction in PR #635; actual-head gates precede push.
+- Maintainer action: none; no rendering choice changed.
