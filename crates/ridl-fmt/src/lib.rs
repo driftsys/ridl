@@ -1,4 +1,4 @@
-//! `ridl fmt` — the CST-based formatter for the typl surface
+//! `ridl fmt` — the CST-based formatter for typl and ridl declarations
 //! (docs/ROADMAP.md epic E1.14, general form §5, typl reference §15.2).
 //!
 //! The formatter parses `text` with [`ridl_syntax::parse`] and rewrites the
@@ -33,11 +33,21 @@
 //!   colon; tuples `(min: Speed, max: Speed)` — comma then space;
 //! - initialisers ` = value` spaced on both sides of `=`, likewise enum values
 //!   `NAME = 0`.
+//! - interfaces use the same brace-body layout; value and callable interactions
+//!   have tight type colons, comma-separated parameter lists, spaced fallible
+//!   returns and tight stream types and timing annotations;
+//! - timing precedes an interaction's attribute block. Inline attributes have
+//!   bracket padding and comma separators; predicates force one attribute per
+//!   line. Binary expression operators have spaces, prefixes and member access
+//!   stay tight, and source parentheses remain. Attribute value lists can break;
+//! - inline services reuse interface bodies; named services keep required shape
+//!   commas and remove the optional trailing comma. An overlong shape list breaks
+//!   after the colon, one shape per line with commas between shapes.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
-//! types break one field per line, with commas between fields, when their code
-//! line exceeds the width. The last breakable construct on an overlong line
+//! types and parameter lists break one item per line, with commas between items,
+//! when their code line exceeds the width. The last breakable construct on an overlong line
 //! breaks first; lines are measured again after each break. Nested tuples break
 //! only after their enclosing tuple. Trailing comments never cause a break;
 //! unbreakable text stays over the limit. `None` disables line breaking.
@@ -53,8 +63,9 @@
 //! # What order is *not* changed
 //!
 //! Source order is wire identity (typl reference §7.4): a formatter must never
-//! change ordinals. This formatter normalises whitespace and separators only —
-//! it never reorders declarations, imports, fields, enum values, or union arms.
+//! change ordinals. This formatter normalises whitespace and separators, and
+//! places timing before attributes in an interaction annotation pair (D-4).
+//! It never reorders declarations, imports, fields, enum values, or union arms.
 //! Input whose first item is not the `package` declaration is a missing-package
 //! parse error (FORM-104), so it is returned untouched and never reformatted;
 //! the never-reorder guarantee applies to the inputs that do format.
@@ -69,7 +80,9 @@
 //! collection, the parentheses of a tuple, or the tokens of one declaration —
 //! cannot be reflowed into the tight style without risking its meaning, so the
 //! enclosing construct is emitted verbatim from source instead of being
-//! re-synthesised. That keeps every comment in place, leaves the node structure
+//! re-synthesised. Inline comments between interaction annotations are an
+//! exception: they stay with the preceding annotation when timing moves first.
+//! Line comments retain their newline. This leaves the node structure
 //! and the non-trivia token set unchanged, and stays idempotent.
 //! The property harness checks all three implemented profiles at widths 100,
 //! 60 and 40, comparing node entry and exit, token identity, and comment text.
@@ -187,92 +200,35 @@ fn layout_container(
     options: &FormatOptions,
 ) -> Vec<String> {
     let ind = indent_str(indent);
-    let mut blocks: Vec<Block> = Vec::new();
-    // Comments seen since the last block, waiting to lead the next node.
-    let mut pending: Vec<PendingComment> = Vec::new();
-    // Newlines in the whitespace run since the last non-whitespace element.
-    let mut nl_run = 0usize;
-    // Whether a comment on the current line would trail an existing block.
-    let mut can_trail = false;
-
-    for element in elements {
-        match element {
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
-                nl_run += token.text().matches('\n').count();
-            }
-            NodeOrToken::Token(token) if is_comment(token.kind()) => {
-                let text = token.text().trim_end().to_string();
-                if can_trail && nl_run == 0 && pending.is_empty() {
-                    if let Some(last) = blocks.last_mut()
-                        && let Some(line) = last.lines.last_mut()
-                    {
-                        line.push(' ');
-                        line.push_str(&text);
-                    }
-                } else {
-                    pending.push(PendingComment {
-                        blank_before: nl_run >= 2,
-                        text,
-                    });
-                    can_trail = false;
-                }
-                nl_run = 0;
-            }
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
-                // A separator comma is dropped; the previous member keeps a
-                // trailing comment on its line.
-                nl_run = 0;
-            }
-            NodeOrToken::Node(node) => {
-                let kind = block_kind(node.kind());
-                let gap_blank = match pending.first() {
-                    Some(first) => first.blank_before,
-                    None => nl_run >= 2,
-                };
-                let mut lines = Vec::new();
-                for (i, comment) in pending.iter().enumerate() {
-                    if i > 0 && comment.blank_before {
-                        lines.push(String::new());
-                    }
-                    lines.push(format!("{ind}{}", comment.text));
-                }
-                if !pending.is_empty() && nl_run >= 2 {
+    let blocks: Vec<Block> = collect_container(elements)
+        .into_iter()
+        .map(|block| {
+            let mut lines = Vec::new();
+            for (i, comment) in block.leading.iter().enumerate() {
+                if i > 0 && comment.blank_before {
                     lines.push(String::new());
                 }
-                lines.extend(format_element(node, indent, options));
-                blocks.push(Block {
-                    kind,
-                    gap_blank,
-                    lines,
-                });
-                pending.clear();
-                nl_run = 0;
-                can_trail = true;
+                lines.push(format!("{ind}{}", comment.text));
             }
-            _ => {
-                // No other token appears as a direct container child: the file
-                // holds only nodes and trivia, a brace block holds members,
-                // separator commas, and trivia.
-                nl_run = 0;
-            }
-        }
-    }
-
-    if !pending.is_empty() {
-        let gap_blank = pending[0].blank_before;
-        let mut lines = Vec::new();
-        for (i, comment) in pending.iter().enumerate() {
-            if i > 0 && comment.blank_before {
+            if block.blank_before_node {
                 lines.push(String::new());
             }
-            lines.push(format!("{ind}{}", comment.text));
-        }
-        blocks.push(Block {
-            kind: BlockKind::CommentOnly,
-            gap_blank,
-            lines,
-        });
-    }
+            if let Some(node) = &block.node {
+                lines.extend(format_element(node, indent, options));
+            }
+            for comment in &block.trailing {
+                if let Some(line) = lines.last_mut() {
+                    line.push(' ');
+                    line.push_str(comment);
+                }
+            }
+            Block {
+                kind: block.kind,
+                gap_blank: block.gap_blank,
+                lines,
+            }
+        })
+        .collect();
 
     let mut out: Vec<String> = Vec::new();
     for (i, block) in blocks.iter().enumerate() {
@@ -285,6 +241,80 @@ fn layout_container(
         out.extend(block.lines.iter().cloned());
     }
     out
+}
+
+/// One source container unit before its node is rendered. Attribute bodies and
+/// brace bodies share this collector, including leading and trailing comments.
+struct ContainerBlock {
+    kind: BlockKind,
+    gap_blank: bool,
+    leading: Vec<PendingComment>,
+    blank_before_node: bool,
+    node: Option<SyntaxNode>,
+    trailing: Vec<String>,
+}
+
+fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
+    let mut blocks: Vec<ContainerBlock> = Vec::new();
+    let mut pending: Vec<PendingComment> = Vec::new();
+    let mut nl_run = 0usize;
+    let mut can_trail = false;
+    for element in elements {
+        match element {
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
+                nl_run += token.text().matches('\n').count();
+            }
+            NodeOrToken::Token(token) if is_comment(token.kind()) => {
+                let text = token.text().trim_end().to_string();
+                if can_trail && nl_run == 0 && pending.is_empty() {
+                    if let Some(last) = blocks.last_mut() {
+                        last.trailing.push(text);
+                    }
+                } else {
+                    pending.push(PendingComment {
+                        blank_before: nl_run >= 2,
+                        text,
+                    });
+                    can_trail = false;
+                }
+                nl_run = 0;
+            }
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
+                if nl_run > 0 {
+                    can_trail = false;
+                }
+                // A separator line is not a blank line. Retain an existing
+                // source blank line without attaching later comments backward.
+                nl_run = if nl_run >= 2 { 2 } else { 0 };
+            }
+            NodeOrToken::Node(node) => {
+                let gap_blank = pending.first().map_or(nl_run >= 2, |c| c.blank_before);
+                let blank_before_node = !pending.is_empty() && nl_run >= 2;
+                blocks.push(ContainerBlock {
+                    kind: block_kind(node.kind()),
+                    gap_blank,
+                    leading: std::mem::take(&mut pending),
+                    blank_before_node,
+                    node: Some(node.clone()),
+                    trailing: Vec::new(),
+                });
+                nl_run = 0;
+                can_trail = true;
+            }
+            _ => nl_run = 0,
+        }
+    }
+    if !pending.is_empty() {
+        blocks.push(ContainerBlock {
+            kind: BlockKind::CommentOnly,
+            gap_blank: pending[0].blank_before,
+            leading: pending,
+            blank_before_node: false,
+            node: None,
+            trailing: Vec::new(),
+        });
+    }
+    blocks
 }
 
 /// A comment waiting to lead the next node, with whether the source placed a
@@ -322,7 +352,9 @@ fn block_kind(kind: SyntaxKind) -> BlockKind {
         | SyntaxKind::StructDef
         | SyntaxKind::EnumDef
         | SyntaxKind::EnumSetDef
-        | SyntaxKind::UnionDef => BlockKind::Def,
+        | SyntaxKind::UnionDef
+        | SyntaxKind::InterfaceDef
+        | SyntaxKind::ServiceDef => BlockKind::Def,
         _ => BlockKind::Member,
     }
 }
@@ -338,10 +370,15 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
     // A comment wedged directly among a single-line element's own tokens (for
     // example between a field name and its colon) would be dropped by the
     // token-stitching synthesis; emit the whole element verbatim so no comment
-    // is ever lost. Brace-block definitions are excluded: their direct comment
-    // children are the between-member comments that `layout_container` places,
+    // is ever lost. Inline comments between interaction annotations travel with
+    // their preceding annotation when timing moves first. Brace-block definitions
+    // are excluded: their direct comments are the between-member comments that
+    // `layout_container` places,
     // and their header-region comments are handled by `format_block_def`.
-    if is_single_line_element(node) && has_direct_comment(node) {
+    if is_single_line_element(node)
+        && has_direct_comment(node)
+        && !has_only_inline_annotation_comments(node)
+    {
         return vec![format!("{ind}{}", node.text())];
     }
     match node.kind() {
@@ -362,12 +399,23 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::StructDef => format_block_def(node, indent, "struct", options),
         SyntaxKind::EnumDef => format_block_def(node, indent, "enum", options),
         SyntaxKind::UnionDef => format_block_def(node, indent, "union", options),
+        SyntaxKind::InterfaceDef => format_block_def(node, indent, "interface", options),
+        SyntaxKind::ServiceDef if has_token(node, SyntaxKind::LBrace) => {
+            format_block_def(node, indent, "service", options)
+        }
+        SyntaxKind::ServiceDef => render_layout(&format_named_service(node), indent, options),
+        SyntaxKind::SignalDef
+        | SyntaxKind::EventDef
+        | SyntaxKind::FixedDef
+        | SyntaxKind::CommandDef
+        | SyntaxKind::QueryDef => render_layout(&format_interaction(node), indent, options),
+        SyntaxKind::AttrBlock => render_layout(&format_attr_block(node), indent, options),
         SyntaxKind::FieldDef => render_layout(&format_field_def(node), indent, options),
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
-        // A declaration with no layout rules here — a ridl `interface` or
-        // `service`, or one of the five rsdl declarations — is emitted as
+        // A declaration with no layout rules here — one of the five rsdl
+        // declarations — is emitted as
         // written, so no source is lost.
         _ => line(node.text().to_string()),
     }
@@ -443,8 +491,9 @@ fn format_enumset_derived(node: &SyntaxNode) -> String {
 
 // --- brace-block definitions --------------------------------------------
 
-/// Formats a `struct` / `enum` / `union` / standalone `enumset` — the header,
-/// the members laid out at the next indent, and the closing brace. An empty
+/// Formats a `struct`, `enum`, `union`, standalone `enumset`, `interface`,
+/// or inline `service`:
+/// the header, the members at the next indent, and the closing brace. An empty
 /// body renders as `{}` on the header line. A comment on the opening-brace line
 /// stays on that line; a comment in the header region is preserved verbatim.
 fn format_block_def(
@@ -455,17 +504,22 @@ fn format_block_def(
 ) -> Vec<String> {
     let ind = indent_str(indent);
     let header_prefix = block_header_prefix(node, keyword);
+    let brace_separator = if header_prefix.ends_with('\n') {
+        ind.as_str()
+    } else {
+        " "
+    };
     let all_members = elements_between_braces(node);
     let (brace_comment, members) = split_brace_line_comment(&all_members);
     let member_lines = layout_container(members, indent + 1, false, options);
 
     if member_lines.is_empty() && brace_comment.is_none() {
-        return vec![format!("{ind}{header_prefix} {{}}")];
+        return vec![format!("{ind}{header_prefix}{brace_separator}{{}}")];
     }
 
     let open = match &brace_comment {
-        Some(comment) => format!("{ind}{header_prefix} {{ {comment}"),
-        None => format!("{ind}{header_prefix} {{"),
+        Some(comment) => format!("{ind}{header_prefix}{brace_separator}{{ {comment}"),
+        None => format!("{ind}{header_prefix}{brace_separator}{{"),
     };
     let mut out = Vec::with_capacity(member_lines.len() + 2);
     out.push(open);
@@ -480,23 +534,44 @@ fn format_block_def(
 fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
     let mut verbatim = String::new();
     let mut has_comment = false;
+    let mut last_significant = None;
     for element in node.children_with_tokens() {
         match element {
             NodeOrToken::Token(t) if t.kind() == SyntaxKind::LBrace => break,
             NodeOrToken::Token(t) => {
                 has_comment |= is_comment(t.kind());
+                if t.kind() != SyntaxKind::Whitespace {
+                    last_significant = Some(t.kind());
+                }
                 verbatim.push_str(t.text());
             }
-            NodeOrToken::Node(n) => verbatim.push_str(&n.text().to_string()),
+            NodeOrToken::Node(n) => {
+                last_significant = Some(n.kind());
+                verbatim.push_str(&n.text().to_string());
+            }
         }
     }
     if has_comment {
-        verbatim.trim_end().to_string()
+        let mut header = verbatim.trim_end().to_string();
+        if matches!(
+            last_significant,
+            Some(SyntaxKind::LineComment | SyntaxKind::DocComment)
+        ) {
+            header.push('\n');
+        }
+        header
     } else {
         format!(
             "{}{keyword} {}",
             modifiers_prefix(node),
-            child_tight(node, SyntaxKind::Name)
+            child_tight(
+                node,
+                if node.kind() == SyntaxKind::ServiceDef {
+                    SyntaxKind::DottedName
+                } else {
+                    SyntaxKind::Name
+                }
+            )
         )
     }
 }
@@ -526,12 +601,20 @@ fn split_brace_line_comment(elements: &[SyntaxElement]) -> (Option<String>, &[Sy
 /// The container children strictly between the block's first `{` and its
 /// closing `}` — member nodes, separator commas, and trivia.
 fn elements_between_braces(node: &SyntaxNode) -> Vec<SyntaxElement> {
+    elements_between_delimiters(node, SyntaxKind::LBrace, SyntaxKind::RBrace)
+}
+
+fn elements_between_delimiters(
+    node: &SyntaxNode,
+    open: SyntaxKind,
+    close: SyntaxKind,
+) -> Vec<SyntaxElement> {
     let mut out = Vec::new();
     let mut inside = false;
     for element in node.children_with_tokens() {
         match &element {
-            NodeOrToken::Token(t) if t.kind() == SyntaxKind::LBrace && !inside => inside = true,
-            NodeOrToken::Token(t) if t.kind() == SyntaxKind::RBrace => break,
+            NodeOrToken::Token(t) if t.kind() == open && !inside => inside = true,
+            NodeOrToken::Token(t) if t.kind() == close => break,
             _ if inside => out.push(element),
             _ => {}
         }
@@ -577,6 +660,313 @@ fn format_union_arm(node: &SyntaxNode) -> String {
     )
 }
 
+// --- named services ------------------------------------------------------
+
+fn format_named_service(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    Layout::Concat(vec![
+        Layout::Text(format!(
+            "service {}:",
+            child_tight(node, SyntaxKind::DottedName)
+        )),
+        Layout::Shapes(
+            node.children()
+                .filter(|child| child.kind() == SyntaxKind::PathType)
+                .map(|shape| tight_text(&shape))
+                .collect(),
+        ),
+    ])
+}
+
+// --- interface members ---------------------------------------------------
+
+/// The value or callable member, with timing before attributes. Each parser
+/// accepted slot is retained, including slots narrowed by the checker.
+fn format_interaction(node: &SyntaxNode) -> Layout {
+    let (keyword, callable) = match node.kind() {
+        SyntaxKind::SignalDef => ("signal", false),
+        SyntaxKind::EventDef => ("event", false),
+        SyntaxKind::FixedDef => ("fixed", false),
+        SyntaxKind::CommandDef => ("command", true),
+        SyntaxKind::QueryDef => ("query", true),
+        _ => return Layout::Text(node.text().to_string()),
+    };
+    let mut parts = vec![Layout::Text(format!(
+        "{keyword} {}",
+        child_tight(node, SyntaxKind::Name)
+    ))];
+    if callable {
+        if let Some(params) = child_node(node, SyntaxKind::ParamList) {
+            parts.push(format_param_list(&params));
+        }
+        if let Some(result) = child_node(node, SyntaxKind::ReturnType) {
+            parts.push(Layout::Text(": ".into()));
+            parts.push(format_return_type(&result));
+        }
+    } else {
+        parts.push(Layout::Text(": ".into()));
+        parts.push(field_type(node));
+    }
+    if let Some(init) = child_node(node, SyntaxKind::InitValue) {
+        if contains_comment(&init) {
+            parts.push(Layout::Text(format!(" {}", init.text())));
+        } else if let Some(literal) = child_node(&init, SyntaxKind::Literal) {
+            parts.push(Layout::Text(format!(" = {}", tight_text(&literal))));
+        }
+    }
+    if let Some(timing) = child_node(node, SyntaxKind::Timing) {
+        parts.push(Layout::Text(format!(" {}", tight_text(&timing))));
+        parts.extend(annotation_comments(node, SyntaxKind::Timing, false));
+    }
+    if let Some(attrs) = child_node(node, SyntaxKind::AttrBlock) {
+        if !matches!(parts.last(), Some(Layout::LineBreak)) {
+            parts.push(Layout::Text(" ".into()));
+        }
+        parts.push(format_attr_block(&attrs));
+        parts.extend(annotation_comments(node, SyntaxKind::AttrBlock, true));
+    }
+    Layout::Concat(parts)
+}
+
+/// Inline comments between annotations belong to the preceding annotation.
+/// Other direct comments retain the existing whole-member verbatim path.
+fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
+    if !matches!(
+        node.kind(),
+        SyntaxKind::SignalDef
+            | SyntaxKind::EventDef
+            | SyntaxKind::FixedDef
+            | SyntaxKind::CommandDef
+            | SyntaxKind::QueryDef
+    ) || child_node(node, SyntaxKind::Timing).is_none()
+        || child_node(node, SyntaxKind::AttrBlock).is_none()
+    {
+        return false;
+    }
+    let mut owner = None;
+    let mut inline = false;
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Node(child) => {
+                owner = Some(child.kind());
+                inline = true;
+            }
+            NodeOrToken::Token(token) if is_comment(token.kind()) => {
+                if !inline
+                    || token.text().contains('\n')
+                    || !matches!(owner, Some(SyntaxKind::Timing | SyntaxKind::AttrBlock))
+                {
+                    return false;
+                }
+            }
+            NodeOrToken::Token(token) if token.text().contains('\n') => inline = false,
+            _ => {}
+        }
+    }
+    true
+}
+
+fn annotation_comments(node: &SyntaxNode, annotation: SyntaxKind, trailing: bool) -> Vec<Layout> {
+    let mut owner = None;
+    let mut comments = Vec::new();
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Node(child) => owner = Some(child.kind()),
+            NodeOrToken::Token(token) if owner == Some(annotation) && is_comment(token.kind()) => {
+                let text = token.text().trim_end().to_string();
+                comments.push(
+                    if trailing
+                        || matches!(
+                            token.kind(),
+                            SyntaxKind::LineComment | SyntaxKind::DocComment
+                        )
+                    {
+                        Layout::TrailingComment(text)
+                    } else {
+                        Layout::Text(format!(" {text}"))
+                    },
+                );
+                if !trailing
+                    && matches!(
+                        token.kind(),
+                        SyntaxKind::LineComment | SyntaxKind::DocComment
+                    )
+                {
+                    comments.push(Layout::LineBreak);
+                }
+            }
+            _ => {}
+        }
+    }
+    comments
+}
+
+fn format_param_list(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    Layout::Tuple(
+        node.children()
+            .filter(|n| n.kind() == SyntaxKind::Param)
+            .map(|param| {
+                Layout::Concat(vec![
+                    Layout::Text(format!("{}: ", child_tight(&param, SyntaxKind::Name))),
+                    field_type(&param),
+                ])
+            })
+            .collect(),
+    )
+}
+
+fn format_return_type(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    if let Some(fallible) = child_node(node, SyntaxKind::FallibleType) {
+        let mut parts = Vec::new();
+        for (index, path) in fallible.children().enumerate() {
+            if index > 0 {
+                parts.push(Layout::Text(" | ".into()));
+            }
+            parts.push(Layout::Text(tight_text(&path)));
+        }
+        Layout::Concat(parts)
+    } else {
+        field_type(node)
+    }
+}
+
+// --- attributes and predicate expressions --------------------------------
+
+fn format_attr_block(node: &SyntaxNode) -> Layout {
+    let force_block = node.children().any(|attr| {
+        has_token(&attr, SyntaxKind::RequireKw) || has_token(&attr, SyntaxKind::EnsureKw)
+    });
+    if !force_block && contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    let elements = elements_between_delimiters(node, SyntaxKind::LBracket, SyntaxKind::RBracket);
+    let blocks = collect_container(&elements)
+        .into_iter()
+        .map(|block| AttributeLayout {
+            gap_blank: block.gap_blank,
+            leading: block.leading,
+            blank_before_node: block.blank_before_node,
+            layout: block.node.as_ref().map(format_attribute),
+            trailing: block.trailing,
+        })
+        .collect();
+    Layout::Attributes {
+        blocks,
+        force_block,
+    }
+}
+
+fn format_attribute(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    if has_token(node, SyntaxKind::RequireKw) || has_token(node, SyntaxKind::EnsureKw) {
+        let keyword = if has_token(node, SyntaxKind::RequireKw) {
+            "require"
+        } else {
+            "ensure"
+        };
+        let expr = node
+            .children()
+            .next()
+            .map(|n| format_expr(&n))
+            .unwrap_or_default();
+        return Layout::Text(format!("{keyword} {expr}"));
+    }
+    let key = node
+        .children()
+        .filter(|n| n.kind() == SyntaxKind::Name)
+        .map(|n| tight_text(&n))
+        .collect::<Vec<_>>()
+        .join(".");
+    match child_node(node, SyntaxKind::AttrValue) {
+        Some(value) => Layout::Concat(vec![
+            Layout::Text(format!("{key} = ")),
+            format_attr_value(&value),
+        ]),
+        None => Layout::Text(key),
+    }
+}
+
+fn format_attr_value(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    if has_token(node, SyntaxKind::LParen) {
+        Layout::Tuple(
+            node.children()
+                .filter(|n| n.kind() == SyntaxKind::AttrValue)
+                .map(|n| format_attr_value(&n))
+                .collect(),
+        )
+    } else {
+        Layout::Text(tight_text(node))
+    }
+}
+
+/// Synthesize only spacing: every source expression node and parenthesis stays.
+fn format_expr(node: &SyntaxNode) -> String {
+    match node.kind() {
+        SyntaxKind::BinaryExpr => {
+            let mut children = node.children();
+            let left = children.next().map(|n| format_expr(&n)).unwrap_or_default();
+            let right = children.next().map(|n| format_expr(&n)).unwrap_or_default();
+            let operator = node
+                .children_with_tokens()
+                .filter_map(NodeOrToken::into_token)
+                .find(|t| !t.kind().is_trivia())
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            format!("{left} {operator} {right}")
+        }
+        SyntaxKind::PrefixExpr => {
+            let operator = node
+                .children_with_tokens()
+                .filter_map(NodeOrToken::into_token)
+                .find(|t| !t.kind().is_trivia())
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            let operand = node
+                .children()
+                .next()
+                .map(|n| format_expr(&n))
+                .unwrap_or_default();
+            format!("{operator}{operand}")
+        }
+        SyntaxKind::MemberExpr => {
+            let left = node
+                .children()
+                .next()
+                .map(|n| format_expr(&n))
+                .unwrap_or_default();
+            let member = node
+                .children_with_tokens()
+                .filter_map(NodeOrToken::into_token)
+                .find(|t| t.kind() == SyntaxKind::Ident)
+                .map(|t| t.text().to_string())
+                .unwrap_or_default();
+            format!("{left}.{member}")
+        }
+        SyntaxKind::ParenExpr => {
+            let inner = node
+                .children()
+                .next()
+                .map(|n| format_expr(&n))
+                .unwrap_or_default();
+            format!("({inner})")
+        }
+        _ => tight_text(node),
+    }
+}
+
 // --- field types ---------------------------------------------------------
 
 /// The first field-type child of `node`, with tuple break positions retained.
@@ -596,19 +986,35 @@ fn is_field_type(kind: SyntaxKind) -> bool {
             | SyntaxKind::ArrayType
             | SyntaxKind::MapType
             | SyntaxKind::OptionalType
+            | SyntaxKind::StreamType
     )
 }
 
-/// A canonical text fragment, concatenation, or breakable tuple. Text also
-/// carries verbatim constructs: comments inside a type disable synthesis.
+/// A canonical text fragment, concatenation, or breakable tuple, attribute
+/// block, or service shape list. Text also carries verbatim constructs.
 enum Layout {
     Text(String),
+    TrailingComment(String),
+    LineBreak,
     Concat(Vec<Layout>),
     Tuple(Vec<Layout>),
+    Shapes(Vec<String>),
+    Attributes {
+        blocks: Vec<AttributeLayout>,
+        force_block: bool,
+    },
 }
 
-/// An outermost unbroken tuple on a rendered physical line. Inner tuples are
-/// exposed only when their parent breaks, so each decision follows the tree.
+struct AttributeLayout {
+    gap_blank: bool,
+    leading: Vec<PendingComment>,
+    blank_before_node: bool,
+    layout: Option<Layout>,
+    trailing: Vec<String>,
+}
+
+/// An outermost unbroken construct on a rendered physical line. Nested tuples
+/// and attribute blocks become candidates when their parent breaks.
 struct BreakCandidate {
     id: usize,
     line: usize,
@@ -620,6 +1026,7 @@ struct Rendering {
     line: usize,
     next_id: usize,
     candidates: Vec<BreakCandidate>,
+    code_columns: std::collections::HashMap<usize, usize>,
 }
 
 impl Rendering {
@@ -628,26 +1035,127 @@ impl Rendering {
         self.text.push_str(text);
     }
 
+    fn current_indent(&self) -> usize {
+        self.text
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .take_while(|c| *c == ' ')
+            .count()
+    }
+
+    fn trailing_comment(&mut self, comment: &str) {
+        let columns = self
+            .text
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count();
+        self.code_columns.entry(self.line).or_insert(columns);
+        self.push(" ");
+        self.push(comment);
+    }
+
     fn layout(&mut self, layout: &Layout, broken: &HashSet<usize>, inside_inline: bool) {
         match layout {
             Layout::Text(text) => self.push(text),
+            Layout::TrailingComment(text) => self.trailing_comment(text),
+            Layout::LineBreak => {
+                let indent = self.current_indent();
+                self.push("\n");
+                self.push(&" ".repeat(indent));
+            }
             Layout::Concat(parts) => {
                 for part in parts {
                     self.layout(part, broken, inside_inline);
+                }
+            }
+            Layout::Attributes {
+                blocks,
+                force_block,
+            } => {
+                let id = self.next_id;
+                self.next_id += 1;
+                if *force_block || broken.contains(&id) {
+                    let indent = self.current_indent();
+                    self.push("[");
+                    for (index, block) in blocks.iter().enumerate() {
+                        if index > 0 && block.gap_blank {
+                            self.push("\n");
+                        }
+                        for (i, comment) in block.leading.iter().enumerate() {
+                            if i > 0 && comment.blank_before {
+                                self.push("\n");
+                            }
+                            self.push("\n");
+                            self.push(&" ".repeat(indent + 2));
+                            self.push(&comment.text);
+                        }
+                        if block.blank_before_node {
+                            self.push("\n");
+                        }
+                        if let Some(item) = &block.layout {
+                            self.push("\n");
+                            self.push(&" ".repeat(indent + 2));
+                            self.layout(item, broken, false);
+                        }
+                        for comment in &block.trailing {
+                            self.trailing_comment(comment);
+                        }
+                    }
+                    self.push("\n");
+                    self.push(&" ".repeat(indent));
+                    self.push("]");
+                } else {
+                    if !inside_inline && !blocks.is_empty() {
+                        self.candidates.push(BreakCandidate {
+                            id,
+                            line: self.line,
+                        });
+                    }
+                    self.push("[ ");
+                    for (i, block) in blocks.iter().enumerate() {
+                        if i > 0 {
+                            self.push(", ");
+                        }
+                        if let Some(item) = &block.layout {
+                            self.layout(item, broken, true);
+                        }
+                    }
+                    self.push(" ]");
+                }
+            }
+            Layout::Shapes(items) => {
+                let id = self.next_id;
+                self.next_id += 1;
+                if broken.contains(&id) {
+                    let indent = self.current_indent();
+                    for (index, item) in items.iter().enumerate() {
+                        self.push("\n");
+                        self.push(&" ".repeat(indent + 2));
+                        self.push(item);
+                        if index + 1 < items.len() {
+                            self.push(",");
+                        }
+                    }
+                } else {
+                    if !inside_inline && !items.is_empty() {
+                        self.candidates.push(BreakCandidate {
+                            id,
+                            line: self.line,
+                        });
+                    }
+                    self.push(" ");
+                    self.push(&items.join(", "));
                 }
             }
             Layout::Tuple(items) => {
                 let id = self.next_id;
                 self.next_id += 1;
                 if broken.contains(&id) {
-                    let indent = self
-                        .text
-                        .rsplit('\n')
-                        .next()
-                        .unwrap_or_default()
-                        .chars()
-                        .take_while(|c| *c == ' ')
-                        .count();
+                    let indent = self.current_indent();
                     self.push("(");
                     for (i, item) in items.iter().enumerate() {
                         self.push("\n");
@@ -683,7 +1191,8 @@ impl Rendering {
 
 /// Start with the inline rendering. Break the last available construct on an
 /// overlong line, render again, and stop when no overlong line can break.
-/// Trailing comments are attached later by the container, so never count here.
+/// Layout trailing comments are excluded by the recorded code-column count;
+/// container trailing comments are attached after rendering.
 fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
     let mut broken = HashSet::new();
     loop {
@@ -696,7 +1205,13 @@ fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec
                 .split('\n')
                 .enumerate()
                 .find_map(|(line, text)| {
-                    if text.chars().count() <= width {
+                    if rendered
+                        .code_columns
+                        .get(&line)
+                        .copied()
+                        .unwrap_or_else(|| text.chars().count())
+                        <= width
+                    {
                         return None;
                     }
                     rendered
@@ -723,7 +1238,7 @@ fn format_field_type(node: &SyntaxNode) -> Layout {
         return Layout::Text(node.text().to_string());
     }
     match node.kind() {
-        SyntaxKind::PathType => Layout::Text(tight_text(node)),
+        SyntaxKind::PathType | SyntaxKind::StreamType => Layout::Text(tight_text(node)),
         SyntaxKind::PrimitiveType => {
             let mut out = primitive_keyword(node);
             if let Some(constraint) = child_node(node, SyntaxKind::Constraint) {
@@ -907,16 +1422,24 @@ fn has_direct_comment(node: &SyntaxNode) -> bool {
         .any(|e| matches!(e, NodeOrToken::Token(t) if is_comment(t.kind())))
 }
 
-/// Whether `node` is a definition or member that renders on a single line —
-/// everything except a brace-block definition (`struct`, `enum`, `union`, or a
-/// standalone `enumset`), whose direct comment children are handled elsewhere.
+/// Whether direct comments need the single-line fallback. Brace definitions
+/// (including standalone enumsets and inline services) and attribute blocks
+/// handle direct comments in their own renderers.
 fn is_single_line_element(node: &SyntaxNode) -> bool {
     match node.kind() {
-        SyntaxKind::StructDef | SyntaxKind::EnumDef | SyntaxKind::UnionDef => false,
-        SyntaxKind::EnumSetDef => !has_token(node, SyntaxKind::LBrace),
+        SyntaxKind::StructDef
+        | SyntaxKind::EnumDef
+        | SyntaxKind::UnionDef
+        | SyntaxKind::InterfaceDef
+        | SyntaxKind::AttrBlock => false,
+        SyntaxKind::EnumSetDef | SyntaxKind::ServiceDef => !has_token(node, SyntaxKind::LBrace),
         _ => true,
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/invariants.rs"]
+mod test_invariants;
 
 #[cfg(test)]
 mod tests {
@@ -1145,53 +1668,833 @@ mod tests {
         );
     }
 
+    fn assert_ridl_member(input: &str, expected: &str) {
+        assert_profile_format(
+            &format!("package p\ninterface I {{ {input} }}\n"),
+            &format!("package p\n\ninterface I {{\n  {expected}\n}}\n"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_struct_preserves_direct_and_array_stream_types() {
+        assert_profile_format(
+            "package p\nstruct Streams { a: <T> b: [<T>; 1..2] }\n",
+            "package p\n\nstruct Streams {\n  a: <T>\n  b: [<T>; 1..2]\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_streams_render_in_nested_collection_and_optional_positions() {
+        assert_profile_format(
+            "package p\nstruct S { a : < veh.T >? b : [<K>:<bytes>;1 .. 2] c : (a:<string>,b:[<T>?;2]) }\n",
+            "package p\n\nstruct S {\n  a: <veh.T>?\n  b: [<K>: <bytes>; 1..2]\n  c: (a: <string>, b: [<T>?; 2])\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_stream_comment_keeps_the_type_verbatim() {
+        assert_profile_format(
+            "package p\nstruct S { a : < T /* element */ > }\n",
+            "package p\n\nstruct S {\n  a: < T /* element */ >\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_interface_header_comment_is_preserved() {
+        assert_profile_format(
+            "package p\ninterface   I /* header */ { signal s : T }\n",
+            "package p\n\ninterface   I /* header */ {\n  signal s: T\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_signal_payload_init_and_four_timing_forms() {
+        for (input, expected) in [
+            (
+                "signal  speed : Speed = LIMIT @ 10ms",
+                "signal speed: Speed = LIMIT @10ms",
+            ),
+            (
+                "signal raw : <SensorFrame> @[ 20ms .. 100ms ]",
+                "signal raw: <SensorFrame> @[20ms..100ms]",
+            ),
+            (
+                "signal maximum : integer[0..10] @[ .. 5s ]",
+                "signal maximum: integer [0..10] @[..5s]",
+            ),
+            (
+                "signal optional : Speed? @[20ms .. ]",
+                "signal optional: Speed? @[20ms..]",
+            ),
+        ] {
+            assert_ridl_member(input, expected);
+        }
+    }
+
+    #[test]
+    fn ridl_event_keeps_lenient_stream_and_init_slots() {
+        assert_ridl_member(
+            "event  calibrated : <bytes> = DEFAULT_CAL @[ 1ms .. 2ms ]",
+            "event calibrated: <bytes> = DEFAULT_CAL @[1ms..2ms]",
+        );
+    }
+
+    #[test]
+    fn ridl_fixed_keeps_lenient_stream_init_and_timing_slots() {
+        assert_ridl_member(
+            "fixed  region : <string> = REGION_EU @ 1s",
+            "fixed region: <string> = REGION_EU @1s",
+        );
+    }
+
+    #[test]
+    fn ridl_command_parameters_optional_return_and_timing() {
+        assert_ridl_member(
+            "command  upload ( data : <FwBlock>, span : (min:A,max:B), ) : Ack @[ .. 1s ]",
+            "command upload(data: <FwBlock>, span: (min: A, max: B)): Ack @[..1s]",
+        );
+        assert_ridl_member("command  reset ( ) @ 50ms", "command reset() @50ms");
+    }
+
+    #[test]
+    fn ridl_query_four_return_shapes() {
+        for (input, expected) in [
+            ("query a ( ) : Speed", "query a(): Speed"),
+            (
+                "query b( ): (min : Speed,max : Speed,)",
+                "query b(): (min: Speed, max: Speed)",
+            ),
+            ("query c( ): < veh.LogLine >", "query c(): <veh.LogLine>"),
+            (
+                "query d( ) : CalReport|CalError",
+                "query d(): CalReport | CalError",
+            ),
+        ] {
+            assert_ridl_member(input, expected);
+        }
+    }
+
+    #[test]
+    fn ridl_reserved_members_keep_order_and_comments() {
+        assert_profile_format(
+            "package p\ninterface I { reserved  legacy, // first\n reserved 3 }\n",
+            "package p\n\ninterface I {\n  reserved legacy // first\n  reserved 3\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_empty_internal_interface_and_between_member_comments() {
+        assert_profile_format(
+            "package p\ninternal   interface Hidden { }\ninterface I { // body\n signal  zebra : A,\n\n // next\n event  alpha : B // trailing\n // end\n}\n",
+            "package p\n\ninternal interface Hidden {}\n\ninterface I { // body\n  signal zebra: A\n\n  // next\n  event alpha: B // trailing\n  // end\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_parameter_return_and_timing_comments_remain_verbatim() {
+        assert_ridl_member(
+            "command upload(data : A, /* preserve */ more:B,)",
+            "command upload(data : A, /* preserve */ more:B,)",
+        );
+        assert_ridl_member(
+            "command c(a:A, // parameter\n b : B)",
+            "command c(a:A, // parameter\n b : B)",
+        );
+        assert_ridl_member(
+            "query q(): (a:A, /* return */ b : B)",
+            "query q(): (a:A, /* return */ b : B)",
+        );
+        assert_ridl_member(
+            "signal s:T @[1ms /* timing */ .. 2ms]",
+            "signal s: T @[1ms /* timing */ .. 2ms]",
+        );
+    }
+
+    #[test]
+    fn ridl_initializer_comment_is_preserved() {
+        assert_ridl_member(
+            "signal  s : T = /* initializer */ DEFAULT",
+            "signal s: T = /* initializer */ DEFAULT",
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_member_uses_timing_then_predicate_block() {
+        assert_ridl_member(
+            "query  q ( ) : T [ require result>0 ] @ 10ms",
+            "query q(): T @10ms [\n    require result > 0\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_inline_attribute_padding_assignments_and_flags() {
+        assert_ridl_member(
+            "signal  target : T [seed=LIMIT,persist,]",
+            "signal target: T [ seed = LIMIT, persist ]",
+        );
+    }
+
+    #[test]
+    fn ridl_annotation_pair_has_one_canonical_order() {
+        for source in [
+            "query q():T [ persist ] @[ .. 5s ]",
+            "query q():T @[ .. 5s ] [ persist ]",
+        ] {
+            assert_ridl_member(source, "query q(): T @[..5s] [ persist ]");
+        }
+    }
+
+    #[test]
+    fn ridl_inline_annotation_comments_stay_with_the_preceding_annotation() {
+        for (source, expected) in [
+            (
+                "query q(): T [persist] /* note */ @10ms",
+                "query q(): T @10ms [ persist ] /* note */",
+            ),
+            (
+                "query q(): T @10ms /* note */ [persist]",
+                "query q(): T @10ms /* note */ [ persist ]",
+            ),
+            (
+                "query q(): T [persist] // note\n @10ms",
+                "query q(): T @10ms [ persist ] // note",
+            ),
+            (
+                "query q(): T @10ms // note\n [persist]",
+                "query q(): T @10ms // note\n  [ persist ]",
+            ),
+            (
+                "query q(): T [require result>0] /* note */ @10ms",
+                "query q(): T @10ms [\n    require result > 0\n  ] /* note */",
+            ),
+        ] {
+            assert_ridl_member(source, expected);
+        }
+    }
+
+    #[test]
+    fn ridl_moved_annotation_comment_does_not_force_attribute_breaking() {
+        let comment = "x".repeat(120);
+        assert_profile_format(
+            &format!("package p\ninterface I {{ query q(): T [persist] /* {comment} */ @10ms }}\n"),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T @10ms [ persist ] /* {comment} */\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_other_direct_member_comments_remain_verbatim() {
+        assert_ridl_member(
+            "query q /* name */ ():T [persist] @10ms",
+            "query q /* name */ ():T [persist] @10ms",
+        );
+        assert_ridl_member(
+            "query q():T [persist]\n /* standalone */ @10ms",
+            "query q():T [persist]\n /* standalone */ @10ms",
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_values_include_nested_and_empty_lists() {
+        assert_ridl_member(
+            "query q():T [labels=(A,(B,C,),(),),persist]",
+            "query q(): T [ labels = (A, (B, C), ()), persist ]",
+        );
+    }
+
+    #[test]
+    fn ridl_predicates_space_every_operator_and_preserve_parentheses() {
+        assert_ridl_member(
+            "command set(position:P)[require position!=GearPosition.PARK||currentSpeed==0.0]",
+            "command set(position: P) [\n    require position != GearPosition.PARK || currentSpeed == 0.0\n  ]",
+        );
+        assert_ridl_member(
+            "query q():T[require (!engaged&&((a+b*c-d/e%f)>=-1.0))||x==y ensure (result).min+1<=MAX&&status!=State.BAD&&v>0&&w<9]",
+            "query q(): T [\n    require (!engaged && ((a + b * c - d / e % f) >= -1.0)) || x == y\n    ensure (result).min + 1 <= MAX && status != State.BAD && v > 0 && w < 9\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_predicate_expression_is_unbreakable() {
+        let name = "A".repeat(120);
+        assert_ridl_member(
+            &format!("query q():T [require {name}>0]"),
+            &format!("query q(): T [\n    require {name} > 0\n  ]"),
+        );
+    }
+
+    #[test]
+    fn ridl_block_attribute_comments_follow_the_container_rules() {
+        assert_ridl_member(
+            "query q():T [require x>0, // trailing\n\n // next\n ensure x>=0\n // end\n]",
+            "query q(): T [\n    require x > 0 // trailing\n\n    // next\n    ensure x >= 0\n    // end\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_comment_inside_an_attribute_keeps_that_attribute_verbatim() {
+        assert_ridl_member(
+            "query q():T [require  x /* predicate */ >0 ensure result>=0]",
+            "query q(): T [\n    require  x /* predicate */ >0\n    ensure result >= 0\n  ]",
+        );
+    }
+
+    #[test]
+    fn ridl_inline_attribute_and_value_comments_remain_verbatim() {
+        assert_ridl_member(
+            "query q():T [persist, /* block */ labels=(A,B,),]",
+            "query q(): T [persist, /* block */ labels=(A,B,),]",
+        );
+        assert_ridl_member(
+            "query q():T [labels=(A, // value\n B)]",
+            "query q(): T [labels=(A, // value\n B)]",
+        );
+    }
+
+    #[test]
+    fn ridl_inline_attribute_width_boundaries() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                let name = "a".repeat(columns - "  signal s: T [  ]".chars().count());
+                let inline = format!("  signal s: T [ {name} ]");
+                assert_eq!(inline.chars().count(), columns);
+                let member = if columns <= width {
+                    inline.clone()
+                } else {
+                    format!("  signal s: T [\n    {name}\n  ]")
+                };
+                assert_profile_format(
+                    &format!("package p\ninterface I {{\n{inline}\n}}\n"),
+                    &format!("package p\n\ninterface I {{\n{member}\n}}\n"),
+                    Profile::Ridl,
+                    &options,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ridl_attribute_value_list_width_boundaries() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                let name = "A".repeat(columns - "    labels = (, B)".chars().count());
+                let inline = format!("    labels = ({name}, B)");
+                assert_eq!(inline.chars().count(), columns);
+                let value = if columns <= width {
+                    inline.clone()
+                } else {
+                    format!("    labels = (\n      {name},\n      B\n    )")
+                };
+                assert_profile_format(
+                    &format!(
+                        "package p\ninterface I {{\n  query q():T [require ready\n{inline}\n]\n}}\n"
+                    ),
+                    &format!(
+                        "package p\n\ninterface I {{\n  query q(): T [\n    require ready\n{value}\n  ]\n}}\n"
+                    ),
+                    Profile::Ridl,
+                    &options,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ridl_nested_attribute_value_lists_break_outer_then_inner() {
+        let name = "A".repeat(40);
+        assert_profile_format(
+            &format!(
+                "package p\ninterface I {{ query q():T[require ready labels=(({name},B),C)] }}\n"
+            ),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T [\n    require ready\n    labels = (\n      (\n        {name},\n        B\n      ),\n      C\n    )\n  ]\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_full_width_example_breaks_attributes_then_return_and_stops() {
+        assert_profile_format(
+            "package p\ninterface I { query getSpeedHistory(window: Duration, mode: Mode): (min: Speed, max: Speed, avg: Speed) @[..100ms] [ labels = (A, B) ] }\n",
+            "package p\n\ninterface I {\n  query getSpeedHistory(window: Duration, mode: Mode): (\n    min: Speed,\n    max: Speed,\n    avg: Speed\n  ) @[..100ms] [\n    labels = (A, B)\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(60),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_trailing_comments_do_not_force_value_breaks() {
+        let comment = "x".repeat(120);
+        assert_profile_format(
+            &format!(
+                "package p\ninterface I {{ query q():T [require ready\nlabels=(A,B) // {comment}\n] }}\n"
+            ),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T [\n    require ready\n    labels = (A, B) // {comment}\n  ]\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_unlimited_width_keeps_attribute_and_value_lists_inline() {
+        let name = "A".repeat(180);
+        assert_profile_format(
+            &format!("package p\ninterface I {{ query q():T[labels=({name},B),persist] }}\n"),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T [ labels = ({name}, B), persist ]\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: None,
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_attribute_width_one_keeps_the_tree_and_fixed_point() {
+        assert_profile_format(
+            "package p\ninterface I { query q():T[labels=(A,B)] }\n",
+            "package p\n\ninterface I {\n  query q(): T [\n    labels = (\n      A,\n      B\n    )\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(1),
+            },
+        );
+    }
+
+    #[test]
+    fn rsdl_attribute_renderer_tightens_dotted_keys_before_body_routing() {
+        let input = "package p\ncomponent C [ linux . realtime, linux . cpuset=(2,3,), ] {}\n";
+        let expected_attributes = "[ linux.realtime, linux.cpuset = (2, 3) ]";
+        let render = |source: &str| {
+            let parse = ridl_syntax::parse(source, Profile::Rsdl);
+            assert!(parse.errors().is_empty(), "{:?}", parse.errors());
+            let attributes = parse
+                .syntax()
+                .descendants()
+                .find(|n| n.kind() == SyntaxKind::AttrBlock)
+                .unwrap();
+            format_element(&attributes, 0, &FormatOptions::default()).join("\n")
+        };
+        assert_eq!(render(input), expected_attributes);
+        let expected = format!("package p\ncomponent C {expected_attributes} {{}}\n");
+        assert_eq!(
+            render(&expected),
+            expected_attributes,
+            "attribute fixed point"
+        );
+        assert_eq!(
+            crate::test_invariants::syntax_structure(input, Profile::Rsdl),
+            crate::test_invariants::syntax_structure(&expected, Profile::Rsdl)
+        );
+        assert_eq!(
+            crate::test_invariants::content_tokens(input, Profile::Rsdl),
+            crate::test_invariants::content_tokens(&expected, Profile::Rsdl)
+        );
+    }
+
+    #[test]
+    fn review_header_line_comments_keep_the_opening_brace_on_a_new_line() {
+        for header in ["interface I", "service p.s"] {
+            assert_profile_format(
+                &format!("package p\n{header} // header\n{{ signal s:T }}\n"),
+                &format!("package p\n\n{header} // header\n{{\n  signal s: T\n}}\n"),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+            assert_profile_format(
+                &format!("package p\n{header} /// header\n{{}}\n"),
+                &format!("package p\n\n{header} /// header\n{{}}\n"),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+        assert_profile_format(
+            "package p\nstruct S // header\n{ x:integer }\n",
+            "package p\n\nstruct S // header\n{\n  x: integer\n}\n",
+            Profile::Typl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn review_separator_comments_remain_separate_in_bodies_and_attributes() {
+        for header in ["interface I", "service p.s"] {
+            assert_profile_format(
+                &format!(
+                    "package p\n{header} {{ signal a:T // first\n , /* second\nthird */\n signal b:U }}\n"
+                ),
+                &format!(
+                    "package p\n\n{header} {{\n  signal a: T // first\n  /* second\nthird */\n  signal b: U\n}}\n"
+                ),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+        assert_ridl_member(
+            "query q():T [require ready // first\n , /* second\nthird */\n ensure result]",
+            "query q(): T [\n    require ready // first\n    /* second\nthird */\n    ensure result\n  ]",
+        );
+    }
+
+    #[test]
+    fn review_separator_lines_preserve_only_source_blank_lines() {
+        for (separator, gap) in [("\n,\n", ""), ("\n\n,\n", "\n"), ("\n,\n\n", "\n")] {
+            assert_ridl_member(
+                &format!("query q():T [require ready{separator}ensure result]"),
+                &format!("query q(): T [\n    require ready\n{gap}    ensure result\n  ]"),
+            );
+        }
+        for separator in ["\n\n,", "\n,\n\n"] {
+            assert_ridl_member(
+                &format!("query q():T [require ready{separator} /* next */\nensure result]"),
+                "query q(): T [\n    require ready\n\n    /* next */\n    ensure result\n  ]",
+            );
+        }
+    }
+
+    #[test]
+    fn review_ensure_alone_forces_block_layout() {
+        assert_ridl_member(
+            "query q():T [ensure result>0]",
+            "query q(): T [\n    ensure result > 0\n  ]",
+        );
+    }
+
+    #[test]
+    fn review_commented_value_list_in_a_predicate_block_is_preserved() {
+        assert_ridl_member(
+            "query q():T [require ready labels=(A, // value\n B)]",
+            "query q(): T [\n    require ready\n    labels=(A, // value\n B)\n  ]",
+        );
+    }
+
+    #[test]
+    fn review_commented_parameter_and_return_fallback_is_limited_to_the_subtree() {
+        assert_ridl_member(
+            "query  q(a:A, /* parameter */ b : B) : T [persist] @ 10ms",
+            "query q(a:A, /* parameter */ b : B): T @10ms [ persist ]",
+        );
+        assert_ridl_member(
+            "query  q(): (a:A, /* return */ b : B) [persist] @ 10ms",
+            "query q(): (a:A, /* return */ b : B) @10ms [ persist ]",
+        );
+    }
+
+    #[test]
+    fn review_multiline_annotation_comment_keeps_the_whole_member_verbatim() {
+        assert_ridl_member(
+            "query  q():T [persist] /* two\n lines */ @ 10ms",
+            "query  q():T [persist] /* two\n lines */ @ 10ms",
+        );
+    }
+
+    #[test]
+    fn ridl_broken_attribute_block_returns_parse_errors() {
+        assert!(matches!(
+            format(
+                "package p\ninterface I { query q():T [ require ] }\n",
+                Profile::Ridl,
+                &FormatOptions::default()
+            ),
+            FormatOutcome::ParseErrors(_)
+        ));
+    }
+
+    #[test]
+    fn ridl_broken_interface_returns_parse_errors() {
+        assert!(matches!(
+            format(
+                "package p\ninterface I { signal s: T\n",
+                Profile::Ridl,
+                &FormatOptions::default()
+            ),
+            FormatOutcome::ParseErrors(_)
+        ));
+    }
+
+    #[test]
+    fn ridl_broken_services_return_parse_errors() {
+        for input in [
+            "package p\nservice p.s: First Second\n",
+            "package p\nservice p.s: \n",
+            "package p\nservice p.s { signal s: T\n",
+        ] {
+            let parsed = ridl_syntax::parse(input, Profile::Ridl);
+            assert!(!parsed.errors().is_empty(), "the fixture must be malformed");
+            assert_eq!(
+                format(input, Profile::Ridl, &FormatOptions::default()),
+                FormatOutcome::ParseErrors(parsed.errors().to_vec()),
+                "malformed services retain the original diagnostics",
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_named_services_keep_required_commas_and_remove_trailing_commas() {
+        for source in [
+            "service veh.body.doors : DoorControl, DiagBlock",
+            "service veh.body.doors : DoorControl, DiagBlock,",
+        ] {
+            assert_profile_format(
+                &format!("package p\n{source}\n"),
+                "package p\n\nservice veh.body.doors: DoorControl, DiagBlock\n",
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_named_service_shape_list_breaks_after_the_colon() {
+        for source in [
+            "service veh.body.composite : DoorControl, MotorControl",
+            "service veh.body.composite : DoorControl, MotorControl,",
+        ] {
+            assert_profile_format(
+                &format!("package p\n{source} // shapes\n"),
+                "package p\n\nservice veh.body.composite:\n  DoorControl,\n  MotorControl // shapes\n",
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(40),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_service_shape_list_obeys_the_exact_width_and_off() {
+        let inline = "service p.s: Alpha, Beta";
+        for width in [Some(inline.chars().count()), None] {
+            assert_profile_format(
+                &format!("package p\n{inline}, // trailing comment beyond the width\n"),
+                &format!("package p\n\n{inline} // trailing comment beyond the width\n"),
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: width,
+                },
+            );
+        }
+        assert_profile_format(
+            &format!("package p\n{inline}\n"),
+            "package p\n\nservice p.s:\n  Alpha,\n  Beta\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(inline.chars().count() - 1),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_service_shape_list_with_a_comment_remains_verbatim() {
+        for source in [
+            "service veh.body.doors : DoorControl, /* shape */ DiagBlock,",
+            "service veh.body.doors : DoorControl, // shape\n DiagBlock,",
+            "service veh.body.doors : veh /* path */ . DoorControl, DiagBlock,",
+        ] {
+            assert_profile_format(
+                &format!("package p\n{source}\n"),
+                &format!("package p\n\n{source}\n"),
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(40),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_inline_service_reuses_member_layout_and_comments() {
+        for comma in ["", ","] {
+            assert_profile_format(
+                &format!(
+                    "package p\nservice veh.hvac.cabin {{ signal  temperature : Temperature @[ 1s .. 10s ]{comma}\n // callable\n command setTarget(t : Temperature) [require t>0] @10ms{comma} }}\n"
+                ),
+                "package p\n\nservice veh.hvac.cabin {\n  signal temperature: Temperature @[1s..10s]\n  // callable\n  command setTarget(t: Temperature) @10ms [\n    require t > 0\n  ]\n}\n",
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+        assert_profile_format(
+            "package p\nservice veh.empty {}\n",
+            "package p\n\nservice veh.empty {}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_inline_service_keeps_header_and_brace_comments() {
+        assert_profile_format(
+            "package p\nservice  veh.body /* header */ { // brace\n signal s:T }\n",
+            "package p\n\nservice  veh.body /* header */ { // brace\n  signal s: T\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_services_golden_preserves_structure_and_comments() {
+        assert_profile_format(
+            include_str!("../test_data/input/services.ridl"),
+            include_str!("../test_data/formatted/services.ridl"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_attributes_golden_preserves_structure_and_comments() {
+        assert_profile_format(
+            include_str!("../test_data/input/attributes.ridl"),
+            include_str!("../test_data/formatted/attributes.ridl"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_interface_golden_preserves_structure_and_comments() {
+        assert_profile_format(
+            include_str!("../test_data/input/interface.ridl"),
+            include_str!("../test_data/formatted/interface.ridl"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_parameter_and_tuple_return_width_boundaries() {
+        for width in [100, 60] {
+            let options = if width == 100 {
+                FormatOptions::default()
+            } else {
+                FormatOptions {
+                    max_line_length: Some(width),
+                }
+            };
+            for columns in [width - 1, width, width + 1] {
+                for is_return in [false, true] {
+                    let prefix = if is_return {
+                        "  query q(): "
+                    } else {
+                        "  command c"
+                    };
+                    let fixed = format!("{prefix}(a: , b: B)");
+                    let name = "A".repeat(columns - fixed.chars().count());
+                    let inline = format!("{prefix}(a: {name}, b: B)");
+                    assert_eq!(inline.chars().count(), columns);
+                    let member = if columns <= width {
+                        inline.clone()
+                    } else {
+                        format!("{prefix}(\n    a: {name},\n    b: B\n  )")
+                    };
+                    assert_profile_format(
+                        &format!("package p\ninterface I {{\n{inline}\n}}\n"),
+                        &format!("package p\n\ninterface I {{\n{member}\n}}\n"),
+                        Profile::Ridl,
+                        &options,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ridl_breaks_tuple_return_before_parameters_and_remeasures() {
+        let input = "package p\ninterface I { query getSpeedHistory(window: Duration, mode: Mode): (min: Speed, max: Speed, avg: Speed) @[..100ms] }\n";
+        let expected = "package p\n\ninterface I {\n  query getSpeedHistory(window: Duration, mode: Mode): (\n    min: Speed,\n    max: Speed,\n    avg: Speed\n  ) @[..100ms]\n}\n";
+        assert_profile_format(
+            input,
+            expected,
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(60),
+            },
+        );
+        let expected = "package p\n\ninterface I {\n  query getSpeedHistory(\n    window: Duration,\n    mode: Mode\n  ): (\n    min: Speed,\n    max: Speed,\n    avg: Speed\n  ) @[..100ms]\n}\n";
+        assert_profile_format(
+            input,
+            expected,
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
     /// Every width fixture pins its rendering, fixed point, and full tree and
     /// content streams. Comments participate in the content stream only.
     fn assert_width_format(input: &str, expected: &str, options: &FormatOptions) {
-        let outcome = format(input, Profile::Typl, options);
+        assert_profile_format(input, expected, Profile::Typl, options);
+    }
+
+    fn assert_profile_format(
+        input: &str,
+        expected: &str,
+        profile: Profile,
+        options: &FormatOptions,
+    ) {
+        let outcome = format(input, profile, options);
         assert_eq!(outcome, FormatOutcome::Formatted(expected.to_string()));
         assert_eq!(
-            format(expected, Profile::Typl, options),
+            format(expected, profile, options),
             outcome,
             "not a fixed point"
         );
-        let structure = |text: &str| {
-            let parse = ridl_syntax::parse(text, Profile::Typl);
-            assert!(
-                parse.errors().is_empty(),
-                "width fixture must parse: {:?}",
-                parse.errors()
-            );
-            parse
-                .syntax()
-                .preorder_with_tokens()
-                .filter_map(|event| match event {
-                    rowan::WalkEvent::Enter(NodeOrToken::Node(n)) => {
-                        Some((true, n.kind(), String::new()))
-                    }
-                    rowan::WalkEvent::Leave(NodeOrToken::Node(n)) => {
-                        Some((false, n.kind(), String::new()))
-                    }
-                    rowan::WalkEvent::Enter(NodeOrToken::Token(t))
-                        if !t.kind().is_trivia() && t.kind() != SyntaxKind::Comma =>
-                    {
-                        Some((true, t.kind(), t.text().to_string()))
-                    }
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-        };
-        let content = |text: &str| {
-            ridl_syntax::parse(text, Profile::Typl)
-                .syntax()
-                .descendants_with_tokens()
-                .filter_map(|e| e.into_token())
-                .filter(|t| !matches!(t.kind(), SyntaxKind::Whitespace | SyntaxKind::Comma))
-                .map(|t| (t.kind(), t.text().trim_end().to_string()))
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(structure(input), structure(expected), "structure changed");
-        assert_eq!(content(input), content(expected), "content changed");
+        assert_eq!(
+            crate::test_invariants::syntax_structure(input, profile),
+            crate::test_invariants::syntax_structure(expected, profile),
+            "structure changed"
+        );
+        assert_eq!(
+            crate::test_invariants::content_tokens(input, profile),
+            crate::test_invariants::content_tokens(expected, profile),
+            "content changed"
+        );
     }
 
     #[test]

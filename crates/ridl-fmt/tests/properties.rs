@@ -6,8 +6,7 @@
 //! - **totality** — each error-corpus input is left unformatted;
 //! - **content preservation** — the formatted text carries the same content
 //!   token stream as the original. The stream is every token except whitespace
-//!   and separator commas (the two things the formatter is licensed to
-//!   normalise), so it includes identifiers, keywords, literals, punctuation,
+//!   and separator commas, after the D-4 Timing/AttrBlock pair normalization, so it includes identifiers, keywords, literals, punctuation,
 //!   **and comments**. Comparing it catches a dropped or renamed identifier, a
 //!   mutated literal, and a dropped comment — none of which a node-kind-only
 //!   comparison could see. Comment text is compared after trimming trailing
@@ -20,8 +19,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
-use ridl_syntax::{Profile, SyntaxKind};
-use rowan::{NodeOrToken, WalkEvent};
+use ridl_syntax::Profile;
+
+#[path = "support/invariants.rs"]
+mod invariants;
+use invariants::{content_tokens, syntax_structure};
 
 /// The parser corpus files for the three implemented profiles, sorted by name.
 fn corpus_files(sub: &str) -> Vec<PathBuf> {
@@ -50,35 +52,6 @@ fn format_ok(text: &str, profile: Profile, options: &FormatOptions, context: &st
     }
 }
 
-fn is_comment(kind: SyntaxKind) -> bool {
-    matches!(
-        kind,
-        SyntaxKind::LineComment | SyntaxKind::BlockComment | SyntaxKind::DocComment
-    )
-}
-
-/// The content token stream: every token in document order except whitespace
-/// and separator commas, as `(kind, text)`. Comment text is trimmed of trailing
-/// whitespace (insignificant, and stripped by the formatter). This is the
-/// invariant the formatter must not disturb — only whitespace and separator
-/// commas may change.
-fn content_tokens(text: &str, profile: Profile) -> Vec<(SyntaxKind, String)> {
-    ridl_syntax::parse(text, profile)
-        .syntax()
-        .descendants_with_tokens()
-        .filter_map(|element| element.into_token())
-        .filter(|token| !matches!(token.kind(), SyntaxKind::Whitespace | SyntaxKind::Comma))
-        .map(|token| {
-            let text = if is_comment(token.kind()) {
-                token.text().trim_end().to_string()
-            } else {
-                token.text().to_string()
-            };
-            (token.kind(), text)
-        })
-        .collect()
-}
-
 /// Each corpus extension selects its language profile.
 fn profile_of_path(path: &Path) -> Option<Profile> {
     match path.extension()?.to_str()? {
@@ -87,41 +60,6 @@ fn profile_of_path(path: &Path) -> Option<Profile> {
         "rsdl" => Some(Profile::Rsdl),
         _ => None,
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum StructureEvent {
-    Enter(SyntaxKind),
-    Leave(SyntaxKind),
-    Token(SyntaxKind, String),
-}
-
-/// Node entry and exit, plus every non-trivia, non-comma token. Preserving
-/// this stream keeps both tree structure and token identity.
-fn syntax_structure(text: &str, profile: Profile) -> Vec<StructureEvent> {
-    let parse = ridl_syntax::parse(text, profile);
-    assert!(
-        parse.errors().is_empty(),
-        "structure input must parse: {:?}",
-        parse.errors()
-    );
-    parse
-        .syntax()
-        .preorder_with_tokens()
-        .filter_map(|event| match event {
-            WalkEvent::Enter(NodeOrToken::Node(node)) => Some(StructureEvent::Enter(node.kind())),
-            WalkEvent::Leave(NodeOrToken::Node(node)) => Some(StructureEvent::Leave(node.kind())),
-            WalkEvent::Enter(NodeOrToken::Token(token))
-                if !token.kind().is_trivia() && token.kind() != SyntaxKind::Comma =>
-            {
-                Some(StructureEvent::Token(
-                    token.kind(),
-                    token.text().to_string(),
-                ))
-            }
-            _ => None,
-        })
-        .collect()
 }
 
 #[test]
@@ -223,4 +161,69 @@ fn content_tokens_detect_a_dropped_comment_and_a_mutated_literal() {
     let spaced = content_tokens("package p\nenum E { A = 0, B = 1 }\n", Profile::Typl);
     let newlined = content_tokens("package p\nenum E {\n  A = 0\n  B = 1\n}\n", Profile::Typl);
     assert_eq!(spaced, newlined, "whitespace and commas must be ignored");
+}
+
+#[test]
+fn annotation_normalization_preserves_comments_members_and_literal_identity() {
+    let attributes_first = "package p\ninterface I {\n query q(): T [ persist /* attribute */ ] @ /* timing */ 10ms\n signal z: B\n}\n";
+    let timing_first = "package p\ninterface I {\n query q(): T @ /* timing */ 10ms [ persist /* attribute */ ]\n signal z: B\n}\n";
+    for source in [attributes_first, timing_first] {
+        assert!(
+            ridl_syntax::parse(source, Profile::Ridl)
+                .errors()
+                .is_empty()
+        );
+    }
+    assert_eq!(
+        content_tokens(attributes_first, Profile::Ridl),
+        content_tokens(timing_first, Profile::Ridl),
+        "D-4 allows only the annotation-pair order change"
+    );
+    assert_eq!(
+        syntax_structure(attributes_first, Profile::Ridl),
+        syntax_structure(timing_first, Profile::Ridl)
+    );
+    for comment in ["/* attribute */", "/* timing */"] {
+        assert_ne!(
+            content_tokens(attributes_first, Profile::Ridl),
+            content_tokens(&timing_first.replace(comment, ""), Profile::Ridl),
+            "normalization must detect a dropped {comment}"
+        );
+    }
+    let missing_member = timing_first.replace(" signal z: B\n", "");
+    let changed_literal = timing_first.replace("10ms", "11ms");
+    for changed in [missing_member, changed_literal] {
+        assert_ne!(
+            syntax_structure(attributes_first, Profile::Ridl),
+            syntax_structure(&changed, Profile::Ridl)
+        );
+        assert_ne!(
+            content_tokens(attributes_first, Profile::Ridl),
+            content_tokens(&changed, Profile::Ridl)
+        );
+    }
+    let reordered_members = "package p\ninterface I {\n signal z: B\n query q(): T @ /* timing */ 10ms [ persist /* attribute */ ]\n}\n";
+    assert_ne!(
+        syntax_structure(attributes_first, Profile::Ridl),
+        syntax_structure(reordered_members, Profile::Ridl),
+        "normalization must not permit member reordering"
+    );
+}
+
+#[test]
+fn annotation_normalization_detects_a_dropped_intervening_comment() {
+    let source = "package p\ninterface I { query q(): T [persist] /* note */ @10ms }\n";
+    let canonical = "package p\ninterface I { query q(): T @10ms [ persist ] /* note */ }\n";
+    assert_eq!(
+        content_tokens(source, Profile::Ridl),
+        content_tokens(canonical, Profile::Ridl)
+    );
+    assert_eq!(
+        syntax_structure(source, Profile::Ridl),
+        syntax_structure(canonical, Profile::Ridl)
+    );
+    assert_ne!(
+        content_tokens(source, Profile::Ridl),
+        content_tokens(&canonical.replace("/* note */", ""), Profile::Ridl)
+    );
 }

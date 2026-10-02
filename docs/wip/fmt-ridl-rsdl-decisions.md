@@ -220,3 +220,319 @@ append-only. Implementation status and verification are in
   again before push. See [CI evidence](fmt-ridl-rsdl-evidence/pr-630-ci.md).
 - Commit and PR: review corrections follow `d011d56` on PR #630's branch.
 - Maintainer action: inspect the focused correction; no merge is authorized.
+
+## D-H8 — Tasks 6–8 branch and PR grouping
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: interface members, attributes, and inline service
+  bodies use the same member and width layout; each later task depends on the
+  preceding one.
+- Chosen action: implement Tasks 6, 7 and 8 sequentially, with separate task
+  commits, evidence and quick reviews, in one stacked PR on `feat/387-fmt-ridl`,
+  based on Task 5's `feat/387-fmt-callers` at
+  `8b8587106e164a8b2b7ffb5a42fbe2463f0da42f`. Run the full PR reviews after the
+  group is implemented. Fetch confirmed main remains `9f0b953c`.
+- Reason and alternatives considered: the small consecutive group provides the
+  complete ridl member and service layout in one reviewable change while keeping
+  each task's tests and implementation distinct. Separate PRs would expose the
+  intentionally temporary attribute-member fallback as a PR boundary.
+- Authority: handoff task-loop step 9 permits a justified small consecutive
+  group; design sections 3.1–3.3 and the existing task order remain unchanged.
+- Affected files and behavior: `ridl-fmt` layout, tests, goldens and records.
+- Verification: the reused worktree completed bootstrap before Task 5; Task 5's
+  final checkpoint passed all eight push gates, pre-push and all CI.
+- Commit and PR: Task 6 commit and grouped PR pending; base PR #632.
+- Maintainer action: review the later stacked PR after PR #632; no merge is
+  authorized.
+
+## D-H9 — Task 6 shared interaction and stream rendering
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: the old formatter drops a direct struct stream and
+  an array stream, and emits interface declarations without canonical member or
+  width layout.
+- Chosen action: route interfaces through `format_block_def`, exclude them from
+  single-line comment routing, reuse `Layout::Tuple` for parameters and tuple
+  returns, and add stream recognition to the shared field-type renderer. Keep
+  attribute members verbatim until Task 7. Share value/callable slot assembly,
+  preserving the parser's lenient slots and spaced fallible returns.
+- Reason and alternatives considered: shared type recognition preserves streams
+  in direct, optional, tuple, array and map positions as well as interaction
+  payloads, parameters and returns. A payload-only patch would leave issue #625.
+  A separate breaking engine would duplicate the approved layout algorithm.
+- Authority: Task 6; design sections 3.1, 3.2, 5 and 6. No parser, checker,
+  grammar or diagnostic changes.
+- Affected files and behavior: `ridl-fmt` module and the new interface golden.
+  Generalize the existing test assertion helper to a profile parameter so each
+  new fixture checks its second pass, structure and comment/content streams.
+- Verification: direct/array stream regression failed with the documented
+  dropped text; all 17 new ridl tests produced one passing malformed-input
+  control and 16 expected layout/preservation failures. All fixtures parsed.
+  `cargo test -p ridl-fmt --locked` then passed, including 48 unit tests and
+  corpus invariants at widths 100, 60 and 40. Tested base `8b858710` plus the
+  local Task 6 diff; committed-head checks follow this task commit.
+- Commit and PR: this Task 6 change is on `feat/387-fmt-ridl`; the grouped PR
+  follows Task 8.
+- Maintainer action: review the stream regression and the grouped PR when open.
+
+## D-H10 — Task 6 initializer comments
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice.
+- Question or observed case: the first interaction renderer extracted only an
+  initializer's literal, dropping a comment between `=` and the literal. Input
+  `signal s: T = /* initializer */ DEFAULT` lost that comment.
+- Chosen action: add a failing fixture first, then retain the entire `InitValue`
+  text when it contains a comment, with one space before it. Keep normal
+  initializer spacing for comment-free values.
+- Reason and alternatives considered: verbatim initializer rendering preserves
+  its comment while allowing the rest of the member to use canonical layout.
+  Returning the whole member verbatim would also suppress unrelated formatting.
+- Authority: design section 5's construct-comment rule and the no-comment-loss
+  invariant; formatter-only correction within Task 6.
+- Affected files and behavior: interaction initializer rendering and one unit
+  regression; no parser or checker changes.
+- Verification:
+  `cargo test -p ridl-fmt ridl_initializer_comment_is_preserved
+  --locked`
+  exited 101 with the dropped comment; `cargo test -p ridl-fmt
+  --locked` then
+  passed all 49 unit tests and the corpus/invariant suites. Local log
+  `task-06-red-init-comment.log`; base `8b858710` plus Task 6 diff.
+- Commit and PR: included in this Task 6 change on `feat/387-fmt-ridl`.
+- Maintainer action: inspect the comment regression in the grouped PR.
+
+## D-H11 — Task 6 quick-review documentation corrections
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice and approved existing rule.
+- Question or observed case: QUICK review of `3e6e9bf` found two live claims
+  that interfaces remain verbatim, and a stale pending paragraph in the review
+  report. It also cited the design/plan's historical initial-state descriptions.
+- Chosen action: correct the book, rsdl test module comment and review report;
+  record the completed Task 6 commit and acceptance. Retain historical initial
+  state in the design/plan, with later dated execution records authoritative.
+- Reason and alternatives considered: current user-facing behavior must match
+  the code; rewriting historical baseline text would obscure the starting point
+  that the handoff explicitly preserves. No normative design rule changes.
+- Authority: QUICK code-to-prose review and the handoff's state-verification
+  instruction about historical wording and later dated entries.
+- Affected files and behavior: documentation only; no executable change.
+- Verification: all three seats used actual Terra; tests/docs and bugs wrapper
+  high, built-in bugs worker medium. Six changed paths matched the commit.
+  Formatter acceptance passed on `3e6e9bf`; correction documentation checks
+  follow. See [Task 6 evidence](fmt-ridl-rsdl-evidence/task-06.md).
+- Commit and PR: Task 6 `3e6e9bf`; documentation correction follows it; grouped
+  PR after Task 8, based on PR #632.
+- Maintainer action: review the grouped PR; no additional decision is needed.
+
+## D-H12 — Task 7 shared attribute layout and invariant normalization
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: implementation choice and approved existing rule.
+- Question or observed case: predicate attributes require brace-body comment
+  placement, while width breaking must consider attributes and their value lists
+  in the same order as parameters and tuple returns.
+- Chosen action: reuse the single forward container collector for attribute
+  blocks, and add attribute layout to the existing rendering tree. Measure code
+  before trailing attribute comments. Render expression spacing recursively from
+  the CST, preserving parentheses. Normalize only the sibling timing/attribute
+  pair in both test invariant comparisons.
+- Reason and alternatives considered: eagerly rendering attributes with their
+  own width loop would prevent last-to-first breaking across a whole member. A
+  separate comment pass would duplicate the existing container rules. Broad
+  token sorting would hide member or comment loss; the narrow shared test
+  normalization leaves those identities and all other order intact.
+- Authority: design sections 3.2, 5, 6 and 9; D-2 through D-6 and D-13.
+- Affected files and behavior: formatter layouts, unit tests and shared
+  test-only invariant helpers; no grammar, checker or configuration changes.
+- Verification: normalization test failed before the helper and passed after it;
+  comment/member removal, literal changes and member reordering remain detected.
+  Layout RED: 14 failures and one malformed-input control passed; all RIDL tests
+  also run before production changes. Logs under the Task 7 evidence directory.
+- Commit and PR: Task 7 follows `4a65b45` in the Tasks 6–8 grouped branch.
+- Maintainer action: review the grouped PR; no additional approval is needed.
+
+## D-H13 — Task 7 intervening annotation comment: approval checkpoint
+
+- Date and timezone: 2026-10-01, Europe/Paris.
+- Status: awaiting approval.
+- Question or observed case: QUICK tests and bugs seats independently found
+  `query q(): T [persist] /* note */ @10ms` remains attribute-first. The
+  existing direct-comment guard emits the whole member verbatim. D-4 states
+  timing first regardless of source order; section 5 preserves a commented
+  one-line construct verbatim, without specifying this comment's attachment when
+  the annotation pair moves.
+- Chosen action or proposal: pause Tasks 8–13 and request an explicit choice:
+  retain the commented member verbatim, or put timing first with the comment
+  either after the attribute block or between timing and attributes. Retaining
+  the whole member is the recommended proposal, not an approved exception.
+- Reason and alternatives considered: automatically relocating the comment or
+  inventing an exception would settle a rendering that the handoff reserves for
+  the maintainer. The reviewer finding does not itself authorize a design
+  change.
+- Authority: handoff stop conditions and plan section 7: "the note does not
+  settle a case — an input whose rendering or break position the note does not
+  determine". Design sections 3.2 and 5 are the rules needing precedence here.
+- Affected files and behavior: no correction applied pending the answer. Task 7
+  production remains at `ae3ddbf`; the probe was temporary and restored.
+- Verification: the minimal whole-file probe parses without errors, preserves
+  structure and comments, and is a fixed point while retaining attribute-first
+  order.
+  `cargo test -p ridl-fmt --lib
+  pending_intervening_annotation_comment_probe --locked -- --nocapture`
+  exited 0 on `ae3ddbf` plus the temporary probe. Log:
+  `task-07-intervening-comment-probe.log`. All three QUICK contexts completed,
+  with matching nine-file scope. See Task 7 evidence for actual model metadata.
+- Commit and PR: Task 7 `ae3ddbf405301a7126e0355ae799a3c713408062`, stacked on
+  Task 6 in `feat/387-fmt-ridl`; grouped Tasks 6–8 PR is not open.
+- Maintainer action: answer the pending rendering question. Then add the
+  approved exact-output regression, rerun acceptance, record the disposition and
+  resume Task 8. No parser or grammar change is proposed.
+
+## D-H14 — approved annotation comment attachment and updated branch base
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: explicit maintainer approval, superseding the pending D-H13
+  checkpoint.
+- Question: how `query q(): T [persist] /* note */ @10ms` renders when timing
+  moves before attributes.
+- Decision: timing first; an inline comment between annotations stays with the
+  annotation immediately preceding it in source. The approved output is
+  `query q(): T @10ms [ persist ] /* note */`. Line comments keep their newline.
+  Other direct comments, standalone comments and multiline block comments retain
+  the whole-member verbatim path.
+- Authority: the maintainer reconsidered the earlier tentative verbatim choice,
+  requested pros and cons, then answered "ok" to the timing-first recommendation
+  with preceding-annotation comment attachment. No further approval is pending.
+- Reason: canonical annotation order remains predictable and the comment retains
+  its attachment. Moving the comment next to timing would change that
+  attachment.
+- Changes: exact-output regressions for both source orders, line comments,
+  predicate blocks, trailing-comment width and verbatim controls; a dropped
+  intervening comment remains visible in the invariant stream. The design note
+  records this approved amendment.
+- Branch: the maintainer merged PR #632 into #630 and #630 into main. Tasks 6–7
+  were restacked onto `037256d5068a6222599030bef96105f831640a3a`, preserving
+  D-CI1 and D-CI2. Commit mapping: `3e6e9bf` to `faab6bb`, `4a65b45` to
+  `bd6c6d7`, `ae3ddbf` to `e27a3dd`, and `336cd2f` to `8f5681c`. The grouped
+  Tasks 6–8 PR will now target main.
+- Verification: the exact approved output failed with exit 101 before
+  correction. Formatter acceptance and the comment-loss mutation follow in Task
+  7 evidence.
+- Review: this corrects the existing Task 7 QUICK finding; the correction gets
+  no recursive QUICK review. The group receives full review after Task 8.
+- Maintainer action: review the grouped PR. Tasks 8–13 resume in order.
+
+## D-H15 — Task 8 service forms reuse the shared renderer
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice within the approved design.
+- Decision: dispatch inline services through the existing brace formatter and
+  use their `DottedName` for the header. Add a shape-list layout variant to the
+  existing width renderer for named services, with a break after the colon and
+  no closer. Keep required commas between shapes and remove the trailing comma.
+- Reason: a separate width loop would duplicate the established last-to-first
+  breaking rules. Named and inline service bodies need different termination,
+  already represented by the CST. A commented named shape list retains its
+  source text; inline body comments follow the container rules.
+- Authority: design sections 3.3, 5 and 6.3; plan Task 8; ADR-0015 decision 13.
+- Tests: both forms with and without trailing commas, the section 3.3 golden,
+  width 40 broken shapes with a trailing comment, exact boundary and off,
+  between-member/header/brace comments, commented shape lists and dotted paths.
+  Every exact-output case checks reparsing, structure, comment identity and a
+  second formatting pass. Appendix A runs at widths 100, 60 and 40.
+- Verification: five layout regressions failed before implementation; one
+  comment preservation control passed. Formatter acceptance passed afterward.
+  Evidence is in [Task 8](fmt-ridl-rsdl-evidence/task-08.md).
+- Commit and PR: separate Task 8 commit on `feat/387-fmt-ridl`; grouped Tasks
+  6–8 PR targets main `037256d` and includes the issue #625 correction.
+- Maintainer action: review the grouped PR. No rendering approval is needed.
+
+## D-H16 — annotation line-comment collision requires approval
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: awaiting approval; D-H14 remains approved for its settled cases.
+- Observed case: `query q(): T [persist] // attribute`, followed by
+  `@10ms // member`. Timing-first rendering currently combines the two comment
+  tokens as `query q(): T @10ms [ persist ] // attribute // member`. A multiline
+  block comment after timing can also have its opener consumed by the moved line
+  comment, producing invalid output.
+- Proposal: preserve this member verbatim when the moved annotation line comment
+  would collide with a trailing member comment. The approved `/* note */` case
+  would still use timing first. The alternative is timing first with
+  `// attribute` after attributes and `// member` on its own following line.
+- Reason and alternatives considered: both comments cannot remain inline on the
+  same final member line as separate tokens. Choosing the alternative would
+  change the second comment's placement; choosing the proposal creates a narrow
+  exception to canonical annotation order. Neither choice is assumed approved.
+- Authority: handoff stop conditions and plan section 7 reserve unsettled
+  renderings for the maintainer. The handoff remains local and untracked in the
+  original worktree.
+- Affected files and behavior: no collision correction applied. Independent
+  header, separator, coverage and prose corrections can proceed; full review
+  pass 2 and Tasks 9–13 await this answer.
+- Verification: full review pass 1 retained the reproduction at confidence 99 on
+  `700d116`; the formatter changes comment content and may fail reparsing. See
+  [PR #634 evidence](fmt-ridl-rsdl-evidence/pr-634.md).
+- Commit and PR: [PR #634](https://github.com/driftsys/ridl/pull/634), based on
+  main `037256d`, published head `700d116` when the question was asked.
+- Maintainer action: choose the verbatim collision exception or specify the
+  timing-first rendering and the second comment's position. The question is
+  pending; elapsed time does not supply approval.
+
+## D-H17 — independent full-review corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice within existing comment and invariant rules.
+- Decision: retain a required newline when the last header token before `{` is a
+  line or documentation comment. Clear trailing-comment eligibility when a
+  separator comma follows a newline, and preserve existing source blank lines
+  while removing separator-only lines.
+- Reason and alternatives considered: trimming the header newline makes `{` part
+  of the comment. Resetting all newline state at a comma attaches later comments
+  to an earlier member and loses blank lines. Ignoring commas entirely would
+  instead create a blank line for an ordinary separator-only line. The shared
+  collector and brace renderer continue to own these rules.
+- Authority: design section 5, comment-token preservation, source blank-line
+  rules and invariant reparsing. No grammar or parser change is needed.
+- Affected files and behavior: `crates/ridl-fmt/src/lib.rs` and the living wip
+  index. Seven new exact-output tests cover the two fixes and four coverage
+  findings. Renderer comments now describe attributes and service shape lists.
+- Verification: three new tests failed on the published implementation; four
+  coverage controls passed. The corrected formatter suite passed. Deliberate
+  mutations removing assignment/value comment guards, ensure-only block forcing,
+  subtree fallback scope and multiline-comment protection each fail their new
+  assertion with exit 101. Local logs are under
+  `fmt-ridl-rsdl-evidence/pr-634-*.log`.
+- Commit and PR: independent correction commit for PR #634; exact commit and
+  gate evidence are recorded in the review report and PR evidence.
+- Maintainer action: resolve D-H16 before the remaining correction and pass 2.
+
+## D-H18 — QUICK coverage follow-up and pending-review checkpoint
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice; D-H16 remains awaiting approval.
+- Decision: add a TYPL struct header line-comment control and combine separator
+  blank-line cases with a leading comment, as the test reviewer suggested.
+  Publish the independent corrections and checkpoint the unresolved rendering.
+- Reason and alternatives considered: the brace and container helpers are
+  shared, so the controls constrain their behavior beyond the original RIDL
+  reproductions. Repeating QUICK over its own corrections is excluded by the
+  review workflow; full pass 2 waits until all pass 1 fixes are authorized.
+- Authority: design section 5, invariant preservation, QUICK advisory review and
+  handoff checkpoint requirements.
+- Affected files and behavior: tests and review records. No additional
+  production or rendering change.
+- Verification: QUICK docs/tests used actual Terra/high; the fresh bug wrapper
+  used Terra/high and native Terra/medium. Scope was the five-file correction
+  diff `700d116` to `82b761f`. Bug review found nothing; code-to-prose review
+  found no falsified statement. The extra same-line comma suggestion predates
+  this correction and is outside that docs direction. Both test suggestions are
+  applied; the focused suite passes. `just verify` passed on `82b761f`.
+- Commit and PR: follow-up coverage and checkpoint commit in PR #634, based on
+  main `037256d`. Actual-head push gates run before publication.
+- Maintainer action: answer D-H16. Then implement its regression and approved
+  rendering, run full pass 2 over the fix diff, and resume Tasks 9–13 in order.

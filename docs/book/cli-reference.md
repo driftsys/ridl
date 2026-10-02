@@ -869,7 +869,10 @@ Options:
 canonical form, unless `--check` is given or the file fails to parse. An `.rsdl`
 file takes the file layout (the header, one blank line between declarations).
 The formatter has no layout rules for the rsdl declarations, so it keeps each
-one as written, as it does a ridl `interface` or `service`.
+one as written. Interfaces and inline services use the canonical brace layout
+and member spacing. Named services keep commas between shapes, remove the
+optional trailing comma, and break overlong shape lists after the colon. Interaction timing precedes attribute blocks. Predicate attributes use block
+form; flag and assignment attributes stay inline when their code line fits.
 
 **Layout and line width.** Formatted blocks use two spaces per indentation
 level. Tuple types in declarations that the formatter lays out break into one
