@@ -204,9 +204,15 @@ impl<'a> Inits<'a> {
     }
 
     fn position(&mut self, home: &'a v2::Package, ty: &v2::FieldType, at: Position<'_>) -> bool {
-        // An absent optional field defaults to absence.
         if ty.optional {
-            return true;
+            // Without an override the field defaults to absence. An explicit
+            // init must construct the value inside Some instead.
+            if at.declared_init.is_none() {
+                return true;
+            }
+            let mut inner = ty.clone();
+            inner.optional = false;
+            return self.position(home, &inner, at);
         }
         match ty.kind.as_ref() {
             Some(v2::field_type::Kind::Named(reference)) => {
@@ -244,6 +250,10 @@ impl<'a> Inits<'a> {
                 }
             }
             Some(v2::field_type::Kind::Map(map)) => {
+                if map.min > 1 {
+                    // A repeated key init would violate map uniqueness.
+                    return false;
+                }
                 if map.min == 0 {
                     return true;
                 }
@@ -274,15 +284,10 @@ impl<'a> Inits<'a> {
     ) -> bool {
         match self.scope.resolve(home, reference) {
             Some((decl, declaring)) => match &decl.kind {
-                Some(v2::decl::Kind::TypeDef(td)) => {
-                    if !self.type_def(td) {
-                        return false;
-                    }
-                    match at.declared_init {
-                        Some(declared) => scalar_value(scalar_class(td), Some(declared)),
-                        None => true,
-                    }
-                }
+                Some(v2::decl::Kind::TypeDef(td)) => match at.declared_init {
+                    Some(declared) => scalar_value(scalar_class(td), Some(declared)),
+                    None => self.type_def(td),
+                },
                 _ => self.decl_derivable(declaring, decl),
             },
             None if is_foreign(reference) => {
@@ -301,10 +306,8 @@ impl<'a> Inits<'a> {
 fn scalar_value(class: v1::ScalarClass, value: Option<&str>) -> bool {
     match class {
         v1::ScalarClass::Float | v1::ScalarClass::Integer => value.is_some(),
-        v1::ScalarClass::Boolean | v1::ScalarClass::String => true,
-        // A declared byte-string init has no faithful literal form, so a
-        // position carrying one has no derivable init at all.
-        v1::ScalarClass::Bytes => value.is_none_or(str::is_empty),
+        // Text initializes a string directly or bytes as its UTF-8 encoding.
+        v1::ScalarClass::Boolean | v1::ScalarClass::String | v1::ScalarClass::Bytes => true,
         v1::ScalarClass::Unspecified => false,
     }
 }

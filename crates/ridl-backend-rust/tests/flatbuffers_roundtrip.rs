@@ -812,9 +812,8 @@ fn main() {
             Ref::<'_, Report, FlatBuffers>::verify(&broken)
         {
             assert!(
-                matches!(violation.rule, Rule::Variant | Rule::Length | Rule::Range),
-                "a wire-level corruption shows up as a variant, a length, or \
-                 a range violation, got {:?}",
+                matches!(violation.rule, Rule::Variant | Rule::Length | Rule::Range | Rule::Step | Rule::Unique),
+                "a wire-level corruption shows up as a contract violation, got {:?}",
                 violation.rule
             );
             hits += 1;

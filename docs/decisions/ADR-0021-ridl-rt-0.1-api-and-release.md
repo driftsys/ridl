@@ -433,6 +433,13 @@ trusted with no `unsafe` and no second verification pass.
    stay open, because ridl §10.3's detected infrastructure failures are
    open-ended and a runtime may need to report one this crate does not yet name.
 
+   **Extended (2026-10-02, driftsys/ridl#469).** `payload::Rule` gains `Unique`,
+   reported when a payload contains duplicate map keys. The enum is already
+   `#[non_exhaustive]`, so the addition retains the existing fallback
+   requirement and does not change the exhaustive `Contract` or `CallError`
+   vocabularies. `Step` remains the rule for a failed quantization check; NaN
+   membership in a declared range is `Range` (typl §4.3 and §5.5).
+
 10. **A breaking `ridl-rt` change is a 0.x minor release, and a public struct
     whose fields are all public and that carries no `#[non_exhaustive]` cannot
     gain a field without a breaking change, because code outside the crate can

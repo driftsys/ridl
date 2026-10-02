@@ -437,7 +437,46 @@ pre-empt such flips — a `wire` clause — is deferred to v0.2, §17.11.)
 ### 4.3 Float
 
 Range and `step` strongly recommended; active profiles may require them. `step`
-declares the value's quantization: valid values are `min + n·step`.
+declares the value's quantization: valid values are `origin + n·step`, where `n`
+is an integer and `origin` is the declared lower bound, or zero when no lower
+bound is declared. This is a validity constraint, not a request to round an
+input. Integer values must lie exactly on the grid. Source literals and resolved
+constants use exact decimal grid membership. Floating-point constructors and
+payload validators use the representation rule below and preserve the supplied
+value rather than normalize it.
+
+Floating-point grid validation uses the type's inferred wire precision. A
+constructor checks the value projected to that precision and preserves the
+supplied backing value. A payload validator checks the received representation
+at the same precision. This makes a constructed value's wire representation
+valid and keeps a decoded value valid under the same constructor check.
+
+The runtime rule uses binary64 arithmetic over the projected value `v`. Prepare
+the phase `p = origin modulo step` exactly in decimal arithmetic, in
+`[0, step)`, so shifting a grid by a large origin does not lose its phase.
+Represent phase and step as a binary64 high part and a residual low part;
+compensated arithmetic retains those residuals when reconstructing candidate
+grid points. Subnormal coefficients are scaled by an exact power of two before
+splitting and computation, then reconstructed values are scaled back.
+
+The adjacent values at the wire precision define `v`'s rounding cell. If the
+step is smaller than that cell's width, it contains a grid point and `v` is
+valid. Otherwise estimate `q = (v - p) / step`, with `q = v / step - p / step`
+as the subtraction-overflow fallback. Check the nearest integer index and its
+two neighbors, using compensated reconstruction and projecting each candidate to
+the wire precision. A candidate `r` admits `v` when
+`abs(v - r) <= min(4 * epsilon * max(abs(v), abs(p), abs(step)), step / 4)`,
+where `epsilon` is machine epsilon at the wire precision. `round` selects the
+nearest integer, with ties away from zero. The quarter-step cap bounds the
+rounding allowance where the grid is resolvable.
+
+A positive decimal step that underflows binary64 is dense in every finite
+rounding cell. For a step that overflows binary64, prepare its finitely
+representable grid points exactly before rounding them and use the same relative
+rounding allowance. NaN and infinity are never grid values. This is a bounded
+representation rule, rather than exact decimal arithmetic in the runtime or
+input normalization; a contract requiring exact decimal grid identity should use
+the scaled-integer form below.
 
 Width inference is **count-based**, not step-based. Let
 `N = (max − min) / step + 1` — the number of distinct representable values:
@@ -584,6 +623,18 @@ Ranges are **closed** (inclusive) on both ends. Either bound may be omitted
 (`[0..]`, `[..255]`), in which case the missing bound defaults to the widest
 value the inferred width allows.
 
+**NaN is outside every declared numeric range**, including a range with an
+omitted bound. NaN is also outside every `step` grid (§4.3); a grid admits only
+finite values. A numeric range's omitted bound is the widest finite backing
+value, so a range also excludes infinities. An unconstrained `float` retains its
+backing representation's NaN and infinity values. Declaring a range or `step`
+therefore changes validity, without globally restricting the `float` primitive
+to finite values. These rules apply to named types and inline constraints. The
+Rust backend enforces them in checked constructors for named scalars and in
+payload verification for named and inline constraints. Public primitive fields
+do not validate assignment. The reason is domain membership: NaN has no ordered
+position in a closed interval and no integer grid index.
+
 **Exclusive bounds are not supported, and are not planned.** An integer's
 exclusive bound is written as the closed bound one value inside it. A float's
 exclusive bound has no definable neighbour: §4.3 derives the width from the
@@ -656,23 +707,44 @@ is needed to disambiguate it from the equation).
 
 **Derived** — when no `= value` is declared:
 
-| Type                      | Derived init                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------- |
-| `boolean`                 | `false`                                                                               |
-| numeric / unit type       | `0` (or `0.0`) if within the range, else `min`                                        |
-| `string` / `bytes`        | empty if the bounds admit length 0; **not derivable** otherwise                       |
-| type with `match` pattern | **not derivable** (a pattern-valid value cannot be synthesised) — declare a `= value` |
-| `enum`                    | the value `0` if declared, else the lowest declared value                             |
-| `enumset`                 | empty set                                                                             |
-| `struct`                  | each field's init, recursively; optional fields absent                                |
-| `union`                   | first arm's init                                                                      |
-| tuple                     | each field's init                                                                     |
-| collection                | `min`-bound count of element inits (empty when `min = 0`)                             |
+| Type                      | Derived init                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `boolean`                 | `false`                                                                                                 |
+| numeric / unit type       | `0` (or `0.0`) if admitted by both range and step, else the lower bound when declared                   |
+| `string` / `bytes`        | empty if the bounds admit length 0; **not derivable** otherwise                                         |
+| type with `match` pattern | **not derivable** (a pattern-valid value cannot be synthesised) — declare a `= value`                   |
+| `enum`                    | the value `0` if declared, else the lowest declared value                                               |
+| `enumset`                 | empty set                                                                                               |
+| `struct`                  | each field's init, recursively; optional fields absent                                                  |
+| `union`                   | first arm's init                                                                                        |
+| tuple                     | each field's init                                                                                       |
+| array                     | `min`-bound count of element inits (empty when `min = 0`)                                               |
+| map                       | empty when `min = 0`; one key/value init when `min = 1` and both are derivable; otherwise not derivable |
 
-A declared init value must satisfy the type's constraints (TYPL-109). A type
-whose init is not derivable is simply marked so in the IR (TYPL-115, info) — it
-becomes an error only where a consumer _requires_ an init (e.g. a ridl signal
-payload, ridl §4.4) and none is declared.
+For a numeric range with no lower bound whose upper bound is negative, derive
+the upper bound when no step is declared. With a step, derive the greatest grid
+point at or below that upper bound, using the zero origin and exact decimal
+arithmetic. A derived floating-point init must fit the finite backing domain;
+when no finite grid point is available, the init is not derivable.
+
+A map with a minimum count above one has no derived init: repeating a key's init
+would violate key uniqueness, and the toolchain does not synthesize distinct
+keys. Optional map fields without an override remain absent.
+
+A declared init value must have the backing's kind and satisfy the type's
+constraints, including `step` (TYPL-109). Floating-point init values and typed
+floating-point constants must lie within the finite binary64 backing domain.
+Integer and enum init values may use an exactly integral numeric spelling such
+as `1.0`; an enum value must name a declared discriminant. Constant references
+are checked after resolution; an unresolved reference is an invalid init. A
+string literal initializes `string` or its UTF-8 bytes initialize `bytes`, with
+the corresponding character or byte length check. A boolean literal initializes
+only `boolean`. The init syntax has no composite or enum-set literal, so a
+literal or constant override on a struct, union, tuple, array, map or enum set
+is rejected rather than stored as an untyped scalar. Derived composite inits
+remain recursive as listed above. A type whose init is not derivable is simply
+marked so in the IR (TYPL-115, info) — it becomes an error only where a consumer
+_requires_ an init (e.g. a ridl signal payload, ridl §4.4) and none is declared.
 
 ---
 
@@ -1059,7 +1131,11 @@ faults   : [FaultCode; 0..32]  // bounded — 0 to 32
 
 ### 12.2 Map
 
-Keys must be a named string type or primitive:
+Keys must be a named string type or primitive. Each key occurs at most once in a
+map; a payload containing duplicate keys is invalid. Equality is value equality
+in the key's declared type, including floating-point equality (`+0.0` and `-0.0`
+compare equal; NaN does not compare equal to itself). Validation must reject
+duplicates rather than choose which entry to retain:
 
 ```ridl
 metadata : [Label : Name; 0..32]

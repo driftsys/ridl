@@ -172,12 +172,13 @@ or of tables needs each element's position before the vector can be written, and
 those are exactly the shapes whose domain type is a `Vec` or a `String`, so a
 generated package over types that own neither still encodes with no allocator.
 
-**`verify` is one pass, and it is total over the typl constraints it can
-reach.** It walks the structure, and beside it checks: an enum and an enum-set
+**`verify` traverses the payload and checks the typl constraints it can reach.**
+It walks the structure, and beside it checks: an enum and an enum-set
 discriminant, through the `TryFrom` the value-object emission already provides;
-a collection's declared element count; and a named scalar's own range, length
-and pattern, through a `fn check(value: &T)` emitted beside `new` in every
-constrained named scalar's `impl` block.
+a collection's declared element count and a map's key uniqueness; and scalar
+range, step, length and pattern constraints. Named scalar checks use a
+`fn check(value: &T)` emitted beside `new` in every constrained named scalar's
+`impl` block.
 
 **`check` is `pub(crate)` since E11.14 (2026-09-21); whether it becomes `pub` is
 still Epic 10's call.** It carried no visibility modifier while every caller was
@@ -197,10 +198,20 @@ named scalar at — an inline field, a string's or a byte sequence's bytes, an
 array element, a map key, a map value, a tuple field, a nested table, a union's
 table arm and its boxed arm, and any of those behind an optional.
 
-What `verify` does **not** check is named in its own doc comment and tracked as
-**driftsys/ridl#469**: an anonymous inline constraint, which carries no named
-scalar and so has no `check` to call; `step`, which the IR's own vacuity test
-excludes; and a map key's uniqueness.
+**Amended 2026-10-02 (driftsys/ridl#469 and #421).** Anonymous inline
+constraints are retained by wire construction and checked at the same positions
+as named scalar constraints, including a bare string map key's default length
+bound. Step constraints are checked rather than classified as vacuous, and map
+entries with equal keys are refused. A numeric range or step refuses NaN; an
+unconstrained float retains it. Pattern checks retain the `validate-pattern`
+feature gate. Map uniqueness compares keys pairwise without allocating an
+auxiliary set, so its worst-case comparison count is quadratic in the number of
+entries. A validated read checks the representation on the wire; it does not
+round or rewrite an invalid payload.
+
+A map with a minimum count above one has no generated `Default`: repeating the
+key init would fail this uniqueness check. Empty maps and a single derivable
+key/value pair retain their defaults (typl §5.8).
 
 **`decode` is total and never panics.** It takes a `Ref` — a proof `verify`
 produced — and cannot fail. Every read that could fail is discharged with the
@@ -294,9 +305,9 @@ directly: the equally long prefix of the same buffer fails `verify`.
   is when 0 lies in its range and, if it declares a `step`, on its grid
   `min + n·step`. `[-1.5..1.5 step 1.0]` holds -1.5, -0.5, 0.5 and 1.5, so an
   absent field of that type is refused. The generated `check` is not used for
-  this, because it ignores `step` (driftsys/ridl#469) and an inline constraint
-  has none. What cannot be decided — a `step` with no lower bound, or a bound
-  that is not plain decimal text — is refused.
+  this: absence legality is a generation-time rule shared by named and inline
+  constraints. A step without a declared lower bound is anchored at zero. A
+  bound that is not plain decimal text is conservatively refused.
 - An absent non-optional string, bytes, table, union or collection field is
   `Malformed::MissingRequired`: an offset has no default.
 - A field whose enum declares no zero member carries `= null` in the schema
@@ -528,10 +539,9 @@ the test already performs over the emitter's live output.
 
 ## Known gaps
 
-| Gap                                                                                          | Issue             |
-| -------------------------------------------------------------------------------------------- | ----------------- |
-| An anonymous inline constraint, `step`, and a map key's uniqueness are unchecked by `verify` | driftsys/ridl#469 |
-| A union-arm retirement would shift wire discriminants silently                               | driftsys/ridl#302 |
+| Gap                                                            | Issue             |
+| -------------------------------------------------------------- | ----------------- |
+| A union-arm retirement would shift wire discriminants silently | driftsys/ridl#302 |
 
 **driftsys/ridl#467 is closed by E11.14 (2026-09-21).** It was the widest of
 these: ten of the corpus's fifteen payload types were withheld a codec, every

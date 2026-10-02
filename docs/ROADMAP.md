@@ -641,6 +641,14 @@ Design and plan of record:
 | E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
 | E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
 
+**Validation amendments (2026-10-02).** driftsys/ridl#421 settles NaN's
+membership in a numeric domain (typl §5.5). driftsys/ridl#469 makes step a
+checked constraint rather than a vacuous one, and extends the FlatBuffers
+verifier to anonymous constraints and duplicate map keys. The M2 portion of
+driftsys/ridl#172 now checks init kinds, step membership, enum discriminants and
+unsupported composite overrides across typl and ridl; the other portions remain
+separately tracked (ADR-0008 decision 20).
+
 E10.1's `Done when` names both backends. The TypeScript backend arrives in step
 2, so that criterion completes then; the Rust half completes here.
 
@@ -698,20 +706,22 @@ FlatBuffers encoding by its `ridl_rt` path (through a per-package `Wire` alias
 until 2026-09-29) and runs its round trips over the generated codec and
 `ridl-loopback`. Two narrower gaps are tracked beside it: **driftsys/ridl#467**,
 a type reaching a cross-package reference carried no codec — closed by E11.14 on
-2026-09-21 — and **driftsys/ridl#469**, an anonymous inline constraint, a `step`
-and a map key's uniqueness are not checked by the generated `verify`. A fourth,
-**driftsys/ridl#472**, was a decided divergence rather than a gap — this codec
-refused a buffer in which a conforming FlatBuffers writer omitted a
-default-valued non-optional field, and a present default-valued optional scalar
-did not survive a foreign round trip — and was decided on 2026-09-29: the codec
-reads an absent non-optional scalar or enum as the FlatBuffers default unless 0
-is not a legal value of its type, and an optional scalar or enum field projects
-with `= null` (ADR-0019 decision 9). Design note D-9's writer rule stands; its
-reader rule is amended. Its remainder, **driftsys/ridl#598**, was decided on
-2026-09-30: `ridl diff` calls appending a non-optional field breaking unless it
-is a scalar, enum or enum set whose type allows 0, which is where the reader
-reads the old buffers (ADR-0008 decision 14 as amended). A type the diff cannot
-resolve is reported as breaking.
+2026-09-21 — and **driftsys/ridl#469**, closed on 2026-10-02 by checking
+anonymous inline constraints, mandatory step grids and map-key uniqueness in
+generated `verify`. The same change closes **driftsys/ridl#421**: NaN is outside
+a declared numeric range or step, while unconstrained floats retain it (typl
+§5.5). A fourth, **driftsys/ridl#472**, was a decided divergence rather than a
+gap — this codec refused a buffer in which a conforming FlatBuffers writer
+omitted a default-valued non-optional field, and a present default-valued
+optional scalar did not survive a foreign round trip — and was decided on
+2026-09-29: the codec reads an absent non-optional scalar or enum as the
+FlatBuffers default unless 0 is not a legal value of its type, and an optional
+scalar or enum field projects with `= null` (ADR-0019 decision 9). Design note
+D-9's writer rule stands; its reader rule is amended. Its remainder,
+**driftsys/ridl#598**, was decided on 2026-09-30: `ridl diff` calls appending a
+non-optional field breaking unless it is a scalar, enum or enum set whose type
+allows 0, which is where the reader reads the old buffers (ADR-0008 decision 14
+as amended). A type the diff cannot resolve is reported as breaking.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

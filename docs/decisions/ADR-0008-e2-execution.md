@@ -3,13 +3,14 @@
 ## Status
 
 Accepted (agent-taken, maintainer-reviewable); decisions 15 to 21 are later
-amendments, each dated in its own text. Decision 14 was amended in place on
-2026-09-30, from the decision on driftsys/ridl#598: an appended non-optional
-struct field is breaking unless its type is a scalar, enum or enum set that
-allows the value 0. `ridl diff` resolves the field's type against the new
-snapshot and the built-in `ridl.std`, and any other type it cannot resolve is
-reported as breaking. Each numbered decision below was taken to unblock the epic
-E2 execution plan, which lives at
+amendments, each dated in its own text. Decision 20 was extended on 2026-10-02
+to close the M2 init-validation gap (driftsys/ridl#172); its earlier narrowing
+is historical. Decision 14 was amended in place on 2026-09-30, from the decision
+on driftsys/ridl#598: an appended non-optional struct field is breaking unless
+its type is a scalar, enum or enum set that allows the value 0. `ridl diff`
+resolves the field's type against the new snapshot and the built-in `ridl.std`,
+and any other type it cannot resolve is reported as breaking. Each numbered
+decision below was taken to unblock the epic E2 execution plan, which lives at
 `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` (moved from
 `docs/wip/` at epic close), and is reversible at the cost of a small refactor
 before a later epic builds on it. This ADR follows the pattern of ADR-0006 (E0)
@@ -1087,6 +1088,21 @@ disagreeing sources is the correct one.
     the flat list with the general form §4.3 key-by-kind allow-list.
     `check.rs`'s comment at the constant claims only what the branch does with a
     key that reaches it, which is accurate, and is left as written.
+
+    **Extended (2026-10-02) — M2 validation is widened.** The earlier narrowing
+    and July reproductions above record the state at those dates. They no longer
+    describe a known gap in the checker. The shared declared-init path now
+    checks literal and resolved constant kinds, exact numeric range and step
+    membership, and the existing string length and pattern constraints. Integer
+    spellings must be exactly integral, including when written as `1.0`. Enum
+    overrides must identify a declared discriminant. Scalar literals and
+    constants cannot initialize a struct, union, tuple, array, map or enum set:
+    the source syntax defines no such composite or set value spelling. These
+    checks bind typl types, struct fields and ridl signal overrides together,
+    with TYPL-109 or RIDL-110 at the corresponding declaration. The ridl §16.1
+    row is widened accordingly. This closes M2, not the other items carried by
+    driftsys/ridl#172. Step's grid and NaN domain are specified in typl §4.3 and
+    §5.5 (driftsys/ridl#469 and #421).
 
 21. **Amendment (2026-07-25) — RIDL-142 and RIDL-111 are allocated for the two
     uncoded E2 errors, and `ridl-core` gains a `RIDL_CATALOG` and a

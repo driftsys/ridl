@@ -14,7 +14,8 @@
 //!   materialized in the IR; a consumer derives them recursively from member
 //!   inits (typl §5.8, the proto comment on `InitValue`).
 //! - `{ derivable: false, value: None }` — **not derivable** (a string/bytes
-//!   type whose bounds forbid length 0, or a type carrying a `match` pattern).
+//!   type whose bounds forbid length 0, a type carrying a `match` pattern, or
+//!   a float whose derived grid value lies outside the finite backing domain).
 //!   The checker emits TYPL-115 (info) for a named type in this state.
 //!
 //! Derived numeric values are always constructed through [`ExactValue`] and
@@ -66,10 +67,11 @@ pub fn derive_type_init(type_def: &v2::TypeDef) -> v2::InitValue {
     {
         // A unit backing is numeric (its underlying primitive is `float`,
         // typl §5.1).
-        Some(v2::backing::Kind::Unit(_)) => numeric_init(constraint),
+        Some(v2::backing::Kind::Unit(_)) => finite_float_init(numeric_init(constraint)),
         Some(v2::backing::Kind::Primitive(code)) => match primitive(*code) {
             v2::PrimitiveType::Boolean => scalar("false"),
-            v2::PrimitiveType::Integer | v2::PrimitiveType::Float => numeric_init(constraint),
+            v2::PrimitiveType::Integer => numeric_init(constraint),
+            v2::PrimitiveType::Float => finite_float_init(numeric_init(constraint)),
             v2::PrimitiveType::String | v2::PrimitiveType::Bytes => string_init(constraint),
             v2::PrimitiveType::Unspecified => composite(),
         },
@@ -90,7 +92,7 @@ pub fn derive_primitive_init(primitive: v2::PrimitiveType) -> v2::InitValue {
     }
 }
 
-/// The numeric derived init (typl §5.8): `0` when it lies within the range,
+/// The numeric derived init (typl §5.8): `0` when it lies within the range and on the step grid,
 /// otherwise the range minimum. Bounds are the exact decimal strings the
 /// checker resolved during lowering.
 fn numeric_init(constraint: Option<&v2::Constraint>) -> v2::InitValue {
@@ -100,27 +102,68 @@ fn numeric_init(constraint: Option<&v2::Constraint>) -> v2::InitValue {
     let max = constraint
         .and_then(|constraint| constraint.max.as_deref())
         .and_then(ExactValue::parse);
-    numeric_zero_or_min(min, max)
+    let step = constraint
+        .and_then(|constraint| constraint.step.as_deref())
+        .and_then(ExactValue::parse);
+    numeric_zero_or_min(min, max, step)
 }
 
 /// The numeric derived init (typl §5.8) from exact bounds: `0` when it lies in
-/// `[min, max]`, otherwise the minimum (or, for a range that is entirely below
-/// zero with an open minimum, the maximum). The chosen value is always rendered
+/// `[min, max]` and on the step grid, otherwise the minimum. When the minimum
+/// is open and the maximum is negative, choose the maximum rounded down to
+/// the step grid, or the maximum itself when no step is declared. The value is rendered
 /// through [`ExactValue::to_decimal_string`] so the IR keeps a terminating
 /// canonical decimal.
-pub fn numeric_zero_or_min(min: Option<ExactValue>, max: Option<ExactValue>) -> v2::InitValue {
+pub fn numeric_zero_or_min(
+    min: Option<ExactValue>,
+    max: Option<ExactValue>,
+    step: Option<ExactValue>,
+) -> v2::InitValue {
     let zero = ExactValue::parse("0").expect("`0` parses");
     let above_min = min.as_ref().is_none_or(|bound| zero.0 >= bound.0);
     let below_max = max.as_ref().is_none_or(|bound| zero.0 <= bound.0);
-    let value = if above_min && below_max {
+    let on_grid = step.as_ref().is_none_or(|step| {
+        step <= &zero || ((&zero.0 - &min.as_ref().unwrap_or(&zero).0) / &step.0).is_integer()
+    });
+    let value = if above_min && below_max && on_grid {
         zero
+    } else if let Some(min) = min {
+        min
+    } else if let Some(max) = max {
+        match step.filter(|step| step > &zero) {
+            Some(step) => ExactValue((&max.0 / &step.0).floor() * &step.0),
+            None => max,
+        }
     } else {
-        min.or(max).unwrap_or(zero)
+        zero
     };
     v2::InitValue {
         derivable: true,
         value: Some(value.to_decimal_string()),
     }
+}
+
+/// Rejects a derived float candidate outside the finite binary64 backing domain.
+/// Binary32 inference requires closed, representable bounds, so its derived
+/// candidate already lies within those bounds. Open bounds use binary64.
+/// Compare exact values: parsing to `f64` could round a value above the maximum
+/// back into the finite domain.
+pub fn finite_float_init(init: v2::InitValue) -> v2::InitValue {
+    let Some(value) = init.value.as_deref().and_then(ExactValue::parse) else {
+        return init;
+    };
+    if float_in_finite_domain(&value) {
+        init
+    } else {
+        not_derivable()
+    }
+}
+
+/// Whether an exact source value lies within the finite binary64 domain.
+pub fn float_in_finite_domain(value: &ExactValue) -> bool {
+    let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+    let maximum = num_rational::BigRational::from_integer(maximum);
+    value.0 >= -&maximum && value.0 <= maximum
 }
 
 /// The string/bytes derived init (typl §5.8): the empty value when the bounds
@@ -189,12 +232,20 @@ pub fn derive_field_init(
             }
         }
         Some(v2::field_type::Kind::Map(map)) => {
-            let value = map
-                .value
-                .as_ref()
-                .is_none_or(|inner| derive_field_init(inner, resolve_named).derivable);
+            // Repeating a key init violates map uniqueness. No distinct-key
+            // synthesis is defined, so only zero or one entry can derive.
+            let derivable = map.min == 0
+                || (map.min == 1
+                    && map
+                        .key
+                        .as_deref()
+                        .is_some_and(|key| derive_field_init(key, resolve_named).derivable)
+                    && map
+                        .value
+                        .as_deref()
+                        .is_some_and(|value| derive_field_init(value, resolve_named).derivable));
             v2::InitValue {
-                derivable: map.min == 0 || value,
+                derivable,
                 value: None,
             }
         }
@@ -275,6 +326,41 @@ mod tests {
 
     fn some(value: &str) -> v2::InitValue {
         scalar(value)
+    }
+
+    #[test]
+    fn map_init_requires_zero_or_one_constructible_unique_entry() {
+        for (min, key, value, expected) in [
+            (0, false, false, true),
+            (1, true, true, true),
+            (1, false, true, false),
+            (1, true, false, false),
+            (2, true, true, false),
+        ] {
+            let ty = v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                    min,
+                    max: 3,
+                    key: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Named("Key".into())),
+                    })),
+                    value: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Named("Value".into())),
+                    })),
+                }))),
+            };
+            let init = derive_field_init(&ty, &|name| v2::InitValue {
+                derivable: if name == "Key" { key } else { value },
+                value: None,
+            });
+            assert_eq!(
+                init.derivable, expected,
+                "min={min}, key={key}, value={value}"
+            );
+        }
     }
 
     #[test]

@@ -137,9 +137,9 @@ enum Wire {
     /// An inline scalar.
     Scalar(Scalar),
     /// An out-of-line UTF-8 string; `Some` when a named scalar wraps it.
-    Text(Option<NamedScalar>),
+    Text(Option<NamedScalar>, Option<v1::Scalar>),
     /// An out-of-line `[ubyte]`; `Some` when a named scalar wraps it.
-    Bytes(Option<NamedScalar>),
+    Bytes(Option<NamedScalar>, Option<v1::Scalar>),
     /// An offset to the table of the named generated type.
     Table(String),
     /// An offset to the wrapper table of the named generated union.
@@ -294,6 +294,7 @@ enum Repr {
 
 #[derive(Debug, Clone)]
 struct Scalar {
+    constraint: Option<v1::Scalar>,
     prim: Prim,
     repr: Repr,
     /// Whether 0, the FlatBuffers default, is a legal value of the type,
@@ -729,6 +730,24 @@ fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenSt
     })
 }
 
+/// Checks an anonymous scalar without requiring a generated newtype. Numeric
+/// wire values use their received precision for the step reconstruction check.
+fn scalar_constraint_check(
+    sc: &v1::Scalar,
+    owner: &str,
+    value: TokenStream,
+    wire_f32: bool,
+) -> TokenStream {
+    let checks = crate::constraint_checks_with_precision(sc, owner, quote! { __value }, wire_f32);
+    quote! {
+        (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+            let __value = #value;
+            #checks
+            ::core::result::Result::Ok(())
+        })().map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Emission
 // ---------------------------------------------------------------------------
@@ -1023,16 +1042,19 @@ impl<'a> Codec<'a> {
             Some(v1::r#type::Kind::Primitive(primitive)) => {
                 match v1::PrimitiveType::try_from(*primitive).ok() {
                     Some(v1::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
+                        constraint: None,
                         prim: Prim::Bool,
                         repr: Repr::Bool,
                         zero_legal: true,
                     })),
                     Some(v1::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
+                        constraint: None,
                         prim: Prim::I64,
                         repr: Repr::Int,
                         zero_legal: true,
                     })),
                     Some(v1::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
+                        constraint: None,
                         prim: Prim::F64,
                         repr: Repr::Float,
                         zero_legal: true,
@@ -1142,6 +1164,7 @@ impl<'a> Codec<'a> {
                     .and_then(|index| def.values.get(index as usize))
                     .map(|zero| pascal_of(zero.name.as_ref()));
                 Ok(Wire::Scalar(Scalar {
+                    constraint: None,
                     // Every typl enum is emitted at one underlying width,
                     // `long`, which is what the projection charges it.
                     prim: Prim::I64,
@@ -1156,6 +1179,7 @@ impl<'a> Codec<'a> {
                 }))
             }
             Some(v1::declaration::Kind::EnumSet(def)) => Ok(Wire::Scalar(Scalar {
+                constraint: None,
                 prim: int_prim(def.width).ok_or_else(|| GenerateError {
                     message: format!("`{name}` carries no integer width"),
                 })?,
@@ -1201,6 +1225,7 @@ impl<'a> Codec<'a> {
                     message: "a scalar carries no integer width".to_string(),
                 })?;
                 Ok(Wire::Scalar(Scalar {
+                    constraint: Some(sc.clone()),
                     prim,
                     repr: scalar_repr(named, backing),
                     zero_legal: zero_is_legal(sc.constraint.as_ref()),
@@ -1217,6 +1242,7 @@ impl<'a> Codec<'a> {
                     }
                 };
                 Ok(Wire::Scalar(Scalar {
+                    constraint: Some(sc.clone()),
                     prim,
                     repr: scalar_repr(named, backing),
                     zero_legal: zero_is_legal(sc.constraint.as_ref()),
@@ -1224,12 +1250,13 @@ impl<'a> Codec<'a> {
             }
             None => match backing {
                 ScalarBacking::Boolean => Ok(Wire::Scalar(Scalar {
+                    constraint: Some(sc.clone()),
                     prim: Prim::Bool,
                     repr: scalar_repr(named, backing),
                     zero_legal: zero_is_legal(sc.constraint.as_ref()),
                 })),
-                ScalarBacking::String => Ok(Wire::Text(named)),
-                ScalarBacking::Bytes => Ok(Wire::Bytes(named)),
+                ScalarBacking::String => Ok(Wire::Text(named, Some(sc.clone()))),
+                ScalarBacking::Bytes => Ok(Wire::Bytes(named, Some(sc.clone()))),
                 // A unit backing implies float and always carries a derived
                 // width, so it never reaches here (typl §5.1).
                 ScalarBacking::Float | ScalarBacking::Integer => Err(GenerateError {
@@ -1524,8 +1551,8 @@ impl<'a> Codec<'a> {
     /// table and for a union.
     fn view_type(&self, wire: &Wire, ty: &v1::Type) -> TokenStream {
         match wire {
-            Wire::Text(_) => quote! { &'a ::core::primitive::str },
-            Wire::Bytes(_) => quote! { &'a [::core::primitive::u8] },
+            Wire::Text(_, _) => quote! { &'a ::core::primitive::str },
+            Wire::Bytes(_, _) => quote! { &'a [::core::primitive::u8] },
             Wire::Table(name) | Wire::Union(name) => {
                 let view = view_path(name);
                 quote! { #view<'a> }
@@ -1542,10 +1569,10 @@ impl<'a> Codec<'a> {
 
     fn view_expr(&self, wire: &Wire, at: &TokenStream) -> Result<TokenStream, GenerateError> {
         Ok(match wire {
-            Wire::Text(_) => quote! {
+            Wire::Text(_, _) => quote! {
                 ::ridl_rt::flatbuffers::string(self.buf, #at).unwrap_or("")
             },
-            Wire::Bytes(_) => quote! {
+            Wire::Bytes(_, _) => quote! {
                 {
                     let __v = ::ridl_rt::flatbuffers::vector(self.buf, #at, 1usize)
                         .unwrap_or(::ridl_rt::flatbuffers::Vector { len: 0, first: 0 });
@@ -1688,14 +1715,14 @@ impl<'a> Codec<'a> {
                     message: "a FlatBuffers scalar is written inline, not out of line".to_string(),
                 });
             }
-            Wire::Text(named) => {
+            Wire::Text(named, _) => {
                 let text = match named {
                     Some(_) => quote! { #reference.get() },
                     None => quote! { #reference.as_str() },
                 };
                 quote! { builder.push_string(#text)? }
             }
-            Wire::Bytes(named) => {
+            Wire::Bytes(named, _) => {
                 let bytes = match named {
                     Some(_) => quote! { #reference.get() },
                     None => quote! { #reference.as_slice() },
@@ -1780,24 +1807,9 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[doc = #doc]
             ///
-            /// A total walk of the type's own shape: the structure in full,
-            /// an enum and an enum-set discriminant, a collection's declared
-            /// element count, and every **named** scalar's own declared
-            /// range, length and pattern, checked over a borrow (`check`,
-            /// beside `new` on the type itself) against its declared range,
-            /// length and pattern.
-            ///
-            /// This does not make every value `decode` builds satisfy every
-            /// typl constraint. Three gaps:
-            ///
-            /// - a `step` constraint is checked nowhere — not by `new`, by
-            ///   `check`, or here (driftsys/ridl#469);
-            /// - the pattern check is behind the `validate-pattern` feature,
-            ///   so a value violating a `match` pattern passes when that
-            ///   feature is off;
-            /// - an anonymous inline constraint (a field's own `[..]` or
-            ///   `match` written at the field, not through a named scalar)
-            ///   is not checked here at all (driftsys/ridl#469).
+            /// Checks the structure, enum discriminants, collection bounds,
+            /// map key uniqueness, and named and anonymous scalar ranges,
+            /// steps and lengths. Pattern checks require `validate-pattern`.
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(
                 buf: &[::core::primitive::u8],
@@ -1860,26 +1872,44 @@ impl<'a> Codec<'a> {
                     }
                     Repr::Named(named) => {
                         let widened = scalar.widen(quote! { __raw });
-                        match named_scalar_check(named, quote! { &(#widened) }) {
-                            Some(check) => quote! {
-                                let __raw = #read
-                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                                #check
-                            },
-                            None => quote! {
-                                #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                            },
+                        let check = named_scalar_check(named, quote! { &(#widened) });
+                        quote! {
+                            let __raw = #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                            #check
                         }
                     }
-                    _ => quote! {
-                        #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                    },
+                    _ => {
+                        let check = scalar.constraint.as_ref().map(|sc| {
+                            let name = match &scalar.repr {
+                                Repr::Named(named) => {
+                                    named.name.rsplit('.').next().unwrap_or(owner)
+                                }
+                                _ => owner,
+                            };
+                            scalar_constraint_check(
+                                sc,
+                                name,
+                                scalar.widen(quote! { __raw }),
+                                scalar.prim == Prim::F32,
+                            )
+                        });
+                        quote! {
+                            let __raw = #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                            #check
+                        }
+                    }
                 }
             }
-            Wire::Text(named) => {
+            Wire::Text(named, constraint) => {
                 let check = named
                     .as_ref()
-                    .and_then(|named| named_scalar_check(named, quote! { __s }));
+                    .and_then(|named| named_scalar_check(named, quote! { __s }))
+                    .or_else(|| {
+                        constraint
+                            .as_ref()
+                            .filter(|_| named.is_none())
+                            .map(|sc| scalar_constraint_check(sc, owner, quote! { __s }, false))
+                    });
                 match check {
                     Some(check) => quote! {
                         let __s = ::ridl_rt::flatbuffers::string(buf, #at)
@@ -1892,10 +1922,17 @@ impl<'a> Codec<'a> {
                     },
                 }
             }
-            Wire::Bytes(named) => {
-                let check = named.as_ref().and_then(|named| {
-                    named_scalar_check(named, quote! { &buf[__v.first..__v.first + __v.len] })
-                });
+            Wire::Bytes(named, constraint) => {
+                let value = quote! { &buf[__v.first..__v.first + __v.len] };
+                let check = named
+                    .as_ref()
+                    .and_then(|named| named_scalar_check(named, value.clone()))
+                    .or_else(|| {
+                        constraint
+                            .as_ref()
+                            .filter(|_| named.is_none())
+                            .map(|sc| scalar_constraint_check(sc, owner, value.clone(), false))
+                    });
                 match check {
                     Some(check) => quote! {
                         let __v = ::ridl_rt::flatbuffers::vector(buf, #at, 1usize)
@@ -1933,6 +1970,40 @@ impl<'a> Codec<'a> {
             Wire::Map { entry, min, max } => {
                 let inner = self.table_verify_body(owner, entry)?;
                 let count = count_check(owner, *min, *max);
+                let key = &entry.slots[0];
+                let key_id = Literal::u16_suffixed(key.id);
+                let key_width = Literal::usize_suffixed(key.wire.inline_width());
+                let key_field = quote! {
+                    ::ridl_rt::flatbuffers::field(buf, table, #key_id, #key_width)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                };
+                let key_value = match &key.wire {
+                    Wire::Scalar(scalar) => {
+                        let read = scalar.read(&quote! { buf }, &quote! { __key_at });
+                        let zero = scalar.prim.neutral();
+                        quote! { match #key_field {
+                            ::core::option::Option::Some(__key_at) => #read
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                            ::core::option::Option::None => #zero,
+                        } }
+                    }
+                    Wire::Text(_, _) => quote! {
+                        ::ridl_rt::flatbuffers::string(buf, #key_field.unwrap_or(0usize))
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                    },
+                    Wire::Bytes(_, _) => quote! {
+                        {
+                            let __key_vec = ::ridl_rt::flatbuffers::vector(buf, #key_field.unwrap_or(0usize), 1usize)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                            &buf[__key_vec.first..__key_vec.first + __key_vec.len]
+                        }
+                    },
+                    _ => {
+                        return Err(GenerateError {
+                            message: "a map key is not a scalar".to_string(),
+                        });
+                    }
+                };
                 quote! {
                     let __v = ::ridl_rt::flatbuffers::vector(buf, #at, 4usize)
                         .map_err(::ridl_rt::payload::VerifyError::Structure)?;
@@ -1941,6 +2012,22 @@ impl<'a> Codec<'a> {
                         let table = ::ridl_rt::flatbuffers::follow(buf, __v.element(__i, 4usize))
                             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
                         #inner
+                        let __key = #key_value;
+                        // Previous entries have already passed structural and
+                        // contract validation. Compare borrowed keys without
+                        // allocating an index from an untrusted vector length.
+                        for __previous in 0..__i {
+                            let __previous_key = {
+                                let table = ::ridl_rt::flatbuffers::follow(buf, __v.element(__previous, 4usize))
+                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                #key_value
+                            };
+                            if __previous_key == __key {
+                                return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
+                                    ::ridl_rt::payload::Violation { type_name: #owner, rule: ::ridl_rt::payload::Rule::Unique }
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -2030,7 +2117,7 @@ impl<'a> Codec<'a> {
     ) -> Result<TokenStream, GenerateError> {
         Ok(match wire {
             Wire::Scalar(scalar) => scalar.decode(buf, at),
-            Wire::Text(named) => {
+            Wire::Text(named, _) => {
                 let text = quote! {
                     ::std::string::String::from(
                         ::ridl_rt::flatbuffers::string(#buf, #at).unwrap_or(""),
@@ -2045,7 +2132,7 @@ impl<'a> Codec<'a> {
                     None => text,
                 }
             }
-            Wire::Bytes(named) => {
+            Wire::Bytes(named, _) => {
                 let bytes = quote! {
                     {
                         let __v = ::ridl_rt::flatbuffers::vector(#buf, #at, 1usize)
@@ -2524,7 +2611,7 @@ impl<'a> Codec<'a> {
         // allocation, where a struct field of the same type is borrowed in
         // place. The doc says which, since a caller in a hot path needs to
         // know.
-        let value_doc = if matches!(wire, Wire::Text(_) | Wire::Bytes(_)) {
+        let value_doc = if matches!(wire, Wire::Text(_, _) | Wire::Bytes(_, _)) {
             format!(
                 " The value the box carries. `{owner}` owns its bytes, so this allocates — \
                  unlike a struct field of the same type, which a view borrows in place."

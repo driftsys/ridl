@@ -541,6 +541,15 @@ enum BackingClass {
     Unknown,
 }
 
+/// The value domain a declared init must inhabit. Unresolved type targets
+/// have resolver diagnostics; composite targets have no literal init syntax.
+enum InitTarget {
+    Scalar(BackingClass),
+    Enum(Vec<ExactValue>),
+    Composite,
+    Unknown,
+}
+
 /// A lowered scalar constraint plus the exact bounds kept for init/const
 /// validation.
 struct ScalarParts {
@@ -620,10 +629,9 @@ struct LoweredType {
     /// Exact numeric bounds when the field type is a numeric scalar, used to
     /// validate a numeric declared init (TYPL-109).
     scalar_bounds: Option<(Option<ExactValue>, Option<ExactValue>)>,
-    /// Length bounds and `match` pattern when the field type is a string/bytes
-    /// scalar — inline (`name : string [0..8]`) or a named string/bytes `type`.
-    /// Used to validate a declared string/bytes init (TYPL-109); the numeric
-    /// path reads `scalar_bounds` instead.
+    /// Scalar constraints for init validation: numeric step, or string/bytes
+    /// length bounds and `match` pattern, for both inline and named types.
+    /// Exact numeric range bounds are retained separately in `scalar_bounds`.
     init_constraint: Option<v2::Constraint>,
 }
 
@@ -863,7 +871,12 @@ impl Checker<'_> {
     /// The regex source of a named regex constant, resolved in the checked
     /// package's view, plus its canonical reference.
     fn const_regex_value(&self, name: &str) -> Option<(String, String)> {
-        let symbol = self.resolution.symbols.get(name)?.clone();
+        self.const_regex_value_in(self.pkg, name)
+    }
+
+    fn const_regex_value_in(&self, package: Package, name: &str) -> Option<(String, String)> {
+        let resolution = resolve_package(self.db, self.ws, package, self.std);
+        let symbol = resolution.symbols.get(name)?.clone();
         if symbol.kind != SymbolKind::Const {
             return None;
         }
@@ -1171,8 +1184,12 @@ impl Checker<'_> {
             .map(|backing| backing.syntax().text_range())
             .unwrap_or_else(|| name_range(decl));
         let parts = self.lower_scalar(class, decl.constraint(), span);
-        let (declared_init, declared) =
-            self.lower_declared_init(decl.init_value(), &parts, DiagCode::TYPL_109);
+        let (declared_init, declared) = self.lower_declared_init(
+            decl.init_value(),
+            &parts,
+            &InitTarget::Scalar(class),
+            DiagCode::TYPL_109,
+        );
         let mut type_def = v2::TypeDef {
             backing,
             constraint: parts.constraint,
@@ -1182,8 +1199,9 @@ impl Checker<'_> {
         };
         // E1.9: a type without a declared `= value` derives its init from the
         // §5.8 table. A named type whose init is not derivable (a string/bytes
-        // type forbidding length 0, or a `match`-typed one) is reported as
-        // TYPL-115 (info) — a consumer that requires an init escalates it.
+        // type forbidding length 0, a `match`-typed one, or a float whose grid
+        // has no finite derived value) is reported as TYPL-115 (info).
+        // A consumer that requires an init escalates it.
         if type_def.init.is_none() {
             let derived = init::derive_type_init(&type_def);
             if !derived.derivable {
@@ -1362,6 +1380,74 @@ impl Checker<'_> {
             },
             other => other,
         };
+
+        if !nominal_reported
+            && let Some(target) = &target_type
+            && let InitTarget::Scalar(class @ (BackingClass::Integer | BackingClass::Float)) =
+                self.symbol_init_target(target)
+        {
+            let valid = match &value_kind {
+                Some(LitKind::Number { value }) => {
+                    class == BackingClass::Float || value.0.is_integer()
+                }
+                Some(LitKind::Malformed) | None => true,
+                _ => false,
+            };
+            if !valid {
+                self.error(
+                    DiagCode::TYPL_108,
+                    value_range,
+                    format!(
+                        "const `{name}` does not have `{}`'s {} value kind",
+                        self.canonical_ref(target),
+                        primitive_noun(class)
+                    ),
+                );
+            }
+        }
+
+        let float_constant = type_ref.as_deref() == Some("float")
+            || target_type.as_ref().is_some_and(|target| {
+                matches!(
+                    self.symbol_init_target(target),
+                    InitTarget::Scalar(BackingClass::Float)
+                )
+            });
+        if !nominal_reported
+            && float_constant
+            && let Some(LitKind::Number { value }) = &value_kind
+            && !init::float_in_finite_domain(value)
+        {
+            self.error(
+                DiagCode::TYPL_108,
+                value_range,
+                format!("const `{name}` value is outside the finite float backing domain"),
+            );
+        }
+
+        // A typed numeric constant must satisfy the same exact step grid as
+        // an init. Resolve the step in the type's defining package, while the
+        // value above resolves in this constant's own package.
+        if !nominal_reported
+            && let (Some(LitKind::Number { value }), Some(target)) = (&value_kind, &target_type)
+        {
+            let parts = self.payload_scalar_parts(target);
+            if !out_of_bounds(value, parts.min.as_ref(), parts.max.as_ref())
+                && let Some(step) = parts
+                    .constraint
+                    .as_ref()
+                    .and_then(|constraint| constraint.step.as_deref())
+                    .and_then(ExactValue::parse)
+                && exact_is_positive(&step)
+            {
+                let origin = parts
+                    .min
+                    .unwrap_or_else(|| ExactValue::parse("0").expect("zero parses"));
+                if !((&value.0 - &origin.0) / &step.0).is_integer() {
+                    self.error(DiagCode::TYPL_108, value_range, format!("const `{name}` value {} is off `{}`'s declared step grid (origin {}, step {})", value.to_decimal_string(), self.canonical_ref(target), origin.to_decimal_string(), step.to_decimal_string()));
+                }
+            }
+        }
 
         let (value, regex) = match value_kind {
             Some(LitKind::Number { value }) => (value.to_decimal_string(), None),
@@ -1842,17 +1928,74 @@ impl Checker<'_> {
         &mut self,
         init: Option<ast::InitValue>,
         parts: &ScalarParts,
+        target: &InitTarget,
         violation: DiagCode,
     ) -> (Option<String>, Option<v2::InitValue>) {
         let Some(literal) = init.as_ref().and_then(ast::InitValue::literal) else {
             return (None, None);
         };
-        let text = match literal_kind(&literal) {
-            LitKind::Number { value } => {
-                if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
+        let value = match literal_kind(&literal) {
+            LitKind::Number { value } => Some(ConstValue::Number(value)),
+            LitKind::Bool(flag) => Some(ConstValue::Bool(flag)),
+            LitKind::Str(text) => Some(ConstValue::Text(text)),
+            LitKind::Regex(text) => Some(ConstValue::Regex(text)),
+            LitKind::ConstRef(name) => {
+                let value = self.const_value_in(self.pkg, &name);
+                if value.is_none() {
                     self.error(
                         violation,
                         literal.syntax().text_range(),
+                        format!("init reference `{name}` does not resolve to a constant value"),
+                    );
+                }
+                value
+            }
+            LitKind::Malformed => None,
+        };
+        let range = literal.syntax().text_range();
+        let valid_kind = match (target, value.as_ref()) {
+            (InitTarget::Scalar(BackingClass::Integer), Some(ConstValue::Number(value))) => {
+                value.0.is_integer()
+            }
+            (InitTarget::Scalar(BackingClass::Float), Some(ConstValue::Number(_)))
+            | (InitTarget::Scalar(BackingClass::Boolean), Some(ConstValue::Bool(_)))
+            | (
+                InitTarget::Scalar(BackingClass::Str | BackingClass::Bytes),
+                Some(ConstValue::Text(_)),
+            ) => true,
+            (InitTarget::Enum(values), Some(ConstValue::Number(value))) => values.contains(value),
+            (InitTarget::Composite, _) => false,
+            (InitTarget::Unknown | InitTarget::Scalar(BackingClass::Unknown), _) | (_, None) => {
+                true
+            }
+            _ => false,
+        };
+        if !valid_kind {
+            let message = match target {
+                InitTarget::Enum(_) => "init value must be one of the enum's declared integer values".to_string(),
+                InitTarget::Composite => "this composite type has no literal init syntax; omit the override to derive its init".to_string(),
+                InitTarget::Scalar(class) => format!("init value does not have the declared type's {} value kind", primitive_noun(*class)),
+                InitTarget::Unknown => unreachable!(),
+            };
+            self.error(violation, range, message);
+        }
+        let text = match value {
+            Some(ConstValue::Number(value)) => {
+                if valid_kind
+                    && matches!(target, InitTarget::Scalar(BackingClass::Float))
+                    && !init::float_in_finite_domain(&value)
+                {
+                    self.error(
+                        violation,
+                        range,
+                        "init value is outside the finite float backing domain".to_string(),
+                    );
+                } else if valid_kind
+                    && out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref())
+                {
+                    self.error(
+                        violation,
+                        range,
                         format!(
                             "init value {} is outside the declared range [{}..{}]",
                             value.to_decimal_string(),
@@ -1860,47 +2003,47 @@ impl Checker<'_> {
                             render_bound(parts.max.as_ref()),
                         ),
                     );
-                }
-                value.to_decimal_string()
-            }
-            LitKind::Bool(flag) => flag.to_string(),
-            LitKind::Str(text) => {
-                self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
-                text
-            }
-            // A constant is reusable in an init (§6), so the value that lowers
-            // is the constant's, not its name. Every kind resolves, not only
-            // the numeric one: `= SOME_TEXT` used to lower as the literal text
-            // `"SOME_TEXT"` and `= SOME_FLAG` as the unparseable `"YES"`, which
-            // both backends then emitted as a wrong value with no diagnostic
-            // anywhere (issue #170). The resolved value is checked against the
-            // declared bounds exactly as a direct literal of the same kind is.
-            LitKind::ConstRef(name) => match self.const_value_in(self.pkg, &name) {
-                Some(ConstValue::Number(value)) => {
-                    if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
+                } else if valid_kind
+                    && let Some(step) = parts
+                        .constraint
+                        .as_ref()
+                        .and_then(|c| c.step.as_deref())
+                        .and_then(ExactValue::parse)
+                    && step > ExactValue::parse("0").expect("zero is a numeric literal")
+                {
+                    let origin = parts.min.clone().unwrap_or_else(|| {
+                        ExactValue::parse("0").expect("zero is a numeric literal")
+                    });
+                    if !((&value.0 - &origin.0) / &step.0).is_integer() {
                         self.error(
                             violation,
-                            literal.syntax().text_range(),
+                            range,
                             format!(
-                                "init value {} is outside the declared range [{}..{}]",
+                                "init value {} is off the declared step grid (origin {}, step {})",
                                 value.to_decimal_string(),
-                                render_bound(parts.min.as_ref()),
-                                render_bound(parts.max.as_ref()),
+                                origin.to_decimal_string(),
+                                step.to_decimal_string()
                             ),
                         );
                     }
-                    value.to_decimal_string()
                 }
-                Some(ConstValue::Bool(flag)) => flag.to_string(),
-                Some(ConstValue::Text(text)) => {
-                    self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
-                    text
+                value.to_decimal_string()
+            }
+            Some(ConstValue::Bool(flag)) => flag.to_string(),
+            Some(ConstValue::Text(text)) => {
+                if valid_kind {
+                    self.check_string_init(
+                        &text,
+                        parts,
+                        matches!(target, InitTarget::Scalar(BackingClass::Bytes)),
+                        range,
+                        violation,
+                    );
                 }
-                Some(ConstValue::Regex(text)) => text,
-                None => significant_text(literal.syntax()),
-            },
-            LitKind::Regex(text) => text,
-            LitKind::Malformed => significant_text(literal.syntax()),
+                text
+            }
+            Some(ConstValue::Regex(text)) => text,
+            None => significant_text(literal.syntax()),
         };
         (
             Some(text.clone()),
@@ -1913,8 +2056,9 @@ impl Checker<'_> {
 
     /// Checks a declared string/bytes init against the type's length bound and,
     /// where a `match` pattern is present, against that pattern (TYPL-109,
-    /// §5.8). Length is measured in Unicode scalar values; the string's own
-    /// escape processing is not applied (the raw inner text is measured).
+    /// §5.8). String length counts Unicode scalar values; bytes length counts
+    /// UTF-8 bytes. Escape processing is not applied (the raw inner text is
+    /// measured).
     /// Pattern conformance uses ECMA-262 `test` semantics — a match anywhere in
     /// the string; typl patterns are anchored with `^`…`$`. An invalid pattern
     /// is skipped here (TYPL-106 reports it at the pattern's own site). Reached
@@ -1927,13 +2071,18 @@ impl Checker<'_> {
         &mut self,
         text: &str,
         parts: &ScalarParts,
+        bytes: bool,
         range: TextRange,
         violation: DiagCode,
     ) {
         let Some(constraint) = &parts.constraint else {
             return;
         };
-        let length = text.chars().count() as u64;
+        let length = if bytes {
+            text.len()
+        } else {
+            text.chars().count()
+        } as u64;
         if let Some(min) = constraint.len_min
             && length < min
         {
@@ -2086,8 +2235,16 @@ impl Checker<'_> {
                 .and_then(|l| l.scalar_bounds.as_ref())
                 .and_then(|(_, max)| max.clone()),
         };
-        let (declared_init, declared) =
-            self.lower_declared_init(field.init_value(), &bounds_parts, DiagCode::TYPL_109);
+        let target = lowered
+            .as_ref()
+            .map(|l| self.field_init_target(&l.ty))
+            .unwrap_or(InitTarget::Unknown);
+        let (declared_init, declared) = self.lower_declared_init(
+            field.init_value(),
+            &bounds_parts,
+            &target,
+            DiagCode::TYPL_109,
+        );
         // E1.9: a field without a declared init derives one from the §5.8 table
         // (a named reference resolves to the referenced type's own init).
         let init = match declared {
@@ -2115,8 +2272,8 @@ impl Checker<'_> {
     /// The derived init of a named reference (`Speed`, `ridl.std.Name`), by kind
     /// (typl §5.8): a scalar `type` materializes its value; an `enum` its `0`
     /// or lowest value; an `enumset` the empty set; a `struct` or `union` is a
-    /// derivable composite the consumer reconstructs (a `union` inherits its
-    /// first arm's derivability). An unresolved reference — already reported by
+    /// composite the consumer reconstructs, with derivability inherited from
+    /// its fields or first arm respectively. An unresolved reference — already reported by
     /// the type-resolution pass — is treated as a derivable composite.
     fn named_ref_init(&self, canonical: &str) -> v2::InitValue {
         match self.resolve_canonical(canonical) {
@@ -2149,7 +2306,17 @@ impl Checker<'_> {
                     },
                     BackingClass::Integer | BackingClass::Float => {
                         let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
-                        init::numeric_zero_or_min(min, max)
+                        let init = init::numeric_zero_or_min(
+                            min,
+                            max,
+                            self.named_init_constraint(symbol)
+                                .and_then(|c| c.step.as_deref().and_then(ExactValue::parse)),
+                        );
+                        if backing_class(decl.backing()) == BackingClass::Float {
+                            init::finite_float_init(init)
+                        } else {
+                            init
+                        }
                     }
                     BackingClass::Str | BackingClass::Bytes => {
                         init::string_init(self.named_string_constraint(symbol).as_ref())
@@ -2166,12 +2333,8 @@ impl Checker<'_> {
                 derivable: true,
                 value: Some(String::new()),
             },
-            SymbolKind::Struct => v2::InitValue {
-                derivable: true,
-                value: None,
-            },
-            SymbolKind::Union => v2::InitValue {
-                derivable: self.union_is_derivable(symbol),
+            SymbolKind::Struct | SymbolKind::Union => v2::InitValue {
+                derivable: self.composite_is_derivable(symbol),
                 value: None,
             },
             SymbolKind::Const => v2::InitValue {
@@ -2248,55 +2411,144 @@ impl Checker<'_> {
         }
     }
 
-    /// Whether a union's derived init — its first arm's init (typl §5.8) — is
-    /// derivable. The first arm resolves one level: a scalar arm defers to its
-    /// scalar derivability, an enum/enumset/struct/union arm is derivable.
-    fn union_is_derivable(&self, symbol: &Symbol) -> bool {
-        let Some(Definition::Union(decl)) = self.find_definition(symbol) else {
-            return true;
-        };
-        let Some(first_arm) = decl.syntax().children().find_map(ast::UnionArm::cast) else {
-            return false;
-        };
-        let Some(path) = first_arm.type_ref() else {
-            return true;
-        };
-        if primitive_path_keyword(&path).is_some() {
-            return true;
-        }
-        let Some(package) = self.package_handle(&symbol.package) else {
-            return true;
-        };
-        let resolution = resolve_package(self.db, self.ws, package, self.std);
-        match self.lookup_path_in(&resolution, &path) {
-            Some(arm) if arm.kind == SymbolKind::Type => self.type_symbol_is_derivable(&arm),
-            _ => true,
-        }
+    /// Composite inits remain unmaterialized, but their derivability follows
+    /// the struct's fields or the union's first arm (typl §5.8).
+    fn composite_is_derivable(&self, symbol: &Symbol) -> bool {
+        self.symbol_init_is_derivable(symbol, &mut HashSet::new(), &mut HashMap::new())
     }
 
-    /// Whether a named scalar `type` has a derivable init (typl §5.8): numeric
-    /// and boolean types always do; a string/bytes type does when its bounds
-    /// admit length 0 and it carries no `match` pattern; a type with a declared
-    /// init always does.
-    fn type_symbol_is_derivable(&self, symbol: &Symbol) -> bool {
-        let Some(Definition::Type(decl)) = self.find_definition(symbol) else {
-            return true;
-        };
-        if decl.init_value().is_some() {
-            return true;
+    fn symbol_init_is_derivable(
+        &self,
+        symbol: &Symbol,
+        visiting: &mut HashSet<(String, String)>,
+        completed: &mut HashMap<(String, String), bool>,
+    ) -> bool {
+        if !matches!(symbol.kind, SymbolKind::Struct | SymbolKind::Union) {
+            return self.named_type_init(symbol).derivable;
         }
-        match backing_class(decl.backing()) {
-            BackingClass::Boolean
-            | BackingClass::Integer
-            | BackingClass::Float
-            | BackingClass::Unknown => true,
-            BackingClass::Str | BackingClass::Bytes => self
-                .named_string_constraint(symbol)
-                .is_some_and(|constraint| {
-                    constraint.pattern.is_none()
-                        && constraint.pattern_const.is_none()
-                        && constraint.len_min.unwrap_or(0) == 0
+        let key = (symbol.package.clone(), symbol.name.clone());
+        // Shared descendants are checked once per derivation. Active paths
+        // remain separate: their repeated occurrence is a recursion cycle.
+        if let Some(derivable) = completed.get(&key) {
+            return *derivable;
+        }
+        // Recursive composites are diagnosed separately as TYPL-206.
+        if !visiting.insert(key.clone()) {
+            return false;
+        }
+        let result = (|| {
+            let Some(package) = self.package_handle(&symbol.package) else {
+                return true;
+            };
+            let resolution = resolve_package(self.db, self.ws, package, self.std);
+            match self.find_definition(symbol) {
+                Some(Definition::Struct(decl)) => decl.members().all(|member| match member {
+                    ast::StructMember::Reserved(_) => true,
+                    ast::StructMember::Field(field) => {
+                        // Explicit values have been validated by field lowering.
+                        field.init_value().is_some()
+                            || field.field_type().is_none_or(|ty| {
+                                self.field_init_is_derivable(
+                                    package,
+                                    &resolution,
+                                    &ty,
+                                    visiting,
+                                    completed,
+                                )
+                            })
+                    }
                 }),
+                Some(Definition::Union(decl)) => {
+                    let Some(first_arm) = decl.syntax().children().find_map(ast::UnionArm::cast)
+                    else {
+                        return false;
+                    };
+                    first_arm.type_ref().is_none_or(|path| {
+                        self.lookup_path_in(&resolution, &path).is_none_or(|arm| {
+                            self.symbol_init_is_derivable(&arm, visiting, completed)
+                        })
+                    })
+                }
+                _ => true,
+            }
+        })();
+        visiting.remove(&key);
+        completed.insert(key, result);
+        result
+    }
+
+    fn field_init_is_derivable(
+        &self,
+        package: Package,
+        resolution: &Resolution,
+        ty: &ast::FieldType,
+        visiting: &mut HashSet<(String, String)>,
+        completed: &mut HashMap<(String, String), bool>,
+    ) -> bool {
+        let minimum = |bound: Option<ast::Bound>| {
+            bound
+                .and_then(|bound| bound.min())
+                .and_then(|literal| self.numeric_literal_in(package, &literal))
+                .and_then(|value| exact_to_u64(&value))
+                .unwrap_or(0)
+        };
+        match ty {
+            ast::FieldType::Optional(_) => true,
+            ast::FieldType::Path(path) => self
+                .lookup_path_in(resolution, path)
+                .is_none_or(|symbol| self.symbol_init_is_derivable(&symbol, visiting, completed)),
+            ast::FieldType::Primitive(node) => {
+                let (_, class) = primitive_of(node);
+                let constraint = node.constraint();
+                match class {
+                    BackingClass::Float => {
+                        let bound = |literal: Option<ast::Literal>| {
+                            literal.and_then(|literal| self.numeric_literal_in(package, &literal))
+                        };
+                        init::finite_float_init(init::numeric_zero_or_min(
+                            bound(constraint.as_ref().and_then(ast::Constraint::min)),
+                            bound(constraint.as_ref().and_then(ast::Constraint::max)),
+                            bound(constraint.as_ref().and_then(ast::Constraint::step)),
+                        ))
+                        .derivable
+                    }
+                    BackingClass::Str | BackingClass::Bytes => {
+                        let (min, _) = self.string_len_bounds(package, constraint.as_ref());
+                        min == 0
+                            && constraint
+                                .as_ref()
+                                .and_then(ast::Constraint::match_pattern)
+                                .is_none()
+                    }
+                    _ => true,
+                }
+            }
+            ast::FieldType::Tuple(tuple) => tuple.fields().all(|field| {
+                field.field_type().is_none_or(|inner| {
+                    self.field_init_is_derivable(package, resolution, &inner, visiting, completed)
+                })
+            }),
+            ast::FieldType::Array(array) => {
+                minimum(array.bound()) == 0
+                    || array.element().is_none_or(|inner| {
+                        self.field_init_is_derivable(
+                            package, resolution, &inner, visiting, completed,
+                        )
+                    })
+            }
+            ast::FieldType::Map(map) => match minimum(map.bound()) {
+                0 => true,
+                1 => {
+                    map.key().is_some_and(|key| {
+                        self.field_init_is_derivable(package, resolution, &key, visiting, completed)
+                    }) && map.value().is_some_and(|value| {
+                        self.field_init_is_derivable(
+                            package, resolution, &value, visiting, completed,
+                        )
+                    })
+                }
+                _ => false,
+            },
         }
     }
 
@@ -2311,9 +2563,10 @@ impl Checker<'_> {
             BackingClass::Str | BackingClass::Bytes => {}
             _ => return None,
         }
+        let package = self.package_handle(&symbol.package)?;
         let constraint = decl.constraint();
-        let (len_min, len_max) = self.string_len_bounds(constraint.as_ref());
-        let (pattern, pattern_const) = self.string_pattern(constraint.as_ref());
+        let (len_min, len_max) = self.string_len_bounds(package, constraint.as_ref());
+        let (pattern, pattern_const) = self.string_pattern(package, constraint.as_ref());
         Some(v2::Constraint {
             min: None,
             max: None,
@@ -2328,18 +2581,22 @@ impl Checker<'_> {
     /// The length bounds of a string/bytes constraint, mirroring
     /// [`Checker::lower_len_scalar`] but read-only: the §4.4 default `[0..256]`
     /// when no length bound is written, a fixed `[N]` as `(N, N)`.
-    fn string_len_bounds(&self, constraint: Option<&ast::Constraint>) -> (u64, u64) {
+    fn string_len_bounds(
+        &self,
+        package: Package,
+        constraint: Option<&ast::Constraint>,
+    ) -> (u64, u64) {
         let Some(bound) = constraint.and_then(ast::Constraint::len) else {
             return (0, 256);
         };
         let min = bound
             .min()
-            .and_then(|literal| self.numeric_literal(&literal))
+            .and_then(|literal| self.numeric_literal_in(package, &literal))
             .and_then(|value| exact_to_u64(&value));
         if bound.dotdot_token().is_some() {
             let max = bound
                 .max()
-                .and_then(|literal| self.numeric_literal(&literal))
+                .and_then(|literal| self.numeric_literal_in(package, &literal))
                 .and_then(|value| exact_to_u64(&value));
             (min.unwrap_or(0), max.unwrap_or(256))
         } else {
@@ -2352,6 +2609,7 @@ impl Checker<'_> {
     /// inline literal or a named regex constant), read-only.
     fn string_pattern(
         &self,
+        package: Package,
         constraint: Option<&ast::Constraint>,
     ) -> (Option<String>, Option<String>) {
         let Some(match_literal) = constraint.and_then(ast::Constraint::match_pattern) else {
@@ -2359,7 +2617,7 @@ impl Checker<'_> {
         };
         match literal_kind(&match_literal) {
             LitKind::Regex(text) => (Some(text), None),
-            LitKind::ConstRef(name) => match self.const_regex_value(&name) {
+            LitKind::ConstRef(name) => match self.const_regex_value_in(package, &name) {
                 Some((text, canonical)) => (Some(text), Some(canonical)),
                 None => (None, Some(name)),
             },
@@ -2484,7 +2742,7 @@ impl Checker<'_> {
                 // type's length bound and `match` pattern for init validation
                 // (the T14 field-init obligation; TYPL-109).
                 let init_constraint = (symbol.kind == SymbolKind::Type)
-                    .then(|| self.named_string_constraint(&symbol))
+                    .then(|| self.named_init_constraint(&symbol))
                     .flatten();
                 LoweredType {
                     ty: v2::FieldType {
@@ -2516,9 +2774,7 @@ impl Checker<'_> {
                 // An inline string/bytes scalar carries its length bound and
                 // `match` pattern for init validation (TYPL-109); a numeric
                 // inline scalar validates through `scalar_bounds`.
-                let init_constraint = matches!(class, BackingClass::Str | BackingClass::Bytes)
-                    .then(|| parts.constraint.clone())
-                    .flatten();
+                let init_constraint = parts.constraint.clone();
                 LoweredType {
                     ty: v2::FieldType {
                         optional: false,
@@ -3996,22 +4252,14 @@ impl Checker<'_> {
                 PathTarget::Symbol(symbol) => {
                     payload = self.canonical_ref(&symbol);
                     match signal.init_value() {
-                        // RIDL-110: the bare `= value` override validates
-                        // against the payload constraints — the E1 scalar
-                        // validation with the ridl code (§4.4) — and lowers
-                        // as `declared_init` in canonical text (ADR-0008
-                        // decision 2). Recorded debt (issue #172, M2): the
-                        // leniency is E1's exactly — a type-mismatched
-                        // literal (`= true` on a numeric payload), a value
-                        // off the `step` grid, or an override on a
-                        // non-`type` payload all pass silently, as they do
-                        // for struct fields — although the §16.1 RIDL-110
-                        // wording reads broader.
+                        // RIDL-110 validates the override's kind, scalar
+                        // constraints, or enum membership before lowering.
                         Some(init_value) => {
                             let parts = self.payload_scalar_parts(&symbol);
                             (declared_init, init) = self.lower_declared_init(
                                 Some(init_value),
                                 &parts,
+                                &self.symbol_init_target(&symbol),
                                 DiagCode::RIDL_110,
                             );
                         }
@@ -5095,16 +5343,82 @@ impl Checker<'_> {
         }
     }
 
-    /// The scalar bounds and string constraint of a signal payload's named
-    /// type, for validating the `= value` override (RIDL-110) — exactly the
-    /// parts a struct field typed by the same name would validate against.
+    /// The value domain of a resolved named type.
+    fn symbol_init_target(&self, symbol: &Symbol) -> InitTarget {
+        match self.find_definition(symbol) {
+            Some(Definition::Type(decl)) => InitTarget::Scalar(backing_class(decl.backing())),
+            Some(Definition::Enum(decl)) => InitTarget::Enum(
+                decl.values()
+                    .filter_map(
+                        |member| match member.value().map(|value| literal_kind(&value)) {
+                            Some(LitKind::Number { value }) => Some(value),
+                            _ => None,
+                        },
+                    )
+                    .collect(),
+            ),
+            Some(Definition::Struct(_) | Definition::Union(_) | Definition::EnumSet(_)) => {
+                InitTarget::Composite
+            }
+            _ => InitTarget::Unknown,
+        }
+    }
+
+    fn field_init_target(&self, ty: &v2::FieldType) -> InitTarget {
+        match ty.kind.as_ref() {
+            Some(v2::field_type::Kind::Named(name)) => self
+                .resolve_canonical(name)
+                .map(|symbol| self.symbol_init_target(&symbol))
+                .unwrap_or(InitTarget::Unknown),
+            Some(v2::field_type::Kind::Primitive(primitive)) => {
+                InitTarget::Scalar(init_primitive_class(*primitive))
+            }
+            Some(v2::field_type::Kind::InlineScalar(scalar)) => InitTarget::Scalar(
+                match scalar
+                    .backing
+                    .as_ref()
+                    .and_then(|backing| backing.kind.as_ref())
+                {
+                    Some(v2::backing::Kind::Primitive(primitive)) => {
+                        init_primitive_class(*primitive)
+                    }
+                    Some(v2::backing::Kind::Unit(_)) => BackingClass::Float,
+                    None => BackingClass::Unknown,
+                },
+            ),
+            Some(_) => InitTarget::Composite,
+            None => InitTarget::Unknown,
+        }
+    }
+
+    /// The full scalar constraint used by a field or signal init, retaining
+    /// a numeric step even when the type is referenced from another package.
+    fn named_init_constraint(&self, symbol: &Symbol) -> Option<v2::Constraint> {
+        if let Some(constraint) = self.named_string_constraint(symbol) {
+            return Some(constraint);
+        }
+        let Definition::Type(decl) = self.find_definition(symbol)? else {
+            return None;
+        };
+        let package = self.package_handle(&symbol.package)?;
+        let step = decl
+            .constraint()?
+            .step()
+            .and_then(|literal| self.numeric_literal_in(package, &literal));
+        Some(v2::Constraint {
+            step: step.map(|value| value.to_decimal_string()),
+            ..Default::default()
+        })
+    }
+
+    /// Scalar constraints used by a signal override, matching struct fields.
     fn payload_scalar_parts(&self, symbol: &Symbol) -> ScalarParts {
         if symbol.kind != SymbolKind::Type {
             return ScalarParts::empty();
         }
         let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
         ScalarParts {
-            constraint: self.named_string_constraint(symbol),
+            constraint: self.named_init_constraint(symbol),
             width: None,
             min,
             max,
@@ -5565,6 +5879,17 @@ fn primitive_of(node: &ast::PrimitiveType) -> (v2::PrimitiveType, BackingClass) 
         (v2::PrimitiveType::Bytes, BackingClass::Bytes)
     } else {
         (v2::PrimitiveType::Unspecified, BackingClass::Unknown)
+    }
+}
+
+fn init_primitive_class(primitive: i32) -> BackingClass {
+    match v2::PrimitiveType::try_from(primitive).ok() {
+        Some(v2::PrimitiveType::Boolean) => BackingClass::Boolean,
+        Some(v2::PrimitiveType::Integer) => BackingClass::Integer,
+        Some(v2::PrimitiveType::Float) => BackingClass::Float,
+        Some(v2::PrimitiveType::String) => BackingClass::Str,
+        Some(v2::PrimitiveType::Bytes) => BackingClass::Bytes,
+        _ => BackingClass::Unknown,
     }
 }
 
@@ -9506,6 +9831,293 @@ mod tests {
     }
 
     #[test]
+    fn union_init_propagates_first_arm_derivability_to_fields_and_signals() {
+        let step = format!("1{}.0", "0".repeat(400));
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "package app\ntype Bad : float [..-0.1 step {step}]\ntype Good : float [0.0..1.0 step 0.1]\ntype Label : string [1] = \"x\"\nunion U {{ bad : Bad, good : Good }}\nunion Nested {{ first : U, good : Good }}\nunion Valid {{ first : Good, bad : Bad }}\nunion Declared {{ first : Label }}\nstruct S {{ bad : U, nested : Nested, good : Valid, declared : Declared }}\ninterface I {{ signal bad : U @10ms, signal nested : Nested @10ms, signal good : Valid @10ms, signal declared : Declared @10ms }}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked)
+                .iter()
+                .filter(|code| **code == "RIDL-109")
+                .count(),
+            2,
+            "{:?}",
+            checked.diagnostics
+        );
+        for (name, derivable) in [
+            ("bad", false),
+            ("nested", false),
+            ("good", true),
+            ("declared", true),
+        ] {
+            assert_eq!(
+                field_init(&checked, "S", name),
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+            assert_eq!(
+                signal_def(&checked, name).init,
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn struct_signal_init_propagates_nonderivable_float_and_unique_map_fields() {
+        let step = format!("1{}.0", "0".repeat(400));
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "package app\ntype Bad : float [..-0.1 step {step}]\ntype Good : integer [0..10]\ntype Label : string [1]\nstruct BadFloat {{ value : Bad }}\nstruct BadMap {{ values : [integer : Good; 2..3] }}\nstruct BadInline {{ value : float [..-0.1 step {step}] }}\nstruct BadArray {{ values : [Bad; 1..2] }}\nstruct BadTuple {{ value : (first: Bad, second: Good) }}\nstruct Nested {{ value : BadMap }}\nstruct Valid {{ label : Label = \"x\", optional : Bad?, empty : [Bad; 0..2], emptyMap : [integer : Bad; 0..2], one : [integer : Good; 1..2] }}\nstruct Repeated {{ first : Valid, second : Valid }}\nunion FloatUnion {{ first : BadFloat }}\nunion MapUnion {{ first : BadMap }}\nstruct Holder {{ badFloat : BadFloat, badMap : BadMap, nested : Nested, valid : Valid, repeated : Repeated }}\ninterface I {{ signal badFloat : BadFloat @10ms, signal badMap : BadMap @10ms, signal nested : Nested @10ms, signal floatUnion : FloatUnion @10ms, signal mapUnion : MapUnion @10ms, signal valid : Valid @10ms, signal repeated : Repeated @10ms, signal badInline : BadInline @10ms, signal badArray : BadArray @10ms, signal badTuple : BadTuple @10ms }}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked)
+                .iter()
+                .filter(|code| **code == "RIDL-109")
+                .count(),
+            8,
+            "{:?}",
+            checked.diagnostics
+        );
+        for (name, derivable) in [
+            ("badFloat", false),
+            ("badMap", false),
+            ("nested", false),
+            ("valid", true),
+            ("repeated", true),
+        ] {
+            assert_eq!(
+                field_init(&checked, "Holder", name),
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+            assert_eq!(
+                signal_def(&checked, name).init,
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+        }
+        for name in [
+            "floatUnion",
+            "mapUnion",
+            "badInline",
+            "badArray",
+            "badTuple",
+        ] {
+            assert_eq!(signal_def(&checked, name).init, Some(iv(false, None)));
+        }
+    }
+
+    #[test]
+    fn shared_composite_derivation_finishes_within_a_bounded_process() {
+        use std::io::Read as _;
+
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "check::tests::shared_composite_derivation_process_fixture",
+                "--ignored",
+                "--nocapture",
+            ])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        // A wide margin above normal compilation still bounds the exponential
+        // regression. Kill and reap the child rather than leaving it running.
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(
+                    status.success(),
+                    "shared composite fixture failed: {status}"
+                );
+                let mut output = String::new();
+                child
+                    .stdout
+                    .take()
+                    .unwrap()
+                    .read_to_string(&mut output)
+                    .unwrap();
+                assert!(
+                    output.contains("RIDL_SHARED_COMPOSITE_FIXTURE_COMPLETE"),
+                    "shared composite fixture did not execute: {output}"
+                );
+                break;
+            }
+            if started.elapsed() >= std::time::Duration::from_secs(10) {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("shared composite derivation exceeded ten seconds");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    #[ignore = "executed by the process-bounded traversal regression"]
+    fn shared_composite_derivation_process_fixture() {
+        let mut source = "package app\nstruct S0 { value : string [0..8] }\n".to_string();
+        for level in 1..=22 {
+            let previous = level - 1;
+            source.push_str(&format!(
+                "struct S{level} {{ first : S{previous}, second : S{previous} }}\n"
+            ));
+        }
+        source.push_str("interface I { signal value : S22 @10ms }\n");
+        let started = std::time::Instant::now();
+        let checked = check_ridl("app", &source);
+        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        assert_eq!(signal_def(&checked, "value").init, Some(iv(true, None)));
+        eprintln!("shared composite source checked in {:?}", started.elapsed());
+        println!("RIDL_SHARED_COMPOSITE_FIXTURE_COMPLETE");
+    }
+
+    #[test]
+    fn composite_derivation_checks_every_required_position() {
+        let prefix = "package app\ntype Good : integer [0..10]\ntype Label : string [1]\n";
+        for fields in [
+            "first : Good, second : Label",
+            "value : (first: Good, second: Label)",
+            "value : [Label : Good; 1..2]",
+            "value : [integer : Label; 1..2]",
+            "value : string [1]",
+            "value : string [0..8 match /^a+$/]",
+            "value : bytes [1]",
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}struct Payload {{ {fields} }}\nstruct Holder {{ value : Payload }}\ninterface I {{ signal value : Payload @10ms }}\n"
+                ),
+            );
+            assert_eq!(
+                field_init(&checked, "Holder", "value"),
+                Some(iv(false, None)),
+                "{fields}: {:?}",
+                checked.diagnostics
+            );
+            assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
+            assert_eq!(
+                codes(&checked)
+                    .iter()
+                    .filter(|code| **code == "RIDL-109")
+                    .count(),
+                1,
+                "{fields}: {:?}",
+                checked.diagnostics
+            );
+        }
+        for fields in [
+            "first : Good, second : Good",
+            "value : (first: Good, second: Good)",
+            "value : [integer : Good; 1..2]",
+            "value : string [0..8]",
+            "value : bytes [0..8]",
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}struct Payload {{ {fields} }}\ninterface I {{ signal value : Payload @10ms }}\n"
+                ),
+            );
+            assert_eq!(
+                signal_def(&checked, "value").init,
+                Some(iv(true, None)),
+                "{fields}: {:?}",
+                checked.diagnostics
+            );
+            assert!(!codes(&checked).contains(&"RIDL-109"));
+        }
+    }
+
+    #[test]
+    fn imported_composite_derivation_uses_its_defining_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "common",
+            "package common\nconst N = 1\ntype Good : integer [0..10]\nstruct Payload { first : Good, second : string [N] }\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nconst N = 0\ntype Good : string [0..8]\nimport common.Payload\nstruct Holder { value : Payload }\ninterface I { signal value : Payload @10ms }\n",
+        );
+        let workspace = Workspace::new(&db, vec![common, app], BTreeMap::new());
+        let checked = check_package(&db, workspace, app, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-109"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            field_init(&checked, "Holder", "value"),
+            Some(iv(false, None))
+        );
+        assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
+    }
+
+    #[test]
+    fn composite_derivation_cache_keeps_package_qualified_identity() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "common",
+            "package common\nstruct Payload { value : string [0..8] }\n",
+        );
+        let other = package(
+            &db,
+            "other",
+            "package other\nstruct Payload { value : string [1] }\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nstruct Holder { first : common.Payload, second : other.Payload }\nstruct Container { value : Holder }\ninterface I { signal value : Holder @10ms }\n",
+        );
+        let workspace = Workspace::new(&db, vec![common, other, app], BTreeMap::new());
+        let checked = check_package(&db, workspace, app, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-109"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            field_init(&checked, "Holder", "first"),
+            Some(iv(true, None))
+        );
+        assert_eq!(
+            field_init(&checked, "Holder", "second"),
+            Some(iv(false, None))
+        );
+        assert_eq!(
+            field_init(&checked, "Container", "value"),
+            Some(iv(false, None))
+        );
+        assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
+    }
+
+    #[test]
+    fn recursive_union_init_is_not_derivable() {
+        let checked = check_source(
+            "app",
+            "package app\nunion U { first : V }\nunion V { first : U }\nstruct S { value : U }\n",
+        );
+        assert!(codes(&checked).contains(&"TYPL-206"));
+        assert_eq!(field_init(&checked, "S", "value"), Some(iv(false, None)));
+    }
+
+    #[test]
     fn derived_tuple_field_init_is_a_derivable_composite() {
         let checked = check_source(
             "app",
@@ -9682,6 +10294,537 @@ mod tests {
     }
 
     /// A clean vocabulary prefix for interaction tests.
+    #[test]
+    fn declared_init_rejects_wrong_scalar_kinds_at_every_site() {
+        for (backing, init) in [
+            ("integer [0..10]", "true"),
+            ("integer [0..10]", "\"text\""),
+            ("integer [0..10]", "1.5"),
+            ("boolean", "1"),
+            ("string [0..10]", "1"),
+            ("bytes [0..10]", "false"),
+            ("float [0.0..10.0 step 1.0]", "FLAG"),
+            ("string [0..10]", "FLAG"),
+            ("integer [0..10]", "TEXT"),
+            ("integer [0..10]", "PATTERN"),
+            ("boolean", "NUMBER"),
+            ("string [0..10]", "NUMBER"),
+        ] {
+            let prefix = "package app\nconst FLAG = true\nconst TEXT = \"text\"\nconst NUMBER = 1\nconst PATTERN = /a/\n";
+            let ty = check_source("app", &format!("{prefix}type T : {backing} = {init}\n"));
+            assert!(
+                codes(&ty).contains(&"TYPL-109"),
+                "type {backing} = {init}: {:?}",
+                ty.diagnostics
+            );
+            let field = check_source(
+                "app",
+                &format!("{prefix}type T : {backing}\nstruct S {{ value : T = {init} }}\n"),
+            );
+            assert!(
+                codes(&field).contains(&"TYPL-109"),
+                "field {backing} = {init}: {:?}",
+                field.diagnostics
+            );
+            let signal = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}type T : {backing}\ninterface I {{ signal value : T = {init} @10ms }}\n"
+                ),
+            );
+            assert!(
+                codes(&signal).contains(&"RIDL-110"),
+                "signal {backing} = {init}: {:?}",
+                signal.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn declared_init_rejects_values_off_the_exact_step_grid() {
+        for init in ["0.2", "BAD"] {
+            let prefix = "package app\nconst BAD = 0.2\n";
+            let backing = "float [0.1..1.1 step 0.2]";
+            let ty = check_source("app", &format!("{prefix}type T : {backing} = {init}\n"));
+            assert!(codes(&ty).contains(&"TYPL-109"), "{:?}", ty.diagnostics);
+            for field_type in ["T", backing] {
+                let field = check_source(
+                    "app",
+                    &format!(
+                        "{prefix}type T : {backing}\nstruct S {{ value : {field_type} = {init} }}\n"
+                    ),
+                );
+                assert!(
+                    codes(&field).contains(&"TYPL-109"),
+                    "{:?}",
+                    field.diagnostics
+                );
+            }
+            let signal = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}type T : {backing}\ninterface I {{ signal value : T = {init} @10ms }}\n"
+                ),
+            );
+            assert!(
+                codes(&signal).contains(&"RIDL-110"),
+                "{:?}",
+                signal.diagnostics
+            );
+        }
+        let valid = check_ridl(
+            "app",
+            "package app\ntype T : float [0.1..1.1 step 0.2] = 0.3\nstruct S { value : T = 0.7 }\ninterface I { signal value : T = 1.1 @10ms }\n",
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn declared_init_checks_enum_members_and_refuses_composite_literals() {
+        let prefix = "package app\ntype Count : integer [0..10]\nenum Mode { OFF = 0, ON = 2 }\nstruct Record { value : Count }\nunion Choice { record : Record }\n";
+        for (target, init) in [
+            ("Mode", "42"),
+            ("Mode", "true"),
+            ("Record", "5"),
+            ("Choice", "5"),
+        ] {
+            let field = check_source(
+                "app",
+                &format!("{prefix}struct S {{ value : {target} = {init} }}\n"),
+            );
+            assert!(
+                codes(&field).contains(&"TYPL-109"),
+                "{target}: {:?}",
+                field.diagnostics
+            );
+            let signal = check_ridl(
+                "app",
+                &format!("{prefix}interface I {{ signal value : {target} = {init} @10ms }}\n"),
+            );
+            assert!(
+                codes(&signal).contains(&"RIDL-110"),
+                "{target}: {:?}",
+                signal.diagnostics
+            );
+        }
+        let valid = check_ridl(
+            "app",
+            &format!(
+                "{prefix}const ACTIVE = 2\nstruct S {{ value : Mode = 2.0 }}\ninterface I {{ signal value : Mode = ACTIVE @10ms }}\n"
+            ),
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn declared_init_refuses_enumset_scalar_overrides() {
+        let prefix = "package app\nenumset Flags { FIRST = 0, SECOND = 1 }\nconst MASK = 1\n";
+        for init in ["1", "MASK", "\"\""] {
+            let field = check_source(
+                "app",
+                &format!("{prefix}struct S {{ flags : Flags = {init} }}\n"),
+            );
+            assert_eq!(codes(&field), vec!["TYPL-109"], "{:?}", field.diagnostics);
+            let signal = check_ridl(
+                "app",
+                &format!("{prefix}interface I {{ signal flags : Flags = {init} @10ms }}\n"),
+            );
+            assert_eq!(codes(&signal), vec!["RIDL-110"], "{:?}", signal.diagnostics);
+        }
+    }
+
+    #[test]
+    fn primitive_and_inline_scalar_field_inits_validate_kind_and_integrality() {
+        for (target, invalid, valid) in [
+            ("boolean", vec!["1", "\"x\""], vec!["true", "false"]),
+            ("integer", vec!["true", "\"x\"", "1.5"], vec!["1", "1.0"]),
+            ("float", vec!["true", "\"x\""], vec!["1", "1.5"]),
+            (
+                "integer [0..10]",
+                vec!["true", "\"x\"", "1.5"],
+                vec!["1", "1.0"],
+            ),
+            (
+                "float [0.0..10.0 step 0.5]",
+                vec!["true", "\"x\""],
+                vec!["1", "1.5"],
+            ),
+            ("string [0..8]", vec!["true", "1"], vec!["\"x\""]),
+            ("bytes [0..8]", vec!["false", "1"], vec!["\"x\""]),
+        ] {
+            let warnings = match target {
+                "integer" => vec!["TYPL-101"],
+                "float" => vec!["TYPL-102"],
+                _ => Vec::new(),
+            };
+            for literal in invalid {
+                for init in [literal, "RAW"] {
+                    let checked = check_source(
+                        "app",
+                        &format!(
+                            "package app\nconst RAW = {literal}\nstruct S {{ value : {target} = {init} }}\n"
+                        ),
+                    );
+                    let mut expected = warnings.clone();
+                    expected.push("TYPL-109");
+                    assert_eq!(
+                        codes(&checked),
+                        expected,
+                        "{target} = {init}: {:?}",
+                        checked.diagnostics
+                    );
+                }
+            }
+            for init in valid {
+                let checked = check_source(
+                    "app",
+                    &format!("package app\nstruct S {{ value : {target} = {init} }}\n"),
+                );
+                assert_eq!(
+                    codes(&checked),
+                    warnings,
+                    "{target} = {init}: {:?}",
+                    checked.diagnostics
+                );
+                assert!(field_init(&checked, "S", "value").unwrap().derivable);
+            }
+        }
+    }
+
+    #[test]
+    fn inline_collection_and_tuple_inits_refuse_scalar_overrides() {
+        let prefix = "package app\ntype Count : integer [0..10]\nconst FIVE = 5\n";
+        for target in [
+            "[Count; 1..2]",
+            "[integer : Count; 1..2]",
+            "(left: Count, right: Count)",
+        ] {
+            let derived =
+                check_source("app", &format!("{prefix}struct S {{ value : {target} }}\n"));
+            assert!(
+                codes(&derived).is_empty(),
+                "{target}: {:?}",
+                derived.diagnostics
+            );
+            assert_eq!(field_init(&derived, "S", "value"), Some(iv(true, None)));
+            for init in ["5", "FIVE"] {
+                let checked = check_source(
+                    "app",
+                    &format!("{prefix}struct S {{ value : {target} = {init} }}\n"),
+                );
+                assert_eq!(
+                    codes(&checked),
+                    vec!["TYPL-109"],
+                    "{target} = {init}: {:?}",
+                    checked.diagnostics
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn derived_numeric_init_respects_step_at_every_site() {
+        for (minimum, expected) in [("-0.1", "-0.1"), ("-0.2", "0")] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "package app\ntype T : float [{minimum}..1.0 step 0.2]\nstruct S {{ named : T, inline : float [{minimum}..1.0 step 0.2] }}\ninterface I {{ signal value : T @10ms }}\n"
+                ),
+            );
+            assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+            assert_eq!(type_def(&checked, "T").init, Some(iv(true, Some(expected))));
+            for name in ["named", "inline"] {
+                assert_eq!(
+                    field_init(&checked, "S", name),
+                    Some(iv(true, Some(expected)))
+                );
+            }
+            let Some(v2::decl::Kind::SignalDef(signal)) = &interaction(&checked, "value").kind
+            else {
+                panic!("expected signal");
+            };
+            assert_eq!(signal.init, Some(iv(true, Some(expected))));
+        }
+    }
+
+    #[test]
+    fn derived_open_minimum_numeric_init_stays_on_the_step_grid() {
+        let checked = check_ridl(
+            "app",
+            "package app\ntype T : float [..-0.1 step 0.2]\nstruct S { value : T }\ninterface I { signal value : T @10ms }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-102"]);
+        assert_eq!(type_def(&checked, "T").init, Some(iv(true, Some("-0.2"))));
+        assert_eq!(
+            field_init(&checked, "S", "value"),
+            Some(iv(true, Some("-0.2")))
+        );
+        let Some(v2::decl::Kind::SignalDef(signal)) = &interaction(&checked, "value").kind else {
+            panic!("expected signal");
+        };
+        assert_eq!(signal.init, Some(iv(true, Some("-0.2"))));
+    }
+
+    #[test]
+    fn derived_float_and_unit_init_stays_within_the_finite_backing_domain() {
+        let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+        for (step, expected) in [
+            (maximum.to_string(), Some(format!("-{maximum}"))),
+            ((&maximum + 1u32).to_string(), None),
+            (format!("1{}", "0".repeat(400)), None),
+        ] {
+            for backing in ["float", "km/h"] {
+                let checked = check_ridl(
+                    "app",
+                    &format!(
+                        "package app\ntype T : {backing} [..-0.1 step {step}.0]\nstruct S {{ named : T, inline : float [..-0.1 step {step}.0] }}\ninterface I {{ signal value : T @10ms }}\n"
+                    ),
+                );
+                let derivable = expected.is_some();
+                let expected = iv(derivable, expected.as_deref());
+                assert_eq!(
+                    type_def(&checked, "T").init.as_ref(),
+                    Some(&expected),
+                    "{backing}: {:?}",
+                    checked.diagnostics
+                );
+                for name in ["named", "inline"] {
+                    assert_eq!(field_init(&checked, "S", name), Some(expected.clone()));
+                }
+                assert_eq!(signal_def(&checked, "value").init, Some(expected));
+                for code in ["TYPL-115", "RIDL-109"] {
+                    assert_eq!(
+                        codes(&checked).contains(&code),
+                        !derivable,
+                        "{backing}: {:?}",
+                        checked.diagnostics
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn declared_float_init_and_typed_constants_require_finite_backing_values() {
+        let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+        for (step, valid) in [
+            (maximum.to_string(), true),
+            ((maximum + 1u32).to_string(), false),
+            (format!("1{}", "0".repeat(400)), false),
+        ] {
+            for sign in ["", "-"] {
+                let value = format!("{sign}{step}.0");
+                let bounds = if sign.is_empty() { "0.0.." } else { "..0.0" };
+                let constraint = format!("[{bounds} step {step}.0]");
+                let prefix =
+                    format!("package app\ntype T : float {constraint}\nconst RAW = {value}\n");
+                for init in [value.clone(), "RAW".to_string()] {
+                    for (source, code, count) in [
+                        (
+                            format!(
+                                "package app\ntype T : float {constraint} = {init}\nconst RAW = {value}\n"
+                            ),
+                            "TYPL-109",
+                            1,
+                        ),
+                        (
+                            format!(
+                                "{prefix}struct S {{ named : T = {init}, inline : float {constraint} = {init} }}\n"
+                            ),
+                            "TYPL-109",
+                            2,
+                        ),
+                        (
+                            format!("{prefix}interface I {{ signal value : T = {init} @10ms }}\n"),
+                            "RIDL-110",
+                            1,
+                        ),
+                    ] {
+                        let checked = check_ridl("app", &source);
+                        let actual = codes(&checked)
+                            .into_iter()
+                            .filter(|actual| *actual == code)
+                            .count();
+                        assert_eq!(
+                            actual,
+                            if valid { 0 } else { count },
+                            "{source}: {:?}",
+                            checked.diagnostics
+                        );
+                    }
+                    for target in ["T", "float"] {
+                        let checked = check_source(
+                            "app",
+                            &format!("{prefix}const VALUE : {target} = {init}\n"),
+                        );
+                        assert_eq!(
+                            !codes(&checked).contains(&"TYPL-108"),
+                            valid,
+                            "{target}={init}: {:?}",
+                            checked.diagnostics
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn declared_init_refuses_unresolved_constant_references() {
+        let checked = check_source("app", "package app\ntype T : integer [0..10] = MISSING\n");
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        let prefix = "package app\ntype T : integer [0..10]\nenum Mode { OFF = 0, ON = 1 }\n";
+        for target in ["T", "Mode"] {
+            let field = check_source(
+                "app",
+                &format!("{prefix}struct S {{ value : {target} = MISSING }}\n"),
+            );
+            assert_eq!(codes(&field), vec!["TYPL-109"], "{:?}", field.diagnostics);
+            let signal = check_ridl(
+                "app",
+                &format!("{prefix}interface I {{ signal value : {target} = MISSING @10ms }}\n"),
+            );
+            assert_eq!(codes(&signal), vec!["RIDL-110"], "{:?}", signal.diagnostics);
+        }
+    }
+
+    #[test]
+    fn imported_string_init_constraints_use_the_defining_package() {
+        for (constraint, init, local) in [
+            ("[N]", "abc", "const N = 3"),
+            ("[0..8 match PATTERN]", "bbb", "const PATTERN = /^b+$/"),
+        ] {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let common = package(
+                &db,
+                "common",
+                &format!(
+                    "package common\nconst N = 2\nconst PATTERN = /^a+$/\ntype Label : string {constraint}\n"
+                ),
+            );
+            let app = ridl_package(
+                &db,
+                "app",
+                &format!(
+                    "package app\nimport common.Label\n{local}\nstruct S {{ label : Label = \"{init}\" }}\ninterface I {{ signal label : Label = \"{init}\" @10ms }}\n"
+                ),
+            );
+            let ws = Workspace::new(&db, vec![common, app], BTreeMap::new());
+            let checked = check_package(&db, ws, app, std);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-109", "RIDL-110"],
+                "{:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn bytes_init_bounds_measure_utf8_bytes_at_every_site() {
+        let ty = check_source("app", "package app\ntype T : bytes [1] = \"é\"\n");
+        assert_eq!(codes(&ty), vec!["TYPL-109"], "{:?}", ty.diagnostics);
+        let fields = check_source(
+            "app",
+            "package app\ntype T : bytes [1]\nstruct S { named : T = \"é\", inline : bytes [1] = \"é\" }\n",
+        );
+        assert_eq!(
+            codes(&fields),
+            vec!["TYPL-115", "TYPL-109", "TYPL-109"],
+            "{:?}",
+            fields.diagnostics
+        );
+        let signal = check_ridl(
+            "app",
+            "package app\ntype T : bytes [1]\ninterface I { signal value : T = \"é\" @10ms }\n",
+        );
+        assert_eq!(
+            codes(&signal),
+            vec!["TYPL-115", "RIDL-110"],
+            "{:?}",
+            signal.diagnostics
+        );
+        let valid = check_ridl(
+            "app",
+            "package app\ntype Text : string [1] = \"é\"\ntype Octets : bytes [2] = \"é\"\nstruct S { text : Text = \"é\", octets : Octets = \"é\" }\ninterface I { signal text : Text = \"é\" @10ms, signal octets : Octets = \"é\" @10ms }\n",
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn typed_constants_respect_the_exact_step_grid() {
+        for init in ["0.35", "VALUE"] {
+            let checked = check_source(
+                "app",
+                &format!(
+                    "package app\ntype F : float [0.0..1.0 step 0.1]\nconst VALUE = 0.35\nconst BAD : F = {init}\n"
+                ),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-108"],
+                "{:?}",
+                checked.diagnostics
+            );
+        }
+        let valid = check_source(
+            "app",
+            "package app\ntype F : float [0.0..1.0 step 0.1]\nconst VALUE = 0.3\nconst GOOD : F = VALUE\nconst DIRECT : F = 0.3\n",
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn imported_typed_constant_step_uses_the_defining_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "common",
+            "package common\nconst MIN = 0.1\nconst STEP = 0.2\ntype F : float [MIN..1.1 step STEP]\n",
+        );
+        let app = package(
+            &db,
+            "app",
+            "package app\nimport common.F\nconst MIN = 0.0\nconst STEP = 0.1\nconst BAD : F = 0.2\nconst GOOD : F = 0.3\n",
+        );
+        let ws = Workspace::new(&db, vec![common, app], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-108"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("BAD"));
+    }
+
+    #[test]
+    fn typed_numeric_constants_reject_wrong_value_kinds() {
+        for (backing, literal) in [
+            ("float [0.0..1.0 step 0.1]", "true"),
+            ("float [0.0..1.0 step 0.1]", "\"text\""),
+            ("float [0.0..1.0 step 0.1]", "/a/"),
+            ("integer [0..10]", "1.5"),
+        ] {
+            for init in [literal, "VALUE"] {
+                let checked = check_source(
+                    "app",
+                    &format!(
+                        "package app\ntype T : {backing}\nconst VALUE = {literal}\nconst BAD : T = {init}\n"
+                    ),
+                );
+                assert_eq!(
+                    codes(&checked),
+                    vec!["TYPL-108"],
+                    "{:?}",
+                    checked.diagnostics
+                );
+            }
+        }
+    }
+
     const PRELUDE: &str = "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n";
 
     #[test]

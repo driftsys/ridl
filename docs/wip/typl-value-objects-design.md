@@ -57,13 +57,13 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    `TryFrom` through core's `impl<T, U: Into<T>> TryFrom<U> for T` blanket.
 
 3. **A vacuous constraint means no `TryFrom`.** The constraint is vacuous when
-   `min`, `max`, `len_min`, `len_max`, `pattern`, and `pattern_const` are all
-   absent — which, because string and bytes always carry a resolved length
-   bound, means exactly: `boolean` backings, and `integer`/`float` with no
-   declared range. `pattern_const` is read as well as `pattern` because a
-   pattern constant that did not resolve leaves `pattern` absent while the type
-   still carries a match constraint; that was added by review of the Task 1 pull
-   request (driftsys/ridl#412).
+   `min`, `max`, `step`, `len_min`, `len_max`, `pattern`, and `pattern_const`
+   are all absent — which, because string and bytes always carry a resolved
+   length bound, means exactly: `boolean` backings, and `integer`/`float` with
+   no declared range or step. `pattern_const` is read as well as `pattern`
+   because a pattern constant that did not resolve leaves `pattern` absent while
+   the type still carries a match constraint; that was added by review of the
+   Task 1 pull request (driftsys/ridl#412).
 
    Such a type emits an infallible `const fn new`, `From<Inner> for Type`, and
    `From<Type> for Inner`, and **no** `new_unchecked` (it would duplicate
@@ -75,10 +75,12 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    later would flip both field access and constructor fallibility — two breaks
    instead of one.
 
-4. **Pattern validation is a Cargo feature that codegen owns.** `min`/`max` and
-   `len_min`/`len_max` are checked whenever the check can fail. `pattern` is
-   checked under `validate-pattern`, on by default, which enables an optional
-   `regex` dependency. A constrained target builds `--no-default-features`.
+4. **Pattern validation is a Cargo feature that codegen owns.** `min`/`max`,
+   `step` and `len_min`/`len_max` are checked whenever the check can fail.
+   Numeric range and step checks reject NaN and infinities. Unconstrained floats
+   retain those values, as specified in typl §5.5. `pattern` is checked under
+   `validate-pattern`, on by default, which enables an optional `regex`
+   dependency. A constrained target builds `--no-default-features`.
 
    **"Checked unconditionally" was the original wording and is no longer true.**
    driftsys/ridl#420 added two guards, both because rustc's `unused_comparisons`
@@ -257,7 +259,6 @@ per module alongside `ConstraintError` as part of the package vocabulary.
 Each generated type carries a doc comment naming what its constructor does not
 check, rather than staying silent:
 
-- **`step` quantization** — see Deferred below.
 - **Cross-field struct invariants** — deferred by typl §17.7 to an `invariant`
   block.
 - **Anything reached through `new_unchecked`, or a TypeScript `as` cast.**
@@ -267,32 +268,21 @@ check, rather than staying silent:
   fourth skip. Unreachable from a typl source, but the generated type states it
   rather than claiming the feature-gated guarantee.
 
-## Deferred — step normalization and steppers
+## Step validation and deferred steppers
 
-Recorded in the style of typl §17.11: deferred, with the constraints already
-settled so the later work does not restart.
+**Amended 2026-10-02 (driftsys/ridl#469).** `step` is a mandatory validity
+constraint, as typl §4.3 states. The previous proposal to round inputs is
+superseded: validating constructors and payload checks preserve the supplied
+value and reject values off the declared grid. The origin is the declared lower
+bound, or zero when that bound is absent. Floating-point checking uses the
+bounded reconstruction allowance in typl §4.3 at the inferred wire precision for
+both constructors and payload checks; it preserves the stored input. Source init
+values use exact decimal grid membership. NaN is excluded by a range or step
+(typl §5.5, driftsys/ridl#421), while an unconstrained float retains NaN.
 
-Rather than _checking_ that a value sits on the step lattice — which needs a
-tolerance the contract does not specify — the constructor **rounds** to the
-nearest lattice point. There is then no check to get wrong. Paired with it, a
-generated stepper (increment and decrement by one step) serves ADR-0012's
-`adjust` operation shape directly: `step` and `adjust` are the same concept at
-the vocabulary and interaction layers.
-
-Settled constraints for whenever it lands:
-
-- Rounding replaces checking; no tolerance is introduced anywhere.
-- **The rounding mode must be named explicitly.** Rust's `f64::round()` is
-  ties-away-from-zero, which is not the IEEE 754 default of ties-to-even, so
-  leaving it implicit picks a mode by accident.
-- **Round first, then range-check.** Rounding can push a value past `max`:
-  `250.4` on `[0.0..250.0 step 0.5]` rounds to `250.5`.
-- The stored `f64` is the nearest lattice point _as computed in `f64`_, not an
-  exact `min + n·step`. Exactness lives in the scaled-integer transport form of
-  typl §4.3, not the language layer.
-- It changes `new` from validating to normalizing — a semantic change to a
-  shipped API — so it lands with or before anything that depends on step
-  exactness.
+A generated stepper (increment and decrement by one step) remains deferred. It
+may serve ADR-0012's `adjust` operation shape, but adds an operation rather than
+changing the validity contract or normalizing construction.
 
 ## Breaking change and migration
 

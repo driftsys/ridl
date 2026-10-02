@@ -25,17 +25,25 @@ use crate::v2;
 /// 0 must lie within `[min..max]`, and when a `step` is declared it must also
 /// be on the grid `min + n·step` for a whole `n` (typl §4.3):
 /// `[-1.5..1.5 step 1.0]` holds -1.5, -0.5, 0.5 and 1.5, and not 0. A `step`
-/// with no `min` has no anchor, and a bound that is not plain decimal text
-/// (`-`, digits, and an optional fractional part) is not read here; in both
-/// cases the answer is `false`, so an absent field is refused rather than
-/// read as a value that may not be legal. A type with no constraint at all
+/// with no `min` uses zero as its origin. A bound that is not plain decimal
+/// text (`-`, digits, and an optional fractional part) is not read here; the
+/// answer is `false`, so an absent field is refused rather than read as a
+/// value that may not be legal. A type with no constraint at all
 /// holds 0: the caller passes three `None`s.
 ///
 /// This is decided from the declaration, for a named type and for an inline
-/// constraint alike, and not by calling a generated type's `check`: `check`
-/// ignores `step` (driftsys/ridl#469), and an inline constraint has no
-/// `check`.
+/// constraint alike, without depending on generated validation functions.
+/// A zero or omitted origin is decided directly from canonical decimal signs
+/// and has no coefficient precision limit.
 pub fn range_holds_zero(min: Option<&str>, max: Option<&str>, step: Option<&str>) -> bool {
+    // A zero origin lies on every positive step lattice. This does not need
+    // coefficient arithmetic, so arbitrarily fine or large canonical decimal
+    // steps remain decidable without the bounded Decimal representation.
+    if min.is_none_or(|min| decimal_sign(min) == Some(0))
+        && max.is_none_or(|max| decimal_sign(max).is_some_and(|sign| sign >= 0))
+    {
+        return step.is_none_or(|step| decimal_sign(step) == Some(1));
+    }
     let read = |text: Option<&str>| -> Result<Option<Decimal>, ()> {
         match text {
             None => Ok(None),
@@ -50,7 +58,7 @@ pub fn range_holds_zero(min: Option<&str>, max: Option<&str>, step: Option<&str>
     }
     match (step, min) {
         (None, _) => true,
-        (Some(_), None) => false,
+        (Some(step), None) => step.units > 0,
         // 0 = min + n·step with a whole n: -min is a whole multiple of step.
         (Some(step), Some(min)) => {
             let scale = min.scale.max(step.scale);
@@ -59,6 +67,30 @@ pub fn range_holds_zero(min: Option<&str>, max: Option<&str>, step: Option<&str>
                 _ => false,
             }
         }
+    }
+}
+
+/// The sign of a canonical decimal, without allocating its coefficient.
+fn decimal_sign(text: &str) -> Option<i8> {
+    let (negative, unsigned) = text
+        .strip_prefix('-')
+        .map_or((false, text), |text| (true, text));
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+        || (unsigned.contains('.') && fraction.is_empty())
+    {
+        return None;
+    }
+    if whole
+        .bytes()
+        .chain(fraction.bytes())
+        .all(|byte| byte == b'0')
+    {
+        Some(0)
+    } else {
+        Some(if negative { -1 } else { 1 })
     }
 }
 
@@ -131,8 +163,11 @@ mod tests {
             (Some("0.0"), Some("1.0"), Some("0.01"), true),
             (Some("-0.25"), Some("1"), Some("0.125"), true),
             (Some("-0.3"), Some("1"), Some("0.2"), false),
-            // A step with no lower bound has no anchor, so it is not decided.
-            (None, Some("10"), Some("1"), false),
+            // A step with no lower bound has zero as its origin.
+            (None, Some("10"), Some("1"), true),
+            (None, None, Some("0.5"), true),
+            (None, None, Some("0"), false),
+            (None, None, Some("-0.5"), false),
             // Text this reader does not accept is not decided either.
             (Some("-1e3"), Some("10"), None, false),
             (Some("-1."), Some("10"), None, false),
@@ -143,6 +178,17 @@ mod tests {
                 legal,
                 "min {min:?}, max {max:?}, step {step:?}"
             );
+        }
+    }
+
+    #[test]
+    fn zero_origin_holds_zero_at_any_canonical_step_precision() {
+        let fine = format!("0.{}1", "0".repeat(399));
+        let large = format!("1{}.0", "0".repeat(400));
+        for step in [&fine, &large] {
+            assert!(range_holds_zero(Some("0.0"), None, Some(step)));
+            assert!(range_holds_zero(None, Some("1.0"), Some(step)));
+            assert!(!range_holds_zero(None, None, Some(&format!("-{step}"))));
         }
     }
 

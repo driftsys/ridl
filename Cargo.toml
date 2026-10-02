@@ -41,6 +41,7 @@ lsp-server = "0.10.0"
 lsp-types = "0.97.0"
 num-bigint = "0.4.8"
 num-rational = "0.4.2"
+num-traits = "0.2.19"
 # The IR's canonical protobuf JSON (ADR-0014 decision 14): `pbjson-build`
 # generates the serde impls at build time from the same `protox` descriptor
 # set that generates the types, and `pbjson` is the runtime the generated

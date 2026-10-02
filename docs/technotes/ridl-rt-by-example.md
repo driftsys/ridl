@@ -348,7 +348,8 @@ bytes to a decoded value that skips the check, and that is enforced by the type
 system rather than by convention.
 
 `verify` checks the structure of the bytes and the typl constraints of the value
-**in one pass**, and reports the two separately:
+before decoding, and reports the two separately. Map uniqueness compares each
+key with preceding keys, so those key reads are repeated:
 
 | `VerifyError`          | Meaning                                                    | ridl stratum |
 | ---------------------- | ---------------------------------------------------------- | ------------ |
@@ -358,8 +359,8 @@ system rather than by convention.
 Keeping them apart matters downstream: a `Temperature` of 200 is a contract
 error the application caused, and a truncated buffer is an infrastructure
 failure. A `Violation` names the typl type and which rule it broke — `Range`,
-`Step`, `Length`, `Pattern` or `Variant` — so the report says `Temperature`
-broke its range rather than that something somewhere was wrong.
+`Step`, `Length`, `Pattern`, `Variant` or `Unique` — so the report says
+`Temperature` broke its range rather than that something somewhere was wrong.
 
 Finally, `Payload<E>::MAX_SIZE` is the largest encoded size of any legal value.
 It is what sized the stack buffer in step 1, and what the generated

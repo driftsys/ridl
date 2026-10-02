@@ -97,13 +97,44 @@ fn ridl_rt_rlib_with(dir: &Path, std: bool) -> PathBuf {
 /// that the bytes it writes are the bytes it reads back, which is E11.7's own
 /// `Done when`.
 pub fn run_program(name: &str, source: &str) {
+    run_program_with_pattern(name, source, false);
+}
+
+/// Runs emitted pattern validation against the regex library already built by
+/// Cargo for the source compiler's semantic checks.
+pub fn run_program_with_pattern(name: &str, source: &str, validate_pattern: bool) {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join(format!("{name}.rs"));
     let bin_path = dir.path().join(name);
     std::fs::write(&source_path, source).expect("the generated source is written");
     let ridl_rt = ridl_rt_rlib(dir.path());
 
-    let status = std::process::Command::new("rustc")
+    let mut command = std::process::Command::new("rustc");
+    if validate_pattern {
+        let executable = std::env::current_exe().expect("the test executable has a path");
+        let dependencies = executable
+            .parent()
+            .expect("the executable is in Cargo's deps directory");
+        let regex = std::fs::read_dir(dependencies)
+            .expect("Cargo's dependencies are readable")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name().is_some_and(|name| {
+                    let name = name.to_string_lossy();
+                    name.starts_with("libregex-") && name.ends_with(".rlib")
+                })
+            })
+            .expect("the semantic compiler builds regex");
+        command
+            .arg("--cfg")
+            .arg(r#"feature="validate-pattern""#)
+            .arg("--extern")
+            .arg(format!("regex={}", regex.display()))
+            .arg("-L")
+            .arg(format!("dependency={}", dependencies.display()));
+    }
+    let status = command
         .args(["--edition", "2024", "--crate-type", "bin", "-D", "warnings"])
         .arg("-o")
         .arg(&bin_path)

@@ -796,11 +796,8 @@ pub mod v2 {
 
     /// Whether a constraint leaves a generated constructor nothing to check.
     ///
-    /// True when no bound and no pattern is present. `step` is excluded on
-    /// purpose: nothing checks a step today, and the design this classifier
-    /// prepares for rounds a value to the nearest step-lattice point rather than
-    /// rejecting it, so a step-only constraint is meant to admit a constructor
-    /// with nothing to check (design spec, Deferred, not yet implemented).
+    /// True when no bound, step or pattern is present. A step is an enforced
+    /// quantization constraint, including when its origin defaults to zero.
     ///
     /// A pattern given by name counts as a pattern: `pattern_const` is read as
     /// well as `pattern`, because a pattern constant that did not resolve leaves
@@ -816,6 +813,7 @@ pub mod v2 {
         let Some(c) = constraint else { return true };
         c.min.is_none()
             && c.max.is_none()
+            && c.step.is_none()
             && c.len_min.is_none()
             && c.len_max.is_none()
             && c.pattern.is_none()
@@ -2320,15 +2318,12 @@ mod vacuous_constraint {
     }
 
     #[test]
-    fn vacuous_constraint_ignores_step() {
-        // A declared step alone leaves a constructor nothing to check: nothing
-        // checks a step today, and the design rounds to the lattice rather
-        // than rejecting (design spec, Deferred, not yet implemented).
+    fn a_step_constraint_is_non_vacuous() {
         let stepped = v2::Constraint {
             step: Some("0.5".to_string()),
             ..constraint()
         };
-        assert!(v2::constraint_is_vacuous(Some(&stepped)));
+        assert!(!v2::constraint_is_vacuous(Some(&stepped)));
     }
 
     /// Every constrained field on its own. A fixture setting a pair — `min`
