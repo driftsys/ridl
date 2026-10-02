@@ -3441,6 +3441,32 @@ mod tests {
     }
 
     #[test]
+    fn indexed_candidate_reads_accumulate_probes() {
+        let mut rendered = Rendering::default();
+        rendered.record_candidate(17);
+        rendered.push("\n\n");
+        rendered.record_candidate(31);
+        assert_eq!(rendered.last_candidates.probes.get(), 0);
+
+        for (line, total) in [(2, 1), (0, 2), (2, 3), (1, 4)] {
+            let _ = rendered.last_candidates[line];
+            assert_eq!(rendered.last_candidates.probes.get(), total);
+        }
+    }
+
+    #[test]
+    fn indexed_candidate_reads_keep_line_identity() {
+        let mut rendered = Rendering::default();
+        rendered.record_candidate(17);
+        rendered.push("\n\n");
+        rendered.record_candidate(31);
+
+        assert_eq!(rendered.last_candidates[2], Some(31));
+        assert_eq!(rendered.last_candidates[0], Some(17));
+        assert_eq!(rendered.last_candidates[1], None);
+    }
+
+    #[test]
     fn large_nested_tuples_keep_canonical_output_and_invariants() {
         let mut fields = Vec::new();
         let mut expected = String::from("package p\n\n// nested tuples\nstruct S {\n  t: (\n");
