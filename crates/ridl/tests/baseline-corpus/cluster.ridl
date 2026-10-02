@@ -31,19 +31,21 @@
 
 package corpus.baseline
 
-type Speed     : km/h    [0.0..250.0 step 0.5]
-type DoorState : integer [0..1]
-type GearIndex : integer [0..6]
+type Speed: km/h [0.0..250.0 step 0.5]
+
+type DoorState: integer [0..1]
+
+type GearIndex: integer [0..6]
 
 interface VehicleStatus {
-  signal currentSpeed : Speed @10ms
-  event tyrePressure : DoorState @[100ms..1s]
-  event doorClosed : DoorState @[100ms..1s]
-  event doorOpened : DoorState @[100ms..1s]
-  signal legacyWheelPhase : Speed @10ms
+  signal currentSpeed: Speed @10ms
+  event tyrePressure: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorOpened: DoorState @[100ms..1s]
+  signal legacyWheelPhase: Speed @10ms
 }
 
 service corpus.baseline.hvac {
-  signal cabinTemp : Speed @[500ms..5s]
-  event filterClogged : DoorState @[100ms..1s]
+  signal cabinTemp: Speed @[500ms..5s]
+  event filterClogged: DoorState @[100ms..1s]
 }

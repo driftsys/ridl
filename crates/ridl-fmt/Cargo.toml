@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The CST-based formatter for the typl surface, behind the `ridl fmt` command."
+description = "The CST-based formatter for the typl, ridl and rsdl profiles, behind the `ridl fmt` command."
 
 [features]
 default = ["editorconfig"]

@@ -868,20 +868,26 @@ Options:
 **It writes** every `.typl`/`.ridl`/`.rsdl` file under `PATH` back to itself in
 canonical form, unless `--check` is given or the file fails to parse. An `.rsdl`
 file takes the file layout (the header, one blank line between declarations).
-The formatter has no layout rules for the rsdl declarations, so it keeps each
-one as written. Interfaces and inline services use the canonical brace layout
+Systems, components, distributions, deployments and machines use canonical
+brace bodies, references and attributes. Deployments keep `for` before header
+attributes and nest machine blocks; source blank lines between machines remain.
+Interfaces and inline services use the canonical brace layout
 and member spacing. Named services keep commas between shapes, remove the
 optional trailing comma, and break overlong shape lists after the colon. Interaction timing precedes attribute blocks. Predicate attributes use block
 form; flag and assignment attributes stay inline when their code line fits.
 
 **Layout and line width.** Formatted blocks use two spaces per indentation
-level. Tuple types in declarations that the formatter lays out break into one
-field per line, with commas between fields, when their code line exceeds the
-configured width, which defaults to 100 characters. Width counts Unicode
+level. Parameter lists, tuple types and attribute value lists break into one
+item per line with commas between items when their code line exceeds the
+configured width. Overlong attribute blocks use one attribute per line; named
+service shape lists break after the colon. The default width is 100 characters. Width counts Unicode
 scalar values, including indentation.
 Trailing comments do not count towards the
 limit, and unbreakable code can exceed it. A comment embedded inside a
-single-line construct keeps that construct's source layout.
+single-line construct keeps that construct's source layout. Comments between
+interaction annotations stay with the preceding source annotation when timing
+moves first. If a moved annotation line comment would consume another trailing
+member comment, the whole member keeps its source layout.
 
 **EditorConfig example.** Editors that support these properties can use this
 section in `.editorconfig` for the family's source files:

@@ -25,24 +25,27 @@ started chapter writes them:
 ```ridl
 package veh.climate
 
-type Temperature : integer [-40..85]
-type FanLevel : integer [0..7]
-type Heated : boolean
+type Temperature: integer [-40..85]
+
+type FanLevel: integer [0..7]
+
+type Heated: boolean
 
 interface Climate {
-  signal cabinTemperature : Temperature @[100ms..1s]
-  command setFan(level : FanLevel) @[..50ms]
+  signal cabinTemperature: Temperature @[100ms..1s]
+  command setFan(level: FanLevel) @[..50ms]
 }
 
 interface Seats {
-  signal heated : Heated @[100ms..1s]
+  signal heated: Heated @[100ms..1s]
 }
 
-service veh.climate.control : Climate
-service veh.climate.seats : Seats
+service veh.climate.control: Climate
+
+service veh.climate.seats: Seats
 
 service veh.climate.diag {
-  query readTemperature() : Temperature @[..100ms]
+  query readTemperature(): Temperature @[..100ms]
 }
 ```
 
@@ -56,17 +59,18 @@ and names one reference per line:
 
 ```rsdl,allow=RSDL-409
 package veh.cabin
-
 import veh.climate.Climate
 import veh.climate.Seats
 
 /// Runs the climate loop. Two copies, one per zone controller.
 component ClimateControl [ instances = (front, rear) ] {
-  offers   veh.climate.control
+  offers veh.climate.control
   requires Seats
 }
 
-component SeatHeating { offers veh.climate.seats }
+component SeatHeating {
+  offers veh.climate.seats
+}
 
 component Dashboard {
   requires Climate
@@ -101,7 +105,13 @@ declares at most one:
 ```rsdl
 package veh.cabin
 
-system Cabin { ClimateControl, SeatHeating, Dashboard, PhoneApp, veh.climate.diag }
+system Cabin {
+  ClimateControl
+  SeatHeating
+  Dashboard
+  PhoneApp
+  veh.climate.diag
+}
 ```
 
 `veh.climate.diag` is a lone service that no declared component offers, so it
@@ -116,8 +126,15 @@ workspace declares one, every implemented closure component is in exactly one:
 ```rsdl
 package veh.cabin
 
-distribution Comfort [ tier = PLATFORM ] { ClimateControl, SeatHeating, veh.climate.diag }
-distribution Display [ tier = APPLICATION ] { Dashboard }
+distribution Comfort [ tier = PLATFORM ] {
+  ClimateControl
+  SeatHeating
+  veh.climate.diag
+}
+
+distribution Display [ tier = APPLICATION ] {
+  Dashboard
+}
 ```
 
 `PhoneApp` is external, so it is in no distribution. `Display` depends on
@@ -135,14 +152,30 @@ and every instance sits on exactly one machine per deployment:
 package veh.cabin
 
 deployment Car for Cabin {
-  machine ZoneFront [ labels = (ASIL_A) ] { ClimateControl.front, SeatHeating, veh.climate.diag }
-  machine ZoneRear { ClimateControl.rear }
-  machine Head { Dashboard [ linux.cpuset = (1) ] }
-  machine Cloud [ external ] { PhoneApp }
+  machine ZoneFront [ labels = (ASIL_A) ] {
+    ClimateControl.front
+    SeatHeating
+    veh.climate.diag
+  }
+  machine ZoneRear {
+    ClimateControl.rear
+  }
+  machine Head {
+    Dashboard [ linux.cpuset = (1) ]
+  }
+  machine Cloud [ external ] {
+    PhoneApp
+  }
 }
 
 deployment Bench for Cabin {
-  machine Rig { ClimateControl, SeatHeating, Dashboard, veh.climate.diag, PhoneApp }
+  machine Rig {
+    ClimateControl
+    SeatHeating
+    Dashboard
+    veh.climate.diag
+    PhoneApp
+  }
 }
 ```
 

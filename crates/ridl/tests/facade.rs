@@ -126,8 +126,8 @@ fn check_reports_a_diagnostic_in_an_rsdl_file() {
 }
 
 /// `ridl fmt` formats an explicit `.rsdl` path under the rsdl profile: the file
-/// layout is applied (one blank line between declarations) and each rsdl
-/// declaration is kept as written, so a second `--check` pass changes nothing.
+/// and declaration layouts are applied, and a second `--check` pass changes
+/// nothing.
 #[test]
 fn fmt_formats_an_rsdl_file() {
     let dir = TempDir::new("fmt-rsdl");
@@ -139,7 +139,7 @@ fn fmt_formats_an_rsdl_file() {
     let formatted = std::fs::read_to_string(&file).expect("the file is still readable");
     assert_eq!(
         formatted,
-        "package veh.topology\n\ncomponent   Cruise {}\n\nsystem Vehicle { Cruise }\n"
+        "package veh.topology\n\ncomponent Cruise {}\n\nsystem Vehicle {\n  Cruise\n}\n"
     );
 
     let (code, stderr) = ridl(&["fmt".as_ref(), "--check".as_ref(), file.as_os_str()]);
@@ -266,6 +266,29 @@ fn fmt_editorconfig_brace_glob_matches_a_typl_file() {
     let file = dir.write("types.typl", &source);
     fmt_directory_and_recheck(&dir);
     assert_eq!(std::fs::read_to_string(file).unwrap(), broken);
+}
+
+#[test]
+fn fmt_editorconfig_brace_glob_controls_valid_rsdl_header_width() {
+    for (width, expected) in [
+        (
+            100,
+            "package p\n\ncomponent Cruise [ instances = (primary, backup) ] {}\n\nsystem Vehicle {\n  Cruise.primary\n  Cruise.backup\n}\n",
+        ),
+        (
+            40,
+            "package p\n\ncomponent Cruise [\n  instances = (primary, backup)\n] {}\n\nsystem Vehicle {\n  Cruise.primary\n  Cruise.backup\n}\n",
+        ),
+    ] {
+        let dir = TempDir::new("fmt-rsdl-width-brace-glob");
+        dir.write(
+            ".editorconfig",
+            &format!("root = true\n[*.{{typl,ridl,rsdl}}]\nmax_line_length = {width}\n"),
+        );
+        let file = dir.write("system.rsdl", "package p\ncomponent Cruise [instances=(primary,backup)] {}\nsystem Vehicle { Cruise.primary, Cruise.backup }\n");
+        fmt_directory_and_recheck(&dir);
+        assert_eq!(std::fs::read_to_string(file).unwrap(), expected);
+    }
 }
 
 #[test]

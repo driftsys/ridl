@@ -709,3 +709,420 @@ append-only. Implementation status and verification are in
 - Commit and PR: QUICK follow-up in PR #635. No recursive QUICK review; final
   pass 2 remains the next full review.
 - Maintainer action: none.
+
+## D-H26 — final correction review and permitted coverage debt
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: final review disposition under the two-pass cap.
+- Observed case: PR #635's final review retained one coverage gap: single-member
+  service fixtures cannot reject preserving a whole service when only one member
+  collides. The current renderer correctly preserves only that member.
+- Decision: track the confirmed test gap in issue #636, milestone E1 — typl +
+  Tooling Spine, with the independent mutation and required two-member probe.
+  Perform no third full review and continue to Task 9.
+- Reason and alternatives considered: the workflow permits coverage debt after
+  its final pass. This is not an observed production or invariant failure.
+- Authority: active review workflow's two-full-pass cap and handoff debt rules.
+- Verification: final pass reviewed `2287d03` through `0249fd1`; compliance/docs
+  reported no new findings and the independent refuter confirmed the test gap at
+  confidence 96. Actual models: compliance/refuter Terra/high, tests/docs
+  Sol/high. All seats matched the five paths. `just verify`, enabled push hooks
+  and all CI checks passed on `0249fd1`.
+- Affected files and behavior: review records and issue #636 only.
+- Commit and PR: PR #635 remains open on `0249fd1`, based on main `c9c7c0e`.
+- Maintainer action: review PR #635 before the stacked RSDL PR; no merge
+  performed by the agent.
+
+## D-H27 — group Tasks 9 and 10 with distinct implementation commits
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: branch and PR grouping choice within the authorized sequential loop.
+- Observed case: Tasks 9 and 10 extend the same header, brace-body and
+  member-line renderers; Task 10 depends directly on Task 9's shared
+  machine-body rules.
+- Decision: use `feat/387-fmt-rsdl` stacked on `fix/387-fmt-annotation-comments`
+  at `0249fd1d2fce5970fc71c775eeba5bedb13b2f38`. Keep separate Task 9 and Task
+  10 commits and QUICK reviews, then open one PR for the consecutive pair.
+- Reason and alternatives considered: the two-task group presents the complete
+  RSDL declaration dispatch without introducing a second partial-layout PR. Task
+  order remains unchanged; a predecessor merge is not required to continue.
+- Authority: handoff's permitted small consecutive PR groups and stacked bases.
+- Affected files and behavior: branch base, review scope and merge order only.
+- Verification: fetched current main `c9c7c0e`; PR #635 is open and all checks
+  passed on its head. Existing worktree is already bootstrapped.
+- Commit and PR: planned RSDL PR based on the immediate unmerged correction
+  branch. Merge order: #635, then the RSDL PR.
+- Maintainer action: review and merge in that order; no merge authorization
+  inferred.
+
+## D-H28 — Task 9 shares header and member attribute layouts
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under settled layout rules.
+- Observed case: RSDL declarations still use the verbatim fallback, and a string
+  header cannot expose its attributes to the existing width renderer.
+- Decision: return `Layout` from `block_header_prefix`, append `{` or `{}`
+  before width measurement, and represent opening-brace comments as trailing
+  comments. Route system, component and distribution through the brace renderer.
+  Share one RSDL line renderer for component keywords and bare references, then
+  reuse Task 7's attribute layout on headers and member lines.
+- Reason and alternatives considered: a separate RSDL width loop would duplicate
+  attribute breaking and risk different boundary decisions. The existing
+  renderer counts indentation, excludes trailing comments and already breaks
+  outer lists before nested lists.
+- Authority: design sections 4.1, 4.2, 4.4, 5 and 6.4; Task 9.
+- Affected files and behavior: formatter, RSDL reference tests and goldens,
+  facade and LSP expected output, and the deferred valid RSDL CLI width test.
+  Direct header comments retain the whole header. Commented references retain
+  their subtree; direct member comments use the existing member fallback.
+- Verification: four intended unit failures and CLI/LSP failures were observed
+  before routing. Formatter, facade and LSP acceptance pass afterward, including
+  three-width corpus invariants and the 143/144-column boundary. The empty body
+  also pins 144/145 because `{}` adds one column. Evidence: Task 9 record.
+- Commit and PR: Task 9 commit in the planned Tasks 9–10 RSDL PR.
+- Maintainer action: none; no grammar, parser or rendering decision changed.
+
+## D-H29 — Task 9 machine-body and golden test placement
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: test-placement choice preserving the task boundary.
+- Observed case: Task 9 owns the shared machine-body line rules, but Task 10
+  owns machine and deployment dispatch.
+- Decision: parse a deployment and call the private brace renderer on its
+  machine subtree at indent one; check exact body output, structure, content,
+  reparsing and a second rendering at all three widths. Keep public
+  deployment/machine dispatch unchanged until Task 10. Copy the
+  attribute-position parser fixture only into formatter goldens; do not edit
+  parser inputs.
+- Reason and alternatives considered: routing deployment early would move Task
+  10 ahead of its required tests. The private renderer test isolates the shared
+  body behavior without altering the parser or public dispatch.
+- Authority: Task 9's machine-body scope, Task 10's dispatch scope, invariants.
+- Affected files and behavior: formatter tests and two golden pairs only. The
+  attribute-position golden still preserves its deployment source until Task 10.
+- Verification: shared machine-body regression failed before member-line
+  routing; all formatter tests pass afterward. One initial comment fixture
+  accidentally exceeded 40 columns; shortening its reference kept the placement
+  test separate from the attribute-width tests. The original failing log is
+  retained.
+- Commit and PR: same Task 9 commit and planned RSDL PR.
+- Maintainer action: none.
+
+## D-H30 — Task 9 QUICK documentation correction
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: factual documentation correction from QUICK review.
+- Observed case: the CLI reference still says all RSDL declarations are kept as
+  written, which Task 9 has made false for system, component and distribution.
+- Decision: describe those three canonical layouts now and explicitly retain
+  deployment/machine's current verbatim status. Task 10 updates that remaining
+  statement when dispatch changes; Task 12 still performs the planned sweep.
+- Reason and alternatives considered: leaving the statement until Task 12 would
+  publish a false behavior claim alongside the intermediate formatter change.
+  This correction does not change the design or advance deployment formatting.
+- Authority: restricted code-to-prose QUICK finding and handoff review loop.
+- Affected files and behavior: CLI reference and evidence only.
+- Verification: all three QUICK seats matched the 13 Task 9 paths. Actual
+  docs/tests Terra/high and fresh bug wrapper/native Terra/medium; metadata
+  verified. Tests and bugs reported no findings. `just test` passed on
+  `c2602dc`; documentation checks follow this correction.
+- Commit and PR: Task 9 QUICK documentation follow-up in the planned RSDL PR; no
+  recursive QUICK pass.
+- Maintainer action: none.
+
+## D-H31 — Task 10 completes deployment and machine dispatch
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under settled nested-container rules.
+- Observed case: the remaining public deployment/machine fallback prevents
+  canonical nested bodies and header relation clauses.
+- Decision: route both kinds through the same brace renderer; classify
+  deployment as a file definition and machine as a body member. Add
+  `for Reference` before header attributes and share the comment-preserving
+  reference helper with member lines. Preserve source gaps through the existing
+  container collector.
+- Reason and alternatives considered: a special deployment renderer or gap loop
+  would duplicate behavior already shared by every brace body. The header layout
+  already exposes attribute break positions and counts the brace.
+- Authority: design section 4.3, R5, D-11, sections 5 and 6.4; Task 10.
+- Affected files and behavior: formatter dispatch/header helper, deployment
+  golden, the attribute-position golden's nested members, and CLI documentation.
+  No parser or grammar changes. The fallback comment no longer names any of the
+  seven declaration kinds.
+- Verification: six selected layout/golden failures were observed before
+  routing; all 102 formatter unit and 20 integration tests pass afterward.
+  Coverage includes the deployment header's 60/61 boundary, machines with and
+  without source blank lines, between-machine comments, direct header line/block
+  comments, commented reference subtrees, empty bodies and malformed deployment
+  input. All seven declaration kinds have exact canonical dispatch assertions at
+  widths 100, 60 and 40. Evidence: Task 10 record.
+- Commit and PR: distinct Task 10 commit in the planned Tasks 9–10 RSDL PR.
+- Maintainer action: none; no unsettled rendering encountered.
+
+## D-H32 — Task 10 QUICK corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under existing comment rules.
+- Question or observed case: a comment after a separator between machines was
+  rendered as a trailing comment of the preceding machine.
+- Chosen action: clear trailing eligibility when consuming a machine separator
+  in the shared collector. Add exact-output regressions for ordinary,
+  documentation and block comments after separators, and nested machine
+  comments/source gaps.
+- Reason and alternatives considered: a machine separator ends the preceding
+  member; limiting the collector rule preserves existing RIDL trailing-comment
+  layouts.
+- Authority: design sections 5 and 9, Task 10 and QUICK review.
+- Affected files and behavior: shared container collector and formatter tests;
+  review report resume paragraph corrected during author diff inspection.
+- Verification: separator regression exits 101 before correction on valid input;
+  final acceptance is recorded in
+  [Task 10 evidence](fmt-ridl-rsdl-evidence/task-10.md).
+- Commit and PR: correction follows `4603d73`; grouped Tasks 9–10 PR pending.
+- Maintainer action: review the grouped PR; no rendering approval is needed.
+
+## D-H33 — Tasks 11–13 branch, grouping and integration
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice following the maintainer's request to proceed.
+- Question or observed case: PR #637 merged into its former stacked base after
+  PR #635 merged into main. Tasks 9–10 are absent from main.
+- Chosen action: create `feat/387-fmt-completion` from fetched main `0bc48da` in
+  the existing bootstrapped sibling worktree. Cherry-pick the four Tasks 9–10
+  implementation and correction commits; preserve the original branch. Group
+  consecutive Tasks 11–13 in a final PR to main, with distinct task commits.
+- Reason and alternatives considered: the final configuration, example sweep and
+  publication documentation depend on the recovered formatter. One PR avoids
+  another dependency on the already merged base branch and tests the final
+  implementation together. No source work is repeated or merged locally.
+- Authority: handoff task grouping and dependency rules; maintainer request
+  “PLEASE ATTACK 11-13”. This is not merge authorization.
+- Affected files and behavior: recovered Tasks 9–10 plus the three final tasks.
+  Task 11 adds exactly the three-extension section from design section 6.6.
+- Verification: remote main and both merge targets inspected; clean worktree;
+  cherry-picks completed. Task 11 acceptance follows below.
+- Commit and PR: final PR pending; target main, with `Part of #387` and the
+  final issue reference only when all implementation done criteria hold.
+- Maintainer action: review and merge the final PR.
+
+## D-H34 — Task 12 parser-selected sweep and fixed-point checks
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under D-10 (b).
+- Question or observed case: the verified book listings, cabin source and
+  baseline corpus use noncanonical spacing.
+- Chosen action: reuse `classify` and its existing `fenced_blocks` parser and
+  unchanged `MDBOOK_OPTIONS` in the fixed-point test. Reuse the test-only
+  formatter invariant streams for structure/content and second-pass checks at
+  widths 100, 60 and 40. The canonical-source comparison uses width 100.
+- Reason and alternatives considered: the compiler harness and formatter gate
+  must select the same fences, including allowed diagnostics and nested Markdown
+  containers. A regular-expression extractor would create another selection
+  rule. An external temporary exporter uses the same existing parser to stage
+  the 32 selected bodies with matching extensions for the CLI formatter.
+- Authority: Task 12, design sections 9 and 11, D-10 and repository book rules.
+- Affected files and behavior: two book chapters, cabin source, baseline source
+  and two baseline span assertions; parser corpus, references, general-form
+  document, ignored fences and baseline IR snapshot remain untouched. A complete
+  before/after parser inventory verifies identical fence markers and unchanged
+  ignored bodies. The tutorial diagnostic is regenerated from actual output.
+- Verification: three fixed-point tests fail with exit 101 before the sweep, on
+  valid inputs and the expected spacing differences. All 40 book tests and 49
+  baseline desk plus 10 gate tests pass after it. The service is at line 48,
+  column 9; the tutorial range diagnostic is at line 4, column 18.
+- Commit and PR: separate Task 12 commit follows Task 11 `8b135ba`; final PR
+  pending. Full workspace/demo and book/link acceptance are running.
+- Maintainer action: review the final PR; no rendering approval is needed.
+
+## D-H35 — final verification of the interrupted review's coverage suggestions
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: author acceptance of advisory coverage suggestions; no review
+  completion or refutation is inferred from the interrupted pass.
+- Question or observed case: PR #637's completed tests seat proposed gaps for
+  populated-machine separator comments, sibling header/member widths and
+  commented distribution dispatch before the coordinator failed.
+- Chosen action: add three targeted assertions during the final done-criteria
+  audit. Include populated machines and all three comment forms; exact fitting
+  and overlong system/distribution headers and both component keywords; and a
+  noncanonical distribution with a between-member comment.
+- Reason and alternatives considered: these assertions enforce existing rules
+  and make the described faulty branches observable. There is no formatter
+  behavior or parser change and no expansion into deferred debt.
+- Authority: plan section 6 done criteria, design sections 5, 6 and 9.
+- Affected files and behavior: formatter unit tests and final verification
+  evidence. Documentation lists every current block kind and comment rule.
+- Verification: all four specified mutations fail with exit 101 on an assertion,
+  not compilation. Restored acceptance passes 107 formatter unit and 20
+  integration tests. The first restored run failed because the disk filled;
+  disposable build caches were cleaned and the successful run disables
+  incremental caching. Both outcomes are retained in local logs.
+- Commit and PR: included with Task 13's final documentation and verification.
+- Maintainer action: review the final PR; the original full review remains
+  recorded as incomplete.
+
+## D-H36 — Task 13 documentation and final audit
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under the existing approved layout.
+- Question or observed case: publication prose still names only the typl or
+  typl/ridl surface; some helper and width descriptions omit implemented forms.
+- Chosen action: describe all three profiles and CLI extensions in the
+  architecture map, CLI module and crate description. Audit the formatter module
+  and helper comments, all book width/indent statements and the narrow approved
+  annotation-comment exception. Keep the five-extension editor example and the
+  three-extension repository section distinct.
+- Reason and alternatives considered: publication prose must describe the
+  implementation shipped by the final PR. The source-based checks and final gate
+  verify the done criteria; an earlier book addition alone does not.
+- Authority: Task 13, plan section 6, D-H14 and D-H19 approved comment rules.
+- Affected files and behavior: architecture, module/helper docs, CLI/crate
+  descriptions, book formatter paragraphs and current review/status records. No
+  runtime layout change, specification sweep or WIP gardening.
+- Verification: all seven canonical dispatch paths, width/configuration and
+  three-profile invariant tests are present. Task 12's sources are fixed points;
+  Task 13 documentation checks and the final actual-head gate follow.
+- Commit and PR: final main-targeted PR pending, with separate task commits.
+- Maintainer action: review and merge the final PR; archive/gardening remains a
+  separate maintainer step.
+
+## D-H37 — Task 12 QUICK correction uses the effective source width
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: accepted advisory test finding; routine implementation choice.
+- Question or observed case: source fixed-point assertions used a width of 100
+  even though CLI options are resolved from the source path.
+- Chosen action: use `FormatOptions::for_path` for canonicality. Cabin and
+  baseline use real paths; book examples use the chapter path with the fence's
+  source extension, without writing a file. Retain independent 100/60/40
+  invariant checks. This supersedes D-H34's default-only source comparison.
+- Reason and alternatives considered: a repository width change must fail the
+  canonical-source test. Creating files beside chapters is unnecessary because
+  the path reader resolves ancestor configuration for nonexistent paths too.
+  Manual prose auditing and actual diagnostic regeneration satisfy the separate
+  book-quotation requirement; brittle prose-string assertions are not added.
+- Authority: Task 12 fixed-point contract and Task 5 path-based reader contract.
+- Affected files and behavior: test-only book/cabin/baseline helpers, no
+  formatter or parser change.
+- Verification: expected RED assertion exit 101, then 41 book, 49 desk and 10
+  gate tests pass; `just check` passes after formatting Task 13 evidence. Logs
+  and actual QUICK model metadata are linked in Task 12 evidence.
+- Commit and PR: `9a2d52a`, final main-targeted PR pending. This is QUICK's own
+  fix and receives no recursive QUICK pass; final full review remains required.
+- Maintainer action: review the final PR; no approval is pending.
+
+## D-H38 — PR 638 machine-gap comments with optional commas
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: confirmed full-review finding; implementation correction.
+- Question or observed case: `machine A {} /* note */ machine B {}` attaches the
+  comment backward, while an optional comma places it between members.
+- Chosen action: stop trailing attachment after every MachineDef, not only after
+  its separator. Comment runs after the last machine remain in the deployment
+  body. Leave other member and attribute attachment rules unchanged.
+- Reason and alternatives considered: section 5 expressly defines these as
+  deployment-body comments. Treating the comma as the deciding boundary fails
+  the same rule for valid comma-free syntax. No new rendering approval is
+  needed.
+- Authority: normative layout section 5, confirmed compliance/refuter finding.
+- Affected files and behavior: shared collector and container comment; exact
+  empty/populated machine assertions with block/line/doc comments, optional
+  separators and last-member comment runs at widths 100/60/40.
+- Verification: expected output assertion fails before the change, exit 101,
+  then passes. Restored formatter acceptance passes 110 unit and 20 integration
+  tests; PR 638 evidence records local logs and the actual heads.
+- Commit and PR: PR #638 against main; separate review correction commit.
+- Maintainer action: review final correction; no approval remains pending.
+
+## D-H39 — PR 638 bare-reference comments and nested width boundaries
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: confirmed coverage findings accepted for correction.
+- Question or observed case: MemberLine-only comment deletion and nested
+  indent-zero measurement mutations survive the earlier tests.
+- Chosen action: add exact-output dotted-reference comment assertions for
+  system, distribution and nested machine members. Check the 41-column nested
+  member at widths 39, 40 and 41, counting its four-space indentation.
+- Reason and alternatives considered: component keyword-line and short nested
+  member cases do not exercise these paths. The new assertions enforce existing
+  comment/width rules and add no formatter behavior.
+- Authority: layout sections 5, 6 and 9, confirmed full-review test findings.
+- Affected files and behavior: formatter unit tests only, with parse, structure,
+  content/comment and second-pass checks.
+- Verification: both precise mutations fail by assertion, exit 101; source is
+  restored and all 110 unit plus 20 integration tests pass. Local logs are
+  recorded in PR 638 evidence.
+- Commit and PR: same distinct PR #638 correction commit; pass 2 follows.
+- Maintainer action: review the final PR; no new design choice is proposed.
+
+## D-H40 — PR 638 evidence scope and count corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: confirmed reporting defects corrected.
+- Question or observed case: D-H34/D-H37 and Task 12 evidence report 10
+  baseline-gate tests; the actual logs show 32. Token descriptions overstate
+  their scope because whitespace and commas are intentionally filtered.
+- Chosen action: correct Task 12 evidence and the rsdl helper comment. This
+  entry supersedes the inaccurate counts in append-only D-H34/D-H37: initial
+  acceptance passes 40 book, 49 desk, 32 gate tests; the path-width correction
+  passes 41 book, 49 desk, 32 gate tests. CST/content comparisons ignore
+  whitespace and separator commas; the content stream retains comment text with
+  trailing whitespace trimmed.
+- Reason and alternatives considered: report actual output, preserving original
+  log evidence and append-only decision history rather than rewriting it. No
+  tests or successful outcomes change.
+- Authority: handoff evidence contract and confirmed docs/refuter findings.
+- Affected files and behavior: test helper prose, evidence and current report.
+- Verification: both Task 12 acceptance logs inspected; formatter suite passes
+  after the comment-only correction.
+- Commit and PR: PR #638 correction commit; final gates and pass 2 follow.
+- Maintainer action: review final evidence; no approval or debt filing needed.
+
+## D-H41 — PR 638 correction QUICK follow-up
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: accepted advisory findings; routine test and documentation correction.
+- Question or observed case: generic module trailing-comment claims omit the
+  machine exception, and singleton tests do not pin a multiple-comment run.
+- Chosen action: state the exception in both module-doc locations. Extend the
+  empty/populated machine tests to block, line, doc and mixed two-comment runs
+  between machines and after the final machine, with and without separators.
+- Reason and alternatives considered: both changes enforce the already settled
+  rule and lossless comment handling. No new layout, parser or runtime change.
+- Authority: normative layout sections 5 and 9; correction QUICK docs/tests.
+- Affected files and behavior: formatter docs/tests and review records only.
+- Verification: a terminal-machine first-comment-only mutation fails with exit
+  101 by assertion; source is restored and 110 unit plus 20 integration tests
+  pass. Actual Terra/medium bugs and Terra/high docs/tests models are verified.
+- Commit and PR: follow-up to `ac52315` in PR #638; combined fix diff receives
+  full pass 2. QUICK does not repeat over its own corrections.
+- Maintainer action: review the final PR; no approval is pending.
+
+## D-H42 — Final review disposition and publication
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: completed review; routine status publication and mandated debt filing.
+- Question or observed case: full pass 2 retains one Minor evidence-timing
+  finding. Task 13's historical claim predates the results it describes.
+- Chosen action: file [#639](https://github.com/driftsys/ridl/issues/639) with
+  label `debt` and milestone E1 — typl + Tooling Spine. Leave the historical
+  Task 13 claim for that issue; record completed review results separately in
+  the current report and PR evidence. Publish only final status records next.
+- Reason and alternatives considered: the required two-pass cap directs
+  non-Critical findings to debt. Another full review would exceed that cap.
+  Completion of review rounds does not mean that no defects remain.
+- Authority: active review procedure's pass-2 stop rule and the handoff's
+  evidence, gate and preservation requirements.
+- Affected files and behavior: status report, WIP index and PR evidence only; no
+  executable behavior changes in the final status publication.
+- Verification: full pass 2 covers `7f0aa60..aaf383a`, with verified Terra/high
+  compliance/refuters and Sol/high tests/docs. All four mutations fail their
+  targeted assertions; restored 110 unit and 20 integration tests pass.
+  `CARGO_INCREMENTAL=0 just verify`, enabled push hooks and CI run 37007230085
+  pass on exact `aaf383afa6291913cb135463ad90151f91c43899`. Final record-only
+  publication repeats the full local gate and enabled push hooks on its own
+  head, then monitors the current PR checks.
+- Commit and PR: implementation `7f0aa60`, corrections `ac52315` and `aaf383a`,
+  final [PR #638](https://github.com/driftsys/ridl/pull/638) directly into main.
+- Maintainer action: review and merge PR #638; no rendering approval or stacked
+  merge remains. Do not archive WIP or merge automatically.

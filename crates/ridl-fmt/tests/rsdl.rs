@@ -1,12 +1,12 @@
-//! The formatter over rsdl files (rsdl reference v0.2). It has no layout rules
-//! of its own for the five rsdl declarations: it lays out the file — the
-//! header, one blank line between declarations, the comments — and emits each
-//! declaration as written. These
-//! tests hold that to two properties over the reference's own examples, and pin
-//! what the layout changes.
+//! The formatter over rsdl reference examples: implemented declarations use
+//! canonical brace bodies, references and attributes. The reference corpus
+//! also checks preserved content, structure and fixed points at three widths.
 
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::{Profile, SyntaxKind, parse};
+
+#[path = "support/invariants.rs"]
+mod invariants;
 
 /// The rsdl reference, read at test time so that the examples are its own.
 fn reference() -> String {
@@ -48,13 +48,13 @@ fn examples(reference: &str, from: &str, to: &str) -> Vec<String> {
     blocks
 }
 
-/// The kind and text of every non-trivia token of `text`, parsed as rsdl.
+/// The kind and text of each non-trivia, non-comma token, parsed as rsdl.
 fn tokens(text: &str) -> Vec<(SyntaxKind, String)> {
     parse(text, Profile::Rsdl)
         .syntax()
         .descendants_with_tokens()
         .filter_map(|element| element.into_token())
-        .filter(|token| !token.kind().is_trivia())
+        .filter(|token| !token.kind().is_trivia() && token.kind() != SyntaxKind::Comma)
         .map(|token| (token.kind(), token.text().to_string()))
         .collect()
 }
@@ -82,25 +82,47 @@ fn the_reference_rsdl_examples_format_idempotently_and_keep_every_token() {
         "§3 holds four rsdl examples and Appendix A three"
     );
     for source in &sources {
-        let once = formatted(source);
-        assert_eq!(
-            formatted(&once),
-            once,
-            "a second pass changes nothing:\n{source}"
-        );
-        assert_eq!(tokens(&once), tokens(source), "no token changes:\n{source}");
+        for width in [100, 60, 40] {
+            let options = FormatOptions {
+                max_line_length: Some(width),
+            };
+            let FormatOutcome::Formatted(once) = format(source, Profile::Rsdl, &options) else {
+                panic!("the reference example parses: {source}");
+            };
+            assert_eq!(
+                format(&once, Profile::Rsdl, &options),
+                FormatOutcome::Formatted(once.clone())
+            );
+            assert_eq!(
+                tokens(&once),
+                tokens(source),
+                "no content token changes:\n{source}"
+            );
+            assert_eq!(
+                invariants::syntax_structure(&once, Profile::Rsdl),
+                invariants::syntax_structure(source, Profile::Rsdl)
+            );
+            assert_eq!(
+                invariants::content_tokens(&once, Profile::Rsdl),
+                invariants::content_tokens(source, Profile::Rsdl)
+            );
+        }
     }
 }
 
 #[test]
-fn an_rsdl_file_takes_the_file_layout_and_keeps_its_declarations_as_written() {
+fn an_rsdl_file_uses_canonical_declaration_and_member_layouts() {
     let source = "package veh.topology\n\nimport veh.adas.LaneAssist\n\n\n\
         /// Two copies.\n\
         component Cruise [ instances = (primary, backup) ] { requires LaneAssist }\n\
         system   Vehicle { Cruise }\n";
     let expected = "package veh.topology\nimport veh.adas.LaneAssist\n\n\
         /// Two copies.\n\
-        component Cruise [ instances = (primary, backup) ] { requires LaneAssist }\n\n\
-        system   Vehicle { Cruise }\n";
+        component Cruise [ instances = (primary, backup) ] {\n\
+        \x20\x20requires LaneAssist\n\
+        }\n\n\
+        system Vehicle {\n\
+        \x20\x20Cruise\n\
+        }\n";
     assert_eq!(formatted(source), expected);
 }
