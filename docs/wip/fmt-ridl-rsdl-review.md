@@ -61,13 +61,15 @@ logs. [PR #632](https://github.com/driftsys/ridl/pull/632) was opened after
 `d31f4b9062bf77139c8d4053d9f91156ba12d588` passed `just verify`, enabled
 pre-push hooks, and all CI checks. The evidence file records both heads.
 
-Tasks 6–8 form one consecutive PR with separate task commits and evidence, now
-based on main after restacking. Later task PRs will be stacked on their
-immediate unmerged predecessor. No merge is authorized.
+Tasks 6–8 formed merged PR #634 with separate task commits and evidence. The
+remaining comment fixes are on the correction branch based on main `c9c7c0e`.
+Later task PRs will be stacked on their immediate unmerged predecessor. No merge
+is authorized.
 
-Work is now on `feat/387-fmt-ridl` in the sibling `ridl-fmt-remaining` worktree.
-The original book branch and untracked handoff are preserved. The owned Task 5
-stash `8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
+Work is now on `fix/387-fmt-annotation-comments` in the sibling
+`ridl-fmt-remaining` worktree. The original book branch and untracked handoff
+are preserved. The owned Task 5 stash
+`8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
 `On feat/387-fmt-editorconfig: Task 5 caller tests and width plumbing pending rsdl test sequencing`,
 remains intact, as do all other stashes. Task 5 is complete with recorded review
 debt. Task 6 acceptance and QUICK review are complete; current book and
