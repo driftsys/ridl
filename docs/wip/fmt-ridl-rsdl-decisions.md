@@ -1077,3 +1077,23 @@ append-only. Implementation status and verification are in
   after the comment-only correction.
 - Commit and PR: PR #638 correction commit; final gates and pass 2 follow.
 - Maintainer action: review final evidence; no approval or debt filing needed.
+
+## D-H41 — PR 638 correction QUICK follow-up
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: accepted advisory findings; routine test and documentation correction.
+- Question or observed case: generic module trailing-comment claims omit the
+  machine exception, and singleton tests do not pin a multiple-comment run.
+- Chosen action: state the exception in both module-doc locations. Extend the
+  empty/populated machine tests to block, line, doc and mixed two-comment runs
+  between machines and after the final machine, with and without separators.
+- Reason and alternatives considered: both changes enforce the already settled
+  rule and lossless comment handling. No new layout, parser or runtime change.
+- Authority: normative layout sections 5 and 9; correction QUICK docs/tests.
+- Affected files and behavior: formatter docs/tests and review records only.
+- Verification: a terminal-machine first-comment-only mutation fails with exit
+  101 by assertion; source is restored and 110 unit plus 20 integration tests
+  pass. Actual Terra/medium bugs and Terra/high docs/tests models are verified.
+- Commit and PR: follow-up to `ac52315` in PR #638; combined fix diff receives
+  full pass 2. QUICK does not repeat over its own corrections.
+- Maintainer action: review the final PR; no approval is pending.

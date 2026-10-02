@@ -7,7 +7,8 @@
 //! - **CST-based** — it walks the concrete syntax tree, so it sees every token
 //!   including trivia (whitespace, comments, doc comments);
 //! - **trivia-aware** — comments and doc comments are preserved and re-anchored
-//!   to what they precede; an inline trailing comment stays on its line;
+//!   to what they precede; an inline trailing comment stays on its line, except
+//!   after a machine block, where it belongs to the deployment body;
 //! - **total** — every syntactically valid input formats; a file with parse
 //!   errors is never reformatted (fmt must not eat broken code, so it returns
 //!   [`FormatOutcome::ParseErrors`] untouched);
@@ -49,7 +50,8 @@
 //!   brace on the attribute block's closing line. Deployments place their `for`
 //!   reference before attributes and nest machine blocks one level down. Machine
 //!   bodies use the same member layout, preserving source blank lines between
-//!   machines.
+//!   machines. Comments after machine blocks belong to the deployment body,
+//!   whether or not the optional separator comma is present.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
@@ -83,7 +85,9 @@
 //! Comments and doc comments survive everywhere. At declaration and member
 //! boundaries they are re-anchored: a leading comment leads the item it
 //! precedes, and an inline trailing comment stays on its line — including a
-//! comment on the opening-brace line of a block. A comment embedded *inside* a
+//! comment on the opening-brace line of a block. Comments after a machine's
+//! closing brace belong to the deployment body, with or without a separator
+//! comma. A comment embedded *inside* a
 //! single-line construct — between the brackets of a constraint or a
 //! collection, the parentheses of a tuple, or the tokens of one declaration —
 //! cannot be reflowed into the tight style without risking its meaning, so the
@@ -1851,7 +1855,15 @@ mod tests {
                     format!("  machine {name} {{\n    {member}\n  }}")
                 }
             };
-            for comment in ["/* note */", "// note\n", "/// note\n"] {
+            for (comment, rendered) in [
+                ("/* note */", "/* note */"),
+                ("// note\n", "// note"),
+                ("/// note\n", "/// note"),
+                ("/* first */ /* second */", "/* first */\n  /* second */"),
+                ("// first\n// second\n", "// first\n  // second"),
+                ("/// first\n/// second\n", "/// first\n  /// second"),
+                ("/* first */ // second\n", "/* first */\n  // second"),
+            ] {
                 for separator in ["", ","] {
                     let source = format!(
                         "package p\ndeployment D for S {{ machine A {{ {first} }}{separator} {comment} machine B {{ {second} }} }}\n"
@@ -1859,7 +1871,7 @@ mod tests {
                     let expected = format!(
                         "package p\n\ndeployment D for S {{\n{}\n  {}\n{}\n}}\n",
                         body("A", first),
-                        comment.trim_end(),
+                        rendered,
                         body("B", second)
                     );
                     let tail_source = format!(
@@ -1868,7 +1880,7 @@ mod tests {
                     let tail_expected = format!(
                         "package p\n\ndeployment D for S {{\n{}\n  {}\n}}\n",
                         body("A", first),
-                        comment.trim_end()
+                        rendered
                     );
                     for width in [100, 60, 40] {
                         let options = FormatOptions {

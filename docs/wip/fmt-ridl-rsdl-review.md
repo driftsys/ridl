@@ -112,3 +112,8 @@ exact assertions, structure/content checks and second passes. Both described
 coverage mutations fail; the restored formatter suite passes 110 unit and 20
 integration tests. The token-scope descriptions and baseline-gate count are
 corrected. See [PR evidence](fmt-ridl-rsdl-evidence/pr-638.md).
+
+The correction QUICK also checks multiple adjacent comments between machines and
+at the end of the deployment. Its first-comment-only mutation is rejected; the
+two generic module statements now name the machine exception. Full pass 2
+reviews these follow-ups with the original correction.
