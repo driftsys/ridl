@@ -3625,7 +3625,7 @@ mod tests {
             assert_eq!(lines.len(), 4 * count + 2);
             assert!(
                 work <= source.len() * 8,
-                "rendered {work} characters for {} source bytes and {count} fields",
+                "rendering work {work} exceeds the bound for {} source bytes and {count} fields",
                 source.len()
             );
         }
