@@ -80,3 +80,30 @@ Checkpoint documentation checks: `just book-check`, `just link-check`,
 `just doc-path-check` and `just check` each exited 0. Logs:
 `task-07-checkpoint-<recipe>.log`. These later edits change zero executable
 lines; QUICK fixes and checkpoint records receive no QUICK pass of their own.
+
+## Approved correction, 2026-10-02
+
+The maintainer approved timing first with intervening inline comments attached
+to their preceding source annotation (D-H14). This supersedes the earlier
+pending checkpoint. PR #630 and #632 are merged; the work is restacked onto main
+`037256d`. Task 7 implementation is now `e27a3dd`; historical hashes above
+remain the original review evidence.
+
+- `cargo test -p ridl-fmt --lib ridl_inline_annotation_comments --locked` failed
+  with exit 101 before correction, specifically attribute-first output against
+  the approved timing-first output. The original guard was reinstated
+  temporarily to save the same failing evidence, then restored.
+- `cargo test -p ridl-fmt --locked` exited 0 after correction: 70 unit tests, 2
+  goldens, 9 configuration tests, 6 properties and 2 rsdl reference tests.
+- `cargo clippy -p ridl-fmt --all-targets --locked -- -D warnings` exited 0.
+- Comment-loss mutation: excluding comment tokens from the invariant helper made
+  `annotation_normalization_detects_a_dropped_intervening_comment` fail, exit
+  101. The helper was restored and formatter acceptance passed again.
+- Local logs: `task-07-approved-comment-{red,green,mutation}.log`.
+
+New cases cover both annotation orders with block and line comments, a predicate
+block with its comment after the closer, a long trailing comment at width 40,
+and unrelated direct/standalone comment verbatim controls. They compare exact
+output, reparse, structure, comment content and fixed point. The test normalizer
+needed no broader reordering. This is a QUICK correction and receives no QUICK
+review of its own; full grouped PR review follows Task 8.

@@ -231,6 +231,14 @@ general form R5's sentence order, `@timing → [ attrs ]` (D-4). With the block
 form of the attribute block that puts `]` last on the member, so a member ends
 where its contract ends.
 
+Amendment approved by the maintainer on 2026-10-02: an inline comment between
+these two annotations stays with the annotation immediately preceding it in
+source. Timing still comes first. For example,
+`query q(): T [persist] /* note */ @10ms` renders as
+`query q(): T @10ms [ persist ] /* note */`. A line comment retains its newline.
+The whole-member verbatim rule continues to apply to other direct member
+comments and to standalone comments between annotations.
+
 **Attribute block, inline form.** One space, the opening bracket, a space, the
 attributes joined by a comma and a space, a space, the closing bracket (the
 padding is D-3). A block whose attributes are all flags or assignments takes
@@ -525,6 +533,8 @@ positions.
   constraint or a collection type is today. A line comment there keeps its
   newline, so the construct spans two lines and the output is still a fixed
   point.
+- Inline comments between timing and attributes follow the approved annotation
+  attachment rule in section 3.2 when the pair is reordered.
 - **New:** inside a block-form attribute block, a comment between two attributes
   is laid out like a comment between two members, at the attributes' indent; a
   comment inside one attribute's tokens emits that attribute verbatim.

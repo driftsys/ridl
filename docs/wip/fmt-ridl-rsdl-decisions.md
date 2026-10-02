@@ -220,6 +220,7 @@ append-only. Implementation status and verification are in
   again before push. See [CI evidence](fmt-ridl-rsdl-evidence/pr-630-ci.md).
 - Commit and PR: review corrections follow `d011d56` on PR #630's branch.
 - Maintainer action: inspect the focused correction; no merge is authorized.
+
 ## D-H8 — Tasks 6–8 branch and PR grouping
 
 - Date and timezone: 2026-10-01, Europe/Paris.
@@ -390,3 +391,37 @@ append-only. Implementation status and verification are in
 - Maintainer action: answer the pending rendering question. Then add the
   approved exact-output regression, rerun acceptance, record the disposition and
   resume Task 8. No parser or grammar change is proposed.
+
+## D-H14 — approved annotation comment attachment and updated branch base
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: explicit maintainer approval, superseding the pending D-H13
+  checkpoint.
+- Question: how `query q(): T [persist] /* note */ @10ms` renders when timing
+  moves before attributes.
+- Decision: timing first; an inline comment between annotations stays with the
+  annotation immediately preceding it in source. The approved output is
+  `query q(): T @10ms [ persist ] /* note */`. Line comments keep their newline.
+  Other direct comments, standalone comments and multiline block comments retain
+  the whole-member verbatim path.
+- Authority: the maintainer reconsidered the earlier tentative verbatim choice,
+  requested pros and cons, then answered "ok" to the timing-first recommendation
+  with preceding-annotation comment attachment. No further approval is pending.
+- Reason: canonical annotation order remains predictable and the comment retains
+  its attachment. Moving the comment next to timing would change that
+  attachment.
+- Changes: exact-output regressions for both source orders, line comments,
+  predicate blocks, trailing-comment width and verbatim controls; a dropped
+  intervening comment remains visible in the invariant stream. The design note
+  records this approved amendment.
+- Branch: the maintainer merged PR #632 into #630 and #630 into main. Tasks 6–7
+  were restacked onto `037256d5068a6222599030bef96105f831640a3a`, preserving
+  D-CI1 and D-CI2. Commit mapping: `3e6e9bf` to `faab6bb`, `4a65b45` to
+  `bd6c6d7`, `ae3ddbf` to `e27a3dd`, and `336cd2f` to `8f5681c`. The grouped
+  Tasks 6–8 PR will now target main.
+- Verification: the exact approved output failed with exit 101 before
+  correction. Formatter acceptance and the comment-loss mutation follow in Task
+  7 evidence.
+- Review: this corrects the existing Task 7 QUICK finding; the correction gets
+  no recursive QUICK review. The group receives full review after Task 8.
+- Maintainer action: review the grouped PR. Tasks 8–13 resume in order.

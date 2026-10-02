@@ -209,3 +209,21 @@ fn annotation_normalization_preserves_comments_members_and_literal_identity() {
         "normalization must not permit member reordering"
     );
 }
+
+#[test]
+fn annotation_normalization_detects_a_dropped_intervening_comment() {
+    let source = "package p\ninterface I { query q(): T [persist] /* note */ @10ms }\n";
+    let canonical = "package p\ninterface I { query q(): T @10ms [ persist ] /* note */ }\n";
+    assert_eq!(
+        content_tokens(source, Profile::Ridl),
+        content_tokens(canonical, Profile::Ridl)
+    );
+    assert_eq!(
+        syntax_structure(source, Profile::Ridl),
+        syntax_structure(canonical, Profile::Ridl)
+    );
+    assert_ne!(
+        content_tokens(source, Profile::Ridl),
+        content_tokens(&canonical.replace("/* note */", ""), Profile::Ridl)
+    );
+}

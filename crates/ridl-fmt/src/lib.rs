@@ -77,7 +77,9 @@
 //! collection, the parentheses of a tuple, or the tokens of one declaration —
 //! cannot be reflowed into the tight style without risking its meaning, so the
 //! enclosing construct is emitted verbatim from source instead of being
-//! re-synthesised. That keeps every comment in place, leaves the node structure
+//! re-synthesised. Inline comments between interaction annotations are an
+//! exception: they stay with the preceding annotation when timing moves first.
+//! Line comments retain their newline. This leaves the node structure
 //! and the non-trivia token set unchanged, and stays idempotent.
 //! The property harness checks all three implemented profiles at widths 100,
 //! 60 and 40, comparing node entry and exit, token identity, and comment text.
@@ -359,10 +361,15 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
     // A comment wedged directly among a single-line element's own tokens (for
     // example between a field name and its colon) would be dropped by the
     // token-stitching synthesis; emit the whole element verbatim so no comment
-    // is ever lost. Brace-block definitions are excluded: their direct comment
-    // children are the between-member comments that `layout_container` places,
+    // is ever lost. Inline comments between interaction annotations travel with
+    // their preceding annotation when timing moves first. Brace-block definitions
+    // are excluded: their direct comments are the between-member comments that
+    // `layout_container` places,
     // and their header-region comments are handled by `format_block_def`.
-    if is_single_line_element(node) && has_direct_comment(node) {
+    if is_single_line_element(node)
+        && has_direct_comment(node)
+        && !has_only_inline_annotation_comments(node)
+    {
         return vec![format!("{ind}{}", node.text())];
     }
     match node.kind() {
@@ -651,12 +658,89 @@ fn format_interaction(node: &SyntaxNode) -> Layout {
     }
     if let Some(timing) = child_node(node, SyntaxKind::Timing) {
         parts.push(Layout::Text(format!(" {}", tight_text(&timing))));
+        parts.extend(annotation_comments(node, SyntaxKind::Timing, false));
     }
     if let Some(attrs) = child_node(node, SyntaxKind::AttrBlock) {
-        parts.push(Layout::Text(" ".into()));
+        if !matches!(parts.last(), Some(Layout::LineBreak)) {
+            parts.push(Layout::Text(" ".into()));
+        }
         parts.push(format_attr_block(&attrs));
+        parts.extend(annotation_comments(node, SyntaxKind::AttrBlock, true));
     }
     Layout::Concat(parts)
+}
+
+/// Inline comments between annotations belong to the preceding annotation.
+/// Other direct comments retain the existing whole-member verbatim path.
+fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
+    if !matches!(
+        node.kind(),
+        SyntaxKind::SignalDef
+            | SyntaxKind::EventDef
+            | SyntaxKind::FixedDef
+            | SyntaxKind::CommandDef
+            | SyntaxKind::QueryDef
+    ) || child_node(node, SyntaxKind::Timing).is_none()
+        || child_node(node, SyntaxKind::AttrBlock).is_none()
+    {
+        return false;
+    }
+    let mut owner = None;
+    let mut inline = false;
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Node(child) => {
+                owner = Some(child.kind());
+                inline = true;
+            }
+            NodeOrToken::Token(token) if is_comment(token.kind()) => {
+                if !inline
+                    || token.text().contains('\n')
+                    || !matches!(owner, Some(SyntaxKind::Timing | SyntaxKind::AttrBlock))
+                {
+                    return false;
+                }
+            }
+            NodeOrToken::Token(token) if token.text().contains('\n') => inline = false,
+            _ => {}
+        }
+    }
+    true
+}
+
+fn annotation_comments(node: &SyntaxNode, annotation: SyntaxKind, trailing: bool) -> Vec<Layout> {
+    let mut owner = None;
+    let mut comments = Vec::new();
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Node(child) => owner = Some(child.kind()),
+            NodeOrToken::Token(token) if owner == Some(annotation) && is_comment(token.kind()) => {
+                let text = token.text().trim_end().to_string();
+                comments.push(
+                    if trailing
+                        || matches!(
+                            token.kind(),
+                            SyntaxKind::LineComment | SyntaxKind::DocComment
+                        )
+                    {
+                        Layout::TrailingComment(text)
+                    } else {
+                        Layout::Text(format!(" {text}"))
+                    },
+                );
+                if !trailing
+                    && matches!(
+                        token.kind(),
+                        SyntaxKind::LineComment | SyntaxKind::DocComment
+                    )
+                {
+                    comments.push(Layout::LineBreak);
+                }
+            }
+            _ => {}
+        }
+    }
+    comments
 }
 
 fn format_param_list(node: &SyntaxNode) -> Layout {
@@ -850,6 +934,8 @@ fn is_field_type(kind: SyntaxKind) -> bool {
 /// carries verbatim constructs: comments inside a type disable synthesis.
 enum Layout {
     Text(String),
+    TrailingComment(String),
+    LineBreak,
     Concat(Vec<Layout>),
     Tuple(Vec<Layout>),
     Attributes {
@@ -914,6 +1000,12 @@ impl Rendering {
     fn layout(&mut self, layout: &Layout, broken: &HashSet<usize>, inside_inline: bool) {
         match layout {
             Layout::Text(text) => self.push(text),
+            Layout::TrailingComment(text) => self.trailing_comment(text),
+            Layout::LineBreak => {
+                let indent = self.current_indent();
+                self.push("\n");
+                self.push(&" ".repeat(indent));
+            }
             Layout::Concat(parts) => {
                 for part in parts {
                     self.layout(part, broken, inside_inline);
@@ -1678,6 +1770,61 @@ mod tests {
         ] {
             assert_ridl_member(source, "query q(): T @[..5s] [ persist ]");
         }
+    }
+
+    #[test]
+    fn ridl_inline_annotation_comments_stay_with_the_preceding_annotation() {
+        for (source, expected) in [
+            (
+                "query q(): T [persist] /* note */ @10ms",
+                "query q(): T @10ms [ persist ] /* note */",
+            ),
+            (
+                "query q(): T @10ms /* note */ [persist]",
+                "query q(): T @10ms /* note */ [ persist ]",
+            ),
+            (
+                "query q(): T [persist] // note\n @10ms",
+                "query q(): T @10ms [ persist ] // note",
+            ),
+            (
+                "query q(): T @10ms // note\n [persist]",
+                "query q(): T @10ms // note\n  [ persist ]",
+            ),
+            (
+                "query q(): T [require result>0] /* note */ @10ms",
+                "query q(): T @10ms [\n    require result > 0\n  ] /* note */",
+            ),
+        ] {
+            assert_ridl_member(source, expected);
+        }
+    }
+
+    #[test]
+    fn ridl_moved_annotation_comment_does_not_force_attribute_breaking() {
+        let comment = "x".repeat(120);
+        assert_profile_format(
+            &format!("package p\ninterface I {{ query q(): T [persist] /* {comment} */ @10ms }}\n"),
+            &format!(
+                "package p\n\ninterface I {{\n  query q(): T @10ms [ persist ] /* {comment} */\n}}\n"
+            ),
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(40),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_other_direct_member_comments_remain_verbatim() {
+        assert_ridl_member(
+            "query q /* name */ ():T [persist] @10ms",
+            "query q /* name */ ():T [persist] @10ms",
+        );
+        assert_ridl_member(
+            "query q():T [persist]\n /* standalone */ @10ms",
+            "query q():T [persist]\n /* standalone */ @10ms",
+        );
     }
 
     #[test]
