@@ -880,3 +880,27 @@ append-only. Implementation status and verification are in
   [Task 10 evidence](fmt-ridl-rsdl-evidence/task-10.md).
 - Commit and PR: correction follows `4603d73`; grouped Tasks 9–10 PR pending.
 - Maintainer action: review the grouped PR; no rendering approval is needed.
+
+## D-H33 — Tasks 11–13 branch, grouping and integration
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice following the maintainer's request to proceed.
+- Question or observed case: PR #637 merged into its former stacked base after
+  PR #635 merged into main. Tasks 9–10 are absent from main.
+- Chosen action: create `feat/387-fmt-completion` from fetched main `0bc48da` in
+  the existing bootstrapped sibling worktree. Cherry-pick the four Tasks 9–10
+  implementation and correction commits; preserve the original branch. Group
+  consecutive Tasks 11–13 in a final PR to main, with distinct task commits.
+- Reason and alternatives considered: the final configuration, example sweep and
+  publication documentation depend on the recovered formatter. One PR avoids
+  another dependency on the already merged base branch and tests the final
+  implementation together. No source work is repeated or merged locally.
+- Authority: handoff task grouping and dependency rules; maintainer request
+  “PLEASE ATTACK 11-13”. This is not merge authorization.
+- Affected files and behavior: recovered Tasks 9–10 plus the three final tasks.
+  Task 11 adds exactly the three-extension section from design section 6.6.
+- Verification: remote main and both merge targets inspected; clean worktree;
+  cherry-picks completed. Task 11 acceptance follows below.
+- Commit and PR: final PR pending; target main, with `Part of #387` and the
+  final issue reference only when all implementation done criteria hold.
+- Maintainer action: review and merge the final PR.
