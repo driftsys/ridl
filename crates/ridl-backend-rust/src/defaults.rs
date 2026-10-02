@@ -1,16 +1,13 @@
 //! Default-value derivation with the leaf-recursion rule (typl §5.8).
 //!
 //! An `impl Default` is emitted for a type only when every field it
-//! transitively contains is derivable. The IR carries an `InitValue.derivable`
-//! flag on each scalar type and each field, but for a field whose type is a
-//! same-package composite that flag is a one-level flag (T15): a struct
-//! `S { inner: Inner }` where `Inner` has a non-derivable field records
-//! `S.inner.init.derivable == true`. Emitting `Default` for `S` on that basis
-//! while `Inner` has no `Default` would not compile. So same-package composite
-//! and scalar references are re-checked by recursing into the referenced
-//! declaration; the flag is trusted only for cross-package references, which
-//! this backend cannot resolve (it generates one package at a time) and which
-//! T15 computed with full resolution.
+//! transitively contains is derivable. The front end records
+//! `InitValue.derivable` on scalar types and fields, recursively checking
+//! composite fields. The model retains that recorded flag as `Init.one_level`.
+//! Same-package scalar and composite references are also checked against the
+//! declarations available in the codegen scope. For a cross-package field
+//! reference, this backend uses the recorded flag because it generates one
+//! package at a time and cannot inspect the referenced declaration.
 
 use crate::{
     Ctx, ScalarBacking, bool_tokens, class_backing, declared, ident, numeric_tokens, pascal_of,

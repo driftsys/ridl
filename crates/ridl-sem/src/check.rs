@@ -2414,18 +2414,24 @@ impl Checker<'_> {
     /// Composite inits remain unmaterialized, but their derivability follows
     /// the struct's fields or the union's first arm (typl §5.8).
     fn composite_is_derivable(&self, symbol: &Symbol) -> bool {
-        self.symbol_init_is_derivable(symbol, &mut HashSet::new())
+        self.symbol_init_is_derivable(symbol, &mut HashSet::new(), &mut HashMap::new())
     }
 
     fn symbol_init_is_derivable(
         &self,
         symbol: &Symbol,
         visiting: &mut HashSet<(String, String)>,
+        completed: &mut HashMap<(String, String), bool>,
     ) -> bool {
         if !matches!(symbol.kind, SymbolKind::Struct | SymbolKind::Union) {
             return self.named_type_init(symbol).derivable;
         }
         let key = (symbol.package.clone(), symbol.name.clone());
+        // Shared descendants are checked once per derivation. Active paths
+        // remain separate: their repeated occurrence is a recursion cycle.
+        if let Some(derivable) = completed.get(&key) {
+            return *derivable;
+        }
         // Recursive composites are diagnosed separately as TYPL-206.
         if !visiting.insert(key.clone()) {
             return false;
@@ -2442,7 +2448,13 @@ impl Checker<'_> {
                         // Explicit values have been validated by field lowering.
                         field.init_value().is_some()
                             || field.field_type().is_none_or(|ty| {
-                                self.field_init_is_derivable(package, &resolution, &ty, visiting)
+                                self.field_init_is_derivable(
+                                    package,
+                                    &resolution,
+                                    &ty,
+                                    visiting,
+                                    completed,
+                                )
                             })
                     }
                 }),
@@ -2452,14 +2464,16 @@ impl Checker<'_> {
                         return false;
                     };
                     first_arm.type_ref().is_none_or(|path| {
-                        self.lookup_path_in(&resolution, &path)
-                            .is_none_or(|arm| self.symbol_init_is_derivable(&arm, visiting))
+                        self.lookup_path_in(&resolution, &path).is_none_or(|arm| {
+                            self.symbol_init_is_derivable(&arm, visiting, completed)
+                        })
                     })
                 }
                 _ => true,
             }
         })();
         visiting.remove(&key);
+        completed.insert(key, result);
         result
     }
 
@@ -2469,6 +2483,7 @@ impl Checker<'_> {
         resolution: &Resolution,
         ty: &ast::FieldType,
         visiting: &mut HashSet<(String, String)>,
+        completed: &mut HashMap<(String, String), bool>,
     ) -> bool {
         let minimum = |bound: Option<ast::Bound>| {
             bound
@@ -2481,7 +2496,7 @@ impl Checker<'_> {
             ast::FieldType::Optional(_) => true,
             ast::FieldType::Path(path) => self
                 .lookup_path_in(resolution, path)
-                .is_none_or(|symbol| self.symbol_init_is_derivable(&symbol, visiting)),
+                .is_none_or(|symbol| self.symbol_init_is_derivable(&symbol, visiting, completed)),
             ast::FieldType::Primitive(node) => {
                 let (_, class) = primitive_of(node);
                 let constraint = node.constraint();
@@ -2510,22 +2525,26 @@ impl Checker<'_> {
             }
             ast::FieldType::Tuple(tuple) => tuple.fields().all(|field| {
                 field.field_type().is_none_or(|inner| {
-                    self.field_init_is_derivable(package, resolution, &inner, visiting)
+                    self.field_init_is_derivable(package, resolution, &inner, visiting, completed)
                 })
             }),
             ast::FieldType::Array(array) => {
                 minimum(array.bound()) == 0
                     || array.element().is_none_or(|inner| {
-                        self.field_init_is_derivable(package, resolution, &inner, visiting)
+                        self.field_init_is_derivable(
+                            package, resolution, &inner, visiting, completed,
+                        )
                     })
             }
             ast::FieldType::Map(map) => match minimum(map.bound()) {
                 0 => true,
                 1 => {
                     map.key().is_some_and(|key| {
-                        self.field_init_is_derivable(package, resolution, &key, visiting)
+                        self.field_init_is_derivable(package, resolution, &key, visiting, completed)
                     }) && map.value().is_some_and(|value| {
-                        self.field_init_is_derivable(package, resolution, &value, visiting)
+                        self.field_init_is_derivable(
+                            package, resolution, &value, visiting, completed,
+                        )
                     })
                 }
                 _ => false,
@@ -9893,6 +9912,142 @@ mod tests {
         ] {
             assert_eq!(signal_def(&checked, name).init, Some(iv(false, None)));
         }
+    }
+
+    #[test]
+    fn shared_composite_derivation_finishes_within_a_bounded_process() {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "check::tests::shared_composite_derivation_process_fixture",
+                "--ignored",
+            ])
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        // A wide margin above normal compilation still bounds the exponential
+        // regression. Kill and reap the child rather than leaving it running.
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(
+                    status.success(),
+                    "shared composite fixture failed: {status}"
+                );
+                break;
+            }
+            if started.elapsed() >= std::time::Duration::from_secs(10) {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("shared composite derivation exceeded ten seconds");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    #[ignore = "executed by the process-bounded traversal regression"]
+    fn shared_composite_derivation_process_fixture() {
+        let mut source = "package app\nstruct S0 { value : string [0..8] }\n".to_string();
+        for level in 1..=22 {
+            let previous = level - 1;
+            source.push_str(&format!(
+                "struct S{level} {{ first : S{previous}, second : S{previous} }}\n"
+            ));
+        }
+        source.push_str("interface I { signal value : S22 @10ms }\n");
+        let started = std::time::Instant::now();
+        let checked = check_ridl("app", &source);
+        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        assert_eq!(signal_def(&checked, "value").init, Some(iv(true, None)));
+        eprintln!("shared composite source checked in {:?}", started.elapsed());
+    }
+
+    #[test]
+    fn composite_derivation_checks_every_required_position() {
+        let prefix = "package app\ntype Good : integer [0..10]\ntype Label : string [1]\n";
+        for fields in [
+            "first : Good, second : Label",
+            "value : (first: Good, second: Label)",
+            "value : [Label : Good; 1..2]",
+            "value : [integer : Label; 1..2]",
+            "value : string [1]",
+            "value : string [0..8 match /^a+$/]",
+            "value : bytes [1]",
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}struct Payload {{ {fields} }}\nstruct Holder {{ value : Payload }}\ninterface I {{ signal value : Payload @10ms }}\n"
+                ),
+            );
+            assert_eq!(
+                field_init(&checked, "Holder", "value"),
+                Some(iv(false, None)),
+                "{fields}: {:?}",
+                checked.diagnostics
+            );
+            assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
+            assert_eq!(
+                codes(&checked)
+                    .iter()
+                    .filter(|code| **code == "RIDL-109")
+                    .count(),
+                1,
+                "{fields}: {:?}",
+                checked.diagnostics
+            );
+        }
+        for fields in [
+            "first : Good, second : Good",
+            "value : (first: Good, second: Good)",
+            "value : [integer : Good; 1..2]",
+            "value : string [0..8]",
+            "value : bytes [0..8]",
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}struct Payload {{ {fields} }}\ninterface I {{ signal value : Payload @10ms }}\n"
+                ),
+            );
+            assert_eq!(
+                signal_def(&checked, "value").init,
+                Some(iv(true, None)),
+                "{fields}: {:?}",
+                checked.diagnostics
+            );
+            assert!(!codes(&checked).contains(&"RIDL-109"));
+        }
+    }
+
+    #[test]
+    fn imported_composite_derivation_uses_its_defining_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "common",
+            "package common\nconst N = 1\ntype Good : integer [0..10]\nstruct Payload { first : Good, second : string [N] }\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nconst N = 0\ntype Good : string [0..8]\nimport common.Payload\nstruct Holder { value : Payload }\ninterface I { signal value : Payload @10ms }\n",
+        );
+        let workspace = Workspace::new(&db, vec![common, app], BTreeMap::new());
+        let checked = check_package(&db, workspace, app, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-109"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            field_init(&checked, "Holder", "value"),
+            Some(iv(false, None))
+        );
+        assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
     }
 
     #[test]

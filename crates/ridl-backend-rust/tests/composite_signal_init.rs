@@ -76,14 +76,14 @@ fn main() {
 
 #[test]
 fn nonderivable_composite_signals_are_rejected_before_codegen() {
-    for target in ["Invalid", "InvalidChoice"] {
+    for target in ["Invalid", "InvalidChoice", "InvalidKey", "InvalidValue"] {
         let directory = tempfile::tempdir().unwrap();
         let entry = directory.path().join("invalid_composite_signal.ridl");
         let destination = directory.path().join("generated");
         std::fs::write(
             &entry,
             format!(
-                "{}interface I {{ signal value : {target} @10ms }}\n",
+                "{}struct InvalidKey {{ values : [Label : Good; 1..2] }}\nstruct InvalidValue {{ values : [integer : Bad; 1..2] }}\ninterface I {{ signal value : {target} @10ms }}\n",
                 declarations()
             ),
         )
