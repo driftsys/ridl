@@ -2056,22 +2056,34 @@ const SHORT: std::time::Duration = std::time::Duration::from_millis(20);
 /// A longer timeout, for the test that shows the value set is the value
 /// waited.
 const LONG: std::time::Duration = std::time::Duration::from_millis(300);
-/// How long the serving thread sleeps before it serves, in the tests that
-/// show a client with no timeout waits for the provider.
+/// How long the serving thread sleeps after the client registers its outcome
+/// interest, in the tests that show an unbounded call waits for its provider.
 const LATE: std::time::Duration = std::time::Duration::from_millis(100);
 
-/// Serves `Valve` once on a second thread, after `LATE`, and returns what
-/// the blocking `open` on `client` answered and how long it waited. The
-/// handler fails once the one claim was presented, so the thread ends with
-/// the failure and the scope joins it at once.
+/// Serves `Valve` once on a second thread, `LATE` after the client registers
+/// its outcome interest, and returns what blocking `open` answered and how
+/// long it waited. Waiting for registration prevents the provider's delay
+/// from elapsing before the caller starts measuring. The handler fails once
+/// the one claim was presented, so the scope joins the thread at once.
 fn open_served_late(
     rt: &Loopback,
     client: &mut generated::valve::blocking::Client<RecordingPorts>,
+    waiter: &std::sync::Mutex<Option<Waker>>,
 ) -> (Result<(), ClientError>, std::time::Duration) {
     let handler = FailingHandler::failing_after(rt.handler(), 1);
     let mut provider = TestProvider::new(0);
     std::thread::scope(|scope| {
         scope.spawn(|| {
+            for attempt in 0.. {
+                if waiter.lock().expect("no poisoned waker slot").is_some() {
+                    break;
+                }
+                assert!(
+                    attempt < 2_000,
+                    "the call registered no Outcome waiter after 2000 attempts"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
             std::thread::sleep(LATE);
             let _ = generated::valve::blocking::serve(handler, &mut provider, Some(GENEROUS));
         });
@@ -2310,9 +2322,11 @@ fn a_blocking_timeout_shorter_than_the_members_max_is_accepted() {
 #[test]
 fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
     let rt = loopback();
-    let mut client = generated::valve::blocking::Client::new(RecordingPorts::new(&rt));
+    let ports = RecordingPorts::new(&rt);
+    let waiter = ports.outcome_waker();
+    let mut client = generated::valve::blocking::Client::new(ports);
 
-    let (answer, waited) = open_served_late(&rt, &mut client);
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter);
     assert_eq!(answer, Ok(()), "the call was served, not cut off");
     assert!(waited >= LATE, "the client waited for the provider");
 }
@@ -2323,10 +2337,12 @@ fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
 #[test]
 fn a_timeout_too_large_to_represent_is_a_wait_with_no_bound() {
     let rt = loopback();
-    let mut client = generated::valve::blocking::Client::new(RecordingPorts::new(&rt))
-        .with_timeout(std::time::Duration::MAX);
+    let ports = RecordingPorts::new(&rt);
+    let waiter = ports.outcome_waker();
+    let mut client =
+        generated::valve::blocking::Client::new(ports).with_timeout(std::time::Duration::MAX);
 
-    let (answer, waited) = open_served_late(&rt, &mut client);
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter);
     assert_eq!(answer, Ok(()), "the call was served, and nothing panicked");
     assert!(waited >= LATE);
 }
@@ -2337,11 +2353,12 @@ fn a_timeout_too_large_to_represent_is_a_wait_with_no_bound() {
 #[test]
 fn set_timeout_none_clears_the_timeout() {
     let rt = loopback();
-    let mut client =
-        generated::valve::blocking::Client::new(RecordingPorts::new(&rt)).with_timeout(SHORT);
+    let ports = RecordingPorts::new(&rt);
+    let waiter = ports.outcome_waker();
+    let mut client = generated::valve::blocking::Client::new(ports).with_timeout(SHORT);
     client.set_timeout(None);
 
-    let (answer, waited) = open_served_late(&rt, &mut client);
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter);
     assert_eq!(
         answer,
         Ok(()),

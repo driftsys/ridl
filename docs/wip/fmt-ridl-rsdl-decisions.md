@@ -167,3 +167,29 @@ append-only. Implementation status and verification are in
 - Commit and PR: corrections `d31f4b9`, PR #632 based on PR #630. This metadata
   checkpoint follows the tested correction; its required gates run before push.
 - Maintainer action: review PR #632 and debt #633. No merge is authorized.
+
+## D-CI1 — PR #630 provider-delay synchronization
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice; explicitly requested CI correction.
+- Question or observed case: PR #630's Rust CI failed the minimum-wait assertion
+  in `a_blocking_client_with_no_timeout_set_waits_for_the_provider` after PR
+  #632 merged into its branch. The provider's sleep could begin before the
+  caller's timer, so the elapsed time did not cover the entire delay.
+- Chosen action: make the provider wait for the client's outcome-interest
+  registration before sleeping, using the existing test double's shared waker
+  slot. Apply the shared helper to its three existing callers.
+- Reason and alternatives considered: simply timing thread launch would count
+  setup time as call wait; lowering the threshold or retrying CI would preserve
+  the scheduling defect. Synchronization preserves the success and minimum-wait
+  assertions and changes only the test setup.
+- Authority: maintainer request "please fix 630"; interaction-face design F-11
+  and ADR-0023 decision 6 keep unbounded blocking-call behavior unchanged.
+- Affected files and behavior: interaction-face test helper and its three test
+  callers; no production code or formatter decision changes. The separate Tasks
+  6–7 branch and its D-H13 approval checkpoint remain untouched.
+- Verification: a temporary 20 ms caller delay reproduced exit 101 before the
+  correction and passed after it, exit 0. All 77 interaction-face tests pass.
+  See [the CI correction evidence](fmt-ridl-rsdl-evidence/pr-630-ci.md).
+- Commit and PR: correction follows `dce6aa60` on PR #630's existing branch.
+- Maintainer action: review the correction; no merge is authorized.
