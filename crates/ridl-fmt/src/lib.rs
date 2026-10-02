@@ -1109,6 +1109,19 @@ struct CandidateIndex {
 
 #[cfg(test)]
 impl CandidateIndex {
+    fn resize(&mut self, len: usize, value: Option<usize>) {
+        self.lines.resize(len, value);
+    }
+
+    fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    // Preserve counted access when a lookup is replaced by a slice scan.
+    fn as_slice(&self) -> &Self {
+        self
+    }
+
     fn get(&self, line: usize) -> Option<&Option<usize>> {
         self.probes.set(self.probes.get() + 1);
         self.lines.get(line)
@@ -1122,18 +1135,19 @@ impl CandidateIndex {
 }
 
 #[cfg(test)]
-impl std::ops::Deref for CandidateIndex {
-    type Target = Vec<Option<usize>>;
+impl std::ops::Index<usize> for CandidateIndex {
+    type Output = Option<usize>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.lines
+    fn index(&self, line: usize) -> &Self::Output {
+        self.probes.set(self.probes.get() + 1);
+        &self.lines[line]
     }
 }
 
 #[cfg(test)]
-impl std::ops::DerefMut for CandidateIndex {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.lines
+impl std::ops::IndexMut<usize> for CandidateIndex {
+    fn index_mut(&mut self, line: usize) -> &mut Self::Output {
+        &mut self.lines[line]
     }
 }
 
@@ -3400,8 +3414,13 @@ mod tests {
                 rendered.push("  ");
                 rendered.layout(&layout, &broken, false);
                 assert_eq!(
-                    rendered.last_candidates.iter().flatten().count(),
+                    rendered.last_candidates.as_slice().iter().flatten().count(),
                     count - broken_count
+                );
+                assert_eq!(
+                    rendered.last_candidates.probes.get(),
+                    rendered.last_candidates.len(),
+                    "a slice scan must count every visited entry"
                 );
                 rendered.last_candidates.probes.set(0);
                 let expected = (broken_count < count).then_some(broken_count + 1);
@@ -3410,7 +3429,7 @@ mod tests {
                 let lines = rendered.text.lines().count();
                 assert!(
                     checks <= lines,
-                    "candidate search inspected {checks} candidates across {lines} lines for {count} fields"
+                    "candidate search made {checks} collection probes across {lines} lines for {count} fields"
                 );
             }
         }
