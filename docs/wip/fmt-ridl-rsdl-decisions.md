@@ -566,3 +566,28 @@ append-only. Implementation status and verification are in
   changes after `700d116`.
 - Maintainer action: review PR #634 after the remaining reviews and CI. No
   rendering approval remains pending; Tasks 9–13 resume after pass 2.
+
+## D-H20 — distinguish consuming line comments from documentation blocks
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation correction within approved D-H19.
+- Observed case: `query q(): T [persist] /** attribute */ @10ms // member` was
+  retained verbatim because both `///` and `/** ... */` have the lexer kind
+  `DocComment`. The block form cannot consume the next comment.
+- Decision: restrict the new collision guard to comment tokens whose text begins
+  with `//`. Keep documentation block comments on the canonical noncolliding
+  path. Extend collision tests to all five interaction kinds and widths 100, 60
+  and 40.
+- Reason and alternatives considered: token kind alone does not distinguish the
+  two documentation-comment forms. Changing the lexer is unnecessary and outside
+  the formatter's scope; source spelling is sufficient for this guard.
+- Authority: approved narrow collision exception, design sections 3.2 and 5;
+  QUICK docs/tests findings.
+- Affected files and behavior: formatter collision guard, exact-output controls
+  and review evidence. No parser or grammar change; no recursive QUICK pass.
+- Verification: documentation-block regression failed before correction;
+  formatter/LSP acceptance passes afterward. Evidence: PR #634 evidence and
+  `pr-634-doc-block-{red,green}.log`. Full gates passed on prior `6578c3e`;
+  actual-head push gates follow for the correction commit.
+- Commit and PR: QUICK correction in PR #634 before full pass 2.
+- Maintainer action: none; no rendering choice changed.

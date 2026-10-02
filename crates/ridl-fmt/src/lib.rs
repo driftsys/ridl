@@ -787,10 +787,8 @@ fn has_moved_annotation_line_comment(node: &SyntaxNode) -> bool {
             NodeOrToken::Node(child) => owner = Some(child.kind()),
             NodeOrToken::Token(token)
                 if owner == Some(SyntaxKind::AttrBlock)
-                    && matches!(
-                        token.kind(),
-                        SyntaxKind::LineComment | SyntaxKind::DocComment
-                    ) =>
+                    && is_comment(token.kind())
+                    && token.text().starts_with("//") =>
             {
                 return true;
             }
@@ -1920,15 +1918,28 @@ mod tests {
 
     #[test]
     fn ridl_colliding_annotation_line_comments_keep_the_member_verbatim() {
-        for annotation in ["// attribute", "/// attribute"] {
-            for trailing in ["// member", "/* member */", "/* member\nmore */"] {
-                let member = format!("query  q():T [persist] {annotation}\n  @ 10ms {trailing}");
-                assert_profile_format(
-                    &format!("package p\ninterface I {{\n  {member}\n}}\n"),
-                    &format!("package p\n\ninterface I {{\n  {member}\n}}\n"),
-                    Profile::Ridl,
-                    &FormatOptions::default(),
-                );
+        for width in [100, 60, 40] {
+            for prefix in [
+                "signal  s : T",
+                "event  e : T",
+                "fixed  f : T = 1",
+                "command  c ( ) : T",
+                "query  q ( ):T",
+            ] {
+                for annotation in ["// attribute", "/// attribute"] {
+                    for trailing in ["// member", "/* member */", "/* member\nmore */"] {
+                        let member =
+                            format!("{prefix} [persist] {annotation}\n  @ 10ms {trailing}");
+                        assert_profile_format(
+                            &format!("package p\ninterface I {{\n  {member}\n}}\n"),
+                            &format!("package p\n\ninterface I {{\n  {member}\n}}\n"),
+                            Profile::Ridl,
+                            &FormatOptions {
+                                max_line_length: Some(width),
+                            },
+                        );
+                    }
+                }
             }
         }
         assert_profile_format(
@@ -1941,12 +1952,18 @@ mod tests {
 
     #[test]
     fn ridl_noncolliding_annotation_comments_still_normalize() {
-        assert_profile_format(
-            "package p\ninterface I {\n  query  q():T [persist] /* attribute */ @ 10ms // member\n}\n",
-            "package p\n\ninterface I {\n  query q(): T @10ms [ persist ] /* attribute */ // member\n}\n",
-            Profile::Ridl,
-            &FormatOptions::default(),
-        );
+        for comment in ["/* attribute */", "/** attribute */"] {
+            assert_profile_format(
+                &format!(
+                    "package p\ninterface I {{\n  query  q():T [persist] {comment} @ 10ms // member\n}}\n"
+                ),
+                &format!(
+                    "package p\n\ninterface I {{\n  query q(): T @10ms [ persist ] {comment} // member\n}}\n"
+                ),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
         assert_profile_format(
             "package p\ninterface I {\n  query  q():T @ 10ms // timing\n  [persist] // member\n}\n",
             "package p\n\ninterface I {\n  query q(): T @10ms // timing\n  [ persist ] // member\n}\n",
