@@ -1096,11 +1096,59 @@ struct AttributeLayout {
     trailing: Vec<String>,
 }
 
-/// An outermost unbroken construct on a rendered physical line. Nested tuples
-/// and attribute blocks become candidates when their parent breaks.
-struct BreakCandidate {
-    id: usize,
-    line: usize,
+#[cfg(not(test))]
+type CandidateIndex = Vec<Option<usize>>;
+
+/// Count collection accesses in tests, including a scan substituted for a lookup.
+#[cfg(test)]
+#[derive(Default)]
+struct CandidateIndex {
+    lines: Vec<Option<usize>>,
+    probes: std::cell::Cell<usize>,
+}
+
+#[cfg(test)]
+impl CandidateIndex {
+    fn resize(&mut self, len: usize, value: Option<usize>) {
+        self.lines.resize(len, value);
+    }
+
+    fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    // Preserve counted access when a lookup is replaced by a slice scan.
+    fn as_slice(&self) -> &Self {
+        self
+    }
+
+    fn get(&self, line: usize) -> Option<&Option<usize>> {
+        self.probes.set(self.probes.get() + 1);
+        self.lines.get(line)
+    }
+
+    fn iter(&self) -> impl DoubleEndedIterator<Item = &Option<usize>> + ExactSizeIterator {
+        self.lines.iter().inspect(|_| {
+            self.probes.set(self.probes.get() + 1);
+        })
+    }
+}
+
+#[cfg(test)]
+impl std::ops::Index<usize> for CandidateIndex {
+    type Output = Option<usize>;
+
+    fn index(&self, line: usize) -> &Self::Output {
+        self.probes.set(self.probes.get() + 1);
+        &self.lines[line]
+    }
+}
+
+#[cfg(test)]
+impl std::ops::IndexMut<usize> for CandidateIndex {
+    fn index_mut(&mut self, line: usize) -> &mut Self::Output {
+        &mut self.lines[line]
+    }
 }
 
 #[derive(Default)]
@@ -1108,11 +1156,33 @@ struct Rendering {
     text: String,
     line: usize,
     next_id: usize,
-    candidates: Vec<BreakCandidate>,
+    // Keep the last outermost unbroken construct on each physical line.
+    // Nested constructs become candidates only after their parent breaks.
+    last_candidates: CandidateIndex,
     code_columns: std::collections::HashMap<usize, usize>,
 }
 
 impl Rendering {
+    fn record_candidate(&mut self, id: usize) {
+        self.last_candidates.resize(self.line + 1, None);
+        self.last_candidates[self.line] = Some(id);
+    }
+
+    fn break_candidate(&self, width: usize) -> Option<usize> {
+        self.text.split('\n').enumerate().find_map(|(line, text)| {
+            if self
+                .code_columns
+                .get(&line)
+                .copied()
+                .unwrap_or_else(|| text.chars().count())
+                <= width
+            {
+                return None;
+            }
+            self.last_candidates.get(line).copied().flatten()
+        })
+    }
+
     fn push(&mut self, text: &str) {
         self.line += text.matches('\n').count();
         self.text.push_str(text);
@@ -1193,10 +1263,7 @@ impl Rendering {
                     self.push("]");
                 } else {
                     if !inside_inline && !blocks.is_empty() {
-                        self.candidates.push(BreakCandidate {
-                            id,
-                            line: self.line,
-                        });
+                        self.record_candidate(id);
                     }
                     self.push("[ ");
                     for (i, block) in blocks.iter().enumerate() {
@@ -1225,10 +1292,7 @@ impl Rendering {
                     }
                 } else {
                     if !inside_inline && !items.is_empty() {
-                        self.candidates.push(BreakCandidate {
-                            id,
-                            line: self.line,
-                        });
+                        self.record_candidate(id);
                     }
                     self.push(" ");
                     self.push(&items.join(", "));
@@ -1253,10 +1317,7 @@ impl Rendering {
                     self.push(")");
                 } else {
                     if !inside_inline && !items.is_empty() {
-                        self.candidates.push(BreakCandidate {
-                            id,
-                            line: self.line,
-                        });
+                        self.record_candidate(id);
                     }
                     self.push("(");
                     for (i, item) in items.iter().enumerate() {
@@ -1282,29 +1343,9 @@ fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec
         let mut rendered = Rendering::default();
         rendered.push(&indent_str(indent));
         rendered.layout(layout, &broken, false);
-        let candidate = options.max_line_length.and_then(|width| {
-            rendered
-                .text
-                .split('\n')
-                .enumerate()
-                .find_map(|(line, text)| {
-                    if rendered
-                        .code_columns
-                        .get(&line)
-                        .copied()
-                        .unwrap_or_else(|| text.chars().count())
-                        <= width
-                    {
-                        return None;
-                    }
-                    rendered
-                        .candidates
-                        .iter()
-                        .rev()
-                        .find(|c| c.line == line)
-                        .map(|c| c.id)
-                })
-        });
+        let candidate = options
+            .max_line_length
+            .and_then(|width| rendered.break_candidate(width));
         match candidate {
             Some(id) => {
                 broken.insert(id);
@@ -3346,6 +3387,84 @@ mod tests {
             ),
         ] {
             assert_width_format(input, expected, &options);
+        }
+    }
+
+    #[test]
+    fn break_candidate_search_skips_unbreakable_lines() {
+        for count in [64, 128, 256] {
+            let fields = (0..count)
+                .map(|i| format!("f{i}: (x{}: integer, y: boolean)", "A".repeat(90)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let source = format!("package p\nstruct S {{ t: ({fields}) }}\n");
+            let parse = ridl_syntax::parse(&source, Profile::Typl);
+            assert!(parse.errors().is_empty(), "{:?}", parse.errors());
+            let field = parse
+                .syntax()
+                .descendants()
+                .find(|node| node.kind() == SyntaxKind::FieldDef)
+                .unwrap();
+            let layout = format_field_def(&field);
+            for broken_count in [0, count / 2, count] {
+                // Break the outer tuple and a prefix of its nested tuples.
+                // Long identifiers cannot break, but later tuples still can.
+                let broken = (0..=broken_count).collect();
+                let mut rendered = Rendering::default();
+                rendered.push("  ");
+                rendered.layout(&layout, &broken, false);
+                assert_eq!(
+                    rendered.last_candidates.as_slice().iter().flatten().count(),
+                    count - broken_count
+                );
+                assert_eq!(
+                    rendered.last_candidates.probes.get(),
+                    rendered.last_candidates.len(),
+                    "a slice scan must count every visited entry"
+                );
+                rendered.last_candidates.probes.set(0);
+                if broken_count < count {
+                    assert_eq!(rendered.last_candidates[0], None);
+                    assert_eq!(rendered.last_candidates.probes.get(), 1);
+                }
+                rendered.last_candidates.probes.set(0);
+                let expected = (broken_count < count).then_some(broken_count + 1);
+                assert_eq!(rendered.break_candidate(100), expected);
+                let checks = rendered.last_candidates.probes.get();
+                let lines = rendered.text.lines().count();
+                assert!(
+                    checks <= lines,
+                    "candidate search made {checks} collection probes across {lines} lines for {count} fields"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn large_nested_tuples_keep_canonical_output_and_invariants() {
+        let mut fields = Vec::new();
+        let mut expected = String::from("package p\n\n// nested tuples\nstruct S {\n  t: (\n");
+        for i in 0..128 {
+            let name = format!("x{}", "A".repeat(90));
+            fields.push(format!("f{i}: ({name}: integer, y: boolean)"));
+            expected.push_str(&format!(
+                "    f{i}: (\n      {name}: integer,\n      y: boolean\n    ){}\n",
+                if i == 127 { "" } else { "," }
+            ));
+        }
+        expected.push_str("  ) // tuple detail\n}\n");
+        let input = format!(
+            "package p\n// nested tuples\nstruct S {{ t: ({}) // tuple detail\n}}\n",
+            fields.join(", ")
+        );
+        for width in [100, 60, 40] {
+            assert_width_format(
+                &input,
+                &expected,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
         }
     }
 
