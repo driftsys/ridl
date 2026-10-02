@@ -16,7 +16,7 @@ The maintainer performed both merges.
 | 6    | Merged                      | `faab6bb`, docs `bd6c6d7`; PR #634 / main       | Formatter/LSP acceptance passed; QUICK docs corrected                       |
 | 7    | Merged; collision follow-up | `e27a3dd`, correction `b8fbe9c`; PR #634 / main | Formatter, Clippy and comment-loss mutation passed; QUICK finding corrected |
 | 8    | Merged                      | `46ab1f5`; PR #634 / main                       | Formatter/reference acceptance passed; all QUICK seats found nothing        |
-| 9    | Implemented; QUICK pending  | Planned Tasks 9–10 PR / correction branch       | Formatter, facade and LSP acceptance passed                                 |
+| 9    | Implemented; QUICK complete | Planned Tasks 9–10 PR / correction branch       | Formatter, facade and LSP acceptance passed                                 |
 | 10   | Pending                     | None                                            | Not run                                                                     |
 | 11   | Pending                     | None                                            | Not run                                                                     |
 | 12   | Pending                     | None                                            | Not run                                                                     |

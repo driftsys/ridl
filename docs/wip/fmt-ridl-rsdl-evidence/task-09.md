@@ -54,3 +54,22 @@ fixture was shortened rather than changing production width behavior. Log:
 
 Logs are local and ignored. Task commit, QUICK results and publication gates are
 recorded after completion of the change.
+
+## Task commit and QUICK review
+
+Task commit: `c2602dc126474fa6d29871da41bec2f390a08452`. `just test` exited 0 on
+that exact head; log: `task-09-workspace-test.log`. `just fmt-check`,
+`just lint` and `just check` also passed; lint log: `task-09-lint.log`.
+
+All three required QUICK seats reviewed only `0249fd1` through `c2602dc` and
+matched all 13 paths. Native docs/tests ran on actual Terra/high, verified by
+rollout `turn_context` records. The fresh bug wrapper invoked the native
+built-in at actual Terra/medium, verified at startup, and reported no findings;
+its log does not show explicit reads of the requirement documents. The tests
+seat also reported no findings. Native logs and review reports remain temporary.
+
+The restricted docs seat found one Important stale statement: the CLI reference
+said all RSDL declarations remain verbatim. D-H30 applies the factual correction
+now for the three implemented declarations while retaining the current verbatim
+deployment/machine status. This is a QUICK correction and receives no recursive
+QUICK review. Full PR reviews follow the consecutive Task 10 commit.
