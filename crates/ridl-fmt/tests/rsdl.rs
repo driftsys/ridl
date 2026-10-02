@@ -48,7 +48,7 @@ fn examples(reference: &str, from: &str, to: &str) -> Vec<String> {
     blocks
 }
 
-/// The kind and text of every non-trivia token of `text`, parsed as rsdl.
+/// The kind and text of each non-trivia, non-comma token, parsed as rsdl.
 fn tokens(text: &str) -> Vec<(SyntaxKind, String)> {
     parse(text, Profile::Rsdl)
         .syntax()

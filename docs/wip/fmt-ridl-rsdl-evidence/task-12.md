@@ -15,8 +15,9 @@ canonical-source assertion rather than an invalid fixture.
 The new book fixed-point test reuses the compiler harness's existing `classify`,
 `fenced_blocks` and unchanged `MDBOOK_OPTIONS`. Both ordinary and diagnostic
 allowance fences are selected, while ignored and included reference fences stay
-outside the set. The shared formatter test-only invariant module compares every
-node and token, including comments, at widths 100, 60 and 40.
+outside the set. The shared formatter test-only invariant module compares CST
+structure and content at widths 100, 60 and 40. Whitespace and separator commas
+are excluded; comment text is retained with trailing whitespace trimmed.
 
 ## Sweep and verification
 
@@ -40,7 +41,7 @@ only the 32 verified source bodies and the regenerated tutorial text diagnostic
 change. All `ignore`/`allow=` markers remain unchanged.
 
 `cargo test -p ridl-cli --test book_examples --test baseline_desk --test baseline_gate --locked`
-exits 0: 40 book tests, 49 desk tests and 10 baseline gate tests. Log:
+exits 0: 40 book tests, 49 desk tests and 32 baseline gate tests. Log:
 `task-12-green-acceptance.log`. Book compilation still checks all declared
 allowances; the new tests check canonical output, structure, content/comments
 and second-pass equality. The committed baseline IR JSON is unchanged.
@@ -87,7 +88,7 @@ independent structure, content/comment and second-pass checks at widths 100, 60
 and 40 remain.
 
 `CARGO_INCREMENTAL=0 cargo test -p ridl-cli --test book_examples --test baseline_desk --test baseline_gate --locked`
-passes: 41 book, 49 desk and 10 gate tests. Local logs:
+passes: 41 book, 49 desk and 32 gate tests. Local logs:
 `task-12-quick-red-path-width.log` and `task-12-quick-green-path-width.log`. The
 subsequent connective-tissue check identified only an unformatted Task 13
 evidence paragraph; it was formatted and the check rerun successfully.
@@ -97,3 +98,9 @@ required manual book audit and actual diagnostic regeneration already recorded
 above. No brittle prose-string tests are added. This is the QUICK pass's own
 correction; it does not receive another QUICK pass. Final full review remains
 required on the published PR.
+
+PR #638 pass 1 confirmed the earlier count and token-scope descriptions were
+inaccurate. The cited acceptance logs report 32 baseline gate tests in both
+runs; the wording above is corrected. D-H40 supersedes the matching historical
+statements in the append-only decision log. These are reporting corrections, not
+changes to the checks or their successful results.

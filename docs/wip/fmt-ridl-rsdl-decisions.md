@@ -1010,3 +1010,70 @@ append-only. Implementation status and verification are in
 - Commit and PR: `9a2d52a`, final main-targeted PR pending. This is QUICK's own
   fix and receives no recursive QUICK pass; final full review remains required.
 - Maintainer action: review the final PR; no approval is pending.
+
+## D-H38 — PR 638 machine-gap comments with optional commas
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: confirmed full-review finding; implementation correction.
+- Question or observed case: `machine A {} /* note */ machine B {}` attaches the
+  comment backward, while an optional comma places it between members.
+- Chosen action: stop trailing attachment after every MachineDef, not only after
+  its separator. Comment runs after the last machine remain in the deployment
+  body. Leave other member and attribute attachment rules unchanged.
+- Reason and alternatives considered: section 5 expressly defines these as
+  deployment-body comments. Treating the comma as the deciding boundary fails
+  the same rule for valid comma-free syntax. No new rendering approval is
+  needed.
+- Authority: normative layout section 5, confirmed compliance/refuter finding.
+- Affected files and behavior: shared collector and container comment; exact
+  empty/populated machine assertions with block/line/doc comments, optional
+  separators and last-member comment runs at widths 100/60/40.
+- Verification: expected output assertion fails before the change, exit 101,
+  then passes. Restored formatter acceptance passes 110 unit and 20 integration
+  tests; PR 638 evidence records local logs and the actual heads.
+- Commit and PR: PR #638 against main; separate review correction commit.
+- Maintainer action: review final correction; no approval remains pending.
+
+## D-H39 — PR 638 bare-reference comments and nested width boundaries
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: confirmed coverage findings accepted for correction.
+- Question or observed case: MemberLine-only comment deletion and nested
+  indent-zero measurement mutations survive the earlier tests.
+- Chosen action: add exact-output dotted-reference comment assertions for
+  system, distribution and nested machine members. Check the 41-column nested
+  member at widths 39, 40 and 41, counting its four-space indentation.
+- Reason and alternatives considered: component keyword-line and short nested
+  member cases do not exercise these paths. The new assertions enforce existing
+  comment/width rules and add no formatter behavior.
+- Authority: layout sections 5, 6 and 9, confirmed full-review test findings.
+- Affected files and behavior: formatter unit tests only, with parse, structure,
+  content/comment and second-pass checks.
+- Verification: both precise mutations fail by assertion, exit 101; source is
+  restored and all 110 unit plus 20 integration tests pass. Local logs are
+  recorded in PR 638 evidence.
+- Commit and PR: same distinct PR #638 correction commit; pass 2 follows.
+- Maintainer action: review the final PR; no new design choice is proposed.
+
+## D-H40 — PR 638 evidence scope and count corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: confirmed reporting defects corrected.
+- Question or observed case: D-H34/D-H37 and Task 12 evidence report 10
+  baseline-gate tests; the actual logs show 32. Token descriptions overstate
+  their scope because whitespace and commas are intentionally filtered.
+- Chosen action: correct Task 12 evidence and the rsdl helper comment. This
+  entry supersedes the inaccurate counts in append-only D-H34/D-H37: initial
+  acceptance passes 40 book, 49 desk, 32 gate tests; the path-width correction
+  passes 41 book, 49 desk, 32 gate tests. CST/content comparisons ignore
+  whitespace and separator commas; the content stream retains comment text with
+  trailing whitespace trimmed.
+- Reason and alternatives considered: report actual output, preserving original
+  log evidence and append-only decision history rather than rewriting it. No
+  tests or successful outcomes change.
+- Authority: handoff evidence contract and confirmed docs/refuter findings.
+- Affected files and behavior: test helper prose, evidence and current report.
+- Verification: both Task 12 acceptance logs inspected; formatter suite passes
+  after the comment-only correction.
+- Commit and PR: PR #638 correction commit; final gates and pass 2 follow.
+- Maintainer action: review final evidence; no approval or debt filing needed.

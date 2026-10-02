@@ -259,8 +259,8 @@ fn layout_container(
 
 /// One source container unit before its node is rendered. Attribute bodies and
 /// brace bodies share this collector, including leading and trailing comments.
-/// A machine separator ends trailing attachment, so a following comment stays
-/// between the machine declarations.
+/// Comments after a machine block belong to the deployment body, including
+/// when the optional separator is absent.
 struct ContainerBlock {
     kind: BlockKind,
     gap_blank: bool,
@@ -296,12 +296,7 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                 nl_run = 0;
             }
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
-                if nl_run > 0
-                    || blocks
-                        .last()
-                        .and_then(|block| block.node.as_ref())
-                        .is_some_and(|node| node.kind() == SyntaxKind::MachineDef)
-                {
+                if nl_run > 0 {
                     can_trail = false;
                 }
                 // A separator line is not a blank line. Retain an existing
@@ -320,7 +315,7 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                     trailing: Vec::new(),
                 });
                 nl_run = 0;
-                can_trail = true;
+                can_trail = node.kind() != SyntaxKind::MachineDef;
             }
             _ => nl_run = 0,
         }
@@ -1843,6 +1838,102 @@ mod tests {
                     },
                 );
             }
+        }
+    }
+
+    #[test]
+    fn rsdl_machine_gap_comments_ignore_optional_commas() {
+        for (first, second) in [("", ""), ("First", "Second")] {
+            let body = |name: &str, member: &str| {
+                if member.is_empty() {
+                    format!("  machine {name} {{}}")
+                } else {
+                    format!("  machine {name} {{\n    {member}\n  }}")
+                }
+            };
+            for comment in ["/* note */", "// note\n", "/// note\n"] {
+                for separator in ["", ","] {
+                    let source = format!(
+                        "package p\ndeployment D for S {{ machine A {{ {first} }}{separator} {comment} machine B {{ {second} }} }}\n"
+                    );
+                    let expected = format!(
+                        "package p\n\ndeployment D for S {{\n{}\n  {}\n{}\n}}\n",
+                        body("A", first),
+                        comment.trim_end(),
+                        body("B", second)
+                    );
+                    let tail_source = format!(
+                        "package p\ndeployment D for S {{ machine A {{ {first} }}{separator} {comment} }}\n"
+                    );
+                    let tail_expected = format!(
+                        "package p\n\ndeployment D for S {{\n{}\n  {}\n}}\n",
+                        body("A", first),
+                        comment.trim_end()
+                    );
+                    for width in [100, 60, 40] {
+                        let options = FormatOptions {
+                            max_line_length: Some(width),
+                        };
+                        assert_profile_format(&source, &expected, Profile::Rsdl, &options);
+                        assert_profile_format(
+                            &tail_source,
+                            &tail_expected,
+                            Profile::Rsdl,
+                            &options,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_bare_dotted_reference_comments_survive_layout() {
+        for (source, expected) in [
+            (
+                "system S { a /* reference */ .b [external] }",
+                "system S {\n  a /* reference */ .b [ external ]\n}",
+            ),
+            (
+                "distribution D { a /* reference */ .b [external] }",
+                "distribution D {\n  a /* reference */ .b [ external ]\n}",
+            ),
+            (
+                "deployment D for S { machine A { a /* reference */ .b [external] } }",
+                "deployment D for S {\n  machine A {\n    a /* reference */ .b [ external ]\n  }\n}",
+            ),
+        ] {
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &format!("package p\n{source}\n"),
+                    &format!("package p\n\n{expected}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_nested_member_width_counts_machine_indentation() {
+        let source = "package p\ndeployment Bench for S { machine DevBox { LongerPanel [linux.cpuset=(2,3)] } }\n";
+        let inline = "package p\n\ndeployment Bench for S {\n  machine DevBox {\n    LongerPanel [ linux.cpuset = (2, 3) ]\n  }\n}\n";
+        let block = "package p\n\ndeployment Bench for S {\n  machine DevBox {\n    LongerPanel [\n      linux.cpuset = (2, 3)\n    ]\n  }\n}\n";
+        assert_eq!(
+            "    LongerPanel [ linux.cpuset = (2, 3) ]".chars().count(),
+            41
+        );
+        for width in [39, 40, 41] {
+            assert_profile_format(
+                source,
+                if width < 41 { block } else { inline },
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
         }
     }
 

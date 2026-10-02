@@ -70,3 +70,9 @@ Task 13 documentation acceptance passes, all exit 0:
 `task-13-cargo-doc.log`, `task-13-link-check.log`, `task-13-doc-path-check.log`
 and `task-13-check.log`. Disabling incremental caching changes build storage
 only, not formatter behavior or gate commands.
+
+Task 13 is committed in `7f0aa60`; all three QUICK seats complete with no
+findings at verified Terra/medium (built-in bugs) and Terra/high (restricted
+docs/tests). `just verify`, enabled push hooks and initial PR #638 CI all pass
+on that exact head. Full pass 1 completes with five retained findings; their
+corrections and pass-2 verification are recorded in [PR evidence](pr-638.md).
