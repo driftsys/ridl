@@ -829,3 +829,32 @@ append-only. Implementation status and verification are in
 - Commit and PR: Task 9 QUICK documentation follow-up in the planned RSDL PR; no
   recursive QUICK pass.
 - Maintainer action: none.
+
+## D-H31 — Task 10 completes deployment and machine dispatch
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under settled nested-container rules.
+- Observed case: the remaining public deployment/machine fallback prevents
+  canonical nested bodies and header relation clauses.
+- Decision: route both kinds through the same brace renderer; classify
+  deployment as a file definition and machine as a body member. Add
+  `for Reference` before header attributes and share the comment-preserving
+  reference helper with member lines. Preserve source gaps through the existing
+  container collector.
+- Reason and alternatives considered: a special deployment renderer or gap loop
+  would duplicate behavior already shared by every brace body. The header layout
+  already exposes attribute break positions and counts the brace.
+- Authority: design section 4.3, R5, D-11, sections 5 and 6.4; Task 10.
+- Affected files and behavior: formatter dispatch/header helper, deployment
+  golden, the attribute-position golden's nested members, and CLI documentation.
+  No parser or grammar changes. The fallback comment no longer names any of the
+  seven declaration kinds.
+- Verification: six selected layout/golden failures were observed before
+  routing; all 102 formatter unit and 20 integration tests pass afterward.
+  Coverage includes the deployment header's 60/61 boundary, machines with and
+  without source blank lines, between-machine comments, direct header line/block
+  comments, commented reference subtrees, empty bodies and malformed deployment
+  input. All seven declaration kinds have exact canonical dispatch assertions at
+  widths 100, 60 and 40. Evidence: Task 10 record.
+- Commit and PR: distinct Task 10 commit in the planned Tasks 9–10 RSDL PR.
+- Maintainer action: none; no unsettled rendering encountered.

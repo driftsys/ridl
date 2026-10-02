@@ -34,7 +34,7 @@ distribution Adas [ tier = PLATFORM, sign.key = "adas" ] {
 
 deployment Bench for veh.topology.Vehicle [ labels = (QM) ] {
   machine DevBox [ external, linux.cpuset = (0, 1) ] {
-    veh.topology.Cruise.primary [ linux.cpuset = (2) ],
-    Cruise.backup,
+    veh.topology.Cruise.primary [ linux.cpuset = (2) ]
+    Cruise.backup
   }
 }
