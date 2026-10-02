@@ -46,7 +46,10 @@
 //! - systems, components and distributions use one member per line. Component
 //!   keywords and references have single spaces, and declaration and member
 //!   attributes share the width rules. An overlong header keeps its opening
-//!   brace on the attribute block's closing line.
+//!   brace on the attribute block's closing line. Deployments place their `for`
+//!   reference before attributes and nest machine blocks one level down. Machine
+//!   bodies use the same member layout, preserving source blank lines between
+//!   machines.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
@@ -367,7 +370,8 @@ fn block_kind(kind: SyntaxKind) -> BlockKind {
         | SyntaxKind::ServiceDef
         | SyntaxKind::SystemDef
         | SyntaxKind::ComponentDef
-        | SyntaxKind::DistributionDef => BlockKind::Def,
+        | SyntaxKind::DistributionDef
+        | SyntaxKind::DeploymentDef => BlockKind::Def,
         _ => BlockKind::Member,
     }
 }
@@ -425,6 +429,8 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::SystemDef => format_block_def(node, indent, "system", options),
         SyntaxKind::ComponentDef => format_block_def(node, indent, "component", options),
         SyntaxKind::DistributionDef => format_block_def(node, indent, "distribution", options),
+        SyntaxKind::DeploymentDef => format_block_def(node, indent, "deployment", options),
+        SyntaxKind::MachineDef => format_block_def(node, indent, "machine", options),
         SyntaxKind::MemberLine | SyntaxKind::ComponentLine => {
             render_layout(&format_rsdl_line(node), indent, options)
         }
@@ -433,8 +439,7 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
-        // Deployment and machine dispatch are added in the next task. Other
-        // nodes with no layout rule are emitted as written so no source is lost.
+        // Preserve nodes without a layout rule so their source remains lossless.
         _ => line(node.text().to_string()),
     }
 }
@@ -588,6 +593,14 @@ fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> Layout {
                 }
             )
         ))];
+        if node.kind() == SyntaxKind::DeploymentDef {
+            parts.push(Layout::Text(" for ".into()));
+            parts.push(Layout::Text(
+                child_node(node, SyntaxKind::Reference)
+                    .map(|reference| reference_text(&reference))
+                    .unwrap_or_default(),
+            ));
+        }
         if let Some(attributes) = child_node(node, SyntaxKind::AttrBlock) {
             parts.push(Layout::Text(" ".into()));
             parts.push(format_attr_block(&attributes));
@@ -610,17 +623,22 @@ fn format_rsdl_line(node: &SyntaxNode) -> Layout {
         parts.push(Layout::Text(format!("{keyword} ")));
     }
     if let Some(reference) = child_node(node, SyntaxKind::Reference) {
-        parts.push(Layout::Text(if contains_comment(&reference) {
-            reference.text().to_string()
-        } else {
-            tight_text(&reference)
-        }));
+        parts.push(Layout::Text(reference_text(&reference)));
     }
     if let Some(attributes) = child_node(node, SyntaxKind::AttrBlock) {
         parts.push(Layout::Text(" ".into()));
         parts.push(format_attr_block(&attributes));
     }
     Layout::Concat(parts)
+}
+
+/// Tight references share one comment-preserving fallback in headers and bodies.
+fn reference_text(reference: &SyntaxNode) -> String {
+    if contains_comment(reference) {
+        reference.text().to_string()
+    } else {
+        tight_text(reference)
+    }
 }
 
 /// Splits off a comment that sits on the opening-brace line — before the first
@@ -1496,6 +1514,8 @@ fn is_single_line_element(node: &SyntaxNode) -> bool {
         | SyntaxKind::SystemDef
         | SyntaxKind::ComponentDef
         | SyntaxKind::DistributionDef
+        | SyntaxKind::DeploymentDef
+        | SyntaxKind::MachineDef
         | SyntaxKind::AttrBlock => false,
         SyntaxKind::EnumSetDef | SyntaxKind::ServiceDef => !has_token(node, SyntaxKind::LBrace),
         _ => true,
@@ -1641,7 +1661,7 @@ mod tests {
     }
 
     #[test]
-    fn rsdl_machine_body_reuses_member_lines_before_deployment_dispatch() {
+    fn rsdl_machine_body_reuses_shared_member_lines() {
         let source = "package p\ndeployment Bench for S { machine DevBox { Cruise.primary, Panel [linux.cpuset=(2,3)], } }\n";
         let parsed = ridl_syntax::parse(source, Profile::Rsdl);
         assert!(parsed.errors().is_empty());
@@ -1705,9 +1725,169 @@ mod tests {
                 include_str!("../test_data/input/rsdl_attribute_positions.rsdl"),
                 include_str!("../test_data/formatted/rsdl_attribute_positions.rsdl"),
             ),
+            (
+                include_str!("../test_data/input/deployment.rsdl"),
+                include_str!("../test_data/formatted/deployment.rsdl"),
+            ),
         ] {
             assert_profile_format(source, expected, Profile::Rsdl, &FormatOptions::default());
         }
+    }
+
+    #[test]
+    fn rsdl_deployment_places_nested_machine_members_on_separate_lines() {
+        let source = "package p\ndeployment Production for Vehicle {\n machine AdasHpc [labels=(ASIL_B)] {Cruise.primary, Lane, veh.diag.access}\n machine Cockpit {Cruise.backup, Panel [linux.cpuset=(2,3)]}\n machine Cloud [external] { Backend }\n}\n";
+        let expected = "package p\n\ndeployment Production for Vehicle {\n  machine AdasHpc [ labels = (ASIL_B) ] {\n    Cruise.primary\n    Lane\n    veh.diag.access\n  }\n  machine Cockpit {\n    Cruise.backup\n    Panel [ linux.cpuset = (2, 3) ]\n  }\n  machine Cloud [ external ] {\n    Backend\n  }\n}\n";
+        for width in [100, 60, 40] {
+            let expected = if width == 40 {
+                expected.replace(
+                    "  machine AdasHpc [ labels = (ASIL_B) ] {",
+                    "  machine AdasHpc [\n    labels = (ASIL_B)\n  ] {",
+                )
+            } else {
+                expected.to_string()
+            };
+            assert_profile_format(
+                source,
+                &expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_deployment_header_keeps_for_before_breakable_attributes() {
+        let source = "package p\ndeployment  Bench for veh .topology .Vehicle [labels=(QM)] {machine DevBox {}}\n";
+        let inline = "package p\n\ndeployment Bench for veh.topology.Vehicle [ labels = (QM) ] {\n  machine DevBox {}\n}\n";
+        let block = "package p\n\ndeployment Bench for veh.topology.Vehicle [\n  labels = (QM)\n] {\n  machine DevBox {}\n}\n";
+        for (width, expected) in [(100, inline), (61, inline), (60, block), (40, block)] {
+            assert_profile_format(
+                source,
+                expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+        assert_profile_format(
+            "package p\ndeployment  Empty for veh .topology .Vehicle {}\n",
+            "package p\n\ndeployment Empty for veh.topology.Vehicle {}\n",
+            Profile::Rsdl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn rsdl_machine_gaps_and_between_machine_comments_follow_source() {
+        for (source, expected) in [
+            (
+                "machine  A {}, machine  B {}",
+                "  machine A {}\n  machine B {}",
+            ),
+            (
+                "machine  A {}\n\nmachine  B {}",
+                "  machine A {}\n\n  machine B {}",
+            ),
+            (
+                "machine  A {}\n// second\nmachine  B {}",
+                "  machine A {}\n  // second\n  machine B {}",
+            ),
+            (
+                "machine  A {}\n\n/// second\n\nmachine  B {}",
+                "  machine A {}\n\n  /// second\n\n  machine B {}",
+            ),
+        ] {
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &format!("package p\ndeployment  D for S {{\n{source}\n}}\n"),
+                    &format!("package p\n\ndeployment D for S {{\n{expected}\n}}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_deployment_and_machine_header_comments_keep_their_scope() {
+        for (source, expected) in [
+            (
+                "deployment  D for /* clause */ S [labels=(QM)] { machine  M { C } }",
+                "deployment  D for /* clause */ S [labels=(QM)] {\n  machine M {\n    C\n  }\n}",
+            ),
+            (
+                "deployment  D for S // header\n{ machine  M { C } }",
+                "deployment  D for S // header\n{\n  machine M {\n    C\n  }\n}",
+            ),
+            (
+                "deployment D for S { machine  M /* header */ [external] { C } }",
+                "deployment D for S {\n  machine  M /* header */ [external] {\n    C\n  }\n}",
+            ),
+            (
+                "deployment D for S { machine  M // header\n { C } }",
+                "deployment D for S {\n  machine  M // header\n  {\n    C\n  }\n}",
+            ),
+            (
+                "deployment  D for a /* ref */ .S [labels=(QM)] { machine M {} }",
+                "deployment D for a /* ref */ .S [ labels = (QM) ] {\n  machine M {}\n}",
+            ),
+        ] {
+            for width in [100, 60, 40] {
+                let expected = if source.contains("a /* ref */ .S") && width == 40 {
+                    "deployment D for a /* ref */ .S [\n  labels = (QM)\n] {\n  machine M {}\n}"
+                } else {
+                    expected
+                };
+                assert_profile_format(
+                    &format!("package p\n{source}\n"),
+                    &format!("package p\n\n{expected}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn all_seven_declaration_kinds_have_canonical_dispatch() {
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                "package p\ncomponent  C {}\nsystem  S { C }\ndistribution  Dist { C }\ndeployment  D for S { machine  M { C } }\n",
+                "package p\n\ncomponent C {}\n\nsystem S {\n  C\n}\n\ndistribution Dist {\n  C\n}\n\ndeployment D for S {\n  machine M {\n    C\n  }\n}\n",
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+            assert_profile_format(
+                "package p\ninterface  I {signal  s:T}\nservice  veh.named : I,\nservice  veh.inline {signal  s:T}\n",
+                "package p\n\ninterface I {\n  signal s: T\n}\n\nservice veh.named: I\n\nservice veh.inline {\n  signal s: T\n}\n",
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_broken_deployment_is_left_unformatted() {
+        assert!(matches!(
+            format(
+                "package p\ndeployment Broken {}\n",
+                Profile::Rsdl,
+                &FormatOptions::default()
+            ),
+            FormatOutcome::ParseErrors(_)
+        ));
     }
 
     #[test]
