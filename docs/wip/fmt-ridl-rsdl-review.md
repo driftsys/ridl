@@ -82,26 +82,25 @@ pre-push hooks and all CI checks. The approved regression renders
 `query q(): T [persist] /* note */ @10ms` as
 `query q(): T @10ms [ persist ] /* note */`.
 
-Full review pass 1 retained eleven findings. Ten independent corrections are
-implemented: two production comment fixes, four coverage regressions and four
-prose updates. Three new layout assertions reproduced the failures before the
-fixes; the formatter suite then passed, and all four specified coverage
-mutations failed. See [PR evidence](fmt-ridl-rsdl-evidence/pr-634.md).
+Full review pass 1 retained eleven findings. All eleven findings are corrected.
+Ten independent corrections address: two production comment fixes, four coverage
+regressions and four prose updates. Three new layout assertions reproduced the
+failures before the fixes; the formatter suite then passed, and all four
+specified coverage mutations failed. See
+[PR evidence](fmt-ridl-rsdl-evidence/pr-634.md).
 
 The independent correction commit is `82b761f`; formatter/LSP acceptance and
 `just verify` passed on that exact head. QUICK review completed with actual
 Terra models and the correct scope. Its two test suggestions are applied; the
 bug seat found nothing and the restricted docs seat found no falsified prose.
-Full pass 2 remains pending until the rendering decision is settled.
+Full pass 2 follows publication of the approved collision correction.
 
-One rendering decision is pending under D-H16: moving timing before an
-attribute's `// attribute` comment collides with a later `// member` comment.
-The proposed narrow exception preserves that member verbatim. The alternative
-puts timing first and places the second comment on its own following line. The
-handoff's stop condition requires the maintainer to settle this case. No
-collision correction or full pass 2 has run. Tasks 9–13 remain pending.
+D-H19 records the maintainer's explicit approval of D-H16's narrow verbatim
+exception. The collision regression failed on valid input before correction;
+formatter/LSP acceptance now passes. A moved annotation line comment with any
+trailing member comment retains the whole source member. Noncolliding cases
+continue to use timing first. No rendering approval remains pending.
 
-Resume after D-H16 is answered: add its exact-output regression before the
-correction, update the normative rendering rule, run acceptance and actual-head
-gates, publish the fixes, then run full pass 2 over only the changes after
-`700d116`. Original worktree, untracked handoff and all stashes are preserved.
+Next: publish the final pass 1 correction after actual-head gates and QUICK,
+then run full pass 2 over only changes after `700d116`. Tasks 9–13 follow in
+order. Original worktree, untracked handoff and all stashes are preserved.

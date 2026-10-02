@@ -536,3 +536,33 @@ append-only. Implementation status and verification are in
   main `037256d`. Actual-head push gates run before publication.
 - Maintainer action: answer D-H16. Then implement its regression and approved
   rendering, run full pass 2 over the fix diff, and resume Tasks 9–13 in order.
+
+## D-H19 — approved verbatim exception for colliding line comments
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: explicit maintainer approval; supersedes the pending D-H16 question.
+- Question: how to retain two comment tokens when moving timing would place an
+  annotation line comment before a trailing member comment on the same line.
+- Decision: preserve the whole member verbatim only for this collision. The
+  maintainer answered "yes" to the recommended narrow exception. D-H14 remains
+  unchanged for noncolliding comments, including the approved `/* note */` case.
+- Reason and alternatives considered: this keeps the original attachment and
+  both comment tokens. Moving the second comment to a new line was offered but
+  was not chosen. The same collision guard handles documentation line comments
+  and a trailing block comment, whose opener would otherwise be swallowed.
+- Authority: explicit maintainer answer and amended design section 3.2.
+- Affected files and behavior: the existing container uses its trailing-comment
+  context to preserve the member when an attribute-first line comment would
+  move. The member renderer and width loop remain shared; no parser change.
+- Verification: after correcting a fixture that initially put `}` inside a line
+  comment, the valid exact-output regression failed with exit 101 because two
+  comments merged. Formatter/LSP acceptance passes after the guard. Tests cover
+  line/doc comments, single/multiline trailing block comments, predicate
+  attributes and noncolliding block-comment/timing-first controls. All cases
+  check structure, comment identity, reparsing and fixed-point output. Logs:
+  `pr-634-collision-red.log` and `pr-634-collision-green.log`.
+- Commit and PR: final pass 1 correction for PR #634; separate from earlier
+  `82b761f` and `6317767` corrections. Full pass 2 follows publication over only
+  changes after `700d116`.
+- Maintainer action: review PR #634 after the remaining reviews and CI. No
+  rendering approval remains pending; Tasks 9–13 resume after pass 2.
