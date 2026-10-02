@@ -10061,6 +10061,37 @@ mod tests {
     }
 
     #[test]
+    fn inline_collection_and_tuple_inits_refuse_scalar_overrides() {
+        let prefix = "package app\ntype Count : integer [0..10]\nconst FIVE = 5\n";
+        for target in [
+            "[Count; 1..2]",
+            "[integer : Count; 1..2]",
+            "(left: Count, right: Count)",
+        ] {
+            let derived =
+                check_source("app", &format!("{prefix}struct S {{ value : {target} }}\n"));
+            assert!(
+                codes(&derived).is_empty(),
+                "{target}: {:?}",
+                derived.diagnostics
+            );
+            assert_eq!(field_init(&derived, "S", "value"), Some(iv(true, None)));
+            for init in ["5", "FIVE"] {
+                let checked = check_source(
+                    "app",
+                    &format!("{prefix}struct S {{ value : {target} = {init} }}\n"),
+                );
+                assert_eq!(
+                    codes(&checked),
+                    vec!["TYPL-109"],
+                    "{target} = {init}: {:?}",
+                    checked.diagnostics
+                );
+            }
+        }
+    }
+
+    #[test]
     fn derived_numeric_init_respects_step_at_every_site() {
         for (minimum, expected) in [("-0.1", "-0.1"), ("-0.2", "0")] {
             let checked = check_ridl(
