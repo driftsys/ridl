@@ -376,8 +376,13 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     OutOfBounds, Unaligned, MissingRequired, Utf8, Union, TooDeep, TooManyTables, TooLarge,
 }
 pub struct Violation { pub type_name: &'static str, pub rule: Rule }
-#[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant }
+#[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant, Unique }
 ```
+
+`Rule::Unique` reports duplicate map keys (typl §12.2). It was added on
+2026-10-02 with driftsys/ridl#469. `Rule` remains `#[non_exhaustive]`; consumers
+must retain a fallback arm when matching it. Step failures use `Rule::Step` and
+NaN in a declared range uses `Rule::Range`.
 
 `Encoding` is sealed: `FlatBuffers`, `Proto3` and `ReprC` are the only encodings
 a payload type can implement, and the marker types carry no cargo feature of

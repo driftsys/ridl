@@ -253,6 +253,8 @@ pub enum Rule {
     Pattern,
     /// A discriminant names no declared variant.
     Variant,
+    /// A map contains more than one entry with the same key.
+    Unique,
 }
 
 #[cfg(test)]
@@ -300,7 +302,7 @@ mod tests {
     /// The match names every variant with no `_` arm, so a `Rule` variant
     /// added or removed fails this test to compile.
     #[test]
-    fn rule_is_exactly_these_five_variants() {
+    fn rule_is_exactly_these_six_variants() {
         fn all(r: Rule) {
             match r {
                 Rule::Range => {}
@@ -308,8 +310,10 @@ mod tests {
                 Rule::Length => {}
                 Rule::Pattern => {}
                 Rule::Variant => {}
+                Rule::Unique => {}
             }
         }
         all(Rule::Range);
+        all(Rule::Unique);
     }
 }

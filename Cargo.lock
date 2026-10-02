@@ -1791,6 +1791,9 @@ name = "ridl-backend-rust"
 version = "0.5.0"
 dependencies = [
  "insta",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
  "planus",
  "planus-codegen",
  "planus-translation",

@@ -1139,3 +1139,117 @@ fn spellings_field_numbers_are_pinned() {
     .map(|(name, number)| (name.to_string(), number));
     assert_eq!(fields, expected);
 }
+
+#[test]
+fn utf8_bytes_init_is_constructible_in_the_model() {
+    let mut package = package();
+    let Some(v2::decl::Kind::TypeDef(td)) = package.decls[0].kind.as_mut() else {
+        panic!("expected scalar");
+    };
+    td.backing = Some(v2::Backing {
+        kind: Some(v2::backing::Kind::Primitive(
+            v2::PrimitiveType::Bytes as i32,
+        )),
+    });
+    td.constraint = Some(v2::Constraint {
+        len_min: Some(2),
+        len_max: Some(2),
+        ..Default::default()
+    });
+    td.width = None;
+    td.declared_init = Some("é".into());
+    td.init = Some(v2::InitValue {
+        derivable: true,
+        value: Some("é".into()),
+    });
+    let model = lower(&package, &[]);
+    let init = model.declarations[0].init.as_ref().unwrap();
+    assert!(init.derivable);
+    assert_eq!(init.value.as_deref(), Some("é"));
+}
+
+#[test]
+fn explicit_field_init_does_not_require_the_scalar_types_own_init() {
+    for optional in [false, true] {
+        let mut package = package();
+        let Some(v2::decl::Kind::TypeDef(td)) = package.decls[0].kind.as_mut() else {
+            panic!("expected scalar");
+        };
+        td.backing = Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        });
+        td.constraint = Some(v2::Constraint {
+            len_min: Some(2),
+            len_max: Some(2),
+            ..Default::default()
+        });
+        td.width = None;
+        td.init = Some(v2::InitValue {
+            derivable: false,
+            value: None,
+        });
+        let Some(v2::decl::Kind::StructDef(def)) = package.decls[2].kind.as_mut() else {
+            panic!("expected struct");
+        };
+        let Some(v2::struct_member::Member::Field(field)) = def.members[0].member.as_mut() else {
+            panic!("expected field");
+        };
+        field.r#type.as_mut().unwrap().optional = optional;
+        field.declared_init = Some("é".into());
+        field.init = Some(v2::InitValue {
+            derivable: true,
+            value: Some("é".into()),
+        });
+        let model = lower(&package, &[]);
+        assert!(!model.declarations[0].init.as_ref().unwrap().derivable);
+        assert!(model.declarations[2].init.as_ref().unwrap().derivable);
+        let Some(v1::declaration::Kind::Struct(def)) = model.declarations[2].kind.as_ref() else {
+            panic!("expected model struct");
+        };
+        let Some(v1::slot::Occupant::Field(field)) = def.slots[0].occupant.as_ref() else {
+            panic!("expected model field");
+        };
+        assert!(field.init.as_ref().unwrap().derivable);
+    }
+}
+
+#[test]
+fn map_model_init_requires_at_most_one_generated_entry() {
+    for (min, expected) in [(0, true), (1, true), (2, false)] {
+        let mut package = package();
+        let Some(v2::decl::Kind::StructDef(def)) = package.decls[2].kind.as_mut() else {
+            panic!("expected struct");
+        };
+        let Some(v2::struct_member::Member::Field(field)) = def.members[0].member.as_mut() else {
+            panic!("expected field");
+        };
+        field.r#type = Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                min,
+                max: 3,
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::Integer as i32,
+                    )),
+                })),
+                value: Some(Box::new(named("SpeedKph"))),
+            }))),
+        });
+        let model = lower(&package, &[]);
+        assert_eq!(
+            model.declarations[2].init.as_ref().unwrap().derivable,
+            expected
+        );
+        let Some(v1::declaration::Kind::Struct(def)) = model.declarations[2].kind.as_ref() else {
+            panic!("expected model struct");
+        };
+        let Some(v1::slot::Occupant::Field(field)) = def.slots[0].occupant.as_ref() else {
+            panic!("expected model field");
+        };
+        assert_eq!(field.init.as_ref().unwrap().derivable, expected);
+    }
+}

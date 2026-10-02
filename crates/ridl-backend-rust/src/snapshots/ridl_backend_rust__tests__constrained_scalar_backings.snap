@@ -158,6 +158,12 @@ impl Ratio {
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",

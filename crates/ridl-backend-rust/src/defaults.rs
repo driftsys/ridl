@@ -71,9 +71,8 @@ fn type_def_default(name: &str, init: &v1::Init, sc: &v1::Scalar) -> Option<Toke
 /// numeric or unit type carries its init text (`"0"` or `min`). A string type
 /// with a declared init emits that init verbatim as a string literal; without a
 /// declared init the derivable case admits length 0 and defaults to the empty
-/// string (I1). A bytes type with a declared init has no faithful literal form
-/// here, so it gets no Default rather than a wrong (empty) one; the derivable
-/// zero-length case defaults to the empty vector.
+/// string (I1). A bytes init carries the UTF-8 bytes of that same literal;
+/// the derivable zero-length case defaults to the empty vector.
 fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<TokenStream> {
     match backing {
         ScalarBacking::Float => Some(numeric_tokens(value?, true)),
@@ -84,7 +83,7 @@ fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<T
             _ => Some(quote! { ::std::string::String::new() }),
         },
         ScalarBacking::Bytes => match value {
-            Some(text) if !text.is_empty() => None,
+            Some(text) if !text.is_empty() => Some(quote! { #text.as_bytes().to_vec() }),
             _ => Some(quote! { ::std::vec::Vec::new() }),
         },
     }
@@ -141,7 +140,13 @@ pub(crate) fn tuple_default_expr(ctx: &Ctx, tuple: &v1::InducedTuple) -> Option<
 /// `<T as ::core::default::Default>::default()` reaches the trait method.
 fn slot_default(ctx: &Ctx, ft: &v1::Type, slot: &Slot) -> Option<TokenStream> {
     if ft.optional {
-        return Some(quote! { ::core::option::Option::None });
+        if slot.declared_init.is_none() {
+            return Some(quote! { ::core::option::Option::None });
+        }
+        let mut inner = ft.clone();
+        inner.optional = false;
+        let value = slot_default(ctx, &inner, slot)?;
+        return Some(quote! { ::core::option::Option::Some(#value) });
     }
     match ft.kind.as_ref() {
         Some(v1::r#type::Kind::Named(reference)) => named_default(ctx, reference, slot),
@@ -190,18 +195,32 @@ fn named_default(ctx: &Ctx, reference: &v1::TypeRef, slot: &Slot) -> Option<Toke
     } else if let Some(decl) = ctx.local(reference) {
         match decl.kind.as_ref() {
             Some(v1::declaration::Kind::Scalar(sc)) => {
-                type_def_default(&reference.reference, decl.init.as_ref()?, sc)?;
                 let path = type_path(&reference.reference);
                 if let Some(declared) = slot.declared_init {
                     let inner = scalar_default_value(class_backing(sc.class), Some(declared))?;
                     let ctor = scalar_ctor(sc);
                     Some(quote! { #path::#ctor(#inner) })
                 } else {
+                    type_def_default(&reference.reference, decl.init.as_ref()?, sc)?;
                     Some(quote! { <#path as ::core::default::Default>::default() })
                 }
             }
-            // Same-package composite, enum, or enum set: recurse rather than
-            // trust a one-level flag.
+            Some(v1::declaration::Kind::Enum(ed)) => {
+                if let Some(declared) = slot.declared_init {
+                    // The checker resolves constants and exact integral
+                    // spellings to canonical integer text. Select by value,
+                    // which is an enum member's identity (typl §8).
+                    let value = declared.parse::<i64>().ok()?;
+                    let chosen = ed.values.iter().find(|member| member.value == value)?;
+                    let path = type_path(&reference.reference);
+                    let variant = ident(&pascal_of(chosen.name.as_ref()));
+                    Some(quote! { #path::#variant })
+                } else {
+                    named_same_package_default(ctx, reference)
+                }
+            }
+            // Same-package composite or enum set: recurse rather than trust
+            // a one-level flag.
             _ => named_same_package_default(ctx, reference),
         }
     } else {
@@ -266,6 +285,11 @@ fn array_default(ctx: &Ctx, array: &v1::ArrayType, slot: &Slot) -> Option<TokenS
 }
 
 fn map_default(ctx: &Ctx, map: &v1::MapType, slot: &Slot) -> Option<TokenStream> {
+    // More than one entry would repeat the same key. The language defines no
+    // distinct-key synthesis for a map init.
+    if map.min > 1 {
+        return None;
+    }
     if map.min == 0 {
         return Some(quote! { ::std::vec::Vec::new() });
     }

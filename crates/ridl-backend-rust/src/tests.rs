@@ -476,17 +476,9 @@ fn vacuous_scalar_constructs_infallibly() {
     );
 }
 
-/// `constraint_is_vacuous` excludes `step` (`crates/ridl-ir/src/lib.rs`), so a
-/// constraint carrying only a `step` is vacuous and takes the infallible
-/// `emit_vacuous_type_def` path — the same path `Enabled` above takes with no
-/// constraint at all. `unchecked_doc` still names the gap on a type reached
-/// this way, because it reads `step` unconditionally, off the same
-/// `td.constraint`, regardless of which path emitted the type. Deleting the
-/// `step` exclusion from `constraint_is_vacuous` would route this type
-/// through `emit_type_def` instead and stop `unchecked_doc`'s note from
-/// matching a constructor that had gone fallible; this test catches that.
+/// A step alone is a constraint, anchored at zero.
 #[test]
-fn step_only_scalar_is_vacuous_and_still_names_the_gap() {
+fn step_only_scalar_has_a_fallible_constructor_and_check() {
     let source = rust_for(vec![public_decl(
         "Rounded",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -501,30 +493,11 @@ fn step_only_scalar_is_vacuous_and_still_names_the_gap() {
             width: derived_float_width(),
         }),
     )]);
-    // The vacuous path: infallible `new`, no `new_unchecked`, no manual
-    // `TryFrom`.
-    assert!(source.contains("pub const fn new(value: ::core::primitive::f64) -> Self"));
-    assert!(source.contains("impl ::core::convert::From<::core::primitive::f64> for Rounded"));
-    assert!(
-        !source.contains("Rounded::new_unchecked")
-            && !source.contains("fn new_unchecked(value: ::core::primitive::f64)"),
-        "new_unchecked would duplicate new on a vacuous type, got:\n{source}"
-    );
-    assert!(
-        !source.contains("impl ::core::convert::TryFrom<::core::primitive::f64> for Rounded")
-            && !source.contains("impl TryFrom<::core::primitive::f64> for Rounded"),
-        "a manual TryFrom collides with core's blanket impl, got:\n{source}"
-    );
-    // And the quantization gap is still named on the type, although `new`
-    // cannot fail.
-    assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
-    // No `fn check` on the vacuous path either: `named_scalar_check`'s
-    // `ctor != "new_unchecked"` short-circuit depends on this, since a
-    // vacuous type's `ctor` is `"new"`, not `"new_unchecked"`.
-    assert!(
-        !source.contains("fn check("),
-        "a vacuous type has no invariant for check to hold, got:\n{source}"
-    );
+    assert!(source.contains("fn check("));
+    assert!(source.contains("fn new_unchecked("));
+    assert!(source.contains("impl ::core::convert::TryFrom<::core::primitive::f64> for Rounded"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Step"));
+    assert!(!source.contains("Quantization (`step`) is not checked"));
 }
 
 #[test]
@@ -861,13 +834,10 @@ fn a_literal_pattern_is_named_as_feature_gated() {
     );
 }
 
-/// A `step` and a literal pattern together are both named: the step is never
-/// checked, and the pattern is checked only under `validate-pattern`. The
-/// `unchecked_doc` check for `step` reads no backing, so it is unconditional;
-/// the backing here is `String` so the pattern's own guard (a check is
-/// emitted only for a `String` backing) also applies.
+/// A pattern on a string carries the feature condition. A malformed numeric
+/// step on a string in hand-built IR cannot emit a numeric check.
 #[test]
-fn a_step_and_a_literal_pattern_are_both_named() {
+fn a_string_pattern_names_the_feature_condition() {
     let source = rust_for(vec![public_decl(
         "Stepped",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -888,7 +858,7 @@ fn a_step_and_a_literal_pattern_are_both_named() {
             width: None,
         }),
     )]);
-    assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
+    assert!(!source.contains("Quantization (`step`) is not checked"));
     assert!(!source.contains("The `match` pattern is not checked by `new`."));
     // The doc line itself, not the `cfg` attribute that also carries the
     // feature name.

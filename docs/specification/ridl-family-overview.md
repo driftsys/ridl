@@ -182,6 +182,13 @@ Chronological; each recorded in full where cited.
 | 35 | **A third payload encoding, `repr(C)`**, beside proto3 and FlatBuffers, chosen by what a consumer can link rather than by a tier; the domain types do not carry it, and a C header is one of its artifacts rather than a language target                                                                                                                                                                                                                                   | ADR-0020 d1–d4                         |
 | 36 | **rsdl rewritten as a language (v0.2)**: five declarations — `system` (the closure), `component` (one execution context; `offers` services, `requires` interfaces), `distribution`, `deployment`, `machine`; a lone service stands for an implicit component; instances are an attribute and redundancy is derived; placement is machine membership; rsdl lowers the crossing kind and the transport is configuration; no process declaration; posture derivation reserved | rsdl §1–§13                            |
 
+**2026-10-02 numeric validation decision:** NaN is excluded by a declared range
+or step, while an unconstrained float retains NaN (typl §5.5,
+driftsys/ridl#421). Step is mandatory validation with a lower-bound origin or
+zero when absent, and uses a bounded floating-point representation allowance
+without normalizing the input (typl §4.3, driftsys/ridl#469). A map rejects
+duplicate keys (typl §12.2).
+
 ## 6. Open Questions — Consolidated Index
 
 By home; see each reference for full statements.

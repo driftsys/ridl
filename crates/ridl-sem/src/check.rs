@@ -541,6 +541,15 @@ enum BackingClass {
     Unknown,
 }
 
+/// The value domain a declared init must inhabit. Unresolved type targets
+/// have resolver diagnostics; composite targets have no literal init syntax.
+enum InitTarget {
+    Scalar(BackingClass),
+    Enum(Vec<ExactValue>),
+    Composite,
+    Unknown,
+}
+
 /// A lowered scalar constraint plus the exact bounds kept for init/const
 /// validation.
 struct ScalarParts {
@@ -620,10 +629,9 @@ struct LoweredType {
     /// Exact numeric bounds when the field type is a numeric scalar, used to
     /// validate a numeric declared init (TYPL-109).
     scalar_bounds: Option<(Option<ExactValue>, Option<ExactValue>)>,
-    /// Length bounds and `match` pattern when the field type is a string/bytes
-    /// scalar — inline (`name : string [0..8]`) or a named string/bytes `type`.
-    /// Used to validate a declared string/bytes init (TYPL-109); the numeric
-    /// path reads `scalar_bounds` instead.
+    /// Scalar constraints for init validation: numeric step, or string/bytes
+    /// length bounds and `match` pattern, for both inline and named types.
+    /// Exact numeric range bounds are retained separately in `scalar_bounds`.
     init_constraint: Option<v2::Constraint>,
 }
 
@@ -863,7 +871,12 @@ impl Checker<'_> {
     /// The regex source of a named regex constant, resolved in the checked
     /// package's view, plus its canonical reference.
     fn const_regex_value(&self, name: &str) -> Option<(String, String)> {
-        let symbol = self.resolution.symbols.get(name)?.clone();
+        self.const_regex_value_in(self.pkg, name)
+    }
+
+    fn const_regex_value_in(&self, package: Package, name: &str) -> Option<(String, String)> {
+        let resolution = resolve_package(self.db, self.ws, package, self.std);
+        let symbol = resolution.symbols.get(name)?.clone();
         if symbol.kind != SymbolKind::Const {
             return None;
         }
@@ -1171,8 +1184,12 @@ impl Checker<'_> {
             .map(|backing| backing.syntax().text_range())
             .unwrap_or_else(|| name_range(decl));
         let parts = self.lower_scalar(class, decl.constraint(), span);
-        let (declared_init, declared) =
-            self.lower_declared_init(decl.init_value(), &parts, DiagCode::TYPL_109);
+        let (declared_init, declared) = self.lower_declared_init(
+            decl.init_value(),
+            &parts,
+            &InitTarget::Scalar(class),
+            DiagCode::TYPL_109,
+        );
         let mut type_def = v2::TypeDef {
             backing,
             constraint: parts.constraint,
@@ -1362,6 +1379,55 @@ impl Checker<'_> {
             },
             other => other,
         };
+
+        if !nominal_reported
+            && let Some(target) = &target_type
+            && let InitTarget::Scalar(class @ (BackingClass::Integer | BackingClass::Float)) =
+                self.symbol_init_target(target)
+        {
+            let valid = match &value_kind {
+                Some(LitKind::Number { value }) => {
+                    class == BackingClass::Float || value.0.is_integer()
+                }
+                Some(LitKind::Malformed) | None => true,
+                _ => false,
+            };
+            if !valid {
+                self.error(
+                    DiagCode::TYPL_108,
+                    value_range,
+                    format!(
+                        "const `{name}` does not have `{}`'s {} value kind",
+                        self.canonical_ref(target),
+                        primitive_noun(class)
+                    ),
+                );
+            }
+        }
+
+        // A typed numeric constant must satisfy the same exact step grid as
+        // an init. Resolve the step in the type's defining package, while the
+        // value above resolves in this constant's own package.
+        if !nominal_reported
+            && let (Some(LitKind::Number { value }), Some(target)) = (&value_kind, &target_type)
+        {
+            let parts = self.payload_scalar_parts(target);
+            if !out_of_bounds(value, parts.min.as_ref(), parts.max.as_ref())
+                && let Some(step) = parts
+                    .constraint
+                    .as_ref()
+                    .and_then(|constraint| constraint.step.as_deref())
+                    .and_then(ExactValue::parse)
+                && exact_is_positive(&step)
+            {
+                let origin = parts
+                    .min
+                    .unwrap_or_else(|| ExactValue::parse("0").expect("zero parses"));
+                if !((&value.0 - &origin.0) / &step.0).is_integer() {
+                    self.error(DiagCode::TYPL_108, value_range, format!("const `{name}` value {} is off `{}`'s declared step grid (origin {}, step {})", value.to_decimal_string(), self.canonical_ref(target), origin.to_decimal_string(), step.to_decimal_string()));
+                }
+            }
+        }
 
         let (value, regex) = match value_kind {
             Some(LitKind::Number { value }) => (value.to_decimal_string(), None),
@@ -1842,17 +1908,63 @@ impl Checker<'_> {
         &mut self,
         init: Option<ast::InitValue>,
         parts: &ScalarParts,
+        target: &InitTarget,
         violation: DiagCode,
     ) -> (Option<String>, Option<v2::InitValue>) {
         let Some(literal) = init.as_ref().and_then(ast::InitValue::literal) else {
             return (None, None);
         };
-        let text = match literal_kind(&literal) {
-            LitKind::Number { value } => {
-                if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
+        let value = match literal_kind(&literal) {
+            LitKind::Number { value } => Some(ConstValue::Number(value)),
+            LitKind::Bool(flag) => Some(ConstValue::Bool(flag)),
+            LitKind::Str(text) => Some(ConstValue::Text(text)),
+            LitKind::Regex(text) => Some(ConstValue::Regex(text)),
+            LitKind::ConstRef(name) => {
+                let value = self.const_value_in(self.pkg, &name);
+                if value.is_none() {
                     self.error(
                         violation,
                         literal.syntax().text_range(),
+                        format!("init reference `{name}` does not resolve to a constant value"),
+                    );
+                }
+                value
+            }
+            LitKind::Malformed => None,
+        };
+        let range = literal.syntax().text_range();
+        let valid_kind = match (target, value.as_ref()) {
+            (InitTarget::Scalar(BackingClass::Integer), Some(ConstValue::Number(value))) => {
+                value.0.is_integer()
+            }
+            (InitTarget::Scalar(BackingClass::Float), Some(ConstValue::Number(_)))
+            | (InitTarget::Scalar(BackingClass::Boolean), Some(ConstValue::Bool(_)))
+            | (
+                InitTarget::Scalar(BackingClass::Str | BackingClass::Bytes),
+                Some(ConstValue::Text(_)),
+            ) => true,
+            (InitTarget::Enum(values), Some(ConstValue::Number(value))) => values.contains(value),
+            (InitTarget::Composite, _) => false,
+            (InitTarget::Unknown | InitTarget::Scalar(BackingClass::Unknown), _) | (_, None) => {
+                true
+            }
+            _ => false,
+        };
+        if !valid_kind {
+            let message = match target {
+                InitTarget::Enum(_) => "init value must be one of the enum's declared integer values".to_string(),
+                InitTarget::Composite => "this composite type has no literal init syntax; omit the override to derive its init".to_string(),
+                InitTarget::Scalar(class) => format!("init value does not have the declared type's {} value kind", primitive_noun(*class)),
+                InitTarget::Unknown => unreachable!(),
+            };
+            self.error(violation, range, message);
+        }
+        let text = match value {
+            Some(ConstValue::Number(value)) => {
+                if valid_kind && out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
+                    self.error(
+                        violation,
+                        range,
                         format!(
                             "init value {} is outside the declared range [{}..{}]",
                             value.to_decimal_string(),
@@ -1860,47 +1972,47 @@ impl Checker<'_> {
                             render_bound(parts.max.as_ref()),
                         ),
                     );
-                }
-                value.to_decimal_string()
-            }
-            LitKind::Bool(flag) => flag.to_string(),
-            LitKind::Str(text) => {
-                self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
-                text
-            }
-            // A constant is reusable in an init (§6), so the value that lowers
-            // is the constant's, not its name. Every kind resolves, not only
-            // the numeric one: `= SOME_TEXT` used to lower as the literal text
-            // `"SOME_TEXT"` and `= SOME_FLAG` as the unparseable `"YES"`, which
-            // both backends then emitted as a wrong value with no diagnostic
-            // anywhere (issue #170). The resolved value is checked against the
-            // declared bounds exactly as a direct literal of the same kind is.
-            LitKind::ConstRef(name) => match self.const_value_in(self.pkg, &name) {
-                Some(ConstValue::Number(value)) => {
-                    if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
+                } else if valid_kind
+                    && let Some(step) = parts
+                        .constraint
+                        .as_ref()
+                        .and_then(|c| c.step.as_deref())
+                        .and_then(ExactValue::parse)
+                    && step > ExactValue::parse("0").expect("zero is a numeric literal")
+                {
+                    let origin = parts.min.clone().unwrap_or_else(|| {
+                        ExactValue::parse("0").expect("zero is a numeric literal")
+                    });
+                    if !((&value.0 - &origin.0) / &step.0).is_integer() {
                         self.error(
                             violation,
-                            literal.syntax().text_range(),
+                            range,
                             format!(
-                                "init value {} is outside the declared range [{}..{}]",
+                                "init value {} is off the declared step grid (origin {}, step {})",
                                 value.to_decimal_string(),
-                                render_bound(parts.min.as_ref()),
-                                render_bound(parts.max.as_ref()),
+                                origin.to_decimal_string(),
+                                step.to_decimal_string()
                             ),
                         );
                     }
-                    value.to_decimal_string()
                 }
-                Some(ConstValue::Bool(flag)) => flag.to_string(),
-                Some(ConstValue::Text(text)) => {
-                    self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
-                    text
+                value.to_decimal_string()
+            }
+            Some(ConstValue::Bool(flag)) => flag.to_string(),
+            Some(ConstValue::Text(text)) => {
+                if valid_kind {
+                    self.check_string_init(
+                        &text,
+                        parts,
+                        matches!(target, InitTarget::Scalar(BackingClass::Bytes)),
+                        range,
+                        violation,
+                    );
                 }
-                Some(ConstValue::Regex(text)) => text,
-                None => significant_text(literal.syntax()),
-            },
-            LitKind::Regex(text) => text,
-            LitKind::Malformed => significant_text(literal.syntax()),
+                text
+            }
+            Some(ConstValue::Regex(text)) => text,
+            None => significant_text(literal.syntax()),
         };
         (
             Some(text.clone()),
@@ -1913,8 +2025,9 @@ impl Checker<'_> {
 
     /// Checks a declared string/bytes init against the type's length bound and,
     /// where a `match` pattern is present, against that pattern (TYPL-109,
-    /// §5.8). Length is measured in Unicode scalar values; the string's own
-    /// escape processing is not applied (the raw inner text is measured).
+    /// §5.8). String length counts Unicode scalar values; bytes length counts
+    /// UTF-8 bytes. Escape processing is not applied (the raw inner text is
+    /// measured).
     /// Pattern conformance uses ECMA-262 `test` semantics — a match anywhere in
     /// the string; typl patterns are anchored with `^`…`$`. An invalid pattern
     /// is skipped here (TYPL-106 reports it at the pattern's own site). Reached
@@ -1927,13 +2040,18 @@ impl Checker<'_> {
         &mut self,
         text: &str,
         parts: &ScalarParts,
+        bytes: bool,
         range: TextRange,
         violation: DiagCode,
     ) {
         let Some(constraint) = &parts.constraint else {
             return;
         };
-        let length = text.chars().count() as u64;
+        let length = if bytes {
+            text.len()
+        } else {
+            text.chars().count()
+        } as u64;
         if let Some(min) = constraint.len_min
             && length < min
         {
@@ -2086,8 +2204,16 @@ impl Checker<'_> {
                 .and_then(|l| l.scalar_bounds.as_ref())
                 .and_then(|(_, max)| max.clone()),
         };
-        let (declared_init, declared) =
-            self.lower_declared_init(field.init_value(), &bounds_parts, DiagCode::TYPL_109);
+        let target = lowered
+            .as_ref()
+            .map(|l| self.field_init_target(&l.ty))
+            .unwrap_or(InitTarget::Unknown);
+        let (declared_init, declared) = self.lower_declared_init(
+            field.init_value(),
+            &bounds_parts,
+            &target,
+            DiagCode::TYPL_109,
+        );
         // E1.9: a field without a declared init derives one from the §5.8 table
         // (a named reference resolves to the referenced type's own init).
         let init = match declared {
@@ -2149,7 +2275,12 @@ impl Checker<'_> {
                     },
                     BackingClass::Integer | BackingClass::Float => {
                         let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
-                        init::numeric_zero_or_min(min, max)
+                        init::numeric_zero_or_min(
+                            min,
+                            max,
+                            self.named_init_constraint(symbol)
+                                .and_then(|c| c.step.as_deref().and_then(ExactValue::parse)),
+                        )
                     }
                     BackingClass::Str | BackingClass::Bytes => {
                         init::string_init(self.named_string_constraint(symbol).as_ref())
@@ -2311,9 +2442,10 @@ impl Checker<'_> {
             BackingClass::Str | BackingClass::Bytes => {}
             _ => return None,
         }
+        let package = self.package_handle(&symbol.package)?;
         let constraint = decl.constraint();
-        let (len_min, len_max) = self.string_len_bounds(constraint.as_ref());
-        let (pattern, pattern_const) = self.string_pattern(constraint.as_ref());
+        let (len_min, len_max) = self.string_len_bounds(package, constraint.as_ref());
+        let (pattern, pattern_const) = self.string_pattern(package, constraint.as_ref());
         Some(v2::Constraint {
             min: None,
             max: None,
@@ -2328,18 +2460,22 @@ impl Checker<'_> {
     /// The length bounds of a string/bytes constraint, mirroring
     /// [`Checker::lower_len_scalar`] but read-only: the §4.4 default `[0..256]`
     /// when no length bound is written, a fixed `[N]` as `(N, N)`.
-    fn string_len_bounds(&self, constraint: Option<&ast::Constraint>) -> (u64, u64) {
+    fn string_len_bounds(
+        &self,
+        package: Package,
+        constraint: Option<&ast::Constraint>,
+    ) -> (u64, u64) {
         let Some(bound) = constraint.and_then(ast::Constraint::len) else {
             return (0, 256);
         };
         let min = bound
             .min()
-            .and_then(|literal| self.numeric_literal(&literal))
+            .and_then(|literal| self.numeric_literal_in(package, &literal))
             .and_then(|value| exact_to_u64(&value));
         if bound.dotdot_token().is_some() {
             let max = bound
                 .max()
-                .and_then(|literal| self.numeric_literal(&literal))
+                .and_then(|literal| self.numeric_literal_in(package, &literal))
                 .and_then(|value| exact_to_u64(&value));
             (min.unwrap_or(0), max.unwrap_or(256))
         } else {
@@ -2352,6 +2488,7 @@ impl Checker<'_> {
     /// inline literal or a named regex constant), read-only.
     fn string_pattern(
         &self,
+        package: Package,
         constraint: Option<&ast::Constraint>,
     ) -> (Option<String>, Option<String>) {
         let Some(match_literal) = constraint.and_then(ast::Constraint::match_pattern) else {
@@ -2359,7 +2496,7 @@ impl Checker<'_> {
         };
         match literal_kind(&match_literal) {
             LitKind::Regex(text) => (Some(text), None),
-            LitKind::ConstRef(name) => match self.const_regex_value(&name) {
+            LitKind::ConstRef(name) => match self.const_regex_value_in(package, &name) {
                 Some((text, canonical)) => (Some(text), Some(canonical)),
                 None => (None, Some(name)),
             },
@@ -2484,7 +2621,7 @@ impl Checker<'_> {
                 // type's length bound and `match` pattern for init validation
                 // (the T14 field-init obligation; TYPL-109).
                 let init_constraint = (symbol.kind == SymbolKind::Type)
-                    .then(|| self.named_string_constraint(&symbol))
+                    .then(|| self.named_init_constraint(&symbol))
                     .flatten();
                 LoweredType {
                     ty: v2::FieldType {
@@ -2516,9 +2653,7 @@ impl Checker<'_> {
                 // An inline string/bytes scalar carries its length bound and
                 // `match` pattern for init validation (TYPL-109); a numeric
                 // inline scalar validates through `scalar_bounds`.
-                let init_constraint = matches!(class, BackingClass::Str | BackingClass::Bytes)
-                    .then(|| parts.constraint.clone())
-                    .flatten();
+                let init_constraint = parts.constraint.clone();
                 LoweredType {
                     ty: v2::FieldType {
                         optional: false,
@@ -3996,22 +4131,14 @@ impl Checker<'_> {
                 PathTarget::Symbol(symbol) => {
                     payload = self.canonical_ref(&symbol);
                     match signal.init_value() {
-                        // RIDL-110: the bare `= value` override validates
-                        // against the payload constraints — the E1 scalar
-                        // validation with the ridl code (§4.4) — and lowers
-                        // as `declared_init` in canonical text (ADR-0008
-                        // decision 2). Recorded debt (issue #172, M2): the
-                        // leniency is E1's exactly — a type-mismatched
-                        // literal (`= true` on a numeric payload), a value
-                        // off the `step` grid, or an override on a
-                        // non-`type` payload all pass silently, as they do
-                        // for struct fields — although the §16.1 RIDL-110
-                        // wording reads broader.
+                        // RIDL-110 validates the override's kind, scalar
+                        // constraints, or enum membership before lowering.
                         Some(init_value) => {
                             let parts = self.payload_scalar_parts(&symbol);
                             (declared_init, init) = self.lower_declared_init(
                                 Some(init_value),
                                 &parts,
+                                &self.symbol_init_target(&symbol),
                                 DiagCode::RIDL_110,
                             );
                         }
@@ -5095,16 +5222,82 @@ impl Checker<'_> {
         }
     }
 
-    /// The scalar bounds and string constraint of a signal payload's named
-    /// type, for validating the `= value` override (RIDL-110) — exactly the
-    /// parts a struct field typed by the same name would validate against.
+    /// The value domain of a resolved named type.
+    fn symbol_init_target(&self, symbol: &Symbol) -> InitTarget {
+        match self.find_definition(symbol) {
+            Some(Definition::Type(decl)) => InitTarget::Scalar(backing_class(decl.backing())),
+            Some(Definition::Enum(decl)) => InitTarget::Enum(
+                decl.values()
+                    .filter_map(
+                        |member| match member.value().map(|value| literal_kind(&value)) {
+                            Some(LitKind::Number { value }) => Some(value),
+                            _ => None,
+                        },
+                    )
+                    .collect(),
+            ),
+            Some(Definition::Struct(_) | Definition::Union(_) | Definition::EnumSet(_)) => {
+                InitTarget::Composite
+            }
+            _ => InitTarget::Unknown,
+        }
+    }
+
+    fn field_init_target(&self, ty: &v2::FieldType) -> InitTarget {
+        match ty.kind.as_ref() {
+            Some(v2::field_type::Kind::Named(name)) => self
+                .resolve_canonical(name)
+                .map(|symbol| self.symbol_init_target(&symbol))
+                .unwrap_or(InitTarget::Unknown),
+            Some(v2::field_type::Kind::Primitive(primitive)) => {
+                InitTarget::Scalar(init_primitive_class(*primitive))
+            }
+            Some(v2::field_type::Kind::InlineScalar(scalar)) => InitTarget::Scalar(
+                match scalar
+                    .backing
+                    .as_ref()
+                    .and_then(|backing| backing.kind.as_ref())
+                {
+                    Some(v2::backing::Kind::Primitive(primitive)) => {
+                        init_primitive_class(*primitive)
+                    }
+                    Some(v2::backing::Kind::Unit(_)) => BackingClass::Float,
+                    None => BackingClass::Unknown,
+                },
+            ),
+            Some(_) => InitTarget::Composite,
+            None => InitTarget::Unknown,
+        }
+    }
+
+    /// The full scalar constraint used by a field or signal init, retaining
+    /// a numeric step even when the type is referenced from another package.
+    fn named_init_constraint(&self, symbol: &Symbol) -> Option<v2::Constraint> {
+        if let Some(constraint) = self.named_string_constraint(symbol) {
+            return Some(constraint);
+        }
+        let Definition::Type(decl) = self.find_definition(symbol)? else {
+            return None;
+        };
+        let package = self.package_handle(&symbol.package)?;
+        let step = decl
+            .constraint()?
+            .step()
+            .and_then(|literal| self.numeric_literal_in(package, &literal));
+        Some(v2::Constraint {
+            step: step.map(|value| value.to_decimal_string()),
+            ..Default::default()
+        })
+    }
+
+    /// Scalar constraints used by a signal override, matching struct fields.
     fn payload_scalar_parts(&self, symbol: &Symbol) -> ScalarParts {
         if symbol.kind != SymbolKind::Type {
             return ScalarParts::empty();
         }
         let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
         ScalarParts {
-            constraint: self.named_string_constraint(symbol),
+            constraint: self.named_init_constraint(symbol),
             width: None,
             min,
             max,
@@ -5565,6 +5758,17 @@ fn primitive_of(node: &ast::PrimitiveType) -> (v2::PrimitiveType, BackingClass) 
         (v2::PrimitiveType::Bytes, BackingClass::Bytes)
     } else {
         (v2::PrimitiveType::Unspecified, BackingClass::Unknown)
+    }
+}
+
+fn init_primitive_class(primitive: i32) -> BackingClass {
+    match v2::PrimitiveType::try_from(primitive).ok() {
+        Some(v2::PrimitiveType::Boolean) => BackingClass::Boolean,
+        Some(v2::PrimitiveType::Integer) => BackingClass::Integer,
+        Some(v2::PrimitiveType::Float) => BackingClass::Float,
+        Some(v2::PrimitiveType::String) => BackingClass::Str,
+        Some(v2::PrimitiveType::Bytes) => BackingClass::Bytes,
+        _ => BackingClass::Unknown,
     }
 }
 
@@ -9682,6 +9886,344 @@ mod tests {
     }
 
     /// A clean vocabulary prefix for interaction tests.
+    #[test]
+    fn declared_init_rejects_wrong_scalar_kinds_at_every_site() {
+        for (backing, init) in [
+            ("integer [0..10]", "true"),
+            ("integer [0..10]", "\"text\""),
+            ("integer [0..10]", "1.5"),
+            ("boolean", "1"),
+            ("string [0..10]", "1"),
+            ("bytes [0..10]", "false"),
+            ("float [0.0..10.0 step 1.0]", "FLAG"),
+            ("string [0..10]", "FLAG"),
+            ("integer [0..10]", "TEXT"),
+            ("integer [0..10]", "PATTERN"),
+            ("boolean", "NUMBER"),
+            ("string [0..10]", "NUMBER"),
+        ] {
+            let prefix = "package app\nconst FLAG = true\nconst TEXT = \"text\"\nconst NUMBER = 1\nconst PATTERN = /a/\n";
+            let ty = check_source("app", &format!("{prefix}type T : {backing} = {init}\n"));
+            assert!(
+                codes(&ty).contains(&"TYPL-109"),
+                "type {backing} = {init}: {:?}",
+                ty.diagnostics
+            );
+            let field = check_source(
+                "app",
+                &format!("{prefix}type T : {backing}\nstruct S {{ value : T = {init} }}\n"),
+            );
+            assert!(
+                codes(&field).contains(&"TYPL-109"),
+                "field {backing} = {init}: {:?}",
+                field.diagnostics
+            );
+            let signal = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}type T : {backing}\ninterface I {{ signal value : T = {init} @10ms }}\n"
+                ),
+            );
+            assert!(
+                codes(&signal).contains(&"RIDL-110"),
+                "signal {backing} = {init}: {:?}",
+                signal.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn declared_init_rejects_values_off_the_exact_step_grid() {
+        for init in ["0.2", "BAD"] {
+            let prefix = "package app\nconst BAD = 0.2\n";
+            let backing = "float [0.1..1.1 step 0.2]";
+            let ty = check_source("app", &format!("{prefix}type T : {backing} = {init}\n"));
+            assert!(codes(&ty).contains(&"TYPL-109"), "{:?}", ty.diagnostics);
+            for field_type in ["T", backing] {
+                let field = check_source(
+                    "app",
+                    &format!(
+                        "{prefix}type T : {backing}\nstruct S {{ value : {field_type} = {init} }}\n"
+                    ),
+                );
+                assert!(
+                    codes(&field).contains(&"TYPL-109"),
+                    "{:?}",
+                    field.diagnostics
+                );
+            }
+            let signal = check_ridl(
+                "app",
+                &format!(
+                    "{prefix}type T : {backing}\ninterface I {{ signal value : T = {init} @10ms }}\n"
+                ),
+            );
+            assert!(
+                codes(&signal).contains(&"RIDL-110"),
+                "{:?}",
+                signal.diagnostics
+            );
+        }
+        let valid = check_ridl(
+            "app",
+            "package app\ntype T : float [0.1..1.1 step 0.2] = 0.3\nstruct S { value : T = 0.7 }\ninterface I { signal value : T = 1.1 @10ms }\n",
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn declared_init_checks_enum_members_and_refuses_composite_literals() {
+        let prefix = "package app\ntype Count : integer [0..10]\nenum Mode { OFF = 0, ON = 2 }\nstruct Record { value : Count }\nunion Choice { record : Record }\n";
+        for (target, init) in [
+            ("Mode", "42"),
+            ("Mode", "true"),
+            ("Record", "5"),
+            ("Choice", "5"),
+        ] {
+            let field = check_source(
+                "app",
+                &format!("{prefix}struct S {{ value : {target} = {init} }}\n"),
+            );
+            assert!(
+                codes(&field).contains(&"TYPL-109"),
+                "{target}: {:?}",
+                field.diagnostics
+            );
+            let signal = check_ridl(
+                "app",
+                &format!("{prefix}interface I {{ signal value : {target} = {init} @10ms }}\n"),
+            );
+            assert!(
+                codes(&signal).contains(&"RIDL-110"),
+                "{target}: {:?}",
+                signal.diagnostics
+            );
+        }
+        let valid = check_ridl(
+            "app",
+            &format!(
+                "{prefix}const ACTIVE = 2\nstruct S {{ value : Mode = 2.0 }}\ninterface I {{ signal value : Mode = ACTIVE @10ms }}\n"
+            ),
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn declared_init_refuses_enumset_scalar_overrides() {
+        let prefix = "package app\nenumset Flags { FIRST = 0, SECOND = 1 }\nconst MASK = 1\n";
+        for init in ["1", "MASK", "\"\""] {
+            let field = check_source(
+                "app",
+                &format!("{prefix}struct S {{ flags : Flags = {init} }}\n"),
+            );
+            assert_eq!(codes(&field), vec!["TYPL-109"], "{:?}", field.diagnostics);
+            let signal = check_ridl(
+                "app",
+                &format!("{prefix}interface I {{ signal flags : Flags = {init} @10ms }}\n"),
+            );
+            assert_eq!(codes(&signal), vec!["RIDL-110"], "{:?}", signal.diagnostics);
+        }
+    }
+
+    #[test]
+    fn derived_numeric_init_respects_step_at_every_site() {
+        for (minimum, expected) in [("-0.1", "-0.1"), ("-0.2", "0")] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "package app\ntype T : float [{minimum}..1.0 step 0.2]\nstruct S {{ named : T, inline : float [{minimum}..1.0 step 0.2] }}\ninterface I {{ signal value : T @10ms }}\n"
+                ),
+            );
+            assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+            assert_eq!(type_def(&checked, "T").init, Some(iv(true, Some(expected))));
+            for name in ["named", "inline"] {
+                assert_eq!(
+                    field_init(&checked, "S", name),
+                    Some(iv(true, Some(expected)))
+                );
+            }
+            let Some(v2::decl::Kind::SignalDef(signal)) = &interaction(&checked, "value").kind
+            else {
+                panic!("expected signal");
+            };
+            assert_eq!(signal.init, Some(iv(true, Some(expected))));
+        }
+    }
+
+    #[test]
+    fn derived_open_minimum_numeric_init_stays_on_the_step_grid() {
+        let checked = check_ridl(
+            "app",
+            "package app\ntype T : float [..-0.1 step 0.2]\nstruct S { value : T }\ninterface I { signal value : T @10ms }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-102"]);
+        assert_eq!(type_def(&checked, "T").init, Some(iv(true, Some("-0.2"))));
+        assert_eq!(
+            field_init(&checked, "S", "value"),
+            Some(iv(true, Some("-0.2")))
+        );
+        let Some(v2::decl::Kind::SignalDef(signal)) = &interaction(&checked, "value").kind else {
+            panic!("expected signal");
+        };
+        assert_eq!(signal.init, Some(iv(true, Some("-0.2"))));
+    }
+
+    #[test]
+    fn declared_init_refuses_unresolved_constant_references() {
+        let checked = check_source("app", "package app\ntype T : integer [0..10] = MISSING\n");
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        let prefix = "package app\ntype T : integer [0..10]\nenum Mode { OFF = 0, ON = 1 }\n";
+        for target in ["T", "Mode"] {
+            let field = check_source(
+                "app",
+                &format!("{prefix}struct S {{ value : {target} = MISSING }}\n"),
+            );
+            assert_eq!(codes(&field), vec!["TYPL-109"], "{:?}", field.diagnostics);
+            let signal = check_ridl(
+                "app",
+                &format!("{prefix}interface I {{ signal value : {target} = MISSING @10ms }}\n"),
+            );
+            assert_eq!(codes(&signal), vec!["RIDL-110"], "{:?}", signal.diagnostics);
+        }
+    }
+
+    #[test]
+    fn imported_string_init_constraints_use_the_defining_package() {
+        for (constraint, init, local) in [
+            ("[N]", "abc", "const N = 3"),
+            ("[0..8 match PATTERN]", "bbb", "const PATTERN = /^b+$/"),
+        ] {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let common = package(
+                &db,
+                "common",
+                &format!(
+                    "package common\nconst N = 2\nconst PATTERN = /^a+$/\ntype Label : string {constraint}\n"
+                ),
+            );
+            let app = ridl_package(
+                &db,
+                "app",
+                &format!(
+                    "package app\nimport common.Label\n{local}\nstruct S {{ label : Label = \"{init}\" }}\ninterface I {{ signal label : Label = \"{init}\" @10ms }}\n"
+                ),
+            );
+            let ws = Workspace::new(&db, vec![common, app], BTreeMap::new());
+            let checked = check_package(&db, ws, app, std);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-109", "RIDL-110"],
+                "{:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn bytes_init_bounds_measure_utf8_bytes_at_every_site() {
+        let ty = check_source("app", "package app\ntype T : bytes [1] = \"é\"\n");
+        assert_eq!(codes(&ty), vec!["TYPL-109"], "{:?}", ty.diagnostics);
+        let fields = check_source(
+            "app",
+            "package app\ntype T : bytes [1]\nstruct S { named : T = \"é\", inline : bytes [1] = \"é\" }\n",
+        );
+        assert_eq!(
+            codes(&fields),
+            vec!["TYPL-115", "TYPL-109", "TYPL-109"],
+            "{:?}",
+            fields.diagnostics
+        );
+        let signal = check_ridl(
+            "app",
+            "package app\ntype T : bytes [1]\ninterface I { signal value : T = \"é\" @10ms }\n",
+        );
+        assert_eq!(
+            codes(&signal),
+            vec!["TYPL-115", "RIDL-110"],
+            "{:?}",
+            signal.diagnostics
+        );
+        let valid = check_ridl(
+            "app",
+            "package app\ntype Text : string [1] = \"é\"\ntype Octets : bytes [2] = \"é\"\nstruct S { text : Text = \"é\", octets : Octets = \"é\" }\ninterface I { signal text : Text = \"é\" @10ms, signal octets : Octets = \"é\" @10ms }\n",
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn typed_constants_respect_the_exact_step_grid() {
+        for init in ["0.35", "VALUE"] {
+            let checked = check_source(
+                "app",
+                &format!(
+                    "package app\ntype F : float [0.0..1.0 step 0.1]\nconst VALUE = 0.35\nconst BAD : F = {init}\n"
+                ),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-108"],
+                "{:?}",
+                checked.diagnostics
+            );
+        }
+        let valid = check_source(
+            "app",
+            "package app\ntype F : float [0.0..1.0 step 0.1]\nconst VALUE = 0.3\nconst GOOD : F = VALUE\nconst DIRECT : F = 0.3\n",
+        );
+        assert!(codes(&valid).is_empty(), "{:?}", valid.diagnostics);
+    }
+
+    #[test]
+    fn imported_typed_constant_step_uses_the_defining_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "common",
+            "package common\nconst MIN = 0.1\nconst STEP = 0.2\ntype F : float [MIN..1.1 step STEP]\n",
+        );
+        let app = package(
+            &db,
+            "app",
+            "package app\nimport common.F\nconst MIN = 0.0\nconst STEP = 0.1\nconst BAD : F = 0.2\nconst GOOD : F = 0.3\n",
+        );
+        let ws = Workspace::new(&db, vec![common, app], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-108"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("BAD"));
+    }
+
+    #[test]
+    fn typed_numeric_constants_reject_wrong_value_kinds() {
+        for (backing, literal) in [
+            ("float [0.0..1.0 step 0.1]", "true"),
+            ("float [0.0..1.0 step 0.1]", "\"text\""),
+            ("float [0.0..1.0 step 0.1]", "/a/"),
+            ("integer [0..10]", "1.5"),
+        ] {
+            for init in [literal, "VALUE"] {
+                let checked = check_source(
+                    "app",
+                    &format!(
+                        "package app\ntype T : {backing}\nconst VALUE = {literal}\nconst BAD : T = {init}\n"
+                    ),
+                );
+                assert_eq!(
+                    codes(&checked),
+                    vec!["TYPL-108"],
+                    "{:?}",
+                    checked.diagnostics
+                );
+            }
+        }
+    }
+
     const PRELUDE: &str = "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n";
 
     #[test]

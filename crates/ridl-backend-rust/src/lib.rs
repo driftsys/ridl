@@ -38,6 +38,7 @@ mod defaults;
 mod derives;
 mod descriptors;
 mod face;
+mod scalar_step;
 
 pub use contract::{Backend, WIRE_ENCODING_OPTION};
 
@@ -1039,21 +1040,10 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
 /// default `[0..256]` length bound, so both are constrained on the source
 /// route.
 ///
-/// Construction is infallible, so `From<Inner>` is correct here. That is not
-/// because the type carries no invariant at all — a `step`-only constraint
-/// reaches this function too (`constraint_is_vacuous` excludes `step`), and
-/// its quantization is a real invariant, which `unchecked_doc` names on the
-/// type a few lines below. It is because `new` checks nothing `From` would
-/// then bypass: `constraint_checks` emits a range branch only for a min or a
-/// max, a length branch only for `len_min`/`len_max`, and a pattern branch
-/// only for `pattern`/`pattern_const` — none of which a vacuous constraint
-/// carries — and `step` is never checked by `new` on any type, constrained or
-/// not. `From<Inner>` therefore introduces no failure the checked path would
-/// have caught. Core's blanket `impl<T, U: Into<T>> TryFrom<U> for T` then
-/// supplies `TryFrom<Inner>` with `Error = Infallible`, so generic consumer
-/// code calling `try_from` compiles against both kinds of scalar. A manual
-/// `TryFrom` would collide with that blanket impl (`rustc` reports `E0119`),
-/// which is the second reason it is absent.
+/// Construction is infallible because there are no bounds, steps or patterns
+/// to check. `From<Inner>` is therefore correct. Core's blanket `TryFrom`
+/// implementation supplies the infallible conversion; a manual `TryFrom`
+/// would conflict with it.
 ///
 /// `new_unchecked` is deliberately absent: `new` already is the unchecked
 /// path, and on this type it is `const`, so [`scalar_ctor`] routes a constant
@@ -1070,9 +1060,6 @@ fn emit_vacuous_type_def(
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
     let doc = doc_attrs(&decl.doc);
-    // A `step`-only constraint is vacuous (`constraint_is_vacuous` excludes
-    // `step`), and that is exactly the case `unchecked_doc` still speaks for,
-    // so the note and its separator are computed here too.
     let unchecked = unchecked_doc(sc);
     let separator = if decl.doc.is_empty() || unchecked.is_empty() {
         quote! {}
@@ -1137,7 +1124,7 @@ pub(crate) fn scalar_ctor(sc: &v1::Scalar) -> TokenStream {
     }
 }
 
-/// The range, length and pattern checks for one constraint, as statements
+/// The range, step, length and pattern checks for one constraint, as statements
 /// that return early with a `Violation`. Only the branches the constraint
 /// carries are emitted, so a string with a length bound and no range gets
 /// only the length check. The pattern check is emitted last and is the only
@@ -1147,6 +1134,18 @@ pub(crate) fn scalar_ctor(sc: &v1::Scalar) -> TokenStream {
 /// emitted only for a float or integer backing; on any other backing the two
 /// are ignored rather than rendered as a literal of the wrong type.
 fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> TokenStream {
+    let wire_f32 = matches!(sc.width, Some(v1::scalar::Width::FloatWidth(width))
+        if width == v1::FloatWidth::F32 as i32);
+    constraint_checks_with_precision(sc, type_name, value, wire_f32)
+}
+
+/// The same checks at the precision of a received floating-point scalar.
+fn constraint_checks_with_precision(
+    sc: &v1::Scalar,
+    type_name: &str,
+    value: TokenStream,
+    wire_f32: bool,
+) -> TokenStream {
     let Some(c) = sc.constraint.as_ref() else {
         return quote! {};
     };
@@ -1158,6 +1157,16 @@ fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> To
         ScalarBacking::Boolean | ScalarBacking::String | ScalarBacking::Bytes => None,
     };
     if let Some(is_float) = is_float {
+        if is_float && (c.min.is_some() || c.max.is_some()) {
+            checks.push(quote! {
+                if !#value.is_finite() {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    });
+                }
+            });
+        }
         if let Some(min) = c.min.as_deref() {
             let lit = numeric_tokens(min, is_float);
             checks.push(quote! {
@@ -1190,6 +1199,38 @@ fn constraint_checks(sc: &v1::Scalar, type_name: &str, value: TokenStream) -> To
                 }
             });
         }
+    }
+    if let Some(step) = c.step.as_deref()
+        && let Some(is_float) = is_float
+    {
+        let origin = numeric_tokens(c.min.as_deref().unwrap_or("0"), is_float);
+        let step = numeric_tokens(step, is_float);
+        let invalid = if is_float {
+            scalar_step::float_invalid(
+                c.min.as_deref(),
+                c.step.as_deref().unwrap_or("0"),
+                &value,
+                wire_f32,
+            )
+        } else {
+            // The language value is i64. The widened difference cannot
+            // overflow even when the origin and value are opposite extremes.
+            quote! {
+                {
+                    let __step: ::core::primitive::i128 = #step as ::core::primitive::i128;
+                    __step <= 0 || ((#value as ::core::primitive::i128) - (#origin as ::core::primitive::i128))
+                        % __step != 0
+                }
+            }
+        };
+        checks.push(quote! {
+            if #invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: #type_name,
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
+            }
+        });
     }
     // Length is in characters for string (typl §5.3) and bytes for bytes
     // (§5.4), which is why the two use different expressions. The cast is
@@ -1337,8 +1378,7 @@ fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> Token
 }
 
 /// The gaps a generated constructor does not close, named on the type itself
-/// rather than left silent: a `step` is not checked by `new`. A literal
-/// `match` pattern on a `String` backing is checked by `new`, but only under
+/// rather than left silent. A literal `match` pattern on a `String` backing is checked by `new`, but only under
 /// the `validate-pattern` feature, so the type names that condition rather
 /// than leaving the guarantee silently variable. On any other backing
 /// `constraint_checks` emits no pattern branch at all (a `regex::Regex`
@@ -1353,9 +1393,6 @@ fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
         return quote! {};
     };
     let mut lines = Vec::new();
-    if c.step.is_some() {
-        lines.push(" Quantization (`step`) is not checked by `new`.".to_string());
-    }
     if c.pattern.is_some() && class_backing(sc.class) == ScalarBacking::String {
         lines.push(
             " The `match` pattern is checked by `new` only when the crate is built with \
