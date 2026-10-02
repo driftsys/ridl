@@ -2152,6 +2152,12 @@ mod tests {
                 &FormatOptions::default(),
             );
         }
+        assert_profile_format(
+            "package p\nstruct S // header\n{ x:integer }\n",
+            "package p\n\nstruct S // header\n{\n  x: integer\n}\n",
+            Profile::Typl,
+            &FormatOptions::default(),
+        );
     }
 
     #[test]
@@ -2180,6 +2186,12 @@ mod tests {
             assert_ridl_member(
                 &format!("query q():T [require ready{separator}ensure result]"),
                 &format!("query q(): T [\n    require ready\n{gap}    ensure result\n  ]"),
+            );
+        }
+        for separator in ["\n\n,", "\n,\n\n"] {
+            assert_ridl_member(
+                &format!("query q():T [require ready{separator} /* next */\nensure result]"),
+                "query q(): T [\n    require ready\n\n    /* next */\n    ensure result\n  ]",
             );
         }
     }

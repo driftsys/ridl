@@ -88,6 +88,12 @@ prose updates. Three new layout assertions reproduced the failures before the
 fixes; the formatter suite then passed, and all four specified coverage
 mutations failed. See [PR evidence](fmt-ridl-rsdl-evidence/pr-634.md).
 
+The independent correction commit is `82b761f`; formatter/LSP acceptance and
+`just verify` passed on that exact head. QUICK review completed with actual
+Terra models and the correct scope. Its two test suggestions are applied; the
+bug seat found nothing and the restricted docs seat found no falsified prose.
+Full pass 2 remains pending until the rendering decision is settled.
+
 One rendering decision is pending under D-H16: moving timing before an
 attribute's `// attribute` comment collides with a later `// member` comment.
 The proposed narrow exception preserves that member verbatim. The alternative

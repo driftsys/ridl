@@ -510,3 +510,29 @@ append-only. Implementation status and verification are in
 - Commit and PR: independent correction commit for PR #634; exact commit and
   gate evidence are recorded in the review report and PR evidence.
 - Maintainer action: resolve D-H16 before the remaining correction and pass 2.
+
+## D-H18 — QUICK coverage follow-up and pending-review checkpoint
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice; D-H16 remains awaiting approval.
+- Decision: add a TYPL struct header line-comment control and combine separator
+  blank-line cases with a leading comment, as the test reviewer suggested.
+  Publish the independent corrections and checkpoint the unresolved rendering.
+- Reason and alternatives considered: the brace and container helpers are
+  shared, so the controls constrain their behavior beyond the original RIDL
+  reproductions. Repeating QUICK over its own corrections is excluded by the
+  review workflow; full pass 2 waits until all pass 1 fixes are authorized.
+- Authority: design section 5, invariant preservation, QUICK advisory review and
+  handoff checkpoint requirements.
+- Affected files and behavior: tests and review records. No additional
+  production or rendering change.
+- Verification: QUICK docs/tests used actual Terra/high; the fresh bug wrapper
+  used Terra/high and native Terra/medium. Scope was the five-file correction
+  diff `700d116` to `82b761f`. Bug review found nothing; code-to-prose review
+  found no falsified statement. The extra same-line comma suggestion predates
+  this correction and is outside that docs direction. Both test suggestions are
+  applied; the focused suite passes. `just verify` passed on `82b761f`.
+- Commit and PR: follow-up coverage and checkpoint commit in PR #634, based on
+  main `037256d`. Actual-head push gates run before publication.
+- Maintainer action: answer D-H16. Then implement its regression and approved
+  rendering, run full pass 2 over the fix diff, and resume Tasks 9–13 in order.
