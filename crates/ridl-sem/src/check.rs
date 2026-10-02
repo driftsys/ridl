@@ -9916,13 +9916,16 @@ mod tests {
 
     #[test]
     fn shared_composite_derivation_finishes_within_a_bounded_process() {
+        use std::io::Read as _;
+
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
                 "check::tests::shared_composite_derivation_process_fixture",
                 "--ignored",
+                "--nocapture",
             ])
-            .stdout(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
             .spawn()
             .unwrap();
         let started = std::time::Instant::now();
@@ -9933,6 +9936,17 @@ mod tests {
                 assert!(
                     status.success(),
                     "shared composite fixture failed: {status}"
+                );
+                let mut output = String::new();
+                child
+                    .stdout
+                    .take()
+                    .unwrap()
+                    .read_to_string(&mut output)
+                    .unwrap();
+                assert!(
+                    output.contains("RIDL_SHARED_COMPOSITE_FIXTURE_COMPLETE"),
+                    "shared composite fixture did not execute: {output}"
                 );
                 break;
             }
@@ -9961,6 +9975,7 @@ mod tests {
         assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
         assert_eq!(signal_def(&checked, "value").init, Some(iv(true, None)));
         eprintln!("shared composite source checked in {:?}", started.elapsed());
+        println!("RIDL_SHARED_COMPOSITE_FIXTURE_COMPLETE");
     }
 
     #[test]
@@ -10045,6 +10060,48 @@ mod tests {
         );
         assert_eq!(
             field_init(&checked, "Holder", "value"),
+            Some(iv(false, None))
+        );
+        assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
+    }
+
+    #[test]
+    fn composite_derivation_cache_keeps_package_qualified_identity() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "common",
+            "package common\nstruct Payload { value : string [0..8] }\n",
+        );
+        let other = package(
+            &db,
+            "other",
+            "package other\nstruct Payload { value : string [1] }\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nstruct Holder { first : common.Payload, second : other.Payload }\nstruct Container { value : Holder }\ninterface I { signal value : Holder @10ms }\n",
+        );
+        let workspace = Workspace::new(&db, vec![common, other, app], BTreeMap::new());
+        let checked = check_package(&db, workspace, app, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-109"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            field_init(&checked, "Holder", "first"),
+            Some(iv(true, None))
+        );
+        assert_eq!(
+            field_init(&checked, "Holder", "second"),
+            Some(iv(false, None))
+        );
+        assert_eq!(
+            field_init(&checked, "Container", "value"),
             Some(iv(false, None))
         );
         assert_eq!(signal_def(&checked, "value").init, Some(iv(false, None)));
