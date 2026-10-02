@@ -293,7 +293,12 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                 nl_run = 0;
             }
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
-                if nl_run > 0 {
+                if nl_run > 0
+                    || blocks
+                        .last()
+                        .and_then(|block| block.node.as_ref())
+                        .is_some_and(|node| node.kind() == SyntaxKind::MachineDef)
+                {
                     can_trail = false;
                 }
                 // A separator line is not a blank line. Retain an existing
@@ -1811,6 +1816,45 @@ mod tests {
                     },
                 );
             }
+        }
+    }
+
+    #[test]
+    fn rsdl_comments_after_machine_separators_stay_between_members() {
+        for comment in ["/* note */", "// note\n", "/// note\n"] {
+            let source = format!(
+                "package p\ndeployment D for S {{ machine A {{}}, {comment} machine B {{}} }}\n"
+            );
+            let expected = format!(
+                "package p\n\ndeployment D for S {{\n  machine A {{}}\n  {}\n  machine B {{}}\n}}\n",
+                comment.trim_end()
+            );
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &source,
+                    &expected,
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_nested_machine_body_formats_comments_and_preserves_gaps() {
+        let source = "package p\ndeployment D for S {machine  M { // brace\n C [external]\n // next\n D [labels=(QM)]\n\n // leading\n E [linux.cpuset=(2,3)] // member\n}}\n";
+        let expected = "package p\n\ndeployment D for S {\n  machine M { // brace\n    C [ external ]\n    // next\n    D [ labels = (QM) ]\n\n    // leading\n    E [ linux.cpuset = (2, 3) ] // member\n  }\n}\n";
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                source,
+                expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
         }
     }
 

@@ -858,3 +858,25 @@ append-only. Implementation status and verification are in
   widths 100, 60 and 40. Evidence: Task 10 record.
 - Commit and PR: distinct Task 10 commit in the planned Tasks 9–10 RSDL PR.
 - Maintainer action: none; no unsettled rendering encountered.
+
+## D-H32 — Task 10 QUICK corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under existing comment rules.
+- Question or observed case: a comment after a separator between machines was
+  rendered as a trailing comment of the preceding machine.
+- Chosen action: clear trailing eligibility when consuming a machine separator
+  in the shared collector. Add exact-output regressions for ordinary,
+  documentation and block comments after separators, and nested machine
+  comments/source gaps.
+- Reason and alternatives considered: a machine separator ends the preceding
+  member; limiting the collector rule preserves existing RIDL trailing-comment
+  layouts.
+- Authority: design sections 5 and 9, Task 10 and QUICK review.
+- Affected files and behavior: shared container collector and formatter tests;
+  review report resume paragraph corrected during author diff inspection.
+- Verification: separator regression exits 101 before correction on valid input;
+  final acceptance is recorded in
+  [Task 10 evidence](fmt-ridl-rsdl-evidence/task-10.md).
+- Commit and PR: correction follows `4603d73`; grouped Tasks 9–10 PR pending.
+- Maintainer action: review the grouped PR; no rendering approval is needed.

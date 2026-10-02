@@ -66,10 +66,9 @@ remaining comment fixes are on the correction branch based on main `c9c7c0e`.
 Later task PRs will be stacked on their immediate unmerged predecessor. No merge
 is authorized.
 
-Work is now on `fix/387-fmt-annotation-comments` in the sibling
-`ridl-fmt-remaining` worktree. The original book branch and untracked handoff
-are preserved. The owned Task 5 stash
-`8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
+Work is now on `feat/387-fmt-rsdl` in the sibling `ridl-fmt-remaining` worktree.
+The original book branch and untracked handoff are preserved. The owned Task 5
+stash `8bd2716627d07aa342d9a98b17a8dba539ed6523`, message
 `On feat/387-fmt-editorconfig: Task 5 caller tests and width plumbing pending rsdl test sequencing`,
 remains intact, as do all other stashes. Task 5 is complete with recorded review
 debt. Task 6 acceptance and QUICK review are complete; current book and
@@ -129,14 +128,18 @@ coverage gap is tracked in [#636](https://github.com/driftsys/ridl/issues/636),
 milestone E1 — typl + Tooling Spine. No production defect was identified. D-H26
 records the two-pass disposition.
 
-Task 9 is implemented in `feat/387-fmt-rsdl`, stacked on PR #635 at `0249fd1`.
-System, component and distribution use canonical brace bodies and the shared
-header/member attribute width renderer. Formatter, facade and LSP acceptance
-pass, including the approved deferred RSDL CLI brace-glob test with a second
-`--check` run. D-H27–D-H29 record the two-task PR group, layout and machine-body
-test placement. See [Task 9 evidence](fmt-ridl-rsdl-evidence/task-09.md). QUICK
-review follows its task commit. Task 10 remains pending and will add public
-machine/deployment dispatch in its own commit before the grouped PR.
+Tasks 9 and 10 are implemented in `feat/387-fmt-rsdl`, stacked on PR #635 at
+`0249fd1`, with separate commits `c2602dc` and `4603d73`. System, component,
+distribution, deployment and machine use canonical brace bodies and the shared
+header/member renderer. Formatter, facade and LSP acceptance pass, including the
+approved deferred RSDL CLI width test with a second `--check` run. Task 9 QUICK
+review is complete; its CLI reference correction is `3c094a7`. Task 10 QUICK
+review found a comment after a machine separator attached backward, and an
+unpinned nested machine comment/gap case. Both have regression assertions; the
+separator collector correction follows the task commit. `just verify` passed on
+`4603d73`; the correction head will be checked before publication. See
+[Task 9 evidence](fmt-ridl-rsdl-evidence/task-09.md) and
+[Task 10 evidence](fmt-ridl-rsdl-evidence/task-10.md).
 
 Merge order: [PR #635](https://github.com/driftsys/ridl/pull/635), then the
 planned Tasks 9–10 RSDL PR. Tasks 11–13 follow in order. Original worktree,

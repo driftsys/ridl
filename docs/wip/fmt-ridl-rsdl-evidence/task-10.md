@@ -56,3 +56,36 @@ publication documentation remains Task 13.
 
 Task commit, QUICK results and actual-head PR gates follow the committed change.
 Logs remain local and ignored.
+
+## QUICK review and correction
+
+All three seats completed on `4603d73`, against parent `3c094a7`. Native
+execution metadata verifies Terra/high for docs/tests and Terra/medium for the
+built-in bug review. All report the same nine changed paths. Restricted docs
+review found no statements falsified by the change. The bug seat found a comment
+after a machine separator attaching to the preceding machine. The test seat
+identified missing coverage for nested machine comments and blank lines.
+
+The new separator regression fails with exit 101 on valid input before the
+production fix (`task-10-quick-red.log`). The shared collector now clears
+trailing-comment eligibility on a machine separator. An initial broader change
+failed the existing reserved-member and block-attribute comment assertions; it
+was narrowed to machine separators to preserve those settled layouts. This keeps
+subsequent machine comments between members. The nested machine assertion
+requires canonical members, opening-brace and trailing comments, a leading
+comment, a retained blank line, structure/content preservation and a second
+formatting pass at widths 100, 60 and 40. Both suggestions are accepted. QUICK
+does not repeat over its own corrections.
+
+Author diff inspection also corrected the review report's stale resume
+paragraph; it had still described Task 10 as pending. This is an author
+correction, not a reviewer finding. `just verify` passed on `4603d73` with exit
+0; final correction head gates follow before the grouped PR is opened. Logs
+remain local and ignored.
+
+The restored correction passes `cargo test -p ridl-fmt --locked`: 104 unit and
+20 integration tests, exit 0 (`task-10-quick-restored.log`). A mutation
+returning comment-bearing machines verbatim makes the new nested-body assertion
+fail with exit 101 (`task-10-quick-mutation.log`); production source was
+restored before the acceptance run. The earlier broad separator attempt's two
+failures remain in `task-10-quick-green.log` for an accurate record.
