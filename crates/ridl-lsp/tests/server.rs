@@ -3312,6 +3312,129 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+#[test]
+fn formatting_resolves_distinct_widths_and_off_for_document_paths() {
+    let dir = TempDir::new("fmt-distinct-widths");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    for (index, (setting, columns, should_break)) in
+        [("60", 80, true), ("100", 80, false), ("off", 200, false)]
+            .into_iter()
+            .enumerate()
+    {
+        std::fs::create_dir(dir.path().join(format!("width-{setting}")))
+            .expect("create the configuration directory");
+        dir.write(
+            &format!("width-{setting}/.editorconfig"),
+            &format!("root = true\n[*.typl]\nmax_line_length = {setting}\n"),
+        );
+        let names = columns - "  pair: (: integer, : boolean)".chars().count();
+        let first = "a".repeat(names / 2);
+        let second = "b".repeat(names - names / 2);
+        let line = format!("  pair: ({first}: integer, {second}: boolean)");
+        assert_eq!(line.chars().count(), columns);
+        let source =
+            format!("package p\nstruct S {{ pair: ({first}:integer,{second}:boolean) }}\n");
+        let field = if should_break {
+            format!("  pair: (\n    {first}: integer,\n    {second}: boolean\n  )")
+        } else {
+            line
+        };
+        let expected = format!("package p\n\nstruct S {{\n{field}\n}}\n");
+        let disk = "package p\nstruct OnDisk { value: integer }\n";
+        let file = dir.write(&format!("width-{setting}/types.typl"), disk);
+        let uri = uri_of(&file);
+        let id = 10 + 2 * index as i32;
+        assert_eq!(
+            open_and_format(&client, id, &uri, &source, tabs()),
+            Some(vec![lt::TextEdit {
+                range: range((0, 0), (2, 0)),
+                new_text: expected.clone(),
+            }]),
+            "resolved width {setting}"
+        );
+        notify::<lt::notification::DidChangeTextDocument>(
+            &client,
+            lt::DidChangeTextDocumentParams {
+                text_document: lt::VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version: 1,
+                },
+                content_changes: vec![lt::TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: expected,
+                }],
+            },
+        );
+        assert_eq!(
+            format_request(&client, id + 1, &uri, four_spaces()),
+            Some(Vec::new()),
+            "width {setting} must be a fixed point"
+        );
+        assert_eq!(std::fs::read_to_string(file).unwrap(), disk);
+    }
+    shut_down(&client, 16);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn formatting_reads_editorconfig_width_and_keeps_two_space_indentation() {
+    let dir = TempDir::new("fmt-editorconfig");
+    dir.write(
+        ".editorconfig",
+        "root = true\n[*.typl]\nmax_line_length = 60\nindent_size = 4\nindent_style = tab\n",
+    );
+    let first = "a".repeat(25);
+    let second = "b".repeat(25);
+    let line = format!("  pair: ({first}: integer, {second}: boolean)");
+    assert_eq!(line.chars().count(), 80);
+    let source = format!("package p\nstruct S {{ pair: ({first}:integer,{second}:boolean) }}\n");
+    let disk = "package p\nstruct OnDisk { value: integer }\n";
+    let file = dir.write("types.typl", disk);
+    let uri = uri_of(&file);
+    let expected = format!(
+        "package p\n\nstruct S {{\n  pair: (\n    {first}: integer,\n    {second}: boolean\n  )\n}}\n"
+    );
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    let edits = open_and_format(&client, 10, &uri, &source, tabs()).expect("valid source");
+    assert_eq!(
+        edits,
+        vec![lt::TextEdit {
+            range: range((0, 0), (2, 0)),
+            new_text: expected.clone(),
+        }]
+    );
+    notify::<lt::notification::DidChangeTextDocument>(
+        &client,
+        lt::DidChangeTextDocumentParams {
+            text_document: lt::VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 1,
+            },
+            content_changes: vec![lt::TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: expected,
+            }],
+        },
+    );
+    assert_eq!(
+        format_request(&client, 11, &uri, four_spaces()),
+        Some(Vec::new())
+    );
+    assert_eq!(
+        std::fs::read_to_string(file).unwrap(),
+        disk,
+        "formatting returns edits without writing the file"
+    );
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// A document whose lines end with a bare `\r` has one line per `\r`, as the
 /// LSP specification counts lines: the formatting edit ends on the line after
 /// the last `\r`, not at a large character offset on line 0.

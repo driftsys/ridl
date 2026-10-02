@@ -2710,7 +2710,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
             }
         };
         let profile = ridl_core::profile_of_path(&file.to_string_lossy());
-        match format(&text, profile, &FormatOptions::default()) {
+        match format(&text, profile, &FormatOptions::for_path(&file)) {
             FormatOutcome::Formatted(formatted) => {
                 if formatted != text {
                     any_would_change = true;
