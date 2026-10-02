@@ -723,25 +723,27 @@ is needed to disambiguate it from the equation).
 For a numeric range with no lower bound whose upper bound is negative, derive
 the upper bound when no step is declared. With a step, derive the greatest grid
 point at or below that upper bound, using the zero origin and exact decimal
-arithmetic.
+arithmetic. A derived floating-point init must fit the finite backing domain;
+when no finite grid point is available, the init is not derivable.
 
 A map with a minimum count above one has no derived init: repeating a key's init
 would violate key uniqueness, and the toolchain does not synthesize distinct
 keys. Optional map fields without an override remain absent.
 
 A declared init value must have the backing's kind and satisfy the type's
-constraints, including `step` (TYPL-109). Integer and enum init values may use
-an exactly integral numeric spelling such as `1.0`; an enum value must name a
-declared discriminant. Constant references are checked after resolution; an
-unresolved reference is an invalid init. A string literal initializes `string`
-or its UTF-8 bytes initialize `bytes`, with the corresponding character or byte
-length check. A boolean literal initializes only `boolean`. The init syntax has
-no composite or enum-set literal, so a literal or constant override on a struct,
-union, tuple, array, map or enum set is rejected rather than stored as an
-untyped scalar. Derived composite inits remain recursive as listed above. A type
-whose init is not derivable is simply marked so in the IR (TYPL-115, info) — it
-becomes an error only where a consumer _requires_ an init (e.g. a ridl signal
-payload, ridl §4.4) and none is declared.
+constraints, including `step` (TYPL-109). Floating-point init values and typed
+floating-point constants must lie within the finite binary64 backing domain.
+Integer and enum init values may use an exactly integral numeric spelling such
+as `1.0`; an enum value must name a declared discriminant. Constant references
+are checked after resolution; an unresolved reference is an invalid init. A
+string literal initializes `string` or its UTF-8 bytes initialize `bytes`, with
+the corresponding character or byte length check. A boolean literal initializes
+only `boolean`. The init syntax has no composite or enum-set literal, so a
+literal or constant override on a struct, union, tuple, array, map or enum set
+is rejected rather than stored as an untyped scalar. Derived composite inits
+remain recursive as listed above. A type whose init is not derivable is simply
+marked so in the IR (TYPL-115, info) — it becomes an error only where a consumer
+_requires_ an init (e.g. a ridl signal payload, ridl §4.4) and none is declared.
 
 ---
 

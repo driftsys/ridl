@@ -1684,30 +1684,30 @@ restated here.
 
 ### 16.1 Timing (RIDL-1xx)
 
-| Code     | Rule                                                                                                                                                                                                        | Severity                                                   |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| RIDL-100 | `signal` or `event` without a timing annotation — default `[100ms..1000ms]` (or configured `[defaults].timing`) applied                                                                                     | warning; error if active profile requires explicit timing  |
-| RIDL-101 | timing range `@[X..Y]` with `X > Y`                                                                                                                                                                         | error                                                      |
-| RIDL-102 | zero or negative timing duration                                                                                                                                                                            | error                                                      |
-| RIDL-103 | strict-periodic `@Xms` on a kind other than `signal` (§9.2, §9.3) — widened from `event` only by ADR-0015                                                                                                   | error                                                      |
-| RIDL-104 | explicit return type on a `command`                                                                                                                                                                         | error                                                      |
-| RIDL-105 | `query` returning `()`                                                                                                                                                                                      | error                                                      |
-| RIDL-106 | timing annotation on `fixed`, or attribute block on `fixed` — `fixed` is the one kind that carries no timing (§9) and no attribute block (§8); narrowed by ADR-0015                                         | error                                                      |
-| RIDL-107 | type declaration inside an `interface` or `service` body — raised at parse time, where the declaration is recognised and recovered                                                                          | error                                                      |
-| RIDL-108 | degenerate timing range `@[X..X]` — the rate floor equal to its staleness bound (§9.2); every kind that admits the range                                                                                    | warning                                                    |
-| RIDL-109 | signal payload has no derivable init and no `= value` override (§4.4)                                                                                                                                       | error                                                      |
-| RIDL-110 | signal `= value` init override has an incompatible kind, violates scalar constraints (range, step, length, pattern), names an undeclared enum value, or supplies an unsupported composite or enum-set value | error                                                      |
-| RIDL-112 | `command` or `query` with no declared response bound (§9.3) — a bare declaration, or the half-open `@[min..]`; never defaulted                                                                              | warning; error if active profile requires a response bound |
+| Code     | Rule                                                                                                                                                                              | Severity                                                   |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| RIDL-100 | `signal` or `event` without a timing annotation — default `[100ms..1000ms]` (or configured `[defaults].timing`) applied                                                           | warning; error if active profile requires explicit timing  |
+| RIDL-101 | timing range `@[X..Y]` with `X > Y`                                                                                                                                               | error                                                      |
+| RIDL-102 | zero or negative timing duration                                                                                                                                                  | error                                                      |
+| RIDL-103 | strict-periodic `@Xms` on a kind other than `signal` (§9.2, §9.3) — widened from `event` only by ADR-0015                                                                         | error                                                      |
+| RIDL-104 | explicit return type on a `command`                                                                                                                                               | error                                                      |
+| RIDL-105 | `query` returning `()`                                                                                                                                                            | error                                                      |
+| RIDL-106 | timing annotation on `fixed`, or attribute block on `fixed` — `fixed` is the one kind that carries no timing (§9) and no attribute block (§8); narrowed by ADR-0015               | error                                                      |
+| RIDL-107 | type declaration inside an `interface` or `service` body — raised at parse time, where the declaration is recognised and recovered                                                | error                                                      |
+| RIDL-108 | degenerate timing range `@[X..X]` — the rate floor equal to its staleness bound (§9.2); every kind that admits the range                                                          | warning                                                    |
+| RIDL-109 | signal payload has no derivable init and no `= value` override (§4.4)                                                                                                             | error                                                      |
+| RIDL-110 | signal `= value` init override violates the payload constraints (kind, finite float backing domain, range, step, length, pattern, enum discriminant, or supported value spelling) | error                                                      |
+| RIDL-112 | `command` or `query` with no declared response bound (§9.3) — a bare declaration, or the half-open `@[min..]`; never defaulted                                                    | warning; error if active profile requires a response bound |
 
 **Init validation — RIDL-110.** Signal overrides use the same declared-init
 validation as typl types and struct fields (typl §5.8). Literal kinds and
 resolved constant kinds must match the backing, and unresolved references are
-invalid; numeric values must satisfy range and step constraints; strings must
-satisfy length and pattern constraints. An enum override must be an exactly
-integral declared discriminant. Struct, union, tuple, collection and enum-set
-overrides are rejected because the init syntax defines no value spelling for
-them. This closes the M2 portion of driftsys/ridl#172; the other items in that
-issue retain their own dispositions.
+invalid; numeric values must satisfy range and step constraints, and floats must
+fit the finite binary64 backing domain; strings must satisfy length and pattern
+constraints. An enum override must be an exactly integral declared discriminant.
+Struct, union, tuple, collection and enum-set overrides are rejected because the
+init syntax defines no value spelling for them. This closes the M2 portion of
+driftsys/ridl#172; the other items in that issue retain their own dispositions.
 
 ### 16.2 Streams (RIDL-2xx)
 

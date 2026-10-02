@@ -1,12 +1,11 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 355
 expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
 // ===== package veh.common =====
 /// Vehicle speed over ground
-///
-/// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
@@ -32,6 +31,12 @@ impl Speed {
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
@@ -42,6 +47,88 @@ impl Speed {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
                 rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if {
+            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                as ::core::primitive::f64;
+            {
+                let __factor: ::core::primitive::f64 = 1f64;
+                let __original_step: ::core::primitive::f64 = 0.5f64;
+                let __step: ::core::primitive::f64 = 0.5f64;
+                let __step_low: ::core::primitive::f64 = 0f64;
+                let __phase: ::core::primitive::f64 = 0f64;
+                let __phase_low: ::core::primitive::f64 = 0f64;
+                if !__checked.is_finite() {
+                    true
+                } else {
+                    let __represented = (__checked as ::core::primitive::f32).abs();
+                    let __bits = __represented.to_bits();
+                    let __below = if __bits == 0 {
+                        -::core::primitive::f32::from_bits(1)
+                    } else {
+                        ::core::primitive::f32::from_bits(__bits - 1)
+                    };
+                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                    let __lower_gap = (__represented - __below)
+                        as ::core::primitive::f64;
+                    let __upper_gap = if __above.is_finite() {
+                        (__above - __represented) as ::core::primitive::f64
+                    } else {
+                        __lower_gap
+                    };
+                    let __cell = (__lower_gap + __upper_gap) / 2.0;
+                    if __original_step < __cell {
+                        false
+                    } else {
+                        let __scaled_value = __checked * __factor;
+                        let __delta = __scaled_value - __phase;
+                        let __quotient = if __delta.is_finite() {
+                            __delta / __step
+                        } else {
+                            __scaled_value / __step - __phase / __step
+                        };
+                        let __index = __quotient.round();
+                        let __scale = __checked
+                            .abs()
+                            .max((__phase / __factor).abs())
+                            .max(__original_step.abs());
+                        let __tolerance = (4.0
+                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
+                            * __scale)
+                            .min(__original_step / 4.0);
+                        let mut __distance = ::core::primitive::f64::INFINITY;
+                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                            let __product = __candidate * __step;
+                            let __sum = __product + __phase;
+                            let __nearest = if __product.is_finite() && __sum.is_finite()
+                            {
+                                let __product_error = __candidate
+                                    .mul_add(__step, -__product);
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__phase - __part);
+                                let __low = __candidate.mul_add(__step_low, __phase_low)
+                                    + __product_error + __sum_error;
+                                __sum + __low
+                            } else {
+                                __candidate.mul_add(__step, __phase)
+                                    + __candidate.mul_add(__step_low, __phase_low)
+                            };
+                            let __nearest = (__nearest / __factor)
+                                as ::core::primitive::f32 as ::core::primitive::f64;
+                            if __nearest.is_finite() {
+                                __distance = __distance.min((__checked - __nearest).abs());
+                            }
+                        }
+                        !__quotient.is_finite() || __distance > __tolerance
+                    }
+                }
+            }
+        } {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Step,
             });
         }
         ::core::result::Result::Ok(())
@@ -77,8 +164,6 @@ impl ::core::default::Default for Speed {
     }
 }
 /// Coolant / ambient temperature
-///
-/// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::f64);
@@ -104,6 +189,12 @@ impl Temperature {
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Temperature",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
         if value < -40.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
@@ -114,6 +205,88 @@ impl Temperature {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
                 rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if {
+            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                as ::core::primitive::f64;
+            {
+                let __factor: ::core::primitive::f64 = 1f64;
+                let __original_step: ::core::primitive::f64 = 0.1f64;
+                let __step: ::core::primitive::f64 = 0.1f64;
+                let __step_low: ::core::primitive::f64 = -0.000000000000000005551115123125783f64;
+                let __phase: ::core::primitive::f64 = 0f64;
+                let __phase_low: ::core::primitive::f64 = 0f64;
+                if !__checked.is_finite() {
+                    true
+                } else {
+                    let __represented = (__checked as ::core::primitive::f32).abs();
+                    let __bits = __represented.to_bits();
+                    let __below = if __bits == 0 {
+                        -::core::primitive::f32::from_bits(1)
+                    } else {
+                        ::core::primitive::f32::from_bits(__bits - 1)
+                    };
+                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                    let __lower_gap = (__represented - __below)
+                        as ::core::primitive::f64;
+                    let __upper_gap = if __above.is_finite() {
+                        (__above - __represented) as ::core::primitive::f64
+                    } else {
+                        __lower_gap
+                    };
+                    let __cell = (__lower_gap + __upper_gap) / 2.0;
+                    if __original_step < __cell {
+                        false
+                    } else {
+                        let __scaled_value = __checked * __factor;
+                        let __delta = __scaled_value - __phase;
+                        let __quotient = if __delta.is_finite() {
+                            __delta / __step
+                        } else {
+                            __scaled_value / __step - __phase / __step
+                        };
+                        let __index = __quotient.round();
+                        let __scale = __checked
+                            .abs()
+                            .max((__phase / __factor).abs())
+                            .max(__original_step.abs());
+                        let __tolerance = (4.0
+                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
+                            * __scale)
+                            .min(__original_step / 4.0);
+                        let mut __distance = ::core::primitive::f64::INFINITY;
+                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                            let __product = __candidate * __step;
+                            let __sum = __product + __phase;
+                            let __nearest = if __product.is_finite() && __sum.is_finite()
+                            {
+                                let __product_error = __candidate
+                                    .mul_add(__step, -__product);
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__phase - __part);
+                                let __low = __candidate.mul_add(__step_low, __phase_low)
+                                    + __product_error + __sum_error;
+                                __sum + __low
+                            } else {
+                                __candidate.mul_add(__step, __phase)
+                                    + __candidate.mul_add(__step_low, __phase_low)
+                            };
+                            let __nearest = (__nearest / __factor)
+                                as ::core::primitive::f32 as ::core::primitive::f64;
+                            if __nearest.is_finite() {
+                                __distance = __distance.min((__checked - __nearest).abs());
+                            }
+                        }
+                        !__quotient.is_finite() || __distance > __tolerance
+                    }
+                }
+            }
+        } {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Temperature",
+                rule: ::ridl_rt::payload::Rule::Step,
             });
         }
         ::core::result::Result::Ok(())
@@ -149,8 +322,6 @@ impl ::core::default::Default for Temperature {
     }
 }
 /// Engine crankshaft speed
-///
-/// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct RPM(::core::primitive::f64);
@@ -176,6 +347,12 @@ impl RPM {
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "RPM",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "RPM",
@@ -186,6 +363,88 @@ impl RPM {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "RPM",
                 rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if {
+            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                as ::core::primitive::f64;
+            {
+                let __factor: ::core::primitive::f64 = 1f64;
+                let __original_step: ::core::primitive::f64 = 10f64;
+                let __step: ::core::primitive::f64 = 10f64;
+                let __step_low: ::core::primitive::f64 = 0f64;
+                let __phase: ::core::primitive::f64 = 0f64;
+                let __phase_low: ::core::primitive::f64 = 0f64;
+                if !__checked.is_finite() {
+                    true
+                } else {
+                    let __represented = (__checked as ::core::primitive::f32).abs();
+                    let __bits = __represented.to_bits();
+                    let __below = if __bits == 0 {
+                        -::core::primitive::f32::from_bits(1)
+                    } else {
+                        ::core::primitive::f32::from_bits(__bits - 1)
+                    };
+                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                    let __lower_gap = (__represented - __below)
+                        as ::core::primitive::f64;
+                    let __upper_gap = if __above.is_finite() {
+                        (__above - __represented) as ::core::primitive::f64
+                    } else {
+                        __lower_gap
+                    };
+                    let __cell = (__lower_gap + __upper_gap) / 2.0;
+                    if __original_step < __cell {
+                        false
+                    } else {
+                        let __scaled_value = __checked * __factor;
+                        let __delta = __scaled_value - __phase;
+                        let __quotient = if __delta.is_finite() {
+                            __delta / __step
+                        } else {
+                            __scaled_value / __step - __phase / __step
+                        };
+                        let __index = __quotient.round();
+                        let __scale = __checked
+                            .abs()
+                            .max((__phase / __factor).abs())
+                            .max(__original_step.abs());
+                        let __tolerance = (4.0
+                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
+                            * __scale)
+                            .min(__original_step / 4.0);
+                        let mut __distance = ::core::primitive::f64::INFINITY;
+                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                            let __product = __candidate * __step;
+                            let __sum = __product + __phase;
+                            let __nearest = if __product.is_finite() && __sum.is_finite()
+                            {
+                                let __product_error = __candidate
+                                    .mul_add(__step, -__product);
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__phase - __part);
+                                let __low = __candidate.mul_add(__step_low, __phase_low)
+                                    + __product_error + __sum_error;
+                                __sum + __low
+                            } else {
+                                __candidate.mul_add(__step, __phase)
+                                    + __candidate.mul_add(__step_low, __phase_low)
+                            };
+                            let __nearest = (__nearest / __factor)
+                                as ::core::primitive::f32 as ::core::primitive::f64;
+                            if __nearest.is_finite() {
+                                __distance = __distance.min((__checked - __nearest).abs());
+                            }
+                        }
+                        !__quotient.is_finite() || __distance > __tolerance
+                    }
+                }
+            }
+        } {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "RPM",
+                rule: ::ridl_rt::payload::Rule::Step,
             });
         }
         ::core::result::Result::Ok(())
@@ -221,8 +480,6 @@ impl ::core::default::Default for RPM {
     }
 }
 /// Normalised ratio
-///
-/// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
@@ -248,6 +505,12 @@ impl Ratio {
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",
@@ -258,6 +521,88 @@ impl Ratio {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",
                 rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if {
+            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                as ::core::primitive::f64;
+            {
+                let __factor: ::core::primitive::f64 = 1f64;
+                let __original_step: ::core::primitive::f64 = 0.1f64;
+                let __step: ::core::primitive::f64 = 0.1f64;
+                let __step_low: ::core::primitive::f64 = -0.000000000000000005551115123125783f64;
+                let __phase: ::core::primitive::f64 = 0f64;
+                let __phase_low: ::core::primitive::f64 = 0f64;
+                if !__checked.is_finite() {
+                    true
+                } else {
+                    let __represented = (__checked as ::core::primitive::f32).abs();
+                    let __bits = __represented.to_bits();
+                    let __below = if __bits == 0 {
+                        -::core::primitive::f32::from_bits(1)
+                    } else {
+                        ::core::primitive::f32::from_bits(__bits - 1)
+                    };
+                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                    let __lower_gap = (__represented - __below)
+                        as ::core::primitive::f64;
+                    let __upper_gap = if __above.is_finite() {
+                        (__above - __represented) as ::core::primitive::f64
+                    } else {
+                        __lower_gap
+                    };
+                    let __cell = (__lower_gap + __upper_gap) / 2.0;
+                    if __original_step < __cell {
+                        false
+                    } else {
+                        let __scaled_value = __checked * __factor;
+                        let __delta = __scaled_value - __phase;
+                        let __quotient = if __delta.is_finite() {
+                            __delta / __step
+                        } else {
+                            __scaled_value / __step - __phase / __step
+                        };
+                        let __index = __quotient.round();
+                        let __scale = __checked
+                            .abs()
+                            .max((__phase / __factor).abs())
+                            .max(__original_step.abs());
+                        let __tolerance = (4.0
+                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
+                            * __scale)
+                            .min(__original_step / 4.0);
+                        let mut __distance = ::core::primitive::f64::INFINITY;
+                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                            let __product = __candidate * __step;
+                            let __sum = __product + __phase;
+                            let __nearest = if __product.is_finite() && __sum.is_finite()
+                            {
+                                let __product_error = __candidate
+                                    .mul_add(__step, -__product);
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__phase - __part);
+                                let __low = __candidate.mul_add(__step_low, __phase_low)
+                                    + __product_error + __sum_error;
+                                __sum + __low
+                            } else {
+                                __candidate.mul_add(__step, __phase)
+                                    + __candidate.mul_add(__step_low, __phase_low)
+                            };
+                            let __nearest = (__nearest / __factor)
+                                as ::core::primitive::f32 as ::core::primitive::f64;
+                            if __nearest.is_finite() {
+                                __distance = __distance.min((__checked - __nearest).abs());
+                            }
+                        }
+                        !__quotient.is_finite() || __distance > __tolerance
+                    }
+                }
+            }
+        } {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Step,
             });
         }
         ::core::result::Result::Ok(())
@@ -361,7 +706,6 @@ impl ::core::default::Default for Counter {
         Counter::new_unchecked(0)
     }
 }
-/// Quantization (`step`) is not checked by `new`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Gain(::core::primitive::f64);
@@ -387,6 +731,12 @@ impl Gain {
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Gain",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Gain",
@@ -397,6 +747,88 @@ impl Gain {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Gain",
                 rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if {
+            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                as ::core::primitive::f64;
+            {
+                let __factor: ::core::primitive::f64 = 1f64;
+                let __original_step: ::core::primitive::f64 = 0.01f64;
+                let __step: ::core::primitive::f64 = 0.01f64;
+                let __step_low: ::core::primitive::f64 = -0.00000000000000000020816681711721684f64;
+                let __phase: ::core::primitive::f64 = 0f64;
+                let __phase_low: ::core::primitive::f64 = 0f64;
+                if !__checked.is_finite() {
+                    true
+                } else {
+                    let __represented = (__checked as ::core::primitive::f32).abs();
+                    let __bits = __represented.to_bits();
+                    let __below = if __bits == 0 {
+                        -::core::primitive::f32::from_bits(1)
+                    } else {
+                        ::core::primitive::f32::from_bits(__bits - 1)
+                    };
+                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                    let __lower_gap = (__represented - __below)
+                        as ::core::primitive::f64;
+                    let __upper_gap = if __above.is_finite() {
+                        (__above - __represented) as ::core::primitive::f64
+                    } else {
+                        __lower_gap
+                    };
+                    let __cell = (__lower_gap + __upper_gap) / 2.0;
+                    if __original_step < __cell {
+                        false
+                    } else {
+                        let __scaled_value = __checked * __factor;
+                        let __delta = __scaled_value - __phase;
+                        let __quotient = if __delta.is_finite() {
+                            __delta / __step
+                        } else {
+                            __scaled_value / __step - __phase / __step
+                        };
+                        let __index = __quotient.round();
+                        let __scale = __checked
+                            .abs()
+                            .max((__phase / __factor).abs())
+                            .max(__original_step.abs());
+                        let __tolerance = (4.0
+                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
+                            * __scale)
+                            .min(__original_step / 4.0);
+                        let mut __distance = ::core::primitive::f64::INFINITY;
+                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                            let __product = __candidate * __step;
+                            let __sum = __product + __phase;
+                            let __nearest = if __product.is_finite() && __sum.is_finite()
+                            {
+                                let __product_error = __candidate
+                                    .mul_add(__step, -__product);
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__phase - __part);
+                                let __low = __candidate.mul_add(__step_low, __phase_low)
+                                    + __product_error + __sum_error;
+                                __sum + __low
+                            } else {
+                                __candidate.mul_add(__step, __phase)
+                                    + __candidate.mul_add(__step_low, __phase_low)
+                            };
+                            let __nearest = (__nearest / __factor)
+                                as ::core::primitive::f32 as ::core::primitive::f64;
+                            if __nearest.is_finite() {
+                                __distance = __distance.min((__checked - __nearest).abs());
+                            }
+                        }
+                        !__quotient.is_finite() || __distance > __tolerance
+                    }
+                }
+            }
+        } {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Gain",
+                rule: ::ridl_rt::payload::Rule::Step,
             });
         }
         ::core::result::Result::Ok(())
@@ -2089,24 +2521,9 @@ pub(crate) fn __ridl_fb_encode_SpeedLimitPayload(
 }
 /// Checks the FlatBuffers table at `table` against `SpeedLimitPayload`'s shape.
 ///
-/// A total walk of the type's own shape: the structure in full,
-/// an enum and an enum-set discriminant, a collection's declared
-/// element count, and every **named** scalar's own declared
-/// range, length and pattern, checked over a borrow (`check`,
-/// beside `new` on the type itself) against its declared range,
-/// length and pattern.
-///
-/// This does not make every value `decode` builds satisfy every
-/// typl constraint. Three gaps:
-///
-/// - a `step` constraint is checked nowhere — not by `new`, by
-///   `check`, or here (driftsys/ridl#469);
-/// - the pattern check is behind the `validate-pattern` feature,
-///   so a value violating a `match` pattern passes when that
-///   feature is off;
-/// - an anonymous inline constraint (a field's own `[..]` or
-///   `match` written at the field, not through a named scalar)
-///   is not checked here at all (driftsys/ridl#469).
+/// Checks the structure, enum discriminants, collection bounds,
+/// map key uniqueness, and named and anonymous scalar ranges,
+/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_SpeedLimitPayload(
     buf: &[::core::primitive::u8],
@@ -2331,24 +2748,9 @@ pub(crate) fn __ridl_fb_encode_RawWheelFrame(
 }
 /// Checks the FlatBuffers table at `table` against `RawWheelFrame`'s shape.
 ///
-/// A total walk of the type's own shape: the structure in full,
-/// an enum and an enum-set discriminant, a collection's declared
-/// element count, and every **named** scalar's own declared
-/// range, length and pattern, checked over a borrow (`check`,
-/// beside `new` on the type itself) against its declared range,
-/// length and pattern.
-///
-/// This does not make every value `decode` builds satisfy every
-/// typl constraint. Three gaps:
-///
-/// - a `step` constraint is checked nowhere — not by `new`, by
-///   `check`, or here (driftsys/ridl#469);
-/// - the pattern check is behind the `validate-pattern` feature,
-///   so a value violating a `match` pattern passes when that
-///   feature is off;
-/// - an anonymous inline constraint (a field's own `[..]` or
-///   `match` written at the field, not through a named scalar)
-///   is not checked here at all (driftsys/ridl#469).
+/// Checks the structure, enum discriminants, collection bounds,
+/// map key uniqueness, and named and anonymous scalar ranges,
+/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_RawWheelFrame(
     buf: &[::core::primitive::u8],
@@ -2371,8 +2773,25 @@ pub(crate) fn __ridl_fb_verify_RawWheelFrame(
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
         ::core::option::Option::Some(__p) => {
-            ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+                let __value = &buf[__v.first..__v.first + __v.len];
+                if (__value.len() as ::core::primitive::u64) < 8 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: "RawWheelFrame",
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+                if (__value.len() as ::core::primitive::u64) > 8 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: "RawWheelFrame",
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+                ::core::result::Result::Ok(())
+            })()
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
         }
         ::core::option::Option::None => {
             return ::core::result::Result::Err(

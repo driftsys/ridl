@@ -1405,6 +1405,25 @@ impl Checker<'_> {
             }
         }
 
+        let float_constant = type_ref.as_deref() == Some("float")
+            || target_type.as_ref().is_some_and(|target| {
+                matches!(
+                    self.symbol_init_target(target),
+                    InitTarget::Scalar(BackingClass::Float)
+                )
+            });
+        if !nominal_reported
+            && float_constant
+            && let Some(LitKind::Number { value }) = &value_kind
+            && !init::float_in_finite_domain(value)
+        {
+            self.error(
+                DiagCode::TYPL_108,
+                value_range,
+                format!("const `{name}` value is outside the finite float backing domain"),
+            );
+        }
+
         // A typed numeric constant must satisfy the same exact step grid as
         // an init. Resolve the step in the type's defining package, while the
         // value above resolves in this constant's own package.
@@ -1961,7 +1980,18 @@ impl Checker<'_> {
         }
         let text = match value {
             Some(ConstValue::Number(value)) => {
-                if valid_kind && out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
+                if valid_kind
+                    && matches!(target, InitTarget::Scalar(BackingClass::Float))
+                    && !init::float_in_finite_domain(&value)
+                {
+                    self.error(
+                        violation,
+                        range,
+                        "init value is outside the finite float backing domain".to_string(),
+                    );
+                } else if valid_kind
+                    && out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref())
+                {
                     self.error(
                         violation,
                         range,
@@ -2275,12 +2305,17 @@ impl Checker<'_> {
                     },
                     BackingClass::Integer | BackingClass::Float => {
                         let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
-                        init::numeric_zero_or_min(
+                        let init = init::numeric_zero_or_min(
                             min,
                             max,
                             self.named_init_constraint(symbol)
                                 .and_then(|c| c.step.as_deref().and_then(ExactValue::parse)),
-                        )
+                        );
+                        if backing_class(decl.backing()) == BackingClass::Float {
+                            init::finite_float_init(init)
+                        } else {
+                            init
+                        }
                     }
                     BackingClass::Str | BackingClass::Bytes => {
                         init::string_init(self.named_string_constraint(symbol).as_ref())
@@ -10066,6 +10101,94 @@ mod tests {
             panic!("expected signal");
         };
         assert_eq!(signal.init, Some(iv(true, Some("-0.2"))));
+    }
+
+    #[test]
+    fn derived_float_init_stays_within_the_finite_backing_domain() {
+        let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+        for (step, expected) in [
+            (maximum.to_string(), Some(format!("-{maximum}"))),
+            ((&maximum + 1u32).to_string(), None),
+            (format!("1{}", "0".repeat(400)), None),
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "package app\ntype T : float [..-0.1 step {step}.0]\nstruct S {{ named : T, inline : float [..-0.1 step {step}.0] }}\ninterface I {{ signal value : T @10ms }}\n"
+                ),
+            );
+            let expected = iv(expected.is_some(), expected.as_deref());
+            assert_eq!(type_def(&checked, "T").init.as_ref(), Some(&expected));
+            for name in ["named", "inline"] {
+                assert_eq!(field_init(&checked, "S", name), Some(expected.clone()));
+            }
+            assert_eq!(signal_def(&checked, "value").init, Some(expected));
+        }
+    }
+
+    #[test]
+    fn declared_float_init_and_typed_constants_require_finite_backing_values() {
+        let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+        for (step, valid) in [
+            (maximum.to_string(), true),
+            ((maximum + 1u32).to_string(), false),
+            (format!("1{}", "0".repeat(400)), false),
+        ] {
+            for sign in ["", "-"] {
+                let value = format!("{sign}{step}.0");
+                let bounds = if sign.is_empty() { "0.0.." } else { "..0.0" };
+                let constraint = format!("[{bounds} step {step}.0]");
+                let prefix =
+                    format!("package app\ntype T : float {constraint}\nconst RAW = {value}\n");
+                for init in [value.clone(), "RAW".to_string()] {
+                    for (source, code, count) in [
+                        (
+                            format!(
+                                "package app\ntype T : float {constraint} = {init}\nconst RAW = {value}\n"
+                            ),
+                            "TYPL-109",
+                            1,
+                        ),
+                        (
+                            format!(
+                                "{prefix}struct S {{ named : T = {init}, inline : float {constraint} = {init} }}\n"
+                            ),
+                            "TYPL-109",
+                            2,
+                        ),
+                        (
+                            format!("{prefix}interface I {{ signal value : T = {init} @10ms }}\n"),
+                            "RIDL-110",
+                            1,
+                        ),
+                    ] {
+                        let checked = check_ridl("app", &source);
+                        let actual = codes(&checked)
+                            .into_iter()
+                            .filter(|actual| *actual == code)
+                            .count();
+                        assert_eq!(
+                            actual,
+                            if valid { 0 } else { count },
+                            "{source}: {:?}",
+                            checked.diagnostics
+                        );
+                    }
+                    for target in ["T", "float"] {
+                        let checked = check_source(
+                            "app",
+                            &format!("{prefix}const VALUE : {target} = {init}\n"),
+                        );
+                        assert_eq!(
+                            !codes(&checked).contains(&"TYPL-108"),
+                            valid,
+                            "{target}={init}: {:?}",
+                            checked.diagnostics
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

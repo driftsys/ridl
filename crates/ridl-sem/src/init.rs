@@ -14,7 +14,8 @@
 //!   materialized in the IR; a consumer derives them recursively from member
 //!   inits (typl §5.8, the proto comment on `InitValue`).
 //! - `{ derivable: false, value: None }` — **not derivable** (a string/bytes
-//!   type whose bounds forbid length 0, or a type carrying a `match` pattern).
+//!   type whose bounds forbid length 0, a type carrying a `match` pattern, or
+//!   a float whose derived grid value lies outside the finite backing domain).
 //!   The checker emits TYPL-115 (info) for a named type in this state.
 //!
 //! Derived numeric values are always constructed through [`ExactValue`] and
@@ -66,10 +67,11 @@ pub fn derive_type_init(type_def: &v2::TypeDef) -> v2::InitValue {
     {
         // A unit backing is numeric (its underlying primitive is `float`,
         // typl §5.1).
-        Some(v2::backing::Kind::Unit(_)) => numeric_init(constraint),
+        Some(v2::backing::Kind::Unit(_)) => finite_float_init(numeric_init(constraint)),
         Some(v2::backing::Kind::Primitive(code)) => match primitive(*code) {
             v2::PrimitiveType::Boolean => scalar("false"),
-            v2::PrimitiveType::Integer | v2::PrimitiveType::Float => numeric_init(constraint),
+            v2::PrimitiveType::Integer => numeric_init(constraint),
+            v2::PrimitiveType::Float => finite_float_init(numeric_init(constraint)),
             v2::PrimitiveType::String | v2::PrimitiveType::Bytes => string_init(constraint),
             v2::PrimitiveType::Unspecified => composite(),
         },
@@ -139,6 +141,29 @@ pub fn numeric_zero_or_min(
         derivable: true,
         value: Some(value.to_decimal_string()),
     }
+}
+
+/// Rejects a derived float candidate outside the finite binary64 backing domain.
+/// Binary32 inference requires closed, representable bounds, so its derived
+/// candidate already lies within those bounds. Open bounds use binary64.
+/// Compare exact values: parsing to `f64` could round a value above the maximum
+/// back into the finite domain.
+pub fn finite_float_init(init: v2::InitValue) -> v2::InitValue {
+    let Some(value) = init.value.as_deref().and_then(ExactValue::parse) else {
+        return init;
+    };
+    if float_in_finite_domain(&value) {
+        init
+    } else {
+        not_derivable()
+    }
+}
+
+/// Whether an exact source value lies within the finite binary64 domain.
+pub fn float_in_finite_domain(value: &ExactValue) -> bool {
+    let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+    let maximum = num_rational::BigRational::from_integer(maximum);
+    value.0 >= -&maximum && value.0 <= maximum
 }
 
 /// The string/bytes derived init (typl §5.8): the empty value when the bounds
