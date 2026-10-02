@@ -3423,6 +3423,11 @@ mod tests {
                     "a slice scan must count every visited entry"
                 );
                 rendered.last_candidates.probes.set(0);
+                if broken_count < count {
+                    assert_eq!(rendered.last_candidates[0], None);
+                    assert_eq!(rendered.last_candidates.probes.get(), 1);
+                }
+                rendered.last_candidates.probes.set(0);
                 let expected = (broken_count < count).then_some(broken_count + 1);
                 assert_eq!(rendered.break_candidate(100), expected);
                 let checks = rendered.last_candidates.probes.get();
