@@ -47,3 +47,17 @@ GitHub comments were used. Final native artifact was inspected.
 full build members. Local log: `tasks-06-08-verify.log`. The report records
 these results in a later documentation commit; its actual-head push gates
 follow. The group remains unpublished and full review/CI follow PR creation.
+
+## Final acceptance audit
+
+Plan section 4 requires a broken-input control for each new declaration. The
+audit added an explicit named/inline service control for missing required
+commas, a missing shape and an unclosed inline body. It compares the original
+parse diagnostics with the formatter's `ParseErrors`; no production behavior
+changes. These cases were not used as the Task 8 layout RED. The focused test
+passed. This acceptance correction follows the completed QUICK review and is
+covered by the grouped full review rather than a recursive QUICK pass.
+
+`just verify` also passed on report head `b7fa1ba`; log:
+`tasks-06-08-publication-verify.log`. The final test correction receives the
+required actual-head gates before publication.

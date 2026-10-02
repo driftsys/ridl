@@ -2136,6 +2136,23 @@ mod tests {
     }
 
     #[test]
+    fn ridl_broken_services_return_parse_errors() {
+        for input in [
+            "package p\nservice p.s: First Second\n",
+            "package p\nservice p.s: \n",
+            "package p\nservice p.s { signal s: T\n",
+        ] {
+            let parsed = ridl_syntax::parse(input, Profile::Ridl);
+            assert!(!parsed.errors().is_empty(), "the fixture must be malformed");
+            assert_eq!(
+                format(input, Profile::Ridl, &FormatOptions::default()),
+                FormatOutcome::ParseErrors(parsed.errors().to_vec()),
+                "malformed services retain the original diagnostics",
+            );
+        }
+    }
+
+    #[test]
     fn ridl_named_services_keep_required_commas_and_remove_trailing_commas() {
         for source in [
             "service veh.body.doors : DoorControl, DiagBlock",
