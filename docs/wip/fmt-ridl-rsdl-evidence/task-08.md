@@ -26,3 +26,24 @@ inline versus broken lists without letting long trailing comments cause breaks.
 No parser, checker, diagnostic or configuration change is made.
 
 QUICK review, full grouped PR review and gates follow the Task 8 commit.
+
+## Exact head and QUICK review
+
+Task 8 commit: `46ab1f56011637dfd13b4bcbbd07126df82d2842`.
+`cargo test -p ridl-fmt --locked` exited 0: 77 unit tests, 2 goldens, 9
+configuration tests, 6 properties, 1 RIDL reference test and 2 rsdl reference
+tests. `cargo clippy -p ridl-fmt --all-targets --locked -- -D warnings`
+exited 0. `just check` exited 0.
+
+Fresh QUICK tests/docs/general-purpose bugs wrapper ran actual `gpt-5.6-terra`
+at high effort. The bugs wrapper invoked the native built-in review on this
+single commit at explicit medium effort. Startup metadata confirms that child
+model/effort. All seats returned no findings. Their git scope output contains
+the same seven changed paths; two narrative summaries miscounted those paths, so
+the count was checked against git rather than copied. No refuters, ledger or
+GitHub comments were used. Final native artifact was inspected.
+
+`just verify` on `46ab1f5` exited 0, including every required push gate and the
+full build members. Local log: `tasks-06-08-verify.log`. The report records
+these results in a later documentation commit; its actual-head push gates
+follow. The group remains unpublished and full review/CI follow PR creation.

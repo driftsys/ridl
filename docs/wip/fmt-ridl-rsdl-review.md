@@ -10,17 +10,17 @@ Tasks 1–4 are merged in [PR #626](https://github.com/driftsys/ridl/pull/626) a
 [PR #632](https://github.com/driftsys/ridl/pull/632) and the CI scheduling fix.
 The maintainer performed both merges.
 
-| Task | Implementation                                  | Commit and PR/base                                                              | Acceptance                                   | Review and CI                                                                              |
-| ---- | ----------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 5    | Merged with PR #630                             | `e515b2e`, `f887c78`, `d31f4b9`, `8b85871`; PR #632 / `docs/387-fmt-book-width` | CLI, LSP and formatter tests passed          | Two full passes complete; remaining coverage debt #633; CI passed at `8b85871`             |
-| 6    | Implemented locally; #625 tests pass            | `3e6e9bf`; grouped PR forthcoming / main                                        | Formatter and LSP acceptance passed          | QUICK complete, docs corrected; grouped full review after Task 8                           |
-| 7    | Implemented locally; approval applied           | `e27a3dd` plus correction; grouped PR pending / main                            | Exact-head formatter tests and Clippy passed | QUICK tests/bugs raised annotation-comment case; D-H14 approved and corrected; no group CI |
-| 8    | Pending                                         | None                                                                            | Not run                                      | Not run                                                                                    |
-| 9    | Pending, including deferred rsdl CLI width test | None                                                                            | Not run                                      | Not run                                                                                    |
-| 10   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                                    |
-| 11   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                                    |
-| 12   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                                    |
-| 13   | Pending                                         | None                                                                            | Not run                                      | Not run                                                                                    |
+| Task | State                                     | Commit and PR/base                                 | Acceptance and review                                                       |
+| ---- | ----------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| 5    | Merged                                    | PR #632 into #630 into main `037256d`              | Caller tests, full reviews and CI passed; coverage debt #633                |
+| 6    | Implemented locally                       | `faab6bb`, docs `bd6c6d7`; grouped PR / main       | Formatter/LSP acceptance passed; QUICK docs corrected                       |
+| 7    | Implemented locally; approval applied     | `e27a3dd`, correction `b8fbe9c`; grouped PR / main | Formatter, Clippy and comment-loss mutation passed; QUICK finding corrected |
+| 8    | Implemented locally                       | `46ab1f5`; grouped PR / main                       | Formatter/reference acceptance passed; all QUICK seats found nothing        |
+| 9    | Pending, including deferred rsdl CLI test | None                                               | Not run                                                                     |
+| 10   | Pending                                   | None                                               | Not run                                                                     |
+| 11   | Pending                                   | None                                               | Not run                                                                     |
+| 12   | Pending                                   | None                                               | Not run                                                                     |
+| 13   | Pending                                   | None                                               | Not run                                                                     |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).
 D-H1 preserves the approved design. D-H2 records explicit approval of Task 5
@@ -75,8 +75,8 @@ maintainer's approved timing-first comment attachment and supersedes D-H13.
 
 ## Current resume point
 
-Tasks 6 and 7 are implemented locally on `feat/387-fmt-ridl`, restacked onto
-main `037256d`. They are not published or CI-verified. The approved regression
+Tasks 6–8 are implemented locally on `feat/387-fmt-ridl`, restacked onto main
+`037256d`. They are not published or CI-verified. The approved regression
 renders `query q(): T [persist] /* note */ @10ms` as
 `query q(): T @10ms [ persist ] /* note */`. Inline comments between annotations
 stay with their preceding annotation; line comments retain their newline. Other
@@ -84,6 +84,8 @@ direct comments retain the verbatim path. Exact output, reparsing, structure,
 comment content and second formatting pass are checked. A deliberate
 comment-loss mutation fails the invariant control.
 
-Task 8 is next. Tasks 9–13 remain pending. The grouped PR, its full reviews,
-full gate and CI remain pending. Original worktree, handoff and all stashes are
-preserved. See [Task 7 evidence](fmt-ridl-rsdl-evidence/task-07.md).
+Task 8 service acceptance and QUICK review pass. `just verify` passed on
+`46ab1f5`; the report update receives actual-head push gates before publication.
+Tasks 9–13 remain pending. The grouped PR, its full reviews and CI are next.
+Original worktree, handoff and all stashes are preserved. See
+[Task 7 evidence](fmt-ridl-rsdl-evidence/task-07.md).
