@@ -614,3 +614,34 @@ append-only. Implementation status and verification are in
   push gates passed on prior `c8b8086`; final actual-head gates follow.
 - Commit and PR: final root-cause correction in PR #634 before full pass 2.
 - Maintainer action: none.
+
+## D-H22 — maintainer merge and correction-PR review continuity
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: remote-state handling within the authorized task loop.
+- Observed state: the maintainer `stasson` merged PR #634 at `6317767` on
+  2026-10-02 05:33:52 UTC, producing main `c9c7c0e`. The approved collision
+  correction was committed afterward and is not part of that merge. The agent
+  performed no merge. The published old feature branch now includes the fixes,
+  but a merged PR cannot receive the required open-PR final review.
+- Decision: restack only the three remaining correction commits onto current
+  main in `fix/387-fmt-annotation-comments`, open a correction PR, and run the
+  existing full pass 2 on that open PR with original pass 1 HEAD `700d116` as
+  BASE. It reviews exactly the original correction diff and keeps the two-pass
+  cap for this work; it does not restart a whole-PR review cycle.
+- Reason and alternatives considered: reopening a merged PR is unavailable.
+  Including the already merged implementation again would duplicate work. The
+  merged main tree equals `6317767`; the restacked final tree equals old
+  `91d1e6d`, so review scope and behavior are preserved despite new commit IDs.
+- Authority: authorized correction PRs, handoff branch/merge rules and the
+  review workflow's open-PR, fix-diff and two-pass requirements.
+- Commit mapping: `6578c3e` to `1eb5b2e`, `c8b8086` to `d055d83`, and `91d1e6d`
+  to `a41cddd`. Backup branch:
+  `checkpoint/387-fmt-ridl-before-collision-restack`. No stash changed.
+- Verification: tree identity checked; actual-head `just verify` and enabled
+  push hooks follow before opening the correction PR. Existing QUICK results
+  remain applicable to the unchanged executable diffs; no new behavior is
+  introduced by restacking.
+- Affected files and behavior: review/decision records and branch base only.
+- Maintainer action: review the correction PR. Task 9 follows full pass 2 and
+  will stack on the immediate unmerged correction branch.
