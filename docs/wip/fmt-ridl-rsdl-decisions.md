@@ -450,3 +450,63 @@ append-only. Implementation status and verification are in
 - Commit and PR: separate Task 8 commit on `feat/387-fmt-ridl`; grouped Tasks
   6–8 PR targets main `037256d` and includes the issue #625 correction.
 - Maintainer action: review the grouped PR. No rendering approval is needed.
+
+## D-H16 — annotation line-comment collision requires approval
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: awaiting approval; D-H14 remains approved for its settled cases.
+- Observed case: `query q(): T [persist] // attribute`, followed by
+  `@10ms // member`. Timing-first rendering currently combines the two comment
+  tokens as `query q(): T @10ms [ persist ] // attribute // member`. A multiline
+  block comment after timing can also have its opener consumed by the moved line
+  comment, producing invalid output.
+- Proposal: preserve this member verbatim when the moved annotation line comment
+  would collide with a trailing member comment. The approved `/* note */` case
+  would still use timing first. The alternative is timing first with
+  `// attribute` after attributes and `// member` on its own following line.
+- Reason and alternatives considered: both comments cannot remain inline on the
+  same final member line as separate tokens. Choosing the alternative would
+  change the second comment's placement; choosing the proposal creates a narrow
+  exception to canonical annotation order. Neither choice is assumed approved.
+- Authority: handoff stop conditions and plan section 7 reserve unsettled
+  renderings for the maintainer. The handoff remains local and untracked in the
+  original worktree.
+- Affected files and behavior: no collision correction applied. Independent
+  header, separator, coverage and prose corrections can proceed; full review
+  pass 2 and Tasks 9–13 await this answer.
+- Verification: full review pass 1 retained the reproduction at confidence 99 on
+  `700d116`; the formatter changes comment content and may fail reparsing. See
+  [PR #634 evidence](fmt-ridl-rsdl-evidence/pr-634.md).
+- Commit and PR: [PR #634](https://github.com/driftsys/ridl/pull/634), based on
+  main `037256d`, published head `700d116` when the question was asked.
+- Maintainer action: choose the verbatim collision exception or specify the
+  timing-first rendering and the second comment's position. The question is
+  pending; elapsed time does not supply approval.
+
+## D-H17 — independent full-review corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice within existing comment and invariant rules.
+- Decision: retain a required newline when the last header token before `{` is a
+  line or documentation comment. Clear trailing-comment eligibility when a
+  separator comma follows a newline, and preserve existing source blank lines
+  while removing separator-only lines.
+- Reason and alternatives considered: trimming the header newline makes `{` part
+  of the comment. Resetting all newline state at a comma attaches later comments
+  to an earlier member and loses blank lines. Ignoring commas entirely would
+  instead create a blank line for an ordinary separator-only line. The shared
+  collector and brace renderer continue to own these rules.
+- Authority: design section 5, comment-token preservation, source blank-line
+  rules and invariant reparsing. No grammar or parser change is needed.
+- Affected files and behavior: `crates/ridl-fmt/src/lib.rs` and the living wip
+  index. Seven new exact-output tests cover the two fixes and four coverage
+  findings. Renderer comments now describe attributes and service shape lists.
+- Verification: three new tests failed on the published implementation; four
+  coverage controls passed. The corrected formatter suite passed. Deliberate
+  mutations removing assignment/value comment guards, ensure-only block forcing,
+  subtree fallback scope and multiline-comment protection each fail their new
+  assertion with exit 101. Local logs are under
+  `fmt-ridl-rsdl-evidence/pr-634-*.log`.
+- Commit and PR: independent correction commit for PR #634; exact commit and
+  gate evidence are recorded in the review report and PR evidence.
+- Maintainer action: resolve D-H16 before the remaining correction and pass 2.

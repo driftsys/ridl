@@ -10,17 +10,17 @@ Tasks 1–4 are merged in [PR #626](https://github.com/driftsys/ridl/pull/626) a
 [PR #632](https://github.com/driftsys/ridl/pull/632) and the CI scheduling fix.
 The maintainer performed both merges.
 
-| Task | State                                     | Commit and PR/base                                 | Acceptance and review                                                       |
-| ---- | ----------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
-| 5    | Merged                                    | PR #632 into #630 into main `037256d`              | Caller tests, full reviews and CI passed; coverage debt #633                |
-| 6    | Implemented locally                       | `faab6bb`, docs `bd6c6d7`; grouped PR / main       | Formatter/LSP acceptance passed; QUICK docs corrected                       |
-| 7    | Implemented locally; approval applied     | `e27a3dd`, correction `b8fbe9c`; grouped PR / main | Formatter, Clippy and comment-loss mutation passed; QUICK finding corrected |
-| 8    | Implemented locally                       | `46ab1f5`; grouped PR / main                       | Formatter/reference acceptance passed; all QUICK seats found nothing        |
-| 9    | Pending, including deferred rsdl CLI test | None                                               | Not run                                                                     |
-| 10   | Pending                                   | None                                               | Not run                                                                     |
-| 11   | Pending                                   | None                                               | Not run                                                                     |
-| 12   | Pending                                   | None                                               | Not run                                                                     |
-| 13   | Pending                                   | None                                               | Not run                                                                     |
+| Task | State                                     | Commit and PR/base                              | Acceptance and review                                                       |
+| ---- | ----------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
+| 5    | Merged                                    | PR #632 into #630 into main `037256d`           | Caller tests, full reviews and CI passed; coverage debt #633                |
+| 6    | Published                                 | `faab6bb`, docs `bd6c6d7`; PR #634 / main       | Formatter/LSP acceptance passed; QUICK docs corrected                       |
+| 7    | Published; approval applied               | `e27a3dd`, correction `b8fbe9c`; PR #634 / main | Formatter, Clippy and comment-loss mutation passed; QUICK finding corrected |
+| 8    | Published                                 | `46ab1f5`; PR #634 / main                       | Formatter/reference acceptance passed; all QUICK seats found nothing        |
+| 9    | Pending, including deferred rsdl CLI test | None                                            | Not run                                                                     |
+| 10   | Pending                                   | None                                            | Not run                                                                     |
+| 11   | Pending                                   | None                                            | Not run                                                                     |
+| 12   | Pending                                   | None                                            | Not run                                                                     |
+| 13   | Pending                                   | None                                            | Not run                                                                     |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).
 D-H1 preserves the approved design. D-H2 records explicit approval of Task 5
@@ -36,13 +36,14 @@ editor configuration example. See
 failures, acceptance, mutation and gate results.
 
 [Issue #625](https://github.com/driftsys/ridl/issues/625) remains open; its
-correction is implemented in Task 6 commit `3e6e9bf`. The old formatter exited 0
-while changing `a: <T>` to `a:` followed by one space, and `b: [<T>; 1..2]` to
-`b: [; 1..2]`. The corrected formatter retains both stream types. Its regression
-tests pass reparsing, structure/comment comparison and second formatting; the
-rebuilt CLI also passes a second `--check`. See
-[Task 6 evidence](fmt-ridl-rsdl-evidence/task-06.md). The grouped PR is not yet
-open and will contain the permitted issue #625 closing reference.
+correction is implemented in restacked Task 6 commit `faab6bb`. The old
+formatter exited 0 while changing `a: <T>` to `a:` followed by one space, and
+`b: [<T>; 1..2]` to `b: [; 1..2]`. The corrected formatter retains both stream
+types. Its regression tests pass reparsing, structure/comment comparison and
+second formatting; the rebuilt CLI also passes a second `--check`. See
+[Task 6 evidence](fmt-ridl-rsdl-evidence/task-06.md). The correction is
+published in [PR #634](https://github.com/driftsys/ridl/pull/634), which
+contains the permitted issue #625 closing reference.
 
 Existing debts remain open in milestone E1 — typl + Tooling Spine:
 [#627](https://github.com/driftsys/ridl/issues/627) (breaking-loop performance),
@@ -75,17 +76,26 @@ maintainer's approved timing-first comment attachment and supersedes D-H13.
 
 ## Current resume point
 
-Tasks 6–8 are implemented locally on `feat/387-fmt-ridl`, restacked onto main
-`037256d`. They are not published or CI-verified. The approved regression
-renders `query q(): T [persist] /* note */ @10ms` as
-`query q(): T @10ms [ persist ] /* note */`. Inline comments between annotations
-stay with their preceding annotation; line comments retain their newline. Other
-direct comments retain the verbatim path. Exact output, reparsing, structure,
-comment content and second formatting pass are checked. A deliberate
-comment-loss mutation fails the invariant control.
+Tasks 6–8 are published in [PR #634](https://github.com/driftsys/ridl/pull/634),
+based on main `037256d`. Published head `700d116` passed `just verify`, enabled
+pre-push hooks and all CI checks. The approved regression renders
+`query q(): T [persist] /* note */ @10ms` as
+`query q(): T @10ms [ persist ] /* note */`.
 
-Task 8 service acceptance and QUICK review pass. `just verify` passed on
-`46ab1f5`; the report update receives actual-head push gates before publication.
-Tasks 9–13 remain pending. The grouped PR, its full reviews and CI are next.
-Original worktree, handoff and all stashes are preserved. See
-[Task 7 evidence](fmt-ridl-rsdl-evidence/task-07.md).
+Full review pass 1 retained eleven findings. Ten independent corrections are
+implemented: two production comment fixes, four coverage regressions and four
+prose updates. Three new layout assertions reproduced the failures before the
+fixes; the formatter suite then passed, and all four specified coverage
+mutations failed. See [PR evidence](fmt-ridl-rsdl-evidence/pr-634.md).
+
+One rendering decision is pending under D-H16: moving timing before an
+attribute's `// attribute` comment collides with a later `// member` comment.
+The proposed narrow exception preserves that member verbatim. The alternative
+puts timing first and places the second comment on its own following line. The
+handoff's stop condition requires the maintainer to settle this case. No
+collision correction or full pass 2 has run. Tasks 9–13 remain pending.
+
+Resume after D-H16 is answered: add its exact-output regression before the
+correction, update the normative rendering rule, run acceptance and actual-head
+gates, publish the fixes, then run full pass 2 over only the changes after
+`700d116`. Original worktree, untracked handoff and all stashes are preserved.

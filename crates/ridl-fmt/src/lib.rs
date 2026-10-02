@@ -280,7 +280,12 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                 nl_run = 0;
             }
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
-                nl_run = 0;
+                if nl_run > 0 {
+                    can_trail = false;
+                }
+                // A separator line is not a blank line. Retain an existing
+                // source blank line without attaching later comments backward.
+                nl_run = if nl_run >= 2 { 2 } else { 0 };
             }
             NodeOrToken::Node(node) => {
                 let gap_blank = pending.first().map_or(nl_run >= 2, |c| c.blank_before);
@@ -499,17 +504,22 @@ fn format_block_def(
 ) -> Vec<String> {
     let ind = indent_str(indent);
     let header_prefix = block_header_prefix(node, keyword);
+    let brace_separator = if header_prefix.ends_with('\n') {
+        ind.as_str()
+    } else {
+        " "
+    };
     let all_members = elements_between_braces(node);
     let (brace_comment, members) = split_brace_line_comment(&all_members);
     let member_lines = layout_container(members, indent + 1, false, options);
 
     if member_lines.is_empty() && brace_comment.is_none() {
-        return vec![format!("{ind}{header_prefix} {{}}")];
+        return vec![format!("{ind}{header_prefix}{brace_separator}{{}}")];
     }
 
     let open = match &brace_comment {
-        Some(comment) => format!("{ind}{header_prefix} {{ {comment}"),
-        None => format!("{ind}{header_prefix} {{"),
+        Some(comment) => format!("{ind}{header_prefix}{brace_separator}{{ {comment}"),
+        None => format!("{ind}{header_prefix}{brace_separator}{{"),
     };
     let mut out = Vec::with_capacity(member_lines.len() + 2);
     out.push(open);
@@ -524,18 +534,32 @@ fn format_block_def(
 fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
     let mut verbatim = String::new();
     let mut has_comment = false;
+    let mut last_significant = None;
     for element in node.children_with_tokens() {
         match element {
             NodeOrToken::Token(t) if t.kind() == SyntaxKind::LBrace => break,
             NodeOrToken::Token(t) => {
                 has_comment |= is_comment(t.kind());
+                if t.kind() != SyntaxKind::Whitespace {
+                    last_significant = Some(t.kind());
+                }
                 verbatim.push_str(t.text());
             }
-            NodeOrToken::Node(n) => verbatim.push_str(&n.text().to_string()),
+            NodeOrToken::Node(n) => {
+                last_significant = Some(n.kind());
+                verbatim.push_str(&n.text().to_string());
+            }
         }
     }
     if has_comment {
-        verbatim.trim_end().to_string()
+        let mut header = verbatim.trim_end().to_string();
+        if matches!(
+            last_significant,
+            Some(SyntaxKind::LineComment | SyntaxKind::DocComment)
+        ) {
+            header.push('\n');
+        }
+        header
     } else {
         format!(
             "{}{keyword} {}",
@@ -966,8 +990,8 @@ fn is_field_type(kind: SyntaxKind) -> bool {
     )
 }
 
-/// A canonical text fragment, concatenation, or breakable tuple. Text also
-/// carries verbatim constructs: comments inside a type disable synthesis.
+/// A canonical text fragment, concatenation, or breakable tuple, attribute
+/// block, or service shape list. Text also carries verbatim constructs.
 enum Layout {
     Text(String),
     TrailingComment(String),
@@ -989,8 +1013,8 @@ struct AttributeLayout {
     trailing: Vec<String>,
 }
 
-/// An outermost unbroken tuple on a rendered physical line. Inner tuples are
-/// exposed only when their parent breaks, so each decision follows the tree.
+/// An outermost unbroken construct on a rendered physical line. Nested tuples
+/// and attribute blocks become candidates when their parent breaks.
 struct BreakCandidate {
     id: usize,
     line: usize,
@@ -1167,7 +1191,8 @@ impl Rendering {
 
 /// Start with the inline rendering. Break the last available construct on an
 /// overlong line, render again, and stop when no overlong line can break.
-/// Trailing comments are attached later by the container, so never count here.
+/// Layout trailing comments are excluded by the recorded code-column count;
+/// container trailing comments are attached after rendering.
 fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
     let mut broken = HashSet::new();
     loop {
@@ -1397,9 +1422,9 @@ fn has_direct_comment(node: &SyntaxNode) -> bool {
         .any(|e| matches!(e, NodeOrToken::Token(t) if is_comment(t.kind())))
 }
 
-/// Whether `node` is a definition or member that renders on a single line —
-/// everything except a brace-block definition (`struct`, `enum`, `union`, or a
-/// standalone `enumset` or `interface`), whose direct comment children are handled elsewhere.
+/// Whether direct comments need the single-line fallback. Brace definitions
+/// (including standalone enumsets and inline services) and attribute blocks
+/// handle direct comments in their own renderers.
 fn is_single_line_element(node: &SyntaxNode) -> bool {
     match node.kind() {
         SyntaxKind::StructDef
@@ -2108,6 +2133,90 @@ mod tests {
         assert_eq!(
             crate::test_invariants::content_tokens(input, Profile::Rsdl),
             crate::test_invariants::content_tokens(&expected, Profile::Rsdl)
+        );
+    }
+
+    #[test]
+    fn review_header_line_comments_keep_the_opening_brace_on_a_new_line() {
+        for header in ["interface I", "service p.s"] {
+            assert_profile_format(
+                &format!("package p\n{header} // header\n{{ signal s:T }}\n"),
+                &format!("package p\n\n{header} // header\n{{\n  signal s: T\n}}\n"),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+            assert_profile_format(
+                &format!("package p\n{header} /// header\n{{}}\n"),
+                &format!("package p\n\n{header} /// header\n{{}}\n"),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+    }
+
+    #[test]
+    fn review_separator_comments_remain_separate_in_bodies_and_attributes() {
+        for header in ["interface I", "service p.s"] {
+            assert_profile_format(
+                &format!(
+                    "package p\n{header} {{ signal a:T // first\n , /* second\nthird */\n signal b:U }}\n"
+                ),
+                &format!(
+                    "package p\n\n{header} {{\n  signal a: T // first\n  /* second\nthird */\n  signal b: U\n}}\n"
+                ),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+        assert_ridl_member(
+            "query q():T [require ready // first\n , /* second\nthird */\n ensure result]",
+            "query q(): T [\n    require ready // first\n    /* second\nthird */\n    ensure result\n  ]",
+        );
+    }
+
+    #[test]
+    fn review_separator_lines_preserve_only_source_blank_lines() {
+        for (separator, gap) in [("\n,\n", ""), ("\n\n,\n", "\n"), ("\n,\n\n", "\n")] {
+            assert_ridl_member(
+                &format!("query q():T [require ready{separator}ensure result]"),
+                &format!("query q(): T [\n    require ready\n{gap}    ensure result\n  ]"),
+            );
+        }
+    }
+
+    #[test]
+    fn review_ensure_alone_forces_block_layout() {
+        assert_ridl_member(
+            "query q():T [ensure result>0]",
+            "query q(): T [\n    ensure result > 0\n  ]",
+        );
+    }
+
+    #[test]
+    fn review_commented_value_list_in_a_predicate_block_is_preserved() {
+        assert_ridl_member(
+            "query q():T [require ready labels=(A, // value\n B)]",
+            "query q(): T [\n    require ready\n    labels=(A, // value\n B)\n  ]",
+        );
+    }
+
+    #[test]
+    fn review_commented_parameter_and_return_fallback_is_limited_to_the_subtree() {
+        assert_ridl_member(
+            "query  q(a:A, /* parameter */ b : B) : T [persist] @ 10ms",
+            "query q(a:A, /* parameter */ b : B): T @10ms [ persist ]",
+        );
+        assert_ridl_member(
+            "query  q(): (a:A, /* return */ b : B) [persist] @ 10ms",
+            "query q(): (a:A, /* return */ b : B) @10ms [ persist ]",
+        );
+    }
+
+    #[test]
+    fn review_multiline_annotation_comment_keeps_the_whole_member_verbatim() {
+        assert_ridl_member(
+            "query  q():T [persist] /* two\n lines */ @ 10ms",
+            "query  q():T [persist] /* two\n lines */ @ 10ms",
         );
     }
 
