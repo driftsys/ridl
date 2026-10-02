@@ -2069,27 +2069,42 @@ fn open_served_late(
     rt: &Loopback,
     client: &mut generated::valve::blocking::Client<RecordingPorts>,
     waiter: &std::sync::Mutex<Option<Waker>>,
+    caller_delay: std::time::Duration,
 ) -> (Result<(), ClientError>, std::time::Duration) {
     let handler = FailingHandler::failing_after(rt.handler(), 1);
     let mut provider = TestProvider::new(0);
+    let caller_thread = std::thread::current();
+    let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(0);
     std::thread::scope(|scope| {
-        scope.spawn(|| {
-            for attempt in 0.. {
+        let serving = scope.spawn(|| {
+            ready_tx
+                .send(())
+                .expect("the caller waits for the provider");
+            let mut registered = false;
+            for _ in 0..2_000 {
                 if waiter.lock().expect("no poisoned waker slot").is_some() {
+                    registered = true;
                     break;
                 }
-                assert!(
-                    attempt < 2_000,
-                    "the call registered no Outcome waiter after 2000 attempts"
-                );
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
             std::thread::sleep(LATE);
             let _ = generated::valve::blocking::serve(handler, &mut provider, Some(GENEROUS));
+            // Even a missing registration must let the caller read the settled
+            // outcome before the test reports the registration failure.
+            caller_thread.unpark();
+            registered
         });
+        ready_rx.recv().expect("the provider announces its start");
+        std::thread::sleep(caller_delay);
         let started = std::time::Instant::now();
         let answer = client.open(generated::Level::new_unchecked(42));
-        (answer, started.elapsed())
+        let waited = started.elapsed();
+        assert!(
+            serving.join().expect("the provider thread completed"),
+            "the call registered no Outcome waiter after 2000 attempts"
+        );
+        (answer, waited)
     })
 }
 
@@ -2326,9 +2341,23 @@ fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
     let waiter = ports.outcome_waker();
     let mut client = generated::valve::blocking::Client::new(ports);
 
-    let (answer, waited) = open_served_late(&rt, &mut client, &waiter);
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter, std::time::Duration::ZERO);
     assert_eq!(answer, Ok(()), "the call was served, not cut off");
     assert!(waited >= LATE, "the client waited for the provider");
+}
+
+/// A provider that starts before a descheduled caller still delays its reply
+/// for `LATE` after the call begins waiting, not after the provider launches.
+#[test]
+fn a_blocking_client_waits_the_full_provider_delay_after_starting_late() {
+    let rt = loopback();
+    let ports = RecordingPorts::new(&rt);
+    let waiter = ports.outcome_waker();
+    let mut client = generated::valve::blocking::Client::new(ports);
+
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter, LATE * 2);
+    assert_eq!(answer, Ok(()), "the call was served, not cut off");
+    assert!(waited >= LATE, "the delay starts after the caller waits");
 }
 
 /// The deadline is `Instant::now().checked_add(timeout)`: a timeout so large
@@ -2342,7 +2371,7 @@ fn a_timeout_too_large_to_represent_is_a_wait_with_no_bound() {
     let mut client =
         generated::valve::blocking::Client::new(ports).with_timeout(std::time::Duration::MAX);
 
-    let (answer, waited) = open_served_late(&rt, &mut client, &waiter);
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter, std::time::Duration::ZERO);
     assert_eq!(answer, Ok(()), "the call was served, and nothing panicked");
     assert!(waited >= LATE);
 }
@@ -2358,7 +2387,7 @@ fn set_timeout_none_clears_the_timeout() {
     let mut client = generated::valve::blocking::Client::new(ports).with_timeout(SHORT);
     client.set_timeout(None);
 
-    let (answer, waited) = open_served_late(&rt, &mut client, &waiter);
+    let (answer, waited) = open_served_late(&rt, &mut client, &waiter, std::time::Duration::ZERO);
     assert_eq!(
         answer,
         Ok(()),

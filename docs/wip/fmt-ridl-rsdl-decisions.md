@@ -193,3 +193,30 @@ append-only. Implementation status and verification are in
   See [the CI correction evidence](fmt-ridl-rsdl-evidence/pr-630-ci.md).
 - Commit and PR: correction follows `dce6aa60` on PR #630's existing branch.
 - Maintainer action: review the correction; no merge is authorized.
+
+## D-CI2 — PR #630 QUICK findings and regression controls
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice following advisory review.
+- Question or observed case: QUICK tests requested committed scheduling
+  coverage; native bugs found that a provider-thread registration assertion
+  could leave the parent blocked. Docs reported no falsified statement.
+- Chosen action: add a provider-start rendezvous and an explicit caller delay
+  parameter to the test helper, with a new delayed-caller regression. Finish
+  serving and unpark the caller before reporting missing registration in the
+  parent. Keep the three original callers' delay zero and timeouts unchanged.
+- Reason and alternatives considered: removing the timing assertion would weaken
+  the original requirement. Setting a client timeout would alter the
+  unbounded-call cases being tested. A committed delayed-caller case detects
+  restoration of the old schedule, while settling and unparking preserves the
+  intended result and makes the registration failure observable.
+- Authority: user-requested CI correction and the QUICK review workflow; no
+  design or production changes. No additional QUICK cycle over the fixes.
+- Affected files and behavior: interaction-face tests only, plus evidence.
+- Verification: original-schedule mutation fails the new test, exit 101.
+  Missing-registration mutation hangs the old guard, but the corrected guard
+  reports exit 101. All mutations are restored; all 78 target tests pass. First
+  correction head `d011d56` passed `just verify`; the final head is verified
+  again before push. See [CI evidence](fmt-ridl-rsdl-evidence/pr-630-ci.md).
+- Commit and PR: review corrections follow `d011d56` on PR #630's branch.
+- Maintainer action: inspect the focused correction; no merge is authorized.

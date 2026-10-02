@@ -40,3 +40,45 @@ Local experiment logs are retained under this ignored evidence directory. The
 commit, QUICK review, full gate and updated CI result will be recorded after
 verification. Existing PR #630 ledgers already contain its two full review
 passes; this correction receives a fresh QUICK review over its own diff.
+
+## QUICK review and corrections
+
+Initial correction commit: `d011d5651e58045c5acc3134e55fc93d730d19e1`.
+`just verify` exited 0 on this head, including every member of `just build`.
+Log: `pr-630-verify-d011d56.log`.
+
+Three fresh QUICK contexts reviewed only `dce6aa60..d011d56`. Tests, restricted
+code-to-prose docs and the general-purpose bugs wrapper ran actual
+`gpt-5.6-terra` at high effort; its native built-in bugs worker ran actual
+`gpt-5.6-terra` at explicit medium effort. All reported the three exact changed
+paths. The wrapper initially reported a missing final output artifact; the
+completed native artifact and its captured output were recovered and inspected.
+The bugs finding below is from that actual artifact, not from the wrapper's
+incorrect empty summary. No refuter, ledger or GitHub review comments were used.
+
+- Tests: a temporary scheduling reproduction does not pin the correction in the
+  committed suite. Corrected by adding
+  `a_blocking_client_waits_the_full_provider_delay_after_starting_late`. A
+  provider-start rendezvous plus a 200 ms caller pause exercises the ordering in
+  the regular suite. Restoring the original immediate-delay behavior makes this
+  new test fail at its minimum-wait assertion, exit 101; log:
+  `pr-630-mutation-immediate-delay.log`.
+- Bugs: panicking the provider when registration is absent can leave the
+  unbounded caller blocked. Corrected by settling the call and unparking the
+  caller before the parent reports the missing registration. A temporary
+  mutation suppressing outcome registration left the old guard blocked after its
+  child assertion; the owned experiment process group was stopped after eight
+  seconds. The same mutation on the correction terminates with the parent
+  assertion, exit 101. Logs: `pr-630-red-registration-guard.log` and
+  `pr-630-green-registration-guard.log`. The mutation is restored.
+- Docs: no code-to-prose finding.
+
+After these corrections,
+`cargo test -p ridl-backend-rust --test
+interaction_face --locked` exited 0 with
+all 78 tests passing; log: `pr-630-reviewed-fix.log`. Neither the caller's
+timeout nor the success and minimum-wait assertions were weakened. QUICK
+corrections receive no QUICK pass of their own. Full verification and enabled
+push hooks run again on the final head. The latest exact head and gate/CI
+results are retained in the local `pr-630-final-verification.log` and
+`pr-630-ci-result.log` evidence files.
