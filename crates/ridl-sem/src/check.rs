@@ -10999,15 +10999,20 @@ interface I {\n\
     }
 
     /// A type path that names no visible declaration draws TYPL-011 on the
-    /// path (driftsys/ridl#543), in nine positions that take a type
+    /// path (driftsys/ridl#543), in ten positions that take a type
     /// reference: a struct field, a parameter, a query return, a stream
     /// element, a signal payload, an event payload, a fixed payload, a union
-    /// arm, and an enumset backing enum (driftsys/ridl#567). The span covers
-    /// the written path, a bare name and a qualified one alike.
+    /// arm, an enumset backing enum, and a map key (driftsys/ridl#567). The
+    /// span covers the written path, a bare name and a qualified one alike.
     #[test]
-    fn typl_011_unresolved_type_path_in_nine_type_reference_positions() {
+    fn typl_011_unresolved_type_path_in_ten_type_reference_positions() {
         let positions = [
             ("field", "struct S {\n  x: Missing\n}\n", "Missing"),
+            (
+                "map key",
+                "struct S {\n  x: [app.Missing : Speed; 0..4]\n}\n",
+                "app.Missing",
+            ),
             (
                 "signal payload",
                 "interface I {\n  signal s : Missing @10ms\n}\n",
@@ -11096,8 +11101,8 @@ interface I {\n\
 
     /// An import that names another package's `internal` declaration binds
     /// nothing (typl §3.3), so a use of the imported name draws TYPL-011 at
-    /// the use: the name is written in an import, but no visible
-    /// declaration stands behind it (driftsys/ridl#567).
+    /// the use: the import names a declaration that is not visible from
+    /// this package (driftsys/ridl#567).
     #[test]
     fn typl_011_on_a_name_an_import_names_but_does_not_bind() {
         let mut db = RidlDatabase::default();
@@ -11112,14 +11117,9 @@ interface I {\n\
         let app = ridl_package(&db, "app", source);
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
-        let unresolved: Vec<_> = checked
-            .diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.code == DiagCode::TYPL_011)
-            .collect();
-        assert_eq!(unresolved.len(), 1, "got: {:?}", checked.diagnostics);
-        assert_eq!(unresolved[0].message, "unknown type name `Hidden`");
-        let range = unresolved[0].primary.range;
+        assert_eq!(codes(&checked), vec!["TYPL-011"]);
+        assert_eq!(messages(&checked), vec!["unknown type name `Hidden`"]);
+        let range = checked.diagnostics[0].primary.range;
         let use_start = source.find(": Hidden").expect("the use is in the fixture") + 2;
         assert_eq!(usize::from(range.start()), use_start);
         assert_eq!(usize::from(range.end()), use_start + "Hidden".len());
