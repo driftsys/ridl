@@ -1186,6 +1186,7 @@ impl Rendering {
     }
 
     fn push(&mut self, text: &str) {
+        record_render_work(text.chars().count());
         self.line += text.matches('\n').count();
         self.text.push_str(text);
     }
@@ -1340,6 +1341,11 @@ thread_local! {
     static RENDER_WORK: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+#[cfg(test)]
+fn record_render_work(amount: usize) {
+    RENDER_WORK.with(|work| work.set(work.get() + amount));
+}
+
 /// Start with the inline rendering. Break the last available construct on an
 /// overlong line, render again, and stop when no overlong line can break.
 /// Layout trailing comments are excluded by the recorded code-column count;
@@ -1366,11 +1372,18 @@ fn render_layout_reference(layout: &Layout, indent: usize, options: &FormatOptio
 fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
     let lines = rendering::render(layout, indent, options);
     #[cfg(test)]
-    assert_eq!(
-        lines,
-        render_layout_reference(layout, indent, options),
-        "incremental rendering differs from the reference renderer"
-    );
+    {
+        // Keep oracle work out of the production measurement. Both renderers
+        // use the same observer, so selecting the old renderer in production
+        // still exposes its repeated whole-declaration work to the bound.
+        let production_work = RENDER_WORK.with(std::cell::Cell::get);
+        let expected = render_layout_reference(layout, indent, options);
+        RENDER_WORK.with(|work| work.set(production_work));
+        assert_eq!(
+            lines, expected,
+            "incremental rendering differs from the reference renderer"
+        );
+    }
     lines
 }
 
@@ -3604,6 +3617,11 @@ mod tests {
             RENDER_WORK.with(|work| work.set(0));
             let lines = render_layout(&layout, 1, &FormatOptions::default());
             let work = RENDER_WORK.with(std::cell::Cell::get);
+            let output_characters: usize = lines.iter().map(|line| line.chars().count()).sum();
+            assert!(
+                work >= output_characters,
+                "work counter missed emitted output"
+            );
             assert_eq!(lines.len(), 4 * count + 2);
             assert!(
                 work <= source.len() * 8,

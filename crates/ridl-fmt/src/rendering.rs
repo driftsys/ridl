@@ -71,7 +71,7 @@ impl<'a> Renderer<'a> {
     fn append(&mut self, text: &str) {
         debug_assert!(!text.contains('\n'));
         #[cfg(test)]
-        super::RENDER_WORK.with(|work| work.set(work.get() + text.chars().count()));
+        super::record_render_work(text.chars().count());
         for c in text.chars() {
             self.state.columns += 1;
             if !self.state.has_code {
@@ -254,7 +254,7 @@ impl<'a> Renderer<'a> {
         loop {
             if let Some(cursor) = self.pending {
                 #[cfg(test)]
-                super::RENDER_WORK.with(|work| work.set(work.get() + 1));
+                super::record_render_work(1);
                 let entry = &self.continuations[cursor];
                 let instruction = entry.instruction;
                 self.pending = entry.next;
