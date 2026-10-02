@@ -1,4 +1,4 @@
-//! `ridl fmt` — the CST-based formatter for typl and ridl interface members
+//! `ridl fmt` — the CST-based formatter for typl and ridl declarations
 //! (docs/ROADMAP.md epic E1.14, general form §5, typl reference §15.2).
 //!
 //! The formatter parses `text` with [`ridl_syntax::parse`] and rewrites the
@@ -39,7 +39,10 @@
 //! - timing precedes an interaction's attribute block. Inline attributes have
 //!   bracket padding and comma separators; predicates force one attribute per
 //!   line. Binary expression operators have spaces, prefixes and member access
-//!   stay tight, and source parentheses remain. Attribute value lists can break.
+//!   stay tight, and source parentheses remain. Attribute value lists can break;
+//! - inline services reuse interface bodies; named services keep required shape
+//!   commas and remove the optional trailing comma. An overlong shape list breaks
+//!   after the colon, one shape per line with commas between shapes.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
@@ -345,7 +348,8 @@ fn block_kind(kind: SyntaxKind) -> BlockKind {
         | SyntaxKind::EnumDef
         | SyntaxKind::EnumSetDef
         | SyntaxKind::UnionDef
-        | SyntaxKind::InterfaceDef => BlockKind::Def,
+        | SyntaxKind::InterfaceDef
+        | SyntaxKind::ServiceDef => BlockKind::Def,
         _ => BlockKind::Member,
     }
 }
@@ -391,6 +395,10 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::EnumDef => format_block_def(node, indent, "enum", options),
         SyntaxKind::UnionDef => format_block_def(node, indent, "union", options),
         SyntaxKind::InterfaceDef => format_block_def(node, indent, "interface", options),
+        SyntaxKind::ServiceDef if has_token(node, SyntaxKind::LBrace) => {
+            format_block_def(node, indent, "service", options)
+        }
+        SyntaxKind::ServiceDef => render_layout(&format_named_service(node), indent, options),
         SyntaxKind::SignalDef
         | SyntaxKind::EventDef
         | SyntaxKind::FixedDef
@@ -401,8 +409,8 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
-        // A declaration with no layout rules here — a ridl `service`, or
-        // one of the five rsdl declarations — is emitted as
+        // A declaration with no layout rules here — one of the five rsdl
+        // declarations — is emitted as
         // written, so no source is lost.
         _ => line(node.text().to_string()),
     }
@@ -478,7 +486,8 @@ fn format_enumset_derived(node: &SyntaxNode) -> String {
 
 // --- brace-block definitions --------------------------------------------
 
-/// Formats a `struct`, `enum`, `union`, standalone `enumset`, or `interface`:
+/// Formats a `struct`, `enum`, `union`, standalone `enumset`, `interface`,
+/// or inline `service`:
 /// the header, the members at the next indent, and the closing brace. An empty
 /// body renders as `{}` on the header line. A comment on the opening-brace line
 /// stays on that line; a comment in the header region is preserved verbatim.
@@ -531,7 +540,14 @@ fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
         format!(
             "{}{keyword} {}",
             modifiers_prefix(node),
-            child_tight(node, SyntaxKind::Name)
+            child_tight(
+                node,
+                if node.kind() == SyntaxKind::ServiceDef {
+                    SyntaxKind::DottedName
+                } else {
+                    SyntaxKind::Name
+                }
+            )
         )
     }
 }
@@ -618,6 +634,26 @@ fn format_union_arm(node: &SyntaxNode) -> String {
         child_tight(node, SyntaxKind::Name),
         child_tight(node, SyntaxKind::PathType),
     )
+}
+
+// --- named services ------------------------------------------------------
+
+fn format_named_service(node: &SyntaxNode) -> Layout {
+    if contains_comment(node) {
+        return Layout::Text(node.text().to_string());
+    }
+    Layout::Concat(vec![
+        Layout::Text(format!(
+            "service {}:",
+            child_tight(node, SyntaxKind::DottedName)
+        )),
+        Layout::Shapes(
+            node.children()
+                .filter(|child| child.kind() == SyntaxKind::PathType)
+                .map(|shape| tight_text(&shape))
+                .collect(),
+        ),
+    ])
 }
 
 // --- interface members ---------------------------------------------------
@@ -938,6 +974,7 @@ enum Layout {
     LineBreak,
     Concat(Vec<Layout>),
     Tuple(Vec<Layout>),
+    Shapes(Vec<String>),
     Attributes {
         blocks: Vec<AttributeLayout>,
         force_block: bool,
@@ -1064,6 +1101,30 @@ impl Rendering {
                         }
                     }
                     self.push(" ]");
+                }
+            }
+            Layout::Shapes(items) => {
+                let id = self.next_id;
+                self.next_id += 1;
+                if broken.contains(&id) {
+                    let indent = self.current_indent();
+                    for (index, item) in items.iter().enumerate() {
+                        self.push("\n");
+                        self.push(&" ".repeat(indent + 2));
+                        self.push(item);
+                        if index + 1 < items.len() {
+                            self.push(",");
+                        }
+                    }
+                } else {
+                    if !inside_inline && !items.is_empty() {
+                        self.candidates.push(BreakCandidate {
+                            id,
+                            line: self.line,
+                        });
+                    }
+                    self.push(" ");
+                    self.push(&items.join(", "));
                 }
             }
             Layout::Tuple(items) => {
@@ -1346,7 +1407,7 @@ fn is_single_line_element(node: &SyntaxNode) -> bool {
         | SyntaxKind::UnionDef
         | SyntaxKind::InterfaceDef
         | SyntaxKind::AttrBlock => false,
-        SyntaxKind::EnumSetDef => !has_token(node, SyntaxKind::LBrace),
+        SyntaxKind::EnumSetDef | SyntaxKind::ServiceDef => !has_token(node, SyntaxKind::LBrace),
         _ => true,
     }
 }
@@ -2072,6 +2133,119 @@ mod tests {
             ),
             FormatOutcome::ParseErrors(_)
         ));
+    }
+
+    #[test]
+    fn ridl_named_services_keep_required_commas_and_remove_trailing_commas() {
+        for source in [
+            "service veh.body.doors : DoorControl, DiagBlock",
+            "service veh.body.doors : DoorControl, DiagBlock,",
+        ] {
+            assert_profile_format(
+                &format!("package p\n{source}\n"),
+                "package p\n\nservice veh.body.doors: DoorControl, DiagBlock\n",
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_named_service_shape_list_breaks_after_the_colon() {
+        for source in [
+            "service veh.body.composite : DoorControl, MotorControl",
+            "service veh.body.composite : DoorControl, MotorControl,",
+        ] {
+            assert_profile_format(
+                &format!("package p\n{source} // shapes\n"),
+                "package p\n\nservice veh.body.composite:\n  DoorControl,\n  MotorControl // shapes\n",
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(40),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_service_shape_list_obeys_the_exact_width_and_off() {
+        let inline = "service p.s: Alpha, Beta";
+        for width in [Some(inline.chars().count()), None] {
+            assert_profile_format(
+                &format!("package p\n{inline}, // trailing comment beyond the width\n"),
+                &format!("package p\n\n{inline} // trailing comment beyond the width\n"),
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: width,
+                },
+            );
+        }
+        assert_profile_format(
+            &format!("package p\n{inline}\n"),
+            "package p\n\nservice p.s:\n  Alpha,\n  Beta\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(inline.chars().count() - 1),
+            },
+        );
+    }
+
+    #[test]
+    fn ridl_service_shape_list_with_a_comment_remains_verbatim() {
+        for source in [
+            "service veh.body.doors : DoorControl, /* shape */ DiagBlock,",
+            "service veh.body.doors : DoorControl, // shape\n DiagBlock,",
+            "service veh.body.doors : veh /* path */ . DoorControl, DiagBlock,",
+        ] {
+            assert_profile_format(
+                &format!("package p\n{source}\n"),
+                &format!("package p\n\n{source}\n"),
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(40),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_inline_service_reuses_member_layout_and_comments() {
+        for comma in ["", ","] {
+            assert_profile_format(
+                &format!(
+                    "package p\nservice veh.hvac.cabin {{ signal  temperature : Temperature @[ 1s .. 10s ]{comma}\n // callable\n command setTarget(t : Temperature) [require t>0] @10ms{comma} }}\n"
+                ),
+                "package p\n\nservice veh.hvac.cabin {\n  signal temperature: Temperature @[1s..10s]\n  // callable\n  command setTarget(t: Temperature) @10ms [\n    require t > 0\n  ]\n}\n",
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+        assert_profile_format(
+            "package p\nservice veh.empty {}\n",
+            "package p\n\nservice veh.empty {}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_inline_service_keeps_header_and_brace_comments() {
+        assert_profile_format(
+            "package p\nservice  veh.body /* header */ { // brace\n signal s:T }\n",
+            "package p\n\nservice  veh.body /* header */ { // brace\n  signal s: T\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_services_golden_preserves_structure_and_comments() {
+        assert_profile_format(
+            include_str!("../test_data/input/services.ridl"),
+            include_str!("../test_data/formatted/services.ridl"),
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
     }
 
     #[test]

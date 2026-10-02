@@ -425,3 +425,28 @@ append-only. Implementation status and verification are in
 - Review: this corrects the existing Task 7 QUICK finding; the correction gets
   no recursive QUICK review. The group receives full review after Task 8.
 - Maintainer action: review the grouped PR. Tasks 8–13 resume in order.
+
+## D-H15 — Task 8 service forms reuse the shared renderer
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice within the approved design.
+- Decision: dispatch inline services through the existing brace formatter and
+  use their `DottedName` for the header. Add a shape-list layout variant to the
+  existing width renderer for named services, with a break after the colon and
+  no closer. Keep required commas between shapes and remove the trailing comma.
+- Reason: a separate width loop would duplicate the established last-to-first
+  breaking rules. Named and inline service bodies need different termination,
+  already represented by the CST. A commented named shape list retains its
+  source text; inline body comments follow the container rules.
+- Authority: design sections 3.3, 5 and 6.3; plan Task 8; ADR-0015 decision 13.
+- Tests: both forms with and without trailing commas, the section 3.3 golden,
+  width 40 broken shapes with a trailing comment, exact boundary and off,
+  between-member/header/brace comments, commented shape lists and dotted paths.
+  Every exact-output case checks reparsing, structure, comment identity and a
+  second formatting pass. Appendix A runs at widths 100, 60 and 40.
+- Verification: five layout regressions failed before implementation; one
+  comment preservation control passed. Formatter acceptance passed afterward.
+  Evidence is in [Task 8](fmt-ridl-rsdl-evidence/task-08.md).
+- Commit and PR: separate Task 8 commit on `feat/387-fmt-ridl`; grouped Tasks
+  6–8 PR targets main `037256d` and includes the issue #625 correction.
+- Maintainer action: review the grouped PR. No rendering approval is needed.
