@@ -1096,6 +1096,47 @@ struct AttributeLayout {
     trailing: Vec<String>,
 }
 
+#[cfg(not(test))]
+type CandidateIndex = Vec<Option<usize>>;
+
+/// Count collection accesses in tests, including a scan substituted for a lookup.
+#[cfg(test)]
+#[derive(Default)]
+struct CandidateIndex {
+    lines: Vec<Option<usize>>,
+    probes: std::cell::Cell<usize>,
+}
+
+#[cfg(test)]
+impl CandidateIndex {
+    fn get(&self, line: usize) -> Option<&Option<usize>> {
+        self.probes.set(self.probes.get() + 1);
+        self.lines.get(line)
+    }
+
+    fn iter(&self) -> impl DoubleEndedIterator<Item = &Option<usize>> + ExactSizeIterator {
+        self.lines.iter().inspect(|_| {
+            self.probes.set(self.probes.get() + 1);
+        })
+    }
+}
+
+#[cfg(test)]
+impl std::ops::Deref for CandidateIndex {
+    type Target = Vec<Option<usize>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.lines
+    }
+}
+
+#[cfg(test)]
+impl std::ops::DerefMut for CandidateIndex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.lines
+    }
+}
+
 #[derive(Default)]
 struct Rendering {
     text: String,
@@ -1103,9 +1144,7 @@ struct Rendering {
     next_id: usize,
     // Keep the last outermost unbroken construct on each physical line.
     // Nested constructs become candidates only after their parent breaks.
-    last_candidates: Vec<Option<usize>>,
-    #[cfg(test)]
-    candidate_checks: std::cell::Cell<usize>,
+    last_candidates: CandidateIndex,
     code_columns: std::collections::HashMap<usize, usize>,
 }
 
@@ -1126,8 +1165,6 @@ impl Rendering {
             {
                 return None;
             }
-            #[cfg(test)]
-            self.candidate_checks.set(self.candidate_checks.get() + 1);
             self.last_candidates.get(line).copied().flatten()
         })
     }
@@ -3362,9 +3399,14 @@ mod tests {
                 let mut rendered = Rendering::default();
                 rendered.push("  ");
                 rendered.layout(&layout, &broken, false);
+                assert_eq!(
+                    rendered.last_candidates.iter().flatten().count(),
+                    count - broken_count
+                );
+                rendered.last_candidates.probes.set(0);
                 let expected = (broken_count < count).then_some(broken_count + 1);
                 assert_eq!(rendered.break_candidate(100), expected);
-                let checks = rendered.candidate_checks.get();
+                let checks = rendered.last_candidates.probes.get();
                 let lines = rendered.text.lines().count();
                 assert!(
                     checks <= lines,
