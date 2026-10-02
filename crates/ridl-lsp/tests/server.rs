@@ -3300,7 +3300,7 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
         edits,
         vec![lt::TextEdit {
             range: range((0, 0), (2, 0)),
-            new_text: "package solo\n\ncomponent Door { offers solo.door }\n".to_string(),
+            new_text: "package solo\n\ncomponent Door {\n  offers solo.door\n}\n".to_string(),
         }]
     );
 

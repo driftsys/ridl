@@ -10,17 +10,17 @@ Tasks 1–4 are merged in [PR #626](https://github.com/driftsys/ridl/pull/626) a
 [PR #632](https://github.com/driftsys/ridl/pull/632) and the CI scheduling fix.
 The maintainer performed both merges.
 
-| Task | State                                     | Commit and PR/base                              | Acceptance and review                                                       |
-| ---- | ----------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
-| 5    | Merged                                    | PR #632 into #630 into main `037256d`           | Caller tests, full reviews and CI passed; coverage debt #633                |
-| 6    | Merged                                    | `faab6bb`, docs `bd6c6d7`; PR #634 / main       | Formatter/LSP acceptance passed; QUICK docs corrected                       |
-| 7    | Merged; collision follow-up               | `e27a3dd`, correction `b8fbe9c`; PR #634 / main | Formatter, Clippy and comment-loss mutation passed; QUICK finding corrected |
-| 8    | Merged                                    | `46ab1f5`; PR #634 / main                       | Formatter/reference acceptance passed; all QUICK seats found nothing        |
-| 9    | Pending, including deferred rsdl CLI test | None                                            | Not run                                                                     |
-| 10   | Pending                                   | None                                            | Not run                                                                     |
-| 11   | Pending                                   | None                                            | Not run                                                                     |
-| 12   | Pending                                   | None                                            | Not run                                                                     |
-| 13   | Pending                                   | None                                            | Not run                                                                     |
+| Task | State                       | Commit and PR/base                              | Acceptance and review                                                       |
+| ---- | --------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
+| 5    | Merged                      | PR #632 into #630 into main `037256d`           | Caller tests, full reviews and CI passed; coverage debt #633                |
+| 6    | Merged                      | `faab6bb`, docs `bd6c6d7`; PR #634 / main       | Formatter/LSP acceptance passed; QUICK docs corrected                       |
+| 7    | Merged; collision follow-up | `e27a3dd`, correction `b8fbe9c`; PR #634 / main | Formatter, Clippy and comment-loss mutation passed; QUICK finding corrected |
+| 8    | Merged                      | `46ab1f5`; PR #634 / main                       | Formatter/reference acceptance passed; all QUICK seats found nothing        |
+| 9    | Implemented; QUICK pending  | Planned Tasks 9–10 PR / correction branch       | Formatter, facade and LSP acceptance passed                                 |
+| 10   | Pending                     | None                                            | Not run                                                                     |
+| 11   | Pending                     | None                                            | Not run                                                                     |
+| 12   | Pending                     | None                                            | Not run                                                                     |
+| 13   | Pending                     | None                                            | Not run                                                                     |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).
 D-H1 preserves the approved design. D-H2 records explicit approval of Task 5
@@ -123,7 +123,22 @@ which rejects an overly broad service-only preservation mutation. Restored
 formatter/LSP acceptance passes. See
 [PR #635 evidence](fmt-ridl-rsdl-evidence/pr-635.md).
 
-Actual-head gates and publication precede the final pass 2, with BASE `2287d03`
-and only the correction diff in scope. Tasks 9–13 follow in order. Original
-worktree, untracked handoff and all stashes are preserved. No approval question
-remains pending.
+PR #635's final published head `0249fd1` passed `just verify`, enabled push
+hooks and all CI checks. Both full reviews are complete; the final review's
+coverage gap is tracked in [#636](https://github.com/driftsys/ridl/issues/636),
+milestone E1 — typl + Tooling Spine. No production defect was identified. D-H26
+records the two-pass disposition.
+
+Task 9 is implemented in `feat/387-fmt-rsdl`, stacked on PR #635 at `0249fd1`.
+System, component and distribution use canonical brace bodies and the shared
+header/member attribute width renderer. Formatter, facade and LSP acceptance
+pass, including the approved deferred RSDL CLI brace-glob test with a second
+`--check` run. D-H27–D-H29 record the two-task PR group, layout and machine-body
+test placement. See [Task 9 evidence](fmt-ridl-rsdl-evidence/task-09.md). QUICK
+review follows its task commit. Task 10 remains pending and will add public
+machine/deployment dispatch in its own commit before the grouped PR.
+
+Merge order: [PR #635](https://github.com/driftsys/ridl/pull/635), then the
+planned Tasks 9–10 RSDL PR. Tasks 11–13 follow in order. Original worktree,
+untracked handoff and all stashes are preserved. No approval question remains
+pending and no merge is authorized.

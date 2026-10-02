@@ -1,0 +1,19 @@
+package veh.topology
+
+component Cruise [ instances = (primary, backup) ] {
+  offers veh.adas.cruise
+  requires LaneAssist
+}
+
+component Lane {
+  offers veh.adas.lane
+}
+
+component Panel {
+  requires CruiseControl
+  requires LaneAssist
+}
+
+component Backend [ external ] {
+  requires CruiseControl
+}
