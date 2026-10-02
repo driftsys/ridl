@@ -67,3 +67,33 @@ The book chapters are deliberately in `.primignore`; prim leaves their source
 fences byte-exact. Rust formatting and connective-tissue checks pass. The
 post-sweep diff contains no parser corpus, specification/general-form document,
 ignored book fence or baseline IR change. QUICK review follows the task commit.
+
+## QUICK review and path-width correction
+
+All three QUICK seats completed on `ad877b4`: native built-in bug review at
+Terra/medium and restricted docs at Terra/high report no findings. The tests
+seat at Terra/high reports that the fixed-point comparison must resolve the
+path's width rather than assume 100. Its first run stopped on a full-disk output
+error; the fresh retry completed, with actual model metadata retained locally.
+Changed-path lists match the committed range.
+
+The width finding is accepted. A temporary rooted EditorConfig sets width 40:
+`source_fixed_point_reads_the_effective_path_width` first fails with exit 101 on
+the expected assertion because the helper uses default options. After using
+`FormatOptions::for_path`, it passes. Cabin and baseline use their real source
+paths; book bodies use representative chapter paths with the fence's source
+extension, solely for configuration lookup. No file is written there. The
+independent structure, content/comment and second-pass checks at widths 100, 60
+and 40 remain.
+
+`CARGO_INCREMENTAL=0 cargo test -p ridl-cli --test book_examples --test baseline_desk --test baseline_gate --locked`
+passes: 41 book, 49 desk and 10 gate tests. Local logs:
+`task-12-quick-red-path-width.log` and `task-12-quick-green-path-width.log`. The
+subsequent connective-tissue check identified only an unformatted Task 13
+evidence paragraph; it was formatted and the check rerun successfully.
+
+The advisory observation about unpinned prose quotations is handled by the
+required manual book audit and actual diagnostic regeneration already recorded
+above. No brittle prose-string tests are added. This is the QUICK pass's own
+correction; it does not receive another QUICK pass. Final full review remains
+required on the published PR.

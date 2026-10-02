@@ -955,6 +955,48 @@ fn formatter_round_trip(source: &str, profile: ridl_syntax::Profile, locator: &s
     default_output.expect("default width was checked")
 }
 
+/// Checks source canonicality while retaining the three-width invariants.
+fn formatter_fixed_point(source: &str, profile: ridl_syntax::Profile, path: &Path) -> bool {
+    let _ = formatter_round_trip(source, profile, &path.display().to_string());
+    ridl_fmt::format(source, profile, &ridl_fmt::FormatOptions::for_path(path))
+        == ridl_fmt::FormatOutcome::Formatted(source.to_string())
+}
+
+#[test]
+fn source_fixed_point_reads_the_effective_path_width() {
+    let temp = TempDir::new("formatter-width");
+    let path = temp.path().join("example.ridl");
+    std::fs::write(
+        temp.path().join(".editorconfig"),
+        "root = true\n[*.ridl]\nmax_line_length = 40\n",
+    )
+    .unwrap();
+    let source = "package p\n\ninterface I {\n  query measure(leftInput: T, rightInput: T): T\n}\n";
+    assert_eq!(
+        ridl_fmt::FormatOptions::for_path(&path).max_line_length,
+        Some(40)
+    );
+    assert!(!formatter_fixed_point(
+        source,
+        ridl_syntax::Profile::Ridl,
+        &path
+    ));
+    let ridl_fmt::FormatOutcome::Formatted(canonical) = ridl_fmt::format(
+        source,
+        ridl_syntax::Profile::Ridl,
+        &ridl_fmt::FormatOptions {
+            max_line_length: Some(40),
+        },
+    ) else {
+        panic!("fixture must parse");
+    };
+    assert!(formatter_fixed_point(
+        &canonical,
+        ridl_syntax::Profile::Ridl,
+        &path
+    ));
+}
+
 #[test]
 fn verified_book_examples_are_formatter_fixed_points() {
     let root = book_root();
@@ -973,8 +1015,10 @@ fn verified_book_examples_are_formatter_fixed_points() {
                 _ => unreachable!("classify accepts only implemented profiles"),
             };
             let locator = example.locator();
-            let formatted = formatter_round_trip(&example.body, profile, &locator);
-            if formatted != example.body {
+            // Resolve the chapter's width with the fence's source extension;
+            // this representative path is never written to the checkout.
+            let source_path = root.join(&example.origin).with_extension(&example.language);
+            if !formatter_fixed_point(&example.body, profile, &source_path) {
                 noncanonical.push(locator);
             }
             count += 1;
@@ -990,28 +1034,23 @@ fn verified_book_examples_are_formatter_fixed_points() {
 #[test]
 fn cabin_example_is_a_formatter_fixed_point() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin/cabin.ridl");
-    let source = std::fs::read_to_string(path).expect("read cabin source");
-    assert_eq!(
-        formatter_round_trip(
-            &source,
-            ridl_syntax::Profile::Ridl,
-            "examples/cabin/cabin.ridl"
-        ),
-        source
-    );
+    let source = std::fs::read_to_string(&path).expect("read cabin source");
+    assert!(formatter_fixed_point(
+        &source,
+        ridl_syntax::Profile::Ridl,
+        &path
+    ));
 }
 
 #[test]
 fn baseline_corpus_is_a_formatter_fixed_point() {
     let source = include_str!("baseline-corpus/cluster.ridl");
-    assert_eq!(
-        formatter_round_trip(
-            source,
-            ridl_syntax::Profile::Ridl,
-            "baseline-corpus/cluster.ridl"
-        ),
-        source
-    );
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/baseline-corpus/cluster.ridl");
+    assert!(formatter_fixed_point(
+        source,
+        ridl_syntax::Profile::Ridl,
+        &path
+    ));
 }
 
 /// The harness can fail. A book whose example does not compile is rejected,
