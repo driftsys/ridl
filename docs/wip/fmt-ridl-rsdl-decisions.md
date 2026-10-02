@@ -536,3 +536,176 @@ append-only. Implementation status and verification are in
   main `037256d`. Actual-head push gates run before publication.
 - Maintainer action: answer D-H16. Then implement its regression and approved
   rendering, run full pass 2 over the fix diff, and resume Tasks 9–13 in order.
+
+## D-H19 — approved verbatim exception for colliding line comments
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: explicit maintainer approval; supersedes the pending D-H16 question.
+- Question: how to retain two comment tokens when moving timing would place an
+  annotation line comment before a trailing member comment on the same line.
+- Decision: preserve the whole member verbatim only for this collision. The
+  maintainer answered "yes" to the recommended narrow exception. D-H14 remains
+  unchanged for noncolliding comments, including the approved `/* note */` case.
+- Reason and alternatives considered: this keeps the original attachment and
+  both comment tokens. Moving the second comment to a new line was offered but
+  was not chosen. The same collision guard handles documentation line comments
+  and a trailing block comment, whose opener would otherwise be swallowed.
+- Authority: explicit maintainer answer and amended design section 3.2.
+- Affected files and behavior: the existing container uses its trailing-comment
+  context to preserve the member when an attribute-first line comment would
+  move. The member renderer and width loop remain shared; no parser change.
+- Verification: after correcting a fixture that initially put `}` inside a line
+  comment, the valid exact-output regression failed with exit 101 because two
+  comments merged. Formatter/LSP acceptance passes after the guard. Tests cover
+  line/doc comments, single/multiline trailing block comments, predicate
+  attributes and noncolliding block-comment/timing-first controls. All cases
+  check structure, comment identity, reparsing and fixed-point output. Logs:
+  `pr-634-collision-red.log` and `pr-634-collision-green.log`.
+- Commit and PR: final pass 1 correction for PR #634; separate from earlier
+  `82b761f` and `6317767` corrections. Full pass 2 follows publication over only
+  changes after `700d116`.
+- Maintainer action: review PR #634 after the remaining reviews and CI. No
+  rendering approval remains pending; Tasks 9–13 resume after pass 2.
+
+## D-H20 — distinguish consuming line comments from documentation blocks
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation correction within approved D-H19.
+- Observed case: `query q(): T [persist] /** attribute */ @10ms // member` was
+  retained verbatim because both `///` and `/** ... */` have the lexer kind
+  `DocComment`. The block form cannot consume the next comment.
+- Decision: restrict the new collision guard to comment tokens whose text begins
+  with `//`. Keep documentation block comments on the canonical noncolliding
+  path. Extend collision tests to all five interaction kinds and widths 100, 60
+  and 40.
+- Reason and alternatives considered: token kind alone does not distinguish the
+  two documentation-comment forms. Changing the lexer is unnecessary and outside
+  the formatter's scope; source spelling is sufficient for this guard.
+- Authority: approved narrow collision exception, design sections 3.2 and 5;
+  QUICK docs/tests findings.
+- Affected files and behavior: formatter collision guard, exact-output controls
+  and review evidence. No parser or grammar change; no recursive QUICK pass.
+- Verification: documentation-block regression failed before correction;
+  formatter/LSP acceptance passes afterward. Evidence: PR #634 evidence and
+  `pr-634-doc-block-{red,green}.log`. Full gates passed on prior `6578c3e`;
+  actual-head push gates follow for the correction commit.
+- Commit and PR: QUICK correction in PR #634 before full pass 2.
+- Maintainer action: none; no rendering choice changed.
+
+## D-H21 — use one line-comment classification in affected renderers
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: root-cause correction of the D-H20 QUICK finding.
+- Observed case: the shared `DocComment` kind also caused `/** header */` to
+  move the opening brace to a new line and `/** timing */` to force a newline
+  before attributes. Both valid exact-output controls failed before correction.
+- Decision: use one `is_line_comment` helper based on comment kind and `//`
+  spelling in header newline protection, annotation newline emission and the
+  collision guard. Block documentation comments retain their inline form.
+- Reason and alternatives considered: fixing only the new guard left the same
+  classification error in two affected rendering paths. The shared helper avoids
+  inconsistent treatment without changing the lexer or comment text.
+- Authority: design sections 3.2 and 5, approved preceding-annotation attachment
+  and the narrow D-H19 collision exception.
+- Affected files and behavior: formatter helper and exact-output controls only;
+  no new rendering choice and no recursive QUICK review.
+- Verification: both controls exited 101 before correction; formatter/LSP
+  acceptance passes afterward. Logs are listed in PR #634 evidence. All eight
+  push gates passed on prior `c8b8086`; final actual-head gates follow.
+- Commit and PR: final root-cause correction in PR #634 before full pass 2.
+- Maintainer action: none.
+
+## D-H22 — maintainer merge and correction-PR review continuity
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: remote-state handling within the authorized task loop.
+- Observed state: the maintainer `stasson` merged PR #634 at `6317767` on
+  2026-10-02 05:33:52 UTC, producing main `c9c7c0e`. The approved collision
+  correction was committed afterward and is not part of that merge. The agent
+  performed no merge. The published old feature branch now includes the fixes,
+  but a merged PR cannot receive the required open-PR final review.
+- Decision: restack only the three remaining correction commits onto current
+  main in `fix/387-fmt-annotation-comments`, open a correction PR, and run the
+  existing full pass 2 on that open PR with original pass 1 HEAD `700d116` as
+  BASE. It reviews exactly the original correction diff and keeps the two-pass
+  cap for this work; it does not restart a whole-PR review cycle.
+- Reason and alternatives considered: reopening a merged PR is unavailable.
+  Including the already merged implementation again would duplicate work. The
+  merged main tree equals `6317767`; the restacked final tree equals old
+  `91d1e6d`, so review scope and behavior are preserved despite new commit IDs.
+- Authority: authorized correction PRs, handoff branch/merge rules and the
+  review workflow's open-PR, fix-diff and two-pass requirements.
+- Commit mapping: `6578c3e` to `1eb5b2e`, `c8b8086` to `d055d83`, and `91d1e6d`
+  to `a41cddd`. Backup branch:
+  `checkpoint/387-fmt-ridl-before-collision-restack`. No stash changed.
+- Verification: tree identity checked; actual-head `just verify` and enabled
+  push hooks follow before opening the correction PR. Existing QUICK results
+  remain applicable to the unchanged executable diffs; no new behavior is
+  introduced by restacking.
+- Affected files and behavior: review/decision records and branch base only.
+- Maintainer action: review the correction PR. Task 9 follows full pass 2 and
+  will stack on the immediate unmerged correction branch.
+
+## D-H23 — fresh review of the open correction PR
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: review execution requirement; supersedes D-H22's proposed scheduling.
+- Observed state: opening PR #635 triggered the active FULL review instruction,
+  requiring a fresh pass 1 on that open PR. PR #634 had already been merged by
+  the maintainer after its first pass.
+- Decision: run fresh pass 1 on PR #635, then pass 2 over its correction diff
+  with BASE `2287d0368d16294369b920c62a77cdabd0843f72`. Keep the two-pass cap
+  per PR. Do not run the D-H22 continuity proposal or a third full pass.
+- Reason and alternatives considered: the active review trigger binds the new
+  open PR. Reusing the old PR's pass number would omit its required first pass.
+- Authority: active FULL review instruction and the review workflow's fresh
+  contexts, open-PR requirement and two-pass cap.
+- Affected files and behavior: review records only; no rendering changes.
+- Verification: fresh pass 1 reviewed main `c9c7c0e` through `2287d03`; all
+  seats matched the five changed paths. Two coverage findings were independently
+  confirmed. All CI checks passed on `2287d03`.
+- Commit and PR: PR #635, based on main; evidence in `pr-635.md`.
+- Maintainer action: review PR #635; no merge authorization is inferred.
+
+## D-H24 — pin the two confirmed annotation-comment coverage gaps
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice within approved D-H19 and D-H21 behavior.
+- Observed case: changing annotation newline checks to accept only ordinary line
+  comments passed existing tests while losing a timing-first `///` newline.
+  Bypassing collision protection only in inline services also passed existing
+  tests while merging their two comment tokens.
+- Decision: add exact-output tests for timing-first documentation line comments
+  and inline-service collisions at widths 100, 60 and 40. Include ordinary and
+  documentation annotation line comments and all three trailing comment forms in
+  inline services. Reuse the structure, content and fixed-point assertions.
+- Reason and alternatives considered: existing interface collision fixtures
+  cannot detect a service-only regression, and their verbatim path does not
+  exercise documentation line comments in the annotation renderer. No production
+  correction is needed for either confirmed test gap.
+- Authority: design sections 3.2, 3.3, 5 and 9; PR #635 pass 1 findings F1/F2.
+- Affected files and behavior: formatter tests and review records only.
+- Verification: both specified mutations exit 101 with the new tests; restored
+  production passes formatter and LSP acceptance. Logs and exact commands are
+  recorded in `fmt-ridl-rsdl-evidence/pr-635.md`.
+- Commit and PR: coverage correction in PR #635; actual-head gates precede push.
+- Maintainer action: none; no rendering choice changed.
+
+## D-H25 — QUICK control for noncolliding inline-service comments
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: coverage correction from QUICK advice; no rendering change.
+- Observed case: a service-only widening of verbatim preservation could pass the
+  colliding fixtures while failing the canonical noncolliding path.
+- Decision: add exact ordinary/documentation block-comment controls inside an
+  inline service at widths 100, 60 and 40, with a trailing member comment.
+- Reason and alternatives considered: a positive collision assertion alone does
+  not distinguish the approved narrow exception from whole-service preservation.
+  Existing interface controls do not exercise a service-only widening.
+- Authority: approved D-H19 narrow exception and design sections 3.2, 3.3 and 5.
+- Affected files and behavior: one formatter regression and review records only.
+- Verification: widening the service guard makes the new assertion fail with
+  exit 101; restored formatter/LSP acceptance exits 0. Evidence: `pr-635.md`.
+- Commit and PR: QUICK follow-up in PR #635. No recursive QUICK review; final
+  pass 2 remains the next full review.
+- Maintainer action: none.

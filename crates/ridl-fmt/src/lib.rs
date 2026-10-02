@@ -82,7 +82,9 @@
 //! enclosing construct is emitted verbatim from source instead of being
 //! re-synthesised. Inline comments between interaction annotations are an
 //! exception: they stay with the preceding annotation when timing moves first.
-//! Line comments retain their newline. This leaves the node structure
+//! If moving an annotation line comment would consume another trailing comment,
+//! the whole member stays verbatim. Line comments retain their newline.
+//! This leaves the node structure
 //! and the non-trivia token set unchanged, and stays idempotent.
 //! The property harness checks all three implemented profiles at widths 100,
 //! 60 and 40, comparing node entry and exit, token identity, and comment text.
@@ -214,7 +216,11 @@ fn layout_container(
                 lines.push(String::new());
             }
             if let Some(node) = &block.node {
-                lines.extend(format_element(node, indent, options));
+                if !block.trailing.is_empty() && has_moved_annotation_line_comment(node) {
+                    lines.push(format!("{ind}{}", node.text()));
+                } else {
+                    lines.extend(format_element(node, indent, options));
+                }
             }
             for comment in &block.trailing {
                 if let Some(line) = lines.last_mut() {
@@ -534,29 +540,26 @@ fn format_block_def(
 fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
     let mut verbatim = String::new();
     let mut has_comment = false;
-    let mut last_significant = None;
+    let mut ends_in_line_comment = false;
     for element in node.children_with_tokens() {
         match element {
             NodeOrToken::Token(t) if t.kind() == SyntaxKind::LBrace => break,
             NodeOrToken::Token(t) => {
                 has_comment |= is_comment(t.kind());
                 if t.kind() != SyntaxKind::Whitespace {
-                    last_significant = Some(t.kind());
+                    ends_in_line_comment = is_line_comment(&t);
                 }
                 verbatim.push_str(t.text());
             }
             NodeOrToken::Node(n) => {
-                last_significant = Some(n.kind());
+                ends_in_line_comment = false;
                 verbatim.push_str(&n.text().to_string());
             }
         }
     }
     if has_comment {
         let mut header = verbatim.trim_end().to_string();
-        if matches!(
-            last_significant,
-            Some(SyntaxKind::LineComment | SyntaxKind::DocComment)
-        ) {
+        if ends_in_line_comment {
             header.push('\n');
         }
         header
@@ -768,6 +771,28 @@ fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
     true
 }
 
+/// Moving an attribute's line comment past timing would consume any later
+/// trailing comment. The container retains this whole member when one exists.
+fn has_moved_annotation_line_comment(node: &SyntaxNode) -> bool {
+    if !has_only_inline_annotation_comments(node) {
+        return false;
+    }
+    let mut owner = None;
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Node(child) if child.kind() == SyntaxKind::Timing => return false,
+            NodeOrToken::Node(child) => owner = Some(child.kind()),
+            NodeOrToken::Token(token)
+                if owner == Some(SyntaxKind::AttrBlock) && is_line_comment(&token) =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
 fn annotation_comments(node: &SyntaxNode, annotation: SyntaxKind, trailing: bool) -> Vec<Layout> {
     let mut owner = None;
     let mut comments = Vec::new();
@@ -776,24 +801,12 @@ fn annotation_comments(node: &SyntaxNode, annotation: SyntaxKind, trailing: bool
             NodeOrToken::Node(child) => owner = Some(child.kind()),
             NodeOrToken::Token(token) if owner == Some(annotation) && is_comment(token.kind()) => {
                 let text = token.text().trim_end().to_string();
-                comments.push(
-                    if trailing
-                        || matches!(
-                            token.kind(),
-                            SyntaxKind::LineComment | SyntaxKind::DocComment
-                        )
-                    {
-                        Layout::TrailingComment(text)
-                    } else {
-                        Layout::Text(format!(" {text}"))
-                    },
-                );
-                if !trailing
-                    && matches!(
-                        token.kind(),
-                        SyntaxKind::LineComment | SyntaxKind::DocComment
-                    )
-                {
+                comments.push(if trailing || is_line_comment(&token) {
+                    Layout::TrailingComment(text)
+                } else {
+                    Layout::Text(format!(" {text}"))
+                });
+                if !trailing && is_line_comment(&token) {
                     comments.push(Layout::LineBreak);
                 }
             }
@@ -1335,6 +1348,11 @@ fn is_comment(kind: SyntaxKind) -> bool {
         kind,
         SyntaxKind::LineComment | SyntaxKind::BlockComment | SyntaxKind::DocComment
     )
+}
+
+/// Documentation comments share a token kind for line and block forms.
+fn is_line_comment(token: &ridl_syntax::SyntaxToken) -> bool {
+    is_comment(token.kind()) && token.text().starts_with("//")
 }
 
 /// The prefix of `internal` / `error` modifiers, in source order, each with a
@@ -1887,6 +1905,124 @@ mod tests {
     }
 
     #[test]
+    fn ridl_colliding_annotation_line_comments_keep_the_member_verbatim() {
+        for width in [100, 60, 40] {
+            for prefix in [
+                "signal  s : T",
+                "event  e : T",
+                "fixed  f : T = 1",
+                "command  c ( ) : T",
+                "query  q ( ):T",
+            ] {
+                for annotation in ["// attribute", "/// attribute"] {
+                    for trailing in ["// member", "/* member */", "/* member\nmore */"] {
+                        let member =
+                            format!("{prefix} [persist] {annotation}\n  @ 10ms {trailing}");
+                        assert_profile_format(
+                            &format!("package p\ninterface I {{\n  {member}\n}}\n"),
+                            &format!("package p\n\ninterface I {{\n  {member}\n}}\n"),
+                            Profile::Ridl,
+                            &FormatOptions {
+                                max_line_length: Some(width),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        assert_profile_format(
+            "package p\ninterface I {\n  query  q():T [require ready] // attribute\n  @ 10ms // member\n}\n",
+            "package p\n\ninterface I {\n  query  q():T [require ready] // attribute\n  @ 10ms // member\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_noncolliding_annotation_comments_still_normalize() {
+        for comment in ["/* attribute */", "/** attribute */"] {
+            assert_profile_format(
+                &format!(
+                    "package p\ninterface I {{\n  query  q():T [persist] {comment} @ 10ms // member\n}}\n"
+                ),
+                &format!(
+                    "package p\n\ninterface I {{\n  query q(): T @10ms [ persist ] {comment} // member\n}}\n"
+                ),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
+        }
+        assert_profile_format(
+            "package p\ninterface I {\n  query  q():T @ 10ms // timing\n  [persist] // member\n}\n",
+            "package p\n\ninterface I {\n  query q(): T @10ms // timing\n  [ persist ] // member\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+        assert_profile_format(
+            "package p\ninterface I {\n  query  q():T @ 10ms /** timing */ [persist] // member\n}\n",
+            "package p\n\ninterface I {\n  query q(): T @10ms /** timing */ [ persist ] // member\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn review_timing_doc_line_comment_keeps_attributes_on_the_next_line() {
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                "package p\ninterface I {\n  query  q():T @ 10ms /// timing\n  [persist] // member\n}\n",
+                "package p\n\ninterface I {\n  query q(): T @10ms /// timing\n  [ persist ] // member\n}\n",
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn review_inline_service_colliding_comments_keep_the_member_verbatim() {
+        for width in [100, 60, 40] {
+            for annotation in ["// attribute", "/// attribute"] {
+                for trailing in ["// member", "/* member */", "/* member\nmore */"] {
+                    assert_profile_format(
+                        &format!(
+                            "package p\nservice veh.control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
+                        ),
+                        &format!(
+                            "package p\n\nservice veh.control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
+                        ),
+                        Profile::Ridl,
+                        &FormatOptions {
+                            max_line_length: Some(width),
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn review_inline_service_noncolliding_comments_still_normalize() {
+        for width in [100, 60, 40] {
+            for comment in ["/* attribute */", "/** attribute */"] {
+                assert_profile_format(
+                    &format!(
+                        "package p\nservice veh.control {{\n  query  q():T [persist] {comment} @ 10ms // member\n}}\n"
+                    ),
+                    &format!(
+                        "package p\n\nservice veh.control {{\n  query q(): T @10ms [ persist ] {comment} // member\n}}\n"
+                    ),
+                    Profile::Ridl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
     fn ridl_moved_annotation_comment_does_not_force_attribute_breaking() {
         let comment = "x".repeat(120);
         assert_profile_format(
@@ -2139,6 +2275,12 @@ mod tests {
     #[test]
     fn review_header_line_comments_keep_the_opening_brace_on_a_new_line() {
         for header in ["interface I", "service p.s"] {
+            assert_profile_format(
+                &format!("package p\n{header} /** header */ {{ signal s:T }}\n"),
+                &format!("package p\n\n{header} /** header */ {{\n  signal s: T\n}}\n"),
+                Profile::Ridl,
+                &FormatOptions::default(),
+            );
             assert_profile_format(
                 &format!("package p\n{header} // header\n{{ signal s:T }}\n"),
                 &format!("package p\n\n{header} // header\n{{\n  signal s: T\n}}\n"),
