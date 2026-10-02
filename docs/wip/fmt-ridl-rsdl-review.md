@@ -19,7 +19,7 @@ The maintainer performed both merges.
 | 9    | Implemented; integrated in final branch | PR #637 merged into former base; final PR to main pending | Formatter, facade, LSP, workspace tests and CI passed                                     |
 | 10   | Implemented; QUICK complete             | PR #637; separator correction included in final branch    | 104 formatter unit and 20 integration tests; gates and CI passed; full review interrupted |
 | 11   | Implemented; acceptance passed          | Final PR to main pending                                  | Exact normative repository section; no behavior change                                    |
-| 12   | Pending                                 | None                                                      | Not run                                                                                   |
+| 12   | Implemented; QUICK pending              | Final PR to main pending                                  | Fixed-point RED observed; book/baseline/workspace/demo/book/link checks pass              |
 | 13   | Pending                                 | None                                                      | Not run                                                                                   |
 
 Decisions are recorded in [the append-only log](fmt-ridl-rsdl-decisions.md).

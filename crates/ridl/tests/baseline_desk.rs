@@ -2327,22 +2327,22 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
         (
             "tyrePressure",
             "declare it at the end of the body instead",
-            "event tyrePressure : DoorState @[100ms..1s]",
+            "event tyrePressure: DoorState @[100ms..1s]",
         ),
         (
             "legacyWheelPhase",
             "give this interaction a different name",
-            "signal legacyWheelPhase : Speed @10ms",
+            "signal legacyWheelPhase: Speed @10ms",
         ),
         (
             "doorOpened",
             "put the declarations back in the baseline's order",
-            "event doorOpened : DoorState @[100ms..1s]",
+            "event doorOpened: DoorState @[100ms..1s]",
         ),
         (
             "doorClosed",
             "put the declarations back in the baseline's order",
-            "event doorClosed : DoorState @[100ms..1s]",
+            "event doorClosed: DoorState @[100ms..1s]",
         ),
     ] {
         let block = ridl_407_block(&stderr, name);
@@ -2465,7 +2465,7 @@ fn inline_shape_removal_spans_the_service_name() {
     // still pass on a span widened leftwards to the keyword, because the
     // widened run is longer and `contains` matches any prefix of it.
     assert!(
-        inline.contains("cluster.ridl:46:9"),
+        inline.contains("cluster.ridl:48:9"),
         "the span starts at the dotted name, column 9 — not column 1, where \
          the `service` keyword is:\n{inline}"
     );

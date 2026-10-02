@@ -130,10 +130,10 @@ Create `veh/common/types.ridl`:
 package veh.common
 
 /// Road speed of the vehicle.
-type Speed : km/h [0.0..250.0 step 0.5]
+type Speed: km/h [0.0..250.0 step 0.5]
 ```
 
-That is a complete package. `type Speed : km/h [0.0..250.0 step 0.5]` declares a
+That is a complete package. `type Speed: km/h [0.0..250.0 step 0.5]` declares a
 named scalar with a physical unit (UCUM `km/h`), a closed range, and a
 quantization step.
 
@@ -143,14 +143,12 @@ Create `veh/cluster/cluster.ridl`:
 
 ```ridl
 package veh.cluster
-
 import veh.common.Speed
 
 /// Vehicle speed reporting interface.
 interface VehicleSpeed {
-
   /// Current vehicle speed, published every 10 ms.
-  signal currentSpeed : Speed @10ms
+  signal currentSpeed: Speed @10ms
 }
 ```
 
@@ -161,7 +159,7 @@ Line by line:
   are single-type and qualified; there are no wildcards and no relative
   imports.
 - `interface VehicleSpeed` — the contract boundary.
-- `signal currentSpeed : Speed @10ms` — a continuously published value, whose
+- `signal currentSpeed: Speed @10ms` — a continuously published value, whose
   contract requires the provider to publish it every 10 ms.
 
 ## Checking it
@@ -181,10 +179,10 @@ Swap the bounds in `types.ridl` to `[250.0..0.0 step 0.5]` and run it again:
 
 ```text
 error[TYPL-104]: range minimum 250 is greater than maximum 0
-  ┌─ ./veh/common/types.ridl:4:19
+  ┌─ ./veh/common/types.ridl:4:18
   │
-4 │ type Speed : km/h [250.0..0.0 step 0.5]
-  │                   ^^^^^^^^^^^^^^^^^^^^^
+4 │ type Speed: km/h [250.0..0.0 step 0.5]
+  │                  ^^^^^^^^^^^^^^^^^^^^^
 ```
 
 Most diagnostics carry a stable code. `TYPL-` codes come from the vocabulary
@@ -201,8 +199,8 @@ typl has five primitives: `boolean`, `integer`, `float`, `string`, `bytes`.
 
 **In an interaction, a primitive is never written directly.** A signal payload,
 an event payload, a command or query parameter, and a `fixed` value must each
-name a type. Writing `fixed doorCount : integer [1..8]` is a `FORM-102` error;
-declare `type DoorCount : integer [1..8]` and use the name. This is the single
+name a type. Writing `fixed doorCount: integer [1..8]` is a `FORM-102` error;
+declare `type DoorCount: integer [1..8]` and use the name. This is the single
 rule that most often surprises newcomers, and it is what gives every value on
 the boundary a domain meaning rather than a width.
 
@@ -220,24 +218,32 @@ Add a second file, `veh/common/scalars.ridl`:
 package veh.common
 
 // physical unit types — UCUM units
-type Temperature : Cel   [-40.0..125.0 step 0.1]
-type FuelLevel   : %     [0.0..100.0 step 0.1]
-type Voltage     : V     [0.0..48.0 step 0.1]
-type Ratio       : %     [0.0..100.0 step 0.1]
+type Temperature: Cel [-40.0..125.0 step 0.1]
+
+type FuelLevel: % [0.0..100.0 step 0.1]
+
+type Voltage: V [0.0..48.0 step 0.1]
+
+type Ratio: % [0.0..100.0 step 0.1]
 
 // constrained integer types
-type Counter   : integer [0..65535]
-type DoorIndex : integer [0..7]
-type DoorCount : integer [1..8]
-type Severity  : integer [0..5]
+type Counter: integer [0..65535]
+
+type DoorIndex: integer [0..7]
+
+type DoorCount: integer [1..8]
+
+type Severity: integer [0..5]
 
 // a named boolean, so it can be used on a boundary
-type Enabled : boolean
+type Enabled: boolean
 
 // string types — bounds are recommended everywhere and required on a boundary
-type ModelCode : string [3..6 match MODEL_PATTERN] = "ABC"
-type Notes     : string [1..256] = "-"
-type Vin       : string [17 match VIN_PATTERN] = "1HGCM82633A004352"
+type ModelCode: string [3..6 match MODEL_PATTERN] = "ABC"
+
+type Notes: string [1..256] = "-"
+
+type Vin: string [17 match VIN_PATTERN] = "1HGCM82633A004352"
 ```
 
 Two details in that listing:
@@ -274,19 +280,22 @@ patterns, init values, and contract expressions:
 ```ridl
 package veh.common
 
-const MAX_SPEED      : Speed   = 250.0
-const SPEED_LIMIT_EU : Speed   = 130.0
-const MAX_GEAR       : integer = 6
+const MAX_SPEED: Speed = 250.0
+
+const SPEED_LIMIT_EU: Speed = 130.0
+
+const MAX_GEAR: integer = 6
 
 // regex constants
 const MODEL_PATTERN = /^[A-Z][A-Z0-9]{2,5}$/
-const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
+
+const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/
 
 // reuse in a range bound
-type EngineSpeed : km/h [0.0..MAX_SPEED step 0.5]
+type EngineSpeed: km/h [0.0..MAX_SPEED step 0.5]
 
 struct GearState {
-  gear : integer [0..MAX_GEAR]
+  gear: integer [0..MAX_GEAR]
 }
 ```
 
@@ -312,7 +321,6 @@ demands on a binding (see the note above — no binding exists yet):
 
 ```ridl
 package veh.cluster
-
 import veh.common.Speed
 import veh.common.Temperature
 import veh.common.FuelLevel
@@ -320,18 +328,17 @@ import veh.common.SPEED_LIMIT_EU
 
 /// The three timing forms a signal accepts.
 interface Sampling {
-
   /// Strict periodic — published every 10 ms whether or not it changed.
-  signal currentSpeed : Speed @10ms
+  signal currentSpeed: Speed @10ms
 
   /// Change-driven — not faster than 20 ms, refreshed at least every 100 ms.
-  signal engineTemp : Temperature @[20ms..100ms]
+  signal engineTemp: Temperature @[20ms..100ms]
 
   /// Staleness bound only — refreshed at least every 5 s.
-  signal fuelLevel : FuelLevel @[..5s]
+  signal fuelLevel: FuelLevel @[..5s]
 
   /// An init value override, written as a bare `= value` before the timing.
-  signal targetSpeed : Speed = SPEED_LIMIT_EU @[20ms..500ms]
+  signal targetSpeed: Speed = SPEED_LIMIT_EU @[20ms..500ms]
 }
 ```
 
@@ -351,23 +358,21 @@ error, because an isochronous rate is meaningless for occurrences:
 
 ```ridl
 package veh.cluster
-
 import veh.common.DoorIndex
 
 struct DoorPayload {
-  sensorId : DoorIndex
-  isOpen   : boolean
+  sensorId: DoorIndex
+  isOpen: boolean
 }
 
 interface DoorEvents {
-
   /// Raised on every door state change; a binding must treat it as stale
   /// 500 ms after it was raised.
-  event doorOpened : DoorPayload @[50ms..500ms]
+  event doorOpened: DoorPayload @[50ms..500ms]
 
   /// A binding must throttle to one occurrence per 100 ms, and must discard
   /// one that reaches a consumer more than 2 s after it was raised.
-  event speedLimitExceeded : DoorPayload @[100ms..2000ms]
+  event speedLimitExceeded: DoorPayload @[100ms..2000ms]
 }
 ```
 
@@ -393,14 +398,19 @@ An `enum` is an integer-backed set of discrete values, for choosing one:
 package veh.common
 
 enum GearPosition {
-  PARK    = 0
+  PARK = 0
   REVERSE = 1
   NEUTRAL = 2
-  DRIVE   = 3
-  LOW     = 4
+  DRIVE = 3
+  LOW = 4
 }
 
-enum DriveMode { NORMAL = 0, ECO = 1, SPORT = 2, OFF_ROAD = 3 }
+enum DriveMode {
+  NORMAL = 0
+  ECO = 1
+  SPORT = 2
+  OFF_ROAD = 3
+}
 ```
 
 Newline and comma are interchangeable separators everywhere, so both layouts
@@ -412,9 +422,9 @@ An `enumset` is a named bitfield, for several flags at once:
 package veh.common
 
 enumset AccessFlags {
-  DOOR_UNLOCKED = 0    // bit 0
-  BOOT_UNLOCKED = 1    // bit 1
-  WINDOW_OPEN   = 2    // bit 2
+  DOOR_UNLOCKED = 0 // bit 0
+  BOOT_UNLOCKED = 1 // bit 1
+  WINDOW_OPEN = 2 // bit 2
 }
 ```
 
@@ -425,13 +435,13 @@ the `enumset` from it:
 package veh.common
 
 enum Warning {
-  LOW_FUEL     = 0
+  LOW_FUEL = 0
   CHECK_ENGINE = 1
-  DOOR_OPEN    = 2
-  SEATBELT     = 3
+  DOOR_OPEN = 2
+  SEATBELT = 3
 }
 
-enumset WarningFlags : Warning
+enumset WarningFlags: Warning
 ```
 
 Both names are then usable on a boundary — the enum where one value is meant,
@@ -439,13 +449,12 @@ the enumset where several are:
 
 ```ridl
 package veh.cluster
-
 import veh.common.Warning
 import veh.common.WarningFlags
 
 interface Warnings {
   command clearWarning(flag: Warning) @[..50ms]
-  signal  activeWarnings : WarningFlags @[50ms..1s]
+  signal activeWarnings: WarningFlags @[50ms..1s]
 }
 ```
 
@@ -456,19 +465,18 @@ immutable for the lifetime of the running software instance:
 
 ```ridl
 package veh.cluster
-
 import veh.common.DoorCount
 import veh.common.Enabled
 import veh.common.Vin
 
 interface VehicleIdentityBasics {
-  fixed vin             : Vin
-  fixed softwareVersion : Version
-  fixed marketRegion    : Label
-  fixed ecuSerial       : Uuid
-  fixed capabilities    : [Label; 0..32]
-  fixed doorCount       : DoorCount
-  fixed hasCruise       : Enabled
+  fixed vin: Vin
+  fixed softwareVersion: Version
+  fixed marketRegion: Label
+  fixed ecuSerial: Uuid
+  fixed capabilities: [Label; 0..32]
+  fixed doorCount: DoorCount
+  fixed hasCruise: Enabled
 }
 ```
 
@@ -476,8 +484,8 @@ Declaring a value `fixed` is a promise that it never changes while the software
 runs, which is what makes it safe for a consumer to cache unconditionally — a
 promise to a future binding, like the rest of the delivery semantics. What the
 compiler enforces today is the shape: a `fixed` takes no timing annotation and
-no contract block, and both are `RIDL-106` errors. Note `hasCruise : Enabled`
-rather than `hasCruise : boolean`: a boundary value names a type.
+no contract block, and both are `RIDL-106` errors. Note `hasCruise: Enabled`
+rather than `hasCruise: boolean`: a boundary value names a type.
 
 ## Commands and queries
 
@@ -490,7 +498,6 @@ A **query** is request/response. The reply is mandatory, and a query returning
 
 ```ridl
 package veh.cluster
-
 import veh.common.Speed
 import veh.common.GearPosition
 
@@ -531,10 +538,10 @@ warns the same way; a missing `min` draws nothing.
 package veh.common
 
 struct CruiseControlState {
-  enabled     : boolean
-  targetSpeed : Speed
-  mode        : DriveMode
-  override    : Speed?     // optional — absent when no override is active
+  enabled: boolean
+  targetSpeed: Speed
+  mode: DriveMode
+  override: Speed? // optional — absent when no override is active
 }
 ```
 
@@ -549,9 +556,9 @@ append-only: add new fields at the end, and retire a removed field with a
 package veh.common
 
 struct DriverProfile {
-  name  : Name
-  reserved legacyChecksum      // was ordinal 2 — retired, never reused
-  speed : Speed
+  name: Name
+  reserved legacyChecksum // was ordinal 2 — retired, never reused
+  speed: Speed
 }
 ```
 
@@ -570,22 +577,21 @@ package veh.common
 /// Failure vocabulary — the `error` modifier marks a shape as a failure shape.
 error enum CalError {
   SENSOR_UNAVAILABLE = 0
-  VEHICLE_MOVING     = 1
-  OUT_OF_RANGE       = 2
+  VEHICLE_MOVING = 1
+  OUT_OF_RANGE = 2
 }
 
 struct CalReport {
-  offset : float [-1.0..1.0 step 0.001]
+  offset: float [-1.0..1.0 step 0.001]
 }
 
 struct Axle {
-  index : integer [0..3]
+  index: integer [0..3]
 }
 ```
 
 ```ridl
 package veh.cluster
-
 import veh.common.CalError
 import veh.common.CalReport
 import veh.common.Axle
@@ -622,14 +628,14 @@ Collections are finite and always explicitly bounded:
 package veh.common
 
 struct FaultCode {
-  dtc : integer [0..65535]
+  dtc: integer [0..65535]
 }
 
 struct DiagReport {
-  faults   : [FaultCode; 0..32]       // bounded array — at most 32 faults
-  sensors  : [Label : Speed; 1..8]    // bounded map — 1 to 8 entries
-  readings : [Speed; 8]               // fixed array — exactly 8
-  rawFrame : bytes [64]               // fixed 64-byte buffer
+  faults: [FaultCode; 0..32] // bounded array — at most 32 faults
+  sensors: [Label: Speed; 1..8] // bounded map — 1 to 8 entries
+  readings: [Speed; 8] // fixed array — exactly 8
+  rawFrame: bytes [64] // fixed 64-byte buffer
 }
 ```
 
@@ -641,12 +647,21 @@ backpressure are transport concerns.
 ```ridl,allow=TYPL-115
 package veh.common
 
-type LogLine : string [1..1024] = "-"
-type FwBlock : bytes  [1..65536]
+type LogLine: string [1..1024] = "-"
 
-struct SensorSample { value : Speed }
-struct ProcessedSample { value : Speed }
-struct DiagFilter { severity : Severity }
+type FwBlock: bytes [1..65536]
+
+struct SensorSample {
+  value: Speed
+}
+
+struct ProcessedSample {
+  value: Speed
+}
+
+struct DiagFilter {
+  severity: Severity
+}
 ```
 
 `FwBlock` draws a `TYPL-115` note: `bytes` with a minimum length above zero has
@@ -657,7 +672,6 @@ carries `allow=TYPL-115` to say so.
 
 ```ridl
 package veh.cluster
-
 import veh.common.LogLine
 import veh.common.FwBlock
 import veh.common.DiagFilter
@@ -666,10 +680,10 @@ import veh.common.SensorSample
 import veh.common.ProcessedSample
 
 interface Transfer {
-  query   streamFaults(filter: DiagFilter): <FaultCode> @[..1s]      // provider produces
-  query   streamLogs(): <LogLine> @[..1s]                             // text stream
-  command uploadFirmware(data: <FwBlock>) @[..1s]                     // consumer produces
-  query   pipe(samples: <SensorSample>): <ProcessedSample> @[..1s]    // bidirectional
+  query streamFaults(filter: DiagFilter): <FaultCode> @[..1s] // provider produces
+  query streamLogs(): <LogLine> @[..1s] // text stream
+  command uploadFirmware(data: <FwBlock>) @[..1s] // consumer produces
+  query pipe(samples: <SensorSample>): <ProcessedSample> @[..1s] // bidirectional
 }
 ```
 
@@ -689,23 +703,22 @@ only.
 
 ```ridl
 package veh.cluster
-
 import veh.common.Speed
 import veh.common.SPEED_LIMIT_EU
 
 interface Cruise {
-  signal currentSpeed : Speed @10ms
+  signal currentSpeed: Speed @10ms
 
-  command setTargetSpeed(speed: Speed) [
+  command setTargetSpeed(speed: Speed) @[..50ms] [
     require speed > 0.0
     require speed <= SPEED_LIMIT_EU
-  ] @[..50ms]
+  ]
 
-  query getSpeedHistory(window: Duration): (min: Speed, max: Speed, avg: Speed) [
+  query getSpeedHistory(window: Duration): (min: Speed, max: Speed, avg: Speed) @[..100ms] [
     require window > 0ms
-    ensure  result.min <= result.avg
-    ensure  result.avg <= result.max
-  ] @[..100ms]
+    ensure result.min <= result.avg
+    ensure result.avg <= result.max
+  ]
 }
 ```
 
@@ -733,7 +746,6 @@ defines no vocabulary:
 
 ```ridl
 package veh.cluster
-
 import veh.common.Speed
 
 /**
@@ -741,7 +753,7 @@ import veh.common.Speed
  * @labels SIL_2, SEC_2, PRIVATE
  */
 interface CruiseControl {
-  signal engagedSpeed : Speed @[50ms..500ms]
+  signal engagedSpeed: Speed @[50ms..500ms]
 }
 
 /**
@@ -749,7 +761,7 @@ interface CruiseControl {
  * @labels SIL_QM, SEC_NA, PUBLIC
  */
 interface LogService {
-  signal lastSpeed : Speed @[1s..10s]
+  signal lastSpeed: Speed @[1s..10s]
 }
 ```
 
@@ -815,9 +827,9 @@ unless you are scripting the compiler directly.
 
 Two of those deserve a note.
 
-**`ridl fmt` has its own canonical layout.** The listings in this chapter use
-the aligned layout the language references use, which is not what the formatter
-writes. Expect your files to change the first time you run it.
+**`ridl fmt` applies the canonical layout used by this chapter's verified
+listings.** It tightens colons and spacing and places one member per line in
+brace bodies.
 The [CLI reference](cli-reference.md#ridl-fmt) describes the two-space
 indentation and the configurable width for tuple line breaking, which defaults
 to 100 characters.
@@ -830,16 +842,15 @@ interaction with a `reserved` tombstone rather than deleting it:
 
 ```ridl
 package veh.cluster
-
 import veh.common.Speed
 
 // `DoorPayload` is declared earlier in this same package (`veh.cluster`), so
 // it needs no import — everything in a package is visible to the rest of it.
 
 interface VehicleStatus {
-  signal currentSpeed : Speed @10ms
-  reserved legacyTemp             // was ordinal 2 — retired
-  event doorOpened : DoorPayload @[50ms..500ms]
+  signal currentSpeed: Speed @10ms
+  reserved legacyTemp // was ordinal 2 — retired
+  event doorOpened: DoorPayload @[50ms..500ms]
 }
 ```
 
@@ -861,15 +872,14 @@ that uniqueness the compiler does enforce (`RIDL-140`).
 
 ```ridl
 package veh.cluster
-
 import veh.common.Temperature
 
-service veh.cluster.status : VehicleStatus
+service veh.cluster.status: VehicleStatus
 
-service veh.cluster.dash : VehicleStatus, Warnings
+service veh.cluster.dash: VehicleStatus, Warnings
 
 service veh.cluster.hvac {
-  signal  temperature : Temperature @[1s..10s]
+  signal temperature: Temperature @[1s..10s]
   command setTarget(temp: Temperature) @[..50ms]
 }
 ```
@@ -942,15 +952,27 @@ ranges.
 
 ```ridl
 package veh.identity
-
 import veh.common.Speed
 import veh.common.Vin
 
-type ModelYear  : integer [2000..2100]
-type Capability : boolean
+type ModelYear: integer [2000..2100]
 
-enum FuelType    { PETROL = 0, DIESEL = 1, HYBRID = 2, ELECTRIC = 3, HYDROGEN = 4 }
-enum DriveLayout { FWD = 0, RWD = 1, AWD = 2, FOUR_WD = 3 }
+type Capability: boolean
+
+enum FuelType {
+  PETROL = 0
+  DIESEL = 1
+  HYBRID = 2
+  ELECTRIC = 3
+  HYDROGEN = 4
+}
+
+enum DriveLayout {
+  FWD = 0
+  RWD = 1
+  AWD = 2
+  FOUR_WD = 3
+}
 
 /**
  * Vehicle identity and hardware capability manifest.
@@ -959,26 +981,25 @@ enum DriveLayout { FWD = 0, RWD = 1, AWD = 2, FOUR_WD = 3 }
  * @labels SIL_QM, SEC_2, CONFIDENTIAL
  */
 interface VehicleIdentity {
-
   // vehicle identity — factory provisioned
-  fixed vin          : Vin
-  fixed modelYear    : ModelYear
-  fixed marketRegion : Label
-  fixed fuelType     : FuelType
-  fixed driveLayout  : DriveLayout
+  fixed vin: Vin
+  fixed modelYear: ModelYear
+  fixed marketRegion: Label
+  fixed fuelType: FuelType
+  fixed driveLayout: DriveLayout
 
   // software identity — updated over the air
-  fixed softwareVersion   : Version
-  fixed bootloaderVersion : Version
-  fixed hardwareVersion   : Version
+  fixed softwareVersion: Version
+  fixed bootloaderVersion: Version
+  fixed hardwareVersion: Version
 
   // capability flags — build time
-  fixed hasAdaptiveCruise   : Capability
-  fixed hasEmergencyBraking : Capability
-  fixed hasLaneKeepAssist   : Capability
-  fixed hasParkingAssist    : Capability
-  fixed hasDriverMonitoring : Capability
-  fixed maxSupportedSpeed   : Speed
+  fixed hasAdaptiveCruise: Capability
+  fixed hasEmergencyBraking: Capability
+  fixed hasLaneKeepAssist: Capability
+  fixed hasParkingAssist: Capability
+  fixed hasDriverMonitoring: Capability
+  fixed maxSupportedSpeed: Speed
 }
 ```
 
@@ -993,43 +1014,50 @@ identifier.
 ```ridl,allow=RIDL-406
 package veh.powertrain
 
-type RPM         : /min  [0.0..8000.0 step 10.0]
-type Torque      : N.m   [0.0..500.0 step 0.1]
-type Temperature : Cel   [-40.0..150.0 step 0.1]
-type FuelLevel   : %     [0.0..100.0 step 0.1]
-type Voltage     : V     [0.0..48.0 step 0.1]
-type Dtc         : integer [0..65535]
-type FaultCount  : integer [0..65535]
-type Severity    : integer [0..5]
+type RPM: /min [0.0..8000.0 step 10.0]
+
+type Torque: N.m [0.0..500.0 step 0.1]
+
+type Temperature: Cel [-40.0..150.0 step 0.1]
+
+type FuelLevel: % [0.0..100.0 step 0.1]
+
+type Voltage: V [0.0..48.0 step 0.1]
+
+type Dtc: integer [0..65535]
+
+type FaultCount: integer [0..65535]
+
+type Severity: integer [0..5]
 
 enum EngineState {
-  OFF      = 0
+  OFF = 0
   CRANKING = 1
-  RUNNING  = 2
-  FAULT    = 3
+  RUNNING = 2
+  FAULT = 3
 }
 
 enum GearPosition {
-  PARK    = 0
+  PARK = 0
   REVERSE = 1
   NEUTRAL = 2
-  DRIVE   = 3
-  LOW     = 4
+  DRIVE = 3
+  LOW = 4
 }
 
 struct EngineMetrics {
-  rpm         : RPM
-  torque      : Torque
-  oilTemp     : Temperature
-  coolantTemp : Temperature
-  engineState : EngineState
+  rpm: RPM
+  torque: Torque
+  oilTemp: Temperature
+  coolantTemp: Temperature
+  engineState: EngineState
 }
 
 struct TransmissionState {
-  gear      : GearPosition
-  inputRPM  : RPM
-  outputRPM : RPM
-  oilTemp   : Temperature
+  gear: GearPosition
+  inputRPM: RPM
+  outputRPM: RPM
+  oilTemp: Temperature
 }
 
 /// The `timestamp` field records when the fault occurred, which is domain
@@ -1037,9 +1065,9 @@ struct TransmissionState {
 /// notes the overlap (RIDL-406); the note is informational and the field is
 /// the legitimate exception the rule names.
 struct FaultPayload {
-  dtc       : Dtc
-  message   : Message
-  timestamp : Timestamp
+  dtc: Dtc
+  message: Message
+  timestamp: Timestamp
 }
 
 /**
@@ -1048,37 +1076,36 @@ struct FaultPayload {
  * @labels SIL_3, SEC_2, PUBLIC
  */
 interface PowertrainManager {
+  signal engineMetrics: EngineMetrics @20ms
+  signal engineRpm: RPM @20ms
+  signal transmissionState: TransmissionState @[50ms..500ms]
+  signal fuelLevel: FuelLevel @[..5s]
+  signal batteryVoltage: Voltage @[100ms..1s]
 
-  signal engineMetrics     : EngineMetrics @20ms
-  signal engineRpm         : RPM @20ms
-  signal transmissionState : TransmissionState @[50ms..500ms]
-  signal fuelLevel         : FuelLevel @[..5s]
-  signal batteryVoltage    : Voltage @[100ms..1s]
+  event engineFault: FaultPayload @[100ms..30s]
+  event transmissionFault: FaultPayload @[100ms..30s]
 
-  event engineFault       : FaultPayload @[100ms..30s]
-  event transmissionFault : FaultPayload @[100ms..30s]
-
-  command requestStart(mode: EngineState) [
+  command requestStart(mode: EngineState) @[..200ms] [
     require mode == EngineState.CRANKING
-  ] @[..200ms]
+  ]
   command requestStop() @[..200ms]
-  command setGear(gear: GearPosition) [
+  command setGear(gear: GearPosition) @[20ms..100ms] [
     require gear != GearPosition.PARK || engineRpm == 0.0
-  ] @[20ms..100ms]
+  ]
 
   query getDiagnostics(): (
-    engineState   : EngineState
-    activeGear    : GearPosition
-    faultCount    : FaultCount
-    lastFaultTime : Timestamp
+    engineState: EngineState,
+    activeGear: GearPosition,
+    faultCount: FaultCount,
+    lastFaultTime: Timestamp
   ) @[..100ms]
 
   query streamFaults(severity: Severity): <FaultPayload> @[..1s]
 
-  fixed softwareVersion    : Version
-  fixed calibrationVersion : Version
-  fixed ecuSerial          : Uuid
-  fixed supportedGears     : [GearPosition; 1..8]
+  fixed softwareVersion: Version
+  fixed calibrationVersion: Version
+  fixed ecuSerial: Uuid
+  fixed supportedGears: [GearPosition; 1..8]
 }
 ```
 
@@ -1091,56 +1118,76 @@ lock parameter is named `lock`, because `state` is reserved.
 
 ```ridl,allow=RIDL-406
 package veh.body
-
 import veh.common.Temperature
 
-type Ratio      : %       [0.0..100.0 step 1.0]
-type DoorIndex  : integer [0..7]
-type DoorCount  : integer [1..8]
-type WindowCount: integer [0..8]
-type UnlockCount: integer [0..8]
-type Zone       : integer [0..7]
-type HasWindows : boolean
-type AllLocked  : boolean
-type Granted    : boolean
+type Ratio: % [0.0..100.0 step 1.0]
 
-enum DoorPosition { CLOSED = 0, OPEN = 1, AJAR = 2 }
-enum LockState    { LOCKED = 0, UNLOCKED = 1 }
-enum LightState   { OFF = 0, ON = 1, FLASH = 2 }
+type DoorIndex: integer [0..7]
+
+type DoorCount: integer [1..8]
+
+type WindowCount: integer [0..8]
+
+type UnlockCount: integer [0..8]
+
+type Zone: integer [0..7]
+
+type HasWindows: boolean
+
+type AllLocked: boolean
+
+type Granted: boolean
+
+enum DoorPosition {
+  CLOSED = 0
+  OPEN = 1
+  AJAR = 2
+}
+
+enum LockState {
+  LOCKED = 0
+  UNLOCKED = 1
+}
+
+enum LightState {
+  OFF = 0
+  ON = 1
+  FLASH = 2
+}
 
 struct DoorState {
-  position : DoorPosition
-  locked   : LockState
-  sensorId : DoorIndex
+  position: DoorPosition
+  locked: LockState
+  sensorId: DoorIndex
 }
 
 struct WindowState {
-  position : Ratio
-  sensorId : DoorIndex
+  position: Ratio
+  sensorId: DoorIndex
 }
 
 struct DoorSet {
-  doors : [DoorState; 1..8]
+  doors: [DoorState; 1..8]
 }
 
 struct WindowSet {
-  windows : [WindowState; 1..8]
+  windows: [WindowState; 1..8]
 }
 
 struct ClimateState {
-  interiorTemp : Temperature
-  targetTemp   : Temperature
-  fanSpeed     : Ratio
-  acActive     : boolean
+  interiorTemp: Temperature
+  targetTemp: Temperature
+  fanSpeed: Ratio
+  acActive: boolean
 }
 
 /// `timestamp` records when access was attempted — domain time, not the
 /// envelope's publication time (RIDL-406 note).
 struct AccessEvent {
-  zone      : Zone
-  granted   : Granted
-  method    : Label
-  timestamp : Timestamp
+  zone: Zone
+  granted: Granted
+  method: Label
+  timestamp: Timestamp
 }
 
 /**
@@ -1150,33 +1197,32 @@ struct AccessEvent {
  * @labels SIL_1, SEC_3, PRIVATE
  */
 interface BodyControl {
+  signal doorStates: DoorSet @[50ms..2s]
+  signal windowStates: WindowSet @[100ms..5s]
+  signal climateState: ClimateState @[500ms..10s]
 
-  signal doorStates   : DoorSet @[50ms..2s]
-  signal windowStates : WindowSet @[100ms..5s]
-  signal climateState : ClimateState @[500ms..10s]
-
-  event doorStateChanged : DoorState @[50ms..10s]
+  event doorStateChanged: DoorState @[50ms..10s]
 
   /**
    * Vehicle access attempt — elevated privacy.
    * @labels SIL_1, SEC_4, CONFIDENTIAL
    */
-  event accessAttempt : AccessEvent @[100ms..30s]
+  event accessAttempt: AccessEvent @[100ms..30s]
 
   command setAllLocks(lock: LockState) @[..100ms]
   command setDoorLock(sensorId: DoorIndex, lock: LockState) @[..100ms]
   command setWindowPosition(sensorId: DoorIndex, position: Ratio) @[..100ms]
-  command setClimateTarget(temp: Temperature) [
+  command setClimateTarget(temp: Temperature) @[..100ms] [
     require temp >= 16.0
     require temp <= 30.0
-  ] @[..100ms]
+  ]
 
   query getLockStatus(): (allLocked: AllLocked, unlockedCount: UnlockCount) @[..50ms]
   query getBodyStatus(): (doors: DoorSet, windows: WindowSet) @[..50ms]
 
-  fixed doorCount          : DoorCount
-  fixed windowCount        : WindowCount
-  fixed hasElectricWindows : HasWindows
+  fixed doorCount: DoorCount
+  fixed windowCount: WindowCount
+  fixed hasElectricWindows: HasWindows
 }
 ```
 
@@ -1185,61 +1231,66 @@ interface BodyControl {
 ```ridl,allow=RIDL-406
 package veh.dms
 
-type Ratio          : %       [0.0..100.0 step 0.1]
-type SampleInterval : integer [50..1000]
-type ZoneCount      : integer [1..16]
-type Distracted     : boolean
-type Fatigued       : boolean
-type Monitoring     : boolean
+type Ratio: % [0.0..100.0 step 0.1]
+
+type SampleInterval: integer [50..1000]
+
+type ZoneCount: integer [1..16]
+
+type Distracted: boolean
+
+type Fatigued: boolean
+
+type Monitoring: boolean
 
 enum AlertLevel {
-  NONE     = 0
-  LOW      = 1
-  MEDIUM   = 2
-  HIGH     = 3
+  NONE = 0
+  LOW = 1
+  MEDIUM = 2
+  HIGH = 3
   CRITICAL = 4
 }
 
 enum GazeZone {
-  FORWARD      = 0
-  MIRROR_LEFT  = 1
+  FORWARD = 0
+  MIRROR_LEFT = 1
   MIRROR_RIGHT = 2
-  MIRROR_REAR  = 3
-  INSTRUMENT   = 4
+  MIRROR_REAR = 3
+  INSTRUMENT = 4
   INFOTAINMENT = 5
-  OFFROAD      = 6
-  UNKNOWN      = 7
+  OFFROAD = 6
+  UNKNOWN = 7
 }
 
 struct AttentionMetrics {
-  gazeZone       : GazeZone
-  eyeOpenness    : Ratio
-  headPitch      : float [-30.0..30.0 step 0.1]
-  headYaw        : float [-90.0..90.0 step 0.1]
-  attentionScore : Ratio
+  gazeZone: GazeZone
+  eyeOpenness: Ratio
+  headPitch: float [-30.0..30.0 step 0.1]
+  headYaw: float [-90.0..90.0 step 0.1]
+  attentionScore: Ratio
 }
 
 struct DrowsinessState {
-  level         : AlertLevel
-  score         : Ratio
-  eyeClosurePct : Ratio
+  level: AlertLevel
+  score: Ratio
+  eyeClosurePct: Ratio
 }
 
 /// `timestamp` records when the distraction occurred — domain time
 /// (RIDL-406 note).
 struct DistractionEvent {
-  level     : AlertLevel
-  gazeZone  : GazeZone
-  duration  : Duration
-  timestamp : Timestamp
+  level: AlertLevel
+  gazeZone: GazeZone
+  duration: Duration
+  timestamp: Timestamp
 }
 
 /// `timestamp` records when the fatigue was detected — domain time
 /// (RIDL-406 note).
 struct FatigueEvent {
-  level     : AlertLevel
-  score     : Ratio
-  timestamp : Timestamp
+  level: AlertLevel
+  score: Ratio
+  timestamp: Timestamp
 }
 
 /**
@@ -1249,30 +1300,29 @@ struct FatigueEvent {
  * @labels SIL_2, SEC_3, CONFIDENTIAL
  */
 interface DriverMonitoring {
+  signal attentionMetrics: AttentionMetrics @[100ms..500ms]
+  signal drowsinessState: DrowsinessState @[500ms..5s]
 
-  signal attentionMetrics : AttentionMetrics @[100ms..500ms]
-  signal drowsinessState  : DrowsinessState @[500ms..5s]
-
-  event distractionDetected : DistractionEvent @[200ms..10s]
-  event fatigueDetected     : FatigueEvent @[500ms..30s]
+  event distractionDetected: DistractionEvent @[200ms..10s]
+  event fatigueDetected: FatigueEvent @[500ms..30s]
 
   command acknowledgeAlert(level: AlertLevel) @[..50ms]
   command setMonitoringEnabled(enabled: Monitoring) @[..50ms]
 
   query getDriverState(): (
-    attentionScore  : Ratio
-    drowsinessLevel : AlertLevel
-    isDistracted    : Distracted
-    isFatigued      : Fatigued
-  ) [
+    attentionScore: Ratio,
+    drowsinessLevel: AlertLevel,
+    isDistracted: Distracted,
+    isFatigued: Fatigued
+  ) @[..100ms] [
     ensure result.attentionScore >= 0.0
     ensure result.attentionScore <= 100.0
-  ] @[..100ms]
+  ]
 
   query streamAttention(interval: SampleInterval): <AttentionMetrics> @[..1s]
 
-  fixed modelVersion  : Version
-  fixed sensorType    : Label
-  fixed gazeZoneCount : ZoneCount
+  fixed modelVersion: Version
+  fixed sensorType: Label
+  fixed gazeZoneCount: ZoneCount
 }
 ```

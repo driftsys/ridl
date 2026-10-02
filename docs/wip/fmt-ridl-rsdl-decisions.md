@@ -904,3 +904,32 @@ append-only. Implementation status and verification are in
 - Commit and PR: final PR pending; target main, with `Part of #387` and the
   final issue reference only when all implementation done criteria hold.
 - Maintainer action: review and merge the final PR.
+
+## D-H34 — Task 12 parser-selected sweep and fixed-point checks
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under D-10 (b).
+- Question or observed case: the verified book listings, cabin source and
+  baseline corpus use noncanonical spacing.
+- Chosen action: reuse `classify` and its existing `fenced_blocks` parser and
+  unchanged `MDBOOK_OPTIONS` in the fixed-point test. Reuse the test-only
+  formatter invariant streams for structure/content and second-pass checks at
+  widths 100, 60 and 40. The canonical-source comparison uses width 100.
+- Reason and alternatives considered: the compiler harness and formatter gate
+  must select the same fences, including allowed diagnostics and nested Markdown
+  containers. A regular-expression extractor would create another selection
+  rule. An external temporary exporter uses the same existing parser to stage
+  the 32 selected bodies with matching extensions for the CLI formatter.
+- Authority: Task 12, design sections 9 and 11, D-10 and repository book rules.
+- Affected files and behavior: two book chapters, cabin source, baseline source
+  and two baseline span assertions; parser corpus, references, general-form
+  document, ignored fences and baseline IR snapshot remain untouched. A complete
+  before/after parser inventory verifies identical fence markers and unchanged
+  ignored bodies. The tutorial diagnostic is regenerated from actual output.
+- Verification: three fixed-point tests fail with exit 101 before the sweep, on
+  valid inputs and the expected spacing differences. All 40 book tests and 49
+  baseline desk plus 10 gate tests pass after it. The service is at line 48,
+  column 9; the tutorial range diagnostic is at line 4, column 18.
+- Commit and PR: separate Task 12 commit follows Task 11 `8b135ba`; final PR
+  pending. Full workspace/demo and book/link acceptance are running.
+- Maintainer action: review the final PR; no rendering approval is needed.

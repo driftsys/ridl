@@ -18,4 +18,8 @@ an unchanged default width of 100. Acceptance commands are `just check` and
 Acceptance passed: `just check`, exit 0, and `cargo test --workspace --locked`,
 exit 0 (`task-11-workspace-test.log`). Existing formatter invariants and all
 workspace unit, integration and documentation tests remain green. This task adds
-no new executable behavior and requires no QUICK behavior review.
+no new executable behavior. The automatic commit trigger nevertheless required
+QUICK review: the fresh built-in bug seat used verified Terra/medium, and
+restricted docs used verified Terra/high. Both completed without findings on
+`8b135ba`, against its parent. No tests seat was needed for unchanged formatter
+behavior. Raw reports and metadata remain temporary.

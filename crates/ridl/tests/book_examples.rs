@@ -918,6 +918,102 @@ fn book_examples_compile() {
     }
 }
 
+#[path = "../../ridl-fmt/tests/support/invariants.rs"]
+mod formatter_invariants;
+
+/// Formats at each invariant width and returns the default-width result.
+fn formatter_round_trip(source: &str, profile: ridl_syntax::Profile, locator: &str) -> String {
+    let mut default_output = None;
+    for width in [100, 60, 40] {
+        let options = ridl_fmt::FormatOptions {
+            max_line_length: Some(width),
+        };
+        let ridl_fmt::FormatOutcome::Formatted(output) =
+            ridl_fmt::format(source, profile, &options)
+        else {
+            panic!("{locator}: formatter input must parse");
+        };
+        assert_eq!(
+            formatter_invariants::syntax_structure(source, profile),
+            formatter_invariants::syntax_structure(&output, profile),
+            "{locator}: structure at width {width}"
+        );
+        assert_eq!(
+            formatter_invariants::content_tokens(source, profile),
+            formatter_invariants::content_tokens(&output, profile),
+            "{locator}: content and comments at width {width}"
+        );
+        assert_eq!(
+            ridl_fmt::format(&output, profile, &options),
+            ridl_fmt::FormatOutcome::Formatted(output.clone()),
+            "{locator}: second formatting pass at width {width}"
+        );
+        if width == 100 {
+            default_output = Some(output);
+        }
+    }
+    default_output.expect("default width was checked")
+}
+
+#[test]
+fn verified_book_examples_are_formatter_fixed_points() {
+    let root = book_root();
+    let mut count = 0;
+    let mut noncanonical = Vec::new();
+    for path in markdown_files(&root) {
+        let origin = path.strip_prefix(&root).unwrap().to_str().unwrap();
+        let markdown = std::fs::read_to_string(&path).expect("read book chapter");
+        let (examples, problems) = classify(origin, &markdown);
+        assert!(problems.is_empty(), "{problems:?}");
+        for example in examples {
+            let profile = match example.language.as_str() {
+                "typl" => ridl_syntax::Profile::Typl,
+                "ridl" => ridl_syntax::Profile::Ridl,
+                "rsdl" => ridl_syntax::Profile::Rsdl,
+                _ => unreachable!("classify accepts only implemented profiles"),
+            };
+            let locator = example.locator();
+            let formatted = formatter_round_trip(&example.body, profile, &locator);
+            if formatted != example.body {
+                noncanonical.push(locator);
+            }
+            count += 1;
+        }
+    }
+    assert!(count > 0, "the book must carry verified examples");
+    assert!(
+        noncanonical.is_empty(),
+        "book examples require formatting: {noncanonical:?}"
+    );
+}
+
+#[test]
+fn cabin_example_is_a_formatter_fixed_point() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin/cabin.ridl");
+    let source = std::fs::read_to_string(path).expect("read cabin source");
+    assert_eq!(
+        formatter_round_trip(
+            &source,
+            ridl_syntax::Profile::Ridl,
+            "examples/cabin/cabin.ridl"
+        ),
+        source
+    );
+}
+
+#[test]
+fn baseline_corpus_is_a_formatter_fixed_point() {
+    let source = include_str!("baseline-corpus/cluster.ridl");
+    assert_eq!(
+        formatter_round_trip(
+            source,
+            ridl_syntax::Profile::Ridl,
+            "baseline-corpus/cluster.ridl"
+        ),
+        source
+    );
+}
+
 /// The harness can fail. A book whose example does not compile is rejected,
 /// and the report names the Markdown file and the line the fence sits on.
 ///
