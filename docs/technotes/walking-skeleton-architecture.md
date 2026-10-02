@@ -192,12 +192,17 @@ that.
   and rsdl profiles with tight `name: Type` colons, two-space indentation and
   canonical brace bodies. Parameter lists, tuples, attributes, nested value
   lists and named service shape lists break at a default code width of 100
-  Unicode scalar values. The pure formatter takes explicit options; the default
-  `editorconfig` feature supplies the separate path-based width reader. The CLI
-  formats `.typl`, `.ridl` and `.rsdl` files and resolves `max_line_length` per
-  file; the LSP resolves it from the document path and formats the buffer.
-  Indentation settings are ignored. The book, worked example and baseline corpus
-  have fixed-point tests using the compiler harness's mdBook parser.
+  Unicode scalar values. The layout renderer commits completed physical lines
+  and resumes from a saved continuation when a construct needs to break,
+  retaining the line prefix instead of rendering the whole declaration again.
+  Unit tests compare it against the original renderer and bound rendering work
+  for large nested tuples. The pure formatter takes explicit options; the
+  default `editorconfig` feature supplies the separate path-based width reader.
+  The CLI formats `.typl`, `.ridl` and `.rsdl` files and resolves
+  `max_line_length` per file; the LSP resolves it from the document path and
+  formats the buffer. Indentation settings are ignored. The book, worked example
+  and baseline corpus have fixed-point tests using the compiler harness's mdBook
+  parser.
 
 - **`crates/ridl-rt`** — the `no_std` runtime library (a `std` feature, off by
   default, adds `task::block_on`, `task::noop_waker` and `task::flag_waker` over

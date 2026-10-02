@@ -106,7 +106,10 @@ use ridl_syntax::{
     ast::{AstNode, SourceFile},
 };
 use rowan::NodeOrToken;
+#[cfg(test)]
 use std::collections::HashSet;
+
+mod rendering;
 
 #[cfg(feature = "editorconfig")]
 mod editorconfig;
@@ -1096,9 +1099,6 @@ struct AttributeLayout {
     trailing: Vec<String>,
 }
 
-#[cfg(not(test))]
-type CandidateIndex = Vec<Option<usize>>;
-
 /// Count collection accesses in tests, including a scan substituted for a lookup.
 #[cfg(test)]
 #[derive(Default)]
@@ -1151,6 +1151,7 @@ impl std::ops::IndexMut<usize> for CandidateIndex {
     }
 }
 
+#[cfg(test)]
 #[derive(Default)]
 struct Rendering {
     text: String,
@@ -1162,6 +1163,7 @@ struct Rendering {
     code_columns: std::collections::HashMap<usize, usize>,
 }
 
+#[cfg(test)]
 impl Rendering {
     fn record_candidate(&mut self, id: usize) {
         self.last_candidates.resize(self.line + 1, None);
@@ -1333,11 +1335,17 @@ impl Rendering {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static RENDER_WORK: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Start with the inline rendering. Break the last available construct on an
 /// overlong line, render again, and stop when no overlong line can break.
 /// Layout trailing comments are excluded by the recorded code-column count;
 /// container trailing comments are attached after rendering.
-fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
+#[cfg(test)]
+fn render_layout_reference(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
     let mut broken = HashSet::new();
     loop {
         let mut rendered = Rendering::default();
@@ -1353,6 +1361,17 @@ fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec
             None => return rendered.text.split('\n').map(str::to_string).collect(),
         }
     }
+}
+
+fn render_layout(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
+    let lines = rendering::render(layout, indent, options);
+    #[cfg(test)]
+    assert_eq!(
+        lines,
+        render_layout_reference(layout, indent, options),
+        "incremental rendering differs from the reference renderer"
+    );
+    lines
 }
 
 /// Renders a field, tuple-field, or collection-element type, recursing through
@@ -3464,6 +3483,134 @@ mod tests {
         assert_eq!(rendered.last_candidates[2], Some(31));
         assert_eq!(rendered.last_candidates[0], Some(17));
         assert_eq!(rendered.last_candidates[1], None);
+    }
+
+    #[test]
+    fn incremental_rendering_matches_reference_over_the_parser_corpus() {
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../ridl-syntax/test_data/parser/ok");
+        let mut profiles = [false; 3];
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            let (profile, index) = match path.extension().and_then(|extension| extension.to_str()) {
+                Some("typl") => (Profile::Typl, 0),
+                Some("ridl") => (Profile::Ridl, 1),
+                Some("rsdl") => (Profile::Rsdl, 2),
+                _ => continue,
+            };
+            profiles[index] = true;
+            let source = std::fs::read_to_string(&path).unwrap();
+            for width in [None, Some(1), Some(20), Some(40), Some(60), Some(100)] {
+                // render_layout compares every production rendering against the
+                // old renderer in unit tests, including this corpus traversal.
+                assert!(
+                    matches!(
+                        format(
+                            &source,
+                            profile,
+                            &FormatOptions {
+                                max_line_length: width
+                            }
+                        ),
+                        FormatOutcome::Formatted(_)
+                    ),
+                    "{}",
+                    path.display()
+                );
+            }
+        }
+        assert_eq!(profiles, [true; 3]);
+    }
+
+    #[test]
+    fn incremental_rewinds_keep_prefix_candidates_and_line_context() {
+        fn generated(seed: &mut u64, depth: usize) -> Layout {
+            *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let choice = (*seed >> 32) as usize;
+            if depth == 0 {
+                return Layout::Text(
+                    ["abc", "  é界", "long_identifier", "  ", "x\n   y", ""][choice % 6].into(),
+                );
+            }
+            match choice % 7 {
+                0 => Layout::Concat(vec![generated(seed, depth - 1), generated(seed, depth - 1)]),
+                1 => Layout::Tuple(vec![generated(seed, depth - 1), generated(seed, depth - 1)]),
+                2 => Layout::Shapes(vec!["LongShape".into(), "OtherShape".into()]),
+                3 => Layout::Concat(vec![
+                    generated(seed, depth - 1),
+                    Layout::LineBreak,
+                    generated(seed, depth - 1),
+                ]),
+                4 => Layout::TrailingComment(
+                    ["/* note */", "/* a\n b */", "// long comment"][choice % 3].into(),
+                ),
+                5 => Layout::Attributes {
+                    force_block: choice & 8 != 0,
+                    blocks: vec![AttributeLayout {
+                        gap_blank: false,
+                        leading: vec![PendingComment {
+                            text: "/* leading */".into(),
+                            blank_before: false,
+                        }],
+                        blank_before_node: choice & 16 != 0,
+                        layout: Some(generated(seed, depth - 1)),
+                        trailing: vec!["/* trailing */".into()],
+                    }],
+                },
+                _ => Layout::Concat(vec![Layout::Tuple(vec![]), generated(seed, depth - 1)]),
+            }
+        }
+        let mut seed = 1;
+        for _ in 0..512 {
+            let layout = generated(&mut seed, 4);
+            for indent in [0, 1, 3] {
+                for width in [
+                    None,
+                    Some(0),
+                    Some(1),
+                    Some(12),
+                    Some(20),
+                    Some(40),
+                    Some(100),
+                ] {
+                    render_layout(
+                        &layout,
+                        indent,
+                        &FormatOptions {
+                            max_line_length: width,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nested_tuple_rendering_does_not_repeat_the_whole_declaration() {
+        for count in [64, 128, 256] {
+            let fields = (0..count)
+                .map(|i| format!("f{i}: (x{}: integer, y: boolean)", "A".repeat(90)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let source = format!("package p\nstruct S {{ t: ({fields}) }}\n");
+            let parsed = ridl_syntax::parse(&source, Profile::Typl);
+            assert!(parsed.errors().is_empty());
+            let field = parsed
+                .syntax()
+                .descendants()
+                .find(|node| node.kind() == SyntaxKind::FieldDef)
+                .unwrap();
+            let layout = format_field_def(&field);
+            RENDER_WORK.with(|work| work.set(0));
+            let lines = render_layout(&layout, 1, &FormatOptions::default());
+            let work = RENDER_WORK.with(std::cell::Cell::get);
+            assert_eq!(lines.len(), 4 * count + 2);
+            assert!(
+                work <= source.len() * 8,
+                "rendered {work} characters for {} source bytes and {count} fields",
+                source.len()
+            );
+        }
     }
 
     #[test]
