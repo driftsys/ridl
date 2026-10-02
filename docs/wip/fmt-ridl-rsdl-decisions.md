@@ -591,3 +591,26 @@ append-only. Implementation status and verification are in
   actual-head push gates follow for the correction commit.
 - Commit and PR: QUICK correction in PR #634 before full pass 2.
 - Maintainer action: none; no rendering choice changed.
+
+## D-H21 — use one line-comment classification in affected renderers
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: root-cause correction of the D-H20 QUICK finding.
+- Observed case: the shared `DocComment` kind also caused `/** header */` to
+  move the opening brace to a new line and `/** timing */` to force a newline
+  before attributes. Both valid exact-output controls failed before correction.
+- Decision: use one `is_line_comment` helper based on comment kind and `//`
+  spelling in header newline protection, annotation newline emission and the
+  collision guard. Block documentation comments retain their inline form.
+- Reason and alternatives considered: fixing only the new guard left the same
+  classification error in two affected rendering paths. The shared helper avoids
+  inconsistent treatment without changing the lexer or comment text.
+- Authority: design sections 3.2 and 5, approved preceding-annotation attachment
+  and the narrow D-H19 collision exception.
+- Affected files and behavior: formatter helper and exact-output controls only;
+  no new rendering choice and no recursive QUICK review.
+- Verification: both controls exited 101 before correction; formatter/LSP
+  acceptance passes afterward. Logs are listed in PR #634 evidence. All eight
+  push gates passed on prior `c8b8086`; final actual-head gates follow.
+- Commit and PR: final root-cause correction in PR #634 before full pass 2.
+- Maintainer action: none.
