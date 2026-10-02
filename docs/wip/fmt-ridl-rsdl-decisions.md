@@ -933,3 +933,80 @@ append-only. Implementation status and verification are in
 - Commit and PR: separate Task 12 commit follows Task 11 `8b135ba`; final PR
   pending. Full workspace/demo and book/link acceptance are running.
 - Maintainer action: review the final PR; no rendering approval is needed.
+
+## D-H35 — final verification of the interrupted review's coverage suggestions
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: author acceptance of advisory coverage suggestions; no review
+  completion or refutation is inferred from the interrupted pass.
+- Question or observed case: PR #637's completed tests seat proposed gaps for
+  populated-machine separator comments, sibling header/member widths and
+  commented distribution dispatch before the coordinator failed.
+- Chosen action: add three targeted assertions during the final done-criteria
+  audit. Include populated machines and all three comment forms; exact fitting
+  and overlong system/distribution headers and both component keywords; and a
+  noncanonical distribution with a between-member comment.
+- Reason and alternatives considered: these assertions enforce existing rules
+  and make the described faulty branches observable. There is no formatter
+  behavior or parser change and no expansion into deferred debt.
+- Authority: plan section 6 done criteria, design sections 5, 6 and 9.
+- Affected files and behavior: formatter unit tests and final verification
+  evidence. Documentation lists every current block kind and comment rule.
+- Verification: all four specified mutations fail with exit 101 on an assertion,
+  not compilation. Restored acceptance passes 107 formatter unit and 20
+  integration tests. The first restored run failed because the disk filled;
+  disposable build caches were cleaned and the successful run disables
+  incremental caching. Both outcomes are retained in local logs.
+- Commit and PR: included with Task 13's final documentation and verification.
+- Maintainer action: review the final PR; the original full review remains
+  recorded as incomplete.
+
+## D-H36 — Task 13 documentation and final audit
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under the existing approved layout.
+- Question or observed case: publication prose still names only the typl or
+  typl/ridl surface; some helper and width descriptions omit implemented forms.
+- Chosen action: describe all three profiles and CLI extensions in the
+  architecture map, CLI module and crate description. Audit the formatter module
+  and helper comments, all book width/indent statements and the narrow approved
+  annotation-comment exception. Keep the five-extension editor example and the
+  three-extension repository section distinct.
+- Reason and alternatives considered: publication prose must describe the
+  implementation shipped by the final PR. The source-based checks and final gate
+  verify the done criteria; an earlier book addition alone does not.
+- Authority: Task 13, plan section 6, D-H14 and D-H19 approved comment rules.
+- Affected files and behavior: architecture, module/helper docs, CLI/crate
+  descriptions, book formatter paragraphs and current review/status records. No
+  runtime layout change, specification sweep or WIP gardening.
+- Verification: all seven canonical dispatch paths, width/configuration and
+  three-profile invariant tests are present. Task 12's sources are fixed points;
+  Task 13 documentation checks and the final actual-head gate follow.
+- Commit and PR: final main-targeted PR pending, with separate task commits.
+- Maintainer action: review and merge the final PR; archive/gardening remains a
+  separate maintainer step.
+
+## D-H37 — Task 12 QUICK correction uses the effective source width
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: accepted advisory test finding; routine implementation choice.
+- Question or observed case: source fixed-point assertions used a width of 100
+  even though CLI options are resolved from the source path.
+- Chosen action: use `FormatOptions::for_path` for canonicality. Cabin and
+  baseline use real paths; book examples use the chapter path with the fence's
+  source extension, without writing a file. Retain independent 100/60/40
+  invariant checks. This supersedes D-H34's default-only source comparison.
+- Reason and alternatives considered: a repository width change must fail the
+  canonical-source test. Creating files beside chapters is unnecessary because
+  the path reader resolves ancestor configuration for nonexistent paths too.
+  Manual prose auditing and actual diagnostic regeneration satisfy the separate
+  book-quotation requirement; brittle prose-string assertions are not added.
+- Authority: Task 12 fixed-point contract and Task 5 path-based reader contract.
+- Affected files and behavior: test-only book/cabin/baseline helpers, no
+  formatter or parser change.
+- Verification: expected RED assertion exit 101, then 41 book, 49 desk and 10
+  gate tests pass; `just check` passes after formatting Task 13 evidence. Logs
+  and actual QUICK model metadata are linked in Task 12 evidence.
+- Commit and PR: `9a2d52a`, final main-targeted PR pending. This is QUICK's own
+  fix and receives no recursive QUICK pass; final full review remains required.
+- Maintainer action: review the final PR; no approval is pending.

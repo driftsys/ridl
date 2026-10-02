@@ -187,9 +187,11 @@ design note, from the archive.
   decisions taken 2026-10-01 (the recommended option of each). Tasks 1–5 are
   merged; Tasks 6–8 are merged in
   [PR #634](https://github.com/driftsys/ridl/pull/634). Annotation-comment
-  corrections have completed review in
-  [PR #635](https://github.com/driftsys/ridl/pull/635). Tasks 9–10 are
-  implemented; Tasks 11–13 remain pending. The
+  corrections are merged in
+  [PR #635](https://github.com/driftsys/ridl/pull/635). Tasks 9–10 merged in
+  [PR #637](https://github.com/driftsys/ridl/pull/637) into its former stacked
+  base and are recovered in the final main-targeted branch. Tasks 11–13 are
+  implemented; final gates and review are in progress. The
   [review report](fmt-ridl-rsdl-review.md) records current status and approvals.
 - **fmt-ridl-rsdl-plan.md** — the thirteen-task implementation plan for that
   note, written for a coding agent that starts with only the repository and the

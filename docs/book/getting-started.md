@@ -831,8 +831,7 @@ Two of those deserve a note.
 listings.** It tightens colons and spacing and places one member per line in
 brace bodies.
 The [CLI reference](cli-reference.md#ridl-fmt) describes the two-space
-indentation and the configurable width for tuple line breaking, which defaults
-to 100 characters.
+indentation and configurable line width, which defaults to 100 characters.
 
 **`ridl diff` classifies, and its exit code carries the answer**: 0 when the
 change is compatible or the snapshots are identical, 1 when it is breaking, 2

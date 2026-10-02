@@ -188,8 +188,16 @@ that.
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is
-  returned untouched), and idempotent, implementing the tight `name: Type` style
-  of general form §5. E2 extended it to `.ridl` files.
+  returned untouched), and idempotent. It formats declarations in the typl, ridl
+  and rsdl profiles with tight `name: Type` colons, two-space indentation and
+  canonical brace bodies. Parameter lists, tuples, attributes, nested value
+  lists and named service shape lists break at a default code width of 100
+  Unicode scalar values. The pure formatter takes explicit options; the default
+  `editorconfig` feature supplies the separate path-based width reader. The CLI
+  formats `.typl`, `.ridl` and `.rsdl` files and resolves `max_line_length` per
+  file; the LSP resolves it from the document path and formats the buffer.
+  Indentation settings are ignored. The book, worked example and baseline corpus
+  have fixed-point tests using the compiler harness's mdBook parser.
 
 - **`crates/ridl-rt`** — the `no_std` runtime library (a `std` feature, off by
   default, adds `task::block_on`, `task::noop_waker` and `task::flag_waker` over

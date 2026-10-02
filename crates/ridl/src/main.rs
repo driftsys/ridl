@@ -3,7 +3,8 @@
 //! defaults: `PATH` defaults to the current directory.
 //!
 //! `ridl check` and `ridl build` delegate to the `ridlc` library face;
-//! `ridl fmt` runs the `ridl-fmt` formatter over `.typl` files (E1.14). The exit
+//! `ridl fmt` formats `.typl`, `.ridl` and `.rsdl` files, resolving the width
+//! from `.editorconfig` per file. The exit
 //! code is 0 clean, 1 on a diagnostic error (or, for `fmt --check`, a file that
 //! would change), and 2 on an input/output or usage error.
 //!

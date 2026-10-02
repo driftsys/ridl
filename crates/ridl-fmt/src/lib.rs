@@ -1,4 +1,4 @@
-//! `ridl fmt` — the CST-based formatter for typl and ridl declarations
+//! `ridl fmt` — the CST-based formatter for typl, ridl and rsdl declarations
 //! (docs/ROADMAP.md epic E1.14, general form §5, typl reference §15.2).
 //!
 //! The formatter parses `text` with [`ridl_syntax::parse`] and rewrites the
@@ -53,9 +53,10 @@
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
-//! types and parameter lists break one item per line, with commas between items,
-//! when their code line exceeds the width. The last breakable construct on an overlong line
-//! breaks first; lines are measured again after each break. Nested tuples break
+//! types, parameter lists and attribute value lists break one item per line,
+//! with commas between items. Overlong attribute blocks use the block form;
+//! named service shape lists break after the colon. The last breakable construct
+//! on an overlong line breaks first; lines are measured again after each break. Nested tuples break
 //! only after their enclosing tuple. Trailing comments never cause a break;
 //! unbreakable text stays over the limit. `None` disables line breaking.
 //! The formatter reads no files or environment.
@@ -258,6 +259,8 @@ fn layout_container(
 
 /// One source container unit before its node is rendered. Attribute bodies and
 /// brace bodies share this collector, including leading and trailing comments.
+/// A machine separator ends trailing attachment, so a following comment stays
+/// between the machine declarations.
 struct ContainerBlock {
     kind: BlockKind,
     gap_blank: bool,
@@ -519,9 +522,10 @@ fn format_enumset_derived(node: &SyntaxNode) -> String {
 
 // --- brace-block definitions --------------------------------------------
 
-/// Formats a `struct`, `enum`, `union`, standalone `enumset`, `interface`,
-/// or inline `service`:
-/// the header, the members at the next indent, and the closing brace. An empty
+/// Formats a brace-body declaration: `struct`, `enum`, `union`, standalone
+/// `enumset`, `interface`, inline `service`, `system`, `component`,
+/// `distribution`, `deployment` or nested `machine`. Renders the header,
+/// the members at the next indent, and the closing brace. An empty
 /// body renders as `{}` on the header line. A comment on the opening-brace line
 /// stays on that line; a comment in the header region is preserved verbatim.
 fn format_block_def(
@@ -1839,6 +1843,88 @@ mod tests {
                     },
                 );
             }
+        }
+    }
+
+    #[test]
+    fn review_populated_machine_separator_comments_stay_between_members() {
+        for comment in ["/* note */", "// note\n", "/// note\n"] {
+            let source = format!(
+                "package p\ndeployment D for S {{ machine A {{ First }}, {comment} machine B {{ Second }} }}\n"
+            );
+            let expected = format!(
+                "package p\n\ndeployment D for S {{\n  machine A {{\n    First\n  }}\n  {}\n  machine B {{\n    Second\n  }}\n}}\n",
+                comment.trim_end()
+            );
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &source,
+                    &expected,
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn review_rsdl_sibling_headers_and_component_lines_read_width() {
+        for keyword in ["system", "distribution"] {
+            let source = format!("package p\n{keyword} S [labels=(QM)] {{ C }}\n");
+            let header = format!("{keyword} S [ labels = (QM) ] {{");
+            let boundary = header.chars().count();
+            let inline = format!("package p\n\n{header}\n  C\n}}\n");
+            let broken = format!("package p\n\n{keyword} S [\n  labels = (QM)\n] {{\n  C\n}}\n");
+            for (width, expected) in [(100, &inline), (boundary, &inline), (boundary - 1, &broken)]
+            {
+                assert_profile_format(
+                    &source,
+                    expected,
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+        for keyword in ["offers", "requires"] {
+            let source =
+                format!("package p\ncomponent C {{ {keyword} pkg .long .Member [external] }}\n");
+            let line = format!("  {keyword} pkg.long.Member [ external ]");
+            let boundary = line.chars().count();
+            let inline = format!("package p\n\ncomponent C {{\n{line}\n}}\n");
+            let broken = format!(
+                "package p\n\ncomponent C {{\n  {keyword} pkg.long.Member [\n    external\n  ]\n}}\n"
+            );
+            for (width, expected) in [(100, &inline), (boundary, &inline), (boundary - 1, &broken)]
+            {
+                assert_profile_format(
+                    &source,
+                    expected,
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn review_distribution_body_comments_do_not_bypass_layout() {
+        let source = "package p\ndistribution  D { C .primary,\n// second\n C .backup }\n";
+        let expected = "package p\n\ndistribution D {\n  C.primary\n  // second\n  C.backup\n}\n";
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                source,
+                expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
         }
     }
 

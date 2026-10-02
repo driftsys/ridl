@@ -877,13 +877,17 @@ optional trailing comma, and break overlong shape lists after the colon. Interac
 form; flag and assignment attributes stay inline when their code line fits.
 
 **Layout and line width.** Formatted blocks use two spaces per indentation
-level. Tuple types in declarations that the formatter lays out break into one
-field per line, with commas between fields, when their code line exceeds the
-configured width, which defaults to 100 characters. Width counts Unicode
+level. Parameter lists, tuple types and attribute value lists break into one
+item per line with commas between items when their code line exceeds the
+configured width. Overlong attribute blocks use one attribute per line; named
+service shape lists break after the colon. The default width is 100 characters. Width counts Unicode
 scalar values, including indentation.
 Trailing comments do not count towards the
 limit, and unbreakable code can exceed it. A comment embedded inside a
-single-line construct keeps that construct's source layout.
+single-line construct keeps that construct's source layout. Comments between
+interaction annotations stay with the preceding source annotation when timing
+moves first. If a moved annotation line comment would consume another trailing
+member comment, the whole member keeps its source layout.
 
 **EditorConfig example.** Editors that support these properties can use this
 section in `.editorconfig` for the family's source files:
