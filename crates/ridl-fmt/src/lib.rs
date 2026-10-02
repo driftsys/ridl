@@ -2003,6 +2003,26 @@ mod tests {
     }
 
     #[test]
+    fn review_inline_service_noncolliding_comments_still_normalize() {
+        for width in [100, 60, 40] {
+            for comment in ["/* attribute */", "/** attribute */"] {
+                assert_profile_format(
+                    &format!(
+                        "package p\nservice veh.control {{\n  query  q():T [persist] {comment} @ 10ms // member\n}}\n"
+                    ),
+                    &format!(
+                        "package p\n\nservice veh.control {{\n  query q(): T @10ms [ persist ] {comment} // member\n}}\n"
+                    ),
+                    Profile::Ridl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
     fn ridl_moved_annotation_comment_does_not_force_attribute_breaking() {
         let comment = "x".repeat(120);
         assert_profile_format(

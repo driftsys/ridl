@@ -690,3 +690,22 @@ append-only. Implementation status and verification are in
   recorded in `fmt-ridl-rsdl-evidence/pr-635.md`.
 - Commit and PR: coverage correction in PR #635; actual-head gates precede push.
 - Maintainer action: none; no rendering choice changed.
+
+## D-H25 — QUICK control for noncolliding inline-service comments
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: coverage correction from QUICK advice; no rendering change.
+- Observed case: a service-only widening of verbatim preservation could pass the
+  colliding fixtures while failing the canonical noncolliding path.
+- Decision: add exact ordinary/documentation block-comment controls inside an
+  inline service at widths 100, 60 and 40, with a trailing member comment.
+- Reason and alternatives considered: a positive collision assertion alone does
+  not distinguish the approved narrow exception from whole-service preservation.
+  Existing interface controls do not exercise a service-only widening.
+- Authority: approved D-H19 narrow exception and design sections 3.2, 3.3 and 5.
+- Affected files and behavior: one formatter regression and review records only.
+- Verification: widening the service guard makes the new assertion fail with
+  exit 101; restored formatter/LSP acceptance exits 0. Evidence: `pr-635.md`.
+- Commit and PR: QUICK follow-up in PR #635. No recursive QUICK review; final
+  pass 2 remains the next full review.
+- Maintainer action: none.

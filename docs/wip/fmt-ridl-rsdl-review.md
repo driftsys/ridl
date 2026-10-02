@@ -117,7 +117,11 @@ fresh pass 1 for PR #635. That review retained two independently confirmed test
 coverage findings. D-H24 adds regressions for timing-first documentation line
 comments and inline-service collisions. Both specified mutations fail with the
 new assertions; restored formatter/LSP acceptance passes. Production behavior is
-unchanged. See [PR #635 evidence](fmt-ridl-rsdl-evidence/pr-635.md).
+unchanged. QUICK review completed on `785c726`; `just verify` passed on that
+exact commit. D-H25 adds the suggested noncolliding inline-service control,
+which rejects an overly broad service-only preservation mutation. Restored
+formatter/LSP acceptance passes. See
+[PR #635 evidence](fmt-ridl-rsdl-evidence/pr-635.md).
 
 Actual-head gates and publication precede the final pass 2, with BASE `2287d03`
 and only the correction diff in scope. Tasks 9–13 follow in order. Original
