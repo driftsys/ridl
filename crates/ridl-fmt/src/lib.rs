@@ -42,7 +42,14 @@
 //!   stay tight, and source parentheses remain. Attribute value lists can break;
 //! - inline services reuse interface bodies; named services keep required shape
 //!   commas and remove the optional trailing comma. An overlong shape list breaks
-//!   after the colon, one shape per line with commas between shapes.
+//!   after the colon, one shape per line with commas between shapes;
+//! - systems, components and distributions use one member per line. Component
+//!   keywords and references have single spaces, and declaration and member
+//!   attributes share the width rules. An overlong header keeps its opening
+//!   brace on the attribute block's closing line. Deployments place their `for`
+//!   reference before attributes and nest machine blocks one level down. Machine
+//!   bodies use the same member layout, preserving source blank lines between
+//!   machines.
 //!
 //! The pure entry point takes [`FormatOptions`], defaulting to a 100-character
 //! code width, measured in Unicode scalar values including indentation. Tuple
@@ -286,7 +293,12 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                 nl_run = 0;
             }
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Comma => {
-                if nl_run > 0 {
+                if nl_run > 0
+                    || blocks
+                        .last()
+                        .and_then(|block| block.node.as_ref())
+                        .is_some_and(|node| node.kind() == SyntaxKind::MachineDef)
+                {
                     can_trail = false;
                 }
                 // A separator line is not a blank line. Retain an existing
@@ -360,7 +372,11 @@ fn block_kind(kind: SyntaxKind) -> BlockKind {
         | SyntaxKind::EnumSetDef
         | SyntaxKind::UnionDef
         | SyntaxKind::InterfaceDef
-        | SyntaxKind::ServiceDef => BlockKind::Def,
+        | SyntaxKind::ServiceDef
+        | SyntaxKind::SystemDef
+        | SyntaxKind::ComponentDef
+        | SyntaxKind::DistributionDef
+        | SyntaxKind::DeploymentDef => BlockKind::Def,
         _ => BlockKind::Member,
     }
 }
@@ -415,14 +431,20 @@ fn format_element(node: &SyntaxNode, indent: usize, options: &FormatOptions) -> 
         | SyntaxKind::FixedDef
         | SyntaxKind::CommandDef
         | SyntaxKind::QueryDef => render_layout(&format_interaction(node), indent, options),
+        SyntaxKind::SystemDef => format_block_def(node, indent, "system", options),
+        SyntaxKind::ComponentDef => format_block_def(node, indent, "component", options),
+        SyntaxKind::DistributionDef => format_block_def(node, indent, "distribution", options),
+        SyntaxKind::DeploymentDef => format_block_def(node, indent, "deployment", options),
+        SyntaxKind::MachineDef => format_block_def(node, indent, "machine", options),
+        SyntaxKind::MemberLine | SyntaxKind::ComponentLine => {
+            render_layout(&format_rsdl_line(node), indent, options)
+        }
         SyntaxKind::AttrBlock => render_layout(&format_attr_block(node), indent, options),
         SyntaxKind::FieldDef => render_layout(&format_field_def(node), indent, options),
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
-        // A declaration with no layout rules here — one of the five rsdl
-        // declarations — is emitted as
-        // written, so no source is lost.
+        // Preserve nodes without a layout rule so their source remains lossless.
         _ => line(node.text().to_string()),
     }
 }
@@ -510,34 +532,34 @@ fn format_block_def(
 ) -> Vec<String> {
     let ind = indent_str(indent);
     let header_prefix = block_header_prefix(node, keyword);
-    let brace_separator = if header_prefix.ends_with('\n') {
-        ind.as_str()
-    } else {
-        " "
+    let brace_separator = match &header_prefix {
+        Layout::Text(text) if text.ends_with('\n') => ind.as_str(),
+        _ => " ",
     };
+    let mut header = vec![header_prefix, Layout::Text(brace_separator.into())];
     let all_members = elements_between_braces(node);
     let (brace_comment, members) = split_brace_line_comment(&all_members);
     let member_lines = layout_container(members, indent + 1, false, options);
 
     if member_lines.is_empty() && brace_comment.is_none() {
-        return vec![format!("{ind}{header_prefix}{brace_separator}{{}}")];
+        header.push(Layout::Text("{}".into()));
+        return render_layout(&Layout::Concat(header), indent, options);
     }
 
-    let open = match &brace_comment {
-        Some(comment) => format!("{ind}{header_prefix}{brace_separator}{{ {comment}"),
-        None => format!("{ind}{header_prefix}{brace_separator}{{"),
-    };
-    let mut out = Vec::with_capacity(member_lines.len() + 2);
-    out.push(open);
+    header.push(Layout::Text("{".into()));
+    if let Some(comment) = brace_comment {
+        header.push(Layout::TrailingComment(comment));
+    }
+    let mut out = render_layout(&Layout::Concat(header), indent, options);
     out.extend(member_lines);
     out.push(format!("{ind}}}"));
     out
 }
 
-/// The header text before the opening brace — `struct Name`, `error enum Name`,
-/// and so on. A comment in the header region (before `{`) forces the region to
-/// be emitted verbatim so the comment is not lost.
-fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
+/// The header layout before the opening brace, including header attributes.
+/// A direct header comment keeps the region verbatim; attributes otherwise
+/// expose their break positions to the same renderer as member attributes.
+fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> Layout {
     let mut verbatim = String::new();
     let mut has_comment = false;
     let mut ends_in_line_comment = false;
@@ -562,9 +584,9 @@ fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
         if ends_in_line_comment {
             header.push('\n');
         }
-        header
+        Layout::Text(header)
     } else {
-        format!(
+        let mut parts = vec![Layout::Text(format!(
             "{}{keyword} {}",
             modifiers_prefix(node),
             child_tight(
@@ -575,7 +597,52 @@ fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
                     SyntaxKind::Name
                 }
             )
-        )
+        ))];
+        if node.kind() == SyntaxKind::DeploymentDef {
+            parts.push(Layout::Text(" for ".into()));
+            parts.push(Layout::Text(
+                child_node(node, SyntaxKind::Reference)
+                    .map(|reference| reference_text(&reference))
+                    .unwrap_or_default(),
+            ));
+        }
+        if let Some(attributes) = child_node(node, SyntaxKind::AttrBlock) {
+            parts.push(Layout::Text(" ".into()));
+            parts.push(format_attr_block(&attributes));
+        }
+        Layout::Concat(parts)
+    }
+}
+
+/// A component keyword and reference, or a bare member reference, followed by
+/// the shared attribute layout. Commented references retain their own text.
+fn format_rsdl_line(node: &SyntaxNode) -> Layout {
+    let mut parts = Vec::new();
+    if node.kind() == SyntaxKind::ComponentLine {
+        let keyword = node
+            .children_with_tokens()
+            .filter_map(NodeOrToken::into_token)
+            .find(|token| matches!(token.kind(), SyntaxKind::OffersKw | SyntaxKind::RequiresKw))
+            .map(|token| token.text().to_string())
+            .unwrap_or_default();
+        parts.push(Layout::Text(format!("{keyword} ")));
+    }
+    if let Some(reference) = child_node(node, SyntaxKind::Reference) {
+        parts.push(Layout::Text(reference_text(&reference)));
+    }
+    if let Some(attributes) = child_node(node, SyntaxKind::AttrBlock) {
+        parts.push(Layout::Text(" ".into()));
+        parts.push(format_attr_block(&attributes));
+    }
+    Layout::Concat(parts)
+}
+
+/// Tight references share one comment-preserving fallback in headers and bodies.
+fn reference_text(reference: &SyntaxNode) -> String {
+    if contains_comment(reference) {
+        reference.text().to_string()
+    } else {
+        tight_text(reference)
     }
 }
 
@@ -1449,6 +1516,11 @@ fn is_single_line_element(node: &SyntaxNode) -> bool {
         | SyntaxKind::EnumDef
         | SyntaxKind::UnionDef
         | SyntaxKind::InterfaceDef
+        | SyntaxKind::SystemDef
+        | SyntaxKind::ComponentDef
+        | SyntaxKind::DistributionDef
+        | SyntaxKind::DeploymentDef
+        | SyntaxKind::MachineDef
         | SyntaxKind::AttrBlock => false,
         SyntaxKind::EnumSetDef | SyntaxKind::ServiceDef => !has_token(node, SyntaxKind::LBrace),
         _ => true,
@@ -1462,6 +1534,405 @@ mod test_invariants;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rsdl_container_bodies_use_one_member_per_line() {
+        for width in [100, 60, 40] {
+            for (source, expected) in [
+                (
+                    "system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }",
+                    "system Vehicle {\n  Cruise\n  Lane\n  Panel\n  Backend\n  veh.diag.access\n}",
+                ),
+                (
+                    "distribution Adas [tier=PLATFORM] { Cruise, Lane, veh.diag.access, }",
+                    "distribution Adas [ tier = PLATFORM ] {\n  Cruise\n  Lane\n  veh.diag.access\n}",
+                ),
+                (
+                    "component Panel { requires  CruiseControl, requires LaneAssist, }",
+                    "component Panel {\n  requires CruiseControl\n  requires LaneAssist\n}",
+                ),
+                (
+                    "component Solo [instances=solo] {}",
+                    "component Solo [ instances = solo ] {}",
+                ),
+                ("system Empty {}", "system Empty {}"),
+                ("distribution Empty {}", "distribution Empty {}"),
+                (
+                    "system S { veh . topology . Cruise . primary [linux.cpuset=(2)] }",
+                    "system S {\n  veh.topology.Cruise.primary [\n    linux.cpuset = (2)\n  ]\n}",
+                ),
+            ] {
+                // The dotted member's attribute block fits at the wider widths.
+                let expected = if source.starts_with("system S") && width > 40 {
+                    "system S {\n  veh.topology.Cruise.primary [ linux.cpuset = (2) ]\n}"
+                } else {
+                    expected
+                };
+                assert_profile_format(
+                    &format!("package p\n{source}\n"),
+                    &format!("package p\n\n{expected}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_component_header_width_counts_the_opening_brace() {
+        let source = "package p\ncomponent Cruise [instances=(primary,backup,),deprecated=\"use Cruise2\",rust.crate=\"cruise\",someip.serviceId=4660,linux.realtime,] { offers veh.adas.cruise }\n";
+        let block = "package p\n\ncomponent Cruise [\n  instances = (primary, backup)\n  deprecated = \"use Cruise2\"\n  rust.crate = \"cruise\"\n  someip.serviceId = 4660\n  linux.realtime\n] {\n  offers veh.adas.cruise\n}\n";
+        let inline = "package p\n\ncomponent Cruise [ instances = (primary, backup), deprecated = \"use Cruise2\", rust.crate = \"cruise\", someip.serviceId = 4660, linux.realtime ] {\n  offers veh.adas.cruise\n}\n";
+        for (width, expected) in [(143, block), (144, inline)] {
+            assert_profile_format(
+                source,
+                expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+        let empty_source = source.replace("{ offers veh.adas.cruise }", "{}");
+        for (width, expected) in [
+            (144, block.replace("{\n  offers veh.adas.cruise\n}", "{}")),
+            (145, inline.replace("{\n  offers veh.adas.cruise\n}", "{}")),
+        ] {
+            assert_profile_format(
+                &empty_source,
+                &expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_container_comments_keep_their_positions() {
+        for (source, expected) in [
+            (
+                "component  Cruise { // brace\n offers   veh.adas.cruise\n // next\n requires LaneAssist\n}",
+                "component Cruise { // brace\n  offers veh.adas.cruise\n  // next\n  requires LaneAssist\n}",
+            ),
+            (
+                "component  Cruise /* header */ [ external ] { requires LaneAssist }",
+                "component  Cruise /* header */ [ external ] {\n  requires LaneAssist\n}",
+            ),
+            (
+                "component  Cruise // header\n{ offers veh.adas.cruise }",
+                "component  Cruise // header\n{\n  offers veh.adas.cruise\n}",
+            ),
+            (
+                "component Cruise [instances= /* value */ (primary,backup)] { requires LaneAssist }",
+                "component Cruise [instances= /* value */ (primary,backup)] {\n  requires LaneAssist\n}",
+            ),
+            (
+                "component C { offers a /* ref */ .b [external] }",
+                "component C {\n  offers a /* ref */ .b [ external ]\n}",
+            ),
+            (
+                "system S { Cruise /* line */ [external] }",
+                "system S {\n  Cruise /* line */ [external]\n}",
+            ),
+        ] {
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &format!("package p\n{source}\n"),
+                    &format!("package p\n\n{expected}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+        let comment = "x".repeat(120);
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                &format!("package p\ncomponent C [external] {{ // {comment}\n requires A\n}}\n"),
+                &format!(
+                    "package p\n\ncomponent C [ external ] {{ // {comment}\n  requires A\n}}\n"
+                ),
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_machine_body_reuses_shared_member_lines() {
+        let source = "package p\ndeployment Bench for S { machine DevBox { Cruise.primary, Panel [linux.cpuset=(2,3)], } }\n";
+        let parsed = ridl_syntax::parse(source, Profile::Rsdl);
+        assert!(parsed.errors().is_empty());
+        let machine = parsed
+            .syntax()
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::MachineDef)
+            .unwrap();
+        for width in [100, 60, 40] {
+            let options = FormatOptions {
+                max_line_length: Some(width),
+            };
+            let expected = vec![
+                "  machine DevBox {",
+                "    Cruise.primary",
+                "    Panel [ linux.cpuset = (2, 3) ]",
+                "  }",
+            ];
+            let actual = format_block_def(&machine, 1, "machine", &options);
+            assert_eq!(actual, expected);
+            let output = format!(
+                "package p\ndeployment Bench for S {{\n{}\n}}\n",
+                actual.join("\n")
+            );
+            assert_eq!(
+                test_invariants::syntax_structure(source, Profile::Rsdl),
+                test_invariants::syntax_structure(&output, Profile::Rsdl)
+            );
+            assert_eq!(
+                test_invariants::content_tokens(source, Profile::Rsdl),
+                test_invariants::content_tokens(&output, Profile::Rsdl)
+            );
+            let parsed = ridl_syntax::parse(&output, Profile::Rsdl);
+            assert!(parsed.errors().is_empty());
+            let machine = parsed
+                .syntax()
+                .descendants()
+                .find(|node| node.kind() == SyntaxKind::MachineDef)
+                .unwrap();
+            assert_eq!(format_block_def(&machine, 1, "machine", &options), actual);
+        }
+    }
+
+    #[test]
+    fn rsdl_broken_system_is_left_unformatted() {
+        let source = "package p\nsystem Broken { Cruise\n";
+        assert!(matches!(
+            format(source, Profile::Rsdl, &FormatOptions::default()),
+            FormatOutcome::ParseErrors(_)
+        ));
+    }
+
+    #[test]
+    fn rsdl_container_goldens_keep_structure_and_comments() {
+        for (source, expected) in [
+            (
+                include_str!("../test_data/input/component.rsdl"),
+                include_str!("../test_data/formatted/component.rsdl"),
+            ),
+            (
+                include_str!("../test_data/input/rsdl_attribute_positions.rsdl"),
+                include_str!("../test_data/formatted/rsdl_attribute_positions.rsdl"),
+            ),
+            (
+                include_str!("../test_data/input/deployment.rsdl"),
+                include_str!("../test_data/formatted/deployment.rsdl"),
+            ),
+        ] {
+            assert_profile_format(source, expected, Profile::Rsdl, &FormatOptions::default());
+        }
+    }
+
+    #[test]
+    fn rsdl_deployment_places_nested_machine_members_on_separate_lines() {
+        let source = "package p\ndeployment Production for Vehicle {\n machine AdasHpc [labels=(ASIL_B)] {Cruise.primary, Lane, veh.diag.access}\n machine Cockpit {Cruise.backup, Panel [linux.cpuset=(2,3)]}\n machine Cloud [external] { Backend }\n}\n";
+        let expected = "package p\n\ndeployment Production for Vehicle {\n  machine AdasHpc [ labels = (ASIL_B) ] {\n    Cruise.primary\n    Lane\n    veh.diag.access\n  }\n  machine Cockpit {\n    Cruise.backup\n    Panel [ linux.cpuset = (2, 3) ]\n  }\n  machine Cloud [ external ] {\n    Backend\n  }\n}\n";
+        for width in [100, 60, 40] {
+            let expected = if width == 40 {
+                expected.replace(
+                    "  machine AdasHpc [ labels = (ASIL_B) ] {",
+                    "  machine AdasHpc [\n    labels = (ASIL_B)\n  ] {",
+                )
+            } else {
+                expected.to_string()
+            };
+            assert_profile_format(
+                source,
+                &expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_deployment_header_keeps_for_before_breakable_attributes() {
+        let source = "package p\ndeployment  Bench for veh .topology .Vehicle [labels=(QM)] {machine DevBox {}}\n";
+        let inline = "package p\n\ndeployment Bench for veh.topology.Vehicle [ labels = (QM) ] {\n  machine DevBox {}\n}\n";
+        let block = "package p\n\ndeployment Bench for veh.topology.Vehicle [\n  labels = (QM)\n] {\n  machine DevBox {}\n}\n";
+        for (width, expected) in [(100, inline), (61, inline), (60, block), (40, block)] {
+            assert_profile_format(
+                source,
+                expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+        assert_profile_format(
+            "package p\ndeployment  Empty for veh .topology .Vehicle {}\n",
+            "package p\n\ndeployment Empty for veh.topology.Vehicle {}\n",
+            Profile::Rsdl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn rsdl_machine_gaps_and_between_machine_comments_follow_source() {
+        for (source, expected) in [
+            (
+                "machine  A {}, machine  B {}",
+                "  machine A {}\n  machine B {}",
+            ),
+            (
+                "machine  A {}\n\nmachine  B {}",
+                "  machine A {}\n\n  machine B {}",
+            ),
+            (
+                "machine  A {}\n// second\nmachine  B {}",
+                "  machine A {}\n  // second\n  machine B {}",
+            ),
+            (
+                "machine  A {}\n\n/// second\n\nmachine  B {}",
+                "  machine A {}\n\n  /// second\n\n  machine B {}",
+            ),
+        ] {
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &format!("package p\ndeployment  D for S {{\n{source}\n}}\n"),
+                    &format!("package p\n\ndeployment D for S {{\n{expected}\n}}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_comments_after_machine_separators_stay_between_members() {
+        for comment in ["/* note */", "// note\n", "/// note\n"] {
+            let source = format!(
+                "package p\ndeployment D for S {{ machine A {{}}, {comment} machine B {{}} }}\n"
+            );
+            let expected = format!(
+                "package p\n\ndeployment D for S {{\n  machine A {{}}\n  {}\n  machine B {{}}\n}}\n",
+                comment.trim_end()
+            );
+            for width in [100, 60, 40] {
+                assert_profile_format(
+                    &source,
+                    &expected,
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rsdl_nested_machine_body_formats_comments_and_preserves_gaps() {
+        let source = "package p\ndeployment D for S {machine  M { // brace\n C [external]\n // next\n D [labels=(QM)]\n\n // leading\n E [linux.cpuset=(2,3)] // member\n}}\n";
+        let expected = "package p\n\ndeployment D for S {\n  machine M { // brace\n    C [ external ]\n    // next\n    D [ labels = (QM) ]\n\n    // leading\n    E [ linux.cpuset = (2, 3) ] // member\n  }\n}\n";
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                source,
+                expected,
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_deployment_and_machine_header_comments_keep_their_scope() {
+        for (source, expected) in [
+            (
+                "deployment  D for /* clause */ S [labels=(QM)] { machine  M { C } }",
+                "deployment  D for /* clause */ S [labels=(QM)] {\n  machine M {\n    C\n  }\n}",
+            ),
+            (
+                "deployment  D for S // header\n{ machine  M { C } }",
+                "deployment  D for S // header\n{\n  machine M {\n    C\n  }\n}",
+            ),
+            (
+                "deployment D for S { machine  M /* header */ [external] { C } }",
+                "deployment D for S {\n  machine  M /* header */ [external] {\n    C\n  }\n}",
+            ),
+            (
+                "deployment D for S { machine  M // header\n { C } }",
+                "deployment D for S {\n  machine  M // header\n  {\n    C\n  }\n}",
+            ),
+            (
+                "deployment  D for a /* ref */ .S [labels=(QM)] { machine M {} }",
+                "deployment D for a /* ref */ .S [ labels = (QM) ] {\n  machine M {}\n}",
+            ),
+        ] {
+            for width in [100, 60, 40] {
+                let expected = if source.contains("a /* ref */ .S") && width == 40 {
+                    "deployment D for a /* ref */ .S [\n  labels = (QM)\n] {\n  machine M {}\n}"
+                } else {
+                    expected
+                };
+                assert_profile_format(
+                    &format!("package p\n{source}\n"),
+                    &format!("package p\n\n{expected}\n"),
+                    Profile::Rsdl,
+                    &FormatOptions {
+                        max_line_length: Some(width),
+                    },
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn all_seven_declaration_kinds_have_canonical_dispatch() {
+        for width in [100, 60, 40] {
+            assert_profile_format(
+                "package p\ncomponent  C {}\nsystem  S { C }\ndistribution  Dist { C }\ndeployment  D for S { machine  M { C } }\n",
+                "package p\n\ncomponent C {}\n\nsystem S {\n  C\n}\n\ndistribution Dist {\n  C\n}\n\ndeployment D for S {\n  machine M {\n    C\n  }\n}\n",
+                Profile::Rsdl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+            assert_profile_format(
+                "package p\ninterface  I {signal  s:T}\nservice  veh.named : I,\nservice  veh.inline {signal  s:T}\n",
+                "package p\n\ninterface I {\n  signal s: T\n}\n\nservice veh.named: I\n\nservice veh.inline {\n  signal s: T\n}\n",
+                Profile::Ridl,
+                &FormatOptions {
+                    max_line_length: Some(width),
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn rsdl_broken_deployment_is_left_unformatted() {
+        assert!(matches!(
+            format(
+                "package p\ndeployment Broken {}\n",
+                Profile::Rsdl,
+                &FormatOptions::default()
+            ),
+            FormatOutcome::ParseErrors(_)
+        ));
+    }
 
     #[test]
     fn default_options_use_a_hundred_column_limit() {

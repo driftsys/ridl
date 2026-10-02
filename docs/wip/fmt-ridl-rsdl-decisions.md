@@ -709,3 +709,174 @@ append-only. Implementation status and verification are in
 - Commit and PR: QUICK follow-up in PR #635. No recursive QUICK review; final
   pass 2 remains the next full review.
 - Maintainer action: none.
+
+## D-H26 — final correction review and permitted coverage debt
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: final review disposition under the two-pass cap.
+- Observed case: PR #635's final review retained one coverage gap: single-member
+  service fixtures cannot reject preserving a whole service when only one member
+  collides. The current renderer correctly preserves only that member.
+- Decision: track the confirmed test gap in issue #636, milestone E1 — typl +
+  Tooling Spine, with the independent mutation and required two-member probe.
+  Perform no third full review and continue to Task 9.
+- Reason and alternatives considered: the workflow permits coverage debt after
+  its final pass. This is not an observed production or invariant failure.
+- Authority: active review workflow's two-full-pass cap and handoff debt rules.
+- Verification: final pass reviewed `2287d03` through `0249fd1`; compliance/docs
+  reported no new findings and the independent refuter confirmed the test gap at
+  confidence 96. Actual models: compliance/refuter Terra/high, tests/docs
+  Sol/high. All seats matched the five paths. `just verify`, enabled push hooks
+  and all CI checks passed on `0249fd1`.
+- Affected files and behavior: review records and issue #636 only.
+- Commit and PR: PR #635 remains open on `0249fd1`, based on main `c9c7c0e`.
+- Maintainer action: review PR #635 before the stacked RSDL PR; no merge
+  performed by the agent.
+
+## D-H27 — group Tasks 9 and 10 with distinct implementation commits
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: branch and PR grouping choice within the authorized sequential loop.
+- Observed case: Tasks 9 and 10 extend the same header, brace-body and
+  member-line renderers; Task 10 depends directly on Task 9's shared
+  machine-body rules.
+- Decision: use `feat/387-fmt-rsdl` stacked on `fix/387-fmt-annotation-comments`
+  at `0249fd1d2fce5970fc71c775eeba5bedb13b2f38`. Keep separate Task 9 and Task
+  10 commits and QUICK reviews, then open one PR for the consecutive pair.
+- Reason and alternatives considered: the two-task group presents the complete
+  RSDL declaration dispatch without introducing a second partial-layout PR. Task
+  order remains unchanged; a predecessor merge is not required to continue.
+- Authority: handoff's permitted small consecutive PR groups and stacked bases.
+- Affected files and behavior: branch base, review scope and merge order only.
+- Verification: fetched current main `c9c7c0e`; PR #635 is open and all checks
+  passed on its head. Existing worktree is already bootstrapped.
+- Commit and PR: planned RSDL PR based on the immediate unmerged correction
+  branch. Merge order: #635, then the RSDL PR.
+- Maintainer action: review and merge in that order; no merge authorization
+  inferred.
+
+## D-H28 — Task 9 shares header and member attribute layouts
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under settled layout rules.
+- Observed case: RSDL declarations still use the verbatim fallback, and a string
+  header cannot expose its attributes to the existing width renderer.
+- Decision: return `Layout` from `block_header_prefix`, append `{` or `{}`
+  before width measurement, and represent opening-brace comments as trailing
+  comments. Route system, component and distribution through the brace renderer.
+  Share one RSDL line renderer for component keywords and bare references, then
+  reuse Task 7's attribute layout on headers and member lines.
+- Reason and alternatives considered: a separate RSDL width loop would duplicate
+  attribute breaking and risk different boundary decisions. The existing
+  renderer counts indentation, excludes trailing comments and already breaks
+  outer lists before nested lists.
+- Authority: design sections 4.1, 4.2, 4.4, 5 and 6.4; Task 9.
+- Affected files and behavior: formatter, RSDL reference tests and goldens,
+  facade and LSP expected output, and the deferred valid RSDL CLI width test.
+  Direct header comments retain the whole header. Commented references retain
+  their subtree; direct member comments use the existing member fallback.
+- Verification: four intended unit failures and CLI/LSP failures were observed
+  before routing. Formatter, facade and LSP acceptance pass afterward, including
+  three-width corpus invariants and the 143/144-column boundary. The empty body
+  also pins 144/145 because `{}` adds one column. Evidence: Task 9 record.
+- Commit and PR: Task 9 commit in the planned Tasks 9–10 RSDL PR.
+- Maintainer action: none; no grammar, parser or rendering decision changed.
+
+## D-H29 — Task 9 machine-body and golden test placement
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: test-placement choice preserving the task boundary.
+- Observed case: Task 9 owns the shared machine-body line rules, but Task 10
+  owns machine and deployment dispatch.
+- Decision: parse a deployment and call the private brace renderer on its
+  machine subtree at indent one; check exact body output, structure, content,
+  reparsing and a second rendering at all three widths. Keep public
+  deployment/machine dispatch unchanged until Task 10. Copy the
+  attribute-position parser fixture only into formatter goldens; do not edit
+  parser inputs.
+- Reason and alternatives considered: routing deployment early would move Task
+  10 ahead of its required tests. The private renderer test isolates the shared
+  body behavior without altering the parser or public dispatch.
+- Authority: Task 9's machine-body scope, Task 10's dispatch scope, invariants.
+- Affected files and behavior: formatter tests and two golden pairs only. The
+  attribute-position golden still preserves its deployment source until Task 10.
+- Verification: shared machine-body regression failed before member-line
+  routing; all formatter tests pass afterward. One initial comment fixture
+  accidentally exceeded 40 columns; shortening its reference kept the placement
+  test separate from the attribute-width tests. The original failing log is
+  retained.
+- Commit and PR: same Task 9 commit and planned RSDL PR.
+- Maintainer action: none.
+
+## D-H30 — Task 9 QUICK documentation correction
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: factual documentation correction from QUICK review.
+- Observed case: the CLI reference still says all RSDL declarations are kept as
+  written, which Task 9 has made false for system, component and distribution.
+- Decision: describe those three canonical layouts now and explicitly retain
+  deployment/machine's current verbatim status. Task 10 updates that remaining
+  statement when dispatch changes; Task 12 still performs the planned sweep.
+- Reason and alternatives considered: leaving the statement until Task 12 would
+  publish a false behavior claim alongside the intermediate formatter change.
+  This correction does not change the design or advance deployment formatting.
+- Authority: restricted code-to-prose QUICK finding and handoff review loop.
+- Affected files and behavior: CLI reference and evidence only.
+- Verification: all three QUICK seats matched the 13 Task 9 paths. Actual
+  docs/tests Terra/high and fresh bug wrapper/native Terra/medium; metadata
+  verified. Tests and bugs reported no findings. `just test` passed on
+  `c2602dc`; documentation checks follow this correction.
+- Commit and PR: Task 9 QUICK documentation follow-up in the planned RSDL PR; no
+  recursive QUICK pass.
+- Maintainer action: none.
+
+## D-H31 — Task 10 completes deployment and machine dispatch
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under settled nested-container rules.
+- Observed case: the remaining public deployment/machine fallback prevents
+  canonical nested bodies and header relation clauses.
+- Decision: route both kinds through the same brace renderer; classify
+  deployment as a file definition and machine as a body member. Add
+  `for Reference` before header attributes and share the comment-preserving
+  reference helper with member lines. Preserve source gaps through the existing
+  container collector.
+- Reason and alternatives considered: a special deployment renderer or gap loop
+  would duplicate behavior already shared by every brace body. The header layout
+  already exposes attribute break positions and counts the brace.
+- Authority: design section 4.3, R5, D-11, sections 5 and 6.4; Task 10.
+- Affected files and behavior: formatter dispatch/header helper, deployment
+  golden, the attribute-position golden's nested members, and CLI documentation.
+  No parser or grammar changes. The fallback comment no longer names any of the
+  seven declaration kinds.
+- Verification: six selected layout/golden failures were observed before
+  routing; all 102 formatter unit and 20 integration tests pass afterward.
+  Coverage includes the deployment header's 60/61 boundary, machines with and
+  without source blank lines, between-machine comments, direct header line/block
+  comments, commented reference subtrees, empty bodies and malformed deployment
+  input. All seven declaration kinds have exact canonical dispatch assertions at
+  widths 100, 60 and 40. Evidence: Task 10 record.
+- Commit and PR: distinct Task 10 commit in the planned Tasks 9–10 RSDL PR.
+- Maintainer action: none; no unsettled rendering encountered.
+
+## D-H32 — Task 10 QUICK corrections
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: implementation choice under existing comment rules.
+- Question or observed case: a comment after a separator between machines was
+  rendered as a trailing comment of the preceding machine.
+- Chosen action: clear trailing eligibility when consuming a machine separator
+  in the shared collector. Add exact-output regressions for ordinary,
+  documentation and block comments after separators, and nested machine
+  comments/source gaps.
+- Reason and alternatives considered: a machine separator ends the preceding
+  member; limiting the collector rule preserves existing RIDL trailing-comment
+  layouts.
+- Authority: design sections 5 and 9, Task 10 and QUICK review.
+- Affected files and behavior: shared container collector and formatter tests;
+  review report resume paragraph corrected during author diff inspection.
+- Verification: separator regression exits 101 before correction on valid input;
+  final acceptance is recorded in
+  [Task 10 evidence](fmt-ridl-rsdl-evidence/task-10.md).
+- Commit and PR: correction follows `4603d73`; grouped Tasks 9–10 PR pending.
+- Maintainer action: review the grouped PR; no rendering approval is needed.

@@ -868,8 +868,10 @@ Options:
 **It writes** every `.typl`/`.ridl`/`.rsdl` file under `PATH` back to itself in
 canonical form, unless `--check` is given or the file fails to parse. An `.rsdl`
 file takes the file layout (the header, one blank line between declarations).
-The formatter has no layout rules for the rsdl declarations, so it keeps each
-one as written. Interfaces and inline services use the canonical brace layout
+Systems, components, distributions, deployments and machines use canonical
+brace bodies, references and attributes. Deployments keep `for` before header
+attributes and nest machine blocks; source blank lines between machines remain.
+Interfaces and inline services use the canonical brace layout
 and member spacing. Named services keep commas between shapes, remove the
 optional trailing comma, and break overlong shape lists after the colon. Interaction timing precedes attribute blocks. Predicate attributes use block
 form; flag and assignment attributes stay inline when their code line fits.
