@@ -331,15 +331,16 @@ mod tests {
     #[test]
     fn line_inspections_accumulate_rendering_work() {
         let mut renderer = empty_renderer();
-        renderer.append("abc");
+        renderer.append("aé界");
         super::super::RENDER_WORK.with(|work| work.set(0));
         assert_eq!(renderer.line.chars().count(), 3);
         assert_eq!(renderer.line.chars().count(), 3);
         assert_eq!(renderer.line.chars().rev().count(), 3);
-        assert_eq!(renderer.line.chars().nth(2), Some('c'));
-        assert!(
-            super::super::RENDER_WORK.with(std::cell::Cell::get) >= 12,
-            "repeated line inspections must contribute to the work bound"
+        assert_eq!(renderer.line.chars().nth(2), Some('界'));
+        assert_eq!(
+            super::super::RENDER_WORK.with(std::cell::Cell::get),
+            12,
+            "each inspected Unicode scalar must contribute to the work bound"
         );
     }
 
@@ -354,6 +355,22 @@ mod tests {
             "copied line bytes must contribute to the work bound"
         );
         assert_eq!(copied.chars().collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn creating_continuations_accumulates_rendering_work() {
+        let mut renderer = empty_renderer();
+        super::super::RENDER_WORK.with(|work| work.set(0));
+        renderer.prepend(Instruction::Text("first"));
+        assert_eq!(super::super::RENDER_WORK.with(std::cell::Cell::get), 1);
+        renderer.prepend(Instruction::Text("second"));
+        assert_eq!(super::super::RENDER_WORK.with(std::cell::Cell::get), 2);
+        assert_eq!(renderer.pending, Some(1));
+        assert!(matches!(
+            renderer.continuations[0].instruction,
+            Instruction::Text("first")
+        ));
+        assert_eq!(renderer.continuations[1].next, Some(0));
     }
 
     #[test]
