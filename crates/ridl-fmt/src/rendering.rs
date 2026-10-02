@@ -11,6 +11,15 @@ use std::collections::HashSet;
 
 use super::{FormatOptions, Layout, indent_str};
 
+#[cfg(test)]
+mod work;
+#[cfg(test)]
+use work::{Continuations, LineBuffer};
+#[cfg(not(test))]
+type Continuations<'a> = Vec<Continuation<'a>>;
+#[cfg(not(test))]
+type LineBuffer = String;
+
 type Cursor = Option<usize>;
 
 #[derive(Clone, Copy)]
@@ -22,6 +31,7 @@ enum Instruction<'a> {
     LineBreak,
 }
 
+#[cfg_attr(test, derive(Clone))]
 struct Continuation<'a> {
     instruction: Instruction<'a>,
     next: Cursor,
@@ -45,11 +55,11 @@ struct Candidate {
 
 struct Renderer<'a> {
     pending: Cursor,
-    continuations: Vec<Continuation<'a>>,
+    continuations: Continuations<'a>,
     candidates: Vec<Candidate>,
     last_candidate: Cursor,
     broken: HashSet<usize>,
-    line: String,
+    line: LineBuffer,
     state: LineState,
     lines: Vec<String>,
     width: Option<usize>,
@@ -99,7 +109,10 @@ impl<'a> Renderer<'a> {
             self.last_candidate = candidate.previous;
             return false;
         }
-        self.lines.push(std::mem::take(&mut self.line));
+        let line = std::mem::take(&mut self.line);
+        #[cfg(test)]
+        let line = String::from(line);
+        self.lines.push(line);
         self.state = LineState::default();
         self.last_candidate = None;
         true
@@ -283,11 +296,11 @@ impl<'a> Renderer<'a> {
 pub(super) fn render(layout: &Layout, indent: usize, options: &FormatOptions) -> Vec<String> {
     let mut renderer = Renderer {
         pending: None,
-        continuations: Vec::new(),
+        continuations: Continuations::new(),
         candidates: Vec::new(),
         last_candidate: None,
         broken: HashSet::new(),
-        line: String::new(),
+        line: LineBuffer::new(),
         state: LineState::default(),
         lines: Vec::new(),
         width: options.max_line_length,
@@ -295,4 +308,108 @@ pub(super) fn render(layout: &Layout, indent: usize, options: &FormatOptions) ->
     renderer.append(&indent_str(indent));
     renderer.prepend(Instruction::Layout(layout, false));
     renderer.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_renderer() -> Renderer<'static> {
+        Renderer {
+            pending: None,
+            continuations: Default::default(),
+            candidates: Vec::new(),
+            last_candidate: None,
+            broken: HashSet::new(),
+            line: Default::default(),
+            state: LineState::default(),
+            lines: Vec::new(),
+            width: Some(100),
+        }
+    }
+
+    #[test]
+    fn line_inspections_accumulate_rendering_work() {
+        let mut renderer = empty_renderer();
+        renderer.append("abc");
+        super::super::RENDER_WORK.with(|work| work.set(0));
+        assert_eq!(renderer.line.chars().count(), 3);
+        assert_eq!(renderer.line.chars().count(), 3);
+        assert_eq!(renderer.line.chars().rev().count(), 3);
+        assert_eq!(renderer.line.chars().nth(2), Some('c'));
+        assert!(
+            super::super::RENDER_WORK.with(std::cell::Cell::get) >= 12,
+            "repeated line inspections must contribute to the work bound"
+        );
+    }
+
+    #[test]
+    fn line_copies_contribute_to_rendering_work() {
+        let mut renderer = empty_renderer();
+        renderer.append("abc");
+        super::super::RENDER_WORK.with(|work| work.set(0));
+        let copied = renderer.line.clone();
+        assert!(
+            super::super::RENDER_WORK.with(std::cell::Cell::get) >= 3,
+            "copied line bytes must contribute to the work bound"
+        );
+        assert_eq!(copied.chars().collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn indexed_continuation_reads_accumulate_work_and_keep_identity() {
+        let mut renderer = empty_renderer();
+        renderer.prepend(Instruction::Text("first"));
+        renderer.prepend(Instruction::Text("second"));
+        super::super::RENDER_WORK.with(|work| work.set(0));
+        assert!(matches!(
+            renderer.continuations[1].instruction,
+            Instruction::Text("second")
+        ));
+        assert_eq!(renderer.continuations[0].next, None);
+        assert_eq!(renderer.continuations[1].next, Some(0));
+        assert!(
+            super::super::RENDER_WORK.with(std::cell::Cell::get) >= 3,
+            "repeated indexed reads must contribute to the work bound"
+        );
+    }
+
+    #[test]
+    fn arena_copies_contribute_to_rendering_work() {
+        let mut renderer = empty_renderer();
+        renderer.prepend(Instruction::Text("first"));
+        renderer.prepend(Instruction::Text("second"));
+        super::super::RENDER_WORK.with(|work| work.set(0));
+        let copied = renderer.continuations.clone();
+        assert!(
+            super::super::RENDER_WORK.with(std::cell::Cell::get) >= 2,
+            "arena copies must contribute to the work bound"
+        );
+        assert!(matches!(copied[0].instruction, Instruction::Text("first")));
+        assert_eq!(copied[0].next, None);
+        assert!(matches!(copied[1].instruction, Instruction::Text("second")));
+        assert_eq!(copied[1].next, Some(0));
+    }
+
+    #[test]
+    fn copying_continuation_entries_contributes_to_rendering_work() {
+        let mut renderer = empty_renderer();
+        renderer.prepend(Instruction::Text("first"));
+        renderer.prepend(Instruction::Text("second"));
+        super::super::RENDER_WORK.with(|work| work.set(0));
+        let copied: Vec<_> = renderer
+            .continuations
+            .iter()
+            .map(|entry| (entry.instruction, entry.next))
+            .collect();
+        assert_eq!(copied.len(), 2);
+        assert!(matches!(copied[0].0, Instruction::Text("first")));
+        assert_eq!(copied[0].1, None);
+        assert!(matches!(copied[1].0, Instruction::Text("second")));
+        assert_eq!(copied[1].1, Some(0));
+        assert!(
+            super::super::RENDER_WORK.with(std::cell::Cell::get) >= 2,
+            "copied continuation entries must contribute to the work bound"
+        );
+    }
 }
