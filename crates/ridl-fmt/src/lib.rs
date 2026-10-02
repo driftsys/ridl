@@ -82,7 +82,9 @@
 //! enclosing construct is emitted verbatim from source instead of being
 //! re-synthesised. Inline comments between interaction annotations are an
 //! exception: they stay with the preceding annotation when timing moves first.
-//! Line comments retain their newline. This leaves the node structure
+//! If moving an annotation line comment would consume another trailing comment,
+//! the whole member stays verbatim. Line comments retain their newline.
+//! This leaves the node structure
 //! and the non-trivia token set unchanged, and stays idempotent.
 //! The property harness checks all three implemented profiles at widths 100,
 //! 60 and 40, comparing node entry and exit, token identity, and comment text.
@@ -214,7 +216,11 @@ fn layout_container(
                 lines.push(String::new());
             }
             if let Some(node) = &block.node {
-                lines.extend(format_element(node, indent, options));
+                if !block.trailing.is_empty() && has_moved_annotation_line_comment(node) {
+                    lines.push(format!("{ind}{}", node.text()));
+                } else {
+                    lines.extend(format_element(node, indent, options));
+                }
             }
             for comment in &block.trailing {
                 if let Some(line) = lines.last_mut() {
@@ -766,6 +772,32 @@ fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
         }
     }
     true
+}
+
+/// Moving an attribute's line comment past timing would consume any later
+/// trailing comment. The container retains this whole member when one exists.
+fn has_moved_annotation_line_comment(node: &SyntaxNode) -> bool {
+    if !has_only_inline_annotation_comments(node) {
+        return false;
+    }
+    let mut owner = None;
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Node(child) if child.kind() == SyntaxKind::Timing => return false,
+            NodeOrToken::Node(child) => owner = Some(child.kind()),
+            NodeOrToken::Token(token)
+                if owner == Some(SyntaxKind::AttrBlock)
+                    && matches!(
+                        token.kind(),
+                        SyntaxKind::LineComment | SyntaxKind::DocComment
+                    ) =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 fn annotation_comments(node: &SyntaxNode, annotation: SyntaxKind, trailing: bool) -> Vec<Layout> {
@@ -1884,6 +1916,43 @@ mod tests {
         ] {
             assert_ridl_member(source, expected);
         }
+    }
+
+    #[test]
+    fn ridl_colliding_annotation_line_comments_keep_the_member_verbatim() {
+        for annotation in ["// attribute", "/// attribute"] {
+            for trailing in ["// member", "/* member */", "/* member\nmore */"] {
+                let member = format!("query  q():T [persist] {annotation}\n  @ 10ms {trailing}");
+                assert_profile_format(
+                    &format!("package p\ninterface I {{\n  {member}\n}}\n"),
+                    &format!("package p\n\ninterface I {{\n  {member}\n}}\n"),
+                    Profile::Ridl,
+                    &FormatOptions::default(),
+                );
+            }
+        }
+        assert_profile_format(
+            "package p\ninterface I {\n  query  q():T [require ready] // attribute\n  @ 10ms // member\n}\n",
+            "package p\n\ninterface I {\n  query  q():T [require ready] // attribute\n  @ 10ms // member\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn ridl_noncolliding_annotation_comments_still_normalize() {
+        assert_profile_format(
+            "package p\ninterface I {\n  query  q():T [persist] /* attribute */ @ 10ms // member\n}\n",
+            "package p\n\ninterface I {\n  query q(): T @10ms [ persist ] /* attribute */ // member\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+        assert_profile_format(
+            "package p\ninterface I {\n  query  q():T @ 10ms // timing\n  [persist] // member\n}\n",
+            "package p\n\ninterface I {\n  query q(): T @10ms // timing\n  [ persist ] // member\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
     }
 
     #[test]

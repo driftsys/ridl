@@ -239,6 +239,13 @@ source. Timing still comes first. For example,
 The whole-member verbatim rule continues to apply to other direct member
 comments and to standalone comments between annotations.
 
+Further amendment approved on 2026-10-02: preserve the whole member verbatim
+when moving an annotation line comment would collide with a trailing member
+comment. This includes documentation line comments and trailing block comments.
+For example, `query q(): T [persist] // attribute` followed by `@10ms // member`
+retains its attribute-first source order and both comments. The preceding
+`/* note */` example still uses timing first.
+
 **Attribute block, inline form.** One space, the opening bracket, a space, the
 attributes joined by a comma and a space, a space, the closing bracket (the
 padding is D-3). A block whose attributes are all flags or assignments takes
