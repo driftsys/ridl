@@ -1097,3 +1097,32 @@ append-only. Implementation status and verification are in
 - Commit and PR: follow-up to `ac52315` in PR #638; combined fix diff receives
   full pass 2. QUICK does not repeat over its own corrections.
 - Maintainer action: review the final PR; no approval is pending.
+
+## D-H42 — Final review disposition and publication
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: completed review; routine status publication and mandated debt filing.
+- Question or observed case: full pass 2 retains one Minor evidence-timing
+  finding. Task 13's historical claim predates the results it describes.
+- Chosen action: file [#639](https://github.com/driftsys/ridl/issues/639) with
+  label `debt` and milestone E1 — typl + Tooling Spine. Leave the historical
+  Task 13 claim for that issue; record completed review results separately in
+  the current report and PR evidence. Publish only final status records next.
+- Reason and alternatives considered: the required two-pass cap directs
+  non-Critical findings to debt. Another full review would exceed that cap.
+  Completion of review rounds does not mean that no defects remain.
+- Authority: active review procedure's pass-2 stop rule and the handoff's
+  evidence, gate and preservation requirements.
+- Affected files and behavior: status report, WIP index and PR evidence only; no
+  executable behavior changes in the final status publication.
+- Verification: full pass 2 covers `7f0aa60..aaf383a`, with verified Terra/high
+  compliance/refuters and Sol/high tests/docs. All four mutations fail their
+  targeted assertions; restored 110 unit and 20 integration tests pass.
+  `CARGO_INCREMENTAL=0 just verify`, enabled push hooks and CI run 37007230085
+  pass on exact `aaf383afa6291913cb135463ad90151f91c43899`. Final record-only
+  publication repeats the full local gate and enabled push hooks on its own
+  head, then monitors the current PR checks.
+- Commit and PR: implementation `7f0aa60`, corrections `ac52315` and `aaf383a`,
+  final [PR #638](https://github.com/driftsys/ridl/pull/638) directly into main.
+- Maintainer action: review and merge PR #638; no rendering approval or stacked
+  merge remains. Do not archive WIP or merge automatically.
