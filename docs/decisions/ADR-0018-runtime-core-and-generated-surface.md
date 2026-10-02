@@ -56,6 +56,11 @@ Those references are unimplemented or under rewrite, so each sweep waits for the
 pass that touches it; the family overview's inventory row, the one that names
 the document, is corrected.
 
+**Amended 2026-10-02 — constrained float validity.** The context now records the
+implemented policy from typl §5.5: range and step constraints exclude NaN and
+infinities, while unconstrained floats retain them (issue #421). This amendment
+does not change the record's Proposed status.
+
 ## Context
 
 The Rust backend has shipped an interaction layer since E2 — consumer and
@@ -82,9 +87,10 @@ have to implement does not survive being emitted twice.
 **And the types below it carry no contract.** A named scalar becomes
 `pub struct Speed(pub f64)`, so `Speed(9999.0)` and `Speed(f64::NAN)` both
 constructed at the time of this record, and typl's range, unit and step reach
-Rust as doc comments. Epic 10 added checked construction, so `Speed(9999.0)` no
-longer constructs; `Speed(f64::NAN)` still does (issue #421). Composite fields
-keep the ridl spelling, enum variants come out `FILTER_INVALID`, and no
+Rust as doc comments. Epic 10 added checked construction, which rejects
+out-of-range values. Range and step constraints now also reject NaN and
+infinities (issue #421); unconstrained floats retain them (typl §5.5). Composite
+fields keep the ridl spelling, enum variants come out `FILTER_INVALID`, and no
 generated type carries a derive.
 
 So the elaborate half of the output is unusable and the thin half is unfinished.

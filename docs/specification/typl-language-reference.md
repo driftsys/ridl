@@ -629,10 +629,11 @@ finite values. A numeric range's omitted bound is the widest finite backing
 value, so a range also excludes infinities. An unconstrained `float` retains its
 backing representation's NaN and infinity values. Declaring a range or `step`
 therefore changes validity, without globally restricting the `float` primitive
-to finite values. These rules apply to named types and inline constraints, at
-construction and at every validated payload boundary. The reason is domain
-membership: NaN has no ordered position in a closed interval and no integer grid
-index.
+to finite values. These rules apply to named types and inline constraints. The
+Rust backend enforces them in checked constructors for named scalars and in
+payload verification for named and inline constraints. Public primitive fields
+do not validate assignment. The reason is domain membership: NaN has no ordered
+position in a closed interval and no integer grid index.
 
 **Exclusive bounds are not supported, and are not planned.** An integer's
 exclusive bound is written as the closed bound one value inside it. A float's

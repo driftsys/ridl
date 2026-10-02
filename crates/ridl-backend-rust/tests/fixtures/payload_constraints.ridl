@@ -47,3 +47,8 @@ struct ExtremeInline {
 
 type HalfLower : float [0.0..]
 type HalfUpper : float [..0.0]
+
+struct InlineRange {
+  grid : float [10.0..100.0 step 1.0]
+  rangeOnly : float [0.0..1.0]
+}

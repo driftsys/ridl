@@ -312,3 +312,165 @@ fn main() {
         ),
     );
 }
+
+#[test]
+fn inline_float_range_rejects_on_grid_outside_values_and_range_only_nan() {
+    rustc::run_program(
+        "inline_float_range",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Rule, VerifyError};
+fn verify(value: &InlineRange) -> Result<(), VerifyError> {
+    let mut out = vec![0; <InlineRange as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).unwrap().bytes;
+    <InlineRange as Payload<FlatBuffers>>::verify(bytes).map(|_| ())
+}
+fn main() {
+    let mut value = InlineRange { grid: 100.0, range_only: 0.5 };
+    assert!(verify(&value).is_ok());
+    for outside in [9.0, 150.0] {
+        value.grid = outside;
+        assert!(matches!(verify(&value), Err(VerifyError::Contract(v)) if v.rule == Rule::Range),
+            "on-grid finite value {outside} must fail its inline range");
+    }
+    value.grid = 100.0;
+    value.range_only = f64::NAN;
+    assert!(matches!(verify(&value), Err(VerifyError::Contract(v)) if v.rule == Rule::Range),
+        "range-only NaN rejection must not depend on Step");
+}
+"#,
+        ),
+    );
+}
+
+#[test]
+fn overflowing_step_retains_nonzero_lattice_points_and_wire_parity() {
+    let magnitude = format!("1{}.0", "0".repeat(308));
+    let step = format!("2{}.0", "0".repeat(308));
+    let output = ridlc::compile(
+        "overflow_nonzero.typl",
+        &format!(
+            "package app\ntype Opposite : float [-{magnitude}..{magnitude} step {step}] = -{magnitude}\n"
+        ),
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let source = ridl_backend_rust::generate(&output.package)
+        .unwrap()
+        .rust_source;
+    rustc::run_program(
+        "overflow_nonzero",
+        &format!(
+            "#![allow(dead_code)]\n{source}\n{}",
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref, Rule};
+fn main() {
+    assert_eq!(Opposite::default().get(), -1e308);
+    assert_eq!(Opposite::new(0.0).unwrap_err().rule, Rule::Step);
+    for value in [Opposite::default(), Opposite::new(-1e308).unwrap(), Opposite::new(1e308).unwrap()] {
+        let input = value.get();
+        assert!(Opposite::check(&input).is_ok());
+        let mut out = vec![0; <Opposite as Payload<FlatBuffers>>::MAX_SIZE];
+        let bytes = value.encode(&mut out).unwrap().bytes;
+        let back = Ref::<'_, Opposite, FlatBuffers>::verify(bytes).unwrap().decode();
+        assert_eq!(back.get(), input);
+        assert!(Opposite::check(&back.get()).is_ok());
+        assert!(Opposite::new(back.get()).is_ok());
+    }
+}
+"#
+        ),
+    );
+}
+
+#[test]
+fn generated_step_checks_compile_without_std() {
+    let output = ridlc::compile(
+        "core_step.typl",
+        "package app\ntype Speed : float [0.0..100.0 step 0.1]\n",
+    );
+    let source = ridl_backend_rust::generate(&output.package)
+        .unwrap()
+        .rust_source;
+    let directory = tempfile::tempdir().unwrap();
+    let runtime = rustc::ridl_rt_rlib_without_std(directory.path());
+    let path = directory.path().join("core_step.rs");
+    std::fs::write(&path, format!("#![no_std]\n#![allow(dead_code)]\n{source}")).unwrap();
+    let result = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2021",
+            "--crate-type",
+            "lib",
+            "--emit=metadata",
+            "-D",
+            "warnings",
+        ])
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", runtime.display()))
+        .arg("-o")
+        .arg(directory.path().join("core_step.rmeta"))
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "no_std emitted checks must compile: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn compensated_reconstruction_does_not_overflow_before_decimal_residual() {
+    let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
+    let origin = num_bigint::BigInt::from(14u32) * num_bigint::BigInt::from(10u32).pow(306);
+    let step = (&maximum - &origin) / 2u32;
+    let output = ridlc::compile(
+        "finite_endpoint.typl",
+        &format!(
+            "package app\ntype Endpoint : float [{origin}.0..{maximum}.0 step {step}.0] = {maximum}.0\n"
+        ),
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let source = ridl_backend_rust::generate(&output.package)
+        .unwrap()
+        .rust_source;
+    rustc::run_program(
+        "finite_endpoint",
+        &format!(
+            "#![allow(dead_code)]\n{source}\n{}",
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref, Rule};
+fn main() {
+    assert_eq!(Endpoint::default().get(), f64::MAX);
+    for value in [Endpoint::default(), Endpoint::new(f64::MAX).unwrap(), Endpoint::new(1.4e307).unwrap()] {
+        let input = value.get();
+        assert!(Endpoint::check(&input).is_ok());
+        let mut out = vec![0; <Endpoint as Payload<FlatBuffers>>::MAX_SIZE];
+        let bytes = value.encode(&mut out).unwrap().bytes;
+        let back = Ref::<'_, Endpoint, FlatBuffers>::verify(bytes).unwrap().decode();
+        assert_eq!(back.get(), input);
+        assert!(Endpoint::check(&back.get()).is_ok());
+    }
+    assert_eq!(Endpoint::new(5e307).unwrap_err().rule, Rule::Step);
+}
+"#
+        ),
+    );
+}

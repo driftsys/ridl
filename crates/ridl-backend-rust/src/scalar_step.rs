@@ -143,9 +143,9 @@ fn float_invalid_at_precision(
         quote! { ::core::primitive::f64 }
     };
     let nearest_at_precision = if wire_f32 {
-        quote! { (__nearest / __factor) as ::core::primitive::f32 as ::core::primitive::f64 }
+        quote! { (__nearest / __factor / __rescale) as ::core::primitive::f32 as ::core::primitive::f64 }
     } else {
-        quote! { __nearest / __factor }
+        quote! { __nearest / __factor / __rescale }
     };
     quote! {
         {
@@ -185,26 +185,53 @@ fn float_invalid_at_precision(
                     } else {
                         __scaled_value / __step - __phase / __step
                     };
-                    let __index = __quotient.round();
+                    // Remainder gives truncation without a std-only rounding
+                    // method. Ties round away from zero, as for f64::round.
+                    let __fraction = __quotient % 1.0;
+                    let __index = __quotient - __fraction + if __fraction >= 0.5 {
+                        1.0
+                    } else if __fraction <= -0.5 {
+                        -1.0
+                    } else {
+                        0.0
+                    };
                     let __scale = #value.abs().max((__phase / __factor).abs()).max(__original_step.abs());
                     let __tolerance = (4.0 * #epsilon * __scale).min(__original_step / 4.0);
                     let mut __distance = ::core::primitive::f64::INFINITY;
+                    // Scale large terms before reconstructing. A rounded high
+                    // sum can otherwise overflow before its negative decimal
+                    // residual brings the exact point back into finite range.
+                    let __rescale = if __scaled_value.abs().max(__phase.abs()).max(__step.abs())
+                        > ::core::primitive::f64::MAX / 4.0 {
+                        0.25
+                    } else {
+                        1.0
+                    };
+                    // Dekker's two-product with mantissa splitting uses core
+                    // operations only. Clearing low bits avoids the overflow
+                    // of the traditional multiplication-based splitter.
+                    let __product_with_error = |__left: ::core::primitive::f64, __right: ::core::primitive::f64| {
+                        let __product = __left * __right;
+                        let __left_high = ::core::primitive::f64::from_bits(__left.to_bits() & !((1u64 << 27) - 1));
+                        let __right_high = ::core::primitive::f64::from_bits(__right.to_bits() & !((1u64 << 27) - 1));
+                        let __left_low = __left - __left_high;
+                        let __right_low = __right - __right_high;
+                        let __error = ((__left_high * __right_high - __product)
+                            + __left_high * __right_low + __left_low * __right_high)
+                            + __left_low * __right_low;
+                        (__product, __error)
+                    };
                     // The estimate can select a neighboring lattice index
                     // through division rounding. Check both neighbors too.
                     for __candidate in [__index - 1.0, __index, __index + 1.0] {
-                        let __product = __candidate * __step;
-                        let __sum = __product + __phase;
-                        let __nearest = if __product.is_finite() && __sum.is_finite() {
-                            let __product_error = __candidate.mul_add(__step, -__product);
-                            let __part = __sum - __product;
-                            let __sum_error = (__product - (__sum - __part)) + (__phase - __part);
-                            let __low = __candidate.mul_add(__step_low, __phase_low)
-                                + __product_error + __sum_error;
-                            __sum + __low
-                        } else {
-                            __candidate.mul_add(__step, __phase)
-                                + __candidate.mul_add(__step_low, __phase_low)
-                        };
+                        let (__product, __product_error) = __product_with_error(__candidate, __step * __rescale);
+                        let __scaled_phase = __phase * __rescale;
+                        let __sum = __product + __scaled_phase;
+                        let __part = __sum - __product;
+                        let __sum_error = (__product - (__sum - __part)) + (__scaled_phase - __part);
+                        let __low = __candidate * (__step_low * __rescale) + __phase_low * __rescale
+                            + __product_error + __sum_error;
+                        let __nearest = __sum + __low;
                         let __nearest = #nearest_at_precision;
                         if __nearest.is_finite() {
                             __distance = __distance.min((#value - __nearest).abs());

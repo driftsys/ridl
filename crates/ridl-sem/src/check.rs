@@ -1199,8 +1199,9 @@ impl Checker<'_> {
         };
         // E1.9: a type without a declared `= value` derives its init from the
         // §5.8 table. A named type whose init is not derivable (a string/bytes
-        // type forbidding length 0, or a `match`-typed one) is reported as
-        // TYPL-115 (info) — a consumer that requires an init escalates it.
+        // type forbidding length 0, a `match`-typed one, or a float whose grid
+        // has no finite derived value) is reported as TYPL-115 (info).
+        // A consumer that requires an init escalates it.
         if type_def.init.is_none() {
             let derived = init::derive_type_init(&type_def);
             if !derived.derivable {
@@ -2271,8 +2272,8 @@ impl Checker<'_> {
     /// The derived init of a named reference (`Speed`, `ridl.std.Name`), by kind
     /// (typl §5.8): a scalar `type` materializes its value; an `enum` its `0`
     /// or lowest value; an `enumset` the empty set; a `struct` or `union` is a
-    /// derivable composite the consumer reconstructs (a `union` inherits its
-    /// first arm's derivability). An unresolved reference — already reported by
+    /// composite the consumer reconstructs, with derivability inherited from
+    /// its fields or first arm respectively. An unresolved reference — already reported by
     /// the type-resolution pass — is treated as a derivable composite.
     fn named_ref_init(&self, canonical: &str) -> v2::InitValue {
         match self.resolve_canonical(canonical) {
@@ -2332,12 +2333,8 @@ impl Checker<'_> {
                 derivable: true,
                 value: Some(String::new()),
             },
-            SymbolKind::Struct => v2::InitValue {
-                derivable: true,
-                value: None,
-            },
-            SymbolKind::Union => v2::InitValue {
-                derivable: self.union_is_derivable(symbol),
+            SymbolKind::Struct | SymbolKind::Union => v2::InitValue {
+                derivable: self.composite_is_derivable(symbol),
                 value: None,
             },
             SymbolKind::Const => v2::InitValue {
@@ -2414,55 +2411,125 @@ impl Checker<'_> {
         }
     }
 
-    /// Whether a union's derived init — its first arm's init (typl §5.8) — is
-    /// derivable. The first arm resolves one level: a scalar arm defers to its
-    /// scalar derivability, an enum/enumset/struct/union arm is derivable.
-    fn union_is_derivable(&self, symbol: &Symbol) -> bool {
-        let Some(Definition::Union(decl)) = self.find_definition(symbol) else {
-            return true;
-        };
-        let Some(first_arm) = decl.syntax().children().find_map(ast::UnionArm::cast) else {
-            return false;
-        };
-        let Some(path) = first_arm.type_ref() else {
-            return true;
-        };
-        if primitive_path_keyword(&path).is_some() {
-            return true;
-        }
-        let Some(package) = self.package_handle(&symbol.package) else {
-            return true;
-        };
-        let resolution = resolve_package(self.db, self.ws, package, self.std);
-        match self.lookup_path_in(&resolution, &path) {
-            Some(arm) if arm.kind == SymbolKind::Type => self.type_symbol_is_derivable(&arm),
-            _ => true,
-        }
+    /// Composite inits remain unmaterialized, but their derivability follows
+    /// the struct's fields or the union's first arm (typl §5.8).
+    fn composite_is_derivable(&self, symbol: &Symbol) -> bool {
+        self.symbol_init_is_derivable(symbol, &mut HashSet::new())
     }
 
-    /// Whether a named scalar `type` has a derivable init (typl §5.8): numeric
-    /// and boolean types always do; a string/bytes type does when its bounds
-    /// admit length 0 and it carries no `match` pattern; a type with a declared
-    /// init always does.
-    fn type_symbol_is_derivable(&self, symbol: &Symbol) -> bool {
-        let Some(Definition::Type(decl)) = self.find_definition(symbol) else {
-            return true;
-        };
-        if decl.init_value().is_some() {
-            return true;
+    fn symbol_init_is_derivable(
+        &self,
+        symbol: &Symbol,
+        visiting: &mut HashSet<(String, String)>,
+    ) -> bool {
+        if !matches!(symbol.kind, SymbolKind::Struct | SymbolKind::Union) {
+            return self.named_type_init(symbol).derivable;
         }
-        match backing_class(decl.backing()) {
-            BackingClass::Boolean
-            | BackingClass::Integer
-            | BackingClass::Float
-            | BackingClass::Unknown => true,
-            BackingClass::Str | BackingClass::Bytes => self
-                .named_string_constraint(symbol)
-                .is_some_and(|constraint| {
-                    constraint.pattern.is_none()
-                        && constraint.pattern_const.is_none()
-                        && constraint.len_min.unwrap_or(0) == 0
+        let key = (symbol.package.clone(), symbol.name.clone());
+        // Recursive composites are diagnosed separately as TYPL-206.
+        if !visiting.insert(key.clone()) {
+            return false;
+        }
+        let result = (|| {
+            let Some(package) = self.package_handle(&symbol.package) else {
+                return true;
+            };
+            let resolution = resolve_package(self.db, self.ws, package, self.std);
+            match self.find_definition(symbol) {
+                Some(Definition::Struct(decl)) => decl.members().all(|member| match member {
+                    ast::StructMember::Reserved(_) => true,
+                    ast::StructMember::Field(field) => {
+                        // Explicit values have been validated by field lowering.
+                        field.init_value().is_some()
+                            || field.field_type().is_none_or(|ty| {
+                                self.field_init_is_derivable(package, &resolution, &ty, visiting)
+                            })
+                    }
                 }),
+                Some(Definition::Union(decl)) => {
+                    let Some(first_arm) = decl.syntax().children().find_map(ast::UnionArm::cast)
+                    else {
+                        return false;
+                    };
+                    first_arm.type_ref().is_none_or(|path| {
+                        self.lookup_path_in(&resolution, &path)
+                            .is_none_or(|arm| self.symbol_init_is_derivable(&arm, visiting))
+                    })
+                }
+                _ => true,
+            }
+        })();
+        visiting.remove(&key);
+        result
+    }
+
+    fn field_init_is_derivable(
+        &self,
+        package: Package,
+        resolution: &Resolution,
+        ty: &ast::FieldType,
+        visiting: &mut HashSet<(String, String)>,
+    ) -> bool {
+        let minimum = |bound: Option<ast::Bound>| {
+            bound
+                .and_then(|bound| bound.min())
+                .and_then(|literal| self.numeric_literal_in(package, &literal))
+                .and_then(|value| exact_to_u64(&value))
+                .unwrap_or(0)
+        };
+        match ty {
+            ast::FieldType::Optional(_) => true,
+            ast::FieldType::Path(path) => self
+                .lookup_path_in(resolution, path)
+                .is_none_or(|symbol| self.symbol_init_is_derivable(&symbol, visiting)),
+            ast::FieldType::Primitive(node) => {
+                let (_, class) = primitive_of(node);
+                let constraint = node.constraint();
+                match class {
+                    BackingClass::Float => {
+                        let bound = |literal: Option<ast::Literal>| {
+                            literal.and_then(|literal| self.numeric_literal_in(package, &literal))
+                        };
+                        init::finite_float_init(init::numeric_zero_or_min(
+                            bound(constraint.as_ref().and_then(ast::Constraint::min)),
+                            bound(constraint.as_ref().and_then(ast::Constraint::max)),
+                            bound(constraint.as_ref().and_then(ast::Constraint::step)),
+                        ))
+                        .derivable
+                    }
+                    BackingClass::Str | BackingClass::Bytes => {
+                        let (min, _) = self.string_len_bounds(package, constraint.as_ref());
+                        min == 0
+                            && constraint
+                                .as_ref()
+                                .and_then(ast::Constraint::match_pattern)
+                                .is_none()
+                    }
+                    _ => true,
+                }
+            }
+            ast::FieldType::Tuple(tuple) => tuple.fields().all(|field| {
+                field.field_type().is_none_or(|inner| {
+                    self.field_init_is_derivable(package, resolution, &inner, visiting)
+                })
+            }),
+            ast::FieldType::Array(array) => {
+                minimum(array.bound()) == 0
+                    || array.element().is_none_or(|inner| {
+                        self.field_init_is_derivable(package, resolution, &inner, visiting)
+                    })
+            }
+            ast::FieldType::Map(map) => match minimum(map.bound()) {
+                0 => true,
+                1 => {
+                    map.key().is_some_and(|key| {
+                        self.field_init_is_derivable(package, resolution, &key, visiting)
+                    }) && map.value().is_some_and(|value| {
+                        self.field_init_is_derivable(package, resolution, &value, visiting)
+                    })
+                }
+                _ => false,
+            },
         }
     }
 
@@ -9745,6 +9812,100 @@ mod tests {
     }
 
     #[test]
+    fn union_init_propagates_first_arm_derivability_to_fields_and_signals() {
+        let step = format!("1{}.0", "0".repeat(400));
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "package app\ntype Bad : float [..-0.1 step {step}]\ntype Good : float [0.0..1.0 step 0.1]\ntype Label : string [1] = \"x\"\nunion U {{ bad : Bad, good : Good }}\nunion Nested {{ first : U, good : Good }}\nunion Valid {{ first : Good, bad : Bad }}\nunion Declared {{ first : Label }}\nstruct S {{ bad : U, nested : Nested, good : Valid, declared : Declared }}\ninterface I {{ signal bad : U @10ms, signal nested : Nested @10ms, signal good : Valid @10ms, signal declared : Declared @10ms }}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked)
+                .iter()
+                .filter(|code| **code == "RIDL-109")
+                .count(),
+            2,
+            "{:?}",
+            checked.diagnostics
+        );
+        for (name, derivable) in [
+            ("bad", false),
+            ("nested", false),
+            ("good", true),
+            ("declared", true),
+        ] {
+            assert_eq!(
+                field_init(&checked, "S", name),
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+            assert_eq!(
+                signal_def(&checked, name).init,
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn struct_signal_init_propagates_nonderivable_float_and_unique_map_fields() {
+        let step = format!("1{}.0", "0".repeat(400));
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "package app\ntype Bad : float [..-0.1 step {step}]\ntype Good : integer [0..10]\ntype Label : string [1]\nstruct BadFloat {{ value : Bad }}\nstruct BadMap {{ values : [integer : Good; 2..3] }}\nstruct BadInline {{ value : float [..-0.1 step {step}] }}\nstruct BadArray {{ values : [Bad; 1..2] }}\nstruct BadTuple {{ value : (first: Bad, second: Good) }}\nstruct Nested {{ value : BadMap }}\nstruct Valid {{ label : Label = \"x\", optional : Bad?, empty : [Bad; 0..2], emptyMap : [integer : Bad; 0..2], one : [integer : Good; 1..2] }}\nstruct Repeated {{ first : Valid, second : Valid }}\nunion FloatUnion {{ first : BadFloat }}\nunion MapUnion {{ first : BadMap }}\nstruct Holder {{ badFloat : BadFloat, badMap : BadMap, nested : Nested, valid : Valid, repeated : Repeated }}\ninterface I {{ signal badFloat : BadFloat @10ms, signal badMap : BadMap @10ms, signal nested : Nested @10ms, signal floatUnion : FloatUnion @10ms, signal mapUnion : MapUnion @10ms, signal valid : Valid @10ms, signal repeated : Repeated @10ms, signal badInline : BadInline @10ms, signal badArray : BadArray @10ms, signal badTuple : BadTuple @10ms }}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked)
+                .iter()
+                .filter(|code| **code == "RIDL-109")
+                .count(),
+            8,
+            "{:?}",
+            checked.diagnostics
+        );
+        for (name, derivable) in [
+            ("badFloat", false),
+            ("badMap", false),
+            ("nested", false),
+            ("valid", true),
+            ("repeated", true),
+        ] {
+            assert_eq!(
+                field_init(&checked, "Holder", name),
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+            assert_eq!(
+                signal_def(&checked, name).init,
+                Some(iv(derivable, None)),
+                "{name}"
+            );
+        }
+        for name in [
+            "floatUnion",
+            "mapUnion",
+            "badInline",
+            "badArray",
+            "badTuple",
+        ] {
+            assert_eq!(signal_def(&checked, name).init, Some(iv(false, None)));
+        }
+    }
+
+    #[test]
+    fn recursive_union_init_is_not_derivable() {
+        let checked = check_source(
+            "app",
+            "package app\nunion U { first : V }\nunion V { first : U }\nstruct S { value : U }\n",
+        );
+        assert!(codes(&checked).contains(&"TYPL-206"));
+        assert_eq!(field_init(&checked, "S", "value"), Some(iv(false, None)));
+    }
+
+    #[test]
     fn derived_tuple_field_init_is_a_derivable_composite() {
         let checked = check_source(
             "app",
@@ -10061,6 +10222,64 @@ mod tests {
     }
 
     #[test]
+    fn primitive_and_inline_scalar_field_inits_validate_kind_and_integrality() {
+        for (target, invalid, valid) in [
+            ("boolean", vec!["1", "\"x\""], vec!["true", "false"]),
+            ("integer", vec!["true", "\"x\"", "1.5"], vec!["1", "1.0"]),
+            ("float", vec!["true", "\"x\""], vec!["1", "1.5"]),
+            (
+                "integer [0..10]",
+                vec!["true", "\"x\"", "1.5"],
+                vec!["1", "1.0"],
+            ),
+            (
+                "float [0.0..10.0 step 0.5]",
+                vec!["true", "\"x\""],
+                vec!["1", "1.5"],
+            ),
+            ("string [0..8]", vec!["true", "1"], vec!["\"x\""]),
+            ("bytes [0..8]", vec!["false", "1"], vec!["\"x\""]),
+        ] {
+            let warnings = match target {
+                "integer" => vec!["TYPL-101"],
+                "float" => vec!["TYPL-102"],
+                _ => Vec::new(),
+            };
+            for literal in invalid {
+                for init in [literal, "RAW"] {
+                    let checked = check_source(
+                        "app",
+                        &format!(
+                            "package app\nconst RAW = {literal}\nstruct S {{ value : {target} = {init} }}\n"
+                        ),
+                    );
+                    let mut expected = warnings.clone();
+                    expected.push("TYPL-109");
+                    assert_eq!(
+                        codes(&checked),
+                        expected,
+                        "{target} = {init}: {:?}",
+                        checked.diagnostics
+                    );
+                }
+            }
+            for init in valid {
+                let checked = check_source(
+                    "app",
+                    &format!("package app\nstruct S {{ value : {target} = {init} }}\n"),
+                );
+                assert_eq!(
+                    codes(&checked),
+                    warnings,
+                    "{target} = {init}: {:?}",
+                    checked.diagnostics
+                );
+                assert!(field_init(&checked, "S", "value").unwrap().derivable);
+            }
+        }
+    }
+
+    #[test]
     fn inline_collection_and_tuple_inits_refuse_scalar_overrides() {
         let prefix = "package app\ntype Count : integer [0..10]\nconst FIVE = 5\n";
         for target in [
@@ -10135,25 +10354,41 @@ mod tests {
     }
 
     #[test]
-    fn derived_float_init_stays_within_the_finite_backing_domain() {
+    fn derived_float_and_unit_init_stays_within_the_finite_backing_domain() {
         let maximum = (num_bigint::BigInt::from(1u64 << 53) - 1u32) << 971u32;
         for (step, expected) in [
             (maximum.to_string(), Some(format!("-{maximum}"))),
             ((&maximum + 1u32).to_string(), None),
             (format!("1{}", "0".repeat(400)), None),
         ] {
-            let checked = check_ridl(
-                "app",
-                &format!(
-                    "package app\ntype T : float [..-0.1 step {step}.0]\nstruct S {{ named : T, inline : float [..-0.1 step {step}.0] }}\ninterface I {{ signal value : T @10ms }}\n"
-                ),
-            );
-            let expected = iv(expected.is_some(), expected.as_deref());
-            assert_eq!(type_def(&checked, "T").init.as_ref(), Some(&expected));
-            for name in ["named", "inline"] {
-                assert_eq!(field_init(&checked, "S", name), Some(expected.clone()));
+            for backing in ["float", "km/h"] {
+                let checked = check_ridl(
+                    "app",
+                    &format!(
+                        "package app\ntype T : {backing} [..-0.1 step {step}.0]\nstruct S {{ named : T, inline : float [..-0.1 step {step}.0] }}\ninterface I {{ signal value : T @10ms }}\n"
+                    ),
+                );
+                let derivable = expected.is_some();
+                let expected = iv(derivable, expected.as_deref());
+                assert_eq!(
+                    type_def(&checked, "T").init.as_ref(),
+                    Some(&expected),
+                    "{backing}: {:?}",
+                    checked.diagnostics
+                );
+                for name in ["named", "inline"] {
+                    assert_eq!(field_init(&checked, "S", name), Some(expected.clone()));
+                }
+                assert_eq!(signal_def(&checked, "value").init, Some(expected));
+                for code in ["TYPL-115", "RIDL-109"] {
+                    assert_eq!(
+                        codes(&checked).contains(&code),
+                        !derivable,
+                        "{backing}: {:?}",
+                        checked.diagnostics
+                    );
+                }
             }
-            assert_eq!(signal_def(&checked, "value").init, Some(expected));
         }
     }
 

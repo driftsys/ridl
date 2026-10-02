@@ -2,7 +2,8 @@
 //!
 //! A generated payload type implements [`Payload<E>`] once for each encoding.
 //! Its `verify` checks the structure of the bytes and the typl constraints of
-//! the value in one pass. Its `decode` takes a [`Ref`], and only
+//! the value before decoding. Map uniqueness can require repeated key reads.
+//! Its `decode` takes a [`Ref`], and only
 //! [`Ref::verify`] and [`Ref::encode`] build a `Ref`. So a value is decoded
 //! only from bytes that were checked, or that its own encoder wrote.
 
@@ -31,7 +32,7 @@ pub trait Payload<E: Encoding>: Sized {
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
 
     /// Checks the structure of `buf` and the typl constraints of the value it
-    /// holds, in one pass.
+    /// holds. Verifying map uniqueness can require repeated key reads.
     fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>;
 
     /// Builds the value from a proof. It cannot fail, because the proof shows

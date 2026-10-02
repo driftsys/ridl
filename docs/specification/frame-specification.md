@@ -110,7 +110,7 @@ definition, or the crate's own source under `crates/ridl-rt/src/`.
 | `Correlation` | `ridl_rt::port`     | a `u64` identifying one sent call to its caller                                                                                                         |
 | `Contract`    | `ridl_rt::error`    | the four contract-error categories of ridl §10.2: `InvalidValue(Violation)`, `PreconditionFailed`, `ContractBroken`, `UnknownInteraction`               |
 | `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`, `Busy`                                                 |
-| `Violation`   | `ridl_rt::payload`  | the name of the typl type whose constraint failed, and the `Rule` that failed: `Range`, `Step`, `Length`, `Pattern` or `Variant`                        |
+| `Violation`   | `ridl_rt::payload`  | the name of the typl type whose constraint failed, and the `Rule` that failed: `Range`, `Step`, `Length`, `Pattern`, `Variant` or `Unique`              |
 | `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `ReprC`, each named as its cargo feature is                                               |
 
 Two words this document adds, because `ridl-rt` has no need of them:
