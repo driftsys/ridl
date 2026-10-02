@@ -818,6 +818,9 @@ Two of those deserve a note.
 **`ridl fmt` has its own canonical layout.** The listings in this chapter use
 the aligned layout the language references use, which is not what the formatter
 writes. Expect your files to change the first time you run it.
+The [CLI reference](cli-reference.md#ridl-fmt) describes the two-space
+indentation and the configurable width for tuple line breaking, which defaults
+to 100 characters.
 
 **`ridl diff` classifies, and its exit code carries the answer**: 0 when the
 change is compatible or the snapshots are identical, 1 when it is breaking, 2

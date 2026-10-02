@@ -46,6 +46,9 @@
 //! only `max_line_length` from the matching EditorConfig files. An integer sets
 //! the width, `off` disables it, and missing, unset, or invalid values use 100.
 //! Indentation settings are ignored. The pure entry point still reads no file.
+//! The CLI resolves options for each file; the LSP resolves them from the
+//! document path and formats the current buffer. Client indentation options
+//! remain ignored.
 //!
 //! # What order is *not* changed
 //!

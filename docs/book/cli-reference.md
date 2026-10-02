@@ -871,6 +871,33 @@ file takes the file layout (the header, one blank line between declarations).
 The formatter has no layout rules for the rsdl declarations, so it keeps each
 one as written, as it does a ridl `interface` or `service`.
 
+**Layout and line width.** Formatted blocks use two spaces per indentation
+level. Tuple types in declarations that the formatter lays out break into one
+field per line, with commas between fields, when their code line exceeds the
+configured width, which defaults to 100 characters. Width counts Unicode
+scalar values, including indentation.
+Trailing comments do not count towards the
+limit, and unbreakable code can exceed it. A comment embedded inside a
+single-line construct keeps that construct's source layout.
+
+**EditorConfig example.** Editors that support these properties can use this
+section in `.editorconfig` for the family's source files:
+
+```ini
+[*.{typl,ridl,rmdl,rsdl,rxdl}]
+indent_style = space
+indent_size = 2
+max_line_length = 100
+```
+
+The CLI resolves `max_line_length` from `.editorconfig` for each file. The
+language server resolves it from the document path and formats the current
+buffer. An integer sets the width, `off` disables breaking, and absent, `unset`
+or invalid effective values use 100. Indentation remains two spaces; the
+formatter ignores `indent_size`, `indent_style` and client formatting options.
+Compiler profiles for `.rmdl` and `.rxdl` are still pending; the glob includes
+them for editor settings.
+
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without
 writing it. Starting from `speed.typl` holding
