@@ -807,3 +807,25 @@ append-only. Implementation status and verification are in
   retained.
 - Commit and PR: same Task 9 commit and planned RSDL PR.
 - Maintainer action: none.
+
+## D-H30 — Task 9 QUICK documentation correction
+
+- Date and timezone: 2026-10-02, Europe/Paris.
+- Status: factual documentation correction from QUICK review.
+- Observed case: the CLI reference still says all RSDL declarations are kept as
+  written, which Task 9 has made false for system, component and distribution.
+- Decision: describe those three canonical layouts now and explicitly retain
+  deployment/machine's current verbatim status. Task 10 updates that remaining
+  statement when dispatch changes; Task 12 still performs the planned sweep.
+- Reason and alternatives considered: leaving the statement until Task 12 would
+  publish a false behavior claim alongside the intermediate formatter change.
+  This correction does not change the design or advance deployment formatting.
+- Authority: restricted code-to-prose QUICK finding and handoff review loop.
+- Affected files and behavior: CLI reference and evidence only.
+- Verification: all three QUICK seats matched the 13 Task 9 paths. Actual
+  docs/tests Terra/high and fresh bug wrapper/native Terra/medium; metadata
+  verified. Tests and bugs reported no findings. `just test` passed on
+  `c2602dc`; documentation checks follow this correction.
+- Commit and PR: Task 9 QUICK documentation follow-up in the planned RSDL PR; no
+  recursive QUICK pass.
+- Maintainer action: none.
