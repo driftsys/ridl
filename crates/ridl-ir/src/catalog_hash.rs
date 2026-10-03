@@ -470,9 +470,11 @@ fn blank_docs(decl: &mut Decl) {
 mod tests {
     use super::*;
     use crate::v2::{
-        CommandDef, ConstDef, Contract, ContractKind, Decl, EnumDef, EnumSetDef, EnumValue, Field,
-        FieldType, Interface, Param, RetiredInterface, Service, ServiceShape, SignalDef, StructDef,
-        StructMember, TypeDef, Visibility, decl, field_type, service_shape, struct_member,
+        ArrayType, CommandDef, ConstDef, Constraint, Contract, ContractKind, Decl, EnumDef,
+        EnumSetDef, EnumValue, EventDef, FallibleType, Field, FieldType, FixedDef, Interface,
+        MapType, Param, QueryDef, RetiredInterface, ReturnType, Service, ServiceShape, SignalDef,
+        StreamType, StructDef, StructMember, TupleField, TupleType, TypeDef, UnionArm, UnionDef,
+        Visibility, decl, field_type, return_type, service_shape, stream_type, struct_member,
     };
 
     fn named(name: &str) -> FieldType {
@@ -1021,5 +1023,276 @@ mod tests {
             panic!("not a command");
         };
         assert_eq!(def.contracts[0].source, "level < MAX");
+    }
+
+    fn field_of(kind: field_type::Kind) -> FieldType {
+        FieldType {
+            optional: false,
+            kind: Some(kind),
+        }
+    }
+
+    /// A declaration `S` with one struct field of type `ty`.
+    fn holder(ty: FieldType) -> Decl {
+        Decl {
+            name: "S".to_owned(),
+            kind: Some(decl::Kind::StructDef(StructDef {
+                members: vec![StructMember {
+                    member: Some(struct_member::Member::Field(Field {
+                        name: "f".to_owned(),
+                        ordinal: 1,
+                        r#type: Some(ty),
+                        ..Default::default()
+                    })),
+                }],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }
+    }
+
+    fn decl_of(name: &str, kind: decl::Kind) -> Decl {
+        Decl {
+            name: name.to_owned(),
+            ordinal: 1,
+            kind: Some(kind),
+            ..Default::default()
+        }
+    }
+
+    fn query(params: Vec<Param>, return_type: Option<return_type::Kind>) -> Decl {
+        decl_of(
+            "q",
+            decl::Kind::QueryDef(QueryDef {
+                params,
+                return_type: return_type.map(|kind| ReturnType { kind: Some(kind) }),
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn param(ty: FieldType) -> Param {
+        Param {
+            name: "p".to_owned(),
+            r#type: Some(ty),
+        }
+    }
+
+    fn pattern_const_def(name: &str) -> TypeDef {
+        TypeDef {
+            constraint: Some(Constraint {
+                pattern_const: Some(name.to_owned()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// One case per kind of type reference the IR holds: the interactions of
+    /// interface `I` and the declarations beside `T`, built so that `T` is
+    /// reached only through that one reference.
+    fn reference_cases() -> Vec<(&'static str, Vec<Decl>, Vec<Decl>)> {
+        let t = || named("T");
+        let via_s = || vec![signal("s", "S")];
+        vec![
+            ("SignalDef.payload", vec![signal("s", "T")], vec![]),
+            (
+                "EventDef.payload",
+                vec![decl_of(
+                    "e",
+                    decl::Kind::EventDef(EventDef {
+                        payload: "T".to_owned(),
+                        ..Default::default()
+                    }),
+                )],
+                vec![],
+            ),
+            ("FieldType::Named", via_s(), vec![holder(t())]),
+            (
+                "UnionArm.type_ref",
+                via_s(),
+                vec![decl_of(
+                    "S",
+                    decl::Kind::UnionDef(UnionDef {
+                        arms: vec![UnionArm {
+                            name: "a".to_owned(),
+                            ordinal: 1,
+                            type_ref: "T".to_owned(),
+                            doc: String::new(),
+                        }],
+                        ..Default::default()
+                    }),
+                )],
+            ),
+            (
+                "EnumSetDef.backing_enum",
+                via_s(),
+                vec![decl_of(
+                    "S",
+                    decl::Kind::EnumSetDef(EnumSetDef {
+                        backing_enum: Some("T".to_owned()),
+                        ..Default::default()
+                    }),
+                )],
+            ),
+            (
+                "ConstDef.type_ref",
+                via_s(),
+                vec![
+                    decl_of("S", decl::Kind::TypeDef(pattern_const_def("C"))),
+                    decl_of(
+                        "C",
+                        decl::Kind::ConstDef(ConstDef {
+                            type_ref: Some("T".to_owned()),
+                            ..Default::default()
+                        }),
+                    ),
+                ],
+            ),
+            (
+                "Constraint.pattern_const",
+                via_s(),
+                vec![decl_of("S", decl::Kind::TypeDef(pattern_const_def("T")))],
+            ),
+            (
+                "FieldType::InlineScalar",
+                via_s(),
+                vec![holder(field_of(field_type::Kind::InlineScalar(Box::new(
+                    pattern_const_def("T"),
+                ))))],
+            ),
+            (
+                "TupleType.fields",
+                via_s(),
+                vec![holder(field_of(field_type::Kind::Tuple(TupleType {
+                    fields: vec![TupleField {
+                        name: "x".to_owned(),
+                        r#type: Some(t()),
+                    }],
+                })))],
+            ),
+            (
+                "ArrayType.element",
+                via_s(),
+                vec![holder(field_of(field_type::Kind::Array(Box::new(
+                    ArrayType {
+                        element: Some(Box::new(t())),
+                        ..Default::default()
+                    },
+                ))))],
+            ),
+            (
+                "MapType.key",
+                via_s(),
+                vec![holder(field_of(field_type::Kind::Map(Box::new(MapType {
+                    key: Some(Box::new(t())),
+                    ..Default::default()
+                }))))],
+            ),
+            (
+                "MapType.value",
+                via_s(),
+                vec![holder(field_of(field_type::Kind::Map(Box::new(MapType {
+                    value: Some(Box::new(t())),
+                    ..Default::default()
+                }))))],
+            ),
+            (
+                "StreamType::Named",
+                via_s(),
+                vec![holder(field_of(field_type::Kind::Stream(StreamType {
+                    element: Some(stream_type::Element::Named("T".to_owned())),
+                })))],
+            ),
+            (
+                "FixedDef.payload",
+                vec![decl_of(
+                    "k",
+                    decl::Kind::FixedDef(FixedDef { payload: Some(t()) }),
+                )],
+                vec![],
+            ),
+            (
+                "CommandDef.params",
+                vec![decl_of(
+                    "c",
+                    decl::Kind::CommandDef(CommandDef {
+                        params: vec![param(t())],
+                        ..Default::default()
+                    }),
+                )],
+                vec![],
+            ),
+            (
+                "QueryDef.params",
+                vec![query(vec![param(t())], None)],
+                vec![],
+            ),
+            (
+                "ReturnType::Value",
+                vec![query(vec![], Some(return_type::Kind::Value(t())))],
+                vec![],
+            ),
+            (
+                "FallibleType.ok",
+                vec![query(
+                    vec![],
+                    Some(return_type::Kind::Fallible(FallibleType {
+                        ok: "T".to_owned(),
+                        err: String::new(),
+                    })),
+                )],
+                vec![],
+            ),
+            (
+                "FallibleType.err",
+                vec![query(
+                    vec![],
+                    Some(return_type::Kind::Fallible(FallibleType {
+                        ok: String::new(),
+                        err: "T".to_owned(),
+                    })),
+                )],
+                vec![],
+            ),
+        ]
+    }
+
+    /// Every kind of type reference reaches the declaration it names, and a
+    /// change to that declaration moves the hash.
+    #[test]
+    fn every_reference_kind_reaches_its_declaration_and_moves_the_hash() {
+        for (kind, interactions, mut decls) in reference_cases() {
+            decls.push(scalar_decl("T"));
+            let mut p = Package {
+                name: "p".to_owned(),
+                decls,
+                interfaces: vec![Interface {
+                    name: "I".to_owned(),
+                    interactions,
+                    number: 1,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            };
+            assert!(
+                reachable_decls(&p, &[]).contains_key("T"),
+                "{kind}: the closure must reach `T`",
+            );
+            let before = catalog_hash(&p, &[]);
+            let target = p.decls.iter_mut().find(|d| d.name == "T").unwrap();
+            target.kind = Some(decl::Kind::TypeDef(TypeDef {
+                constraint: Some(Constraint {
+                    min: Some("1".to_owned()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }));
+            assert_ne!(
+                catalog_hash(&p, &[]),
+                before,
+                "{kind}: a change to `T` must move the hash",
+            );
+        }
     }
 }
