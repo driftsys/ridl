@@ -8,7 +8,8 @@
 //!
 //! It takes no dependency. The FlatBuffers runtime crate that ADR-0020
 //! decision 5 permits under this feature is not used here, and nothing in this
-//! module allocates.
+//! module allocates. That decision's 2026-10-03 amendment excludes planus from
+//! the permission: no planus crate may be a dependency of this crate.
 //!
 //! # What is here, and what is not
 //!

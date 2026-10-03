@@ -208,7 +208,9 @@ other entry below is Accepted.
   precedes TypeScript in the sequence; decisions 8, 9, 10 and 12 are unchanged.
   Amended again the same day, when stage P4 ported the Rust backend: the Rust
   parity test now exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
-  `ridlc-gen-model` one stays beside it.
+  `ridlc-gen-model` one stays beside it. Amended 2026-10-03: the FlatBuffers
+  runtime decision 5 permits `ridl-rt` cannot be planus; the toolchain may
+  depend on planus, and `ridl-rt` and every generated package must not.
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left

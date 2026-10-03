@@ -155,9 +155,12 @@ jobs:
           # of the compiler crates. ridl-lsp and ridl-mcp depend on ridlc (and
           # not on each other, so their relative order does not matter);
           # ridl-cli — the `ridl` binary — depends on both of them plus
-          # ridlc, so it is last of all.
+          # ridlc, so it is last of all. ridl-descriptor has no internal
+          # dependency; it publishes before ridlc so that ridlc can come to
+          # depend on it.
           publish ridl-syntax
           publish ridl-ir
+          publish ridl-descriptor
           publish ridl-rt
           publish ridl-loopback
           publish ridl-core

@@ -420,7 +420,9 @@ the tail builder that a generated `Payload<FlatBuffers>` implementation calls.
 The module decides no layout: it is handed a slot, an offset and a table size
 and writes the bytes they describe. It still takes no dependency: the
 FlatBuffers runtime crate ADR-0020 decision 5 permits under this feature is not
-used. `proto3` and `repr-c` remain empty.
+used, and since that decision's 2026-10-03 amendment it cannot be planus: the
+toolchain may depend on planus, and `ridl-rt` and every generated package must
+not. `proto3` and `repr-c` remain empty.
 
 **Since 2026-09-25 (story E11.17) a fourth feature, `std`, exists, off by
 default.** It is not an encoding: it links the standard library and gates the

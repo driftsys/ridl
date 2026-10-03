@@ -34,6 +34,15 @@ Rust parity test exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
 the as-built record of the contract and the two hosts is
 [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md).
 
+**Amended 2026-10-03 — decision 5, planus is not the FlatBuffers runtime
+`ridl-rt` may take.** Sebastien's decision of 2026-10-03, recorded as answer 8
+in section 4 of the
+[lane E16 driver](../wip/2026-10-03-lane-e16-catalog-descriptor-driver.md), is:
+the toolchain may depend on planus — `ridl-descriptor`, and through it `ridlc`
+and `ridl` — and `ridl-rt` and every generated package must not. The amendment
+is written into decision 5 in place, with this record's reading of that answer;
+the other decisions are unchanged.
+
 Its reasoning trail is
 [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md),
 whose §3.3, §3.4, §3.5 and §3.8 carry the alternatives this record summarises,
@@ -228,6 +237,31 @@ as its public contract.
    than calls; no runtime implements them, so decision 6 is unchanged. The
    unconditional module list is therefore `contract`, `sample`, `payload`,
    `port`, `error`, `encoding`, `correlate` and `face`.
+
+   **Amendment (2026-10-03) — planus is excluded from the permission.** The
+   FlatBuffers runtime this decision permits `ridl-rt` under the `flatbuffers`
+   feature cannot be planus. Sebastien's decision of 2026-10-03 (the
+   [lane E16 driver](../wip/2026-10-03-lane-e16-catalog-descriptor-driver.md),
+   section 4, answer 8) is: the toolchain may depend on planus —
+   `ridl-descriptor`, and through it `ridlc` and `ridl` — and `ridl-rt` and
+   every generated package must not.
+
+   This record reads that answer as follows. "Must not" covers every kind of
+   dependency on every planus crate: a normal, a build or a dev dependency on
+   `planus`, `planus-codegen` or `planus-translation`. `xtask` is part of the
+   toolchain, and it depends on `planus-translation` and `planus-codegen` to
+   generate the accessors `ridl-descriptor` commits
+   (`cargo xtask descriptor-codegen`). The permission is narrowed, not
+   withdrawn: answer 8 names planus only, so another FlatBuffers runtime crate
+   stays permitted under the feature. It also stays unused: the E11.7 design
+   note's D-12
+   ([`docs/archive/2026-09-20-flatbuffers-codec-design.md`](../archive/2026-09-20-flatbuffers-codec-design.md))
+   says that the `flatbuffers` feature takes no external dependency and that the
+   FlatBuffers runtime crate this decision permits is not used, and `ridl-rt`
+   has no dependency in any feature combination (ADR-0021 decision 8).
+   `xtask/tests/oracle_boundary.rs` enforces the planus rule: it fails when a
+   planus crate is reachable from `ridl-rt` with every feature on, or is in the
+   resolved graph of the crate `ridl build` generates for `examples/cabin`.
 
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
@@ -449,6 +483,9 @@ as its public contract.
 | [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §17.13 sends the `repr(C)` string rules to decision 4's projection record                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md)                 | the library's placement is decisions 5 and 6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12); E4.5b's row corrected 2026-09-22 with decision 11's amendment — the Rust backend ported onto the contract, not both in-tree backends                                               |
+| [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | the `flatbuffers` feature's paragraph: the FlatBuffers runtime decision 5 permits cannot be planus (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                          |
+| [`crates/ridl-rt/src/flatbuffers.rs`](../../crates/ridl-rt/src/flatbuffers.rs)                 | the module documentation: no planus crate may be a dependency of `ridl-rt` (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| [`docs/design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)                           | the conformance test's planus paragraph: `ridl-backend-rust`'s own use of planus is dev-only, the toolchain may depend on planus, and `ridl-rt` and every generated package must not (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                        |
 
 ## References
 

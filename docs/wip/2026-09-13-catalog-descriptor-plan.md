@@ -309,6 +309,7 @@ pub use generated::ridl::descriptor::{
     SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
 pub enum VerifyError { TooShort(usize), WrongIdentifier([u8; 4]), WrongVersion(u32), Invalid(planus::Error) }
+pub fn finish(catalog: &Catalog) -> Vec<u8>;
 pub fn verify(bytes: &[u8]) -> Result<CatalogRef<'_>, VerifyError>;
 // ridl_descriptor::number
 pub struct Numbered { pub name: String, pub number: u32, pub provisional: bool }
@@ -750,8 +751,7 @@ fn sample() -> Catalog {
 
 #[test]
 fn every_field_reads_back() {
-    let mut builder = planus::Builder::new();
-    let bytes = builder.finish(&sample(), Some(FILE_IDENTIFIER)).to_vec();
+    let bytes = ridl_descriptor::finish(&sample());
 
     assert_eq!(&bytes[4..8], &FILE_IDENTIFIER);
     let catalog = CatalogRef::read_as_root(&bytes).expect("a finished buffer reads");
@@ -794,8 +794,7 @@ fn every_field_reads_back() {
 
 #[test]
 fn the_owned_form_round_trips_through_the_view() {
-    let mut builder = planus::Builder::new();
-    let bytes = builder.finish(&sample(), Some(FILE_IDENTIFIER)).to_vec();
+    let bytes = ridl_descriptor::finish(&sample());
     let view = CatalogRef::read_as_root(&bytes).unwrap();
     let owned: Catalog = view.try_into().expect("a valid view converts");
     assert_eq!(owned.interfaces[0].members[0].payloads[0].max_sizes[1].bytes, 40);
@@ -865,8 +864,7 @@ fn minimal(version: u32) -> Vec<u8> {
         interfaces: vec![],
         retired: vec![],
     };
-    let mut builder = planus::Builder::new();
-    builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec()
+    ridl_descriptor::finish(&catalog)
 }
 
 #[test]
@@ -3217,8 +3215,7 @@ pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerErr
             .map(|entry| RetiredInterface { name: entry.name.clone(), number: entry.number })
             .collect(),
     };
-    let mut builder = planus::Builder::new();
-    Ok(builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec())
+    Ok(crate::finish(&catalog))
 }
 
 fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
@@ -3663,8 +3660,7 @@ mod tests {
             }],
             retired: vec![],
         };
-        let mut builder = planus::Builder::new();
-        let bytes = builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec();
+        let bytes = crate::finish(&catalog);
         let json = to_json(verify(&bytes).unwrap()).unwrap();
         assert_eq!(
             json,

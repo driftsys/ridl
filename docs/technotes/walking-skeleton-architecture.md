@@ -263,7 +263,8 @@ that.
   grammars for `.typl`, `.ridl` and `.rsdl`, built with npm/tsc.
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
-  `family.ungram`.
+  `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
+  `ridl-descriptor`'s accessors from `schema/catalog.fbs` with planus.
 
 ## The end-to-end pipeline contract
 

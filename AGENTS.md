@@ -7,9 +7,10 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: nineteen crates
-under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
-`ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
+(ADRs), the implementation roadmap, and the compiler workspace: twenty crates
+under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
+`ridl-descriptor` (the catalog descriptor's schema, accessors and verifier),
+`ridlc`, `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
 `ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` (the port contract tests any
 runtime runs, test-only), and `ridlc-gen-model` and `ridlc-gen-rust` (the
@@ -127,7 +128,9 @@ member; rsdl is the apex.
     just demo            generate examples/cabin's crate with ridl build and run
                          the program that links it — each round trip's value
                          is matched, and a missing one or a non-zero exit
-                         fails. examples/cabin is its own
+                         fails; it also checks that no planus crate is in
+                         the generated crate's dependency graph.
+                         examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
                          this workspace cannot reach

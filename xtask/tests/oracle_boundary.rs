@@ -25,16 +25,35 @@
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
 //! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
-//! same reason and one more: the E11.7 design note's D-12 keeps a
-//! third-party FlatBuffers implementation out of the shipped path, and
-//! ADR-0020 decision 9 makes a backend an executable rather than a library
-//! other crates link.
+//! same reason and one more: ADR-0020 decision 9 makes a backend an
+//! executable rather than a library other crates link.
 //!
-//! **The authority is D-12, not ADR-0020 decision 5.** Decision 5 *permits*
-//! one FlatBuffers runtime crate, in `ridl-rt` under its `flatbuffers`
-//! feature; D-12 leaves that permission unused, so ADR-0020's RA-01
-//! dependency ceiling stays unspent. Citing decision 5 as the prohibition
-//! would be citing a permission.
+//! **Which record each rule rests on.** The test-time-only rule for
+//! `ridl-backend-rust`'s four edges rests on ADR-0020 decision 9. The E11.7
+//! design note's D-12 says that `ridl-rt`'s `flatbuffers` feature takes no
+//! external dependency, so the FlatBuffers runtime crate ADR-0020 decision 5
+//! permits there is not used and ADR-0020's RA-01 dependency ceiling stays
+//! unspent. The planus rule of the next paragraph rests on ADR-0020 decision
+//! 5 as amended 2026-10-03, which excludes planus from that permission.
+//!
+//! Lane E16 (the catalog descriptor) added a second kind of boundary, a
+//! stronger one (lane E16 driver, section 4, answer 8). The toolchain may now
+//! depend on planus: `ridl-descriptor` on its runtime, `xtask` on its schema
+//! compiler and code generator, and `ridlc` and `ridl` may depend on it
+//! through `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
+//! not depend on any planus crate at all, as a normal, a build or a dev
+//! dependency (ADR-0020 decision 5, as amended 2026-10-03), because `ridl-rt`
+//! is the crate a generated package links and the generated package is what
+//! a user ships. [`RUNTIME_PACKAGES`] covers `ridl-rt` in this workspace.
+//!
+//! The generated package is the second half of that rule, and this workspace
+//! cannot see it: `ridl build` writes it into `examples/cabin/generated/`,
+//! which is not in git, and `examples/cabin` is its own cargo workspace
+//! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] reads that
+//! workspace's resolved graph, so it can run only after the crate is
+//! generated. It is `#[ignore]`d for a plain `cargo test`, and `just demo`
+//! runs it right after `ridl build` writes the crate, so `just build` and CI
+//! run it on every change.
 //!
 //! This guard reads the resolved dependency graph instead, via
 //! `cargo metadata --format-version 1`, because that is the one place the
@@ -46,6 +65,7 @@
 //! only the resolved graph can.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Command;
 
 /// One boundary this guard protects: `package` may depend on `oracle` only
@@ -68,11 +88,12 @@ const BOUNDARIES: &[Boundary] = &[
     },
     // E11.7 stage K8 added planus's runtime and code generator to
     // `ridl-backend-rust` for the FlatBuffers codec's conformance test. They
-    // are the same kind of oracle under a stronger rule: the design note's
-    // D-12 keeps a third-party FlatBuffers implementation out of the shipped
-    // path, and this crate emits the codec rather than linking one. A
-    // promotion here would put planus behind `ridlc`, and so behind the
-    // `ridl` CLI.
+    // are the same kind of oracle: this crate emits the codec rather than
+    // linking one, so its own use of planus is test-time only. The toolchain
+    // may ship planus through `ridl-descriptor`; what must never reach planus
+    // is `ridl-rt` and a generated package (ADR-0020 decision 5 as amended
+    // 2026-10-03), which `RUNTIME_PACKAGES` and the generated-crate check
+    // below cover.
     Boundary {
         package: "ridl-backend-rust",
         oracle: "planus",
@@ -95,16 +116,40 @@ const BOUNDARIES: &[Boundary] = &[
     },
 ];
 
+/// The planus crates: the FlatBuffers runtime, the code generator and the
+/// schema compiler.
+const PLANUS_CRATES: &[&str] = &["planus", "planus-codegen", "planus-translation"];
+
+/// The packages under the stronger boundary of lane E16 (driver section 4,
+/// answer 8): none of them may reach any of [`PLANUS_CRATES`] through any
+/// kind of dependency edge, dev included, because a generated package links
+/// them.
+const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
+
 /// Runs `cargo metadata --format-version 1 --locked` and parses its stdout
 /// as JSON. `--locked` matches every other cargo invocation this workspace's
 /// gate makes (`justfile`): the lockfile is already the resolved graph, and
 /// this guard must read that graph, not silently re-resolve a different one.
 fn cargo_metadata() -> serde_json::Value {
+    cargo_metadata_of(None, false)
+}
+
+/// [`cargo_metadata`] for the workspace whose root manifest is `manifest`,
+/// or for this workspace when it is `None`. With `all_features`, every
+/// feature of every workspace member is on, so the resolved graph holds
+/// every optional dependency, including one that no feature in the workspace
+/// turns on.
+fn cargo_metadata_of(manifest: Option<&Path>, all_features: bool) -> serde_json::Value {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-    let output = Command::new(cargo)
-        .args(["metadata", "--format-version", "1", "--locked"])
-        .output()
-        .expect("`cargo metadata` must run");
+    let mut command = Command::new(cargo);
+    command.args(["metadata", "--format-version", "1", "--locked"]);
+    if all_features {
+        command.arg("--all-features");
+    }
+    if let Some(manifest) = manifest {
+        command.arg("--manifest-path").arg(manifest);
+    }
+    let output = command.output().expect("`cargo metadata` must run");
     assert!(
         output.status.success(),
         "`cargo metadata` failed:\n{}",
@@ -175,13 +220,42 @@ fn normal_closure<'a>(
     metadata: &'a serde_json::Value,
     package: &'a str,
 ) -> HashMap<&'a str, &'a str> {
+    let normal = edges(metadata, |kind| kind.is_none());
+    reach(&normal, &normal, package)
+}
+
+/// Every package reachable from `package` by any kind of dependency edge on
+/// the first step, then by normal and build edges only, each mapped to the
+/// edge that first reached it.
+///
+/// The first step takes every kind because [`RUNTIME_PACKAGES`] must not
+/// reach a planus crate as a dev-dependency either. The later steps leave out dev edges because
+/// cargo never builds a dependency's own dev-dependencies for its dependents,
+/// and keep build edges because cargo compiles those for every build of
+/// `package`: a planus crate there would be compiled into the build of every
+/// generated package.
+fn runtime_closure<'a>(
+    metadata: &'a serde_json::Value,
+    package: &'a str,
+) -> HashMap<&'a str, &'a str> {
+    let any = edges(metadata, |_| true);
+    let shipped = edges(metadata, |kind| kind != Some("dev"));
+    reach(&any, &shipped, package)
+}
+
+/// Every resolved node's dependency names, by the node's own name, keeping
+/// an edge when `keep` accepts any of its kinds. A kind is `None` for a
+/// normal edge (JSON null), otherwise `"dev"` or `"build"`.
+fn edges(
+    metadata: &serde_json::Value,
+    keep: impl Fn(Option<&str>) -> bool,
+) -> HashMap<&str, Vec<&str>> {
     let names = package_names(metadata);
     let nodes = metadata["resolve"]["nodes"]
         .as_array()
         .expect("cargo metadata carries `resolve.nodes`");
 
-    // Every node's normal dependency names, by the node's own name.
-    let mut normal: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut edges: HashMap<&str, Vec<&str>> = HashMap::new();
     for node in nodes {
         let id = node["id"].as_str().expect("a node id is a string");
         let from = *names.get(id).expect("every node id names a package");
@@ -194,18 +268,28 @@ fn normal_closure<'a>(
                     .as_array()
                     .expect("a dependency edge carries a `dep_kinds` array")
                     .iter()
-                    .any(|entry| entry["kind"].is_null())
+                    .any(|entry| keep(entry["kind"].as_str()))
             })
             .map(|dep| {
                 let dep_id = dep["pkg"].as_str().expect("a dep's `pkg` is a string");
                 *names.get(dep_id).expect("every dep id names a package")
             })
             .collect();
-        normal.insert(from, deps);
+        edges.insert(from, deps);
     }
+    edges
+}
 
+/// Walks from `package`: its own edges in `first`, every later step's in
+/// `rest`. Returns each package reached, mapped to the package it was first
+/// reached from.
+fn reach<'a>(
+    first: &HashMap<&'a str, Vec<&'a str>>,
+    rest: &HashMap<&'a str, Vec<&'a str>>,
+    package: &'a str,
+) -> HashMap<&'a str, &'a str> {
     assert!(
-        normal.contains_key(package),
+        first.contains_key(package),
         "cargo metadata's resolved graph has no node for `{package}` — is it \
          still a workspace member?"
     );
@@ -213,7 +297,8 @@ fn normal_closure<'a>(
     let mut reached: HashMap<&str, &str> = HashMap::new();
     let mut queue: Vec<&str> = vec![package];
     while let Some(from) = queue.pop() {
-        for &to in normal.get(from).into_iter().flatten() {
+        let step = if from == package { first } else { rest };
+        for &to in step.get(from).into_iter().flatten() {
             if reached.contains_key(to) || to == package {
                 continue;
             }
@@ -224,9 +309,9 @@ fn normal_closure<'a>(
     reached
 }
 
-/// The chain of normal edges from `package` to `oracle`, as
-/// `a -> b -> oracle`, read back out of [`normal_closure`]'s predecessor
-/// map.
+/// The chain of edges from `package` to `oracle`, as `a -> b -> oracle`,
+/// read back out of the predecessor map [`normal_closure`] or
+/// [`runtime_closure`] returns.
 fn normal_path(reached: &HashMap<&str, &str>, package: &str, oracle: &str) -> String {
     let mut chain = vec![oracle];
     let mut at = oracle;
@@ -262,6 +347,71 @@ fn schema_compilers_stay_dev_dependencies() {
             package = boundary.package,
             oracle = boundary.oracle,
             path = normal_path(&reached, boundary.package, boundary.oracle),
+        );
+    }
+}
+
+/// Every package in [`RUNTIME_PACKAGES`] holds: no crate of [`PLANUS_CRATES`]
+/// is reachable from it through any dependency edge, dev included (lane E16 driver,
+/// section 4, answer 8).
+///
+/// The graph is resolved with `--all-features`. A user's generated package
+/// can turn on any `ridl-rt` feature, so a planus crate behind a feature that
+/// nothing in this workspace turns on still reaches a shipped build, and
+/// this test must see it.
+#[test]
+fn the_runtime_reaches_no_planus_crate() {
+    let metadata = cargo_metadata_of(None, true);
+    for &package in RUNTIME_PACKAGES {
+        let reached = runtime_closure(&metadata, package);
+        for &forbidden in PLANUS_CRATES {
+            assert!(
+                !reached.contains_key(forbidden),
+                "\n\
+                 `{forbidden}` is in `{package}`'s dependency closure: {path}\n\
+                 \n\
+                 `{package}` is the crate every generated package links, so it \
+                 must not depend on planus in any way, not even as a \
+                 dev-dependency (lane E16 driver, section 4, answer 8). The \
+                 toolchain may reach planus through `ridl-descriptor` instead.\n",
+                path = normal_path(&reached, package, forbidden),
+            );
+        }
+    }
+}
+
+/// No planus crate is in the resolved graph of `examples/cabin`, the
+/// workspace that holds the crate `ridl build` generates for `cabin.ridl` and
+/// the program that links it (lane E16 driver, section 4, answer 8).
+///
+/// `examples/cabin/generated/` is written by `just demo` and is not in git,
+/// so `cargo metadata` cannot resolve the workspace before that, and this
+/// test is ignored for a plain `cargo test`. `just demo` runs it with
+/// `--ignored` right after `ridl build` writes the crate.
+///
+/// The graph is resolved with `--all-features`, so a planus crate behind a
+/// feature of the generated crate or of the consumer that nothing turns on
+/// still fails this test.
+#[test]
+#[ignore = "needs examples/cabin/generated, which `just demo` writes; `just demo` runs it"]
+fn the_generated_crate_reaches_no_planus_crate() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
+    let metadata = cargo_metadata_of(Some(&manifest), true);
+    let names = package_names(&metadata);
+    assert!(
+        names.values().any(|&name| name == "veh_cabin"),
+        "the resolved graph of `examples/cabin` has no `veh_cabin` package — \
+         did `ridl build` write `examples/cabin/generated/`?"
+    );
+    for forbidden in PLANUS_CRATES {
+        assert!(
+            !names.values().any(|name| name == forbidden),
+            "\n\
+             `{forbidden}` is in the resolved graph of `examples/cabin`, the \
+             workspace of the crate `ridl build` generates. A generated \
+             package must not depend on planus in any way (lane E16 driver, \
+             section 4, answer 8): look for the edge in the generated \
+             manifest, in `ridl-rt`, or in `ridl-loopback`.\n",
         );
     }
 }

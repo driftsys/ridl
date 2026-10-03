@@ -7,6 +7,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+# `cargo xtask descriptor-codegen` compiles the catalog-descriptor schema and
+# generates its Rust accessors with planus (src/descriptor.rs).
+planus-codegen.workspace = true
+planus-translation.workspace = true
 prettyplease.workspace = true
 proc-macro2.workspace = true
 quote.workspace = true
