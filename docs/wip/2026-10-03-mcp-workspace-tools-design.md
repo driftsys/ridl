@@ -32,10 +32,10 @@ Only the first exists, and only in its pasted-source form.
 
 - **D-1. Stateless calls behind one seam.** Each tool call loads and checks the
   workspace from disk, applies the overlays, and answers. No cache. Every tool
-  goes through one function (`snapshot`, §5.3), so a cache can be added there
-  later without a schema change. Measured on 2026-10-03:
-  `ridl check
-examples/cabin` takes less than 10 ms. The condition that reopens
+  that takes `path` goes through one function (`snapshot`, §5.3), so a cache can
+  be added there later without a schema change; `ridl_diff` loads its two sides
+  through `ridlc::load_diff_side` (§5.2). Measured on 2026-10-03:
+  `ridl check examples/cabin` takes less than 10 ms. The condition that reopens
   a cache is a real workspace whose snapshot takes more than 500 ms.
 - **D-2. Root discovery is unchanged.** A `path` resolves to a workspace exactly
   as `ridl check <path>` resolves it (`ridl_core::load_workspace`, nearest
@@ -89,8 +89,9 @@ Out of scope, and why:
 - **`overlays`.** Every tool that takes `path` also takes an optional
   `overlays: [{path, source}]`: unsaved text for a file. §5.1 gives the rules.
 - **Output.** Every tool returns its result as MCP structured content with an
-  output schema (rmcp `Json<T>`), and rmcp also writes the same JSON as the text
-  content for hosts that ignore structured content.
+  output schema (`CallToolResult::structured`, with the schema set on the
+  `#[tool]` attribute), and rmcp also writes the same JSON as the text content
+  for hosts that ignore structured content.
 - **Workspace status.** Every result built from a workspace carries
   `workspace: {root, errors, warnings, notes}`. `root` is the manifest directory
   that was loaded (or the file, in single-file mode). `errors` and `warnings`
@@ -104,9 +105,10 @@ Out of scope, and why:
   alias resolves too. §6.2 covers no match and several matches.
 - **Locations.** A location is `{path, start, end}` with `start` and `end` as
   `{line, column}`, 1-based, end exclusive: the same shape as `span` in
-  `ridl check --format json`. It is the declaration's range from
-  `Resolution.symbols`. A declaration that is not a symbol (an interaction, a
-  field) reports the location of its enclosing package-level declaration.
+  `ridl check --format json`. Its range is the range of the declared name, as
+  `Resolution.symbols` records it (`Symbol.range`). A declaration that is not a
+  symbol (an interaction, a field) reports the location of its enclosing
+  package-level declaration.
 
 ### 4.2 The tool table
 
@@ -115,7 +117,7 @@ Out of scope, and why:
 | `ridl_check`             | none; or, instead of `path`, today's `{source, profile}`                                    | `{diagnostics, workspace}`; each diagnostic is exactly what `ridl_core::diag::to_json` writes. In source mode the result is `{diagnostics}`, unchanged from today.          |
 | `ridl_explain`           | `code`: a diagnostic code (`TYPL-002`) or a diff category word (`payload_changed`); no path | `{kind: "diagnostic", code, severity, summary}` or `{kind: "diff_category", category, text}`                                                                                |
 | `ridl_resolve`           | `name`; optional `from`                                                                     | `{name, package, kind, visibility, location, workspace}`, plus `alias` when the input was an import alias                                                                   |
-| `ridl_describe_type`     | `name`; optional `from`                                                                     | `{declaration, location, workspace}`; `declaration` is the IR `Decl` in the IR's own JSON form                                                                              |
+| `ridl_describe_type`     | `name`; optional `from`                                                                     | `{declaration, package, location, workspace}`; `declaration` is the IR `Decl` in the IR's own JSON form                                                                     |
 | `ridl_list_interactions` | `interface`; optional `from`                                                                | `{interface: {name, package, doc, labels, deprecated, number, provisional}, interactions, location, workspace}`; `interactions` is the interface's IR `Decl` list, in order |
 | `ridl_references`        | `name`; optional `from`                                                                     | `{target, references: [{package, declaration, interaction, location}], workspace}`                                                                                          |
 | `ridl_dependencies`      | optional `package`                                                                          | `{packages: [{name, imports, depends_on, dependents}], workspace}`                                                                                                          |
@@ -169,12 +171,14 @@ holds a type reference: `FieldType.named` (recursively through arrays, maps,
 tuples, streams and inline scalars), `UnionArm.type_ref`, `ConstDef.type_ref`,
 `EnumSetDef.backing_enum`, `Constraint.pattern_const`, `SignalDef.payload`,
 `EventDef.payload`, `StreamType.named`, `FallibleType.ok` and `.err`, parameter
-types, return types, `FixedDef.payload` and `Service.interface_ref`. Each
-reference reports the package, the package-level declaration that holds it, the
-interaction name when the reference sits inside an interface's interaction
-(otherwise `null`), and the location. A declaration that refers to the target
-more than once is reported once. `ridl.std` is not walked: a standard type
-cannot refer to a workspace type.
+types, return types, `FixedDef.payload`, and in each service of
+`Package.services` every `ServiceShape.interface_ref` and every reference inside
+an inline `ServiceShape.inline` interface. A reference inside a service reports
+the service's name as its declaration. Each reference reports the package, the
+package-level declaration that holds it, the interaction name when the reference
+sits inside an interface's interaction (otherwise `null`), and the location. A
+declaration that refers to the target more than once is reported once.
+`ridl.std` is not walked: a standard type cannot refer to a workspace type.
 
 **`ridl_dependencies`.** For each workspace package:
 
@@ -224,7 +228,7 @@ pub fn load_workspace_with(
 pub enum LoadError {
     Io(io::Error),
     OverlayNotSource(PathBuf),
-    OverlayOutsideWorkspace(PathBuf),
+    OverlayOutsideWorkspace { path: PathBuf, missing_directory: bool },
 }
 ```
 
@@ -298,8 +302,10 @@ compile. Its `Display` writes the exact message the CLI prints today. The CLI's
 `run_diff` calls the moved function and prints the error, and its output and
 exit codes are byte-identical to today's (the existing `ridl diff` tests are the
 proof). Overlays are accepted only when the side is a source path; otherwise
-they are refused with an error. `ridlc` does not need `ridl-diff` for this: the
-snapshot parse is `ridl_ir::v2::from_json`. No dependency cycle is created.
+they are refused with an error. The snapshot parse uses
+`ridl_diff::load_ir_json` today, so `ridlc` may gain a dependency on
+`ridl-diff`; no cycle is created, because `ridl-diff` depends only on `ridl-ir`,
+`serde` and `serde_json`.
 
 ### 5.3 `ridl-mcp`
 
@@ -307,15 +313,16 @@ snapshot parse is `ridl_ir::v2::from_json`. No dependency cycle is created.
   `RidlDatabase`, calls `ridlc::compile_workspace_with`, and returns
   `Snapshot { db: RidlDatabase, output: WorkspaceOutput, root, notes }`. The
   database stays in the snapshot because a `Symbol`'s file path and text are
-  salsa inputs read through it. `snapshot` is the only place a tool reads the
-  disk (D-1).
+  salsa inputs read through it. `snapshot` is the only place a tool that takes
+  `path` reads the disk (D-1).
 - `query` module: one pure function per lookup tool, from `&Snapshot` and the
   tool's input to the tool's result type. No MCP types appear in it, so each
   function is unit-tested directly.
 - `lib.rs`: one `#[tool]` method per tool. Each runs `snapshot` and the query in
   `tokio::task::spawn_blocking`, as `ridl_check` does today, and converts a
   `ToolError` into an MCP tool error.
-- New dependencies: `ridl-diff` and `ridl-ir`. `ridl-lsp` is not a dependency.
+- New dependencies: `ridl-diff`, `ridl-ir` and `ridl-sem` (for `Symbol`).
+  `ridl-lsp` is not a dependency.
 - The server's `instructions` string is rewritten to name the tools and to say
   "pass the workspace root as `path`".
 
@@ -379,26 +386,31 @@ The `ridl-mcp` README states this list.
 
 ### 7.2 The tool surface is an external contract
 
-Tool names, input schemas and output schemas are an external contract under
-ADR-0005 §7. Later changes may only add to them: a new optional input, a new
-output field, a new tool. A test pins the whole `tools/list` response (§8), so
-any schema change appears as a diff in review. Source-mode `ridl_check` keeps
-today's input and output exactly.
+Tool names, input schemas and output schemas are an external contract. ADR-0005
+§7 names three contract surfaces (the coded diagnostics, the `ridl diff`
+categories and the IR); this design adds the MCP tool surface as a fourth, and
+the ADR-0005 amendment (§9) records it. Later changes may only add to them: a
+new optional input, a new output field, a new tool. A test pins the whole
+`tools/list` response (§8), so any schema change appears as a diff in review.
+Source-mode `ridl_check` keeps today's input fields and returns the same JSON
+value. Its input schema changes in one way: `source` and `profile` become
+optional, because `path` mode omits them; every call that was valid stays valid.
 
 ## 8. Testing
 
-All test- **`ridl-core` unit tests** for `load_workspace_with`: replace a file's
-text, and the diagnostic spans point into the overlay text; add a new file in a
-package; add a new file in an existing subdirectory, which joins that
-subdirectory's package; an added file whose package name does not match its
-directory draws TYPL-002; refuse a path outside the workspace; refuse a path in
-a directory that does not exist; refuse a non-source extension; single-file
-mode.
+All tests are Rust tests, so `just test` runs them.
+
+- **`ridl-core` unit tests** for `load_workspace_with`: replace a file's text,
+  and the diagnostic spans point into the overlay text; add a new file in a
+  package; add a new file in an existing subdirectory, which joins that
+  subdirectory's package; an added file whose package name does not match its
+  directory draws TYPL-002; refuse a path outside the workspace; refuse a path
+  in a directory that does not exist; refuse a non-source extension; single-file
+  mode.
 
 - **`ridlc` unit tests** for `compile_workspace_with` (an overlay reaches the
   checked IR) and for `load_diff_side`: each `DiffSideError` variant, and
-  overlays refused on a snapshot side. , and overlays refused on a snapshot
-  side.
+  overlays refused on a snapshot side.
 - **`ridl-mcp` unit tests** for each `query` function, over a fixture workspace
   under `crates/ridl-mcp/tests/fixtures/` that has two member packages, one
   cross-package reference, one import alias, one interface with at least one
@@ -420,7 +432,10 @@ mode.
   - the `tools/list` response is compared with a checked-in JSON file; the test
     tells the reader to update that file deliberately when the contract changes
     additively;
-  - the existing `ridl_check` source-mode tests pass unchanged.
+  - the existing `ridl_check` source-mode tests keep their assertions on the
+    returned JSON; tests that build `CheckParams` or `CheckOutput` in Rust,
+    assert the input schema's required fields, or assert a one-tool list are
+    updated to the new types and the eight tools.
 - **The CLI `ridl diff` tests** pass unchanged after §5.2's move.
 
 ## 9. Documentation and registration
@@ -456,7 +471,7 @@ mode.
   changes `ridl-lsp` with no user benefit in 1a. It becomes the right move when
   the language server needs lookups by name.
 - **Write the long-form error index inside 1a.** Rejected (D-4): it is writing
-  across about 200 codes, not wrapping compiler functions.
+  across the 147 catalogued codes, not wrapping compiler functions.
 - **A `reference` URL for each namespace in the `ridl_explain` result.**
   Rejected: a chapter that moves breaks the URL, which is a tool contract under
   §7.2, and the FORM and MANI codes have no book chapter at all. The skill

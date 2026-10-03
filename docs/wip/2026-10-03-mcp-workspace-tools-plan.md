@@ -15,8 +15,8 @@ overlay-aware compile and takes over the `ridl diff` side loader from the CLI.
 with pure functions over the checked IR. `ridl-lsp` is not touched.
 
 **Tech Stack:** Rust (toolchain pinned in `rust-toolchain.toml`), salsa, `rmcp`
-3.3.0 (stdio, `#[tool]` macros, `Json<T>` structured output), pbjson serde for
-the IR, `serde_json`, `tokio`.
+3.3.0 (stdio, `#[tool]` macros, structured output via
+`CallToolResult::structured`), pbjson serde for the IR, `serde_json`, `tokio`.
 
 **Spec:**
 [`2026-10-03-mcp-workspace-tools-design.md`](2026-10-03-mcp-workspace-tools-design.md).
@@ -45,9 +45,16 @@ the spec disagree, stop and ask.
 - No change to `ridl-lsp`, to the language, to the IR schema, or to any wire
   format.
 - `ridl-mcp` must not depend on `ridl-lsp`.
-- The source-mode `ridl_check` input `{source, profile}` and its output
-  `{diagnostics}` keep their current JSON shape; the existing source-mode tests
-  pass unchanged except the one-tool test that Task 4 deletes.
+- Source-mode `ridl_check` keeps its input fields `{source, profile}` and
+  returns the same JSON value `{diagnostics}` as today. Its input schema changes
+  in one way: `source` and `profile` become optional. Task 4 updates exactly
+  these existing tests and keeps every assertion on returned JSON: the tests in
+  `crates/ridl-mcp/src/lib.rs` that build `CheckParams` or read `CheckOutput`
+  fields in Rust (about lines 238-249, 285, 313, 358), the input-schema test
+  (about line 552) whose `required` list becomes empty, the one-tool test
+  `the_server_advertises_exactly_one_tool_named_ridl_check` (deleted), and the
+  tool-list assertion in `crates/ridl/tests/servers.rs` (about line 102), which
+  becomes "the list contains `ridl_check`" until Task 8 pins the full list.
 - `ridl check`, `ridl diff` and `ridl diff --explain` keep byte-identical
   stdout, stderr and exit codes. The existing tests in `crates/ridl/tests/`
   (`diff_cli.rs`, `diff_gate.rs`, `diff_member_reorder.rs`, `baseline_desk.rs`,
@@ -59,10 +66,13 @@ the spec disagree, stop and ask.
   `#[tool(output_schema =
   rmcp::handler::server::common::schema_for_output::<T>())]`,
   where `T` is the tool's output type. Success is
-  `Ok(CallToolResult::structured(serde_json::to_value(&output)?))`. A wrong
-  request is `Ok(tool_error.into_result())`, an MCP result with
-  `isError:
-  true`. Only a compiler panic caught by `spawn_blocking` is
+  `Ok(CallToolResult::structured(value))`, where `value` is
+  `serde_json::to_value(&output)` with its error mapped by
+  `.map_err(|e| ErrorData::internal_error(e.to_string(), None))` (rmcp has no
+  `From<serde_json::Error>` for `ErrorData`). A wrong request is
+  `Ok(tool_error.into_result())`, an MCP result with `isError:
+  true`. Only a
+  compiler panic caught by `spawn_blocking` is
   `Err(ErrorData::internal_error(..))`, as today (spec §6.2). Never return
   `Err(ErrorData)` for a wrong request: it becomes a JSON-RPC protocol error,
   which the agent does not see as a tool result.
@@ -92,7 +102,8 @@ the spec disagree, stop and ask.
 
 Tasks 4 to 8 use this workspace. Task 4 creates it. `ridl check` on it exits 0
 with no diagnostic. It has two members, a subdirectory package, every
-interaction kind, a cross-package reference, an import alias, and one bare name
+interaction kind, a cross-package reference, an import alias, a service that
+names an interface, a service with an inline interface, and one bare name
 (`Level`) that two packages declare.
 
 `crates/ridl-mcp/tests/fixtures/ws/ridl.toml`:
@@ -167,6 +178,12 @@ interface Status {
   command setLevel(level: ALevel) @[..50ms]
   query outcome(window: Level): Outcome @[..200ms]
   fixed softwareVersion: Version
+}
+
+service fx.b.status: Status
+
+service fx.b.diag {
+  query readSpeed(): Speed @[..100ms]
 }
 ```
 
@@ -271,11 +288,13 @@ package's `files(&db)` paths and `text(&db)`, `loaded.diagnostics` codes,
   manifest above it (put the `TempDir` under the system temp directory, as the
   existing single-file tests do); overlay for it replaces its text; an overlay
   for any other path is `OverlayOutsideWorkspace { missing_directory: false }`.
-- `overlay_matches_a_file_named_by_a_relative_entry`: load with `entry` given as
-  a path relative to the current directory (build it with `pathdiff`-free logic:
-  `std::env::current_dir()` and `Path::strip_prefix`; skip the test with an
-  early `return` if the temp directory is not under the current directory's
-  root) and the overlay path absolute; the overlay applies. (Review Focus 1.)
+- `overlay_matches_a_file_named_by_a_relative_entry` (`#[cfg(unix)]`): build a
+  relative form of the absolute temp path that always resolves from the current
+  directory: one `..` for each normal component of `std::env::current_dir()`,
+  then the absolute path without its leading `/`. Two loads: (1) `entry`
+  relative and the overlay path absolute; (2) `entry` absolute and the overlay
+  path relative. In both, the loaded file's text is the overlay text. (Review
+  Focus 1.)
 - `load_workspace_without_overlays_is_unchanged`: the existing loader tests
   still pass; add no assertion here beyond calling
   `load_workspace_with(db,
@@ -459,16 +478,20 @@ git commit -m "feat(ridlc): compile a workspace with overlays and expose manifes
 - [ ] **Step 1: Write the failing tests** in `diff_side.rs`
 
 - `a_snapshot_file_loads`: write one `.ir.json` by compiling a tiny package with
-  `compile_workspace` and `ridl_ir::v2` JSON serialisation
-  (`serde_json::
-  to_string(&ir)`), then `load_diff_side` on it returns one
-  package.
+  `compile_workspace` and writing `ridl_ir::v2::to_json_pretty(&ir)` (the
+  function `--emit ir-json` uses; `ridlc` has no `serde_json` dependency), then
+  `load_diff_side` on it returns one package.
 - `a_source_side_with_an_error_is_compile`: a package whose file has an unknown
   type; `Err(DiffSideError::Compile { diagnostics, .. })` with one `Error`.
 - `an_overlay_on_a_snapshot_side_is_refused`:
   `Err(DiffSideError::OverlayOnSnapshot(_))`.
 - `an_overlay_reaches_a_source_side`: the overlay adds a declaration; the
   returned package's `decls` names it.
+- One test for each other `DiffSideError` variant (a non-JSON IR file such as
+  `x.ir.txtpb`, a directory that holds IR artifacts but no `.ir.json`, a
+  directory whose only snapshot is in a subdirectory, a snapshot that is not
+  valid IR JSON), each asserting the variant and that `Display` equals the CLI's
+  message without its `error:` prefix.
 - `a_missing_path_is_an_error_whose_text_is_the_cli_text`: `Display` equals
   ``nope: `nope` does not exist`` when called with the relative path `nope` from
   a directory that does not contain it.
@@ -589,7 +612,7 @@ Rules:
   ``"loaded the package at `{root}` alone, so imports of its sibling workspace members do not resolve (driftsys/ridl#529); pass the workspace root `{ancestor}` as `path` instead"``.
 - `status`: `errors` and `warnings` count `output.diagnostics` by severity.
 - `ridl_check`: exactly one of `source` and `path`, otherwise
-  `Request("pass either`source`with`profile`, or`path`with optional`overlays`")`.
+  ``Request("pass either `source` with `profile`, or `path` with optional `overlays`")``.
   `profile` is required with `source` and refused with `path`, with the same
   message. Source mode returns `CheckOutput { diagnostics, workspace: None }`
   from today's `check` function, unchanged.
@@ -679,7 +702,11 @@ git commit -m "feat(ridl-mcp): check a workspace by path with unsaved overlays"
       pub symbol: Option<&'a ridl_sem::Symbol>, // None for ridl.std
       pub alias: Option<String>,           // the written name, when it was an alias
   }
-  pub enum Item<'a> { Decl(&'a ridl_ir::v2::Decl), Interface(&'a ridl_ir::v2::Interface) }
+  pub enum Item<'a> {
+      Decl(&'a ridl_ir::v2::Decl),
+      Interface(&'a ridl_ir::v2::Interface),
+      Service(&'a ridl_ir::v2::Service), // walked by Task 6 only; `find` never returns it
+  }
 
   pub fn find(snap: &Snapshot, name: &str, from: Option<&str>) -> Result<Found<'_>, ToolError>;
 
@@ -713,7 +740,7 @@ git commit -m "feat(ridl-mcp): check a workspace by path with unsaved overlays"
   name in `output.checked` and then `output.std_ir`.
 - Bare `Name` with `from`: the package index `i` where
   `output.checked[i].ir.name == from` (unknown `from` is
-  `Request("no package`{from}`in this workspace; packages: {sorted list}")`);
+  ``Request("no package `{from}` in this workspace; packages: {sorted list}")``);
   look up `output.resolutions[i].symbols[name]`; follow `symbol.package` and
   `symbol.name` to the declaration; `alias` is `Some(name)` when
   `symbol.name != name`.
@@ -809,11 +836,16 @@ git commit -m "feat(ridl-mcp): add the resolve, describe and list-interactions t
   pub struct PackageDeps { pub name: String, pub imports: Vec<String>, pub depends_on: Vec<String>, pub dependents: Vec<String> }
   ```
 
-`references_of` walks exactly the fields §4.3 lists (`ridl_references`). A
-reference string is canonical when it contains a dot whose prefix names a
-package of the workspace or `ridl.std`; otherwise it is bare and is qualified as
-`{own_package}.{name}`. A primitive or inline scalar has no reference. A unit
-string (`TypeDef.backing.unit`) is not a reference for this tool.
+`references_of` walks exactly the fields §4.3 lists (`ridl_references`),
+including, for an `Item::Service`, every `ServiceShape.interface_ref` and every
+reference inside an inline `ServiceShape.inline` interface (whose interactions
+report their own names). `references` and `dependencies` walk `ir.decls`,
+`ir.interfaces` and `ir.services` of every workspace package; a reference held
+by a service reports `Service.name` as its `declaration`. A reference string is
+canonical when it contains a dot whose prefix names a package of the workspace
+or `ridl.std`; otherwise it is bare and is qualified as `{own_package}.{name}`.
+A primitive or inline scalar has no reference. A unit string
+(`TypeDef.backing.unit`) is not a reference for this tool.
 
 `references`: resolve the target with `find`, then collect, for each workspace
 package and each declaration and interface, the pairs whose reference equals the
@@ -825,7 +857,7 @@ declaration's symbol location.
 of its references, excluding itself and `ridl.std`; `dependents` is the inverse;
 `imports` is the sorted keys of `output.imports[i]`. With `package`, only that
 package; unknown package is
-`Request("no package`{p}`in this workspace; packages: {sorted list}")`.
+``Request("no package `{p}` in this workspace; packages: {sorted list}")``.
 
 - [ ] **Step 1: Write the failing tests** in `refs.rs`, over the fixture:
 
@@ -838,6 +870,11 @@ package; unknown package is
 - `a_declaration_referring_twice_is_reported_once`: overlay `a.ridl` adding
   `struct Pair { x: Health  y: Health }` (check the struct field syntax used in
   `Reading`); `Health` references contain `Pair` exactly once.
+- `references_from_services`: `Status` → contains
+  `(fx.b, <the IR name of service fx.b.status>, null)`; `Speed` → contains
+  `(fx.b, <the IR name of service fx.b.diag>, readSpeed)` as well as
+  `(fx.b, Status, speed)`. Read the two service names from the fixture's IR once
+  and write them into the test as literals.
 - `dependencies_of_the_fixture`: `fx.b.depends_on == ["fx.a"]`,
   `fx.a.dependents == ["fx.b"]`, `fx.a.sub` has both empty, no package lists
   `ridl.std`.
@@ -932,7 +969,8 @@ Rules:
   `TYPL-011`.
 
 - [ ] **Step 2: Run and see them fail**:
-      `cargo test -p ridl-mcp --locked explain diff`
+      `cargo test -p ridl-mcp --locked explain`, then
+      `cargo test -p ridl-mcp --locked diff` (cargo takes one filter per run)
 
 - [ ] **Step 3: Implement both modules and tool methods.**
 
