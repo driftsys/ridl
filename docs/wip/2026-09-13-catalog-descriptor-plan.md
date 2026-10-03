@@ -102,10 +102,8 @@ in D1's final report:
    declared `enum`, not a message; so none of the three has a proto3 root form,
    and its proto3 state is absent until a record defines one. This narrows
    driver §3 D5's "bounded or unbounded for a payload that is one named type" on
-   the proto3 side; the roadmap, the design and #380 say so. D5 does not start
-   Task 6 before Sebastien confirms this reading or names a root form (an
-   induced single-field message would be a wire shape the descriptor defines,
-   which §4 answer 6 forbids).
+   the proto3 side; the roadmap, the design and #380 say so. Confirmed on
+   2026-10-04 under Sebastien's delegation (driver §5); D5 may start Task 6.
 6. The FlatBuffers cause comes from `ridl_ir::codegen::unbounded::attribute`,
    made public as `ridl_ir::codegen::fb_unbounded`, not from lowering the whole
    codegen model.
@@ -2195,10 +2193,11 @@ two shapes ADR-0017 projects as a message. ADR-0017 decision 1 inlines a named
 scalar and an enum set into their field, its decision 2 rejects a wrapper
 message per named scalar, and an enum is a declared `enum`, not a message; so
 none of the three has a proto3 root form as a payload, and its proto3 state is
-absent until a record defines one (re-baseline decision 5, which D5 confirms
-with Sebastien before this task starts). proto3 has no unbounded state: typl
-bounds every collection, so a message is bounded or, when the projection refuses
-a member, absent. A bound above `u32::MAX` is absent, as in `MAX_ENCODABLE`.
+absent until a record defines one (re-baseline decision 5, confirmed on
+2026-10-04 under Sebastien's delegation; driver §5). proto3 has no unbounded
+state: typl bounds every collection, so a message is bounded or, when the
+projection refuses a member, absent. A bound above `u32::MAX` is absent, as in
+`MAX_ENCODABLE`.
 
 - [ ] **Step 1: Write the failing tests**
 

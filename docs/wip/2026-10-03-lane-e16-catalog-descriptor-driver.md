@@ -239,7 +239,8 @@ proto3 bound under ADR-0017 as amended today. Task 7 calls
 records give that placeholder to E16.2 (`docs/ROADMAP.md`,
 `docs/design/interaction-face.md`), but the bounds exist only after this stage,
 so amend those records to say E16.4. Done when each payload carries a size state
-for both encodings: bounded or unbounded for a payload that is one named type,
+for both encodings: bounded or unbounded for a payload that is one named type
+(on the proto3 side, only a struct or a union payload is sized, §5 D1 item 5),
 and absent for a request with more than one parameter, an inline `T | E` reply
 and a stream payload, even a stream of a named type (§4 answers 5, 6 and 10).
 
@@ -351,10 +352,11 @@ named.
 
 ### D1 — the plan's "Re-baseline 2026-10" items 1 to 8, accepted
 
-1. **The hash does not cover `Package.retired`.** Reason: retiring an interface
-   removes it from the interfaces the hash covers, so the hash changes anyway;
-   the retired list is identity-neutral data an engine reads beside it. Cost if
-   wrong: a hash-input change in D3's decision record and its golden value.
+1. **The hash does not cover `Package.retired`.** Reason: the hash is the
+   identity of the interfaces, their numbers and the types they reach (rsdl note
+   D-8), and the retired list is carried beside it. Retiring an interface
+   removes it from those interfaces, so the hash still changes. Cost if wrong: a
+   hash-input change in D3's decision record and its golden value.
 2. **A reduced interface takes `InterfaceShape::visibility()`.** Reason: a
    declared interface and an inline service shape with the same content must
    hash alike. Cost if wrong: one field of the reduced package.
@@ -370,9 +372,11 @@ named.
    decision 2 rejects a wrapper message per named scalar, and an enum is a
    declared `enum`, not a message, so none of the three has a proto3 root form.
    Giving one would need an induced message, a wire shape the descriptor would
-   define, which answer 6 forbids. This confirmation lets D5 start Task 6. Cost
-   if wrong: the proto3 column is empty for those payloads until a codec story
-   defines their root form.
+   define, which answer 6 forbids. This narrows §3 D5's done criterion on the
+   proto3 side (amended there), and the plan's re-baseline item 5 and Task 6 no
+   longer wait for Sebastien: D5 may start Task 6. Cost if wrong: the proto3
+   column is empty for those payloads until a codec story defines their root
+   form.
 6. **The FlatBuffers cause comes from `ridl_ir::codegen::fb_unbounded`.**
    Reason: one implementation of the cause, as with `max_size`. Cost if wrong:
    one function made public in `ridl-ir`.
@@ -407,6 +411,19 @@ named.
    uses it (E11.7 D-12). Reason: answer 8 names planus only. Cost if wrong: one
    sentence of the amendment.
 6. **The generated-crate planus check runs under `just demo`, not
-   `cargo test`.** Reason: the crate must be generated first; `demo` fails if
-   the check runs no test. Cost if wrong: the check runs in the demo CI job
-   instead of the test job.
+   `cargo test`.** Reason: the crate must be generated first; `demo` fails
+   unless exactly one test runs and passes. Cost if wrong: a contributor who
+   runs `just test` without `just demo` does not run the check; CI runs both in
+   its `rust` job.
+7. **The planus checks resolve with every feature on.** The `ridl-rt` check and
+   the generated-crate check run `cargo metadata --all-features`, and the
+   `ridl-rt` closure takes every edge kind on its first step. Reason: a planus
+   dependency behind a feature nothing turns on, or a dev-dependency of
+   `ridl-rt`, must still fail the check. Cost if wrong: none found; optional
+   features of `ridl-loopback` are not covered (#670).
+8. **`ridl-descriptor` has no `ridl-ir`, `sha2` or `serde_json` dependency
+   yet**, although plan Task 1 lists them. Reason: nothing in D2 uses them, and
+   an unused dependency is a cost every consumer of a published crate pays.
+   `.github/workflows/crates-io-release.yml` keeps the publish position answer 9
+   sets, and its comment says the crate has no internal dependency. Cost if
+   wrong: D3 adds `ridl-ir` back and restores that comment's sentence (#670).
