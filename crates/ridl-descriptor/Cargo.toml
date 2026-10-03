@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The catalog descriptor an engine reads: schema, accessors, lowering, sizes, verifier"
+description = "The catalog descriptor an engine reads: schema, generated accessors, verifier"
 
 [dependencies]
 # The FlatBuffers runtime the generated accessors call into. The schema

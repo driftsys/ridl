@@ -10,6 +10,8 @@
 
 pub mod generated;
 
+use planus::ReadAsRoot;
+
 pub use generated::ridl::descriptor::{
     Catalog, CatalogRef, Encoding, Interface, InterfaceRef, Kind, MaxSize, MaxSizeRef, Member,
     MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
@@ -25,8 +27,6 @@ pub const FILE_IDENTIFIER: [u8; 4] = *b"RDLC";
 /// The artifact suffix: `<base>.catalog.binfb` (ADR-0014 decision 4's
 /// convention — a plain-English flag value, an encoding-bearing extension).
 pub const FILE_SUFFIX: &str = ".catalog.binfb";
-
-use planus::ReadAsRoot;
 
 /// Builds the descriptor buffer for `catalog`: the root offset at bytes
 /// 0..4, [`FILE_IDENTIFIER`] at bytes 4..8, the layout the FlatBuffers
