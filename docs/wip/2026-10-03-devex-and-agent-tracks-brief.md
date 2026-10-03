@@ -102,6 +102,21 @@ a lint raised to `deny`.
   doc. `[Type]` links get completion and go-to-definition, and a quick fix
   inserts a doc stub.
 
+Decided with the maintainer on 2026-10-03:
+
+- **`///` is the house style.** Both forms typl §14 allows stay accepted with
+  the same meaning. The book, the examples, the skill and generated code use
+  `///`. `ridl fmt` does not rewrite one form into the other. An optional
+  `doc-comment-style` lint, allowed by default, lets a project require one form
+  through `[lints]`.
+- **Each interaction is documented on its member.** The doc on a call, event,
+  stream or property says what that interaction does and when to use it; its
+  parameters, fields and error arms are each documented where they are declared.
+  The interface doc states the interface's responsibility, in one sentence where
+  possible, and does not list or repeat its members. `missing-docs` covers both
+  the interface and each member. The one-sentence responsibility is also an
+  input to track 1's cohesion review.
+
 Open decisions: which declarations and members count as public for
 `missing-docs`; whether doc comments are allowed on every member kind (call
 parameters, error arms, stream elements); how a `[Type]` link resolves across
