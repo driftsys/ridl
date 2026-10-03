@@ -421,6 +421,39 @@ async fn path_mode_check_equals_the_cli() {
     .expect("workspace check timeout");
 }
 #[tokio::test]
+async fn an_unsaved_overlay_reports_diagnostics_without_changing_disk() {
+    tokio::time::timeout(TIMEOUT, async {
+        let root = workspace_fixture("ws");
+        let path = root.join("b/b.ridl");
+        let disk = std::fs::read_to_string(&path).unwrap();
+        let source = disk.replace("signal speed: Speed @10ms", "signal speed: Missing @10ms");
+        assert_ne!(source, disk);
+        let client = connect().await;
+        let result = call_workspace_tool(
+            &client,
+            "ridl_check",
+            json!({"path":root,"overlays":[{"path":path,"source":source}]}),
+        )
+        .await;
+        assert_ne!(result.is_error, Some(true));
+        let output = result.structured_content.unwrap();
+        assert_eq!(output["workspace"]["errors"], 1);
+        assert!(
+            output["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|d| d["message"].as_str().unwrap().contains("Missing")
+                    && d["span"]["path"] == path.to_string_lossy().as_ref())
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), disk);
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("unsaved overlay timeout");
+}
+
+#[tokio::test]
 async fn diff_tool_equals_the_cli() {
     tokio::time::timeout(TIMEOUT, async {
         let old = workspace_fixture("ws");
@@ -485,23 +518,72 @@ async fn every_tool_leaves_the_tree_unchanged() {
         let temp = TempDir::new("read-only");
         copy(&workspace_fixture("ws"), &temp.0);
         let before = record(&temp.0);
+        let overlay_path = temp.0.join("a/a.ridl");
+        let source = std::fs::read_to_string(&overlay_path)
+            .unwrap()
+            .replace("250.0", "200.0");
+        let overlays = json!([{"path":overlay_path,"source":source}]);
         let client = connect().await;
         for (name, arguments) in [
-            ("ridl_check", json!({"path":temp.0})),
+            ("ridl_check", json!({"path":temp.0,"overlays":overlays})),
             ("ridl_explain", json!({"code":"TYPL-002"})),
-            ("ridl_resolve", json!({"path":temp.0,"name":"Speed"})),
-            ("ridl_describe_type", json!({"path":temp.0,"name":"Speed"})),
+            (
+                "ridl_resolve",
+                json!({"path":temp.0,"name":"Speed","overlays":overlays}),
+            ),
+            (
+                "ridl_describe_type",
+                json!({"path":temp.0,"name":"Speed","overlays":overlays}),
+            ),
             (
                 "ridl_list_interactions",
-                json!({"path":temp.0,"interface":"Status"}),
+                json!({"path":temp.0,"interface":"Status","overlays":overlays}),
             ),
-            ("ridl_references", json!({"path":temp.0,"name":"Speed"})),
-            ("ridl_dependencies", json!({"path":temp.0})),
-            ("ridl_diff", json!({"old":temp.0,"new":temp.0})),
+            (
+                "ridl_references",
+                json!({"path":temp.0,"name":"Speed","overlays":overlays}),
+            ),
+            (
+                "ridl_dependencies",
+                json!({"path":temp.0,"overlays":overlays}),
+            ),
+            (
+                "ridl_diff",
+                json!({"old":temp.0,"new":temp.0,"overlays":overlays}),
+            ),
         ] {
             let result = call_workspace_tool(&client, name, arguments).await;
             assert_ne!(result.is_error, Some(true), "{name}: {result:?}");
-            assert!(result.structured_content.is_some(), "{name}: {result:?}");
+            let text: serde_json::Value = serde_json::from_str(&tool_text(&result)).unwrap();
+            let output = result.structured_content.unwrap();
+            assert_eq!(text, output, "{name}");
+            match name {
+                "ridl_check" => assert_eq!(output["diagnostics"], json!([])),
+                "ridl_explain" => {
+                    assert_eq!(output["kind"], "diagnostic");
+                    assert_eq!(output["code"], "TYPL-002");
+                }
+                "ridl_resolve" => {
+                    assert_eq!(output["name"], "Speed");
+                    assert_eq!(output["package"], "fx.a");
+                }
+                "ridl_describe_type" => {
+                    assert_eq!(output["declaration"]["name"], "Speed");
+                    assert_eq!(output["package"], "fx.a");
+                    assert!(output["declaration"].to_string().contains("200"));
+                }
+                "ridl_list_interactions" => {
+                    assert_eq!(output["interface"]["name"], "Status");
+                    assert_eq!(output["interactions"].as_array().unwrap().len(), 5);
+                }
+                "ridl_references" => {
+                    assert_eq!(output["target"], "fx.a.Speed");
+                    assert_eq!(output["references"].as_array().unwrap().len(), 2);
+                }
+                "ridl_dependencies" => assert_eq!(output["packages"].as_array().unwrap().len(), 3),
+                "ridl_diff" => assert_eq!(output["verdict"], "breaking"),
+                _ => unreachable!(),
+            }
         }
         client.cancel().await.unwrap();
         assert_eq!(record(&temp.0), before);
