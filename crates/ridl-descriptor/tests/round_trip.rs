@@ -1,35 +1,18 @@
 //! Spec §4 "Schema round trip": build a descriptor with the Rust builder,
 //! finish it with the file identifier, read every field back.
 //!
-//! planus 1.3.0 does not write the FlatBuffers layout when it is given a file
-//! identifier: `Builder::finish(root, Some(id))` writes the identifier at
-//! bytes 0..4 and the root offset at bytes 4..8, the reverse of the layout
-//! the FlatBuffers specification defines, and planus's own `read_as_root`
-//! then rejects the buffer. [`finish`] below writes the standard layout, and
+//! The buffers come from [`ridl_descriptor::finish`], which writes the
+//! FlatBuffers header layout that planus 1.3.0 does not write when it is
+//! given a file identifier.
 //! [`planus_writes_the_identifier_before_the_root_offset`] fails when a planus
-//! release changes that behaviour, so the workaround is removed then.
+//! release changes that behaviour, so the workaround in `finish` is removed
+//! then.
 
 use planus::ReadAsRoot;
 use ridl_descriptor::{
     Catalog, CatalogRef, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize, Member, Payload,
-    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause,
+    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause, finish,
 };
-
-/// Finishes `catalog` with [`FILE_IDENTIFIER`] in the FlatBuffers layout:
-/// the root offset at bytes 0..4, the identifier at bytes 4..8.
-///
-/// planus reserves the 8 header bytes with the root's alignment and writes
-/// them in the reverse order (see the module comment); the root offset it
-/// writes is relative to byte 4, where it put it. Moving it to byte 0 adds 4
-/// to it, and nothing after byte 8 moves.
-fn finish(catalog: &Catalog) -> Vec<u8> {
-    let mut builder = planus::Builder::new();
-    let mut bytes = builder.finish(catalog, Some(FILE_IDENTIFIER)).to_vec();
-    let from_byte_4 = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    bytes[0..4].copy_from_slice(&(from_byte_4 + 4).to_le_bytes());
-    bytes[4..8].copy_from_slice(&FILE_IDENTIFIER);
-    bytes
-}
 
 fn sample() -> Catalog {
     Catalog {
@@ -145,15 +128,13 @@ fn the_owned_form_round_trips_through_the_view() {
     let bytes = finish(&sample());
     let view = CatalogRef::read_as_root(&bytes).unwrap();
     let owned: Catalog = view.try_into().expect("a valid view converts");
-    assert_eq!(
-        owned.interfaces[0].members[0].payloads[0].max_sizes[1].bytes,
-        40
-    );
+    assert_eq!(owned, sample());
 }
 
-/// Pins the planus behaviour [`finish`] works around. When this fails, a
-/// planus release writes the standard layout itself: remove [`finish`] and
-/// call `planus::Builder::finish` directly.
+/// Pins the planus behaviour [`ridl_descriptor::finish`] works around, and so
+/// proves that function is still needed. When this fails, a planus release
+/// writes the standard layout itself: make `finish` call
+/// `planus::Builder::finish` directly.
 #[test]
 fn planus_writes_the_identifier_before_the_root_offset() {
     let mut builder = planus::Builder::new();

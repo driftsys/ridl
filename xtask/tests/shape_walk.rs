@@ -145,8 +145,14 @@ const ALLOWED: &[Allowed] = &[
               `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/src/lib.rs",
+        lines: 1,
+        why: "`verify` walking the catalog descriptor's own `Catalog.interfaces` \
+              field in a buffer, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
-        lines: 2,
+        lines: 1,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
               field back out of a buffer, not a read of `Package::interfaces`",
     },
