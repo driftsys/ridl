@@ -8,7 +8,9 @@ session, and do only that stage. Where this document says "stop", stop and
 report to Sebastien. Do not guess past it.
 
 Where this document and an ADR disagree, the ADR wins. This document summarizes.
-It does not decide.
+The one exception is §4, which records Sebastien's answers of 2026-10-03. Where
+an answer departs from an ADR (answer 4 and ADR-0014 decision 9), the stage that
+applies it writes the decision record first.
 
 **THIS SESSION RUNS: D1**. D0 is the pull request that added this document.
 
@@ -48,10 +50,10 @@ It does not decide.
 Epic E16 in `docs/ROADMAP.md`: one FlatBuffers catalog descriptor per package,
 which an engine (a bus configurator, a runtime outside this repository) reads
 without decoding the IR. It carries the interface numbers, the members and their
-kinds, the catalog hash, and a maximum encoded size per payload for proto3 and
-FlatBuffers. `ridlc build --emit catalog` writes it, a verifier checks it before
-any access, and `ridl describe` prints it as strict JSON. The system descriptor
-(per deployment) is out of scope. It follows the rsdl lowering.
+kinds, the catalog hash, and a size state per payload for proto3 and FlatBuffers
+(§4 answer 5). `ridlc build --emit catalog` writes it, a verifier checks it
+before any access, and `ridl describe` prints it as strict JSON. The system
+descriptor (per deployment) is out of scope. It follows the rsdl lowering.
 
 This is the release's critical path (`docs/BACKLOG.md`, "Next delivery
 sequence", items 1 and 2).
@@ -101,8 +103,8 @@ make a task's code or a disposition wrong.
   it. A second implementation would be a defect (E11.7 design D-6, in
   `docs/archive/2026-09-20-flatbuffers-codec-design.md`; see also
   `docs/design/flatbuffers-codec.md`). That bound charges four bytes per
-  declared character of a string, so any `match` narrowing could only change the
-  proto3 column. No proto3 bound exists yet.
+  declared character of a string, and §4 answer 7 defers any `match` narrowing
+  to #665. No proto3 bound exists yet.
 - **E15, the lock, landed.** The IR carries `Interface.number` and
   `Interface.provisional`. `interfaces.lock` has a parser and a writer, and
   `ridl lock` exists. The plan's disposition "every interface shape is
@@ -130,15 +132,15 @@ make a task's code or a disposition wrong.
     `ridl-loopback`'s `UnknownInteraction` wait on E16.2 as well.
   - The size types differ: `ridl_rt::contract::EncodedSizes` holds
     `Option<u32>`, the codegen model holds `uint32`, and the plan's
-    `catalog.fbs` holds `uint64`. D1 picks one and says why.
-- **Shipped code must not depend on planus.** The root `Cargo.toml` says planus
-  and planus-codegen are dev-dependencies of `ridl-backend-rust` only, and that
-  nothing the workspace ships depends on either (E11.7 design D-12).
-  `xtask/tests/oracle_boundary.rs` checks only three backend crates
-  (`ridl-backend-flatbuffers`, `ridl-backend-proto`, `ridl-backend-rust`), so no
-  test would catch a new crate that breaks the rule. Plan Task 1 makes `planus`
-  a normal dependency of `ridl-descriptor`, which `ridlc` and `ridl` then depend
-  on. §4 answer 8 settles this.
+    `catalog.fbs` holds `uint64`. §4 answer 5 picks `uint32`.
+- **The rule on planus is stated more widely than its decision.** The root
+  `Cargo.toml` says planus and planus-codegen are dev-dependencies of
+  `ridl-backend-rust` only, and that nothing the workspace ships depends on
+  either (E11.7 design D-12). `xtask/tests/oracle_boundary.rs` checks only three
+  backend crates (`ridl-backend-flatbuffers`, `ridl-backend-proto`,
+  `ridl-backend-rust`), so no test would catch a new crate that breaks the rule.
+  Plan Task 1 makes `planus` a normal dependency of `ridl-descriptor`, which
+  `ridlc` and `ridl` then depend on. §4 answer 8 settles this.
 - **Every crate is now published unless it opts out.** ADR-0007 decision 14
   (amended 2026-09-21): a `v<version>` tag publishes every crate without
   `publish = false`, so an internal dependency must be a workspace entry with a
@@ -173,10 +175,13 @@ Model: `fable` for the audit. Docs only. No code.
    task, record what no longer holds on `main`: a type or function that was
    renamed or removed, a file that moved, a dependency that already exists, a
    disposition that a landed record decided differently.
-2. Amend the plan in place on a branch. Apply the answers in §4. Apply #326's
-   items, with the census recounted against today's CLI. Keep the task
-   numbering, so the issues' task references stay valid. Remove a task only if
-   it is empty.
+2. Amend the plan in place on a branch. Apply the answers in §4. In the same
+   pull request, bring the other records that state the old criteria into line
+   with §4: the E16.2 and E16.4 rows of `docs/ROADMAP.md`, the done lines of
+   #378 and #380, and D-6 of the runtime-descriptors design (its every-payload
+   heading and its stream wording). Apply #326's items, with the census
+   recounted against today's CLI. Keep the task numbering, so the issues' task
+   references stay valid. Remove a task only if it is empty.
 3. Write a short "Re-baseline 2026-10" section at the top of the plan. List
    every change, and the record or the §4 answer that caused each one.
 4. Open the pull request (docs-only lane), review it, fix it, and merge it.
@@ -188,10 +193,11 @@ Model: `fable` for the audit. Docs only. No code.
 
 Plan Tasks 1 and 2. A new crate `crates/ridl-descriptor/` and its
 `.git-std.toml` scope. `cargo xtask descriptor-codegen` generates the accessors,
-which are committed with a drift test. Nothing may depend on `flatc`. Planus
-must stay out of shipped crates' normal dependencies unless §4 item 8 decides
-otherwise. Done when a catalog round-trips through the builder and the reader,
-and a buffer with a wrong identifier or version is rejected as a whole.
+which are committed with a drift test. Nothing may depend on `flatc`. Planus may
+be a normal dependency of `ridl-descriptor`, `ridlc` and `ridl`, and of no other
+shipped crate (§4 answer 8). Done when a catalog round-trips through the builder
+and the reader, and a buffer with a wrong identifier or version is rejected as a
+whole.
 
 ### D3 — E16.2 (#378): numbering and the catalog hash
 
@@ -201,8 +207,10 @@ Plan Tasks 3 and 4. Every walk over a package's interfaces goes through
 retire the Rust backend's zero `CatalogHash`. Decide which stage emits the
 port's catalog check. That stage also takes the decision ADR-0021 decision 3 and
 ADR-0023 leave open (what `new` does on a mismatch), as an ADR-0023 amendment.
-Done when two packages with the same declarations and numbering hash alike, and
-changing one number changes the hash.
+Done when two packages with the same declarations and numbering hash alike,
+changing one number changes the hash, the hash is the same whether a build emits
+proto3, FlatBuffers or both (§4 answer 11), and a golden-hash test runs in the
+gate (§4 answer 4).
 
 ### D4 — E16.3 (#379): the size context
 
@@ -218,8 +226,10 @@ proto3 bound under ADR-0017 as amended today. Task 7 calls
 (§2). Fill the Rust backend's `EncodedSizes`, which are all `None` today. The
 records give that placeholder to E16.2 (`docs/ROADMAP.md`,
 `docs/design/interaction-face.md`), but the bounds exist only after this stage,
-so amend those records to say E16.4. Done when each payload carries a maximum
-encoded size for both encodings.
+so amend those records to say E16.4. Done when each payload carries a size state
+for both encodings: bounded or unbounded for a payload that is one named type,
+and absent for a request with more than one parameter, an inline `T | E` reply
+and a stream payload (§4 answers 5, 6 and 10).
 
 ### D6 — E16.5 (#381): the lowering and the emit
 
@@ -289,11 +299,14 @@ that contradicts an answer, stop and report that fact.
    codec define their encoding. The plan's induced request message and its
    `ok`/`err` union are removed.
 7. **No `match` narrowing in E16.** A string counts 4 bytes per scalar value in
-   both columns, as design note §3.11 and `max_size` do. The checker and the
-   generated Rust code do not agree on what a pattern matches until #597 is
+   both columns, as §3.11 of
+   `docs/wip/2026-09-12-release-scope-and-plugin-system-design.md` and
+   `max_size` do. The checker and the generated Rust code do not agree on what a
+   pattern matches until the design of #597
+   (`docs/wip/2026-10-01-portable-match-patterns-design.md`, approach A) is
    implemented, so an ASCII-only verdict is not safe for a size bound. #665,
-   which depends on #597, records the narrowing, to be built in one function
-   that both bounds call.
+   which depends on that implementation, records the narrowing, to be built in
+   one function that both bounds call.
 8. **planus.** The toolchain may depend on planus: `ridl-descriptor`, and
    through it `ridlc` and `ridl`. `ridl-rt` and every generated package must
    not. Narrow the root `Cargo.toml` comment to say that, and extend
@@ -311,5 +324,5 @@ that contradicts an answer, stop and report that fact.
     the IR. #378 gains #275's criterion: the hash is the same whether a build
     emits proto3, FlatBuffers or both. #275 closes when #378 merges.
 
-One question stays open for the stage that meets it: which stage emits the
-port's catalog check, and what `new` does on a mismatch (D3).
+One question stays open for the stage that needs the answer: which stage emits
+the port's catalog check, and what `new` does on a mismatch (D3).
