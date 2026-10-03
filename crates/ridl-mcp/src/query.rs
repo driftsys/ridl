@@ -538,16 +538,17 @@ mod tests {
     #[test]
     fn list_interactions_reports_the_header() {
         let out = list_interactions(&snap(), &input("Status", None)).unwrap();
-        assert_eq!(out.interface.name, "Status");
-        assert_eq!(out.interface.package, "fx.b");
-        assert_eq!(out.interface.doc, "The status interface.");
-        assert_eq!(out.interface.labels, ["PRIVATE"]);
+        let header = out.interface;
+        assert_eq!(header.name, "Status");
+        assert_eq!(header.package, "fx.b");
+        assert_eq!(header.doc, "The status interface.");
+        assert_eq!(header.labels, ["PRIVATE"]);
         assert_eq!(
-            out.interface.deprecated.as_deref(),
+            header.deprecated.as_deref(),
             Some("Use the next status interface.")
         );
-        assert_eq!(out.interface.number, 1);
-        assert!(out.interface.provisional);
+        assert_eq!(header.number, 1);
+        assert!(header.provisional);
     }
     #[test]
     fn locations_are_complete() {
