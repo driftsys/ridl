@@ -98,8 +98,21 @@ async fn ridl_mcp_advertises_ridl_check() {
             .list_tools(Default::default())
             .await
             .expect("tools/list");
-        let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
-        assert!(names.contains(&"ridl_check"));
+        let mut names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "ridl_check",
+                "ridl_dependencies",
+                "ridl_describe_type",
+                "ridl_diff",
+                "ridl_explain",
+                "ridl_list_interactions",
+                "ridl_references",
+                "ridl_resolve"
+            ]
+        );
         client.cancel().await.expect("shutdown");
     })
     .await
@@ -367,6 +380,152 @@ fn ridl_mcp_exits_two_when_stdin_closes_before_initialize() {
     // decision 1 — the same code, and the same cause, as the `ridl lsp`
     // counterpart below.
     assert_eq!(status.code(), Some(2), "a lost transport exits 2");
+}
+
+fn workspace_fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-mcp/tests/fixtures")
+        .join(name)
+}
+async fn call_workspace_tool(
+    client: &RunningService<RoleClient, ()>,
+    name: &str,
+    args: serde_json::Value,
+) -> CallToolResult {
+    client
+        .call_tool(
+            CallToolRequestParams::new(name.to_owned())
+                .with_arguments(args.as_object().unwrap().clone()),
+        )
+        .await
+        .expect("tools/call")
+}
+#[tokio::test]
+async fn path_mode_check_equals_the_cli() {
+    tokio::time::timeout(TIMEOUT, async {
+        let path = workspace_fixture("ws-diag");
+        let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+            .args(["check", "--format", "json"])
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert_eq!(cli.status.code(), Some(1));
+        let expected: serde_json::Value = serde_json::from_slice(&cli.stdout).unwrap();
+        let client = connect().await;
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path":path})).await;
+        assert_ne!(result.is_error, Some(true));
+        assert_eq!(result.structured_content.unwrap()["diagnostics"], expected);
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("workspace check timeout");
+}
+#[tokio::test]
+async fn diff_tool_equals_the_cli() {
+    tokio::time::timeout(TIMEOUT, async {
+        let old = workspace_fixture("ws");
+        let new = workspace_fixture("ws-v2");
+        let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+            .args(["diff", "--format", "json"])
+            .arg(&old)
+            .arg(&new)
+            .output()
+            .unwrap();
+        assert_eq!(cli.status.code(), Some(1));
+        let expected: serde_json::Value = serde_json::from_slice(&cli.stdout).unwrap();
+        let client = connect().await;
+        let result = call_workspace_tool(&client, "ridl_diff", json!({"old":old,"new":new})).await;
+        assert_ne!(result.is_error, Some(true));
+        assert_eq!(result.structured_content.unwrap(), expected);
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("workspace diff timeout");
+}
+#[tokio::test]
+async fn every_tool_leaves_the_tree_unchanged() {
+    tokio::time::timeout(TIMEOUT, async {
+        fn copy(from: &std::path::Path, to: &std::path::Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for entry in std::fs::read_dir(from).unwrap() {
+                let entry = entry.unwrap();
+                let dest = to.join(entry.file_name());
+                if entry.path().is_dir() {
+                    copy(&entry.path(), &dest);
+                } else {
+                    std::fs::copy(entry.path(), dest).unwrap();
+                }
+            }
+        }
+        fn record(root: &std::path::Path) -> Vec<(PathBuf, u64, std::time::SystemTime)> {
+            fn walk(
+                root: &std::path::Path,
+                dir: &std::path::Path,
+                entries: &mut Vec<(PathBuf, u64, std::time::SystemTime)>,
+            ) {
+                for entry in std::fs::read_dir(dir).unwrap() {
+                    let entry = entry.unwrap();
+                    let metadata = entry.metadata().unwrap();
+                    if metadata.is_dir() {
+                        walk(root, &entry.path(), entries);
+                    } else {
+                        entries.push((
+                            entry.path().strip_prefix(root).unwrap().into(),
+                            metadata.len(),
+                            metadata.modified().unwrap(),
+                        ));
+                    }
+                }
+            }
+            let mut entries = Vec::new();
+            walk(root, root, &mut entries);
+            entries.sort();
+            entries
+        }
+        let temp = TempDir::new("read-only");
+        copy(&workspace_fixture("ws"), &temp.0);
+        let before = record(&temp.0);
+        let client = connect().await;
+        for (name, arguments) in [
+            ("ridl_check", json!({"path":temp.0})),
+            ("ridl_explain", json!({"code":"TYPL-002"})),
+            ("ridl_resolve", json!({"path":temp.0,"name":"Speed"})),
+            ("ridl_describe_type", json!({"path":temp.0,"name":"Speed"})),
+            (
+                "ridl_list_interactions",
+                json!({"path":temp.0,"interface":"Status"}),
+            ),
+            ("ridl_references", json!({"path":temp.0,"name":"Speed"})),
+            ("ridl_dependencies", json!({"path":temp.0})),
+            ("ridl_diff", json!({"old":temp.0,"new":temp.0})),
+        ] {
+            let result = call_workspace_tool(&client, name, arguments).await;
+            assert_ne!(result.is_error, Some(true), "{name}: {result:?}");
+            assert!(result.structured_content.is_some(), "{name}: {result:?}");
+        }
+        client.cancel().await.unwrap();
+        assert_eq!(record(&temp.0), before);
+        assert!(!temp.0.join("ridl.lock").exists());
+        assert!(!temp.0.join(".ridl").exists());
+    })
+    .await
+    .expect("read-only tools timeout");
+}
+#[tokio::test]
+async fn a_wrong_request_is_is_error_not_a_protocol_error() {
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect().await;
+        let result = call_workspace_tool(
+            &client,
+            "ridl_resolve",
+            json!({"path":workspace_fixture("ws"),"name":"Unknown"}),
+        )
+        .await;
+        assert_eq!(result.is_error, Some(true));
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("tool error timeout");
 }
 
 // ---------------------------------------------------------------------------

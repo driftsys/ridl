@@ -412,6 +412,34 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn the_tool_list_is_pinned() {
+        let mut tools = RidlMcp::new().tool_router.list_all();
+        tools.sort_by(|a, b| a.name.cmp(&b.name));
+        let names = tools.iter().map(|t| t.name.as_ref()).collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                "ridl_check",
+                "ridl_dependencies",
+                "ridl_describe_type",
+                "ridl_diff",
+                "ridl_explain",
+                "ridl_list_interactions",
+                "ridl_references",
+                "ridl_resolve"
+            ]
+        );
+        let actual = serde_json::to_value(tools).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/tools.json")).unwrap();
+        assert!(
+            actual == expected,
+            "{}\nthe MCP tool surface is an external contract (ADR-0005 §7, as amended by the 1a design); if this change only adds, replace tests/tools.json with the JSON above",
+            serde_json::to_string_pretty(&actual).unwrap()
+        );
+    }
+
     #[tokio::test]
     async fn path_mode_check_matches_to_json() {
         let path = snapshot::tests::fixture("ws-diag");
