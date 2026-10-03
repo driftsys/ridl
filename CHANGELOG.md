@@ -1,5 +1,88 @@
 # Changelog
 
+## [0.5.1] (2026-10-03)
+
+### Bug Fixes
+
+- **family:** enforce payload constraints and initial value validity ([#654])
+  ([6c3def2]), closes [#469], 421
+  M2 of #172 is fixed; the remaining roll-up items stay open.
+- **ridl-fmt:** preserve colliding annotation comments ([#635]) ([0bc48da])
+- **ridl-sem:** cache the regex crate's TYPL-220 verdict by pattern text
+  ([#621]) ([d534ed2])
+- RIDL-149 citation, Spellings field numbers, typl and ridl
+  catalogue-to-reference test ([#618]) ([d4a0007]), closes [#456], refs [#561],
+  closes [#575], [#561], refs [#575]
+- **ridl-lsp:** treat a bare carriage return as a line break ([#622])
+  ([f045b8f])
+- **ridl:** accept --stdio and --clientProcessId on ridl lsp ([#620])
+  ([5df89ac])
+
+### Performance
+
+- **ridl-fmt:** render tuple breaks incrementally ([#651]) ([d9aa42c])
+- **ridl-fmt:** index break candidates by physical line ([#640]) ([85a2d01])
+
+### Features
+
+- **ridl-fmt:** complete RIDL and RSDL canonical formatting ([#638]) ([1caf85a])
+- **ridl-fmt:** format RIDL interfaces, attributes and services ([#634])
+  ([c9c7c0e])
+- **ridl-fmt:** apply per-file EditorConfig width and document layout ([#630])
+  ([037256d])
+- **ridl-fmt:** resolve width options from EditorConfig ([#628]) ([9f0b953])
+- **ridl-fmt:** add formatting options and tuple line width ([#626]) ([43debd6])
+- **ridl-lsp:** format a document with the ridl fmt engine ([#617]) ([bf389b4])
+
+### Documentation
+
+- **roadmap:** capture prioritized issue backlog ([#655]) ([4a3d470])
+- **repo:** design portable typl match patterns ([#597]) ([#615]) ([aeb46c8]),
+  refs [#597]
+- **ridl-fmt:** design the layout of the ridl and rsdl declarations ([#624])
+  ([169dc4c])
+
+[0.5.1]: https://github.com/driftsys/ridl/compare/v0.5.0...v0.5.1
+[6c3def2]: https://github.com/driftsys/ridl/commit/6c3def2
+[#654]: https://github.com/driftsys/ridl/issues/654
+[#469]: https://github.com/driftsys/ridl/issues/469
+[0bc48da]: https://github.com/driftsys/ridl/commit/0bc48da
+[#635]: https://github.com/driftsys/ridl/issues/635
+[d534ed2]: https://github.com/driftsys/ridl/commit/d534ed2
+[#621]: https://github.com/driftsys/ridl/issues/621
+[d4a0007]: https://github.com/driftsys/ridl/commit/d4a0007
+[#618]: https://github.com/driftsys/ridl/issues/618
+[#456]: https://github.com/driftsys/ridl/issues/456
+[#561]: https://github.com/driftsys/ridl/issues/561
+[#575]: https://github.com/driftsys/ridl/issues/575
+[f045b8f]: https://github.com/driftsys/ridl/commit/f045b8f
+[#622]: https://github.com/driftsys/ridl/issues/622
+[5df89ac]: https://github.com/driftsys/ridl/commit/5df89ac
+[#620]: https://github.com/driftsys/ridl/issues/620
+[d9aa42c]: https://github.com/driftsys/ridl/commit/d9aa42c
+[#651]: https://github.com/driftsys/ridl/issues/651
+[85a2d01]: https://github.com/driftsys/ridl/commit/85a2d01
+[#640]: https://github.com/driftsys/ridl/issues/640
+[1caf85a]: https://github.com/driftsys/ridl/commit/1caf85a
+[#638]: https://github.com/driftsys/ridl/issues/638
+[c9c7c0e]: https://github.com/driftsys/ridl/commit/c9c7c0e
+[#634]: https://github.com/driftsys/ridl/issues/634
+[037256d]: https://github.com/driftsys/ridl/commit/037256d
+[#630]: https://github.com/driftsys/ridl/issues/630
+[9f0b953]: https://github.com/driftsys/ridl/commit/9f0b953
+[#628]: https://github.com/driftsys/ridl/issues/628
+[43debd6]: https://github.com/driftsys/ridl/commit/43debd6
+[#626]: https://github.com/driftsys/ridl/issues/626
+[bf389b4]: https://github.com/driftsys/ridl/commit/bf389b4
+[#617]: https://github.com/driftsys/ridl/issues/617
+[4a3d470]: https://github.com/driftsys/ridl/commit/4a3d470
+[#655]: https://github.com/driftsys/ridl/issues/655
+[aeb46c8]: https://github.com/driftsys/ridl/commit/aeb46c8
+[#597]: https://github.com/driftsys/ridl/issues/597
+[#615]: https://github.com/driftsys/ridl/issues/615
+[169dc4c]: https://github.com/driftsys/ridl/commit/169dc4c
+[#624]: https://github.com/driftsys/ridl/issues/624
+
 ## [0.5.0] (2026-10-01)
 
 ### Features

@@ -1760,7 +1760,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-backend-flatbuffers"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "insta",
  "planus-translation",
@@ -1774,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-backend-proto"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "insta",
  "proptest",
@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-backend-rust"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "insta",
  "num-bigint",
@@ -1814,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-backend-ts"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "insta",
  "ridl-core",
@@ -1825,7 +1825,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap",
  "lsp-server",
@@ -1851,7 +1851,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "codespan-reporting",
  "insta",
@@ -1868,7 +1868,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-diff"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ridl-ir",
  "serde",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-fmt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ec4rs",
  "ridl-syntax",
@@ -1886,7 +1886,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-ir"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "pbjson",
  "pbjson-build",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-loopback"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ridl-rt",
  "ridl-rt-conformance",
@@ -1908,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-lsp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "lsp-server",
  "lsp-types",
@@ -1924,7 +1924,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-mcp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ridl-core",
  "ridlc",
@@ -1936,18 +1936,18 @@ dependencies = [
 
 [[package]]
 name = "ridl-rt"
-version = "0.5.0"
+version = "0.5.1"
 
 [[package]]
 name = "ridl-rt-conformance"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ridl-rt",
 ]
 
 [[package]]
 name = "ridl-sem"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "insta",
  "num-bigint",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-syntax"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "insta",
  "logos 0.16.1",
@@ -1975,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "ridlc"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap",
  "insta",
@@ -1995,7 +1995,7 @@ dependencies = [
 
 [[package]]
 name = "ridlc-gen-model"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ridl-core",
  "ridl-ir",
@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "ridlc-gen-rust"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ridl-backend-rust",
  "ridl-core",
@@ -3065,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "prettyplease",
  "proc-macro2",
