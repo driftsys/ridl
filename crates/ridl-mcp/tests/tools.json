@@ -1,0 +1,1060 @@
+[
+  {
+    "description": "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. It omits remote fetching, the `ridl.lock` round trip and baseline checks.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        },
+        "Profile": {
+          "description": "Which language a source text is parsed as. These are the three profiles the\ncompiler has; the `.rxdl` form does not exist yet (epic E3.5). An rsdl text\nis checked as a workspace of one file, so the rsdl system checks run over\nit as `ridl check` runs them over the same text in a file. The checks of\nfiles beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`\nsnapshot) do not run: a source text has no such files.",
+          "enum": [
+            "typl",
+            "ridl",
+            "rsdl"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which language `source` is parsed as."
+        },
+        "source": {
+          "description": "The full text of one `.typl`, `.ridl` or `.rsdl` file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "ridl_check",
+    "outputSchema": {
+      "$defs": {
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "diagnostics": {
+          "items": true,
+          "type": "array"
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "diagnostics"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List package imports, dependencies and dependents. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "package": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_dependencies",
+    "outputSchema": {
+      "$defs": {
+        "PackageDeps": {
+          "properties": {
+            "dependents": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "depends_on": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "imports": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "imports",
+            "depends_on",
+            "dependents"
+          ],
+          "type": "object"
+        },
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "packages": {
+          "items": {
+            "$ref": "#/$defs/PackageDeps"
+          },
+          "type": "array"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceStatus"
+        }
+      },
+      "required": [
+        "packages",
+        "workspace"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Describe a non-interface declaration in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_describe_type",
+    "outputSchema": {
+      "$defs": {
+        "Location": {
+          "properties": {
+            "end": {
+              "$ref": "#/$defs/Position"
+            },
+            "path": {
+              "type": "string"
+            },
+            "start": {
+              "$ref": "#/$defs/Position"
+            }
+          },
+          "required": [
+            "path",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Position": {
+          "properties": {
+            "column": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "line": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "line",
+            "column"
+          ],
+          "type": "object"
+        },
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "declaration": true,
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Location"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "package": {
+          "type": "string"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceStatus"
+        }
+      },
+      "required": [
+        "declaration",
+        "package",
+        "workspace"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Compare source workspaces or IR snapshots. Overlays apply only to the new source side. Read-only and offline.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "new": {
+          "type": "string"
+        },
+        "old": {
+          "type": "string"
+        },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "old",
+        "new"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_diff",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  {
+    "description": "Explain a diagnostic code or diff category word.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "code": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_explain",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "diagnostic",
+              "type": "string"
+            },
+            "severity": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "code",
+            "severity",
+            "summary"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "diff_category",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "category",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  {
+    "description": "List an interface and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interface": {
+          "type": "string"
+        },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "interface"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_list_interactions",
+    "outputSchema": {
+      "$defs": {
+        "InterfaceHeader": {
+          "properties": {
+            "deprecated": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "doc": {
+              "type": "string"
+            },
+            "labels": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            },
+            "number": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "package": {
+              "type": "string"
+            },
+            "provisional": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "package",
+            "doc",
+            "labels",
+            "number",
+            "provisional"
+          ],
+          "type": "object"
+        },
+        "Location": {
+          "properties": {
+            "end": {
+              "$ref": "#/$defs/Position"
+            },
+            "path": {
+              "type": "string"
+            },
+            "start": {
+              "$ref": "#/$defs/Position"
+            }
+          },
+          "required": [
+            "path",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Position": {
+          "properties": {
+            "column": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "line": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "line",
+            "column"
+          ],
+          "type": "object"
+        },
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "interactions": {
+          "items": true,
+          "type": "array"
+        },
+        "interface": {
+          "$ref": "#/$defs/InterfaceHeader"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Location"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceStatus"
+        }
+      },
+      "required": [
+        "interface",
+        "interactions",
+        "workspace"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List declarations and interactions using a declaration. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_references",
+    "outputSchema": {
+      "$defs": {
+        "Location": {
+          "properties": {
+            "end": {
+              "$ref": "#/$defs/Position"
+            },
+            "path": {
+              "type": "string"
+            },
+            "start": {
+              "$ref": "#/$defs/Position"
+            }
+          },
+          "required": [
+            "path",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Position": {
+          "properties": {
+            "column": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "line": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "line",
+            "column"
+          ],
+          "type": "object"
+        },
+        "Reference": {
+          "properties": {
+            "declaration": {
+              "type": "string"
+            },
+            "interaction": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Location"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "package": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "package",
+            "declaration"
+          ],
+          "type": "object"
+        },
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "references": {
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "type": "array"
+        },
+        "target": {
+          "type": "string"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceStatus"
+        }
+      },
+      "required": [
+        "target",
+        "references",
+        "workspace"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Resolve a declaration by name. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "inputSchema": {
+      "$defs": {
+        "OverlayInput": {
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "source"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/OverlayInput"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_resolve",
+    "outputSchema": {
+      "$defs": {
+        "Location": {
+          "properties": {
+            "end": {
+              "$ref": "#/$defs/Position"
+            },
+            "path": {
+              "type": "string"
+            },
+            "start": {
+              "$ref": "#/$defs/Position"
+            }
+          },
+          "required": [
+            "path",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Position": {
+          "properties": {
+            "column": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "line": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "line",
+            "column"
+          ],
+          "type": "object"
+        },
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "alias": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Location"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceStatus"
+        }
+      },
+      "required": [
+        "name",
+        "package",
+        "kind",
+        "visibility",
+        "workspace"
+      ],
+      "type": "object"
+    }
+  }
+]

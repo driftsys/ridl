@@ -1,20 +1,26 @@
 //! The RIDL MCP server (ADR-0005 Layer B; docs/ROADMAP.md epic E8.6).
 //!
-//! One tool, `ridl_check`: the compiler's single-file check
-//! (`ridlc::check_source`) over a source string an agent supplies, returned
-//! as the JSON diagnostic contract (`ridl_core::diag::JsonDiagnostic`). The
-//! server is a thin consumer of the shared compiler crates — no parser, no
-//! checker of its own — and runs over stdio behind `ridl mcp`.
+//! Eight read-only workspace tools expose checks, declarations, references,
+//! dependencies and compatibility comparisons over stdio behind `ridl mcp`.
+//! The server consumes the shared compiler crates and their canonical IR JSON.
 
-use ridl_core::diag::{JsonDiagnostic, to_json};
+pub mod diff;
+pub mod explain;
+pub mod query;
+pub mod refs;
+pub mod snapshot;
+use ridl_core::diag::to_json;
+pub mod types;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::schemars::JsonSchema;
 use rmcp::service::QuitReason;
 use rmcp::transport::stdio;
 use rmcp::{ErrorData, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
+use snapshot::{ToolError, snapshot};
+use types::{OverlayInput, WorkspaceStatus};
 
 // This enum is the only gate on the profile, and its doc comment is the
 // description the tool's JSON schema carries to an agent. `ridlc` reads the
@@ -53,23 +59,38 @@ impl Profile {
 #[schemars(crate = "rmcp::schemars")]
 pub struct CheckParams {
     /// The full text of one `.typl`, `.ridl` or `.rsdl` file.
-    pub source: String,
+    pub source: Option<String>,
     /// Which language `source` is parsed as.
-    pub profile: Profile,
+    pub profile: Option<Profile>,
+    pub path: Option<String>,
+    pub overlays: Option<Vec<OverlayInput>>,
 }
 
 /// The `ridl_check` tool's output.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct CheckOutput {
-    pub diagnostics: Vec<JsonDiagnostic>,
+    pub diagnostics: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceStatus>,
 }
 
 /// Checks `params.source` under `params.profile` against the embedded
 /// `ridl.std`. Pure: no transport, no I/O.
 pub fn check(params: &CheckParams) -> CheckOutput {
-    let run = ridlc::check_source(params.profile.synthetic_path(), &params.source);
+    let run = ridlc::check_source(
+        params
+            .profile
+            .expect("source mode has a profile")
+            .synthetic_path(),
+        params.source.as_deref().expect("source mode has source"),
+    );
     CheckOutput {
-        diagnostics: to_json(&run.diagnostics, &run.sources),
+        diagnostics: to_json(&run.diagnostics, &run.sources)
+            .iter()
+            .map(|d| serde_json::to_value(d).expect("diagnostics serialize"))
+            .collect(),
+        workspace: None,
     }
 }
 
@@ -82,7 +103,7 @@ pub struct RidlMcp {
     /// `ridl lsp` agree; a caller driving this library directly (including
     /// this crate's own tests) gets this crate's version through `new`.
     version: String,
-    /// What `ridl_check` runs: [`check`], except in this crate's own tests.
+    /// What source-mode `ridl_check` runs: [`check`], except in this crate's own tests.
     /// No input is known to make the compiler panic, so a test installs a
     /// function that does, to reach the handler's failure path.
     check: fn(&CheckParams) -> CheckOutput,
@@ -112,9 +133,145 @@ impl RidlMcp {
         }
     }
 
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<explain::ExplainOutput>(), description = "Explain a diagnostic code or diff category word.")]
+    async fn ridl_explain(
+        &self,
+        Parameters(input): Parameters<explain::ExplainInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || explain::explain(&input))
+            .await
+            .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<serde_json::Map<String, serde_json::Value>>(), description = "Compare source workspaces or IR snapshots. Overlays apply only to the new source side. Read-only and offline.")]
+    async fn ridl_diff(
+        &self,
+        Parameters(input): Parameters<diff::DiffInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || diff::diff(&input))
+            .await
+            .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<refs::ReferencesOutput>(), description = "List declarations and interactions using a declaration. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_references(
+        &self,
+        Parameters(input): Parameters<query::NameInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            refs::references(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<refs::DependenciesOutput>(), description = "List package imports, dependencies and dependents. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_dependencies(
+        &self,
+        Parameters(input): Parameters<refs::DependenciesInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            refs::dependencies(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::ResolveOutput>(), description = "Resolve a declaration by name. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_resolve(
+        &self,
+        Parameters(input): Parameters<query::NameInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            query::resolve(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::DescribeOutput>(), description = "Describe a non-interface declaration in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_describe_type(
+        &self,
+        Parameters(input): Parameters<query::NameInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            query::describe_type(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::InteractionsOutput>(), description = "List an interface and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_list_interactions(
+        &self,
+        Parameters(input): Parameters<query::InterfaceInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let input: query::NameInput = input.into();
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            query::list_interactions(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
     #[tool(
         name = "ridl_check",
-        description = "Type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. The text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. The checks of files beside a file on disk, an `interfaces.lock` and a `.ridl/baseline/` snapshot, do not run."
+        output_schema = rmcp::handler::server::common::schema_for_output::<CheckOutput>(),
+        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. It omits remote fetching, the `ridl.lock` round trip and baseline checks."
     )]
     async fn ridl_check(
         &self,
@@ -130,10 +287,34 @@ impl RidlMcp {
         // in the SDK's pool. Tokio catches the blocking task's panic instead
         // and hands it back here as a `JoinError`.
         let check = self.check;
-        let output = tokio::task::spawn_blocking(move || check(&params))
-            .await
-            .map_err(checker_failed)?;
-        Ok(CallToolResult::success(vec![ContentBlock::json(&output)?]))
+        let output = tokio::task::spawn_blocking(move || {
+            const MESSAGE: &str =
+                "pass either `source` with `profile`, or `path` with optional `overlays`";
+            match (&params.source, &params.path, params.profile) {
+                (Some(_), None, Some(_)) => Ok(check(&params)),
+                (None, Some(path), None) => {
+                    let snap = snapshot(path, params.overlays.as_deref().unwrap_or_default())?;
+                    Ok(CheckOutput {
+                        diagnostics: to_json(&snap.output.diagnostics, &snap.output.sources)
+                            .iter()
+                            .map(|d| serde_json::to_value(d).expect("diagnostics serialize"))
+                            .collect(),
+                        workspace: Some(snap.status()),
+                    })
+                }
+                _ => Err(ToolError::Request(MESSAGE.into())),
+            }
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
     }
 }
 
@@ -171,8 +352,15 @@ impl ServerHandler for RidlMcp {
             // (through `with_version`) the `ridl` binary's build version.
             .with_server_info(Implementation::new("ridl-mcp", self.version.clone()))
             .with_instructions(
-                "RIDL compiler tools. Call ridl_check with a source text and a profile \
-                 (typl, ridl or rsdl) to get coded diagnostics with fix-its.",
+                "ridl_check: check workspace files or one source text.\n\
+                 ridl_explain: explain a diagnostic code or diff category.\n\
+                 ridl_resolve: resolve a declaration and its location.\n\
+                 ridl_describe_type: describe a non-interface declaration.\n\
+                 ridl_list_interactions: list an interface's interactions.\n\
+                 ridl_references: list declarations and interactions using a declaration.\n\
+                 ridl_dependencies: list package dependencies and dependents.\n\
+                 ridl_diff: compare source workspaces or IR snapshots.\n\
+                 Pass the workspace root (the directory that holds its ridl.toml) as `path`. Tools are read-only: they never write files and never fetch remote imports. Use `overlays` to check unsaved text.",
             )
     }
 }
@@ -221,12 +409,103 @@ fn outcome(reason: QuitReason) -> Result<(), Box<dyn std::error::Error + Send + 
 
 #[cfg(test)]
 mod tests {
+    use rmcp::model::ContentBlock;
     use std::time::Duration;
 
     use serde_json::json;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, ReadHalf, WriteHalf};
 
     use super::*;
+
+    #[test]
+    fn instructions_name_every_tool_and_the_read_only_workspace_contract() {
+        let server = RidlMcp::new();
+        let instructions = server.get_info().instructions.unwrap();
+        for tool in server.tool_router.list_all() {
+            assert!(
+                instructions
+                    .lines()
+                    .any(|line| line.starts_with(tool.name.as_ref())),
+                "{} is absent from instructions",
+                tool.name
+            );
+        }
+        assert!(instructions.contains("Pass the workspace root (the directory that holds its ridl.toml) as `path`. Tools are read-only: they never write files and never fetch remote imports. Use `overlays` to check unsaved text."));
+    }
+
+    #[test]
+    fn the_tool_list_is_pinned() {
+        let mut tools = RidlMcp::new().tool_router.list_all();
+        tools.sort_by(|a, b| a.name.cmp(&b.name));
+        let names = tools.iter().map(|t| t.name.as_ref()).collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            [
+                "ridl_check",
+                "ridl_dependencies",
+                "ridl_describe_type",
+                "ridl_diff",
+                "ridl_explain",
+                "ridl_list_interactions",
+                "ridl_references",
+                "ridl_resolve"
+            ]
+        );
+        let actual = serde_json::to_value(tools).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/tools.json")).unwrap();
+        assert!(
+            actual == expected,
+            "{}\nthe MCP tool surface is an external contract (ADR-0005 §7, as amended by the 1a design); if this change only adds, replace tests/tools.json with the JSON above",
+            serde_json::to_string_pretty(&actual).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn path_mode_check_matches_to_json() {
+        let path = snapshot::tests::fixture("ws-diag");
+        let output = ridlc::compile_workspace(
+            &mut ridl_core::RidlDatabase::default(),
+            std::path::Path::new(&path),
+        )
+        .unwrap();
+        let expected = serde_json::to_value(to_json(&output.diagnostics, &output.sources)).unwrap();
+        let params = serde_json::from_value(json!({"path": path})).unwrap();
+        let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+        let value = result.structured_content.unwrap();
+        assert_eq!(value["diagnostics"], expected);
+        assert_eq!(
+            value["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|d| d["code"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["TYPL-103", "TYPL-011"]
+        );
+    }
+
+    #[tokio::test]
+    async fn both_modes_or_neither_is_a_tool_error() {
+        for value in [
+            json!({"source": "package p", "profile": "typl", "path": "."}),
+            json!({}),
+            json!({"path": ".", "profile": "typl"}),
+        ] {
+            let result = RidlMcp::new()
+                .ridl_check(Parameters(serde_json::from_value(value).unwrap()))
+                .await
+                .unwrap();
+            assert_eq!(result.is_error, Some(true));
+            let [ContentBlock::Text(text)] = result.content.as_slice() else {
+                panic!("one text block")
+            };
+            assert_eq!(
+                text.text,
+                "pass either `source` with `profile`, or `path` with optional `overlays`"
+            );
+        }
+    }
 
     // The fixture deliberately has no trailing newline: with one, the parser
     // reports the missing backing type at the position past it, which is
@@ -236,24 +515,28 @@ mod tests {
     #[test]
     fn check_reports_an_error_for_a_broken_typl_source() {
         let output = check(&CheckParams {
-            source: BROKEN_TYPL.to_string(),
-            profile: Profile::Typl,
+            source: Some(BROKEN_TYPL.to_string()),
+            profile: Some(Profile::Typl),
+            path: None,
+            overlays: None,
         });
         let error = output
             .diagnostics
             .iter()
-            .find(|diagnostic| diagnostic.severity == "error")
+            .find(|diagnostic| diagnostic["severity"] == "error")
             .expect("an error diagnostic");
-        assert_eq!(error.span.path, "input.typl");
-        assert_eq!(error.span.start.line, 2);
-        assert_eq!(error.span.start.column, 8);
+        assert_eq!(error["span"]["path"], "input.typl");
+        assert_eq!(error["span"]["start"]["line"], 2);
+        assert_eq!(error["span"]["start"]["column"], 8);
     }
 
     #[test]
     fn check_output_serializes_as_a_diagnostics_array() {
         let output = check(&CheckParams {
-            source: BROKEN_TYPL.to_string(),
-            profile: Profile::Typl,
+            source: Some(BROKEN_TYPL.to_string()),
+            profile: Some(Profile::Typl),
+            path: None,
+            overlays: None,
         });
         let value: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&output).expect("serializes"))
@@ -275,43 +558,53 @@ mod tests {
     fn check_selects_the_profile_from_the_parameter() {
         let source = "package p\ninterface I {}\n".to_string();
         let ridl = check(&CheckParams {
-            source: source.clone(),
-            profile: Profile::Ridl,
+            source: Some(source.clone()),
+            profile: Some(Profile::Ridl),
+            path: None,
+            overlays: None,
         });
         let typl = check(&CheckParams {
-            source,
-            profile: Profile::Typl,
+            source: Some(source),
+            profile: Some(Profile::Typl),
+            path: None,
+            overlays: None,
         });
-        assert!(ridl.diagnostics.iter().all(|d| d.severity != "error"));
-        assert!(typl.diagnostics.iter().any(|d| d.severity == "error"));
+        assert!(ridl.diagnostics.iter().all(|d| d["severity"] != "error"));
+        assert!(typl.diagnostics.iter().any(|d| d["severity"] == "error"));
     }
 
     #[test]
     fn check_parses_an_rsdl_source_under_the_rsdl_profile() {
         let component = "package p\n\ncomponent Idle {}\n".to_string();
         let rsdl = check(&CheckParams {
-            source: component.clone(),
-            profile: Profile::Rsdl,
+            source: Some(component.clone()),
+            profile: Some(Profile::Rsdl),
+            path: None,
+            overlays: None,
         });
         let typl = check(&CheckParams {
-            source: component,
-            profile: Profile::Typl,
+            source: Some(component),
+            profile: Some(Profile::Typl),
+            path: None,
+            overlays: None,
         });
-        assert!(rsdl.diagnostics.iter().all(|d| d.severity != "error"));
-        assert!(typl.diagnostics.iter().any(|d| d.severity == "error"));
+        assert!(rsdl.diagnostics.iter().all(|d| d["severity"] != "error"));
+        assert!(typl.diagnostics.iter().any(|d| d["severity"] == "error"));
 
         // rsdl reference §2: `internal` before an rsdl keyword is FORM-102.
         let internal = check(&CheckParams {
-            source: "package p\n\ninternal component Idle {}\n".to_string(),
-            profile: Profile::Rsdl,
+            source: Some("package p\n\ninternal component Idle {}\n".to_string()),
+            profile: Some(Profile::Rsdl),
+            path: None,
+            overlays: None,
         });
         let error = internal
             .diagnostics
             .iter()
-            .find(|diagnostic| diagnostic.severity == "error")
+            .find(|diagnostic| diagnostic["severity"] == "error")
             .expect("an error diagnostic");
-        assert_eq!(error.code, "FORM-102");
-        assert_eq!(error.span.path, "input.rsdl");
+        assert_eq!(error["code"], "FORM-102");
+        assert_eq!(error["span"]["path"], "input.rsdl");
     }
 
     #[test]
@@ -321,18 +614,6 @@ mod tests {
         assert!(serde_json::from_str::<Profile>("\"rsdl\"").is_ok());
         assert!(serde_json::from_str::<Profile>("\"rxdl\"").is_err());
         assert!(serde_json::from_str::<Profile>("\"Typl\"").is_err());
-    }
-
-    #[test]
-    fn the_server_advertises_exactly_one_tool_named_ridl_check() {
-        let server = RidlMcp::new();
-        let names: Vec<String> = server
-            .tool_router
-            .list_all()
-            .into_iter()
-            .map(|tool| tool.name.to_string())
-            .collect();
-        assert_eq!(names, vec!["ridl_check".to_string()]);
     }
 
     #[test]
@@ -356,8 +637,10 @@ mod tests {
         let server = RidlMcp::new();
         let result = server
             .ridl_check(Parameters(CheckParams {
-                source: BROKEN_TYPL.to_string(),
-                profile: Profile::Typl,
+                source: Some(BROKEN_TYPL.to_string()),
+                profile: Some(Profile::Typl),
+                path: None,
+                overlays: None,
             }))
             .await
             .expect("the tool succeeds");
@@ -375,7 +658,7 @@ mod tests {
     /// and is the real [`check`] on every other, so one server can show both
     /// the failed call and the call after it.
     fn check_or_panic(params: &CheckParams) -> CheckOutput {
-        if params.source == "panic" {
+        if params.source.as_deref() == Some("panic") {
             panic!("a checker panic driven by the test");
         }
         check(params)
@@ -549,6 +832,14 @@ mod tests {
             schema["$defs"]["Profile"]["enum"],
             json!(["typl", "ridl", "rsdl"])
         );
-        assert_eq!(schema["required"], json!(["source", "profile"]));
+        assert!(schema.get("required").is_none());
+        let mut properties = schema["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        properties.sort();
+        assert_eq!(properties, ["overlays", "path", "profile", "source"]);
     }
 }

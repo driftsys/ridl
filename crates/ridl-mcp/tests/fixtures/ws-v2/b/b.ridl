@@ -1,0 +1,24 @@
+package fx.b
+
+import fx.a.Speed
+import fx.a.Level as ALevel
+import fx.a.Reading
+import fx.a.Outcome
+
+/// A window size, local to this package.
+type Level: integer [0..10]
+
+/// The status interface.
+interface Status {
+  signal speed: Speed @10ms
+  event reading: Reading @[100ms..1s]
+  command setLevel(level: ALevel, force: Level) @[..50ms]
+  query outcome(window: Level): Outcome @[..200ms]
+  fixed softwareVersion: Version
+}
+
+service fx.b.status: Status
+
+service fx.b.diag {
+  query readSpeed(): Speed @[..100ms]
+}

@@ -177,9 +177,12 @@ types, return types, `FixedDef.payload`, and in each service of
 an inline `ServiceShape.inline` interface. A reference inside a service reports
 the service's name as its declaration. Each reference reports the package, the
 package-level declaration that holds it, the interaction name when the reference
-sits inside an interface's interaction (otherwise `null`), and the location. A
-declaration that refers to the target more than once is reported once.
-`ridl.std` is not walked: a standard type cannot refer to a workspace type.
+sits inside an interface's interaction (otherwise `null`), and the location.
+References are reported once for each (declaration, interaction) pair: a pair
+that refers to the target more than once is reported once, and an interface
+whose interactions refer to the target gives one result for each such
+interaction. `ridl.std` is not walked: a standard type cannot refer to a
+workspace type.
 
 **`ridl_dependencies`.** For each workspace package:
 

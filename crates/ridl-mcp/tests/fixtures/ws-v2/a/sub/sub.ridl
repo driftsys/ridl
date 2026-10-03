@@ -1,0 +1,3 @@
+package fx.a.sub
+
+type Gear: integer [0..8]

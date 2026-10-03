@@ -389,13 +389,14 @@ fn run_explain(category: &str) -> ExitCode {
 /// either side, 1 when the change is breaking, 0 when it is compatible or the
 /// two are identical.
 fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
-    let old_side = match load_diff_side(old) {
+    let mut db = ridl_core::RidlDatabase::default();
+    let old_side = match ridlc::load_diff_side(&mut db, old, &[]) {
         Ok(side) => side,
-        Err(code) => return code,
+        Err(error) => return report_diff_side_error(error),
     };
-    let new_side = match load_diff_side(new) {
+    let new_side = match ridlc::load_diff_side(&mut db, new, &[]) {
         Ok(side) => side,
-        Err(code) => return code,
+        Err(error) => return report_diff_side_error(error),
     };
 
     // The verdict is the contracts' alone: the system's placement and
@@ -425,137 +426,15 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     }
 }
 
-/// One side of a diff: its resolved packages, and its lowered system when the
-/// side carries one (rsdl reference §13).
-struct DiffSide {
-    packages: Vec<ridl_ir::v2::Package>,
-    system: Option<ridl_ir::v2::System>,
-}
-
-/// Loads one side of a diff into a set of resolved packages and, when the side
-/// carries one, its lowered system.
-///
-/// Three input forms, in order:
-///
-/// 1. an `.ir.json` file — deserialized directly;
-/// 2. a directory holding `.ir.json` files — deserialized as a snapshot set.
-///    This is the form `.ridl/baseline/` takes, and an N-package workspace
-///    publishes N snapshots, so `ridl diff .ridl/baseline .` has to read the
-///    whole directory. Falling through to a compile here would silently diff
-///    the current source against itself and always report `identical`
-///    (ADR-0008 decision 14: `ridl diff` reads the workspace-local baseline);
-/// 3. anything else — a source file, a package directory, or a workspace
-///    root — compiled in process through `ridlc::compile_workspace`.
-///
-/// Only IR artifacts are recognised by name — the suffix table (issue #218
-/// item 4). Three inputs are refused rather than parsed as source: a file in
-/// a non-JSON IR encoding; a directory that holds IR artifacts but neither an
-/// `.ir.json` snapshot nor source — no `ridl.toml` and no `.typl`/`.ridl`
-/// file directly inside it; and a directory with no source whose `.ir.json`
-/// snapshots sit one level below it rather than inside it, which is a path
-/// aimed one level too high (issue #230). A fourth is refused before any of
-/// those three is considered: a directory — source tree or not — holding an
-/// entry named like a snapshot whose metadata cannot be read, which
-/// [`snapshot_files`] reports rather than skips (driftsys/ridl#339 case 3).
-/// Everything else is source. Recognising *source*
-/// by extension was tried and reverted — it refused inputs the compiler
-/// accepts, such as a `ridl.toml` path designating its workspace, an
-/// extensionless source file, or a symlink — so a renamed artifact whose
-/// name lost the `.ir.` infix still falls through to the compiler (recorded
-/// on issue #218).
-///
-/// A read, parse, or compile error renders to stderr and yields exit code 2 —
-/// `ridl diff` never emits a diff report over a snapshot it could not build.
-///
-/// Only a source input carries a system, the one the compile lowered: a
-/// snapshot is a package snapshot, and `ridl baseline` publishes no system.
-fn load_diff_side(entry: &Path) -> Result<DiffSide, ExitCode> {
-    if is_ir_json(entry) {
-        return Ok(DiffSide {
-            packages: load_snapshots(&[entry.to_path_buf()], None)?,
-            system: None,
-        });
+fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
+    match error {
+        ridlc::DiffSideError::Compile {
+            diagnostics,
+            sources,
+        } => eprint!("{}", render(&diagnostics, &sources)),
+        error => eprintln!("error: {error}"),
     }
-
-    // The other IR encodings are refused by name, before the source
-    // fallback below can parse prototext or binary as `.typl` and report its
-    // syntax errors — a misdiagnosis of the actual mistake.
-    if is_non_json_ir(entry) {
-        eprintln!(
-            "error: {}: `ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); \
-             emit the package with `--emit ir-json` to compare it",
-            entry.display()
-        );
-        return Err(ExitCode::from(2));
-    }
-
-    if entry.is_dir() {
-        let snapshots = snapshot_files(entry)?;
-        if !snapshots.is_empty() {
-            return Ok(DiffSide {
-                packages: load_snapshots(&snapshots, None)?,
-                system: None,
-            });
-        }
-        // Two directory shapes are described rather than compiled: one
-        // holding IR artifacts and no `.ir.json` — a snapshot directory in an
-        // encoding this surface refuses, `ridl diff out/ src/` after `--emit
-        // ir-text` (issue #218 item 4) — and one whose `.ir.json` snapshots
-        // sit a level below it, a path aimed one level too high (issue #230).
-        // The second failed open: the directory fell through to the compiler,
-        // which walked up to the workspace's own manifest and compiled the
-        // current source as the baseline side, so the gate reported
-        // `identical` over a breaking change.
-        //
-        // Neither applies to a source tree. A build can write its artifacts
-        // into the workspace itself (`--out-dir .`) and a workspace can
-        // publish its baseline inside itself (`--out ws/published`); such a
-        // tree compiles below exactly as `ridl check` reads it, artifacts and
-        // snapshots included.
-        if !is_source_dir(entry) {
-            if let Some(witness) = first_non_json_ir_in(entry) {
-                return Err(refuse_artifact_directory(
-                    entry,
-                    &witness,
-                    "`ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); emit \
-                     the packages with `--emit ir-json` to compare them",
-                ));
-            }
-            if let Some(nested) = first_nested_snapshot_dir(entry)? {
-                return Err(refuse_nested_snapshot_directory(
-                    entry,
-                    &nested,
-                    &format!("compare `{}` instead", nested.display()),
-                ));
-            }
-        }
-    }
-
-    let mut db = ridl_core::RidlDatabase::default();
-    match ridlc::compile_workspace(&mut db, entry) {
-        Ok(output) => {
-            if output
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
-            {
-                eprint!("{}", render(&output.diagnostics, &output.sources));
-                return Err(ExitCode::from(2));
-            }
-            Ok(DiffSide {
-                packages: output
-                    .checked
-                    .into_iter()
-                    .map(|checked| checked.ir)
-                    .collect(),
-                system: output.system,
-            })
-        }
-        Err(err) => {
-            eprintln!("error: {}: {err}", entry.display());
-            Err(ExitCode::from(2))
-        }
-    }
+    ExitCode::from(2)
 }
 
 /// The one snapshot suffix this surface accepts — baselines and diffs stay
@@ -611,7 +490,7 @@ fn is_non_json_ir(path: &Path) -> bool {
 /// with: a file whose extension is `typl`, `ridl` or `rsdl`. Used only to tell
 /// a source tree from a snapshot directory ([`is_source_dir`]) — a diff
 /// *argument* is never gated on this, because a source file's own name is
-/// unconstrained ([`load_diff_side`]).
+/// unconstrained ([`ridlc::load_diff_side`]).
 fn is_source_file(path: &Path) -> bool {
     path.is_file()
         && path.extension().is_some_and(|extension| {
@@ -2266,9 +2145,9 @@ fn load_published(out_dir: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode>
 /// cannot be read or parsed is exit 2 — a comparison against half a baseline
 /// would be a lie about what is published. This is shared by `ridl check
 /// --baseline` (through [`load_baseline`], where the file may be the single
-/// `.ir.json` the flag names), `ridl diff` (through [`load_diff_side`], for
-/// either side) and `ridl baseline` (through [`load_published`] for the
-/// published side, and directly for the freshly built side).
+/// `.ir.json` the flag names) and `ridl baseline` (through [`load_published`]
+/// for the published side, and directly for the freshly built side).
+/// `ridl diff` uses the separate reader behind [`ridlc::load_diff_side`].
 ///
 /// `parse_remedy`, when given, finishes the parse-error message. Only the
 /// caller knows which file it handed over, so only the caller can say what to
