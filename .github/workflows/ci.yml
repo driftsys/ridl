@@ -95,16 +95,25 @@ jobs:
           fi
           files="$(git diff --name-only --no-renames HEAD^1 HEAD)"
           echo "$files"
-          # Here-strings, not `printf | grep -q`: grep -q exits at its first
-          # match, printf then dies of SIGPIPE, and pipefail reports that as a
-          # non-match once the list passes the 64 KiB pipe buffer.
+          # An empty list is not a pull request that needs nothing; it is a
+          # diff that did not read the change. Run every job.
+          if [ -z "$files" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "markdown=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A here-string and a command substitution, not `printf | grep -q`:
+          # grep -q exits at its first match, printf then dies of SIGPIPE, and
+          # pipefail reports that as a non-match once the list passes the
+          # 64 KiB pipe buffer. `grep -vq` also returns the wrong status in
+          # BSD grep, so the test reads grep's output instead of its status.
           rust_skip='^(docs/(wip|archive|decisions|design|technotes)/|docs/[^/]+\.md$|[A-Z_-]+\.md$|editors/|\.claude/|\.githooks/|\.git-std\.toml$|\.mcp\.json$)'
-          if grep -vqE "$rust_skip" <<< "$files"; then
+          if [ -n "$(grep -vE "$rust_skip" <<< "$files" || true)" ]; then
             echo "rust=true" >> "$GITHUB_OUTPUT"
           else
             echo "rust=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -vqE '\.rs$' <<< "$files"; then
+          if [ -n "$(grep -vE '\.rs$' <<< "$files" || true)" ]; then
             echo "markdown=true" >> "$GITHUB_OUTPUT"
           else
             echo "markdown=false" >> "$GITHUB_OUTPUT"
