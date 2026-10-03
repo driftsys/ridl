@@ -11,16 +11,18 @@ Two kinds of users need more help than the toolchain gives today.
 
 - **Interface and service designers who work with an AI assistant** (Claude Opus
   or Sonnet, or GPT). Today `ridl mcp` exposes one tool, `ridl_check`. It checks
-  one pasted source string against `ridl.std` only, so imports do not resolve
-  and spans name a synthetic file. No skill or rules file exists; only
+  one pasted source string against `ridl.std` only, so an import of any other
+  package does not resolve and spans name a synthetic file. No skill or rules
+  file exists; only
   [`skill-ridl-authoring-outline.md`](skill-ridl-authoring-outline.md) does.
 - **Developers who write and consume RIDL**. typl §14 specifies doc comments
   (`///`, `/** */`, CommonMark, `[Type]` links, `@see`, `@labels`,
   `@deprecated`), but the compiler checks almost none of it. The TypeScript
-  backend emits JSDoc with `@unit`, `@range` and `@bounds`. The Rust backend
-  copies type docs, gives the interaction face only a generic module line, and
-  emits long maintainer notes into generated internals (for example the
-  `validate` doc in `examples/cabin/generated/veh.cabin.rs`).
+  backend emits JSDoc with `@unit`, `@range`, `@bounds` and `@deprecated`. The
+  Rust backend copies type docs. Its interaction face carries generated rustdoc
+  on each type, trait and method, but no source doc comment reaches the face,
+  and no rule is stated there. Generated internals carry rustdoc written for the
+  generator's maintainers, which the user of the generated crate also sees.
 
 ## What the maintainer said
 
@@ -86,8 +88,9 @@ a lint raised to `deny`.
 ### Spec 2a — documentation in the source
 
 - The small tag set (candidates: `@since`, `@example`). It changes the language
-  surface, so it is recorded in the language references and an ADR under the
-  ADR-0011 and ADR-0015 rules.
+  surface, so it is recorded in the language references and in an ADR, and is
+  checked against ADR-0011, ADR-0012 and ADR-0015, which AGENTS.md names for any
+  change to the language surface.
 - Doc lints: missing docs, a broken `[Type]` link, an unknown or malformed tag,
   `@deprecated` without a reason.
 - Language server: rendered hover, completion and go-to-definition on `[Type]`
@@ -123,31 +126,32 @@ Three parts, in this order:
   tools (`ridl_resolve`, `ridl_describe_type`, `ridl_list_interactions`, the
   roadmap's E8.7), and review tools (what depends on what, and what a change
   breaks through `ridl_diff`, E8.6). Registration for Claude Code (a `.mcp.json`
-  in this repository and a documented `claude mcp add`).
+  in this repository; `crates/ridl-mcp/README.md` already documents
+  `claude mcp add`).
 - **1b. Design lints on the foundation.** Naming and unit consistency, one
   concept defined twice under different names, dependency cycles between
   packages, the dependencies of each package and its dependents, and interface
   cohesion (members that share no types).
 - **1c. Skill, rules and evals.** Built from the existing outline, for design
   and for review, portable across the three hosts. The skill handles the
-  judgment calls (which interaction kind, where a service boundary goes, how to
-  name a concept) and cites lint and tool output as evidence.
+  decisions that need judgment (which interaction kind, where a service boundary
+  goes, how to name a concept) and cites lint and tool output as evidence.
 
 Open decisions: how a request maps onto a loaded workspace and how that
 workspace is cached between calls (shared with #529, the language server's
-workspace-member gap); the tool schemas; how 1b's metrics are thresholded so the
-defaults do not produce noise; how evals are scored beyond "it compiles" (an
-open question in ADR-0005).
+workspace-member gap); the tool schemas; how 1b's metric thresholds are set so
+the default levels do not report findings that a designer would dismiss; how
+evals are scored beyond "it compiles" (an open question in ADR-0005).
 
 ## Order
 
 1. Spec 0, the lint foundation.
-2. Specs 2a, 2b and 1a in parallel. They touch different crates.
+2. Specs 2a, 2b and 1a in parallel. 2a and 2b can both change `ridl-ir` (the doc
+   model and the documented contract), so their specs agree on that shape before
+   either plan starts.
 3. 1b and 1c, which need the foundation and the 1a tools.
 
-## Related work in flight
+## Related work
 
-- The formatter work for #387 (`fmt-ridl-rsdl-*.md`). The 0.5.1 release that
-  ships the `ridl lsp --stdio` fix (#620) waits for it.
 - The language server's open gaps: #529 (a workspace member does not see its
   sibling members) and #385 (rsdl-aware references, rename and completion).
