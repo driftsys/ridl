@@ -205,6 +205,11 @@ design note, from the archive.
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
   record. Roadmap: Epic 10.
+- **2026-10-03-devex-and-agent-tracks-brief.md** — the agreed scope of two
+  tracks, an AI design assistant (MCP tools, design lints, skill) and code
+  documentation (doc lints, language server, rules in generated facade docs),
+  split into four specs over a shared lint foundation. Scope only; each spec
+  starts its own design session from it.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

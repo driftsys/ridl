@@ -1,0 +1,200 @@
+# Developer experience and agent assistance — scope brief
+
+Status: scope agreed with the maintainer on 2026-10-03. No design in this file
+is approved. Each spec named below starts its own brainstorming session from
+this brief: it proposes approaches, presents a design, writes the spec, and gets
+the spec reviewed before a plan is written.
+
+## Why
+
+Two kinds of users need more help than the toolchain gives today.
+
+- **Interface and service designers who work with an AI assistant** (Claude Opus
+  or Sonnet, or GPT). Today `ridl mcp` exposes one tool, `ridl_check`. It checks
+  one pasted source string against `ridl.std` only, so an import of any other
+  package does not resolve and spans name a synthetic file. No skill or rules
+  file exists; only
+  [`skill-ridl-authoring-outline.md`](skill-ridl-authoring-outline.md) does.
+- **Developers who write and consume RIDL**. typl §14 specifies doc comments
+  (`///`, `/** */`, CommonMark, `[Type]` links, `@see`, `@labels`,
+  `@deprecated`), but the compiler checks almost none of it. The TypeScript
+  backend emits JSDoc with `@unit`, `@range`, `@bounds` and `@deprecated`. The
+  Rust backend copies type docs. Its interaction face carries generated rustdoc
+  on each type, trait and method, but no source doc comment reaches the face,
+  and no rule is stated there. Generated internals carry rustdoc written for the
+  generator's maintainers, which the user of the generated crate also sees.
+
+## What the maintainer said
+
+Track 1, design assistant:
+
+- The assistant targets interface and service designers who use Claude Opus,
+  Claude Sonnet, or GPT.
+- It helps them use the right interaction kinds, helps enforce semantic
+  consistency, and helps keep low coupling and high cohesion of services and
+  interfaces.
+- It serves both design from requirements and review and evolution of an
+  existing workspace, with review and evolution weighted a little more.
+- "Enforce" means two layers: what can be computed becomes compiler lints;
+  judgment stays in the skill, which cites the lint results as evidence.
+
+Track 2, code documentation:
+
+- RIDL supports proper code documentation in the rustdoc or Dokka style.
+- Source doc style is rustdoc-like Markdown, documented where each item is
+  declared, plus a small set of tags only for what the model cannot infer
+  (option C of the session). Anything the model already knows (types, units,
+  ranges, bounds, errors, timing, contracts) is extracted, never written by
+  hand.
+- Generated code carries the documentation. The public API facade's docs state
+  the validation rules each item enforces. The generated internals do not.
+- Missing documentation is a warning by default on public declarations and their
+  members, configurable per project in `ridl.toml`.
+- Lints are exposed as SARIF.
+
+## Assumptions to confirm in the specs
+
+- The skill and rules are portable across the first-class hosts ADR-0005 names:
+  Claude Code, Copilot and Codex. They carry evals, as ADR-0005 requires.
+- Generated internals are hidden from documentation (`#[doc(hidden)]` or the
+  equivalent in each language), and their maintainer notes move to the
+  generator's source.
+- The Kotlin generator is an out-of-repo plugin, so it can only render what the
+  IR carries. The extracted rules therefore live in the IR as structured data,
+  and each backend only formats them.
+- `ridl check` has `text` and `json` output today (`CheckFormat` in
+  `crates/ridl/src/main.rs`); `sarif` is new work.
+
+## The split
+
+Four specs. Each one is a separate brainstorming, spec and plan cycle.
+
+### Spec 0 — the shared lint foundation
+
+Both tracks depend on it, so it comes first and stays small.
+
+- A lint registry: a stable name and a default level for each lint, separate
+  from the existing error diagnostics.
+- A `[lints]` table in `ridl.toml` to change a level per project (for example
+  `missing-docs = "deny"`). This changes the manifest, so ADR-0002 governs it.
+- `ridl check --format sarif`.
+- The same lint results through `ridl-lsp` and `ridl-mcp`.
+
+Open decisions: how a lint differs from a warning diagnostic today; whether
+levels can also be set per package or per declaration; the SARIF rule metadata
+(help text, links to the diagnostic catalogue); how ADR-0010's exit codes treat
+a lint raised to `deny`.
+
+### Spec 2a — documentation in the source
+
+- The small tag set (candidates: `@since`, `@example`). It changes the language
+  surface, so it is recorded in the language references and in an ADR, and is
+  checked against ADR-0011, ADR-0012 and ADR-0015, which AGENTS.md names for any
+  change to the language surface.
+- Doc lints: missing docs, a broken `[Type]` link, an unknown or malformed tag,
+  `@deprecated` without a reason.
+- Language server: every doc comment, at every level that can carry one
+  (package, interface, interaction, parameter, field, enum value, error arm),
+  reaches the language server. Hover on a declaration or on any use of it shows
+  the rendered doc together with the rules extracted for spec 2b (range, unit,
+  bounds, contracts, timing, errors), so the editor and the generated facade
+  state the same contract. Completion items and signature help carry the same
+  doc. `[Type]` links get completion and go-to-definition, and a quick fix
+  inserts a doc stub.
+
+Decided with the maintainer on 2026-10-03:
+
+- **`///` is the house style.** Both forms typl §14 allows stay accepted with
+  the same meaning. The book, the examples, the skill and generated code use
+  `///`. `ridl fmt` does not rewrite one form into the other. An optional
+  `doc-comment-style` lint, allowed by default, lets a project require one form
+  through `[lints]`.
+- **Each interaction is documented on its member.** The doc on a call, event,
+  stream or property says what that interaction does and when to use it; its
+  parameters, fields and error arms are each documented where they are declared.
+  The interface doc states the interface's responsibility, in one sentence where
+  possible, and does not list or repeat its members. `missing-docs` covers both
+  the interface and each member. The one-sentence responsibility is also an
+  input to track 1's cohesion review.
+
+Open decisions: which declarations and members count as public for
+`missing-docs`; whether doc comments are allowed on every member kind (call
+parameters, error arms, stream elements); how a `[Type]` link resolves across
+packages and imports.
+
+### Spec 2b — documentation in generated code
+
+- A documented contract in the IR: the rules extracted once from the model
+  (range, step, unit, size bounds, `require` and `ensure`, timing, the errors a
+  call can raise) plus the source docs.
+- The Rust backend renders rustdoc and the TypeScript backend renders TSDoc, on
+  the public facade only. The out-of-repo Kotlin plugin renders KDoc from the
+  same IR.
+- Generated internals are hidden and carry no maintainer notes.
+
+Open decisions: the IR shape for the documented contract, and whether it changes
+the IR's stability promise (`2026-09-22-ir-stability-design.md`); how rules are
+worded so they read the same in each language; the relation to the validators
+that [`typl-value-objects-design.md`](typl-value-objects-design.md) plans, which
+enforce the same rules the docs state.
+
+### Spec 1 — the design assistant
+
+Three parts, in this order:
+
+- **1a. Workspace-aware MCP server.** `ridl_check` by path (and by path plus
+  unsaved source, the overlay model `ridl-lsp` uses), `ridl_explain`, lookup
+  tools (`ridl_resolve`, `ridl_describe_type`, `ridl_list_interactions`, the
+  roadmap's E8.7), and review tools (what depends on what, and what a change
+  breaks through `ridl_diff`, E8.6). Registration for Claude Code (a `.mcp.json`
+  in this repository; `crates/ridl-mcp/README.md` already documents
+  `claude mcp add`).
+- **1b. Design lints on the foundation.** Naming and unit consistency, one
+  concept defined twice under different names, dependency cycles between
+  packages, the dependencies of each package and its dependents, and interface
+  cohesion (members that share no types).
+- **1c. Skill, rules and evals.** Built from the existing outline, for design
+  and for review, portable across the three hosts. The skill handles the
+  decisions that need judgment (which interaction kind, where a service boundary
+  goes, how to name a concept) and cites lint and tool output as evidence.
+
+Open decisions: how a request maps onto a loaded workspace and how that
+workspace is cached between calls (shared with #529, the language server's
+workspace-member gap); the tool schemas; how 1b's metric thresholds are set so
+the default levels do not report findings that a designer would dismiss; how
+evals are scored beyond "it compiles" (an open question in ADR-0005).
+
+## Order
+
+Agreed with the maintainer on 2026-10-03. The order starts with the pieces whose
+outcome is predictable and ends with the pieces that need evidence.
+
+| Piece                      | Work           | Uncertainty | Why                                                                                                                                  |
+| -------------------------- | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1a, MCP tools              | medium         | low         | Wraps compiler functions that exist. No change to the language, the IR or a wire format.                                             |
+| Spec 0, lint foundation    | small          | low         | A registry, a manifest table and an output format. Bound by ADR-0002 and ADR-0010.                                                   |
+| 2a, docs in the source     | medium         | low         | rustdoc and Dokka show the target. The tag set is a language-surface decision.                                                       |
+| 2b, docs in generated code | medium to high | low         | Broad: an IR shape, the rendering in each backend, generated-output snapshots, the out-of-repo Kotlin plugin.                        |
+| 1b, design lints           | medium         | high        | The metrics are easy to compute; thresholds that do not report findings a designer would dismiss need evidence from real workspaces. |
+| 1c, skill and evals        | medium         | highest     | Proving the skill helps across Claude and GPT needs an eval harness and a scoring method beyond "it compiles" (ADR-0005).            |
+
+1. **1a and Spec 0, in parallel.** 1a does not need the lint foundation:
+   checking by path and the lookup and review tools work without `[lints]`. 1a
+   goes first because the MCP server is the larger gap today, and its lookup
+   tools return richer docs later with no change when 2a and 2b land.
+2. **2a**, after Spec 0, because its doc lints need the lint registry.
+3. **2b**, after 2a has settled the doc model in the IR, and after the catalog
+   descriptor epic (E16, #377 to #382) has landed its IR changes. 2b changes
+   `ridl-ir` and every backend; E16.4 and E16.5 change the same places.
+4. **1b, then 1c.** Both need the foundation and the 1a tools. Start collecting
+   real design and review tasks as 1c's eval set from step 1 onward; it costs
+   little and is what 1c is judged against.
+
+The catalog descriptor epic keeps priority over these tracks for implementation
+effort. Each step above starts its own session: brainstorming, a spec under
+`docs/wip/`, a review of the spec, then a plan.
+
+## Related work
+
+- The language server's open gaps: #529 (a workspace member does not see its
+  sibling members) and #385 (rsdl-aware references, rename and completion).
