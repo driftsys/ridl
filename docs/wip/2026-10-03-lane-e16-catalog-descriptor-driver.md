@@ -59,15 +59,18 @@ sequence", items 1 and 2).
 **Records.**
 
 - Design: `docs/wip/2026-09-13-runtime-descriptors-design.md`, decisions D-1 to
-  D-10. Sebastien approved it on 2026-09-13 (PR #323).
+  D-10. Sebastien approved it in conversation on 2026-09-13, before PR #323
+  merged it.
 - Plan: `docs/wip/2026-09-13-catalog-descriptor-plan.md`, 12 tasks with code (PR
   #324, 2026-09-13).
 - Identity: `docs/wip/2026-09-12-rsdl-rewrite-decisions.md` D-7 and D-8.
 - Debt on the plan: #326 (the book census for a new subcommand and a new emit
   value). Resolve its first three items before Task 11 and the rest before
   Task 12.
-- ADR-0010 (CLI), ADR-0014 decision 4 (artifact naming), ADR-0016 (the name
-  transform), ADR-0017 (proto3 projection), ADR-0019 (FlatBuffers projection).
+- ADR-0007 decision 14 (publishing), ADR-0010 (CLI), ADR-0014 decisions 4 and 9
+  (artifact naming, canonical encoding), ADR-0017 (proto3 projection), ADR-0019
+  (FlatBuffers projection), ADR-0021 decision 3 and ADR-0023 (the port's catalog
+  check).
 
 **Issues.**
 
@@ -86,48 +89,70 @@ coordinate it with #378. See §4.
 
 ## 2. Why the plan must be re-baselined first
 
-The plan was written on 2026-09-13. These changes have landed since, and each
-one can make a task's code or a disposition wrong:
+The plan was written on 2026-09-13. Two later pull requests amended it in place
+(#473 and #474), and other work has landed around it. Each item below can make a
+task's code or a disposition wrong.
 
+- **Task 7 is already replaced.** The plan's Task 7 now opens with "Amended
+  2026-09-21, E11.7 stage K8. Do not implement the bound this task describes."
+  The FlatBuffers bound has one implementation,
+  `ridl_ir::projection::flatbuffers::max_size`
+  (`crates/ridl-ir/src/projection/flatbuffers.rs`), and the descriptor must call
+  it. A second implementation would be a defect (E11.7 design D-6,
+  `docs/design/flatbuffers-codec.md`). That bound charges four bytes per
+  declared character of a string, so the `match` narrowing of Task 5 can only
+  change the proto3 column. No proto3 bound exists yet.
 - **E15, the lock, landed.** The IR carries `Interface.number` and
   `Interface.provisional`. `interfaces.lock` has a parser and a writer, and
-  `ridl lock` exists. The plan's disposition "every interface is provisional,
-  numbered 1.. in `Package::shapes()` order" and its `number_interfaces` (Task
-  3) were written for a time with no lock. They are now at least partly replaced
-  by what the checker already computes.
-- **planus is a workspace dependency.** `planus`, `planus-codegen` and
-  `planus-translation` 1.3.0 are in the root `Cargo.toml` (the FlatBuffers
-  codec, E11.7, #473). Task 1 adds them as if they were new.
-- **The FlatBuffers projection changed.** #474 roots every declaration in a
-  table. #604 changed how an omitted default reads and gave an optional scalar
-  `= null`. ADR-0019 has amendments, decision 8 among them. Task 7's upper bound
-  follows the projection, so check it against the ADR as it stands.
-- **Part of the catalog already exists in other code.** Lane P built the lowered
-  codegen model, `ridl.codegen.v1`
-  (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`). It has a `Catalog`
-  message whose `hash` field is "all zero until E16.2 (driftsys/ridl#378)", with
-  the retired interfaces. It also has a per-scope FlatBuffers bound, which comes
-  from `max_size` in `crates/ridl-ir/src/projection/flatbuffers.rs`. Task 4 must
-  fill that hash field, and the descriptor and the codegen model must agree on
-  the hash. Task 7 must reuse the existing FlatBuffers bound or state why it
-  differs. No proto3 bound exists yet.
-- **The frame specification (E11.1) landed.** The plan's disposition on "what a
-  payload is on the wire" (induced single-field message, request as the induced
-  message of the parameters, fallible response as a union over `ok` and `err`)
-  says "E11.1 must adopt or amend this". Check what E11.1 decided in
-  `docs/specification/frame-specification.md` (#257).
-- **`match` semantics.** The plan narrows a string's byte capacity only for an
-  anchored ASCII-only pattern, because `ridl-sem` applied `match` as a substring
-  search. #597 (portable match patterns,
-  `docs/wip/2026-10-01-portable-match-patterns-design.md`) and #603 (pattern
-  cache) changed this area. Check how the checker applies a pattern now.
-- **Generated names.** ADR-0016 amendments, #608 (renamed backend-chosen names)
-  and the name-collision work (#611, #612) can change the names the plan's
-  snapshots expect.
-- **The CLI grew.** `ridl lock` was added, so the subcommand counts in #326 and
-  in Task 11's book census are off by at least one.
-- **The release is 0.5.1.** Version pins in the plan's `Cargo.toml` snippets are
-  stale.
+  `ridl lock` exists. The plan's disposition "every interface shape is
+  provisional, numbered 1.. in `Package::shapes()` order", and its
+  `number_interfaces` in Task 3, were written for a time with no lock.
+- **ADR-0014 decision 9 was amended on 2026-09-22.** The canonical encoding of
+  the IR is now canonical protobuf JSON, and the binary encoding is derived. The
+  design, the plan (Task 4 hashes `ridl_ir::v2::to_binary`) and #378 all say the
+  hash is taken over "the canonical protobuf binary". #275 also depends on the
+  canonical JSON form. The hash input has to be decided again (§4).
+- **Code already waits for E16.2's hash and sizes.**
+  - The codegen model, `ridl.codegen.v1`
+    (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`), has a `Catalog`
+    message whose `hash` field is "all zero until E16.2 (driftsys/ridl#378)". It
+    carries the FlatBuffers bound per payload (`Payload.flatbuffers_max_size`)
+    and per root (`FbRoot.max_size`).
+  - The Rust backend's descriptors
+    (`crates/ridl-backend-rust/src/descriptors.rs`) emit a zero `CatalogHash`
+    and every `EncodedSizes` field as `None`. `docs/ROADMAP.md` lists both as
+    E11.13 placeholders that E16.2 retires.
+  - ADR-0021 decision 3 and ADR-0023 (amendments of 2026-09-21) say the port's
+    catalog check lands with E16.2 or after it, and that the story that emits
+    the hash decides what `new` does on a mismatch. The frame specification says
+    the attach check and `ridl-loopback`'s `UnknownInteraction` wait on E16.2 as
+    well.
+  - The size types differ: `ridl_rt::contract::EncodedSizes` holds
+    `Option<u32>`, the codegen model holds `uint32`, and the plan's
+    `catalog.fbs` holds `uint64`. D1 picks one and says why.
+- **Shipped code must not depend on planus.** The root `Cargo.toml` says planus
+  and planus-codegen are dev-dependencies of `ridl-backend-rust` only, and that
+  nothing the workspace ships depends on either (E11.7 design D-12).
+  `xtask/tests/oracle_boundary.rs` guards that boundary. Plan Task 1 makes
+  `planus` a normal dependency of `ridl-descriptor`, which `ridlc` and `ridl`
+  then depend on. This needs a decision (§4).
+- **Every crate is now published unless it opts out.** ADR-0007 decision 14
+  (amended 2026-09-21): a `v<version>` tag publishes every crate without
+  `publish = false`, so an internal dependency must be a workspace entry with a
+  path and a version. The plan's manifest for `ridl-descriptor` uses a path-only
+  `ridl-ir` dependency, which `cargo publish` refuses.
+- **The frame specification (E11.1) landed.** The plan's disposition on what a
+  payload is on the wire says "E11.1 must adopt or amend this". Check what
+  `docs/specification/frame-specification.md` (#257) decided.
+- **`match` semantics are unchanged in code.** The checker still applies a
+  pattern as a substring search (`regress` `find` in
+  `crates/ridl-sem/src/check.rs`), which is the plan's premise. #601 added the
+  TYPL-220 compile check. The portable-patterns design
+  (`docs/wip/2026-10-01-portable-match-patterns-design.md`, #597) is not
+  implemented, but if it lands it can change the premise.
+- **The CLI grew.** `ridl lock` is the ninth subcommand, so `describe` is the
+  tenth. `codegen-model` (lane P) is the eighth emit value, so `catalog` is the
+  ninth. #326's title and body count both one too low.
 
 ## 3. Stages
 
@@ -168,8 +193,11 @@ reader, and a buffer with a wrong identifier or version is rejected as a whole.
 
 Plan Tasks 3 and 4. Every walk over a package's interfaces goes through
 `Package::shapes()`, so inline service shapes are included. Settle the #275
-question (§4) before you write the hash. Done when two packages with the same
-declarations and numbering hash alike, and changing one number changes the hash.
+question and the hash input (§4) before you write the hash. Fill the codegen
+model's `Catalog.hash`, and retire the Rust backend's zero `CatalogHash`. Take
+the decision ADR-0021 decision 3 leaves to this story: what `new` does on a
+catalog mismatch. Done when two packages with the same declarations and
+numbering hash alike, and changing one number changes the hash.
 
 ### D4 — E16.3 (#379): the size context
 
@@ -179,9 +207,11 @@ two touch disjoint files. Otherwise it runs after D3.
 
 ### D5 — E16.4 (#380): the two upper bounds
 
-Plan Tasks 6 (proto3) and 7 (FlatBuffers). Model `fable`. Each bound follows its
-projection ADR as amended today. Done when each payload carries a maximum
-encoded size for both encodings.
+Plan Tasks 6 (proto3) and 7 (FlatBuffers). Model `fable`. Task 6 derives the
+proto3 bound under ADR-0017 as amended today. Task 7 calls
+`ridl_ir::projection::flatbuffers::max_size` and computes nothing of its own
+(§2). Fill the Rust backend's `EncodedSizes`, which are all `None` today. Done
+when each payload carries a maximum encoded size for both encodings.
 
 ### D6 — E16.5 (#381): the lowering and the emit
 
@@ -210,19 +240,22 @@ a wip file, read `docs/wip/README.md` and grep for citations of it by name in
 
 ## 4. Decisions for Sebastien (D1 reports them)
 
-The plan takes these dispositions. Sebastien has not confirmed them. Items 6 and
-7 are new design that the plan took, not answers to open items in the design's
-§7. Say so when you report them.
+The plan takes these dispositions, and Sebastien has not confirmed them. Only
+items 1 and 2 answer open items in the design's §7. Items 6 and 7 are new design
+that the plan took. Say so when you report them.
 
 1. The crate `ridl-descriptor` sits beside `ridl-ir`, not inside it.
 2. The file identifier is `RDLC`. The artifact is `<base>.catalog.binfb`, and
    the emit value is `catalog`.
-3. Interface numbers: written for a time with no lock. D1 replaces this with the
-   numbers from the lock (E15). Confirm the replacement.
-4. The catalog hash is SHA-256 over the canonical protobuf binary of a reduced
-   package (every interface shape under its identity name, the reachable type
-   declarations with canonical names, doc strings blanked), followed by the
-   numbering. It is derived and never recorded.
+3. Interface numbers: the plan's disposition was written for a time with no
+   lock. D1 replaces it with the numbers the checker assigns from the lock
+   (E15). Confirm the replacement.
+4. The catalog hash is SHA-256 over a reduced package (every interface shape
+   under its identity name, the reachable type declarations with canonical
+   names, doc strings blanked), followed by the numbering. It is derived and
+   never recorded. The plan hashes the protobuf binary, but ADR-0014 decision 9
+   now makes canonical protobuf JSON the canonical encoding. D1 proposes which
+   bytes are hashed.
 5. The `repr(C)` column exists in the `Encoding` enum but has no entry in any
    payload's size list until E11.12 (#317) defines the layout.
 6. What a payload is on the wire: a struct or union payload is that message or
@@ -230,16 +263,23 @@ The plan takes these dispositions. Sebastien has not confirmed them. Items 6 and
    request is the induced message of its parameters. A fallible response is a
    union over `ok` and `err`. D1 checks this against the frame specification.
 7. `match` narrowing of a string's byte capacity applies only to a pattern
-   anchored at both ends that admits ASCII only. D1 checks this against the
-   checker's current pattern semantics.
+   anchored at both ends that admits ASCII only. It changes only the proto3
+   column (§2). D1 checks it against the checker's pattern semantics.
+8. planus as a runtime dependency: either `ridl-descriptor` depends on `planus`
+   and the workspace's "nothing shipped depends on planus" statement and
+   `oracle_boundary.rs` change, or the accessors are generated without a runtime
+   dependency on planus. D1 proposes one with evidence.
+9. Whether `ridl-descriptor` is published to crates.io, or carries
+   `publish = false`.
 
-Two design wordings came from the review, not from Sebastien, and are to be
-raised before the size derivation (D4) is built:
+Two design wordings came from the review of PR #323, not from Sebastien, and are
+to be raised before the size derivation (D4) is built:
 
-- (b) A stream payload gets the maximum size of one element plus a `stream`
-  flag, because the stream itself has no bound.
-- (c) The `match` narrowing is kept, as an amendment to the design note's §3.11,
-  which says 4·N bytes for every string.
+- A stream payload gets the maximum size of one element plus a `stream` flag,
+  because the stream itself has no bound.
+- The `match` narrowing is kept, as an amendment to §3.11 of
+  `docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`, which says
+  4·N bytes for every string.
 
 And one scope question:
 
