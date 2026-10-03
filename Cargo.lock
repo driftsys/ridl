@@ -1927,8 +1927,12 @@ name = "ridl-mcp"
 version = "0.5.1"
 dependencies = [
  "ridl-core",
+ "ridl-diff",
+ "ridl-ir",
+ "ridl-sem",
  "ridlc",
  "rmcp",
+ "rowan",
  "serde",
  "serde_json",
  "tokio",

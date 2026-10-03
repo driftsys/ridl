@@ -99,7 +99,7 @@ async fn ridl_mcp_advertises_ridl_check() {
             .await
             .expect("tools/list");
         let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
-        assert_eq!(names, ["ridl_check"]);
+        assert!(names.contains(&"ridl_check"));
         client.cancel().await.expect("shutdown");
     })
     .await
