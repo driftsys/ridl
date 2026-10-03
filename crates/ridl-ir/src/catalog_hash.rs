@@ -80,7 +80,8 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
 
 /// SHA-256 over the protobuf binary of [`reduced_package`]. The numbers are
 /// inside: each reduced interface carries the IR's `number` and
-/// `provisional`.
+/// `provisional`. An entry of `others` named like `package` is ignored, so
+/// the hash is the same whether or not the caller includes `package` there.
 pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(crate::v2::to_binary(&reduced_package(package, others)));
@@ -99,7 +100,8 @@ const ROOT: usize = 0;
 /// from, never in the hashed package. Package names contain dots, so a
 /// qualified name is resolved by lookup, not by splitting it.
 struct Index<'a> {
-    /// The hashed package at [`ROOT`], then `others` in the order given.
+    /// The hashed package at [`ROOT`], then `others` in the order given,
+    /// without an entry named like the hashed package.
     packages: Vec<&'a Package>,
     /// Per package, its declarations by bare name.
     bare: Vec<BTreeMap<&'a str, &'a Decl>>,
@@ -110,8 +112,17 @@ struct Index<'a> {
 
 impl<'a> Index<'a> {
     fn new(package: &'a Package, others: &[&'a Package]) -> Self {
+        // `ridlc build` passes every package of the build as `others`, the
+        // hashed package included. A second copy of the hashed package would
+        // overwrite its `pkg.Name` entries below, and a declaration reached
+        // through both names would be keyed twice, so that copy is skipped.
         let packages: Vec<&'a Package> = std::iter::once(package)
-            .chain(others.iter().copied())
+            .chain(
+                others
+                    .iter()
+                    .copied()
+                    .filter(|other| other.name != package.name),
+            )
             .collect();
         let bare = packages
             .iter()
@@ -757,5 +768,37 @@ mod tests {
             reduced_package(&reordered, &[&fw_reordered]),
             reduced_package(&p, &[&fw])
         );
+    }
+
+    /// `ridlc build` passes every package of the build as `others`, so the
+    /// hashed package is among its own `others`. That copy is skipped: a
+    /// reference back to the hashed package written `p.Coord` (from inside
+    /// `fw`) still resolves to the bare canonical name `Coord`, so `Coord`
+    /// is reached once and the hash equals the hash without the copy.
+    #[test]
+    fn the_hashed_package_among_others_is_skipped() {
+        let p = Package {
+            name: "p".to_owned(),
+            decls: vec![
+                struct_decl("Point", &["Coord", "fw.Unit"]),
+                scalar_decl("Coord"),
+            ],
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                interactions: vec![signal("pos", "Point")],
+                number: 1,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let fw = Package {
+            name: "fw".to_owned(),
+            decls: vec![struct_decl("Unit", &["p.Coord"])],
+            ..Default::default()
+        };
+        let reached: Vec<String> = reachable_decls(&p, &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, ["Coord", "Point", "fw.Unit"]);
+        assert_eq!(reduced_package(&p, &[&p, &fw]), reduced_package(&p, &[&fw]));
+        assert_eq!(catalog_hash(&p, &[&p, &fw]), catalog_hash(&p, &[&fw]));
     }
 }

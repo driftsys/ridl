@@ -975,8 +975,9 @@ impl<'a> Lowering<'a> {
     fn catalog(&mut self) -> v1::Catalog {
         v1::Catalog {
             package: self.scope.package.name.clone(),
-            // The placeholder until E16.2 (driftsys/ridl#378).
-            hash: vec![0u8; 32],
+            // The catalog hash of ADR-0014 decision 15, over the same scope
+            // the model is lowered over.
+            hash: crate::catalog_hash::catalog_hash(self.scope.package, self.scope.others).to_vec(),
             retired: self
                 .scope
                 .package
