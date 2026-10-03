@@ -241,6 +241,13 @@ pub fn compile_workspace_with(
 ) -> Result<WorkspaceOutput, ridl_core::LoadError>;
 ```
 
+`WorkspaceOutput` gains one public field,
+`imports: Vec<BTreeMap<String,
+String>>`: each checked package's manifest
+`[imports]` map (`Package::imports`), positional like `resolutions`. It is what
+`ridl_dependencies` reports as `imports`, and nothing else in `WorkspaceOutput`
+carries it.
+
 The overlay rules:
 
 1. Paths are compared by their **key**: the canonicalised parent directory
@@ -298,9 +305,10 @@ snapshot parse is `ridl_ir::v2::from_json`. No dependency cycle is created.
 
 - `snapshot(path, overlays) -> Result<Snapshot, ToolError>` builds a
   `RidlDatabase`, calls `ridlc::compile_workspace_with`, and returns
-  `Snapshot { output: WorkspaceOutput, imports: per-package manifest imports,
-  root, notes }`.
-  It is the only place a tool reads the disk (D-1).
+  `Snapshot { db: RidlDatabase, output: WorkspaceOutput, root, notes }`. The
+  database stays in the snapshot because a `Symbol`'s file path and text are
+  salsa inputs read through it. `snapshot` is the only place a tool reads the
+  disk (D-1).
 - `query` module: one pure function per lookup tool, from `&Snapshot` and the
   tool's input to the tool's result type. No MCP types appear in it, so each
   function is unit-tested directly.
