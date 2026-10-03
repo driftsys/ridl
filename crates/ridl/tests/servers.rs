@@ -928,13 +928,16 @@ interface Infotainment {
 
 /// A two-member workspace whose `[lints]` tables exercise every level the
 /// language server must honor. The root sets `missing-timing = "deny"` and
-/// `shared-error-type = "allow"`, and has one key that names no lint
-/// (MANI-010 on the root manifest). Member `a` sets `missing-timing = "info"`
+/// `shared-error-type = "allow"`, raises `unknown-lint = "info"`, and has one
+/// key that names no lint (MANI-010 on the root manifest). MANI-010 is a
+/// loader diagnostic, which the server converts at load time and `analyze`
+/// never sees; at `info` rather than its default Warning, the level applied
+/// at load time is pinned. Member `a` sets `missing-timing = "info"`
 /// over the root, so a diagnostic under `a` tells the member's table (Info)
 /// from the root's (Error) and from the registry default (Warning). Member `b`
 /// has no table of its own. Expected after the levels apply:
 ///
-/// - `ridl.toml`: MANI-010, Warning;
+/// - `ridl.toml`: MANI-010, Info;
 /// - `a/a.ridl`: RIDL-100, Info;
 /// - `b/b.ridl`: RIDL-100, Error; the three RIDL-405 are removed.
 ///
@@ -943,7 +946,7 @@ fn lint_workspace(dir: &TempDir) -> PathBuf {
     dir.write(
         "ridl.toml",
         "[workspace]\nmembers = [\"a\", \"b\"]\n\n[lints]\nmissing-timing = \"deny\"\n\
-         shared-error-type = \"allow\"\nnot-a-lint = \"warn\"\n",
+         shared-error-type = \"allow\"\nunknown-lint = \"info\"\nnot-a-lint = \"warn\"\n",
     );
     std::fs::create_dir_all(dir.0.join("a")).expect("create member a");
     std::fs::create_dir_all(dir.0.join("b")).expect("create member b");
@@ -963,12 +966,15 @@ fn lint_workspace(dir: &TempDir) -> PathBuf {
     dir.0.clone()
 }
 
-/// The `file://` URI of an absolute path. The scratch paths here are ASCII
-/// letters, digits, `-`, `_`, `.` and `/`, which a URI carries unencoded, so
-/// the text matches the URI the server builds for the same path byte for
-/// byte.
+/// The `file://` URI of an absolute path, as text, built by the conversion
+/// the server itself uses for the URIs it publishes, so the two compare byte
+/// for byte.
 fn file_uri(path: &Path) -> String {
-    format!("file://{}", path.display())
+    let path = path.to_str().expect("a UTF-8 scratch path");
+    ridl_lsp::convert::path_to_uri(path)
+        .unwrap_or_else(|| panic!("`{path}` is absolute and converts to a URI"))
+        .as_str()
+        .to_string()
 }
 
 /// The `(code, severity)` pairs `ridl check --format json` reports for
@@ -1109,7 +1115,8 @@ impl LspSession {
 /// `ridl check --format json` reports, after the `[lints]` levels apply
 /// (lint foundation spec §6.2): `deny` is LSP severity 1, `info` is 3,
 /// `allow` removes the diagnostic on both faces, and the MANI-010 of the
-/// unknown key is a Warning on both. Both faces walk the same workspace
+/// unknown key is an Info on both, the root's `unknown-lint = "info"` applied
+/// to a loader diagnostic. Both faces walk the same workspace
 /// from disk, so the comparison is a multiset over every published file.
 #[test]
 fn lsp_matches_check_with_lints() {
@@ -1121,7 +1128,7 @@ fn lsp_matches_check_with_lints() {
     assert_eq!(
         cli,
         vec![
-            ("MANI-010".to_string(), 2),
+            ("MANI-010".to_string(), 3),
             ("RIDL-100".to_string(), 1),
             ("RIDL-100".to_string(), 3),
         ],
