@@ -74,8 +74,9 @@ ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "std"] }
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
 # in one test, which regenerates the checked-in reader and asserts it is byte
 # for byte what is in the tree; `planus` is the runtime that reader links, in
-# this test binary only. Neither is a dependency of anything this workspace
-# ships or anything a generated package links.
+# this test binary only. This crate's own use of both is dev-only. The
+# toolchain may depend on planus (`ridl-descriptor` does); `ridl-rt` and every
+# generated package must not (ADR-0020 decision 5, as amended 2026-10-03).
 # The `.fbs` the conformance test compiles with planus is emitted from the
 # same IR as the codec under test, by the schema backend, so the two agree by
 # construction rather than through a checked-in schema that could drift. A

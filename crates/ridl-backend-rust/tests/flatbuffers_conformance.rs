@@ -15,11 +15,11 @@
 //! buffers as well as schemas: `planus-codegen` turns the `.fbs` the schema
 //! backend emits for the round-trip fixture into a Rust reader and writer,
 //! and that reader is **checked in** beside this file. There is no
-//! `build.rs` and no `flatc`: nothing outside this test binary depends on
-//! planus, and nothing a generated package links does
-//! (design note D-12, which leaves unused the one FlatBuffers runtime
-//! ADR-0020 decision 5 permits, so ADR-0020's RA-01 dependency ceiling
-//! stays unspent).
+//! `build.rs` and no `flatc`: this crate depends on planus only in this test
+//! binary. The toolchain may depend on planus (`ridl-descriptor` does), and
+//! `ridl-rt` and every generated package must not (design note D-12, and
+//! ADR-0020 decision 5 as amended 2026-10-03, which excludes planus from the
+//! one FlatBuffers runtime that decision permits `ridl-rt`).
 //!
 //! [`the_checked_in_planus_reader_is_what_planus_codegen_writes`] is what
 //! keeps the checked-in reader honest: it regenerates it from the fixture's
