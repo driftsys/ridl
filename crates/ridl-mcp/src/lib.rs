@@ -7,6 +7,7 @@
 //! checker of its own — and runs over stdio behind `ridl mcp`.
 
 pub mod query;
+pub mod refs;
 pub mod snapshot;
 use ridl_core::diag::to_json;
 pub mod types;
@@ -132,6 +133,46 @@ impl RidlMcp {
         }
     }
 
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<refs::ReferencesOutput>(), description = "List declarations and interactions using a declaration. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_references(
+        &self,
+        Parameters(input): Parameters<query::NameInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            refs::references(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<refs::DependenciesOutput>(), description = "List package imports, dependencies and dependents. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_dependencies(
+        &self,
+        Parameters(input): Parameters<refs::DependenciesInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            refs::dependencies(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
     #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::ResolveOutput>(), description = "Resolve a declaration by name. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
     async fn ridl_resolve(
         &self,
