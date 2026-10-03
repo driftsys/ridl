@@ -16,7 +16,7 @@ use clap::{Parser, Subcommand};
 use ridl_core::Frozen;
 use ridl_core::diag::render;
 use ridlc::plugin::PluginSpec;
-use ridlc::{CliRun, Emit};
+use ridlc::{ApplyLints, CliRun, Emit};
 
 #[derive(Parser)]
 #[command(name = "ridlc", about = "The RIDL family compiler (plumbing)", version)]
@@ -81,6 +81,7 @@ fn main() -> ExitCode {
             &plugin,
             Duration::from_secs(plugin_timeout),
             Frozen::from(frozen),
+            ApplyLints::Yes,
         ),
     };
     finish(run)

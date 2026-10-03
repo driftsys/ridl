@@ -53,7 +53,7 @@ use ridl_core::interface_lock::LockKey;
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::plugin::PluginSpec;
-use ridlc::{CliRun, Emit};
+use ridlc::{ApplyLints, CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
 #[derive(Parser)]
@@ -271,6 +271,7 @@ fn main() -> ExitCode {
             &plugin,
             std::time::Duration::from_secs(plugin_timeout),
             frozen.into(),
+            ApplyLints::Yes,
         )),
         Command::Test {
             path,
@@ -620,7 +621,19 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     let staging = staging_dir(&out_dir);
     let _ = std::fs::remove_dir_all(&staging);
 
-    let mut run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
+    // The snapshot is published with the severities the emit sites chose: a
+    // baseline is not a report to a person, so no `[lints]` level applies, and
+    // a lint at `deny` does not block the publication (lint foundation spec
+    // D-8).
+    let mut run = match ridlc::run_build_with(
+        path,
+        &staging,
+        &[Emit::IrJson],
+        &[],
+        std::time::Duration::from_secs(ridlc::plugin::DEFAULT_TIMEOUT_SECONDS),
+        false.into(),
+        ApplyLints::No,
+    ) {
         Ok(run) => run,
         Err(err) => {
             let _ = std::fs::remove_dir_all(&staging);

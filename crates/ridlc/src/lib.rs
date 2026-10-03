@@ -49,7 +49,7 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::lint::LintScopes;
+use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, materialize_imports, parse_file,
@@ -118,7 +118,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
     );
     let workspace = Workspace::new(&db, vec![pkg], BTreeMap::new());
 
-    let compiled = check_loaded(
+    let mut compiled = check_loaded(
         &db,
         std,
         LoadedWorkspace {
@@ -129,6 +129,14 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // §5.2).
             lints: LintScopes::default(),
         },
+    );
+    // The callers, `check_source` and `compile`, report their diagnostics, so
+    // the levels apply here, with the empty scopes: every lint gets its
+    // registry default (lint foundation spec §6.2).
+    apply_lint_levels(
+        &mut compiled.diagnostics,
+        &compiled.sources,
+        &compiled.lints,
     );
     let ir = compiled
         .checked
@@ -155,6 +163,7 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
     CliRun {
         diagnostics: front.diagnostics,
         sources: front.sources,
+        lints: LintScopes::default(),
     }
 }
 
@@ -308,8 +317,14 @@ pub struct WorkspaceOutput {
     /// workspace declares no `system` or an error in its closure blocks the
     /// lowering. A deployment an RSDL-7xx error blocks is absent from it.
     pub system: Option<ridl_ir::v2::System>,
+    /// The diagnostics with the severities the emit sites chose. The lint
+    /// levels of `lints` are not applied here (lint foundation spec D-8): a
+    /// consumer that reports to a person or an agent applies them itself.
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
+    /// The lint scopes the loader resolved from every `[lints]` table, for a
+    /// consumer that reports `diagnostics` (lint foundation spec §6.2).
+    pub lints: LintScopes,
 }
 
 /// The lowered IR of the built-in `ridl.std` package (typl Appendix A), checked
@@ -363,6 +378,7 @@ pub fn compile_workspace_with(
         system,
         diagnostics,
         sources,
+        lints,
     } = load_and_check(db, entry, overlays)?;
     // `ridl.std` is checked here rather than in `load_and_check` so the command
     // drivers, which never look at its IR, do not pay for the pass.
@@ -377,6 +393,7 @@ pub fn compile_workspace_with(
         system,
         diagnostics,
         sources,
+        lints,
     })
 }
 
@@ -563,6 +580,23 @@ impl Emit {
 pub struct CliRun {
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
+    /// The lint scopes the loader resolved: empty for [`check_source`], and
+    /// the loaded scopes for [`run_check`] and [`run_build_with`]. A caller
+    /// that adds a lint diagnostic after the run returns applies them once
+    /// more over the whole list (lint foundation spec §6.2).
+    pub lints: LintScopes,
+}
+
+/// Whether [`run_build_with`] applies the lint levels of the loaded `[lints]`
+/// tables to its diagnostics before the emit gate (lint foundation spec D-8,
+/// §6.2). `ridl build` and `ridlc build`, which report to a person, pass
+/// [`Yes`](ApplyLints::Yes); `ridl baseline`, which publishes a snapshot,
+/// passes [`No`](ApplyLints::No), so a lint at `deny` does not block the
+/// publication.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApplyLints {
+    Yes,
+    No,
 }
 
 impl CliRun {
@@ -577,19 +611,24 @@ impl CliRun {
 
 /// Runs `check`: loads, resolves, and checks the workspace at `entry`, then
 /// materializes remote imports against `ridl.lock` (regenerating it on a clean
-/// non-frozen run). Returns every diagnostic and the source map for rendering.
+/// non-frozen run), and applies the lint levels of every `[lints]` table
+/// (lint foundation spec §6.2). Returns every diagnostic and the source map
+/// for rendering.
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
         workspace,
         mut diagnostics,
         sources,
+        lints,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
     diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
+    apply_lint_levels(&mut diagnostics, &sources, &lints);
     Ok(CliRun {
         diagnostics,
         sources,
+        lints,
     })
 }
 
@@ -630,6 +669,7 @@ pub fn run_build(
         &[],
         Duration::from_secs(plugin::DEFAULT_TIMEOUT_SECONDS),
         frozen,
+        ApplyLints::Yes,
     )
 }
 
@@ -641,6 +681,11 @@ pub fn run_build(
 /// ([`plugin::run`]) with `plugin_timeout` as its limit. A plugin's files
 /// are written under `out_dir` exactly as an in-tree backend's are
 /// ([`write_response`]).
+///
+/// With [`ApplyLints::Yes`], the lint levels of every `[lints]` table are
+/// applied before the emit gate, so a lint at `deny` is an error that
+/// suppresses every artifact; with [`ApplyLints::No`], the diagnostics keep
+/// the severities the emit sites chose (lint foundation spec D-8).
 pub fn run_build_with(
     entry: &Path,
     out_dir: &Path,
@@ -648,6 +693,7 @@ pub fn run_build_with(
     plugins: &[plugin::PluginSpec],
     plugin_timeout: Duration,
     frozen: Frozen,
+    apply_lints: ApplyLints,
 ) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
@@ -657,6 +703,7 @@ pub fn run_build_with(
         system,
         mut diagnostics,
         sources,
+        lints,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
 
@@ -683,6 +730,14 @@ pub fn run_build_with(
                 TextRange::default(),
             )),
         }
+    }
+
+    // The levels are applied before the emit gate below, so a lint at `deny`
+    // is an error by the time the gate reads the list and no artifact is
+    // written for it. `ridl.lock` is already written by `materialize_and_lock`
+    // above; the lockfile is not an artifact (lint foundation spec §6.2).
+    if apply_lints == ApplyLints::Yes {
+        apply_lint_levels(&mut diagnostics, &sources, &lints);
     }
 
     // A build must not emit artifacts for a workspace that failed: code
@@ -725,6 +780,7 @@ pub fn run_build_with(
                 return Ok(CliRun {
                     diagnostics,
                     sources,
+                    lints,
                 });
             }
         }
@@ -836,6 +892,7 @@ pub fn run_build_with(
     Ok(CliRun {
         diagnostics,
         sources,
+        lints,
     })
 }
 
@@ -1160,8 +1217,13 @@ struct Compiled {
     imports: Vec<BTreeMap<String, String>>,
     /// The checked rsdl model; its diagnostics are already in `diagnostics`.
     system: CheckedSystem,
+    /// The diagnostics with the severities the emit sites chose; `lints` is
+    /// not applied here (lint foundation spec D-8).
     diagnostics: Vec<Diagnostic>,
     sources: SourceMap,
+    /// The lint scopes the loader resolved, carried out unapplied for the
+    /// entry points that report diagnostics (lint foundation spec §6.2).
+    lints: LintScopes,
 }
 
 /// Loads the workspace at `entry` and runs parse, resolve, and check over every
@@ -1187,7 +1249,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         workspace,
         mut diagnostics,
         mut sources,
-        ..
+        lints,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -1277,6 +1339,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         system,
         diagnostics,
         sources,
+        lints,
     }
 }
 
