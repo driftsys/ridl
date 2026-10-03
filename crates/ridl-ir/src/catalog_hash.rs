@@ -199,14 +199,111 @@ impl<'a> Index<'a> {
     }
 }
 
-/// Pushes every type name `decl` references, each tagged with `context`,
-/// the package `decl` belongs to.
+/// Pushes every type name `decl` references, and every name chain inside
+/// its expression strings, each tagged with `context`, the package `decl`
+/// belongs to.
 fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<(String, usize)>) {
     // The visitor is written once, over `&mut`, so that the rewrite in
     // `reduced_package` and this read share one exhaustive walk; the clone
     // is the price of not writing the walk twice.
     let mut copy = decl.clone();
     visit_refs(&mut copy, &mut |name| out.push((name.clone(), context)));
+    visit_exprs(decl, &mut |source| {
+        expr_names(source, &mut |name| out.push((name.to_owned(), context)));
+    });
+}
+
+/// Calls `f` on every expression string inside `decl` that can name a
+/// constant or an enum: `ConstDef.value` (a constant may be defined as
+/// another constant, and the lowering keeps the name as written) and the
+/// `source` of every `Contract` of a command or a query. These strings are
+/// hashed as written and never rewritten; the names inside them are only
+/// followed, so the declarations they name enter the closure.
+///
+/// The IR's other value strings hold resolved values, not names: a
+/// constant named in a declared init is lowered as its value (`declared_init`
+/// and `InitValue.value` on `TypeDef`, `Field` and `SignalDef`), and range
+/// bounds, steps and timing bounds are canonical decimals. A change to the
+/// constant changes those strings, so they need no following.
+/// `Constraint.pattern_const` is a reference, visited by [`visit_refs`].
+///
+/// The `match` is exhaustive for the same reason as in [`visit_refs`].
+fn visit_exprs(decl: &Decl, f: &mut dyn FnMut(&str)) {
+    match &decl.kind {
+        Some(decl::Kind::ConstDef(def)) => f(&def.value),
+        Some(decl::Kind::CommandDef(def)) => {
+            for contract in &def.contracts {
+                f(&contract.source);
+            }
+        }
+        Some(decl::Kind::QueryDef(def)) => {
+            for contract in &def.contracts {
+                f(&contract.source);
+            }
+        }
+        Some(decl::Kind::TypeDef(_))
+        | Some(decl::Kind::StructDef(_))
+        | Some(decl::Kind::EnumDef(_))
+        | Some(decl::Kind::EnumSetDef(_))
+        | Some(decl::Kind::UnionDef(_))
+        | Some(decl::Kind::SignalDef(_))
+        | Some(decl::Kind::EventDef(_))
+        | Some(decl::Kind::FixedDef(_))
+        | Some(decl::Kind::ReservedSlot(_))
+        | None => {}
+    }
+}
+
+/// Calls `f` on every name chain in the expression text `source` (identifiers
+/// `[A-Za-z_][A-Za-z0-9_]*` joined by `.`) and on every dotted prefix of
+/// each chain: `Mode.off` yields `Mode` and `Mode.off`, and `a.b.MAX` yields
+/// `a`, `a.b` and `a.b.MAX`, because a package name contains dots and an
+/// enum value is written after its enum's name. The caller keeps only what
+/// [`Index::resolve`] resolves.
+///
+/// A string literal (`"..."`, RFC 8259 escapes, typl §2.6) is skipped, and so
+/// is a number with its suffix or exponent (`1e3`, `10ms`). Anything else is
+/// scanned, so a parameter or a field named like a declaration also reaches
+/// that declaration, and so does a word of a string constant's value, which
+/// the lowering stores without its quotes. That over-inclusion only widens
+/// what the hash covers; it never leaves a named declaration out.
+fn expr_names(source: &str, f: &mut dyn FnMut(&str)) {
+    let bytes = source.as_bytes();
+    let is_start = |b: u8| b.is_ascii_alphabetic() || b == b'_';
+    let is_part = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'"' {
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'"' {
+                i += if bytes[i] == b'\\' { 2 } else { 1 };
+            }
+            i += 1;
+        } else if b.is_ascii_digit() {
+            while i < bytes.len()
+                && (is_part(bytes[i])
+                    || (bytes[i] == b'.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit)))
+            {
+                i += 1;
+            }
+        } else if is_start(b) {
+            let start = i;
+            loop {
+                while i < bytes.len() && is_part(bytes[i]) {
+                    i += 1;
+                }
+                f(&source[start..i]);
+                if bytes.get(i) == Some(&b'.') && bytes.get(i + 1).is_some_and(|&b| is_start(b)) {
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
 }
 
 /// Calls `f` on every type reference inside `decl`. The IR references a type
@@ -215,7 +312,9 @@ fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<(String, usize)>) {
 /// `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
 /// `StreamType::Named` and `FallibleType.ok`/`err`. `Contract.signal_refs`
 /// and `Contract.param_refs` name interactions and parameters of the same
-/// interface, not types, so they are not visited.
+/// interface, not types, so they are not visited. Names inside expression
+/// strings (`Contract.source`, `ConstDef.value`) are followed by
+/// [`visit_exprs`] and never rewritten.
 ///
 /// The `match` is exhaustive on purpose: an IR variant added later is a
 /// compile error here, which is the reminder to decide whether the new
@@ -371,9 +470,9 @@ fn blank_docs(decl: &mut Decl) {
 mod tests {
     use super::*;
     use crate::v2::{
-        Decl, EnumSetDef, EnumValue, Field, FieldType, Interface, RetiredInterface, Service,
-        ServiceShape, SignalDef, StructDef, StructMember, TypeDef, Visibility, decl, field_type,
-        service_shape, struct_member,
+        CommandDef, ConstDef, Contract, ContractKind, Decl, EnumDef, EnumSetDef, EnumValue, Field,
+        FieldType, Interface, Param, RetiredInterface, Service, ServiceShape, SignalDef, StructDef,
+        StructMember, TypeDef, Visibility, decl, field_type, service_shape, struct_member,
     };
 
     fn named(name: &str) -> FieldType {
@@ -800,5 +899,127 @@ mod tests {
         assert_eq!(reached, ["Coord", "Point", "fw.Unit"]);
         assert_eq!(reduced_package(&p, &[&p, &fw]), reduced_package(&p, &[&fw]));
         assert_eq!(catalog_hash(&p, &[&p, &fw]), catalog_hash(&p, &[&fw]));
+    }
+
+    fn const_decl(name: &str, type_ref: &str, value: &str) -> Decl {
+        Decl {
+            name: name.to_owned(),
+            kind: Some(decl::Kind::ConstDef(ConstDef {
+                type_ref: Some(type_ref.to_owned()),
+                value: value.to_owned(),
+                regex: None,
+            })),
+            ..Default::default()
+        }
+    }
+
+    /// A command `set(level: Level)` with one `require` clause.
+    fn guarded_command(source: &str) -> Decl {
+        Decl {
+            name: "set".to_owned(),
+            ordinal: 1,
+            kind: Some(decl::Kind::CommandDef(CommandDef {
+                params: vec![Param {
+                    name: "level".to_owned(),
+                    r#type: Some(named("Level")),
+                }],
+                contracts: vec![Contract {
+                    kind: ContractKind::Require as i32,
+                    source: source.to_owned(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })),
+            ..Default::default()
+        }
+    }
+
+    /// `p`: interface `I` with the command `set(level: Level)` guarded by
+    /// `require <source>`; `MAX : Level = 100` is declared.
+    fn guarded_fixture(source: &str) -> Package {
+        Package {
+            name: "p".to_owned(),
+            decls: vec![scalar_decl("Level"), const_decl("MAX", "Level", "100")],
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                interactions: vec![guarded_command(source)],
+                number: 1,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn set_const_value(package: &mut Package, name: &str, value: &str) {
+        let decl = package.decls.iter_mut().find(|d| d.name == name).unwrap();
+        let Some(decl::Kind::ConstDef(def)) = &mut decl.kind else {
+            panic!("{name} is not a constant");
+        };
+        def.value = value.to_owned();
+    }
+
+    /// A constant named only inside a contract clause is reached, so a change
+    /// to its value moves the hash.
+    #[test]
+    fn a_constant_named_in_a_contract_clause_is_reached() {
+        let mut p = guarded_fixture("level < MAX");
+        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
+        assert_eq!(reached, vec!["Level", "MAX"]);
+        let before = catalog_hash(&p, &[]);
+        set_const_value(&mut p, "MAX", "200");
+        assert_ne!(catalog_hash(&p, &[]), before);
+    }
+
+    /// A constant whose value names another constant reaches it.
+    #[test]
+    fn a_constant_named_in_a_constant_value_is_reached() {
+        let mut p = guarded_fixture("level < LIMIT");
+        p.decls.push(const_decl("LIMIT", "Level", "MAX"));
+        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
+        assert_eq!(reached, vec!["LIMIT", "Level", "MAX"]);
+        let before = catalog_hash(&p, &[]);
+        set_const_value(&mut p, "MAX", "200");
+        assert_ne!(catalog_hash(&p, &[]), before);
+    }
+
+    /// Every dotted prefix of a name chain is followed: `Mode.off` reaches
+    /// the enum `Mode`, and `fw.MAX` reaches the foreign constant.
+    #[test]
+    fn a_dotted_name_in_an_expression_reaches_its_declarations() {
+        let mut p = guarded_fixture("mode == Mode.off && level < fw.MAX");
+        p.decls.push(Decl {
+            name: "Mode".to_owned(),
+            kind: Some(decl::Kind::EnumDef(EnumDef::default())),
+            ..Default::default()
+        });
+        let fw = Package {
+            name: "fw".to_owned(),
+            decls: vec![const_decl("MAX", "u8", "7")],
+            ..Default::default()
+        };
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Level", "Mode", "fw.MAX"]);
+    }
+
+    /// A name inside a string literal of an expression is not a reference,
+    /// and neither is the exponent or suffix of a number.
+    #[test]
+    fn a_name_in_a_string_literal_or_a_number_is_not_followed() {
+        let mut p = guarded_fixture(r#"label != "say \"MAX\"" && level > 1e3 && level < 10MAX"#);
+        p.decls.push(const_decl("e3", "Level", "1"));
+        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
+        assert_eq!(reached, vec!["Level"]);
+    }
+
+    /// The expression string is hashed as written: following a name does not
+    /// rewrite it.
+    #[test]
+    fn an_expression_string_is_hashed_as_written() {
+        let p = guarded_fixture("level < MAX");
+        let reduced = reduced_package(&p, &[]);
+        let Some(decl::Kind::CommandDef(def)) = &reduced.interfaces[0].interactions[0].kind else {
+            panic!("not a command");
+        };
+        assert_eq!(def.contracts[0].source, "level < MAX");
     }
 }
