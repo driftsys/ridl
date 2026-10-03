@@ -9,6 +9,8 @@ import fx.a.Outcome
 type Level: integer [0..10]
 
 /// The status interface.
+/// @labels PRIVATE
+/// @deprecated "Use the next status interface."
 interface Status {
   signal speed: Speed @10ms
   event reading: Reading @[100ms..1s]

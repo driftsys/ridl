@@ -9,17 +9,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct NameInput {
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: String,
+    /// Optional unsaved source files to apply without writing them to disk.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// The declaration name as Name or pkg.Name.
     pub name: String,
+    /// The package name in which a bare name resolves, including import aliases.
     pub from: Option<String>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct InterfaceInput {
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: String,
+    /// Optional unsaved source files to apply without writing them to disk.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// The interface name as Name or pkg.Name.
     pub interface: String,
+    /// The package name in which a bare name resolves, including import aliases.
     pub from: Option<String>,
 }
 impl From<InterfaceInput> for NameInput {
@@ -152,10 +160,11 @@ fn unknown(snap: &Snapshot, name: &str) -> ToolError {
     suggestions.sort();
     suggestions.dedup();
     suggestions.truncate(10);
-    ToolError::Request(format!(
-        "no declaration `{name}` in this workspace; suggestions: {}",
-        suggestions.join(", ")
-    ))
+    let mut message = format!("no declaration `{name}` in this workspace");
+    if !suggestions.is_empty() {
+        message.push_str(&format!("; suggestions: {}", suggestions.join(", ")));
+    }
+    ToolError::Request(message)
 }
 pub fn find<'a>(
     snap: &'a Snapshot,
@@ -333,6 +342,11 @@ mod tests {
         }
     }
     #[test]
+    fn an_unknown_name_with_no_close_match() {
+        let error = resolve(&snap(), &input("Zzzqqq", None)).err().unwrap();
+        assert_eq!(message(error), "no declaration `Zzzqqq` in this workspace");
+    }
+    #[test]
     fn resolve_a_bare_unique_name() {
         let out = resolve(&snap(), &input("Speed", None)).unwrap();
         assert_eq!(out.package, "fx.a");
@@ -387,7 +401,7 @@ mod tests {
     }
     #[test]
     fn a_clean_empty_package_can_resolve_standard_declarations() {
-        let copy = crate::snapshot::tests::TempWorkspace::copy();
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
         std::fs::remove_dir_all(copy.0.join("a")).unwrap();
         std::fs::remove_dir_all(copy.0.join("b")).unwrap();
         std::fs::write(
@@ -489,5 +503,68 @@ mod tests {
             assert!(out.interactions[i].get(*kind).is_some());
             assert_eq!(out.interactions[i]["ordinal"], i + 1);
         }
+    }
+
+    #[test]
+    fn resolve_reports_visibility() {
+        assert_eq!(
+            resolve(&snap(), &input("PrivateLevel", None))
+                .unwrap()
+                .visibility,
+            "internal"
+        );
+        assert_eq!(
+            resolve(&snap(), &input("Speed", None)).unwrap().visibility,
+            "public"
+        );
+    }
+    #[test]
+    fn resolve_reports_each_kind() {
+        for (name, kind) in [
+            ("Reading", "struct"),
+            ("Health", "enum"),
+            ("Outcome", "union"),
+            ("Status", "interface"),
+            ("HEALTH_PATTERN", "const"),
+            ("HealthSet", "enumset"),
+        ] {
+            assert_eq!(
+                resolve(&snap(), &input(name, None)).unwrap().kind,
+                kind,
+                "{name}"
+            );
+        }
+    }
+    #[test]
+    fn list_interactions_reports_the_header() {
+        let out = list_interactions(&snap(), &input("Status", None)).unwrap();
+        let header = out.interface;
+        assert_eq!(header.name, "Status");
+        assert_eq!(header.package, "fx.b");
+        assert_eq!(header.doc, "The status interface.");
+        assert_eq!(header.labels, ["PRIVATE"]);
+        assert_eq!(
+            header.deprecated.as_deref(),
+            Some("Use the next status interface.")
+        );
+        assert_eq!(header.number, 1);
+        assert!(header.provisional);
+    }
+    #[test]
+    fn locations_are_complete() {
+        let out = resolve(&snap(), &input("Speed", None)).unwrap();
+        assert_eq!(
+            serde_json::to_value(out.location).unwrap(),
+            crate::snapshot::tests::name_location("a/a.ridl", "type Speed", "Speed")
+        );
+    }
+    #[test]
+    fn no_alias_without_an_alias() {
+        assert!(
+            resolve(&snap(), &input("Level", Some("fx.b")))
+                .unwrap()
+                .alias
+                .is_none()
+        );
     }
 }

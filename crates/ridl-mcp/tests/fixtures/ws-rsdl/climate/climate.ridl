@@ -1,0 +1,24 @@
+package veh.climate
+
+type Temperature: integer [-40..85]
+
+type FanLevel: integer [0..7]
+
+type Heated: boolean
+
+interface Climate {
+  signal cabinTemperature: Temperature @[100ms..1s]
+  command setFan(level: FanLevel) @[..50ms]
+}
+
+interface Seats {
+  signal heated: Heated @[100ms..1s]
+}
+
+service veh.climate.control: Climate
+
+service veh.climate.seats: Seats
+
+service veh.climate.diag {
+  query readTemperature(): Temperature @[..100ms]
+}
