@@ -309,6 +309,7 @@ pub use generated::ridl::descriptor::{
     SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
 pub enum VerifyError { TooShort(usize), WrongIdentifier([u8; 4]), WrongVersion(u32), Invalid(planus::Error) }
+pub fn finish(catalog: &Catalog) -> Vec<u8>;
 pub fn verify(bytes: &[u8]) -> Result<CatalogRef<'_>, VerifyError>;
 // ridl_descriptor::number
 pub struct Numbered { pub name: String, pub number: u32, pub provisional: bool }
@@ -865,8 +866,7 @@ fn minimal(version: u32) -> Vec<u8> {
         interfaces: vec![],
         retired: vec![],
     };
-    let mut builder = planus::Builder::new();
-    builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec()
+    ridl_descriptor::finish(&catalog)
 }
 
 #[test]
@@ -3217,8 +3217,7 @@ pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerErr
             .map(|entry| RetiredInterface { name: entry.name.clone(), number: entry.number })
             .collect(),
     };
-    let mut builder = planus::Builder::new();
-    Ok(builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec())
+    Ok(crate::finish(&catalog))
 }
 
 fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
@@ -3663,8 +3662,7 @@ mod tests {
             }],
             retired: vec![],
         };
-        let mut builder = planus::Builder::new();
-        let bytes = builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec();
+        let bytes = crate::finish(&catalog);
         let json = to_json(verify(&bytes).unwrap()).unwrap();
         assert_eq!(
             json,
