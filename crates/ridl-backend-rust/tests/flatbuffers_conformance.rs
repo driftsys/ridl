@@ -17,9 +17,10 @@
 //! and that reader is **checked in** beside this file. There is no
 //! `build.rs` and no `flatc`: this crate depends on planus only in this test
 //! binary. The toolchain may depend on planus (`ridl-descriptor` does), and
-//! `ridl-rt` and every generated package must not (design note D-12, and
-//! ADR-0020 decision 5 as amended 2026-10-03, which excludes planus from the
-//! one FlatBuffers runtime that decision permits `ridl-rt`).
+//! `ridl-rt` and every generated package must not (ADR-0020 decision 5 as
+//! amended 2026-10-03, which excludes planus from the one FlatBuffers runtime
+//! that decision permits `ridl-rt`). Design note D-12 leaves that permission
+//! unused: `ridl-rt`'s `flatbuffers` feature takes no external dependency.
 //!
 //! [`the_checked_in_planus_reader_is_what_planus_codegen_writes`] is what
 //! keeps the checked-in reader honest: it regenerates it from the fixture's

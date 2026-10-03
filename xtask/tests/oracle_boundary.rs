@@ -26,22 +26,21 @@
 //! runtime and code generator, and emits the `.fbs` it feeds them with
 //! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
 //! same reason and one more: ADR-0020 decision 9 makes a backend an
-//! executable rather than a library other crates link. The E11.7 design
-//! note's D-12 keeps planus out of `ridl-rt` and out of every generated
-//! package; the toolchain may ship planus (ADR-0020 decision 5, as amended
-//! 2026-10-03).
+//! executable rather than a library other crates link.
 //!
-//! **The authority is D-12, not ADR-0020 decision 5.** Decision 5 *permits*
-//! one FlatBuffers runtime crate, in `ridl-rt` under its `flatbuffers`
-//! feature; D-12 leaves that permission unused, so ADR-0020's RA-01
-//! dependency ceiling stays unspent. Citing decision 5 as the prohibition
-//! would be citing a permission.
+//! **Which record each rule rests on.** The test-time-only rule for
+//! `ridl-backend-rust`'s four edges rests on ADR-0020 decision 9. The E11.7
+//! design note's D-12 says that `ridl-rt`'s `flatbuffers` feature takes no
+//! external dependency, so the FlatBuffers runtime crate ADR-0020 decision 5
+//! permits there is not used and ADR-0020's RA-01 dependency ceiling stays
+//! unspent. The planus rule of the next paragraph rests on ADR-0020 decision
+//! 5 as amended 2026-10-03, which excludes planus from that permission.
 //!
 //! Lane E16 (the catalog descriptor) added a second kind of boundary, a
 //! stronger one (lane E16 driver, section 4, answer 8). The toolchain may now
 //! depend on planus: `ridl-descriptor` on its runtime, `xtask` on its schema
-//! compiler and code generator, and `ridlc` and `ridl` may through
-//! `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
+//! compiler and code generator, and `ridlc` and `ridl` may depend on it
+//! through `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
 //! not depend on any planus crate at all, as a normal, a build or a dev
 //! dependency (ADR-0020 decision 5, as amended 2026-10-03), because `ridl-rt`
 //! is the crate a generated package links and the generated package is what
@@ -92,9 +91,9 @@ const BOUNDARIES: &[Boundary] = &[
     // are the same kind of oracle: this crate emits the codec rather than
     // linking one, so its own use of planus is test-time only. The toolchain
     // may ship planus through `ridl-descriptor`; what must never reach planus
-    // is `ridl-rt` and a generated package (the E11.7 design note's D-12, and
-    // ADR-0020 decision 5 as amended 2026-10-03), which `RUNTIME_PACKAGES`
-    // and the generated-crate check below cover.
+    // is `ridl-rt` and a generated package (ADR-0020 decision 5 as amended
+    // 2026-10-03), which `RUNTIME_PACKAGES` and the generated-crate check
+    // below cover.
     Boundary {
         package: "ridl-backend-rust",
         oracle: "planus",
