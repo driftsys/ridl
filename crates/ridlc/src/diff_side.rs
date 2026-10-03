@@ -128,6 +128,9 @@ impl std::error::Error for DiffSideError {}
 
 /// Loads a source path or a flat JSON snapshot set. Overlays apply only to source.
 ///
+/// The source predicate also accepts `.rsdl` files; the restored historical
+/// note below lists the earlier `.typl` and `.ridl` source extensions.
+///
 /// Only IR artifacts are recognised by name — the suffix table (issue #218
 /// item 4). Three inputs are refused rather than parsed as source: a file in
 /// a non-JSON IR encoding; a directory that holds IR artifacts but neither an

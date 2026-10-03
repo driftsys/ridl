@@ -149,8 +149,8 @@ cycles or unused imports. Required named interfaces add dependencies from each
 declared component's package to the interface's catalog. The system's package
 also depends on the packages of its declared member components. The graph keeps
 qualifiers that name unresolved or remote packages outside the workspace. When
-no rsdl system was lowered, the workspace carries the same no-system note as
-`ridl_references`.
+the loaded workspace contains `.rsdl` files and no system was lowered, the
+workspace carries the same no-system note as `ridl_references`.
 
 ### `ridl_diff`
 

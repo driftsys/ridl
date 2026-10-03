@@ -706,6 +706,15 @@ mod tests {
         let out = deps(&snap, Some("veh.ops"));
         assert!(out.workspace.notes.is_empty());
         assert_eq!(out.packages[0].depends_on, ["veh.cabin", "veh.climate"]);
+        for package in [None, Some("veh.cabin")] {
+            let graph = deps(&snap, package);
+            let cabin = graph
+                .packages
+                .iter()
+                .find(|p| p.name == "veh.cabin")
+                .unwrap();
+            assert_eq!(cabin.dependents, ["veh.ops"]);
+        }
     }
     #[test]
     fn no_lowered_system_draws_the_rsdl_note() {
@@ -729,6 +738,34 @@ mod tests {
                 .unwrap()
                 .iter()
                 .all(|r| r["kind"] != "component")
+        );
+    }
+    #[test]
+    fn an_error_blocking_system_lowering_draws_the_rsdl_note() {
+        let path = format!("{}/cabin/cabin.rsdl", fixture("ws-rsdl"));
+        let disk = std::fs::read_to_string(&path).unwrap();
+        let snap = snapshot(
+            &fixture("ws-rsdl"),
+            &[OverlayInput {
+                path,
+                source: disk.replacen("requires Seats", "requires MissingInterface", 1),
+            }],
+        )
+        .unwrap();
+        assert!(snap.status().errors > 0);
+        assert!(snap.output.system.is_none());
+        let out = references(&snap, &input("veh.climate.Seats")).unwrap();
+        assert!(out.workspace.notes.iter().any(|n| n == "rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which"));
+        assert_eq!(deps(&snap, None).workspace.notes, out.workspace.notes);
+        assert!(
+            deps(&snap, Some("veh.cabin")).packages[0]
+                .depends_on
+                .is_empty()
+        );
+        assert!(
+            out.references
+                .iter()
+                .all(|r| r.kind != ReferenceKind::Component)
         );
     }
     #[test]
