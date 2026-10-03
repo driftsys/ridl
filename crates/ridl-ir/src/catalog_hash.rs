@@ -14,8 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
 
 use crate::v2::{
-    Decl, FieldType, Interface, Package, TypeDef, decl, field_type, return_type, stream_type,
-    struct_member,
+    Decl, FieldType, Package, TypeDef, decl, field_type, return_type, stream_type, struct_member,
 };
 
 /// Every declaration an interface of `package` reaches, keyed by canonical
@@ -24,159 +23,33 @@ pub fn reachable_decls<'a>(
     package: &'a Package,
     others: &[&'a Package],
 ) -> BTreeMap<String, &'a Decl> {
-    let mut index: BTreeMap<String, &'a Decl> = BTreeMap::new();
-    for decl in &package.decls {
-        index.insert(decl.name.clone(), decl);
-    }
-    for other in others {
-        for decl in &other.decls {
-            index.insert(format!("{}.{}", other.name, decl.name), decl);
-        }
-    }
-
-    let mut pending: Vec<String> = Vec::new();
-    for shape in package.shapes() {
-        collect_interface(shape.interface, &mut pending);
-    }
-    let mut reached: BTreeMap<String, &'a Decl> = BTreeMap::new();
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    while let Some(name) = pending.pop() {
-        if !seen.insert(name.clone()) {
-            continue;
-        }
-        // A primitive spelled as a name, or a name the checker already
-        // rejected, has no declaration: nothing more to reach.
-        let Some(decl) = index.get(&name) else {
-            continue;
-        };
-        reached.insert(name, decl);
-        collect_decl(decl, &mut pending);
-    }
-    reached
-}
-
-fn collect_interface(interface: &Interface, out: &mut Vec<String>) {
-    for interaction in &interface.interactions {
-        collect_decl(interaction, out);
-    }
-}
-
-/// Pushes every type name `decl` references. The IR references a type by
-/// name string in: `SignalDef.payload`, `EventDef.payload`,
-/// `FieldType::Named`, `UnionArm.type_ref`, `ConstDef.type_ref`,
-/// `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
-/// `StreamType::Named` and `FallibleType.ok`/`err`. `Contract.signal_refs`
-/// and `Contract.param_refs` name interactions and parameters of the same
-/// interface, not types, so they add nothing to the closure.
-///
-/// The `match` is exhaustive on purpose: an IR variant added later is a
-/// compile error here, which is the reminder to decide whether the new
-/// variant reaches a type.
-fn collect_decl(decl: &Decl, out: &mut Vec<String>) {
-    match &decl.kind {
-        Some(decl::Kind::TypeDef(def)) => collect_type_def(def, out),
-        Some(decl::Kind::ConstDef(def)) => out.extend(def.type_ref.clone()),
-        Some(decl::Kind::StructDef(def)) => {
-            for member in &def.members {
-                if let Some(struct_member::Member::Field(field)) = &member.member
-                    && let Some(ty) = &field.r#type
-                {
-                    collect_field_type(ty, out);
-                }
-            }
-        }
-        Some(decl::Kind::EnumDef(_)) | Some(decl::Kind::ReservedSlot(_)) | None => {}
-        Some(decl::Kind::EnumSetDef(def)) => out.extend(def.backing_enum.clone()),
-        Some(decl::Kind::UnionDef(def)) => {
-            out.extend(def.arms.iter().map(|arm| arm.type_ref.clone()))
-        }
-        Some(decl::Kind::SignalDef(def)) => out.push(def.payload.clone()),
-        Some(decl::Kind::EventDef(def)) => out.push(def.payload.clone()),
-        Some(decl::Kind::CommandDef(def)) => {
-            for param in &def.params {
-                if let Some(ty) = &param.r#type {
-                    collect_field_type(ty, out);
-                }
-            }
-        }
-        Some(decl::Kind::QueryDef(def)) => {
-            for param in &def.params {
-                if let Some(ty) = &param.r#type {
-                    collect_field_type(ty, out);
-                }
-            }
-            match def.return_type.as_ref().and_then(|r| r.kind.as_ref()) {
-                Some(return_type::Kind::Value(ty)) => collect_field_type(ty, out),
-                Some(return_type::Kind::Fallible(f)) => {
-                    out.push(f.ok.clone());
-                    out.push(f.err.clone());
-                }
-                None => {}
-            }
-        }
-        Some(decl::Kind::FixedDef(def)) => {
-            if let Some(ty) = &def.payload {
-                collect_field_type(ty, out);
-            }
-        }
-    }
-}
-
-fn collect_type_def(def: &TypeDef, out: &mut Vec<String>) {
-    // `backing.unit` is a UCUM unit expression, not a type reference.
-    if let Some(constant) = def
-        .constraint
-        .as_ref()
-        .and_then(|c| c.pattern_const.clone())
-    {
-        out.push(constant);
-    }
-}
-
-fn collect_field_type(ty: &FieldType, out: &mut Vec<String>) {
-    match &ty.kind {
-        Some(field_type::Kind::Named(name)) => out.push(name.clone()),
-        Some(field_type::Kind::Primitive(_)) | None => {}
-        Some(field_type::Kind::InlineScalar(def)) => collect_type_def(def, out),
-        Some(field_type::Kind::Tuple(tuple)) => {
-            for field in &tuple.fields {
-                if let Some(ty) = &field.r#type {
-                    collect_field_type(ty, out);
-                }
-            }
-        }
-        Some(field_type::Kind::Array(array)) => {
-            if let Some(element) = &array.element {
-                collect_field_type(element, out);
-            }
-        }
-        Some(field_type::Kind::Map(map)) => {
-            for ty in [&map.key, &map.value].into_iter().flatten() {
-                collect_field_type(ty, out);
-            }
-        }
-        Some(field_type::Kind::Stream(stream)) => {
-            if let Some(stream_type::Element::Named(name)) = &stream.element {
-                out.push(name.clone());
-            }
-        }
-    }
+    let index = Index::new(package, others);
+    index
+        .closure()
+        .into_iter()
+        .map(|(canonical, (_, decl))| (canonical, decl))
+        .collect()
 }
 
 /// The exact input of the hash: the package name; every interface shape
 /// under its identity name (`Package::shapes()` order) with the owning
 /// service's visibility for an inline shape, the IR's `number` and
 /// `provisional`, and its interactions; the reached declarations under
-/// canonical names, in canonical-name order; doc strings blanked; no
-/// services and no retired entries.
+/// canonical names, in canonical-name order, every type reference inside
+/// them rewritten to the canonical name of the declaration it resolves to;
+/// doc strings and doc tags (`labels`, `deprecated`) blanked; no services
+/// and no retired entries.
 pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
+    let index = Index::new(package, others);
     let mut reduced = Package {
         name: package.name.clone(),
-        decls: reachable_decls(package, others)
+        decls: index
+            .closure()
             .into_iter()
-            .map(|(canonical, decl)| {
+            .map(|(canonical, (owner, decl))| {
                 let mut decl = decl.clone();
                 decl.name = canonical;
+                visit_refs(&mut decl, &mut |name| index.canonicalize(name, owner));
                 blank_docs(&mut decl);
                 decl
             })
@@ -195,7 +68,10 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
     };
     for interface in &mut reduced.interfaces {
         interface.doc.clear();
+        interface.labels.clear();
+        interface.deprecated = None;
         for interaction in &mut interface.interactions {
+            visit_refs(interaction, &mut |name| index.canonicalize(name, ROOT));
             blank_docs(interaction);
         }
     }
@@ -211,17 +87,245 @@ pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// Clears every `doc` field inside `decl`. The IR carries a `doc` on
-/// `Decl`, `Field`, `EnumValue` (in `EnumDef.values` and `EnumSetDef.bits`)
-/// and `UnionArm`; no other message that can occur inside a declaration has
-/// one.
+/// The position of the hashed package in [`Index::packages`].
+const ROOT: usize = 0;
+
+/// The declarations of every package of the build, for name resolution.
+///
+/// The IR writes a reference as the bare `Name` when the referenced
+/// declaration is in the same package as the referencing one, and as the
+/// fully qualified `pkg.Name` otherwise (`ir.proto` header). A bare name is
+/// therefore resolved in the package that holds the declaration it was read
+/// from, never in the hashed package. Package names contain dots, so a
+/// qualified name is resolved by lookup, not by splitting it.
+struct Index<'a> {
+    /// The hashed package at [`ROOT`], then `others` in the order given.
+    packages: Vec<&'a Package>,
+    /// Per package, its declarations by bare name.
+    bare: Vec<BTreeMap<&'a str, &'a Decl>>,
+    /// Every declaration of every package by `pkg.Name`, with the index of
+    /// its package.
+    qualified: BTreeMap<String, (usize, &'a Decl)>,
+}
+
+impl<'a> Index<'a> {
+    fn new(package: &'a Package, others: &[&'a Package]) -> Self {
+        let packages: Vec<&'a Package> = std::iter::once(package)
+            .chain(others.iter().copied())
+            .collect();
+        let bare = packages
+            .iter()
+            .map(|p| p.decls.iter().map(|d| (d.name.as_str(), d)).collect())
+            .collect();
+        let mut qualified = BTreeMap::new();
+        for (i, p) in packages.iter().enumerate() {
+            for d in &p.decls {
+                qualified.insert(format!("{}.{}", p.name, d.name), (i, d));
+            }
+        }
+        Self {
+            packages,
+            bare,
+            qualified,
+        }
+    }
+
+    /// The declaration `name` means when read inside a declaration of
+    /// package `context`, with its canonical name and its package. `None`
+    /// for a primitive spelled as a name or a name the checker rejected.
+    fn resolve(&self, name: &str, context: usize) -> Option<(String, usize, &'a Decl)> {
+        if let Some(decl) = self.bare[context].get(name) {
+            return Some((self.canonical(context, name), context, decl));
+        }
+        let (owner, decl) = self.qualified.get(name)?;
+        Some((self.canonical(*owner, &decl.name), *owner, decl))
+    }
+
+    /// The canonical name of declaration `bare` of package `owner`: bare for
+    /// the hashed package, `pkg.Name` for another.
+    fn canonical(&self, owner: usize, bare: &str) -> String {
+        if owner == ROOT {
+            bare.to_owned()
+        } else {
+            format!("{}.{}", self.packages[owner].name, bare)
+        }
+    }
+
+    /// Rewrites `name`, read in package `context`, to its canonical name. A
+    /// name that resolves to nothing stays as written.
+    fn canonicalize(&self, name: &mut String, context: usize) {
+        if let Some((canonical, _, _)) = self.resolve(name, context) {
+            *name = canonical;
+        }
+    }
+
+    /// Every declaration the hashed package's interface shapes reach,
+    /// transitively, keyed by canonical name, with the index of the package
+    /// that declares it.
+    fn closure(&self) -> BTreeMap<String, (usize, &'a Decl)> {
+        // Each pending reference carries the package it was read in.
+        let mut pending: Vec<(String, usize)> = Vec::new();
+        for shape in self.packages[ROOT].shapes() {
+            for interaction in &shape.interface.interactions {
+                collect_refs(interaction, ROOT, &mut pending);
+            }
+        }
+        let mut reached: BTreeMap<String, (usize, &'a Decl)> = BTreeMap::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        while let Some((name, context)) = pending.pop() {
+            // A primitive spelled as a name, or a name the checker already
+            // rejected, has no declaration: nothing more to reach.
+            let Some((canonical, owner, decl)) = self.resolve(&name, context) else {
+                continue;
+            };
+            if !seen.insert(canonical.clone()) {
+                continue;
+            }
+            reached.insert(canonical, (owner, decl));
+            collect_refs(decl, owner, &mut pending);
+        }
+        reached
+    }
+}
+
+/// Pushes every type name `decl` references, each tagged with `context`,
+/// the package `decl` belongs to.
+fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<(String, usize)>) {
+    // The visitor is written once, over `&mut`, so that the rewrite in
+    // `reduced_package` and this read share one exhaustive walk; the clone
+    // is the price of not writing the walk twice.
+    let mut copy = decl.clone();
+    visit_refs(&mut copy, &mut |name| out.push((name.clone(), context)));
+}
+
+/// Calls `f` on every type reference inside `decl`. The IR references a type
+/// by name string in: `SignalDef.payload`, `EventDef.payload`,
+/// `FieldType::Named`, `UnionArm.type_ref`, `ConstDef.type_ref`,
+/// `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
+/// `StreamType::Named` and `FallibleType.ok`/`err`. `Contract.signal_refs`
+/// and `Contract.param_refs` name interactions and parameters of the same
+/// interface, not types, so they are not visited.
+///
+/// The `match` is exhaustive on purpose: an IR variant added later is a
+/// compile error here, which is the reminder to decide whether the new
+/// variant reaches a type.
+fn visit_refs(decl: &mut Decl, f: &mut dyn FnMut(&mut String)) {
+    match &mut decl.kind {
+        Some(decl::Kind::TypeDef(def)) => visit_type_def(def, f),
+        Some(decl::Kind::ConstDef(def)) => {
+            if let Some(name) = &mut def.type_ref {
+                f(name);
+            }
+        }
+        Some(decl::Kind::StructDef(def)) => {
+            for member in &mut def.members {
+                if let Some(struct_member::Member::Field(field)) = &mut member.member
+                    && let Some(ty) = &mut field.r#type
+                {
+                    visit_field_type(ty, f);
+                }
+            }
+        }
+        Some(decl::Kind::EnumDef(_)) | Some(decl::Kind::ReservedSlot(_)) | None => {}
+        Some(decl::Kind::EnumSetDef(def)) => {
+            if let Some(name) = &mut def.backing_enum {
+                f(name);
+            }
+        }
+        Some(decl::Kind::UnionDef(def)) => {
+            for arm in &mut def.arms {
+                f(&mut arm.type_ref);
+            }
+        }
+        Some(decl::Kind::SignalDef(def)) => f(&mut def.payload),
+        Some(decl::Kind::EventDef(def)) => f(&mut def.payload),
+        Some(decl::Kind::CommandDef(def)) => {
+            for param in &mut def.params {
+                if let Some(ty) = &mut param.r#type {
+                    visit_field_type(ty, f);
+                }
+            }
+        }
+        Some(decl::Kind::QueryDef(def)) => {
+            for param in &mut def.params {
+                if let Some(ty) = &mut param.r#type {
+                    visit_field_type(ty, f);
+                }
+            }
+            match def.return_type.as_mut().and_then(|r| r.kind.as_mut()) {
+                Some(return_type::Kind::Value(ty)) => visit_field_type(ty, f),
+                Some(return_type::Kind::Fallible(fallible)) => {
+                    f(&mut fallible.ok);
+                    f(&mut fallible.err);
+                }
+                None => {}
+            }
+        }
+        Some(decl::Kind::FixedDef(def)) => {
+            if let Some(ty) = &mut def.payload {
+                visit_field_type(ty, f);
+            }
+        }
+    }
+}
+
+fn visit_type_def(def: &mut TypeDef, f: &mut dyn FnMut(&mut String)) {
+    // `backing.unit` is a UCUM unit expression, not a type reference.
+    if let Some(constant) = def
+        .constraint
+        .as_mut()
+        .and_then(|c| c.pattern_const.as_mut())
+    {
+        f(constant);
+    }
+}
+
+fn visit_field_type(ty: &mut FieldType, f: &mut dyn FnMut(&mut String)) {
+    match &mut ty.kind {
+        Some(field_type::Kind::Named(name)) => f(name),
+        Some(field_type::Kind::Primitive(_)) | None => {}
+        Some(field_type::Kind::InlineScalar(def)) => visit_type_def(def, f),
+        Some(field_type::Kind::Tuple(tuple)) => {
+            for field in &mut tuple.fields {
+                if let Some(ty) = &mut field.r#type {
+                    visit_field_type(ty, f);
+                }
+            }
+        }
+        Some(field_type::Kind::Array(array)) => {
+            if let Some(element) = &mut array.element {
+                visit_field_type(element, f);
+            }
+        }
+        Some(field_type::Kind::Map(map)) => {
+            for ty in [&mut map.key, &mut map.value].into_iter().flatten() {
+                visit_field_type(ty, f);
+            }
+        }
+        Some(field_type::Kind::Stream(stream)) => {
+            if let Some(stream_type::Element::Named(name)) = &mut stream.element {
+                f(name);
+            }
+        }
+    }
+}
+
+/// Clears every doc string and doc tag inside `decl`: `doc`, `labels` and
+/// `deprecated` (typl §14). The IR carries `doc` on `Decl`, `Field`,
+/// `EnumValue` (in `EnumDef.values` and `EnumSetDef.bits`) and `UnionArm`,
+/// and `labels` and `deprecated` on `Decl` and `Field`; no other message that
+/// can occur inside a declaration has one.
 fn blank_docs(decl: &mut Decl) {
     decl.doc.clear();
+    decl.labels.clear();
+    decl.deprecated = None;
     match &mut decl.kind {
         Some(decl::Kind::StructDef(def)) => {
             for member in &mut def.members {
                 if let Some(struct_member::Member::Field(field)) = &mut member.member {
                     field.doc.clear();
+                    field.labels.clear();
+                    field.deprecated = None;
                 }
             }
         }
@@ -356,8 +460,52 @@ mod tests {
         (p, fw)
     }
 
+    /// `p`: interface `I` with a signal of `Point`; `Point` has one field of
+    /// `fw.Unit`; `fw.Unit` has one field of `Coord`, the bare name of a
+    /// declaration of `fw`. `p` declares no `Coord`.
+    fn foreign_fixture() -> (Package, Package) {
+        let p = Package {
+            name: "p".to_owned(),
+            decls: vec![struct_decl("Point", &["fw.Unit"])],
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                interactions: vec![signal("pos", "Point")],
+                number: 1,
+                provisional: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let fw = Package {
+            name: "fw".to_owned(),
+            decls: vec![
+                struct_decl("Unit", &["Coord"]),
+                scalar_decl("Coord"),
+                scalar_decl("Other"),
+            ],
+            ..Default::default()
+        };
+        (p, fw)
+    }
+
     fn hash_of(p: &Package, fw: &Package) -> [u8; 32] {
         catalog_hash(p, &[fw])
+    }
+
+    fn field_type_names(decl: &Decl) -> Vec<String> {
+        let Some(decl::Kind::StructDef(def)) = &decl.kind else {
+            panic!("{} is not a struct", decl.name);
+        };
+        def.members
+            .iter()
+            .filter_map(|m| match &m.member {
+                Some(struct_member::Member::Field(field)) => match &field.r#type.as_ref()?.kind {
+                    Some(field_type::Kind::Named(name)) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
     }
 
     #[test]
@@ -387,6 +535,79 @@ mod tests {
         let before = hash_of(&p, &fw);
         fw.decls[0] = struct_decl("Unit", &[]);
         assert_ne!(hash_of(&p, &fw), before);
+    }
+
+    /// A bare name inside a foreign declaration means a declaration of that
+    /// foreign package (`ir.proto` header), so `fw.Unit`'s field of `Coord`
+    /// reaches `fw.Coord`, and the reduced `fw.Unit` names it canonically.
+    #[test]
+    fn a_bare_name_in_a_foreign_declaration_resolves_in_its_own_package() {
+        let (p, mut fw) = foreign_fixture();
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Point", "fw.Coord", "fw.Unit"]);
+
+        let reduced = reduced_package(&p, &[&fw]);
+        let unit = reduced.decls.iter().find(|d| d.name == "fw.Unit").unwrap();
+        assert_eq!(field_type_names(unit), vec!["fw.Coord"]);
+
+        let before = hash_of(&p, &fw);
+        fw.decls[1] = struct_decl("Coord", &[]);
+        assert_ne!(hash_of(&p, &fw), before);
+    }
+
+    /// The hashed package's own `Coord` is not what `fw.Unit`'s bare `Coord`
+    /// means, so it stays unreached and a change to it does not move the
+    /// hash.
+    #[test]
+    fn a_bare_name_in_a_foreign_declaration_does_not_pick_the_root_packages_homonym() {
+        let (mut p, fw) = foreign_fixture();
+        p.decls.push(scalar_decl("Coord"));
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Point", "fw.Coord", "fw.Unit"]);
+
+        let reduced = reduced_package(&p, &[&fw]);
+        let unit = reduced.decls.iter().find(|d| d.name == "fw.Unit").unwrap();
+        assert_eq!(field_type_names(unit), vec!["fw.Coord"]);
+
+        let before = hash_of(&p, &fw);
+        p.decls[1] = struct_decl("Coord", &[]);
+        assert_eq!(hash_of(&p, &fw), before);
+    }
+
+    /// A qualified reference back into the hashed package, from a foreign
+    /// declaration or from the package's own interaction, is canonical as
+    /// the bare name.
+    #[test]
+    fn a_qualified_reference_to_the_root_package_is_canonical_as_bare() {
+        let (mut p, mut fw) = foreign_fixture();
+        p.decls.push(scalar_decl("X"));
+        p.interfaces[0].interactions.push(signal("x", "p.X"));
+        fw.decls[0] = struct_decl("Unit", &["p.X"]);
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Point", "X", "fw.Unit"]);
+
+        let reduced = reduced_package(&p, &[&fw]);
+        let unit = reduced.decls.iter().find(|d| d.name == "fw.Unit").unwrap();
+        assert_eq!(field_type_names(unit), vec!["X"]);
+        let Some(decl::Kind::SignalDef(def)) = &reduced.interfaces[0].interactions[1].kind else {
+            panic!("not a signal");
+        };
+        assert_eq!(def.payload, "X");
+    }
+
+    /// A name that resolves to nothing — a primitive spelled as a name, or a
+    /// name the checker rejected — stays as written.
+    #[test]
+    fn an_unresolved_name_stays_as_written() {
+        let (mut p, fw) = fixture();
+        p.decls[0] = struct_decl("Point", &["u32", "nowhere.Missing"]);
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Point"]);
+        let reduced = reduced_package(&p, &[&fw]);
+        assert_eq!(
+            field_type_names(&reduced.decls[0]),
+            vec!["u32", "nowhere.Missing"]
+        );
     }
 
     #[test]
@@ -427,6 +648,31 @@ mod tests {
         if let Some(decl::Kind::EnumSetDef(def)) = &mut p.decls[3].kind {
             def.bits[0].doc = "documented".to_owned();
         }
+        assert_eq!(hash_of(&p, &fw), before);
+    }
+
+    /// `@labels` and `@deprecated` are doc tags (typl §14), blanked like doc
+    /// strings on a declaration, a struct field, an interaction and an
+    /// interface.
+    #[test]
+    fn a_doc_tag_does_not_move_the_hash() {
+        let (mut p, fw) = fixture();
+        let before = hash_of(&p, &fw);
+
+        p.decls[0].labels.push("tagged".to_owned());
+        p.decls[0].deprecated = Some("use Point2".to_owned());
+        if let Some(decl::Kind::StructDef(def)) = &mut p.decls[0].kind
+            && let Some(struct_member::Member::Field(field)) = &mut def.members[0].member
+        {
+            field.labels.push("tagged".to_owned());
+            field.deprecated = Some("use f9".to_owned());
+        }
+        p.interfaces[0].labels.push("tagged".to_owned());
+        p.interfaces[0].deprecated = Some("use J".to_owned());
+        p.interfaces[0].interactions[0]
+            .labels
+            .push("tagged".to_owned());
+        p.interfaces[0].interactions[0].deprecated = Some("use pos2".to_owned());
         assert_eq!(hash_of(&p, &fw), before);
     }
 
