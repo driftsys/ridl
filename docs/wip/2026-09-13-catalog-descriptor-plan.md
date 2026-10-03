@@ -751,8 +751,7 @@ fn sample() -> Catalog {
 
 #[test]
 fn every_field_reads_back() {
-    let mut builder = planus::Builder::new();
-    let bytes = builder.finish(&sample(), Some(FILE_IDENTIFIER)).to_vec();
+    let bytes = ridl_descriptor::finish(&sample());
 
     assert_eq!(&bytes[4..8], &FILE_IDENTIFIER);
     let catalog = CatalogRef::read_as_root(&bytes).expect("a finished buffer reads");
@@ -795,8 +794,7 @@ fn every_field_reads_back() {
 
 #[test]
 fn the_owned_form_round_trips_through_the_view() {
-    let mut builder = planus::Builder::new();
-    let bytes = builder.finish(&sample(), Some(FILE_IDENTIFIER)).to_vec();
+    let bytes = ridl_descriptor::finish(&sample());
     let view = CatalogRef::read_as_root(&bytes).unwrap();
     let owned: Catalog = view.try_into().expect("a valid view converts");
     assert_eq!(owned.interfaces[0].members[0].payloads[0].max_sizes[1].bytes, 40);
