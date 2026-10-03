@@ -332,9 +332,11 @@ mod tests {
         let path = format!("{}/b/b.ridl", fixture("ws"));
         let source = std::fs::read_to_string(&path).unwrap().replace(
             "  fixed softwareVersion: Version",
-            "  query readSpeed(input: Speed): Speed @[..100ms]\n  fixed softwareVersion: Version",
+            "  query readSpeed(sample: Speed): Speed @[..100ms]\n  fixed softwareVersion: Version",
         );
         let snap = snapshot(&fixture("ws"), &[OverlayInput { path, source }]).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        assert_eq!(snap.status().warnings, 0);
         let out = references(&snap, &input("Speed")).unwrap();
         assert_eq!(
             pairs(&out),
@@ -385,6 +387,59 @@ mod tests {
                 .iter()
                 .all(|p| !p.depends_on.iter().any(|n| n == "ridl.std"))
         );
+    }
+    #[test]
+    fn dependencies_report_manifest_imports_and_preserve_the_filtered_graph() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy();
+        for (member, imports) in [
+            ("a", "alpha = \"https://192.0.2.1/alpha.git\""),
+            (
+                "b",
+                "zeta = \"https://192.0.2.1/zeta.git\"\nbeta = \"https://192.0.2.1/beta.git\"",
+            ),
+        ] {
+            let manifest = copy.0.join(member).join("ridl.toml");
+            let source = std::fs::read_to_string(&manifest).unwrap();
+            std::fs::write(manifest, format!("{source}\n[imports]\n{imports}\n")).unwrap();
+        }
+        let path = copy.0.to_str().unwrap();
+        let snap = snapshot(path, &[]).unwrap();
+        let out = dependencies(
+            &snap,
+            &DependenciesInput {
+                path: path.into(),
+                overlays: None,
+                package: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            out.packages
+                .iter()
+                .map(|p| (
+                    &*p.name,
+                    p.imports.iter().map(String::as_str).collect::<Vec<_>>()
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("fx.a", vec!["alpha"]),
+                ("fx.a.sub", vec!["alpha"]),
+                ("fx.b", vec!["beta", "zeta"])
+            ]
+        );
+        let filtered = dependencies(
+            &snap,
+            &DependenciesInput {
+                path: path.into(),
+                overlays: None,
+                package: Some("fx.a".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(filtered.packages.len(), 1);
+        assert_eq!(filtered.packages[0].name, "fx.a");
+        assert_eq!(filtered.packages[0].dependents, ["fx.b"]);
+        assert_eq!(filtered.packages[0].imports, ["alpha"]);
     }
     #[test]
     fn dependencies_of_an_unknown_package_is_an_error() {

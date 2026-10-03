@@ -103,7 +103,7 @@ pub struct RidlMcp {
     /// `ridl lsp` agree; a caller driving this library directly (including
     /// this crate's own tests) gets this crate's version through `new`.
     version: String,
-    /// What `ridl_check` runs: [`check`], except in this crate's own tests.
+    /// What source-mode `ridl_check` runs: [`check`], except in this crate's own tests.
     /// No input is known to make the compiler panic, so a test installs a
     /// function that does, to reach the handler's failure path.
     check: fn(&CheckParams) -> CheckOutput,
@@ -271,7 +271,7 @@ impl RidlMcp {
     #[tool(
         name = "ridl_check",
         output_schema = rmcp::handler::server::common::schema_for_output::<CheckOutput>(),
-        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. The text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. The checks of files beside a file on disk, an `interfaces.lock` and a `.ridl/baseline/` snapshot, do not run."
+        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. It omits remote fetching, the `ridl.lock` round trip and baseline checks."
     )]
     async fn ridl_check(
         &self,

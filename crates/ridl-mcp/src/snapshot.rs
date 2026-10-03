@@ -234,14 +234,23 @@ pub(crate) mod tests {
                 .any(|c| c.ir.name == "fx.a.sub" && !c.ir.decls.is_empty())
         );
     }
+    #[test]
+    fn workspace_status_counts_errors_and_warnings_separately() {
+        let snapshot = snapshot(&fixture("ws-diag"), &[]).unwrap();
+        assert_eq!(snapshot.status().errors, 1);
+        assert_eq!(snapshot.status().warnings, 1);
+    }
     #[tokio::test]
     async fn a_remote_import_is_reported_and_not_fetched() {
         let copy = TempWorkspace::copy();
         let manifest = copy.0.join("b/ridl.toml");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
         fs::write(
             &manifest,
             format!(
-                "{}\n[imports]\next = \"https://192.0.2.1/ext.git\"\n",
+                "{}\n[imports]\next = \"https://{address}/ext.git\"\n",
                 fs::read_to_string(&manifest).unwrap()
             ),
         )
@@ -266,6 +275,11 @@ pub(crate) mod tests {
         assert!(snap.output.diagnostics.iter().any(
             |d| d.severity == ridl_core::Severity::Info && d.message.contains("remote import")
         ));
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock,
+            "the compiler must not connect to the remote endpoint"
+        );
         assert!(!copy.0.join("ridl.lock").exists());
         assert!(!copy.0.join(".ridl").exists());
     }

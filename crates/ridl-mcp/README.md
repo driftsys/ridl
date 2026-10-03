@@ -79,8 +79,8 @@ diff category word such as `payload_changed`. No workspace path is needed.
 
 Result: `{kind: "diagnostic", code, severity, summary}` from the binary's
 catalogue, or `{kind: "diff_category", category, text}` from
-`ridl_diff::explain`. Unknown inputs are tool errors listing FORM-, TYPL-,
-RIDL-, RSDL-, MANI- and accepted diff category words.
+`ridl_diff::explain`. Unknown inputs are tool errors naming FORM-, TYPL-, RIDL-,
+RSDL-, MANI- and saying that diff category words are also accepted.
 
 ### `ridl_resolve`
 

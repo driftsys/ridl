@@ -522,14 +522,20 @@ async fn every_tool_leaves_the_tree_unchanged() {
         let source = std::fs::read_to_string(&overlay_path)
             .unwrap()
             .replace("250.0", "200.0");
-        let overlays = json!([{"path":overlay_path,"source":source}]);
+        let source = source + "\ntype Probe: integer [0..10]\n";
+        let interface_path = temp.0.join("b/b.ridl");
+        let interface_source = std::fs::read_to_string(&interface_path).unwrap()
+            .replace("import fx.a.Speed", "import fx.a.Speed\nimport fx.a.Probe\nimport fx.a.sub.Gear")
+            .replace("signal speed: Speed", "signal speed: Gear")
+            .replace("  fixed softwareVersion: Version", "  fixed softwareVersion: Version\n  query probe(sample: Probe): Probe @[..100ms]");
+        let overlays = json!([{"path":overlay_path,"source":source}, {"path":interface_path,"source":interface_source}]);
         let client = connect().await;
         for (name, arguments) in [
             ("ridl_check", json!({"path":temp.0,"overlays":overlays})),
             ("ridl_explain", json!({"code":"TYPL-002"})),
             (
                 "ridl_resolve",
-                json!({"path":temp.0,"name":"Speed","overlays":overlays}),
+                json!({"path":temp.0,"name":"Probe","overlays":overlays}),
             ),
             (
                 "ridl_describe_type",
@@ -564,7 +570,7 @@ async fn every_tool_leaves_the_tree_unchanged() {
                     assert_eq!(output["code"], "TYPL-002");
                 }
                 "ridl_resolve" => {
-                    assert_eq!(output["name"], "Speed");
+                    assert_eq!(output["name"], "Probe");
                     assert_eq!(output["package"], "fx.a");
                 }
                 "ridl_describe_type" => {
@@ -574,13 +580,19 @@ async fn every_tool_leaves_the_tree_unchanged() {
                 }
                 "ridl_list_interactions" => {
                     assert_eq!(output["interface"]["name"], "Status");
-                    assert_eq!(output["interactions"].as_array().unwrap().len(), 5);
+                    assert_eq!(output["interactions"].as_array().unwrap().len(), 6);
+                    assert_eq!(output["interactions"][5]["name"], "probe");
                 }
                 "ridl_references" => {
                     assert_eq!(output["target"], "fx.a.Speed");
-                    assert_eq!(output["references"].as_array().unwrap().len(), 2);
+                    assert_eq!(output["references"].as_array().unwrap().len(), 1);
+                    assert_eq!(output["references"][0]["declaration"], "fx.b.diag");
                 }
-                "ridl_dependencies" => assert_eq!(output["packages"].as_array().unwrap().len(), 3),
+                "ridl_dependencies" => {
+                    assert_eq!(output["packages"].as_array().unwrap().len(), 3);
+                    let package = output["packages"].as_array().unwrap().iter().find(|p| p["name"] == "fx.b").unwrap();
+                    assert_eq!(package["depends_on"], json!(["fx.a", "fx.a.sub"]));
+                },
                 "ridl_diff" => assert_eq!(output["verdict"], "breaking"),
                 _ => unreachable!(),
             }

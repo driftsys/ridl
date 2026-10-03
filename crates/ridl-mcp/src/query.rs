@@ -162,7 +162,13 @@ pub fn find<'a>(
     name: &str,
     from: Option<&str>,
 ) -> Result<Found<'a>, ToolError> {
-    if snap.output.checked.is_empty() {
+    if snap.output.checked.is_empty()
+        && snap
+            .output
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::Severity::Error)
+    {
         return Err(ToolError::Request("the workspace has errors that stop it from being checked; run ridl_check on the same path".into()));
     }
     if let Some((package, name_in_package)) = name.rsplit_once('.') {
@@ -380,6 +386,25 @@ mod tests {
         }
     }
     #[test]
+    fn a_clean_empty_package_can_resolve_standard_declarations() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy();
+        std::fs::remove_dir_all(copy.0.join("a")).unwrap();
+        std::fs::remove_dir_all(copy.0.join("b")).unwrap();
+        std::fs::write(
+            copy.0.join("ridl.toml"),
+            "[package]\nname = \"empty\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let snap = snapshot(copy.0.to_str().unwrap(), &[]).unwrap();
+        assert!(snap.output.checked.is_empty());
+        assert_eq!(snap.status().errors, 0);
+        for name in ["Version", "ridl.std.Version", "Duration"] {
+            let out = resolve(&snap, &input(name, None)).unwrap();
+            assert_eq!(out.package, "ridl.std");
+            assert!(out.location.is_none());
+        }
+    }
+    #[test]
     fn an_unknown_name_suggests_close_names() {
         assert!(
             message(resolve(&snap(), &input("speed", None)).err().unwrap()).contains("fx.a.Speed")
@@ -387,7 +412,20 @@ mod tests {
     }
     #[test]
     fn describe_a_struct() {
-        let out = describe_type(&snap(), &input("Reading", None)).unwrap();
+        let snapshot = snap();
+        let out = describe_type(&snapshot, &input("Reading", None)).unwrap();
+        let declaration = snapshot
+            .output
+            .checked
+            .iter()
+            .find(|p| p.ir.name == "fx.a")
+            .unwrap()
+            .ir
+            .decls
+            .iter()
+            .find(|d| d.name == "Reading")
+            .unwrap();
+        assert_eq!(out.declaration, serde_json::to_value(declaration).unwrap());
         let fields = out.declaration["structDef"]["members"].as_array().unwrap();
         assert_eq!(
             fields
@@ -420,7 +458,23 @@ mod tests {
     }
     #[test]
     fn list_every_interaction_kind() {
-        let out = list_interactions(&snap(), &input("Status", None)).unwrap();
+        let snapshot = snap();
+        let out = list_interactions(&snapshot, &input("Status", None)).unwrap();
+        let package = &snapshot
+            .output
+            .checked
+            .iter()
+            .find(|p| p.ir.name == "fx.b")
+            .unwrap()
+            .ir;
+        let shape = package
+            .shapes()
+            .find(|shape| shape.name == "Status")
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&out.interactions).unwrap(),
+            serde_json::to_value(&shape.interface.interactions).unwrap()
+        );
         assert_eq!(out.interactions.len(), 5);
         for (i, kind) in [
             "signalDef",

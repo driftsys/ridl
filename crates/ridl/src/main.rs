@@ -2145,9 +2145,9 @@ fn load_published(out_dir: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode>
 /// cannot be read or parsed is exit 2 — a comparison against half a baseline
 /// would be a lie about what is published. This is shared by `ridl check
 /// --baseline` (through [`load_baseline`], where the file may be the single
-/// `.ir.json` the flag names), `ridl diff` (through [`ridlc::load_diff_side`], for
-/// either side) and `ridl baseline` (through [`load_published`] for the
-/// published side, and directly for the freshly built side).
+/// `.ir.json` the flag names) and `ridl baseline` (through [`load_published`]
+/// for the published side, and directly for the freshly built side).
+/// `ridl diff` uses the separate reader behind [`ridlc::load_diff_side`].
 ///
 /// `parse_remedy`, when given, finishes the parse-error message. Only the
 /// caller knows which file it handed over, so only the caller can say what to
