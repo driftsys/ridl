@@ -64,6 +64,7 @@ rust-toolchain.toml             The pinned Rust toolchain (ADR-0009)
 docs/
 ├── ROADMAP.md                  Forward plan — epics, stories, the two-step release
 │                               plan; what has shipped is in docs/archive/roadmap-landed-record.md
+├── BACKLOG.md                  Dated issue priorities, bugs and technical debt
 ├── book/                       mdBook source (just book) — introduction, reading guide, getting started
 │                               Its `ridl` examples are compiled by crates/ridl/tests/book_examples.rs
 │                               Published to https://driftsys.github.io/ridl/ on every push to main
@@ -124,6 +125,8 @@ docs/
   [`docs/wip/ridl-family-concept.md`](docs/wip/ridl-family-concept.md).
 - Building the toolchain? [`docs/ROADMAP.md`](docs/ROADMAP.md) and the ADRs
   under [`docs/decisions/`](docs/decisions/).
+- Selecting work? [`docs/BACKLOG.md`](docs/BACKLOG.md) records the latest
+  priority review of open issues, bugs and technical debt.
 
 **Want to watch the generated code run?** `just demo` compiles
 [`examples/cabin/cabin.ridl`](examples/cabin/cabin.ridl) with
