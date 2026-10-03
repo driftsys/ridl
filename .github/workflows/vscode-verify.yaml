@@ -1,8 +1,8 @@
 name: vscode-verify
 
-# Packages the VS Code extension on every pull request that touches it, with no
-# bundled binary and no credentials: a manifest or .vscodeignore mistake fails
-# here instead of in a release. The gate command is `just vscode-verify`
+# Packages the VS Code extension as a generic and a linux-x64 VSIX on every pull
+# request that touches it, with a placeholder binary and no credentials: a
+# manifest or .vscodeignore mistake fails here instead of in a release. The gate command is `just vscode-verify`
 # (ADR-0009: the justfile defines it; this file only invokes it). It is not a
 # member of `just build`, so `just gate-parity` does not cover this workflow.
 

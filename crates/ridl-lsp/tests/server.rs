@@ -3318,12 +3318,18 @@ fn formatting_resolves_distinct_widths_and_off_for_document_paths() {
     let (server_side, client) = Connection::memory();
     let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
     initialize(&client, None);
-    for (index, (setting, columns, should_break)) in
-        [("60", 80, true), ("100", 80, false), ("off", 200, false)]
-            .into_iter()
-            .enumerate()
+    let mut documents = Vec::new();
+    for (index, (setting, columns, should_break)) in [
+        ("60", 60, false),
+        ("60", 61, true),
+        ("100", 100, false),
+        ("100", 101, true),
+        ("off", 200, false),
+    ]
+    .into_iter()
+    .enumerate()
     {
-        std::fs::create_dir(dir.path().join(format!("width-{setting}")))
+        std::fs::create_dir_all(dir.path().join(format!("width-{setting}")))
             .expect("create the configuration directory");
         dir.write(
             &format!("width-{setting}/.editorconfig"),
@@ -3343,16 +3349,32 @@ fn formatting_resolves_distinct_widths_and_off_for_document_paths() {
         };
         let expected = format!("package p\n\nstruct S {{\n{field}\n}}\n");
         let disk = "package p\nstruct OnDisk { value: integer }\n";
-        let file = dir.write(&format!("width-{setting}/types.typl"), disk);
+        let file = dir.write(&format!("width-{setting}/types-{columns}.typl"), disk);
         let uri = uri_of(&file);
+        notify::<lt::notification::DidOpenTextDocument>(
+            &client,
+            lt::DidOpenTextDocumentParams {
+                text_document: lt::TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "typl".to_string(),
+                    version: 0,
+                    text: source,
+                },
+            },
+        );
+        documents.push((index, setting, columns, file, uri, expected, disk));
+    }
+    // All documents are open before the first request, including the last
+    // document whose unlimited width would change the earlier finite layouts.
+    for (index, setting, columns, file, uri, expected, disk) in documents {
         let id = 10 + 2 * index as i32;
         assert_eq!(
-            open_and_format(&client, id, &uri, &source, tabs()),
+            format_request(&client, id, &uri, tabs()),
             Some(vec![lt::TextEdit {
                 range: range((0, 0), (2, 0)),
                 new_text: expected.clone(),
             }]),
-            "resolved width {setting}"
+            "resolved width {setting}, inline columns {columns}"
         );
         notify::<lt::notification::DidChangeTextDocument>(
             &client,
@@ -3375,7 +3397,7 @@ fn formatting_resolves_distinct_widths_and_off_for_document_paths() {
         );
         assert_eq!(std::fs::read_to_string(file).unwrap(), disk);
     }
-    shut_down(&client, 16);
+    shut_down(&client, 20);
     server.join().expect("thread joins").expect("clean exit");
 }
 

@@ -1694,8 +1694,9 @@ install:
 clean:
     rm -rf book target
 
-# Verify the VS Code extension packages: compile, unit tests, and a `vsce
-# package` against a placeholder bin/ridl staged just for this check, so a
+# Verify generic and target-specific VSIX archives: compile, unit tests,
+# packaged notices, requested output paths, and the target manifest. A
+# placeholder bin/ridl is staged just for this check, so a
 # .vscodeignore mistake that drops the binary is caught here instead of in a
 # release, where it would ship five VSIXs with no binary at all. Invoked by
 # vscode-verify.yaml on pull requests that touch editors/vscode. Not a member
@@ -1720,24 +1721,39 @@ vscode-verify:
         chmod +x bin/ridl
         staged=1
     fi
-    just package-vsix "" "$scratch/ridl-lang.vsix"
-    listing="$(npx vsce ls)"
-    if ! grep -qx 'bin/ridl' <<<"$listing"; then
-        echo "vscode-verify: bin/ridl is missing from the VSIX — check .vscodeignore" >&2
-        exit 1
-    fi
-    if ! grep -qx 'bin/THIRD-PARTY-NOTICES.txt' <<<"$listing"; then
-        echo "vscode-verify: third-party notices are missing from the VSIX" >&2
-        exit 1
-    fi
-    if grep -q '^src/' <<<"$listing"; then
-        echo "vscode-verify: src/ would ship in the VSIX — check .vscodeignore" >&2
-        exit 1
-    fi
-    if grep -q '\.test\.js$' <<<"$listing"; then
-        echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
-        exit 1
-    fi
+    for vsce_target in "" linux-x64; do
+        archive="$scratch/ridl-lang${vsce_target:+-$vsce_target}.vsix"
+        just package-vsix "$vsce_target" "$archive"
+        if [ ! -f "$archive" ]; then
+            echo "vscode-verify: requested archive was not created: $archive" >&2
+            exit 1
+        fi
+        listing="$(unzip -Z1 "$archive")"
+        if ! grep -qx 'extension/bin/ridl' <<<"$listing"; then
+            echo "vscode-verify: bin/ridl is missing from the VSIX — check .vscodeignore" >&2
+            exit 1
+        fi
+        unzip -p "$archive" extension/bin/THIRD-PARTY-NOTICES.txt > "$scratch/notices.txt"
+        if ! cmp -s ../../THIRD-PARTY-NOTICES.txt "$scratch/notices.txt"; then
+            echo "vscode-verify: packaged third-party notices differ from the root notices" >&2
+            exit 1
+        fi
+        if [ -n "$vsce_target" ]; then
+            unzip -p "$archive" extension.vsixmanifest > "$scratch/manifest.xml"
+            if ! grep -q "TargetPlatform=\"$vsce_target\"" "$scratch/manifest.xml"; then
+                echo "vscode-verify: incorrect VSIX target platform" >&2
+                exit 1
+            fi
+        fi
+        if grep -q '^extension/src/' <<<"$listing"; then
+            echo "vscode-verify: src/ would ship in the VSIX — check .vscodeignore" >&2
+            exit 1
+        fi
+        if grep -q '\.test\.js$' <<<"$listing"; then
+            echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
+            exit 1
+        fi
+    done
     echo "vscode-verify: packaged ok"
 
 # Package the extension: compile, then `vsce package`. Assumes the caller has
