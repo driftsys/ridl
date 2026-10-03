@@ -79,6 +79,14 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
             }
         }
     }
+    if output.system.is_none()
+        && output
+            .sources
+            .iter_files()
+            .any(|(path, _)| path.ends_with(".rsdl"))
+    {
+        notes.push("rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which".into());
+    }
     Ok(Snapshot {
         db,
         output,
@@ -133,7 +141,7 @@ pub(crate) mod tests {
     }
     pub struct TempWorkspace(pub PathBuf);
     impl TempWorkspace {
-        pub fn copy() -> Self {
+        pub fn copy(name: &str) -> Self {
             static NEXT: AtomicUsize = AtomicUsize::new(0);
             let path = std::env::temp_dir().join(format!(
                 "ridl-mcp-{}-{}",
@@ -152,7 +160,7 @@ pub(crate) mod tests {
                     }
                 }
             }
-            copy(Path::new(&fixture("ws")), &path);
+            copy(Path::new(&fixture(name)), &path);
             Self(path)
         }
     }
@@ -211,7 +219,7 @@ pub(crate) mod tests {
             }],
         )
         .unwrap();
-        let copy = TempWorkspace::copy();
+        let copy = TempWorkspace::copy("ws");
         fs::write(copy.0.join("a/a.ridl"), "").unwrap();
         let output =
             ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), &copy.0).unwrap();
@@ -246,7 +254,7 @@ pub(crate) mod tests {
     }
     #[tokio::test]
     async fn a_remote_import_is_reported_and_not_fetched() {
-        let copy = TempWorkspace::copy();
+        let copy = TempWorkspace::copy("ws");
         let manifest = copy.0.join("b/ridl.toml");
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();

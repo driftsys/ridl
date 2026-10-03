@@ -387,7 +387,7 @@ mod tests {
     }
     #[test]
     fn a_clean_empty_package_can_resolve_standard_declarations() {
-        let copy = crate::snapshot::tests::TempWorkspace::copy();
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
         std::fs::remove_dir_all(copy.0.join("a")).unwrap();
         std::fs::remove_dir_all(copy.0.join("b")).unwrap();
         std::fs::write(

@@ -817,6 +817,9 @@
                 "null"
               ]
             },
+            "kind": {
+              "$ref": "#/$defs/ReferenceKind"
+            },
             "location": {
               "anyOf": [
                 {
@@ -833,9 +836,19 @@
           },
           "required": [
             "package",
-            "declaration"
+            "declaration",
+            "kind"
           ],
           "type": "object"
+        },
+        "ReferenceKind": {
+          "enum": [
+            "declaration",
+            "interface",
+            "service",
+            "component"
+          ],
+          "type": "string"
         },
         "WorkspaceStatus": {
           "properties": {

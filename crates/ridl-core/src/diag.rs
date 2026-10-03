@@ -1529,7 +1529,7 @@ impl SourceMap {
     /// The interned files, in id order — the renderer replays them into a
     /// `codespan_reporting` file table so `FileId(i)` lines up with codespan id
     /// `i`.
-    pub(crate) fn iter_files(&self) -> impl Iterator<Item = (&str, &str)> {
+    pub fn iter_files(&self) -> impl Iterator<Item = (&str, &str)> {
         self.files
             .iter()
             .map(|entry| (entry.path.as_str(), entry.text.as_str()))
