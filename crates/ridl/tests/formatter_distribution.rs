@@ -48,6 +48,16 @@ fn the_cli_dependency_exposes_the_default_editorconfig_api() {
 #[test]
 fn ec4rs_licence_text_matches_the_upstream_release() {
     let notices = std::fs::read_to_string(repo().join("THIRD-PARTY-NOTICES.txt")).unwrap();
+    assert!(
+        notices.contains(concat!(
+            "ec4rs 1.2.0 — EditorConfig For Rust\n",
+            "Author: TheDaemoness\n",
+            "Source: https://github.com/TheDaemoness/ec4rs\n",
+            "Release source commit: 14bbca047324cedd5791b89f858eb5e17e6b0b3c\n",
+            "Licence: Apache-2.0\n",
+        )),
+        "the ec4rs attribution must accompany its licence"
+    );
     let (_, licence) = notices.split_once(
         "The following licence text is copied from that release's LICENSE.txt.\n-------------------------------------------------------------------------------\n\n"
     ).expect("the ec4rs licence follows its attribution");
@@ -128,5 +138,105 @@ fn both_release_archives_carry_the_licences() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn the_root_licence_is_the_recorded_mit_licence() {
+    let licence = std::fs::read(repo().join("LICENSE")).unwrap();
+    // The complete MIT text and driftsys copyright recorded on 2026-10-01.
+    assert_eq!(
+        format!("{:x}", Sha256::digest(&licence)),
+        "c502d160325cfb7af6776061fa114aa0a36dbf25811c86e950e1a6e70cd34f87"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn vsix_packaging_passes_the_target_and_output_arguments() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Command;
+
+    let dir = TestDir::new();
+    dir.write("justfile", &std::fs::read(repo().join("justfile")).unwrap());
+    dir.write("THIRD-PARTY-NOTICES.txt", b"fixture notices\n");
+    // Exercise the real recipe without installing npm dependencies or packaging
+    // a binary. The acceptance recipe checks the actual VSIX separately.
+    for (name, script) in [
+        ("npm", "#!/bin/sh\nexit 0\n"),
+        (
+            "npx",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGUMENT_LOG\"\n",
+        ),
+    ] {
+        dir.write(&format!("tools/{name}"), script.as_bytes());
+        std::fs::set_permissions(
+            dir.0.join(format!("tools/{name}")),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    let search_path = std::env::join_paths(std::iter::once(dir.0.join("tools")).chain(
+        std::env::split_paths(&std::env::var_os("PATH").expect("PATH is set")),
+    ))
+    .unwrap();
+    let log = dir.0.join("arguments.txt");
+    for (target, output, expected) in [
+        ("", "", vec!["vsce", "package"]),
+        (
+            "linux-x64",
+            "",
+            vec![
+                "vsce",
+                "package",
+                "--target",
+                "linux-x64",
+                "--out",
+                "ridl-lang-linux-x64.vsix",
+            ],
+        ),
+        (
+            "",
+            "custom.vsix",
+            vec!["vsce", "package", "--out", "custom.vsix"],
+        ),
+        (
+            "darwin-arm64",
+            "custom target.vsix",
+            vec![
+                "vsce",
+                "package",
+                "--target",
+                "darwin-arm64",
+                "--out",
+                "custom target.vsix",
+            ],
+        ),
+    ] {
+        let result = Command::new("just")
+            .arg("--justfile")
+            .arg(dir.0.join("justfile"))
+            .args(["package-vsix", target, output])
+            .env("PATH", &search_path)
+            .env("ARGUMENT_LOG", &log)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(
+            std::fs::read_to_string(&log)
+                .unwrap()
+                .lines()
+                .collect::<Vec<_>>(),
+            expected,
+            "target {target:?}, output {output:?}"
+        );
+        assert_eq!(
+            std::fs::read(dir.0.join("editors/vscode/bin/THIRD-PARTY-NOTICES.txt")).unwrap(),
+            b"fixture notices\n"
+        );
     }
 }
