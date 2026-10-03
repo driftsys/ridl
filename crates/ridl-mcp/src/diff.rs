@@ -6,8 +6,11 @@ use std::path::Path;
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct DiffInput {
+    /// The old side as an .ir.json file, a snapshot directory such as <root>/.ridl/baseline, or a source path.
     pub old: String,
+    /// The new side as an .ir.json file, a snapshot directory such as <root>/.ridl/baseline, or a source path.
     pub new: String,
+    /// Optional unsaved source files applied to the new source side only.
     pub overlays: Option<Vec<OverlayInput>>,
 }
 pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {

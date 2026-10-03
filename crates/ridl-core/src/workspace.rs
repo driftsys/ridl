@@ -380,16 +380,18 @@ impl Loader {
                 source_files.push(path);
             }
         }
-        let directory_key = dir.canonicalize()?;
-        for (key, _, _) in &self.overlays {
-            if key.parent() == Some(directory_key.as_path())
-                && !source_files
-                    .iter()
-                    .any(|p| overlay_key(p).as_ref() == Some(key))
-            {
-                let added = dir.join(key.file_name().expect("overlay keys have a file name"));
-                if !source_files.contains(&added) {
-                    source_files.push(added);
+        if !self.overlays.is_empty() {
+            let directory_key = dir.canonicalize()?;
+            for (key, _, _) in &self.overlays {
+                if key.parent() == Some(directory_key.as_path())
+                    && !source_files
+                        .iter()
+                        .any(|p| overlay_key(p).as_ref() == Some(key))
+                {
+                    let added = dir.join(key.file_name().expect("overlay keys have a file name"));
+                    if !source_files.contains(&added) {
+                        source_files.push(added);
+                    }
                 }
             }
         }

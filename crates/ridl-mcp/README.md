@@ -140,13 +140,14 @@ recommend `ridl_check` on the same path.
 
 Input: `path`, optional `overlays`, optional `package`. Result:
 `{packages, workspace}`. Each package carries `name`, `imports` (manifest import
-names), sorted `depends_on` (other IR-referenced packages, excluding `ridl.std`)
-and sorted `dependents` (workspace packages referencing it). A `package` filter
-returns one package. An unknown package is a tool error listing the available
-packages. This tool reports the graph; it does not lint cycles or unused
-imports. Required named interfaces add dependencies from each declared
-component's package to the interface's catalog. The system's package also
-depends on the packages of its declared member components. The graph keeps
+names from the member manifest's `[imports]` only, excluding the workspace
+root's shared `[imports]`), sorted `depends_on` (other IR-referenced packages,
+excluding `ridl.std`) and sorted `dependents` (workspace packages referencing
+it). A `package` filter returns one package. An unknown package is a tool error
+listing the available packages. This tool reports the graph; it does not lint
+cycles or unused imports. Required named interfaces add dependencies from each
+declared component's package to the interface's catalog. The system's package
+also depends on the packages of its declared member components. The graph keeps
 qualifiers that name unresolved or remote packages outside the workspace. When
 no rsdl system was lowered, the workspace carries the same no-system note as
 `ridl_references`.

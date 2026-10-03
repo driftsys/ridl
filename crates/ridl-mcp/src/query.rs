@@ -9,17 +9,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct NameInput {
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: String,
+    /// Optional unsaved source files to apply without writing them to disk.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// The declaration name as Name or pkg.Name.
     pub name: String,
+    /// The package name in which a bare name resolves, including import aliases.
     pub from: Option<String>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct InterfaceInput {
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: String,
+    /// Optional unsaved source files to apply without writing them to disk.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// The interface name as Name or pkg.Name.
     pub interface: String,
+    /// The package name in which a bare name resolves, including import aliases.
     pub from: Option<String>,
 }
 impl From<InterfaceInput> for NameInput {
@@ -152,10 +160,11 @@ fn unknown(snap: &Snapshot, name: &str) -> ToolError {
     suggestions.sort();
     suggestions.dedup();
     suggestions.truncate(10);
-    ToolError::Request(format!(
-        "no declaration `{name}` in this workspace; suggestions: {}",
-        suggestions.join(", ")
-    ))
+    let mut message = format!("no declaration `{name}` in this workspace");
+    if !suggestions.is_empty() {
+        message.push_str(&format!("; suggestions: {}", suggestions.join(", ")));
+    }
+    ToolError::Request(message)
 }
 pub fn find<'a>(
     snap: &'a Snapshot,
@@ -331,6 +340,11 @@ mod tests {
             ToolError::Request(message) => message,
             _ => panic!("request error"),
         }
+    }
+    #[test]
+    fn an_unknown_name_with_no_close_match() {
+        let error = resolve(&snap(), &input("Zzzqqq", None)).err().unwrap();
+        assert_eq!(message(error), "no declaration `Zzzqqq` in this workspace");
     }
     #[test]
     fn resolve_a_bare_unique_name() {

@@ -1529,7 +1529,7 @@ Options:
 
 Behavior lives in `crates/ridl-mcp`; this subcommand builds the Tokio runtime
 and wires the stdio transport. An agent host spawns it and speaks MCP over stdin
-and stdout. The [crate README](../../crates/ridl-mcp/README.md) documents input
+and stdout. The [crate README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md) documents input
 and output schemas, tool errors and the read-only workspace contract. The command
 takes no flag of its own.
 

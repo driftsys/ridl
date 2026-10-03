@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct ExplainInput {
+    /// A diagnostic code such as TYPL-002 or a diff category word such as payload_changed.
     pub code: String,
 }
 #[derive(Debug, Serialize, JsonSchema)]

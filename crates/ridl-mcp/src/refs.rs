@@ -35,8 +35,11 @@ pub struct Reference {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct DependenciesInput {
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: String,
+    /// Optional unsaved source files to apply without writing them to disk.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// An optional package name that filters the result to that workspace package.
     pub package: Option<String>,
 }
 #[derive(Debug, Serialize, JsonSchema)]

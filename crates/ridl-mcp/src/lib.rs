@@ -62,7 +62,9 @@ pub struct CheckParams {
     pub source: Option<String>,
     /// Which language `source` is parsed as.
     pub profile: Option<Profile>,
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: Option<String>,
+    /// Optional unsaved source files for path mode, refused in source mode.
     pub overlays: Option<Vec<OverlayInput>>,
 }
 
@@ -77,7 +79,7 @@ pub struct CheckOutput {
 
 /// Checks `params.source` under `params.profile` against the embedded
 /// `ridl.std`. Pure: no transport, no I/O.
-pub fn check(params: &CheckParams) -> CheckOutput {
+fn check(params: &CheckParams) -> CheckOutput {
     let run = ridlc::check_source(
         params
             .profile
@@ -291,7 +293,7 @@ impl RidlMcp {
             const MESSAGE: &str =
                 "pass either `source` with `profile`, or `path` with optional `overlays`";
             match (&params.source, &params.path, params.profile) {
-                (Some(_), None, Some(_)) => Ok(check(&params)),
+                (Some(_), None, Some(_)) if params.overlays.is_none() => Ok(check(&params)),
                 (None, Some(path), None) => {
                     let snap = snapshot(path, params.overlays.as_deref().unwrap_or_default())?;
                     Ok(CheckOutput {
@@ -524,6 +526,32 @@ mod tests {
             text.text,
             "pass either `source` with `profile`, or `path` with optional `overlays`"
         );
+    }
+
+    #[tokio::test]
+    async fn source_mode_refuses_overlays() {
+        for overlays in [
+            json!([]),
+            json!([{"path": "a.typl", "source": "package p"}]),
+        ] {
+            let result = RidlMcp::new()
+                .ridl_check(Parameters(
+                    serde_json::from_value(json!({
+                        "source": "package p", "profile": "typl", "overlays": overlays
+                    }))
+                    .unwrap(),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(result.is_error, Some(true));
+            let [ContentBlock::Text(text)] = result.content.as_slice() else {
+                panic!("one text block");
+            };
+            assert_eq!(
+                text.text,
+                "pass either `source` with `profile`, or `path` with optional `overlays`"
+            );
+        }
     }
 
     // The fixture deliberately has no trailing newline: with one, the parser
