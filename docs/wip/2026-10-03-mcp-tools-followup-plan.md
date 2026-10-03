@@ -30,8 +30,9 @@ the code does not match what this plan says, stop and ask.
 - Work on a branch `feat/1a-mcp-followup` from `main` (which contains #668 and
   this plan). Run `./bootstrap` once after creating the worktree. One pull
   request; at least one commit per task.
-- Commit scopes allowed: those in `.git-std.toml`. This plan uses `ridl-mcp`,
-  `ridlc`, `ridl`, `ridl-core`, `adr` and `docs`.
+- Commit scopes allowed: those in `.git-std.toml`. This plan's commit messages
+  use `ridl-mcp`, `ridlc` and `docs`; use `ridl-core` or `adr` if you split a
+  commit by crate.
 - Per task: `cargo test -p <crate> --locked`, `cargo fmt --all`,
   `cargo clippy -p <crate> --all-targets -- -D warnings`. Before the pull
   request: `just verify`.
@@ -44,10 +45,10 @@ the code does not match what this plan says, stop and ask.
   tool form.
 - The tool surface changes only by addition (spec §7.2). The changes to
   `crates/ridl-mcp/tests/tools.json` in this plan are: the `kind` field on a
-  reference, and `description` texts on input fields. No field is removed or
-  renamed, and no tool result for an existing input changes except that
-  `ridl_references` and `ridl_dependencies` now also report rsdl uses, which is
-  the point of §4.4.
+  reference (a required property, plus a `ReferenceKind` entry under `$defs`),
+  and `description` texts on input fields. No field is removed or renamed, and
+  no tool result for an existing input changes except that `ridl_references` and
+  `ridl_dependencies` now also report rsdl uses, which is the point of §4.4.
 - Every existing test keeps its assertions, except where a task says otherwise.
 
 ## Review Focus
@@ -74,7 +75,9 @@ the code does not match what this plan says, stop and ask.
 
 - Create: `crates/ridl-mcp/tests/fixtures/ws-rsdl/` (below)
 - Modify: `crates/ridl-mcp/src/refs.rs` (`Reference`, `references`,
-  `dependencies`), `crates/ridl-mcp/src/snapshot.rs` (the notes),
+  `dependencies`), `crates/ridl-mcp/src/snapshot.rs` (the notes, and
+  `TempWorkspace::copy`, which gains a fixture-name parameter so tests can copy
+  `ws-rsdl`), `crates/ridl-core/src/diag.rs` (`iter_files` becomes `pub`),
   `crates/ridl-mcp/tests/tools.json`, `crates/ridl-mcp/README.md`
 
 **Interfaces:**
@@ -82,7 +85,8 @@ the code does not match what this plan says, stop and ask.
 - `Reference` gains `pub kind: ReferenceKind`, serialised in lower case:
 
   ```rust
-  #[derive(Serialize, JsonSchema, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+  #[derive(Serialize, JsonSchema, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+  #[schemars(crate = "rmcp::schemars")]
   #[serde(rename_all = "snake_case")]
   pub enum ReferenceKind { Declaration, Interface, Service, Component }
   ```
@@ -107,8 +111,10 @@ the code does not match what this plan says, stop and ask.
 
 The no-system note (spec §6.3, §4.4), exact text:
 ``"rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which"``.
-It is added in `snapshot` when `output.system.is_none()` and any file of any
-checked package ends in `.rsdl`.
+It is added in `snapshot` when `output.system.is_none()` and any file the load
+read ends in `.rsdl`. The loaded paths are in `output.sources`; make
+`SourceMap::iter_files` (`crates/ridl-core/src/diag.rs`, about line 1532) `pub`
+for this, a one-word API addition. Do not load the workspace a second time.
 
 **The fixture** `ws-rsdl/`, checked with `ridl check`: exit 0, two RSDL-409
 warnings (the book example draws the same two):
@@ -214,9 +220,9 @@ harness does not compile them.
   ["veh.climate"]`,
   `veh.climate.dependents == ["veh.cabin"]`.
 - `system_package_depends_on_member_component_packages`: a temporary copy of
-  `ws-rsdl` with `"ops"` added to the root `members`, the `system Cabin` block
-  removed from `cabin.rsdl`, and `ops/ridl.toml` (`name = "veh.ops"`) plus
-  `ops/ops.rsdl`:
+  `ws-rsdl` (through `TempWorkspace::copy("ws-rsdl")`) with `"ops"` added to the
+  root `members`, the `system Cabin` block removed from `cabin.rsdl`, and
+  `ops/ridl.toml` (`name = "veh.ops"`) plus `ops/ops.rsdl`:
 
   ```rsdl
   package veh.ops
@@ -274,23 +280,31 @@ harness does not compile them.
 
 - Modify: `crates/ridlc/src/diff_side.rs`, `crates/ridl/src/main.rs`
 
-`crates/ridl/src/main.rs` still defines the helpers that #668 copied into
-`ridlc::diff_side` (`is_ir_json`, `has_ir_json_name`, `is_non_json_ir`,
-`is_source_file`, `is_source_dir`, `snapshot_files`, `load_snapshots`,
-`files_matching`, `ir_json_files`, `first_non_json_ir_in`,
-`first_nested_snapshot_dir`, `refuse_nested_snapshot_directory`,
-`refuse_artifact_directory`, and any other duplicate you find by comparing the
-two files), because `load_baseline` and `load_published` use them.
+`crates/ridl/src/main.rs` still defines helpers that #668 copied into
+`ridlc::diff_side`, because `load_baseline` and `load_published` use them.
+Compare the two files and list every function defined in both. Share the ones
+whose behaviour is the same in both copies (expect the predicates and listing
+helpers: `is_ir_json`, `has_ir_json_name`, `is_non_json_ir`, `is_source_file`,
+`is_source_dir`, `files_matching`, `ir_json_files`, `first_non_json_ir_in`,
+`first_nested_snapshot_dir`, and `snapshot_files` if its errors map cleanly).
+Keep in `main.rs` the helpers whose message text depends on the caller:
+`refuse_nested_snapshot_directory` and `refuse_artifact_directory` take the
+remedy text from their caller, and `main.rs`'s `load_snapshots` takes a
+`parse_remedy` argument, so the baseline commands print words that the
+`DiffSideError` messages do not. List in the pull request which helpers you
+shared and which you kept, and why.
 
-- [ ] **Step 1:** Make the `ridlc::diff_side` versions `pub` (returning
-      `DiffSideError` where they fail), and change the `main.rs` callers to call
-      them and map the error to the same stderr message and `ExitCode` they
-      produce today. Delete the `main.rs` copies.
-- [ ] **Step 2:** Move every doc comment from the deleted `main.rs` copies onto
-      the `ridlc` functions, including the notes on #218 (source recognised by
-      extension was tried and reverted), #230 and #339 (fail closed), and why
+- [ ] **Step 1:** Make the shared `ridlc::diff_side` helpers `pub`, change the
+      `main.rs` callers to use them, mapping any error to the same stderr
+      message and `ExitCode` as today, and delete the `main.rs` copies of the
+      shared ones only.
+- [ ] **Step 2:** Move the doc comments of each deleted `main.rs` copy onto its
+      `ridlc` function: the #230 and #339 fail-closed reasoning, and why
       `first_nested_snapshot_dir` must not swallow a read error. Keep their
-      text; only fix references to names that changed.
+      text; only fix references to names that changed. (The note about #218 was
+      on the old `load_diff_side` and is already gone; restore it on
+      `ridlc::load_diff_side` from `git show edeec6e^:crates/ridl/src/main.rs`,
+      near line 461.)
 - [ ] **Step 3:** Run
       `cargo test -p ridlc --locked && cargo test -p ridl-cli
       --locked`.
@@ -314,11 +328,14 @@ line number above them unchanged): one `internal` declaration, one `enumset`
 over `Health`, one `const` and one type whose `match` pattern names that const.
 Use the syntax in the typl reference; confirm `ridl check` on `ws` still exits 0
 with no diagnostic. Give `interface Status` in `ws/b/b.ridl` a label and a
-`@deprecated` reason (and a number, if the grammar has one) without moving any
-existing line. Apply the same additions to `ws-diag/` and `ws-v2/`, so the
-variants still differ from `ws/` only by their own edits. Then update every test
-whose assertions these additions change (for example a declaration count), and
-say which in the commit message.
+`@deprecated` reason (and a number, if the grammar has one), in the form the
+ridl reference gives (a tag on the same line as the doc comment becomes doc
+text, and a bracket form draws FORM-101; check with `ridl check`). This moves
+lines in `b.ridl`, so update the line-number assertions that depend on them.
+Apply the same additions to `ws-diag/` and `ws-v2/`, so the variants still
+differ from `ws/` only by their own edits. Then update every test whose
+assertions these additions change (for example a declaration count), and say
+which in the commit message.
 
 - `diff_uses_std_as_context`: a fixture variant that appends to
   `struct
@@ -363,7 +380,7 @@ say which in the commit message.
 
 ### Task 4: Small fixes
 
-**Files:** `crates/ridl-mcp/src/{lib,query,types,diff,refs}.rs`,
+**Files:** `crates/ridl-mcp/src/{lib,query,types,diff,refs,explain}.rs`,
 `crates/ridl-core/src/workspace.rs`, `docs/book/cli-reference.md`,
 `docs/decisions/ADR-0005-agent-enablement.md`, `crates/ridl-mcp/README.md`,
 `crates/ridl-mcp/tests/tools.json`

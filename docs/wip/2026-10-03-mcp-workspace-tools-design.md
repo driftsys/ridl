@@ -3,8 +3,9 @@
 Status: design spec for piece 1a of
 [`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md),
 written 2026-10-03 against `main` at 29b221a. Sebastien agreed the approach in
-the brainstorming session of 2026-10-03 (decisions D-1 to D-6, §2). Nothing here
-is implemented. It is archived with its plan when the work lands.
+the brainstorming session of 2026-10-03 (decisions D-1 to D-6, §2). Implemented
+by #668, except the §4.4 amendment. It is archived with its plan when the work
+lands.
 
 Satisfies: the brief's piece 1a; ROADMAP E8.6 (verify and evolve tools) and E8.7
 (grounding and IR-query tools); ADR-0005 §3 (Layer B, the MCP server).
@@ -162,20 +163,21 @@ interaction. Its kind is one of the IR's five interaction kinds: `signal`,
 `timing`, `params`, `contracts` and the return or payload type are the IR's
 fields, unchanged.
 
-**`ridl_references`.** The target is resolved as `ridl_resolve` resolves it, to
-a canonical `pkg.Name`. The tool then walks every declaration of every workspace
-package and reports each one that holds a type reference equal to the target.
-The IR writes a reference in the same package as a bare `Name` and a reference
-across packages as `pkg.Name` (`ir.proto`), so a bare reference is qualified
-with its own package before the comparison. The walk covers every field that
-holds a type reference: `FieldType.named` (recursively through arrays, maps,
-tuples, streams and inline scalars), `UnionArm.type_ref`, `ConstDef.type_ref`,
-`EnumSetDef.backing_enum`, `Constraint.pattern_const`, `SignalDef.payload`,
-`EventDef.payload`, `StreamType.named`, `FallibleType.ok` and `.err`, parameter
-types, return types, `FixedDef.payload`, and in each service of
-`Package.services` every `ServiceShape.interface_ref` and every reference inside
-an inline `ServiceShape.inline` interface. A reference inside a service reports
-the service's name as its declaration. Each reference reports the package, the
+**`ridl_references`.** (§4.4 adds rsdl components and the `kind` field.) The
+target is resolved as `ridl_resolve` resolves it, to a canonical `pkg.Name`. The
+tool then walks every declaration of every workspace package and reports each
+one that holds a type reference equal to the target. The IR writes a reference
+in the same package as a bare `Name` and a reference across packages as
+`pkg.Name` (`ir.proto`), so a bare reference is qualified with its own package
+before the comparison. The walk covers every field that holds a type reference:
+`FieldType.named` (recursively through arrays, maps, tuples, streams and inline
+scalars), `UnionArm.type_ref`, `ConstDef.type_ref`, `EnumSetDef.backing_enum`,
+`Constraint.pattern_const`, `SignalDef.payload`, `EventDef.payload`,
+`StreamType.named`, `FallibleType.ok` and `.err`, parameter types, return types,
+`FixedDef.payload`, and in each service of `Package.services` every
+`ServiceShape.interface_ref` and every reference inside an inline
+`ServiceShape.inline` interface. A reference inside a service reports the
+service's name as its declaration. Each reference reports the package, the
 package-level declaration that holds it, the interaction name when the reference
 sits inside an interface's interaction (otherwise `null`), and the location.
 References are reported once for each (declaration, interaction) pair: a pair
@@ -211,14 +213,16 @@ error whose structured content carries the diagnostics (§6.2).
 
 Added after the first implementation (#668), approved by Sebastien on
 2026-10-03. Without it, `ridl_references` and `ridl_dependencies` see only the
-package IR, so an interface that only an rsdl component requires is reported as
-used by nothing.
+package IR. A required interface is always listed by some service (otherwise
+RSDL-403), so `ridl_references` still finds that service; but the components
+that require the interface are not reported, and `ridl_dependencies` misses
+every package edge that only rsdl creates.
 
 - **Source.** rsdl components exist only in the lowered system,
   `WorkspaceOutput.system` (`ridl_ir::v2::System`); the package IR has no
   components. Both tools read it in addition to the package IR. Only the
   components that the workspace's `system` lists are lowered, which is also the
-  set that the backends and `ridl diff` see.
+  set that `ridl diff` and the IR dump see.
 - **References.** For each `Component` in `System.components` whose `package` is
   not empty, each `Require` whose `interface` is present and not `inline` is a
   reference to `{catalog}.{name}`. Inline interface references are skipped: they
@@ -234,10 +238,12 @@ used by nothing.
   package-level declaration other than an interface), `interface`, `service`, or
   `component`. It is an added output field, so the change is additive (§7.2).
 - **Dependencies.** A component's package depends on the `catalog` of each
-  interface it requires (the same rule as an IR reference: not itself, not
-  `ridl.std`). The system's package (`System.package`) depends on the package of
-  each component its member lines name (`MemberLine.component`, looked up in
-  `System.components`; implicit components are skipped).
+  interface it requires, counting the same requires as the references above
+  (inline ones are skipped), and with the same exclusions as an IR reference:
+  not the package itself, not `ridl.std`. The system's package
+  (`System.package`) depends on the package of each component its member lines
+  name (`MemberLine.component`, looked up in `System.components`; implicit
+  components are skipped, and so is the system's own package).
 - **No lowered system.** When `output.system` is `None` and at least one
   workspace package has a `.rsdl` file, every result built from the workspace
   carries a second note (§6.3) saying that rsdl uses were not counted because no
