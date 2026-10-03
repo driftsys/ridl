@@ -256,12 +256,12 @@ as its public contract.
    stays permitted under the feature. It also stays unused: the E11.7 design
    note's D-12
    ([`docs/archive/2026-09-20-flatbuffers-codec-design.md`](../archive/2026-09-20-flatbuffers-codec-design.md))
-   already kept a third-party FlatBuffers implementation out of the shipped
-   path, and `ridl-rt` has no dependency in any feature combination (ADR-0021
-   decision 8). `xtask/tests/oracle_boundary.rs` enforces the planus rule: it
-   fails when a planus crate is reachable from `ridl-rt` with every feature on,
-   or is in the resolved graph of the crate `ridl build` generates for
-   `examples/cabin`.
+   keeps planus out of `ridl-rt` and out of every generated package, while the
+   toolchain may ship it, and `ridl-rt` has no dependency in any feature
+   combination (ADR-0021 decision 8). `xtask/tests/oracle_boundary.rs` enforces
+   the planus rule: it fails when a planus crate is reachable from `ridl-rt`
+   with every feature on, or is in the resolved graph of the crate `ridl build`
+   generates for `examples/cabin`.
 
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
@@ -483,6 +483,8 @@ as its public contract.
 | [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §17.13 sends the `repr(C)` string rules to decision 4's projection record                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md)                 | the library's placement is decisions 5 and 6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12); E4.5b's row corrected 2026-09-22 with decision 11's amendment — the Rust backend ported onto the contract, not both in-tree backends                                               |
+| [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | the `flatbuffers` feature's paragraph: the FlatBuffers runtime decision 5 permits cannot be planus (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                          |
+| [`crates/ridl-rt/src/flatbuffers.rs`](../../crates/ridl-rt/src/flatbuffers.rs)                 | the module documentation: no planus crate may be a dependency of `ridl-rt` (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## References
 
