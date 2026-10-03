@@ -84,7 +84,7 @@ jobs:
           fi
           files="$(git diff --name-only "$BASE_SHA" HEAD)"
           echo "$files"
-          rust_paths='^(crates/|xtask/|examples/|docs/book/|docs/specification/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|justfile$|install\.(sh|ps1)$|book\.toml$|\.github/workflows/|\.cargo/)'
+          rust_paths='^(crates/|xtask/|examples/|docs/book/|docs/specification/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|justfile$|install\.(sh|ps1)$|LICENSE$|THIRD-PARTY-NOTICES\.txt$|book\.toml$|\.github/workflows/|\.cargo/)'
           if printf '%s\n' "$files" | grep -qE "$rust_paths"; then
             echo "rust=true" >> "$GITHUB_OUTPUT"
           else
