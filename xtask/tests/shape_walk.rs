@@ -157,6 +157,12 @@ const ALLOWED: &[Allowed] = &[
               field back out of a buffer, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/tests/verify.rs",
+        lines: 1,
+        why: "a test case naming the catalog descriptor's own `Catalog.interfaces` \
+              field, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/lib.rs",
         lines: 9,
         why: "the IR-side `shapes()` helper itself; `referenced_packages`, \
