@@ -108,7 +108,8 @@ Out of scope, and why:
   `ridl check --format json`. Its range is the range of the declared name, as
   `Resolution.symbols` records it (`Symbol.range`). A declaration that is not a
   symbol (an interaction, a field) reports the location of its enclosing
-  package-level declaration.
+  package-level declaration. A service has no symbol, so a reference held by a
+  service has `location: null`.
 
 ### 4.2 The tool table
 
@@ -321,8 +322,8 @@ they are refused with an error. The snapshot parse uses
 - `lib.rs`: one `#[tool]` method per tool. Each runs `snapshot` and the query in
   `tokio::task::spawn_blocking`, as `ridl_check` does today, and converts a
   `ToolError` into an MCP tool error.
-- New dependencies: `ridl-diff`, `ridl-ir` and `ridl-sem` (for `Symbol`).
-  `ridl-lsp` is not a dependency.
+- New dependencies: `ridl-diff`, `ridl-ir`, `ridl-sem` (for `Symbol`) and
+  `rowan` (for `TextRange`). `ridl-lsp` is not a dependency.
 - The server's `instructions` string is rewritten to name the tools and to say
   "pass the workspace root as `path`".
 
@@ -393,8 +394,9 @@ the ADR-0005 amendment (§9) records it. Later changes may only add to them: a
 new optional input, a new output field, a new tool. A test pins the whole
 `tools/list` response (§8), so any schema change appears as a diff in review.
 Source-mode `ridl_check` keeps today's input fields and returns the same JSON
-value. Its input schema changes in one way: `source` and `profile` become
-optional, because `path` mode omits them; every call that was valid stays valid.
+value. Its input schema changes in two ways: `source` and `profile` become
+optional, because `path` mode omits them, and `path` and `overlays` are added.
+Every call that was valid stays valid.
 
 ## 8. Testing
 
@@ -433,9 +435,10 @@ All tests are Rust tests, so `just test` runs them.
     tells the reader to update that file deliberately when the contract changes
     additively;
   - the existing `ridl_check` source-mode tests keep their assertions on the
-    returned JSON; tests that build `CheckParams` or `CheckOutput` in Rust,
-    assert the input schema's required fields, or assert a one-tool list are
-    updated to the new types and the eight tools.
+    returned JSON; tests that build `CheckParams` or `CheckOutput` in Rust, or
+    assert the input schema's required fields are updated to the new types; the
+    tests that assert a one-tool list are replaced by the pinned list of eight
+    tools.
 - **The CLI `ridl diff` tests** pass unchanged after §5.2's move.
 
 ## 9. Documentation and registration
@@ -448,8 +451,9 @@ All tests are Rust tests, so `just test` runs them.
 - `docs/book/cli-reference.md`, section `ridl mcp`: the tool list replaces the
   sentence that names one tool. The command still takes no flag.
 - ADR-0005: the minimum tool table names the inputs as paths, adds
-  `ridl_references` and `ridl_dependencies`, and names the IR's five interaction
-  kinds. The amendment is recorded in its `## Status`.
+  `ridl_references` and `ridl_dependencies`, names the IR's five interaction
+  kinds, and §7 adds the MCP tool surface as a fourth contract surface. The
+  amendment is recorded in its `## Status`.
 - ROADMAP E8.6 and E8.7: marked as delivered by this work when it lands (by the
   gardening pass, not by the implementation).
 

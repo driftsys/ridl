@@ -47,11 +47,15 @@ the spec disagree, stop and ask.
 - `ridl-mcp` must not depend on `ridl-lsp`.
 - Source-mode `ridl_check` keeps its input fields `{source, profile}` and
   returns the same JSON value `{diagnostics}` as today. Its input schema changes
-  in one way: `source` and `profile` become optional. Task 4 updates exactly
-  these existing tests and keeps every assertion on returned JSON: the tests in
-  `crates/ridl-mcp/src/lib.rs` that build `CheckParams` or read `CheckOutput`
-  fields in Rust (about lines 238-249, 285, 313, 358), the input-schema test
-  (about line 552) whose `required` list becomes empty, the one-tool test
+  in two ways: `source` and `profile` become optional, and `path` and `overlays`
+  are added. Task 4 updates exactly these existing tests and keeps every
+  assertion on returned JSON: the tests in `crates/ridl-mcp/src/lib.rs` that
+  build `CheckParams` or read `CheckOutput` fields in Rust (about lines 238-254,
+  285, 313, 358, including `check_output_serializes_as_a_diagnostics_array`),
+  the `check_or_panic` test helper (about line 377), the input-schema test
+  (about line 552), which then asserts that the schema has no `required` key
+  (schemars leaves it out when every field is optional) and that its properties
+  are `source`, `profile`, `path` and `overlays`, the one-tool test
   `the_server_advertises_exactly_one_tool_named_ridl_check` (deleted), and the
   tool-list assertion in `crates/ridl/tests/servers.rs` (about line 102), which
   becomes "the list contains `ridl_check`" until Task 8 pins the full list.
@@ -72,7 +76,8 @@ the spec disagree, stop and ask.
   `From<serde_json::Error>` for `ErrorData`). A wrong request is
   `Ok(tool_error.into_result())`, an MCP result with `isError:
   true`. Only a
-  compiler panic caught by `spawn_blocking` is
+  compiler panic caught by `spawn_blocking`, and an output that fails to
+  serialise (a defect, not a request error), are
   `Err(ErrorData::internal_error(..))`, as today (spec §6.2). Never return
   `Err(ErrorData)` for a wrong request: it becomes a JSON-RPC protocol error,
   which the agent does not see as a tool result.
@@ -287,7 +292,8 @@ package's `files(&db)` paths and `text(&db)`, `loaded.diagnostics` codes,
 - `single_file_mode_takes_an_overlay_for_the_entry`: a lone `x.typl` with no
   manifest above it (put the `TempDir` under the system temp directory, as the
   existing single-file tests do); overlay for it replaces its text; an overlay
-  for any other path is `OverlayOutsideWorkspace { missing_directory: false }`.
+  for any other path is
+  `OverlayOutsideWorkspace { missing_directory: false, .. }`.
 - `overlay_matches_a_file_named_by_a_relative_entry` (`#[cfg(unix)]`): build a
   relative form of the absolute temp path that always resolves from the current
   directory: one `..` for each normal component of `std::env::current_dir()`,
@@ -490,8 +496,13 @@ git commit -m "feat(ridlc): compile a workspace with overlays and expose manifes
 - One test for each other `DiffSideError` variant (a non-JSON IR file such as
   `x.ir.txtpb`, a directory that holds IR artifacts but no `.ir.json`, a
   directory whose only snapshot is in a subdirectory, a snapshot that is not
-  valid IR JSON), each asserting the variant and that `Display` equals the CLI's
-  message without its `error:` prefix.
+  valid IR JSON, and, under `#[cfg(unix)]` with permissions set to `0o000` and
+  restored before the assertion, an unreadable snapshot directory, an unreadable
+  snapshot file, and an unreadable `.ir.json` file (the `load_ir_json` read
+  error, not a parse error)), each asserting the variant and that `Display`
+  equals the CLI's message without its `error:` prefix.
+- `a_refused_overlay_on_a_source_side_is_load`: an overlay `x.toml` on a source
+  side gives `Err(DiffSideError::Load(LoadError::OverlayNotSource(_)))`.
 - `a_missing_path_is_an_error_whose_text_is_the_cli_text`: `Display` equals
   ``nope: `nope` does not exist`` when called with the relative path `nope` from
   a directory that does not contain it.
@@ -527,7 +538,8 @@ git commit -m "refactor(ridlc): move the diff side loader out of the CLI"
 - Modify: `crates/ridl-mcp/src/lib.rs` (`CheckParams`, `CheckOutput`, `check`,
   the `ridl_check` tool method, the tests module)
 - Modify: `crates/ridl-mcp/Cargo.toml` (add `ridl-ir`, `ridl-sem`, `ridl-diff`
-  as workspace dependencies; `ridl-sem` is needed for `Symbol` in Task 5)
+  and `rowan` as workspace dependencies; `ridl-sem` is needed for `Symbol` in
+  Task 5, and `rowan` for `TextRange`, which `ridl-core` does not re-export)
 
 **Interfaces:**
 
@@ -636,8 +648,9 @@ Rules:
   `output.diagnostics` contains an error (the import of `fx.a` does not
   resolve).
 - `an_overlay_error_is_reported_and_disk_is_unchanged`: overlay on `ws/b/b.ridl`
-  with `Speed` replaced by `Missing`; one error; the file on disk still contains
-  `signal speed: Speed`.
+  with the line `signal speed: Speed @10ms` changed to
+  `signal speed: Missing @10ms` (that line only); exactly one error; the file on
+  disk still contains `signal speed: Speed`.
 - `an_empty_overlay_is_checked_like_an_empty_file`: overlay `source: ""` for
   `ws/a/a.ridl`; no panic; the diagnostic codes equal those that
   `ridlc::compile_workspace` gives for a temporary copy of `ws` whose `a/a.ridl`
@@ -848,10 +861,11 @@ A primitive or inline scalar has no reference. A unit string
 (`TypeDef.backing.unit`) is not a reference for this tool.
 
 `references`: resolve the target with `find`, then collect, for each workspace
-package and each declaration and interface, the pairs whose reference equals the
-target; one `Reference` per (declaration, interaction) pair; sort by package,
-declaration, interaction. `location` is the enclosing package-level
-declaration's symbol location.
+package and each declaration, interface and service, the pairs whose reference
+equals the target; one `Reference` per (declaration, interaction) pair; sort by
+package, declaration, interaction. `location` is the enclosing package-level
+declaration's symbol location. A service has no `Symbol` (`SymbolKind` has no
+service variant), so a reference held by a service has `location: null`.
 
 `dependencies`: `depends_on` of a package is the sorted set of package prefixes
 of its references, excluding itself and `ridl.std`; `dependents` is the inverse;
@@ -871,10 +885,10 @@ package; unknown package is
   `struct Pair { x: Health  y: Health }` (check the struct field syntax used in
   `Reading`); `Health` references contain `Pair` exactly once.
 - `references_from_services`: `Status` → contains
-  `(fx.b, <the IR name of service fx.b.status>, null)`; `Speed` → contains
-  `(fx.b, <the IR name of service fx.b.diag>, readSpeed)` as well as
-  `(fx.b, Status, speed)`. Read the two service names from the fixture's IR once
-  and write them into the test as literals.
+  `(fx.b, <the IR name of service fx.b.status>, null)` with `location: null`;
+  `Speed` → contains `(fx.b, <the IR name of service fx.b.diag>, readSpeed)` as
+  well as `(fx.b, Status, speed)`. Read the two service names from the fixture's
+  IR once and write them into the test as literals.
 - `dependencies_of_the_fixture`: `fx.b.depends_on == ["fx.a"]`,
   `fx.a.dependents == ["fx.b"]`, `fx.a.sub` has both empty, no package lists
   `ridl.std`.
@@ -1008,10 +1022,17 @@ In `lib.rs` tests:
   `tools/list` returns, through `tool_router`) with `serde_json::to_value`, sort
   by name, and compare with `include_str!("../tests/tools.json")` parsed. On
   mismatch the assertion message prints the actual JSON pretty and says: "the
-  MCP tool surface is an external contract (ADR-0005 §7); if this change only
-  adds, replace tests/tools.json with the JSON above". Create `tests/tools.json`
-  from the first run's output, then read it once to confirm every tool has an
-  `outputSchema` and an input schema with the fields this plan names.
+  MCP tool surface is an external contract (ADR-0005 §7, as amended by the 1a
+  design); if this change only adds, replace tests/tools.json with the JSON
+  above". Create `tests/tools.json` from the first run's output, then read it
+  once to confirm every tool has an `outputSchema` and an input schema with the
+  fields this plan names. The pinned file holds exactly the eight tools named in
+  this task's Interfaces block; assert that list of names separately, so a
+  missing tool fails with a clear message.
+
+In `servers.rs`, replace Task 4's "contains `ridl_check`" assertion (about line
+102) with: the tool names the real binary advertises are exactly the eight
+names, sorted.
 
 In `servers.rs`, against the real `ridl mcp` binary:
 
@@ -1090,10 +1111,14 @@ git commit -m "test(ridl-mcp): pin the tool surface and compare with the CLI end
       for `ridl_references` (the declarations that use a declaration) and
       `ridl_dependencies` (each package's dependencies and dependents), and
       change "interactions with kinds" to name the IR kinds `signal`, `event`,
-      `command`, `query`, `fixed`. In `## Status`, add one paragraph: "Amended
-      2026-10-03 by the workspace-aware MCP tools design (piece 1a): the tools
-      take a workspace path with optional unsaved overlays, and
-      `ridl_references` and `ridl_dependencies` are added." Leave the status
+      `command`, `query`, `fixed`. In §7, where the ADR lists the surfaces whose
+      stability is an agent contract (the coded diagnostics, the `ridl diff`
+      categories and the IR), add a fourth: the MCP tool names and their input
+      and output schemas, which change only by addition. In `## Status`, add one
+      paragraph: "Amended 2026-10-03 by the workspace-aware MCP tools design
+      (piece 1a): the tools take a workspace path with optional unsaved
+      overlays, `ridl_references` and `ridl_dependencies` are added, and the
+      tool surface becomes a fourth contract surface in §7." Leave the status
       itself as Proposed.
 
 - [ ] **Step 6: Gates.** Run `prim fmt` on the changed Markdown and JSON, then
