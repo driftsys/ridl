@@ -26,10 +26,9 @@ diagnostics).
 [`2026-10-03-lint-foundation-design.md`](2026-10-03-lint-foundation-design.md) —
 read it before Task 1. Section numbers below (§n) refer to it.
 
-**Start point:** begin from `main` **after** branch
-`feat/1a-mcp-workspace-tools` has merged. 1a changes `crates/ridl/src/main.rs`,
-`crates/ridlc/src/lib.rs`, the `ridl-core` loader (overlays) and `ridl_check`.
-Run `./bootstrap` in the new worktree.
+**Start point:** `main` at edeec6e1, which includes 1a (#668). Line numbers in
+this plan were taken before 1a merged and may be off by up to about 200 lines;
+locate each function by name. Run `./bootstrap` in the worktree.
 
 ## Deviations from the spec
 
@@ -337,8 +336,8 @@ spec when the work lands (gardening):
   - Call it in `front_end`, with `LintScopes::default()`.
   - This must happen before `run_build_with` computes `succeeded` (673) and
     before `write_crate_files`.
-  - If 1a's `compile_workspace_with` exists, confirm it reaches `check_loaded`.
-    If it does not, call `apply_lint_levels` in it too.
+  - 1a's `compile_workspace_with` (used by MCP path mode) goes through
+    `load_and_check` and `check_loaded`, so it needs no separate call.
   - Update every `CliRun { .. }` constructor.
 
 - [ ] **Step 4: Run.** `cargo test -p ridlc --locked`. Expected: pass. If an
