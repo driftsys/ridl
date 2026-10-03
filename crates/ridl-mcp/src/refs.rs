@@ -67,6 +67,23 @@ pub fn references_of(own_package: &str, item: Item<'_>) -> Vec<(Option<String>, 
                                 walk(own, item, item["name"].as_str(), out);
                             }
                         }
+                    } else if key == "fallible" {
+                        if let Some(fallible) = value.as_object() {
+                            for key in ["ok", "err"] {
+                                if let Some(name) = fallible
+                                    .get(key)
+                                    .and_then(serde_json::Value::as_str)
+                                    .filter(|n| !n.is_empty())
+                                {
+                                    let canonical = if name.contains('.') {
+                                        name.to_string()
+                                    } else {
+                                        format!("{own}.{name}")
+                                    };
+                                    out.push((interaction.map(str::to_string), canonical));
+                                }
+                            }
+                        }
                     } else if matches!(
                         key.as_str(),
                         "named"
@@ -310,7 +327,7 @@ mod tests {
         let path = format!("{}/b/b.ridl", fixture("ws"));
         let source = std::fs::read_to_string(&path).unwrap().replace(
             "  fixed softwareVersion: Version",
-            "  query readSpeed(): Speed @[..100ms]\n  fixed softwareVersion: Version",
+            "  query readSpeed(input: Speed): Speed @[..100ms]\n  fixed softwareVersion: Version",
         );
         let snap = snapshot(&fixture("ws"), &[OverlayInput { path, source }]).unwrap();
         let out = references(&snap, &input("Speed")).unwrap();
@@ -323,6 +340,23 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn fallible_returns_report_both_named_types() {
+        let interface: ridl_ir::v2::Interface = serde_json::from_value(serde_json::json!({
+            "name": "Status",
+            "interactions": [{"name":"read", "queryDef": {"returnType":{"fallible":{"ok":"fx.a.Speed", "err":"Failure"}}}}]
+        })).unwrap();
+        let mut found = references_of("fx.b", Item::Interface(&interface));
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                (Some("read".into()), "fx.a.Speed".into()),
+                (Some("read".into()), "fx.b.Failure".into())
+            ]
+        );
+    }
+
     #[test]
     fn dependencies_of_the_fixture() {
         let out = dependencies(
