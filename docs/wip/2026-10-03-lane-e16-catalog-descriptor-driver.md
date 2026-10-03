@@ -5,7 +5,11 @@ session. This document is written for an agent with no prior context. It names
 every record it relies on and carries the facts a session would otherwise need
 from a conversation. Set the `THIS SESSION RUNS` line below before you start a
 session, and do only that stage. Where this document says "stop", stop and
-report to Sebastien. Do not guess past it.
+report to Sebastien. Do not guess past it. Since 2026-10-04 Sebastien has
+delegated the lane's open decisions: a stage takes a decision this document or
+the plan reserves for him, and records it in §5 for his review, instead of
+stopping. Irreversible actions (a tag, a publish, a secret, a push to `main`)
+still stop.
 
 Where this document and an ADR disagree, the ADR wins. This document summarizes.
 The one exception is §4, which records Sebastien's answers of 2026-10-03. Where
@@ -239,7 +243,8 @@ proto3 bound under ADR-0017 as amended today. Task 7 calls
 records give that placeholder to E16.2 (`docs/ROADMAP.md`,
 `docs/design/interaction-face.md`), but the bounds exist only after this stage,
 so amend those records to say E16.4. Done when each payload carries a size state
-for both encodings: bounded or unbounded for a payload that is one named type,
+for both encodings: bounded or unbounded for a payload that is one named type
+(on the proto3 side, only a struct or a union payload is sized, §5 D1 item 5),
 and absent for a request with more than one parameter, an inline `T | E` reply
 and a stream payload, even a stream of a named type (§4 answers 5, 6 and 10).
 
@@ -338,3 +343,91 @@ that contradicts an answer, stop and report that fact.
 
 One question stays open for the stage that needs the answer: which stage emits
 the port's catalog check, and what `new` does on a mismatch (D3).
+
+## 5. Decisions taken under delegation
+
+On 2026-10-04 Sebastien delegated the lane's open decisions to the session that
+drives it, and asked for every decision to be recorded here for his review. Each
+stage appends the decisions it takes that neither the plan nor §4 settles, in
+the follow-up pull request that moves the `THIS SESSION RUNS` line. Each entry
+gives the decision, the reason, and what it costs if it is wrong. A decision
+Sebastien overturns is struck through here, and the stage that reverses it is
+named.
+
+### D1 — the plan's "Re-baseline 2026-10" items 1 to 8, accepted
+
+1. **The hash does not cover `Package.retired`.** Reason: the hash is the
+   identity of the interfaces, their numbers and the types they reach (rsdl note
+   D-8), and the retired list is carried beside it. Retiring an interface
+   removes it from those interfaces, so the hash still changes. Cost if wrong: a
+   hash-input change in D3's decision record and its golden value.
+2. **A reduced interface takes `InterfaceShape::visibility()`.** Reason: a
+   declared interface and an inline service shape with the same content must
+   hash alike. Cost if wrong: one field of the reduced package.
+3. **A stream payload's `type_name` is the spelled `<T>`.** Reason: it names the
+   element type without a `stream` flag, which answer 10 defers to #336. Cost if
+   wrong: a string format that #336 can change with the flag.
+4. **A request with zero parameters has absent sizes.** Reason: like a request
+   with more than one, it is not one named type, and answer 6 sizes only one
+   named type. Cost if wrong: one more payload shape for a later codec story.
+5. **A proto3 size is computed only for a struct or a union payload.** A named
+   scalar, an enum or an enum-set payload has an absent proto3 state. Reason:
+   ADR-0017 decision 1 inlines a named scalar and an enum set into their field,
+   decision 2 rejects a wrapper message per named scalar, and an enum is a
+   declared `enum`, not a message, so none of the three has a proto3 root form.
+   Giving one would need an induced message, a wire shape the descriptor would
+   define, which answer 6 forbids. This narrows §3 D5's done criterion on the
+   proto3 side (amended there), and the plan's re-baseline item 5 and Task 6 no
+   longer wait for Sebastien: D5 may start Task 6. Cost if wrong: the proto3
+   column is empty for those payloads until a codec story defines their root
+   form.
+6. **The FlatBuffers cause comes from `ridl_ir::codegen::fb_unbounded`.**
+   Reason: one implementation of the cause, as with `max_size`. Cost if wrong:
+   one function made public in `ridl-ir`.
+7. **`lower` returns a `Result`, and `ridlc` reports interface number 0 as an
+   internal error with exit 2.** Reason: answer 3 and ADR-0010 decision 1. Cost
+   if wrong: an exit code.
+8. **Cargo commands for `crates/ridl` say `-p ridl-cli`.** Reason: that is the
+   package name (AGENTS.md). Cost if wrong: none; it is a fact.
+
+### D2 — PR #669 (004ca063)
+
+1. **A public `ridl_descriptor::finish` writes every descriptor buffer.** planus
+   1.3.0's `Builder::finish(_, Some(id))` writes the identifier at bytes 0..4
+   and the root offset at 4..8, the reverse of the FlatBuffers layout, and
+   planus's own reader then rejects the buffer. A test fails when a planus
+   release changes this. Cost if wrong: the helper becomes one call.
+2. **The three planus crates are pinned to `=1.3.0`.** Reason: the generated
+   accessors call `check_version_compatibility("planus-1.3.0")`, so a caret
+   range breaks the published crate for a consumer who resolves without the lock
+   file. Cost if wrong: a pin bump with each planus upgrade, which the
+   regeneration needs anyway.
+3. **`serde` is a dependency of `ridl-descriptor`.** Reason: the code planus
+   generates always derives serde. Cost if wrong: one dependency.
+4. **The generator formats with rustfmt, not prettyplease, and writes the schema
+   path relative to the repository.** Reason: `cargo fmt --check` and the drift
+   test must pass in every checkout. Cost if wrong: the drift test needs
+   rustfmt, which the pinned toolchain carries.
+5. **The ADR-0020 decision 5 amendment narrows the permission instead of
+   withdrawing it.** planus is barred from `ridl-rt` and every generated
+   package, and "must not" covers every dependency kind. Another FlatBuffers
+   runtime crate stays permitted under the `flatbuffers` feature, and nothing
+   uses it (E11.7 D-12). Reason: answer 8 names planus only. Cost if wrong: one
+   sentence of the amendment.
+6. **The generated-crate planus check runs under `just demo`, not
+   `cargo test`.** Reason: the crate must be generated first; `demo` fails
+   unless exactly one test runs and passes. Cost if wrong: a contributor who
+   runs `just test` without `just demo` does not run the check; CI runs both in
+   its `rust` job.
+7. **The planus checks resolve with every feature on.** The `ridl-rt` check and
+   the generated-crate check run `cargo metadata --all-features`, and the
+   `ridl-rt` closure takes every edge kind on its first step. Reason: a planus
+   dependency behind a feature nothing turns on, or a dev-dependency of
+   `ridl-rt`, must still fail the check. Cost if wrong: none found; optional
+   features of `ridl-loopback` are not covered (#670).
+8. **`ridl-descriptor` has no `ridl-ir`, `sha2` or `serde_json` dependency
+   yet**, although plan Task 1 lists them. Reason: nothing in D2 uses them, and
+   an unused dependency is a cost every consumer of a published crate pays.
+   `.github/workflows/crates-io-release.yml` keeps the publish position answer 9
+   sets, and its comment says the crate has no internal dependency. Cost if
+   wrong: D3 adds `ridl-ir` back and restores that comment's sentence (#670).
