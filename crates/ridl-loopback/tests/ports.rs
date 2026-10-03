@@ -166,9 +166,10 @@ const IFACE: InterfaceNo = InterfaceNo(1);
 const ORD: Ordinal = Ordinal(1);
 const OTHER: Ordinal = Ordinal(2);
 
-/// The catalog every test attaches to. The hash is all zeros, which is the
-/// placeholder the descriptor emitter writes until story E16.2
-/// (driftsys/ridl#378) computes a real one.
+/// The catalog every test attaches to. The hash is all zeros, which is
+/// enough here: the runtime carries the catalog without examining it, and no
+/// generated code compares catalogs until story E16.5 (driftsys/ridl#381)
+/// emits the constructor's check.
 fn catalog() -> CatalogRef {
     CatalogRef {
         name: "face.demo",

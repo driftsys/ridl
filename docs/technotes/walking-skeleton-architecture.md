@@ -124,6 +124,14 @@ that.
   `ridl diff` reads. `ridl_ir::zero` holds the one definition of whether the
   value 0 is legal for a type, which the Rust FlatBuffers codec and
   `ridl-diff`'s classifier both call (driftsys/ridl#598).
+  `ridl_ir::catalog_hash` computes the catalog hash: SHA-256 over the protobuf
+  binary of a reduced package that holds the interfaces, their numbers and the
+  types they reach (ADR-0014 decision 15, story E16.2). It is in this crate
+  because two artifacts carry the hash — the codegen model's `Catalog.hash`,
+  which the Rust backend writes into every generated `Interface::CATALOG`, and
+  the catalog descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`,
+  re-exports the hash as `ridl_descriptor::hash`, and copies the interface
+  numbers from the IR in `ridl_descriptor::number`.
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and

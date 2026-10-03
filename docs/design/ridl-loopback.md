@@ -665,9 +665,9 @@ types below the port, which is the layering ADR-0020 decision 6 fixes.
 
 ## What it cannot report
 
-The loopback holds no catalog descriptor. The descriptor and the real catalog
-hash arrive with story E16.2 (driftsys/ridl#378), so there is no member table,
-and therefore:
+The loopback holds no catalog descriptor. The descriptor arrives with story
+E16.5 (driftsys/ridl#381), which writes the first one, so there is no member
+table, and therefore:
 
 - **no unknown ordinal.** Nothing here can tell an ordinal that names no member
   from one that names a member with no value yet, so no port error's `Contract`
@@ -848,7 +848,7 @@ that.
   text; driftsys/ridl#544 aligned the ridl reference with the frame
   specification on both
 - Open against it: driftsys/ridl#350's `Watermark::seq` question, on which this
-  crate takes a reading; driftsys/ridl#378 (E16.2), which gives it a catalog
+  crate takes a reading; driftsys/ridl#381 (E16.5), which gives it a catalog
   descriptor and with it every report in "What it cannot report"
 - `crates/ridl-loopback/src/lib.rs`, `src/handle.rs`, `src/store.rs` — the crate
   as built; `crates/ridl-loopback/tests/conformance.rs` — the port contract

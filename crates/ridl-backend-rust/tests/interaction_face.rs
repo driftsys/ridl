@@ -56,10 +56,12 @@ use ridl_rt::sample::{Duration, Provenance};
 
 use support::doubles::{self, FailingHandler, Op, QueuedClaims, RecordingPorts};
 
-/// The catalog the fixture's package declares, with the all-zero placeholder
-/// hash the descriptor emitter writes until story E16.2 (driftsys/ridl#378)
-/// computes a real one. The generated constructor performs no catalog check
-/// (driftsys/ridl#448), and the loopback checks nothing against it either.
+/// The catalog the runtime is built with: the fixture's package name and an
+/// all-zero hash, not the computed hash the generated `CATALOG` carries
+/// (ADR-0014 decision 15). The zero hash is enough here because no generated
+/// code compares catalogs until story E16.5 (driftsys/ridl#381) emits the
+/// constructor's check (driftsys/ridl#448), and the loopback checks nothing
+/// against it either.
 const CATALOG: CatalogRef = CatalogRef {
     name: "face.demo",
     hash: CatalogHash([0u8; 32]),

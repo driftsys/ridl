@@ -469,9 +469,9 @@ places the face after E11.1 and E11.9, and this story ran before both so the
 team has a face to write against. It is in-process only, and it carries four
 explicit placeholders that later stories retire — a hand-written payload
 implementation (retired by E11.7's D-11, which moved the face onto the generated
-FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash and
-all-absent encoded sizes (E16.2), and a narrow contract-clause translator
-(E5.1). The as-built record is
+FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash
+(retired by E16.2, which computes it), all-absent encoded sizes (E16.2), and a
+narrow contract-clause translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
 trail is archived at

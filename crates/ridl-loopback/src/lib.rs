@@ -59,8 +59,8 @@
 //!
 //! # What it reports, and what it cannot
 //!
-//! The loopback holds no catalog descriptor — the descriptor and the catalog
-//! hash arrive with story E16.2 (driftsys/ridl#378) — so it has no member
+//! The loopback holds no catalog descriptor — the descriptor arrives with story
+//! E16.5 (driftsys/ridl#381), which writes the first one — so it has no member
 //! table, and there is no ordinal it can call unknown, no member it can call
 //! unowned, and no timing annotation it can measure a value's freshness or a
 //! call's remaining time against. What it therefore never returns:

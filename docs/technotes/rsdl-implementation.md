@@ -155,12 +155,14 @@ there is no runtime, and every fact it states about the lowered system and about
 
 - **The catalog hash per region** (story E6.17). rsdl §13 lists the catalog
   hashes of every catalog in the region map, as received. The function that
-  computes one, `ridl_descriptor::hash::catalog_hash` (driftsys/ridl#324), does
-  not exist, so `Region` has no hash field and the lowered system carries no
-  hash. The archived plan's Part B4 Task 9 describes the work that fills it, and
-  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7 records
-  the constraint it must satisfy: the driver embeds the hash, the rsdl lowering
-  never computes it.
+  computes one exists since story E16.2 (driftsys/ridl#378):
+  `ridl_ir::catalog_hash::catalog_hash`, re-exported as
+  `ridl_descriptor::hash::catalog_hash` (ADR-0014 decision 15). Nothing calls it
+  for a region yet, so `Region` has no hash field and the lowered system carries
+  no hash. The archived plan's Part B4 Task 9 describes the work that fills it,
+  and [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7
+  records the constraint it must satisfy: the driver embeds the hash, the rsdl
+  lowering never computes it.
 - **A runtime's system descriptor.** rsdl §13 says a runtime's descriptor is an
   emitter over these facts, specified with the runtime. The runtime descriptors
   design defines two artifacts and the roadmap plans only the catalog half (Epic
