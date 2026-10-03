@@ -495,3 +495,48 @@ fn version_flag_and_short_form_both_exit_zero() {
         );
     }
 }
+
+const CATALOG_SOURCE: &str = "package veh.cabin\n\
+type Level: integer [0..100]\n\
+struct Warning {\n  code: Level\n}\n\
+interface Cabin {\n  signal level: Level @10ms\n  event warning: Warning @[100ms..1s]\n}\n";
+
+/// Builds `CATALOG_SOURCE` with `--emit <emit>` and returns the
+/// `Catalog.hash` of the codegen model it writes, as the canonical JSON
+/// spells it (base64).
+fn built_catalog_hash(emit: &str) -> String {
+    let dir = TempDir::new("catalog-hash");
+    let file = dir.write("cabin.ridl", CATALOG_SOURCE);
+    let out = TempDir::new("catalog-hash-out");
+    let (code, stderr) = ridl(&[
+        "build".as_ref(),
+        file.as_os_str(),
+        "--emit".as_ref(),
+        emit.as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+    ]);
+    assert_eq!(code, 0, "`--emit {emit}` must build, stderr:\n{stderr}");
+    let json = std::fs::read_to_string(out.path().join("cabin.codegen.json"))
+        .expect("`--emit codegen-model` writes <input-stem>.codegen.json");
+    let model: serde_json::Value = serde_json::from_str(&json).expect("the model is JSON");
+    model["catalog"]["hash"]
+        .as_str()
+        .expect("the model carries `catalog.hash`")
+        .to_owned()
+}
+
+/// driftsys/ridl#275's criterion: the catalog hash is the same whether a
+/// build emits proto3, FlatBuffers or both, and it is not the all-zero
+/// placeholder.
+#[test]
+fn catalog_hash_is_the_same_whether_a_build_emits_proto_flatbuffers_or_both() {
+    let proto = built_catalog_hash("codegen-model,proto");
+    let flatbuffers = built_catalog_hash("codegen-model,flatbuffers");
+    let both = built_catalog_hash("codegen-model,proto,flatbuffers");
+    assert_eq!(proto, flatbuffers);
+    assert_eq!(proto, both);
+    // 32 zero bytes in base64.
+    assert_ne!(proto, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+    assert_eq!(proto.len(), 44, "32 bytes are 44 base64 characters");
+}
