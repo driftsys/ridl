@@ -4,6 +4,11 @@
 
 Proposed.
 
+Amended 2026-10-03 by the workspace-aware MCP tools design (piece 1a): the tools
+take a workspace path with optional unsaved overlays, `ridl_references` and
+`ridl_dependencies` are added, and the tool surface becomes a fourth contract
+surface in §7.
+
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept
 note's §8–§9 conclusions (compiler-as-library, stable IR, coded diagnostics, the
@@ -118,14 +123,16 @@ _for this platform specifically_: the hard parts (structured diagnostics, the
 stable IR, `ridl-diff`) are already built for other reasons. Minimum viable tool
 set:
 
-| Tool                            | Returns                                                      | Backs the loop phase |
-| ------------------------------- | ------------------------------------------------------------ | -------------------- |
-| `ridl_check(source)`            | structured diagnostics — coded, spans, **fix-its verbatim**  | verify               |
-| `ridl_explain(code)`            | the rustc-`--explain`-style entry (ADR-0004 §10 error index) | verify / learn       |
-| `ridl_diff(a, b)`               | exit class 0/1/2 + the breaking-change list                  | evolve               |
-| `ridl_describe_type(name)`      | range, unit, step, init, resolved wire width                 | ground               |
-| `ridl_list_interactions(iface)` | interactions with kinds, ordinals, timing                    | ground               |
-| `ridl_resolve(symbol)`          | package, kind, definition location                           | ground               |
+| Tool                                 | Returns                                                                                     | Backs the loop phase |
+| ------------------------------------ | ------------------------------------------------------------------------------------------- | -------------------- |
+| `ridl_check(path \| source)`         | structured diagnostics — coded, spans, **fix-its verbatim**                                 | verify               |
+| `ridl_explain(code)`                 | the rustc-`--explain`-style entry (ADR-0004 §10 error index)                                | verify / learn       |
+| `ridl_diff(a, b)`                    | exit class 0/1/2 + the breaking-change list                                                 | evolve               |
+| `ridl_describe_type(path, name)`     | range, unit, step, init, resolved wire width                                                | ground               |
+| `ridl_list_interactions(path, name)` | interactions with kinds `signal`, `event`, `command`, `query`, `fixed`, ordinals and timing | ground               |
+| `ridl_resolve(path, name)`           | package, kind, definition location                                                          | ground               |
+| `ridl_references(path, name)`        | declarations that use a declaration                                                         | ground               |
+| `ridl_dependencies(path, package)`   | each package's dependencies and dependents                                                  | ground               |
 
 Two rules make this effective. **Return the coded diagnostics with their
 fix-its, unaltered** — agents are exceptional at consuming `TYPL-405`-style
@@ -183,9 +190,10 @@ for agents; this ADR records them as constraints to _preserve_, not new work:
   examples, and round-trip evals (concept note §4).
 - **Sigil poverty / words-over-symbols** happens to maximize semantic signal per
   token for an LLM — keep it.
-- **Coded diagnostics, `ridl-diff` categories, and the IR** are the three things
-  the MCP surfaces; their stability policy (ADR-0004 open questions) is
-  therefore also an _agent-contract_ stability policy.
+- **Coded diagnostics, `ridl-diff` categories, and the IR** have stability
+  policies (ADR-0004 open questions) that are also agent-contract stability
+  policies. A fourth contract surface is the **MCP tool names and their input
+  and output schemas**, which change only by addition.
 
 ### 8. Sequencing, mapped onto ADR-0004 phases
 
@@ -253,11 +261,12 @@ Agent enablement is not a separate program; it rides the existing phases:
 
   The fallback for a host without MCP is the command `ridl check --format json`.
   It serialises through the same `ridl_core::diag::to_json` as the MCP tool, so
-  each diagnostic object has the same shape. The two faces run different front
-  ends, though: the CLI resolves the workspace a file belongs to, and the tool
-  checks one standalone source against `ridl.std`. Their diagnostic lists agree
-  only for a standalone file with no manifest and no imports; for a workspace
-  member they can differ.
+  each diagnostic object has the same shape. In source mode the tool checks a
+  standalone source against `ridl.std`, so the lists agree only for a standalone
+  file without a manifest or imports, apart from synthetic paths. In path mode
+  the tool loads the workspace with optional overlays. It omits the CLI's fetch,
+  lockfile and baseline operations; the workspace-tools design §7.1 and the
+  crate README record these omissions.
 
   Cursor and Cowork are not first-class in this pass, and for Cursor the reason
   is a cost this decision accepts. `registerMcpServerDefinitionProvider`

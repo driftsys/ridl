@@ -1,7 +1,7 @@
 # ridl-mcp
 
 The RIDL MCP server (ADR-0005 Layer B): `ridl mcp` serves the Model Context
-Protocol over stdio with one tool, `ridl_check`. It is a thin consumer of the
+Protocol over stdio with eight read-only tools. It is a thin consumer of the
 shared compiler crates — the same parser, resolver, and checker `ridl check` and
 `ridl lsp` use.
 
@@ -18,52 +18,136 @@ and download the binary from the newest `editor-v*` GitHub Release.
 
 ## Tools
 
+Every tool returns structured content with an output schema, plus the same JSON
+in a text content block. Wrong requests return `isError: true` with an
+actionable message. A compiler panic returns an MCP internal error.
+
+Pass the workspace root (the directory that holds its `ridl.toml`) as `path`. A
+package directory or source file is also accepted. Relative paths resolve
+against the server's working directory. With a package manifest beneath a
+workspace manifest, the member is loaded alone: sibling imports do not resolve
+(driftsys/ridl#529). `workspace.notes` names the workspace root to pass instead.
+
+Optional `overlays: [{path, source}]` replace unsaved text inside the loader.
+Paths match by canonical parent plus file name. Only `.typl`, `.ridl` and
+`.rsdl` files are accepted. A new file is accepted in an existing loaded package
+directory; create its directory first. Empty text is valid. An overlay outside
+the loaded workspace, in a hidden directory or separate package root, or for
+another file in single-file mode is a tool error. Tools never write files or
+fetch remote imports.
+
+Workspace results carry `workspace: {root, errors, warnings, notes}`. Locations
+are `{path, start, end}` with 1-based `{line, column}` and an exclusive end. The
+range is the declared name. Fields and interactions use their enclosing
+declaration's location; services and standard declarations have null locations.
+
 ### `ridl_check`
 
-| Parameter | Type                           | Meaning                              |
-| --------- | ------------------------------ | ------------------------------------ |
-| `source`  | string                         | the full text of one file            |
-| `profile` | `"typl"`, `"ridl"` or `"rsdl"` | which language `source` is parsed as |
+Input: either `path` and optional `overlays`, or `source` with `profile`
+(`typl`, `ridl`, `rsdl`). Both or neither mode, a missing source profile, or a
+profile with a path is a tool error.
 
-Returns `{ "diagnostics": [ … ] }`, where each element is:
-
-| Field      | Content                                                                        |
-| ---------- | ------------------------------------------------------------------------------ |
-| `code`     | the catalogue code, for example `RIDL-107`                                     |
-| `severity` | `error`, `warning`, or `info`                                                  |
-| `message`  | the primary message, verbatim                                                  |
-| `span`     | `path`, and 1-based `start`/`end` (`end` exclusive) with `line` and `column`   |
-| `labels`   | secondary annotations, verbatim: `message`, `span` — empty when there are none |
-| `fixes`    | fix-its, verbatim: `label`, `replacement`, `span`                              |
+Result: `{diagnostics, workspace}` in path mode, `{diagnostics}` in source mode.
+Diagnostics use `ridl_core::diag::to_json` verbatim: `code`, `severity`,
+`message`, `span`, `labels` and `fixes`. A span carries `path`, `start` and
+`end`; labels carry `message` and `span`; fixes carry `label`, `replacement` and
+`span`. A workspace with diagnostics is a successful tool result.
 
 **What this tool shares with `ridl check --format json <file>`, and where it
-differs.** Both call the same `ridl_core::diag::to_json`, so each diagnostic
-object has the shape listed above in both faces. For a standalone file with no
-manifest and no imports, the two lists agree except for the two points below.
-For a workspace member they can differ further, because the CLI resolves the
-workspace and this tool does not. The two points:
+differs.** The CLI prints a bare diagnostic array; the tool wraps that array.
+Source mode checks one standalone file against embedded `ridl.std`, including
+the service catalogue and rsdl system checks. Its spans use `input.typl`,
+`input.ridl` or `input.rsdl`. For a standalone file without a manifest or
+imports, source mode agrees with the CLI except for those paths and the wrapper.
+Path mode reports the same diagnostic objects as the CLI for the overlaid tree,
+except for CLI operations that need the network, lockfile round trip or
+baseline:
 
-- **The top level.** This tool returns the object `{"diagnostics": [ … ]}`.
-  `ridl check --format json` prints the bare array instead, with no
-  `diagnostics` key. The wrapper is not incidental: MCP's structured tool output
-  (`CallToolResult.structuredContent`) must be a JSON object validated against
-  an `outputSchema`, so an object envelope can later become structured content
-  and can gain sibling fields without breaking a reader, and a bare array can do
-  neither. The CLI has no such constraint, and a bare array is what a `jq`
-  pipeline expects.
-- **`span.path`.** This tool's input is a source string with no file, so every
-  span reports the fixed synthetic path `input.typl`, `input.ridl` or
-  `input.rsdl`. `ridl check --format json <file>` reports the real path it read.
+- MANI-101 to MANI-104 fetch and lock failures, and lockfile read and write
+  diagnostics from `materialize_and_lock`;
+- the check against `.ridl/baseline`: RIDL-407 and the rename hint on RIDL-409.
+  Use `ridl_diff` with `old: "<root>/.ridl/baseline"` and `new: "<root>"` to
+  compare the baseline explicitly.
 
-This is the first agent-facing diagnostic contract; a change to its shape is a
-change to an external contract (ADR-0005 §7).
+Remote imports produce the same Info diagnostic in both faces: the import is not
+yet available. Path loading and overlay failures are tool errors.
 
-The source is checked as a standalone file against the embedded `ridl.std` only:
-no workspace, no other imports. The tool treats the source as a workspace of one
-file, so it runs the workspace-wide passes as well: the service catalog
-(RIDL-140) and, for an rsdl source, the rsdl system checks (the closure,
-resolution, placement, distributions and attribute keys). The `.rxdl` form is
-not a profile yet (epic E3.5).
+### `ridl_explain`
+
+Input: `code`, an exact case-sensitive diagnostic code such as `TYPL-002` or
+diff category word such as `payload_changed`. No workspace path is needed.
+
+Result: `{kind: "diagnostic", code, severity, summary}` from the binary's
+catalogue, or `{kind: "diff_category", category, text}` from
+`ridl_diff::explain`. Unknown inputs are tool errors listing FORM-, TYPL-,
+RIDL-, RSDL-, MANI- and accepted diff category words.
+
+### `ridl_resolve`
+
+Input: `path`, optional `overlays`, `name` and optional `from` package. A
+canonical `pkg.Name` selects directly. A bare name searches workspace packages
+and `ridl.std`; with `from` it resolves through that package's symbols,
+including import aliases.
+
+Result: `{name, package, kind, visibility, location, workspace}`, plus `alias`
+when an import alias was used. Kinds are `type`, `const`, `struct`, `enum`,
+`enumset`, `union`, `interface`; visibility is `public` or `internal`.
+
+No match is a tool error with up to ten sorted canonical suggestions containing
+the input, ignoring case. Ambiguity lists every match and directs the caller to
+`pkg.Name` or `from`. An unknown package or unavailable checked IR is a tool
+error; the latter directs the caller to `ridl_check` on the same path.
+
+### `ridl_describe_type`
+
+Input: `path`, optional `overlays`, `name`, optional `from`, resolved as above.
+Result: `{declaration, package, location, workspace}`. `declaration` is a
+complete non-interface IR `Decl` in canonical protobuf JSON, as in `.ir.json`
+snapshots. Lookup errors are the same as `ridl_resolve`; an interface is a tool
+error naming `ridl_list_interactions`.
+
+### `ridl_list_interactions`
+
+Input: `path`, optional `overlays`, `interface`, optional `from`. Result:
+`{interface, interactions, location, workspace}`. The interface header carries
+`name`, `package`, `doc`, `labels`, `deprecated`, `number`, `provisional`.
+Interactions are canonical IR declarations in source order: `signal`, `event`,
+`command`, `query`, `fixed`, or a `reserved` tombstone. Payloads, returns,
+parameters, timing, ordinals and contracts retain the IR's fields. Lookup errors
+are the same as `ridl_resolve`; a non-interface is a tool error.
+
+### `ridl_references`
+
+Input: `path`, optional `overlays`, `name`, optional `from`. Result:
+`{target, references, workspace}` with canonical `target` and each reference
+`{package, declaration, interaction, location}`. The walk includes nested type
+references, pattern constants, enumset backing enums, interface references and
+inline service interactions. Standard declarations are not walked. References
+are reported once per `(declaration, interaction)` pair. Repeated fields without
+an interaction yield one result; two interactions using the same target yield
+two results. Service references use the service name and a null location. Lookup
+errors are the same as `ridl_resolve`.
+
+### `ridl_dependencies`
+
+Input: `path`, optional `overlays`, optional `package`. Result:
+`{packages, workspace}`. Each package carries `name`, `imports` (manifest import
+names), sorted `depends_on` (other IR-referenced packages, excluding `ridl.std`)
+and sorted `dependents` (workspace packages referencing it). A `package` filter
+returns one package. An unknown package is a tool error listing the available
+packages. This tool reports the graph; it does not lint cycles or unused
+imports.
+
+### `ridl_diff`
+
+Input: `old`, `new`, optional `overlays`. Each side accepts source paths,
+`.ir.json` files or snapshot directories, using the CLI's loader. Overlays apply
+to the new source side only and are refused for snapshots. Result: the object
+`ridl diff --format json` prints, including `verdict` and `changes`, with the
+standard IR supplied as context. Load failures are tool errors with the CLI's
+message. A source side that does not compile returns `isError: true` with
+structured `message` and `diagnostics`; the message identifies the old or new
+side. The diagnostics retain their full JSON shape.
 
 ## Host configuration
 

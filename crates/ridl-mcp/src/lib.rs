@@ -1,10 +1,8 @@
 //! The RIDL MCP server (ADR-0005 Layer B; docs/ROADMAP.md epic E8.6).
 //!
-//! One tool, `ridl_check`: the compiler's single-file check
-//! (`ridlc::check_source`) over a source string an agent supplies, returned
-//! as the JSON diagnostic contract (`ridl_core::diag::JsonDiagnostic`). The
-//! server is a thin consumer of the shared compiler crates — no parser, no
-//! checker of its own — and runs over stdio behind `ridl mcp`.
+//! Eight read-only workspace tools expose checks, declarations, references,
+//! dependencies and compatibility comparisons over stdio behind `ridl mcp`.
+//! The server consumes the shared compiler crates and their canonical IR JSON.
 
 pub mod diff;
 pub mod explain;
@@ -354,8 +352,15 @@ impl ServerHandler for RidlMcp {
             // (through `with_version`) the `ridl` binary's build version.
             .with_server_info(Implementation::new("ridl-mcp", self.version.clone()))
             .with_instructions(
-                "RIDL compiler tools. Call ridl_check with a source text and a profile \
-                 (typl, ridl or rsdl) to get coded diagnostics with fix-its.",
+                "ridl_check: check workspace files or one source text.\n\
+                 ridl_explain: explain a diagnostic code or diff category.\n\
+                 ridl_resolve: resolve a declaration and its location.\n\
+                 ridl_describe_type: describe a non-interface declaration.\n\
+                 ridl_list_interactions: list an interface's interactions.\n\
+                 ridl_references: list declarations and interactions using a declaration.\n\
+                 ridl_dependencies: list package dependencies and dependents.\n\
+                 ridl_diff: compare source workspaces or IR snapshots.\n\
+                 Pass the workspace root (the directory that holds its ridl.toml) as `path`. Tools are read-only: they never write files and never fetch remote imports. Use `overlays` to check unsaved text.",
             )
     }
 }
@@ -411,6 +416,22 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, ReadHalf, WriteHalf};
 
     use super::*;
+
+    #[test]
+    fn instructions_name_every_tool_and_the_read_only_workspace_contract() {
+        let server = RidlMcp::new();
+        let instructions = server.get_info().instructions.unwrap();
+        for tool in server.tool_router.list_all() {
+            assert!(
+                instructions
+                    .lines()
+                    .any(|line| line.starts_with(tool.name.as_ref())),
+                "{} is absent from instructions",
+                tool.name
+            );
+        }
+        assert!(instructions.contains("Pass the workspace root (the directory that holds its ridl.toml) as `path`. Tools are read-only: they never write files and never fetch remote imports. Use `overlays` to check unsaved text."));
+    }
 
     #[test]
     fn the_tool_list_is_pinned() {

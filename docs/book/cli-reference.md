@@ -1516,12 +1516,22 @@ Options:
   -h, --help  Print help
 ```
 
-`ridl mcp` serves the Model Context Protocol over stdio with one tool,
-`ridl_check`: behavior lives in `crates/ridl-mcp`, and this subcommand only
-builds the Tokio runtime the server needs — the only asynchronous code in this
-workspace — and wires the stdio transport. An agent host spawns it and speaks
-MCP over its stdin and stdout. The tool's input and output are documented in
-`crates/ridl-mcp/README.md`.
+`ridl mcp` serves the Model Context Protocol over stdio with eight tools:
+
+- `ridl_check` checks workspace files or a source text.
+- `ridl_explain` explains a diagnostic code or diff category.
+- `ridl_resolve` resolves a declaration and its location.
+- `ridl_describe_type` describes a non-interface declaration.
+- `ridl_list_interactions` lists an interface's interactions.
+- `ridl_references` lists declarations and interactions using a declaration.
+- `ridl_dependencies` lists package dependencies and dependents.
+- `ridl_diff` compares source workspaces or IR snapshots.
+
+Behavior lives in `crates/ridl-mcp`; this subcommand builds the Tokio runtime
+and wires the stdio transport. An agent host spawns it and speaks MCP over stdin
+and stdout. The [crate README](../../crates/ridl-mcp/README.md) documents input
+and output schemas, tool errors and the read-only workspace contract. The command
+takes no flag of its own.
 
 **Exit codes.** 0 on a clean shutdown: the host closes the server's stdin,
 which is how a stdio host ends an MCP session. 2 when the Tokio runtime fails
