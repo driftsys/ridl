@@ -60,8 +60,9 @@ In scope:
 - eight tools: `ridl_check` (extended), `ridl_explain`, `ridl_resolve`,
   `ridl_describe_type`, `ridl_list_interactions`, `ridl_references`,
   `ridl_dependencies`, `ridl_diff`;
-- two public functions in `ridlc`: compiling a workspace with overlays, and
-  loading one side of a diff (§5.1, §5.2);
+- an overlay-aware loader in `ridl-core` and two public functions in `ridlc`:
+  compiling a workspace with overlays, and loading one side of a diff (§5.1,
+  §5.2);
 - a `.mcp.json` at the repository root;
 - the documentation listed in §9.
 
@@ -197,10 +198,16 @@ error whose structured content carries the diagnostics (§6.2).
 
 ## 5. Where the code lives
 
-### 5.1 `ridlc`: compiling with overlays
+### 5.1 `ridl-core` and `ridlc`: compiling with overlays
 
-`ridlc::compile_workspace(db, entry)` keeps its signature and becomes a call to
-a new public function:
+Overlays are applied **inside the loader**, not after it. The loader enforces
+the package-and-directory law (TYPL-001, TYPL-002, TYPL-010) and interns each
+file's text for diagnostic spans while it reads the file, and it makes every
+subdirectory its own package. An overlay applied after the load would skip those
+checks and leave spans pointing at the text on disk.
+
+`ridl-core` gains an overlay-aware entry point; `load_workspace` keeps its
+signature and calls it with no overlays:
 
 ```rust
 pub struct Overlay {
@@ -208,38 +215,54 @@ pub struct Overlay {
     pub text: String,
 }
 
-pub fn compile_workspace_with(
+pub fn load_workspace_with(
     db: &mut RidlDatabase,
     entry: &Path,
     overlays: &[Overlay],
-) -> Result<WorkspaceOutput, CompileError>;
+) -> Result<LoadedWorkspace, LoadError>;
 
-pub enum CompileError {
+pub enum LoadError {
     Io(io::Error),
-    OverlayOutsideWorkspace(PathBuf),
     OverlayNotSource(PathBuf),
+    OverlayOutsideWorkspace(PathBuf),
 }
 ```
 
-It loads the workspace with `ridl_core::load_workspace`, applies the overlays to
-the salsa inputs, then runs the same checking path `compile_workspace` runs
-today (`check_loaded`, the std check, `lower_system`). It adds no checking
-logic. The overlay rules:
+`ridlc` gains the matching compile entry point; `compile_workspace` keeps its
+signature and calls it with no overlays. It runs the same passes as today
+(`check_loaded`, the `ridl.std` check, `lower_system`) and adds no checking
+logic:
 
-1. An overlay path is made absolute against the working directory and compared
-   with the loaded files' paths after the same normalisation the loader applies.
-2. A path equal to a loaded file replaces that file's text
-   (`InputFile::set_text`).
-3. Any other path must end in `.typl`, `.ridl` or `.rsdl` (`OverlayNotSource`
-   otherwise). It is added to the loaded package whose manifest is the nearest
-   `ridl.toml` above it, through `Package::set_files`, keeping the files sorted
-   by path as the loader sorts them.
-4. A new path that no loaded package's directory contains is
-   `OverlayOutsideWorkspace`. In single-file mode the only accepted overlay path
-   is the loaded file.
+```rust
+pub fn compile_workspace_with(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[ridl_core::Overlay],
+) -> Result<WorkspaceOutput, ridl_core::LoadError>;
+```
 
-The new file then goes through every check a file on disk goes through,
-including the package-name check against its directory (TYPL-002).
+The overlay rules:
+
+1. Paths are compared by their **key**: the canonicalised parent directory
+   joined with the file name. The parent must exist; the file need not. An
+   overlay whose parent directory does not exist is `OverlayOutsideWorkspace`,
+   and its message says to create the directory first.
+2. An overlay path must end in `.typl`, `.ridl` or `.rsdl`; otherwise
+   `OverlayNotSource`.
+3. When the loader reads a source file whose key matches an overlay, it uses the
+   overlay text instead of the disk text. The overlay text is what is parsed,
+   checked and interned for spans.
+4. When the loader lists a package directory, it adds every overlay whose parent
+   key is that directory and whose file is not on disk. The added paths are
+   sorted together with the files on disk, as the loader sorts them, so a new
+   file joins the package of its directory exactly as the same file saved to
+   disk would.
+5. In single-file mode the entry file is the only file read; an overlay for it
+   replaces its text.
+6. Every overlay the loader did not consume in rules 3 to 5 is
+   `OverlayOutsideWorkspace`: its directory is not a package directory of the
+   loaded workspace (outside the root, hidden, a separate package root with its
+   own `ridl.toml`, or not loaded in single-file mode).
 
 ### 5.2 `ridlc`: loading a diff side
 
@@ -356,13 +379,18 @@ today's input and output exactly.
 
 ## 8. Testing
 
-All tests are Rust tests, so `just test` runs them.
+All test- **`ridl-core` unit tests** for `load_workspace_with`: replace a file's
+text, and the diagnostic spans point into the overlay text; add a new file in a
+package; add a new file in an existing subdirectory, which joins that
+subdirectory's package; an added file whose package name does not match its
+directory draws TYPL-002; refuse a path outside the workspace; refuse a path in
+a directory that does not exist; refuse a non-source extension; single-file
+mode.
 
-- **`ridlc` unit tests** for `compile_workspace_with`: replace a file's text;
-  add a new file in a package; add a new file in a subdirectory of a package;
-  refuse a path outside the workspace; refuse a non-source extension;
-  single-file mode. And for `load_diff_side`: each `DiffSideError` variant, and
-  overlays refused on a snapshot side.
+- **`ridlc` unit tests** for `compile_workspace_with` (an overlay reaches the
+  checked IR) and for `load_diff_side`: each `DiffSideError` variant, and
+  overlays refused on a snapshot side. , and overlays refused on a snapshot
+  side.
 - **`ridl-mcp` unit tests** for each `query` function, over a fixture workspace
   under `crates/ridl-mcp/tests/fixtures/` that has two member packages, one
   cross-package reference, one import alias, one interface with at least one
