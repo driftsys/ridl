@@ -89,16 +89,17 @@ coordinate it with #378. See §4.
 
 ## 2. Why the plan must be re-baselined first
 
-The plan was written on 2026-09-13. Two later pull requests amended it in place
-(#473 and #474), and other work has landed around it. Each item below can make a
-task's code or a disposition wrong.
+The plan was written on 2026-09-13. Three later pull requests edited it in place
+(#355, #473 and #474), and other work has landed around it. Each item below can
+make a task's code or a disposition wrong.
 
 - **Task 7 is already replaced.** The plan's Task 7 now opens with "Amended
   2026-09-21, E11.7 stage K8. Do not implement the bound this task describes."
   The FlatBuffers bound has one implementation,
   `ridl_ir::projection::flatbuffers::max_size`
   (`crates/ridl-ir/src/projection/flatbuffers.rs`), and the descriptor must call
-  it. A second implementation would be a defect (E11.7 design D-6,
+  it. A second implementation would be a defect (E11.7 design D-6, in
+  `docs/archive/2026-09-20-flatbuffers-codec-design.md`; see also
   `docs/design/flatbuffers-codec.md`). That bound charges four bytes per
   declared character of a string, so the `match` narrowing of Task 5 can only
   change the proto3 column. No proto3 bound exists yet.
@@ -109,9 +110,9 @@ task's code or a disposition wrong.
   `number_interfaces` in Task 3, were written for a time with no lock.
 - **ADR-0014 decision 9 was amended on 2026-09-22.** The canonical encoding of
   the IR is now canonical protobuf JSON, and the binary encoding is derived. The
-  design, the plan (Task 4 hashes `ridl_ir::v2::to_binary`) and #378 all say the
-  hash is taken over "the canonical protobuf binary". #275 also depends on the
-  canonical JSON form. The hash input has to be decided again (§4).
+  plan (Task 4 hashes `ridl_ir::v2::to_binary`) and #378 say the hash is taken
+  over "the canonical protobuf binary". #275 also depends on the canonical JSON
+  form. The hash input has to be decided again (§4).
 - **Code already waits for E16.2's hash and sizes.**
   - The codegen model, `ridl.codegen.v1`
     (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`), has a `Catalog`
@@ -124,18 +125,20 @@ task's code or a disposition wrong.
     E11.13 placeholders that E16.2 retires.
   - ADR-0021 decision 3 and ADR-0023 (amendments of 2026-09-21) say the port's
     catalog check lands with E16.2 or after it, and that the story that emits
-    the hash decides what `new` does on a mismatch. The frame specification says
-    the attach check and `ridl-loopback`'s `UnknownInteraction` wait on E16.2 as
-    well.
+    the check decides what `new` does on a mismatch, as an amendment to
+    ADR-0023. The frame specification says the attach check and
+    `ridl-loopback`'s `UnknownInteraction` wait on E16.2 as well.
   - The size types differ: `ridl_rt::contract::EncodedSizes` holds
     `Option<u32>`, the codegen model holds `uint32`, and the plan's
     `catalog.fbs` holds `uint64`. D1 picks one and says why.
 - **Shipped code must not depend on planus.** The root `Cargo.toml` says planus
   and planus-codegen are dev-dependencies of `ridl-backend-rust` only, and that
   nothing the workspace ships depends on either (E11.7 design D-12).
-  `xtask/tests/oracle_boundary.rs` guards that boundary. Plan Task 1 makes
-  `planus` a normal dependency of `ridl-descriptor`, which `ridlc` and `ridl`
-  then depend on. This needs a decision (§4).
+  `xtask/tests/oracle_boundary.rs` checks only three backend crates
+  (`ridl-backend-flatbuffers`, `ridl-backend-proto`, `ridl-backend-rust`), so no
+  test would catch a new crate that breaks the rule. Plan Task 1 makes `planus`
+  a normal dependency of `ridl-descriptor`, which `ridlc` and `ridl` then depend
+  on. This needs a decision (§4).
 - **Every crate is now published unless it opts out.** ADR-0007 decision 14
   (amended 2026-09-21): a `v<version>` tag publishes every crate without
   `publish = false`, so an internal dependency must be a workspace entry with a
@@ -150,9 +153,11 @@ task's code or a disposition wrong.
   TYPL-220 compile check. The portable-patterns design
   (`docs/wip/2026-10-01-portable-match-patterns-design.md`, #597) is not
   implemented, but if it lands it can change the premise.
-- **The CLI grew.** `ridl lock` is the ninth subcommand, so `describe` is the
-  tenth. `codegen-model` (lane P) is the eighth emit value, so `catalog` is the
-  ninth. #326's title and body count both one too low.
+- **The CLI grew.** `ridl` gained `lock`, `lsp` and `mcp` after the plan was
+  written, so every subcommand count in the plan's Task 11 census is stale;
+  recount each against `docs/book/cli-reference.md`. `codegen-model` (lane P) is
+  the eighth emit value, so `catalog` is the ninth. #326's title and body count
+  both one too low.
 
 ## 3. Stages
 
@@ -184,20 +189,22 @@ Model: `fable` for the audit. Docs only. No code.
 
 Plan Tasks 1 and 2. A new crate `crates/ridl-descriptor/` and its
 `.git-std.toml` scope. `cargo xtask descriptor-codegen` generates the accessors,
-which are committed with a drift test. Nothing may depend on `flatc`.
-`xtask/tests/oracle_boundary.rs` keeps schema compilers out of normal
-dependencies. Done when a catalog round-trips through the builder and the
-reader, and a buffer with a wrong identifier or version is rejected as a whole.
+which are committed with a drift test. Nothing may depend on `flatc`. Planus
+must stay out of shipped crates' normal dependencies unless §4 item 8 decides
+otherwise. Done when a catalog round-trips through the builder and the reader,
+and a buffer with a wrong identifier or version is rejected as a whole.
 
 ### D3 — E16.2 (#378): numbering and the catalog hash
 
 Plan Tasks 3 and 4. Every walk over a package's interfaces goes through
 `Package::shapes()`, so inline service shapes are included. Settle the #275
 question and the hash input (§4) before you write the hash. Fill the codegen
-model's `Catalog.hash`, and retire the Rust backend's zero `CatalogHash`. Take
-the decision ADR-0021 decision 3 leaves to this story: what `new` does on a
-catalog mismatch. Done when two packages with the same declarations and
-numbering hash alike, and changing one number changes the hash.
+model's `Catalog.hash`, and retire the Rust backend's zero `CatalogHash`.
+Decide, and report in D1, which stage emits the port's catalog check. That stage
+also takes the decision ADR-0021 decision 3 and ADR-0023 leave open (what `new`
+does on a mismatch), as an ADR-0023 amendment. Done when two packages with the
+same declarations and numbering hash alike, and changing one number changes the
+hash.
 
 ### D4 — E16.3 (#379): the size context
 
@@ -210,8 +217,11 @@ two touch disjoint files. Otherwise it runs after D3.
 Plan Tasks 6 (proto3) and 7 (FlatBuffers). Model `fable`. Task 6 derives the
 proto3 bound under ADR-0017 as amended today. Task 7 calls
 `ridl_ir::projection::flatbuffers::max_size` and computes nothing of its own
-(§2). Fill the Rust backend's `EncodedSizes`, which are all `None` today. Done
-when each payload carries a maximum encoded size for both encodings.
+(§2). Fill the Rust backend's `EncodedSizes`, which are all `None` today. The
+records give that placeholder to E16.2 (`docs/ROADMAP.md`,
+`docs/design/interaction-face.md`), but the bounds exist only after this stage,
+so amend those records to say E16.4. Done when each payload carries a maximum
+encoded size for both encodings.
 
 ### D6 — E16.5 (#381): the lowering and the emit
 
@@ -240,9 +250,9 @@ a wip file, read `docs/wip/README.md` and grep for citations of it by name in
 
 ## 4. Decisions for Sebastien (D1 reports them)
 
-The plan takes these dispositions, and Sebastien has not confirmed them. Only
-items 1 and 2 answer open items in the design's §7. Items 6 and 7 are new design
-that the plan took. Say so when you report them.
+The plan takes items 1 to 7, and this driver raises items 8 and 9. Sebastien has
+confirmed none of them. Only items 1 and 2 answer open items in the design's §7.
+Items 6 and 7 are new design that the plan took. Say so when you report them.
 
 1. The crate `ridl-descriptor` sits beside `ridl-ir`, not inside it.
 2. The file identifier is `RDLC`. The artifact is `<base>.catalog.binfb`, and
@@ -266,11 +276,13 @@ that the plan took. Say so when you report them.
    anchored at both ends that admits ASCII only. It changes only the proto3
    column (§2). D1 checks it against the checker's pattern semantics.
 8. planus as a runtime dependency: either `ridl-descriptor` depends on `planus`
-   and the workspace's "nothing shipped depends on planus" statement and
-   `oracle_boundary.rs` change, or the accessors are generated without a runtime
+   and the workspace's "nothing shipped depends on planus" statement in the root
+   `Cargo.toml` changes, or the accessors are generated without a runtime
    dependency on planus. D1 proposes one with evidence.
-9. Whether `ridl-descriptor` is published to crates.io, or carries
-   `publish = false`.
+9. `ridl-descriptor` is published to crates.io. `publish = false` is not
+   available: `ridlc` and `ridl` are published and would depend on it, and
+   ADR-0007 decision 14 says `cargo publish` refuses a normal dependency with no
+   registry version. Confirm.
 
 Two design wordings came from the review of PR #323, not from Sebastien, and are
 to be raised before the size derivation (D4) is built:
