@@ -854,10 +854,10 @@ including, for an `Item::Service`, every `ServiceShape.interface_ref` and every
 reference inside an inline `ServiceShape.inline` interface (whose interactions
 report their own names). `references` and `dependencies` walk `ir.decls`,
 `ir.interfaces` and `ir.services` of every workspace package; a reference held
-by a service reports `Service.name` as its `declaration`. A reference string is
-canonical when it contains a dot whose prefix names a package of the workspace
-or `ridl.std`; otherwise it is bare and is qualified as `{own_package}.{name}`.
-A primitive or inline scalar has no reference. A unit string
+by a service reports `Service.name` as its `declaration`. A reference string
+that contains a dot is preserved as `pkg.Name`, including when its package has
+no checked IR. A bare reference is qualified as `{own_package}.{name}`. A
+primitive or inline scalar has no reference. A unit string
 (`TypeDef.backing.unit`) is not a reference for this tool.
 
 `references`: resolve the target with `find`, then collect, for each workspace
