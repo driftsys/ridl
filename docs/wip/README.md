@@ -156,6 +156,12 @@ design note, from the archive.
   prior context, so it carries the working rules and the facts a driver prompt
   otherwise leaves to the conversation. Six stages; two design notes inside it
   stop for Sebastien's disposition. Coordination issue: #328.
+- **2026-10-03-lane-e16-catalog-descriptor-driver.md** — the driver for epic
+  E16, the catalog descriptor (#377 to #382, then E6.17 #367). It runs the
+  2026-09-13 catalog descriptor plan, after stage D1 brings the plan up to date
+  with what landed since: the lock, the codegen model's catalog facts, the frame
+  specification. D1 stops for Sebastien's answer on seven dispositions and #275.
+  Archive it with the plan at stage D8.
 - **2026-09-22-ir-stability-design.md** — lane P stage P1a: the recommended
   disposition of O-P1 (canonical protobuf JSON becomes the canonical encoding,
   binary and prototext derived), with #231 reproduced as measured numbers, the
