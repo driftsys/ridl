@@ -235,7 +235,13 @@ Always close the loop — do not trust generated RIDL:
 
 1. Write the `.typl`/`.ridl`/`.rxdl`.
 2. `ridl_check(source)` → fix every error using the returned coded fix-its;
-   `ridl_explain(code)` for anything unclear.
+   `ridl_explain(code)` for anything unclear. `ridl_explain` returns only the
+   code, its severity and its one-line summary (1a design §4.3). For the full
+   rule, the skill points to the document that lists each namespace: `TYPL-` in
+   the typl language reference, `RIDL-` in the ridl language reference, `RSDL-`
+   in the rsdl language reference, and `FORM-` and `MANI-` in
+   `ridl-family-overview.md` §7. Each code appears in a table there, with the
+   rule in the prose near it.
 3. For edits to a published contract: `ridl_diff(old, new)` → must be exit 0
    (compatible) unless a break is intended and acknowledged.
 4. Ground new work in existing symbols first: `ridl_list_interactions`,
