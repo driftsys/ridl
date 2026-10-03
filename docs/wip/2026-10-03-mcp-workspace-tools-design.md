@@ -120,7 +120,7 @@ Out of scope, and why:
 | `ridl_resolve`           | `name`; optional `from`                                                                     | `{name, package, kind, visibility, location, workspace}`, plus `alias` when the input was an import alias                                                                   |
 | `ridl_describe_type`     | `name`; optional `from`                                                                     | `{declaration, package, location, workspace}`; `declaration` is the IR `Decl` in the IR's own JSON form                                                                     |
 | `ridl_list_interactions` | `interface`; optional `from`                                                                | `{interface: {name, package, doc, labels, deprecated, number, provisional}, interactions, location, workspace}`; `interactions` is the interface's IR `Decl` list, in order |
-| `ridl_references`        | `name`; optional `from`                                                                     | `{target, references: [{package, declaration, interaction, location}], workspace}`                                                                                          |
+| `ridl_references`        | `name`; optional `from`                                                                     | `{target, references: [{package, declaration, kind, interaction, location}], workspace}`                                                                                    |
 | `ridl_dependencies`      | optional `package`                                                                          | `{packages: [{name, imports, depends_on, dependents}], workspace}`                                                                                                          |
 | `ridl_diff`              | `old`, `new`: an `.ir.json` file, a snapshot directory, or a source path                    | the object `ridl diff --format json` prints: `{verdict, changes, …}`; overlays apply to `new` only                                                                          |
 
@@ -187,9 +187,12 @@ workspace type.
 **`ridl_dependencies`.** For each workspace package:
 
 - `imports` is the import names its manifest declares (`Package.imports`);
-- `depends_on` is the sorted set of other packages its IR refers to, taken from
-  the `pkg.Name` references the `ridl_references` walk finds, excluding
-  `ridl.std`, which every package imports implicitly;
+- `depends_on` is the sorted set of other package names its IR refers to, taken
+  from the `pkg.Name` references the `ridl_references` walk finds, excluding
+  `ridl.std`, which every package imports implicitly. A qualifier that names no
+  workspace package (an unresolved or remote import) is kept as written, so the
+  list can name a package the workspace does not contain; the rsdl uses of §4.4
+  are added to it;
 - `dependents` is the sorted set of workspace packages whose `depends_on`
   contains it.
 
@@ -203,6 +206,43 @@ writes for the same inputs, parsed back into a JSON value. `std_ir` is passed as
 context, as the CLI does (#598). A comparison against the published baseline is
 `old: "<root>/.ridl/baseline"`. A source side that does not compile is a tool
 error whose structured content carries the diagnostics (§6.2).
+
+### 4.4 rsdl uses in the review tools (amendment, 2026-10-03)
+
+Added after the first implementation (#668), approved by Sebastien on
+2026-10-03. Without it, `ridl_references` and `ridl_dependencies` see only the
+package IR, so an interface that only an rsdl component requires is reported as
+used by nothing.
+
+- **Source.** rsdl components exist only in the lowered system,
+  `WorkspaceOutput.system` (`ridl_ir::v2::System`); the package IR has no
+  components. Both tools read it in addition to the package IR. Only the
+  components that the workspace's `system` lists are lowered, which is also the
+  set that the backends and `ridl diff` see.
+- **References.** For each `Component` in `System.components` whose `package` is
+  not empty, each `Require` whose `interface` is present and not `inline` is a
+  reference to `{catalog}.{name}`. Inline interface references are skipped: they
+  belong to a service that the package walk already covers. `offers`, links and
+  routes are skipped: offers name services, and links and routes are derived
+  from the `requires`. An implicit component (empty `package`, the component of
+  a lone service) is skipped, because its service is walked in its package.
+- **The reference.** `package` is `Component.package`, `declaration` is
+  `Component.name`, `interaction` is `null`, and `location` is `null`:
+  components are not `Symbol`s. A component that requires the target more than
+  once is reported once.
+- **`kind`.** Every `Reference` gains a field `kind`: `declaration` (a
+  package-level declaration other than an interface), `interface`, `service`, or
+  `component`. It is an added output field, so the change is additive (§7.2).
+- **Dependencies.** A component's package depends on the `catalog` of each
+  interface it requires (the same rule as an IR reference: not itself, not
+  `ridl.std`). The system's package (`System.package`) depends on the package of
+  each component its member lines name (`MemberLine.component`, looked up in
+  `System.components`; implicit components are skipped).
+- **No lowered system.** When `output.system` is `None` and at least one
+  workspace package has a `.rsdl` file, every result built from the workspace
+  carries a second note (§6.3) saying that rsdl uses were not counted because no
+  system was lowered: the workspace declares no `system`, or an error in its
+  closure blocked the lowering; run `ridl_check` to see which.
 
 ## 5. Where the code lives
 
@@ -362,10 +402,11 @@ A compiler panic inside `spawn_blocking` stays an MCP internal error, as today.
 
 ### 6.3 Notes
 
-`workspace.notes` carries one note in 1a. When `path` loaded a package manifest
-and a `ridl.toml` that declares a `[workspace]` exists in a directory above it,
-the note says that the member was loaded alone, that its sibling members do not
-resolve (#529), and names the workspace root to pass instead. Other notes may be
+`workspace.notes` carries two notes in 1a. The first: When `path` loaded a
+package manifest and a `ridl.toml` that declares a `[workspace]` exists in a
+directory above it, the note says that the member was loaded alone, that its
+sibling members do not resolve (#529), and names the workspace root to pass
+instead. The second is the no-lowered-system note of §4.4. Other notes may be
 added later; the field is a list of strings, so an addition is not a schema
 change.
 

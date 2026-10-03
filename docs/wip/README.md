@@ -224,6 +224,9 @@ design note, from the archive.
   dependencies, diff). Covers ROADMAP E8.6 and E8.7. Its nine-task plan,
   **2026-10-03-mcp-workspace-tools-plan.md**, is written for a coding agent that
   starts with only the repository and the two files.
+  **2026-10-03-mcp-tools-followup-plan.md** is the four-task follow-up after the
+  first implementation (#668): rsdl component uses in the review tools (design
+  §4.4) and the fixes a review of #668 found.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is
