@@ -49,6 +49,7 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
+use ridl_core::lint::LintScopes;
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, materialize_imports, parse_file,
@@ -124,6 +125,9 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             workspace,
             diagnostics: Vec::new(),
             sources,
+            // No manifest: the registry defaults apply (lint foundation spec
+            // §5.2).
+            lints: LintScopes::default(),
         },
     );
     let ir = compiled
@@ -1183,6 +1187,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         workspace,
         mut diagnostics,
         mut sources,
+        ..
     } = loaded;
 
     let packages = workspace.packages(db).clone();

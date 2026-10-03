@@ -35,17 +35,23 @@ use rowan::{TextRange, TextSize};
 use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use crate::interface_lock;
+use crate::lint::{LintLevels, LintScopes};
 use crate::manifest::{Manifest, ManifestKind, parse_manifest};
 use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
 
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
-/// diagnostics the load accumulated, and the interned path+text table the
+/// diagnostics the load accumulated, the interned path+text table the
 /// diagnostics' [`Span`]s point into (what the caller hands to
-/// [`render`](crate::diag::render())).
+/// [`render`](crate::diag::render())), and the effective lint levels by
+/// directory (lint foundation spec §6.1): one scope for the workspace root,
+/// one per member, one for a standalone package, none in single-file mode.
+/// The scope keys are the directories in the same path form as the file
+/// paths in `sources`, so [`LintScopes::for_path`] resolves a recorded path.
 pub struct LoadedWorkspace {
     pub workspace: Workspace,
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
+    pub lints: LintScopes,
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -209,6 +215,7 @@ pub fn load_workspace_with(
         workspace,
         diagnostics: loader.diagnostics,
         sources: loader.sources,
+        lints: loader.lints,
     })
 }
 
@@ -240,6 +247,16 @@ struct Loader {
     /// the member's packages. Stays `None` in a standalone package load and in
     /// single-file mode (E2 task 9).
     workspace_default_timing: Option<String>,
+    /// The workspace root's effective lint levels: the registry defaults
+    /// overlaid with the root `[lints]` (lint foundation spec §5.2 step 2).
+    /// Each member's own table is overlaid on a clone. Stays at the defaults
+    /// in a standalone package load and in single-file mode.
+    workspace_lints: LintLevels,
+    /// The effective lint levels by directory: one scope for the root, one per
+    /// member directory, one for a standalone package, none in single-file
+    /// mode (spec §6.1). Each key is the directory in the path form the
+    /// loader records for the files under it.
+    lints: LintScopes,
 }
 
 impl Loader {
@@ -255,10 +272,17 @@ impl Loader {
             kind,
             imports,
             default_timing,
+            lints,
         }) = manifest
         else {
             return Ok(());
         };
+        // The root directory's scope: the registry defaults overlaid with the
+        // root `[lints]`. In workspace mode it is also the base every member
+        // overlays its own table on (lint foundation spec §5.2).
+        let mut root_lints = LintLevels::default();
+        root_lints.overlay(&lints);
+        self.lints.insert(root.to_path_buf(), root_lints.clone());
         match kind {
             ManifestKind::Package { name, .. } => {
                 // A standalone package: the manifest's `[imports]` and
@@ -272,6 +296,7 @@ impl Loader {
                 // never merged into them.
                 self.workspace_imports = imports;
                 self.workspace_default_timing = default_timing;
+                self.workspace_lints = root_lints;
                 for member in &members {
                     self.load_member(db, root, member, file_id, &text)?;
                 }
@@ -311,10 +336,18 @@ impl Loader {
             kind,
             imports,
             default_timing,
+            lints,
         }) = manifest
         else {
             return Ok(());
         };
+        // The member directory's scope: the root levels overlaid with the
+        // member's own `[lints]` (lint foundation spec §5.2 step 3). The key
+        // is the member directory in the same path form as the file paths
+        // recorded under it, so `for_path` finds them by prefix.
+        let mut member_lints = self.workspace_lints.clone();
+        member_lints.overlay(&lints);
+        self.lints.insert(workspace_root.join(member), member_lints);
         match kind {
             ManifestKind::Workspace { .. } => {
                 self.diagnostics.push(error(
@@ -674,6 +707,7 @@ mod tests {
     use salsa::plumbing::AsId;
 
     use super::*;
+    use crate::lint::{LintLevel, apply_lint_levels, lint_by_name};
 
     /// A unique directory under the system temp dir, removed on drop.
     struct TempDir(PathBuf);
@@ -1361,6 +1395,152 @@ mod tests {
             single_loaded.workspace.packages(&single_db)[0].default_timing(&single_db),
             &None,
             "single-file mode carries no configured default",
+        );
+    }
+
+    /// The lint scopes the loader builds in workspace mode: the root
+    /// directory gets the defaults overlaid with the root `[lints]`, and
+    /// each member directory gets the root levels overlaid with the member's
+    /// own table (lint foundation spec §5.2, §6.1). The scope keys share the
+    /// path form of the file paths the loader records, so the path recorded
+    /// for a member file resolves to the member's scope.
+    #[test]
+    fn lint_scopes_follow_root_then_member() {
+        let dir = TempDir::new("lint-scopes");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"a\", \"b\"]\n\n[lints]\nmissing-timing = \"deny\"\nshared-error-type = \"allow\"\n",
+        );
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[lints]\nmissing-timing = \"warn\"\n",
+        );
+        let a_file = dir.write("a/a.typl", "package a\ntype A: m\n");
+        dir.write(
+            "b/ridl.toml",
+            "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+        );
+        let b_file = dir.write("b/b.typl", "package b\ntype B: s\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
+
+        let missing_timing = lint_by_name("missing-timing").expect("missing-timing is a lint");
+        let shared_error_type =
+            lint_by_name("shared-error-type").expect("shared-error-type is a lint");
+        let levels = |path: &Path| {
+            loaded
+                .lints
+                .for_path(path)
+                .unwrap_or_else(|| panic!("`{}` is in a scope", path.display()))
+        };
+
+        let in_a = levels(&a_file);
+        assert_eq!(in_a.level(missing_timing), LintLevel::Warn);
+        assert_eq!(in_a.level(shared_error_type), LintLevel::Allow);
+        assert_eq!(levels(&b_file).level(missing_timing), LintLevel::Deny);
+        let root = levels(&dir.path().join("ridl.toml"));
+        assert_eq!(root.level(missing_timing), LintLevel::Deny);
+        assert_eq!(root.level(shared_error_type), LintLevel::Allow);
+        assert_eq!(
+            levels(&dir.path().join("a/ridl.toml")).level(missing_timing),
+            LintLevel::Warn,
+        );
+
+        // The path the loader recorded for the member file, not one built by
+        // hand, is in the member's scope.
+        let packages = loaded.workspace.packages(&db).clone();
+        let a = packages
+            .iter()
+            .find(|p| p.name(&db) == "a")
+            .expect("member a loads");
+        let recorded = a.files(&db)[0].path(&db).clone();
+        assert_eq!(
+            levels(Path::new(&recorded)).level(missing_timing),
+            LintLevel::Warn,
+            "the recorded path `{recorded}` resolves to the member's scope",
+        );
+    }
+
+    /// A manifest diagnostic's file path resolves to the scope of the
+    /// manifest's own directory, so a member's `[lints]` table sets the level
+    /// of the MANI-010 it causes (lint foundation spec §5.3).
+    #[test]
+    fn a_member_manifest_diagnostic_is_in_the_member_scope() {
+        let dir = TempDir::new("lint-scope-manifest");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"a\"]\n\n[lints]\nunknown-lint = \"deny\"\n",
+        );
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[lints]\nunknown-lint = \"allow\"\nnope = \"warn\"\n",
+        );
+        dir.write("a/a.typl", "package a\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-010"]);
+        let unknown_lint = lint_by_name("unknown-lint").expect("unknown-lint is a lint");
+        let path = loaded
+            .sources
+            .path(loaded.diagnostics[0].primary.file)
+            .expect("the manifest has a path");
+        assert_eq!(
+            loaded
+                .lints
+                .for_path(Path::new(path))
+                .expect("the member manifest is in a scope")
+                .level(unknown_lint),
+            LintLevel::Allow,
+            "the recorded manifest path `{path}` resolves to the member's scope",
+        );
+
+        let mut diagnostics = loaded.diagnostics.clone();
+        apply_lint_levels(&mut diagnostics, &loaded.sources, &loaded.lints);
+        assert_eq!(
+            diagnostics,
+            Vec::new(),
+            "`unknown-lint = \"allow\"` silences the MANI-010"
+        );
+    }
+
+    /// A standalone package gets one scope for its directory, which covers
+    /// every package in its tree; single-file mode gets none.
+    #[test]
+    fn standalone_lint_scope_covers_the_tree_and_single_file_has_none() {
+        let dir = TempDir::new("lint-scope-standalone");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[lints]\nmissing-timing = \"deny\"\n",
+        );
+        let top = dir.write("a.typl", "package veh.common\ntype A: m\n");
+        let nested = dir.write("sub/s.typl", "package veh.common.sub\ntype S: s\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let missing_timing = lint_by_name("missing-timing").expect("missing-timing is a lint");
+        for path in [&top, &nested] {
+            assert_eq!(
+                loaded
+                    .lints
+                    .for_path(path)
+                    .unwrap_or_else(|| panic!("`{}` is in a scope", path.display()))
+                    .level(missing_timing),
+                LintLevel::Deny,
+            );
+        }
+
+        let bare = TempDir::new("lint-scope-bare");
+        let single = bare.write("iface.ridl", "package solo\ntype A: m\n");
+        let mut single_db = RidlDatabase::default();
+        let single_loaded =
+            load_workspace(&mut single_db, &single).expect("single-file mode loads");
+        assert!(
+            single_loaded.lints.for_path(&single).is_none(),
+            "single-file mode has no lint scope",
         );
     }
 

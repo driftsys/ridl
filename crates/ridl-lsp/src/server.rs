@@ -295,6 +295,7 @@ impl ServerState {
             workspace,
             diagnostics,
             sources,
+            ..
         } = load_workspace(&mut self.db, dir)?;
         for package in workspace.packages(&self.db) {
             for file in package.files(&self.db) {
