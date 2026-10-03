@@ -162,11 +162,17 @@ fn vsix_packaging_passes_the_target_and_output_arguments() {
     dir.write("THIRD-PARTY-NOTICES.txt", b"fixture notices\n");
     // Exercise the real recipe without installing npm dependencies or packaging
     // a binary. The acceptance recipe checks the actual VSIX separately.
+    // Each fake tool fails outside editors/vscode and logs what it was asked to
+    // run, so the recipe's directory change and its npm steps are pinned too.
+    let guard = "case \"$PWD\" in */editors/vscode) ;; *) echo \"wrong directory: $PWD\" >&2; exit 1 ;; esac\n";
     for (name, script) in [
-        ("npm", "#!/bin/sh\nexit 0\n"),
+        (
+            "npm",
+            format!("#!/bin/sh\n{guard}echo \"npm $*\" >> \"$ARGUMENT_LOG\"\n"),
+        ),
         (
             "npx",
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGUMENT_LOG\"\n",
+            format!("#!/bin/sh\n{guard}printf '%s\\n' \"$@\" >> \"$ARGUMENT_LOG\"\n"),
         ),
     ] {
         dir.write(&format!("tools/{name}"), script.as_bytes());
@@ -213,6 +219,9 @@ fn vsix_packaging_passes_the_target_and_output_arguments() {
             ],
         ),
     ] {
+        let _ = std::fs::remove_file(&log);
+        // A copy left by an earlier case must not satisfy this case.
+        let _ = std::fs::remove_file(dir.0.join("editors/vscode/bin/THIRD-PARTY-NOTICES.txt"));
         let result = Command::new("just")
             .arg("--justfile")
             .arg(dir.0.join("justfile"))
@@ -231,7 +240,10 @@ fn vsix_packaging_passes_the_target_and_output_arguments() {
                 .unwrap()
                 .lines()
                 .collect::<Vec<_>>(),
-            expected,
+            ["npm ci", "npm run compile"]
+                .into_iter()
+                .chain(expected)
+                .collect::<Vec<_>>(),
             "target {target:?}, output {output:?}"
         );
         assert_eq!(

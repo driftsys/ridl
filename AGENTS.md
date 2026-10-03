@@ -147,8 +147,9 @@ member; rsdl is the apex.
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages
-    just vscode-verify   compile, test, and vsce package the VS Code extension
-                         with no bundled binary
+    just vscode-verify   compile, test, and package the VS Code extension as a
+                         generic and a linux-x64 VSIX, with a placeholder
+                         binary, and check each archive
     just package-vsix    compile the extension, then vsce package (optional
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension
