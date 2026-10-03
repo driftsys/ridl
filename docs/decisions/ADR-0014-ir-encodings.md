@@ -25,6 +25,16 @@ trail is
 the policy that follows from it is
 [the IR specification](../specification/ir-specification.md).
 
+**Amended 2026-10-04 — decision 15, the catalog hash.** The catalog hash of
+story E16.2 (driftsys/ridl#378) is taken over the protobuf binary of a reduced
+package, not over the canonical JSON that decision 9's 2026-09-22 amendment
+names canonical. Decision 15 records what is hashed, the determinism rule for
+those bytes, the reason the derived encoding is the input, and the golden-hash
+test that pins it. Sebastien took the choice of input on 2026-10-03 (answer 4 of
+[the lane E16 driver](../wip/2026-10-03-lane-e16-catalog-descriptor-driver.md)
+§4); the rest of decision 15 is written from stage D3 of that lane. Decisions 1
+to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -449,6 +459,72 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     stays behind prototext, dropping its `serde` feature. Decision 13 is
     unchanged on both sides.
 
+15. **Amendment (2026-10-04) — the catalog hash is SHA-256 over the protobuf
+    binary of a reduced package.** The catalog hash is the identity of a
+    package's interfaces, their numbers and the types they reach (the rsdl
+    rewrite decisions note, D-7 and D-8). It is derived on every build and never
+    recorded. There is one such identity: the schema hash over the IR that
+    driftsys/ridl#275 asked for is this hash, so it does not depend on which
+    wire schema a build emits — proto3, FlatBuffers or both.
+
+    **What is hashed.** `ridl_ir::v2::to_binary` of the package that
+    `ridl_ir::catalog_hash::reduced_package` returns, which holds:
+    - the package name;
+    - every interface shape, in `Package::shapes()` order, under its identity
+      name (a declared interface's own name, or the owning service's dotted
+      global name for an inline shape), with `InterfaceShape::visibility()`, the
+      IR's `number` and `provisional`, and its interactions;
+    - every declaration those interfaces reach, transitively and in any package
+      of the build, under its canonical name (bare in this package, `pkg.Name`
+      in another), in canonical-name order;
+    - every doc string blank, and `services` and `retired` empty.
+
+    **What is not covered, and why.** `Package.retired`: the hash identifies
+    what a peer can call, and the retired list is carried beside it, in the
+    catalog descriptor and in the codegen model's `Catalog.retired`. Doc
+    strings: a comment does not change what crosses a boundary. A declaration no
+    interface reaches: it does not cross a boundary either.
+
+    **The determinism rule for the binary.** The same reduced package always
+    encodes to the same bytes because:
+    - fields are written in field-number order. `prost-derive` 0.14 sorts a
+      message's fields by their lowest tag, so a `oneof` is written at the
+      position of its lowest member tag. No `oneof` in `ir.proto` has a plain
+      field whose number lies between its member tags, so the two orders are the
+      same today; a field added inside such a range would make them differ, and
+      must not be added;
+    - list elements are written in the order the writer holds them, which
+      `reduced_package` fixes as stated above;
+    - no field is a `map<>`, whose entry order protobuf does not fix. The IR
+      schema has none, and a `map<>` added later must not enter the reduced
+      package;
+    - a field at its default is omitted, which proto3 binary does for every
+      non-`optional` field.
+
+    **Why the derived encoding, not the canonical one.** Canonical protobuf JSON
+    writes every non-`optional` field at its default (decision 2). An IR field
+    added later would then appear in every reduced package, at its default, and
+    change every catalog hash at a toolchain upgrade, although no source
+    changed. The binary omits it. The bound that moved the canonical label to
+    JSON (decision 9's 2026-09-22 amendment: `from_binary` refuses more than 100
+    message levels) applies to reading the binary back; the hashed bytes are
+    written and never read, and `to_binary` has no depth bound.
+
+    **Where it is computed.** In `ridl-ir`
+    (`crates/ridl-ir/src/catalog_hash.rs`), because two artifacts carry it and
+    `ridl-ir` is the crate both depend on: the codegen model's `Catalog.hash`,
+    which the Rust backend writes into every generated `Interface::CATALOG`, and
+    the catalog descriptor, whose crate `ridl-descriptor` re-exports the
+    functions as `ridl_descriptor::hash`.
+
+    **The golden-hash test.** `crates/ridl-descriptor/tests/golden_hash.rs` pins
+    the hash of the corpus package's checked-in IR snapshot, and `just test`
+    runs it in the gate. A change that moves the pinned value — a new IR field
+    set on a reached declaration, a change to `reduced_package`, a `prost`
+    release that encodes differently — fails the gate. The pinned value moves
+    only in a commit that changes the IR schema or this decision, and that
+    commit's message names the cause.
+
 ## Alternatives considered
 
 | Candidate                                             | Verdict                        | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -459,6 +535,8 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 | Additive only — keep `serde` JSON, add new emits      | rejected                       | zero churn, but it leaves the misleading artifact shipped under the name every consumer reaches for first, and raises the dialect count instead of lowering it                                                                                                                                                                                                                                |
 | A compatibility shim for existing baselines           | rejected                       | the version is `0.0.0` with no tags and nothing published, so no baseline exists outside this repository                                                                                                                                                                                                                                                                                      |
 | Reuse `TimingChanged`-style enumeration in the filter | rejected                       | see decision 10 — an enumeration of variants is what allowed the defect to be latent, and the next encoding would reintroduce it                                                                                                                                                                                                                                                              |
+| The canonical JSON as the catalog hash's input        | rejected (decision 15)         | it is the canonical encoding, but it writes every non-`optional` field at its default, so each IR field added later would change every catalog hash at a toolchain upgrade with no source change                                                                                                                                                                                              |
+| The hash in `ridl-descriptor`, as the plan placed it  | rejected (decision 15)         | the codegen model is lowered in `ridl-ir` and must carry the hash, and `ridl-ir` cannot depend on `ridl-descriptor`, which depends on it                                                                                                                                                                                                                                                      |
 
 The `prost-reflect` cost is real and small, and is recorded rather than hidden.
 It renders JSON by transcoding the typed message and then walking that tree with

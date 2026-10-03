@@ -98,7 +98,10 @@ other entry below is Accepted.
   reader, and decision 14 moves JSON off `prost-reflect` onto `pbjson`-generated
   impls so the interchange artifact carries no recursion ceiling. Decision 14 is
   further corrected 2026-09-22, in place, on two facts it stated wrongly. The
-  descriptor pool now serves prototext alone.
+  descriptor pool now serves prototext alone. Decision 15 (amended 2026-10-04)
+  takes the catalog hash over the protobuf binary of a reduced package, not over
+  the canonical JSON, states the determinism rule for that binary, and pins the
+  corpus package's hash with a golden test in the gate.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
