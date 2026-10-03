@@ -125,7 +125,12 @@ fn items(package: &ridl_ir::v2::Package) -> impl Iterator<Item = Item<'_>> {
         .decls
         .iter()
         .map(Item::Decl)
-        .chain(package.interfaces.iter().map(Item::Interface))
+        .chain(
+            package
+                .shapes()
+                .filter(|shape| !shape.is_inline())
+                .map(|shape| Item::Interface(shape.interface)),
+        )
         .chain(package.services.iter().map(Item::Service))
 }
 fn canonical(snap: &Snapshot, own: &str, reference: String) -> String {

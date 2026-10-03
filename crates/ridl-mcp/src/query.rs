@@ -107,11 +107,12 @@ pub fn packages(snap: &Snapshot) -> String {
     names.join(", ")
 }
 fn declarations(package: &v2::Package) -> impl Iterator<Item = Item<'_>> {
-    package
-        .decls
-        .iter()
-        .map(Item::Decl)
-        .chain(package.interfaces.iter().map(Item::Interface))
+    package.decls.iter().map(Item::Decl).chain(
+        package
+            .shapes()
+            .filter(|shape| !shape.is_inline())
+            .map(|shape| Item::Interface(shape.interface)),
+    )
 }
 fn in_package<'a>(snap: &'a Snapshot, package: &str, name: &str) -> Option<Found<'a>> {
     let (ir, resolution) = if package == "ridl.std" {
