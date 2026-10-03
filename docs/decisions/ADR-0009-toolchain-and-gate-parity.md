@@ -16,6 +16,9 @@ amendments, dated in their own text, for the markdownlint-cli retirement.
 Decisions 1 and 11 carry 2026-09-14 amendments for the first toolchain bump, and
 decision 4 carries one for `ridl-rt`'s edition 2021.
 
+Decision 5 carries a 2026-10-04 amendment: on a pull request the workflow runs a
+path-dependent subset of the recipes, chosen by a `changes` job.
+
 ## Context
 
 ADR-0006 decision 8 made the gate local while CI is stuck, and ADR-0008 decision
@@ -127,6 +130,19 @@ prediction.
    copies that agree today are one edit away from disagreeing, and the five gaps
    above are that edit having happened five times. What remains in the workflow
    is tool installation and job plumbing; no gate command is written there.
+
+   _Amendment, 2026-10-04._ On a pull request, a `changes` job reads the changed
+   files and skips `rust` and `wasm` when every file is on a list of
+   documentation and editor paths that no Rust test or recipe reads, and skips
+   `markdown` when every file is Rust source. The filter fails closed: a path
+   that is not on the list runs the job. A push to `main` and a manual run run
+   every job, so `just build` is what CI runs on `main`, and a subset of it on a
+   pull request. `gate-parity` still checks only that each member is invoked in
+   the workflow text, not that every pull request runs it, which is the case
+   decision 6 describes. The path list is a maintained input of the workflow: a
+   new test that reads a file outside `crates/` needs no edit, because the file
+   is not listed, but a new documentation path added to the list has to be one
+   that no test reads.
 
    When CI needs a variant of a check, the recipe takes a parameter and CI
    passes it. That is how the fifth instance was closed: the `convco` job

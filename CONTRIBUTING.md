@@ -52,7 +52,10 @@ repairs the new release wants in the same commit.
 5. Open a PR. CI runs these same recipes — it installs the tools a runner needs
    and then invokes `just check`, `just compile`, `just test`, and the rest, so
    there is one definition of each command rather than two that drift
-   (ADR-0009).
+   (ADR-0009). On a pull request, a `changes` job skips the Rust jobs when every
+   changed file is documentation or editor tooling that no test reads, and skips
+   `just check` when every changed file is Rust source. A push to `main` runs
+   every job.
 
 ## Writing examples in the book
 
