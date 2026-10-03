@@ -481,21 +481,27 @@ async fn dirty_workspace_lookups_preserve_valid_declarations() {
         let path = workspace_fixture("ws");
         let client = connect().await;
         let overlays = json!([{"path":path.join("a/a.ridl"), "source":""}]);
-        for tool in ["ridl_resolve", "ridl_describe_type"] {
-            let result = call_workspace_tool(
-                &client,
-                tool,
-                json!({"path":path, "name":"fx.a.sub.Gear", "overlays":overlays}),
-            )
-            .await;
-            assert_ne!(result.is_error, Some(true), "{result:?}");
-            let output = result.structured_content.unwrap();
-            assert_eq!(output["package"], "fx.a.sub");
-            assert!(output["workspace"]["errors"].as_u64().unwrap() > 0);
-            if tool == "ridl_resolve" {
-                assert_eq!(output["name"], "Gear");
-            } else {
-                assert_eq!(output["declaration"]["name"], "Gear");
+        for (name, from) in [
+            ("fx.a.sub.Gear", None),
+            ("Gear", None),
+            ("Gear", Some("fx.a.sub")),
+        ] {
+            for tool in ["ridl_resolve", "ridl_describe_type"] {
+                let result = call_workspace_tool(
+                    &client,
+                    tool,
+                    json!({"path":path, "name":name, "from":from, "overlays":overlays}),
+                )
+                .await;
+                assert_ne!(result.is_error, Some(true), "{result:?}");
+                let output = result.structured_content.unwrap();
+                assert_eq!(output["package"], "fx.a.sub");
+                assert!(output["workspace"]["errors"].as_u64().unwrap() > 0);
+                if tool == "ridl_resolve" {
+                    assert_eq!(output["name"], "Gear");
+                } else {
+                    assert_eq!(output["declaration"]["name"], "Gear");
+                }
             }
         }
         client.cancel().await.unwrap();
@@ -515,27 +521,29 @@ async fn diff_compile_errors_preserve_structured_diagnostics() {
         assert_eq!(cli.status.code(), Some(1));
         let expected: serde_json::Value = serde_json::from_slice(&cli.stdout).unwrap();
         let client = connect().await;
-        let result = call_workspace_tool(
-            &client,
-            "ridl_diff",
-            json!({"old":workspace_fixture("ws"), "new":path}),
-        )
-        .await;
-        assert_eq!(result.is_error, Some(true));
-        let text: serde_json::Value = serde_json::from_str(&tool_text(&result)).unwrap();
-        let output = result.structured_content.unwrap();
-        assert_eq!(text, output);
-        assert_eq!(output["message"], "the new side does not compile");
-        assert_eq!(output["diagnostics"], expected);
-        assert_eq!(
-            output["diagnostics"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|d| d["code"].as_str().unwrap())
-                .collect::<Vec<_>>(),
-            ["TYPL-103", "TYPL-011"]
-        );
+        let clean = workspace_fixture("ws");
+        for (old, new, message) in [
+            (&clean, &path, "the new side does not compile"),
+            (&path, &clean, "the old side does not compile"),
+        ] {
+            let result =
+                call_workspace_tool(&client, "ridl_diff", json!({"old":old, "new":new})).await;
+            assert_eq!(result.is_error, Some(true));
+            let text: serde_json::Value = serde_json::from_str(&tool_text(&result)).unwrap();
+            let output = result.structured_content.unwrap();
+            assert_eq!(text, output);
+            assert_eq!(output["message"], message);
+            assert_eq!(output["diagnostics"], expected);
+            assert_eq!(
+                output["diagnostics"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|d| d["code"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                ["TYPL-103", "TYPL-011"]
+            );
+        }
         client.cancel().await.unwrap();
     })
     .await
