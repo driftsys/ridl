@@ -6,7 +6,7 @@
 //! subcommand wires the stdio transport at all.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command as StdCommand, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
@@ -889,6 +889,290 @@ fn ridl_lsp_exits_two_when_stdin_closes_before_initialize() {
     // a clean shutdown: exit 2, the "could not answer" code of ADR-0010
     // decision 1.
     assert_eq!(status.code(), Some(2), "a lost transport exits 2");
+}
+
+// ---------------------------------------------------------------------------
+// `ridl lsp` and the `[lints]` levels
+// ---------------------------------------------------------------------------
+
+/// A `signal` with no timing annotation, which draws RIDL-100
+/// (`missing-timing`, a Warning by default) and nothing else.
+const UNTIMED_SIGNAL: &str = "package {name}\n\ntype Speed: integer [0..300]\n\ninterface Sensor {\n  \
+                              signal speed: Speed\n}\n";
+
+/// Three interfaces whose queries share one error type, which draws RIDL-405
+/// (`shared-error-type`, an Info by default) three times — one per interface
+/// — and nothing else. A file body with no `package` line, appended to one.
+const SHARED_ERROR: &str = "\
+struct FaultPage {
+  count : integer [0..64]
+}
+
+error enum DiagError {
+  STORAGE_BUSY  = 0
+  ACCESS_DENIED = 1
+}
+
+interface Cluster {
+  query faults(): FaultPage | DiagError @[..50ms]
+}
+
+interface Powertrain {
+  query faults(): FaultPage | DiagError @[..50ms]
+}
+
+interface Infotainment {
+  query faults(): FaultPage | DiagError @[..50ms]
+}
+";
+
+/// A two-member workspace whose `[lints]` tables exercise every level the
+/// language server must honor. The root sets `missing-timing = "deny"` and
+/// `shared-error-type = "allow"`, and has one key that names no lint
+/// (MANI-010 on the root manifest). Member `a` sets `missing-timing = "info"`
+/// over the root, so a diagnostic under `a` tells the member's table (Info)
+/// from the root's (Error) and from the registry default (Warning). Member `b`
+/// has no table of its own. Expected after the levels apply:
+///
+/// - `ridl.toml`: MANI-010, Warning;
+/// - `a/a.ridl`: RIDL-100, Info;
+/// - `b/b.ridl`: RIDL-100, Error; the three RIDL-405 are removed.
+///
+/// Returns the workspace root.
+fn lint_workspace(dir: &TempDir) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"a\", \"b\"]\n\n[lints]\nmissing-timing = \"deny\"\n\
+         shared-error-type = \"allow\"\nnot-a-lint = \"warn\"\n",
+    );
+    std::fs::create_dir_all(dir.0.join("a")).expect("create member a");
+    std::fs::create_dir_all(dir.0.join("b")).expect("create member b");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[lints]\nmissing-timing = \"info\"\n",
+    );
+    dir.write("a/a.ridl", &UNTIMED_SIGNAL.replace("{name}", "a"));
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "b/b.ridl",
+        &format!("{}\n{SHARED_ERROR}", UNTIMED_SIGNAL.replace("{name}", "b")),
+    );
+    dir.0.clone()
+}
+
+/// The `file://` URI of an absolute path. The scratch paths here are ASCII
+/// letters, digits, `-`, `_`, `.` and `/`, which a URI carries unencoded, so
+/// the text matches the URI the server builds for the same path byte for
+/// byte.
+fn file_uri(path: &Path) -> String {
+    format!("file://{}", path.display())
+}
+
+/// The `(code, severity)` pairs `ridl check --format json` reports for
+/// `root`, with the severity as the LSP number: `error` 1, `warning` 2,
+/// `info` 3. Sorted, so two reports compare as multisets.
+fn cli_code_severity_pairs(root: &Path) -> Vec<(String, u8)> {
+    let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(["check", "--format", "json"])
+        .arg(root)
+        .output()
+        .expect("run ridl check");
+    // Checked first: on every exit-2 path `--format json` returns before it
+    // prints anything, so the parse below would report a JSON error instead
+    // of the real failure. Exit 1, not 0: the root's `deny` makes RIDL-100
+    // an error in `b`.
+    assert_eq!(cli.status.code(), Some(1), "{cli:?}");
+    let diagnostics: serde_json::Value =
+        serde_json::from_slice(&cli.stdout).expect("the CLI prints JSON to stdout");
+    let mut pairs: Vec<(String, u8)> = diagnostics
+        .as_array()
+        .expect("a JSON array")
+        .iter()
+        .map(|diagnostic| {
+            let code = diagnostic["code"].as_str().expect("a code").to_string();
+            let severity = match diagnostic["severity"].as_str() {
+                Some("error") => 1,
+                Some("warning") => 2,
+                Some("info") => 3,
+                other => panic!("an unexpected severity {other:?} in {diagnostic}"),
+            };
+            (code, severity)
+        })
+        .collect();
+    pairs.sort();
+    pairs
+}
+
+/// The `(code, severity)` pairs of one `publishDiagnostics` parameter object.
+fn published_code_severity_pairs(params: &serde_json::Value) -> Vec<(String, u8)> {
+    params["diagnostics"]
+        .as_array()
+        .expect("a diagnostics array")
+        .iter()
+        .map(|diagnostic| {
+            let code = diagnostic["code"].as_str().expect("a code").to_string();
+            let severity = diagnostic["severity"].as_u64().expect("a numeric severity") as u8;
+            (code, severity)
+        })
+        .collect()
+}
+
+/// A spawned `ridl lsp` after its `initialize` handshake over `root`, with
+/// `initialized` sent.
+struct LspSession {
+    child: Child,
+    stdin: std::process::ChildStdin,
+    messages: mpsc::Receiver<Message>,
+}
+
+impl LspSession {
+    fn start(root: &Path) -> LspSession {
+        let mut child = spawn_lsp(&[]);
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        let messages = read_messages(child.stdout.take().expect("piped stdout"));
+        let initialize = RequestId::from(1);
+        Message::Request(Request::new(
+            initialize.clone(),
+            "initialize".to_string(),
+            json!({
+                "capabilities": {},
+                "workspaceFolders": [{ "uri": file_uri(root), "name": "lints" }],
+            }),
+        ))
+        .write(&mut stdin)
+        .expect("write initialize");
+        response_to(&messages, initialize)
+            .response_result
+            .expect("an initialize result, not an error");
+        Message::Notification(Notification::new("initialized".to_string(), json!({})))
+            .write(&mut stdin)
+            .expect("write initialized");
+        LspSession {
+            child,
+            stdin,
+            messages,
+        }
+    }
+
+    fn notify(&mut self, method: &str, params: serde_json::Value) {
+        Message::Notification(Notification::new(method.to_string(), params))
+            .write(&mut self.stdin)
+            .unwrap_or_else(|err| panic!("write {method}: {err}"));
+    }
+
+    /// Sends `shutdown` and returns every `publishDiagnostics` the server sent
+    /// before answering it, newest last. Dispatch is sequential, so every
+    /// publish an earlier message caused precedes the `shutdown` response.
+    /// Then sends `exit` and asserts the server exits 0. The request id is 2:
+    /// `initialize` was 1, and no other request is sent in between.
+    fn shutdown_collecting_publishes(mut self) -> Vec<serde_json::Value> {
+        let shutdown = RequestId::from(2);
+        Message::Request(Request::new(
+            shutdown.clone(),
+            "shutdown".to_string(),
+            json!(null),
+        ))
+        .write(&mut self.stdin)
+        .expect("write shutdown");
+        let mut publishes = Vec::new();
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match self.messages.recv_timeout(remaining) {
+                Ok(Message::Response(response)) if response.id == shutdown => {
+                    response
+                        .response_result
+                        .expect("a shutdown result, not an error");
+                    break;
+                }
+                Ok(Message::Notification(notification))
+                    if notification.method == "textDocument/publishDiagnostics" =>
+                {
+                    publishes.push(notification.params);
+                }
+                Ok(_) => {}
+                Err(err) => panic!("no response to shutdown within {TIMEOUT:?}: {err}"),
+            }
+        }
+        self.notify("exit", json!(null));
+        drop(self.stdin);
+        let status = wait_for_exit(&mut self.child, "ridl lsp");
+        assert_eq!(status.code(), Some(0), "a clean shutdown exits 0");
+        publishes
+    }
+}
+
+/// The language server publishes the same `(code, severity)` pairs that
+/// `ridl check --format json` reports, after the `[lints]` levels apply
+/// (lint foundation spec §6.2): `deny` is LSP severity 1, `info` is 3,
+/// `allow` removes the diagnostic on both faces, and the MANI-010 of the
+/// unknown key is a Warning on both. Both faces walk the same workspace
+/// from disk, so the comparison is a multiset over every published file.
+#[test]
+fn lsp_matches_check_with_lints() {
+    let dir = TempDir::new("lsp-lints");
+    let root = lint_workspace(&dir);
+    let cli = cli_code_severity_pairs(&root);
+    // Pinned, or the equality below would pass over a fixture that stopped
+    // drawing the diagnostics it is here for.
+    assert_eq!(
+        cli,
+        vec![
+            ("MANI-010".to_string(), 2),
+            ("RIDL-100".to_string(), 1),
+            ("RIDL-100".to_string(), 3),
+        ],
+    );
+
+    let session = LspSession::start(&root);
+    let publishes = session.shutdown_collecting_publishes();
+    let mut lsp: Vec<(String, u8)> = publishes
+        .iter()
+        .flat_map(published_code_severity_pairs)
+        .collect();
+    lsp.sort();
+
+    assert_eq!(lsp, cli, "published: {publishes:#?}");
+}
+
+/// A file the editor creates after the workspace loaded has no load-time
+/// entry, so its levels resolve by directory: a new file under member `a`
+/// takes `a`'s `missing-timing = "info"` (LSP severity 3), not the root's
+/// `deny` (1) and not the registry default (2). Review focus 3.
+#[test]
+fn lsp_new_file_uses_member_levels() {
+    let dir = TempDir::new("lsp-new-file");
+    let root = lint_workspace(&dir);
+    let new_file = root.join("a").join("fresh.ridl");
+    let uri = file_uri(&new_file);
+
+    let mut session = LspSession::start(&root);
+    session.notify(
+        "textDocument/didOpen",
+        json!({
+            "textDocument": {
+                "uri": uri,
+                "languageId": "ridl",
+                "version": 1,
+                "text": UNTIMED_SIGNAL.replace("{name}", "fresh"),
+            }
+        }),
+    );
+    let publishes = session.shutdown_collecting_publishes();
+
+    let for_new_file = publishes
+        .iter()
+        .rev()
+        .find(|params| params["uri"] == uri)
+        .unwrap_or_else(|| panic!("a publish for `{uri}` in {publishes:#?}"));
+    assert_eq!(
+        published_code_severity_pairs(for_new_file),
+        vec![("RIDL-100".to_string(), 3)],
+        "{for_new_file:#?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
