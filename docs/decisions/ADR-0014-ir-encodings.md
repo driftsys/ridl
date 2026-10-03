@@ -476,14 +476,20 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       IR's `number` and `provisional`, and its interactions;
     - every declaration those interfaces reach, transitively and in any package
       of the build, under its canonical name (bare in this package, `pkg.Name`
-      in another), in canonical-name order;
-    - every doc string blank, and `services` and `retired` empty.
+      in another), in canonical-name order. A bare reference inside a
+      declaration of another package names that package's declaration, and every
+      type reference inside a reduced declaration is rewritten to its canonical
+      name, so the bytes show which declaration each reference means;
+    - every doc string blank, the doc tags `@labels` and `@deprecated` (the
+      `labels` and `deprecated` fields) blank, and `services` and `retired`
+      empty.
 
     **What is not covered, and why.** `Package.retired`: the hash identifies
     what a peer can call, and the retired list is carried beside it, in the
     catalog descriptor and in the codegen model's `Catalog.retired`. Doc
-    strings: a comment does not change what crosses a boundary. A declaration no
-    interface reaches: it does not cross a boundary either.
+    strings, labels and deprecation notes: they come from doc comments and do
+    not change what crosses a boundary. A declaration no interface reaches: it
+    does not cross a boundary either.
 
     **The determinism rule for the binary.** The same reduced package always
     encodes to the same bytes because:
