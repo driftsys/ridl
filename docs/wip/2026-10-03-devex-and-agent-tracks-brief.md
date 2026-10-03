@@ -166,11 +166,33 @@ evals are scored beyond "it compiles" (an open question in ADR-0005).
 
 ## Order
 
-1. Spec 0, the lint foundation.
-2. Specs 2a, 2b and 1a in parallel. 2a and 2b can both change `ridl-ir` (the doc
-   model and the documented contract), so their specs agree on that shape before
-   either plan starts.
-3. 1b and 1c, which need the foundation and the 1a tools.
+Agreed with the maintainer on 2026-10-03. The order starts with the pieces whose
+outcome is predictable and ends with the pieces that need evidence.
+
+| Piece                      | Work           | Uncertainty | Why                                                                                                                                  |
+| -------------------------- | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1a, MCP tools              | medium         | low         | Wraps compiler functions that exist. No change to the language, the IR or a wire format.                                             |
+| Spec 0, lint foundation    | small          | low         | A registry, a manifest table and an output format. Bound by ADR-0002 and ADR-0010.                                                   |
+| 2a, docs in the source     | medium         | low         | rustdoc and Dokka show the target. The tag set is a language-surface decision.                                                       |
+| 2b, docs in generated code | medium to high | low         | Broad: an IR shape, the rendering in each backend, generated-output snapshots, the out-of-repo Kotlin plugin.                        |
+| 1b, design lints           | medium         | high        | The metrics are easy to compute; thresholds that do not report findings a designer would dismiss need evidence from real workspaces. |
+| 1c, skill and evals        | medium         | highest     | Proving the skill helps across Claude and GPT needs an eval harness and a scoring method beyond "it compiles" (ADR-0005).            |
+
+1. **1a and Spec 0, in parallel.** 1a does not need the lint foundation:
+   checking by path and the lookup and review tools work without `[lints]`. 1a
+   goes first because the MCP server is the larger gap today, and its lookup
+   tools return richer docs later with no change when 2a and 2b land.
+2. **2a**, after Spec 0, because its doc lints need the lint registry.
+3. **2b**, after 2a has settled the doc model in the IR, and after the catalog
+   descriptor epic (E16, #377 to #382) has landed its IR changes. 2b changes
+   `ridl-ir` and every backend; E16.4 and E16.5 change the same places.
+4. **1b, then 1c.** Both need the foundation and the 1a tools. Start collecting
+   real design and review tasks as 1c's eval set from step 1 onward; it costs
+   little and is what 1c is judged against.
+
+The catalog descriptor epic keeps priority over these tracks for implementation
+effort. Each step above starts its own session: brainstorming, a spec under
+`docs/wip/`, a review of the spec, then a plan.
 
 ## Related work
 
