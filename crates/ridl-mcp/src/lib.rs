@@ -6,6 +6,7 @@
 //! server is a thin consumer of the shared compiler crates — no parser, no
 //! checker of its own — and runs over stdio behind `ridl mcp`.
 
+pub mod query;
 pub mod snapshot;
 use ridl_core::diag::to_json;
 pub mod types;
@@ -131,6 +132,67 @@ impl RidlMcp {
         }
     }
 
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::ResolveOutput>(), description = "Resolve a declaration by name. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_resolve(
+        &self,
+        Parameters(input): Parameters<query::NameInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            query::resolve(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::DescribeOutput>(), description = "Describe a non-interface declaration in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_describe_type(
+        &self,
+        Parameters(input): Parameters<query::NameInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            query::describe_type(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::InteractionsOutput>(), description = "List an interface and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    async fn ridl_list_interactions(
+        &self,
+        Parameters(input): Parameters<query::InterfaceInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let input: query::NameInput = input.into();
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            query::list_interactions(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
     #[tool(
         name = "ridl_check",
         output_schema = rmcp::handler::server::common::schema_for_output::<CheckOutput>(),
