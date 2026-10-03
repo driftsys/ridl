@@ -389,7 +389,19 @@ demo:
     # and keep this green while a fresh clone failed.
     rm -rf examples/cabin/generated
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    cargo test --locked -p xtask --test oracle_boundary -- --ignored --exact the_generated_crate_reaches_no_planus_crate
+    # This line is the only one that runs the generated crate's planus check,
+    # which is ignored for a plain `cargo test`. A filter that matches no test
+    # exits 0, so a renamed test would pass here unseen: the result line must
+    # say that exactly one test ran and passed.
+    if ! planus_check="$(cargo test --locked -p xtask --test oracle_boundary -- --ignored --exact the_generated_crate_reaches_no_planus_crate 2>&1)"; then
+        printf '%s\n' "$planus_check"
+        exit 1
+    fi
+    printf '%s\n' "$planus_check"
+    if ! printf '%s\n' "$planus_check" | grep -q '^test result: ok\. 1 passed; 0 failed'; then
+        echo "demo: the generated crate's planus check did not run exactly one test" >&2
+        exit 1
+    fi
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the

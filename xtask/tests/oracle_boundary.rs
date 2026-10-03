@@ -25,10 +25,11 @@
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
 //! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
-//! same reason and one more: the E11.7 design note's D-12 keeps a
-//! third-party FlatBuffers implementation out of the shipped path, and
-//! ADR-0020 decision 9 makes a backend an executable rather than a library
-//! other crates link.
+//! same reason and one more: ADR-0020 decision 9 makes a backend an
+//! executable rather than a library other crates link. The E11.7 design
+//! note's D-12 keeps planus out of `ridl-rt` and out of every generated
+//! package; the toolchain may ship planus (ADR-0020 decision 5, as amended
+//! 2026-10-03).
 //!
 //! **The authority is D-12, not ADR-0020 decision 5.** Decision 5 *permits*
 //! one FlatBuffers runtime crate, in `ridl-rt` under its `flatbuffers`
@@ -39,12 +40,12 @@
 //! Lane E16 (the catalog descriptor) added a second kind of boundary, a
 //! stronger one (lane E16 driver, section 4, answer 8). The toolchain may now
 //! depend on planus: `ridl-descriptor` on its runtime, `xtask` on its schema
-//! compiler and code generator, and `ridlc` and `ridl` through
+//! compiler and code generator, and `ridlc` and `ridl` may through
 //! `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
 //! not depend on any planus crate at all, as a normal, a build or a dev
-//! dependency, because `ridl-rt` is the crate a generated package links and
-//! the generated package is what a user ships. [`RUNTIME_BOUNDARIES`] covers
-//! `ridl-rt` in this workspace.
+//! dependency (ADR-0020 decision 5, as amended 2026-10-03), because `ridl-rt`
+//! is the crate a generated package links and the generated package is what
+//! a user ships. [`RUNTIME_PACKAGES`] covers `ridl-rt` in this workspace.
 //!
 //! The generated package is the second half of that rule, and this workspace
 //! cannot see it: `ridl build` writes it into `examples/cabin/generated/`,
@@ -88,11 +89,12 @@ const BOUNDARIES: &[Boundary] = &[
     },
     // E11.7 stage K8 added planus's runtime and code generator to
     // `ridl-backend-rust` for the FlatBuffers codec's conformance test. They
-    // are the same kind of oracle under a stronger rule: the design note's
-    // D-12 keeps a third-party FlatBuffers implementation out of the shipped
-    // path, and this crate emits the codec rather than linking one. A
-    // promotion here would put planus behind `ridlc`, and so behind the
-    // `ridl` CLI.
+    // are the same kind of oracle: this crate emits the codec rather than
+    // linking one, so its own use of planus is test-time only. The toolchain
+    // may ship planus through `ridl-descriptor`; what must never reach planus
+    // is `ridl-rt` and a generated package (the E11.7 design note's D-12, and
+    // ADR-0020 decision 5 as amended 2026-10-03), which `RUNTIME_PACKAGES`
+    // and the generated-crate check below cover.
     Boundary {
         package: "ridl-backend-rust",
         oracle: "planus",
@@ -119,30 +121,11 @@ const BOUNDARIES: &[Boundary] = &[
 /// schema compiler.
 const PLANUS_CRATES: &[&str] = &["planus", "planus-codegen", "planus-translation"];
 
-/// The stronger boundary of lane E16 (driver section 4, answer 8): `package`
-/// must not reach `forbidden` through any kind of dependency edge, dev
-/// included, because `package` is what a generated package links.
-struct RuntimeBoundary {
-    /// The crate under the constraint.
-    package: &'static str,
-    /// The crate `package` must not reach at all.
-    forbidden: &'static str,
-}
-
-const RUNTIME_BOUNDARIES: &[RuntimeBoundary] = &[
-    RuntimeBoundary {
-        package: "ridl-rt",
-        forbidden: "planus",
-    },
-    RuntimeBoundary {
-        package: "ridl-rt",
-        forbidden: "planus-codegen",
-    },
-    RuntimeBoundary {
-        package: "ridl-rt",
-        forbidden: "planus-translation",
-    },
-];
+/// The packages under the stronger boundary of lane E16 (driver section 4,
+/// answer 8): none of them may reach any of [`PLANUS_CRATES`] through any
+/// kind of dependency edge, dev included, because a generated package links
+/// them.
+const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
 /// Runs `cargo metadata --format-version 1 --locked` and parses its stdout
 /// as JSON. `--locked` matches every other cargo invocation this workspace's
@@ -246,8 +229,8 @@ fn normal_closure<'a>(
 /// the first step, then by normal and build edges only, each mapped to the
 /// edge that first reached it.
 ///
-/// The first step takes every kind because a [`RuntimeBoundary`] forbids the
-/// crate as a dev-dependency too. The later steps leave out dev edges because
+/// The first step takes every kind because [`RUNTIME_PACKAGES`] must not
+/// reach a planus crate as a dev-dependency either. The later steps leave out dev edges because
 /// cargo never builds a dependency's own dev-dependencies for its dependents,
 /// and keep build edges because cargo compiles those for every build of
 /// `package`: a planus crate there would be compiled into the build of every
@@ -369,8 +352,8 @@ fn schema_compilers_stay_dev_dependencies() {
     }
 }
 
-/// Every [`RuntimeBoundary`] holds: no planus crate is reachable from
-/// `ridl-rt` through any dependency edge, dev included (lane E16 driver,
+/// Every package in [`RUNTIME_PACKAGES`] holds: no crate of [`PLANUS_CRATES`]
+/// is reachable from it through any dependency edge, dev included (lane E16 driver,
 /// section 4, answer 8).
 ///
 /// The graph is resolved with `--all-features`. A user's generated package
@@ -380,21 +363,21 @@ fn schema_compilers_stay_dev_dependencies() {
 #[test]
 fn the_runtime_reaches_no_planus_crate() {
     let metadata = cargo_metadata_of(None, true);
-    for boundary in RUNTIME_BOUNDARIES {
-        let reached = runtime_closure(&metadata, boundary.package);
-        assert!(
-            !reached.contains_key(boundary.forbidden),
-            "\n\
-             `{forbidden}` is in `{package}`'s dependency closure: {path}\n\
-             \n\
-             `{package}` is the crate every generated package links, so it \
-             must not depend on planus in any way, not even as a \
-             dev-dependency (lane E16 driver, section 4, answer 8). The \
-             toolchain reaches planus through `ridl-descriptor` instead.\n",
-            package = boundary.package,
-            forbidden = boundary.forbidden,
-            path = normal_path(&reached, boundary.package, boundary.forbidden),
-        );
+    for &package in RUNTIME_PACKAGES {
+        let reached = runtime_closure(&metadata, package);
+        for &forbidden in PLANUS_CRATES {
+            assert!(
+                !reached.contains_key(forbidden),
+                "\n\
+                 `{forbidden}` is in `{package}`'s dependency closure: {path}\n\
+                 \n\
+                 `{package}` is the crate every generated package links, so it \
+                 must not depend on planus in any way, not even as a \
+                 dev-dependency (lane E16 driver, section 4, answer 8). The \
+                 toolchain may reach planus through `ridl-descriptor` instead.\n",
+                path = normal_path(&reached, package, forbidden),
+            );
+        }
     }
 }
 
@@ -406,11 +389,15 @@ fn the_runtime_reaches_no_planus_crate() {
 /// so `cargo metadata` cannot resolve the workspace before that, and this
 /// test is ignored for a plain `cargo test`. `just demo` runs it with
 /// `--ignored` right after `ridl build` writes the crate.
+///
+/// The graph is resolved with `--all-features`, so a planus crate behind a
+/// feature of the generated crate or of the consumer that nothing turns on
+/// still fails this test.
 #[test]
 #[ignore = "needs examples/cabin/generated, which `just demo` writes; `just demo` runs it"]
 fn the_generated_crate_reaches_no_planus_crate() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
-    let metadata = cargo_metadata_of(Some(&manifest), false);
+    let metadata = cargo_metadata_of(Some(&manifest), true);
     let names = package_names(&metadata);
     assert!(
         names.values().any(|&name| name == "veh_cabin"),
