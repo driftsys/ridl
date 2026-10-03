@@ -366,7 +366,8 @@ compat-check: toolchain-check
 # failing to compile; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; a planus crate in the resolved graph of
-# `examples/cabin`.
+# `examples/cabin`; the planus check running no test or more than one, which
+# is what a renamed test or a changed filter does.
 #
 # The planus check is `xtask/tests/oracle_boundary.rs`'s
 # `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
