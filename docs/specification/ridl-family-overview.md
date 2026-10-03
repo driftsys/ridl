@@ -318,6 +318,7 @@ are `1xx`.
 | MANI-007 | invalid import URL                                          | error    |
 | MANI-008 | workspace member directory is missing or has no `ridl.toml` | error    |
 | MANI-009 | invalid `[defaults].timing` value (ridl §9.1)               | error    |
+| MANI-010 | `[lints]` entry names no lint, or its value is not a level  | warning  |
 | MANI-101 | remote import fetch failed                                  | error    |
 | MANI-102 | fetched content hash does not match the lockfile            | error    |
 | MANI-103 | `--frozen`: no lockfile entry for a remote import           | error    |
