@@ -186,6 +186,20 @@ trusted with no `unsafe` and no second verification pass.
    catalog reads and writes the wrong interface's slots with no error, which is
    sound only because `ridl-loopback` is in-process and single-catalog.
 
+   **Note (2026-10-04, story E16.2, driftsys/ridl#378).** The catalog hash is
+   now computed ([ADR-0014](ADR-0014-ir-encodings.md) decision 15), and the Rust
+   backend writes it into every generated `Interface::CATALOG`; no generated
+   code writes `CatalogHash([0u8; 32])` any more. The check is still not
+   emitted. It now waits on story E16.5 (driftsys/ridl#381), which emits it and
+   takes the decision on what `new` does on a mismatch, as an amendment to
+   [ADR-0023](ADR-0023-interaction-face-generation.md). E16.2 did not emit it,
+   for four reasons: it kept E16.2 smaller; the amendment above lets the check
+   land with E16.2 or after it; the mismatch behaviour changes every generated
+   `new`; and E16.5 is the story after which the hash is in both artifacts a
+   pair can be built from — the generated face and the catalog descriptor an
+   engine reads. Until E16.5, the last sentence of the amendment above still
+   holds.
+
 4. **A failed `require` or `ensure` clause carries no value.** Both methods
    return `Result<(), ()>` (`#[allow(clippy::result_unit_err)]`, because the
    omission is deliberate): the method that fails already decides the contract
@@ -686,6 +700,11 @@ trusted with no `unsafe` and no second verification pass.
     `ridl-loopback` moves its caller side onto both in the same story, with
     sixteen slots and no byte budget until E16.2 gives it a descriptor. Notes
     F-5, F-8 and F-9.
+
+    **Note (2026-10-04, story E16.2, driftsys/ridl#378).** E16.2 computes the
+    catalog hash but writes no catalog descriptor file; `--emit catalog` is
+    story E16.5 (driftsys/ridl#381). `ridl-loopback` therefore still has no
+    descriptor, and the descriptor in the sentence above now arrives with E16.5.
 
 16. **Amendment (2026-09-26) — `ClientError` and `ProviderError`.** `error`
     gains `ClientError { Send(SendError), Call(CallError), Read(ReadError) }`,

@@ -116,6 +116,12 @@ nothing.
    depend on `ridl-descriptor` — and `Region` gains `bytes hash = 3`. The
    archived plan's Part B4 Task 9 is the record of that deferred work.
 
+   **Note (2026-10-04, story E16.2, driftsys/ridl#378).** The function now
+   exists: `ridl_ir::catalog_hash::catalog_hash`, re-exported as
+   `ridl_descriptor::hash::catalog_hash` ([ADR-0014](ADR-0014-ir-encodings.md)
+   decision 15). Story E6.17 no longer waits on it, and is still open: `Region`
+   still has no hash field, and the driver does not yet embed one.
+
 8. **`ridl build` writes every artifact when the only errors are RSDL-7xx, and
    still exits 1** (plan decision P-B8, confirmed by Sebastien on 2026-09-17).
    The build's rule was that any error-severity diagnostic writes nothing. rsdl

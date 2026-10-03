@@ -322,6 +322,14 @@ argument for it in the command case.
    `new` returning `Self` today is the absence of a decision, not a decision
    that it is infallible. Recorded on driftsys/ridl#448.
 
+   **Note (2026-10-04, story E16.2, driftsys/ridl#378).** The catalog hash is
+   now computed ([ADR-0014](ADR-0014-ir-encodings.md) decision 15) and written
+   into every generated `Interface::CATALOG`, so the comparison would no longer
+   be two zeros. The check is still not emitted: it now waits on story E16.5
+   (driftsys/ridl#381), which emits it and amends this record with what `new`
+   does on a mismatch. The reasons are in the 2026-10-04 note on
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3.
+
 6. **Amendment (2026-09-26) — two clients per interface and a `serve`, and the
    poll face `pub(crate)`.** For every interface the face emits:
 
