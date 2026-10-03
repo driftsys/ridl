@@ -48,6 +48,85 @@ pub struct LoadedWorkspace {
     pub sources: SourceMap,
 }
 
+/// Unsaved source text for a file in a loaded package directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Overlay {
+    pub path: PathBuf,
+    pub text: String,
+}
+
+/// A filesystem failure or an overlay that cannot belong to the workspace.
+#[derive(Debug)]
+pub enum LoadError {
+    Io(io::Error),
+    OverlayNotSource(PathBuf),
+    OverlayOutsideWorkspace {
+        path: PathBuf,
+        missing_directory: bool,
+    },
+}
+
+impl std::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "{e}"),
+            Self::OverlayNotSource(p) => write!(
+                f,
+                "overlay `{}` is not a `.typl`, `.ridl` or `.rsdl` file",
+                p.display()
+            ),
+            Self::OverlayOutsideWorkspace {
+                path,
+                missing_directory: true,
+            } => write!(
+                f,
+                "overlay `{}` is in a directory that does not exist; create the directory first",
+                path.display()
+            ),
+            Self::OverlayOutsideWorkspace {
+                path,
+                missing_directory: false,
+            } => write!(
+                f,
+                "overlay `{}` is not in a package directory of the workspace loaded from this path",
+                path.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<io::Error> for LoadError {
+    fn from(e: io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+/// The comparison key for a path: its parent directory canonicalised, joined
+/// with its file name. `None` when the parent directory does not exist.
+fn overlay_key(path: &Path) -> Option<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(path)
+    };
+    Some(
+        absolute
+            .parent()?
+            .canonicalize()
+            .ok()?
+            .join(absolute.file_name()?),
+    )
+}
+
 /// Loads the workspace reachable from `entry` into `db`.
 ///
 /// `entry` may be:
@@ -67,7 +146,33 @@ pub struct LoadedWorkspace {
 /// standalone package load the manifest's `[imports]` ride on its packages
 /// and [`Workspace::imports`] is empty.
 pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedWorkspace> {
+    load_workspace_with(db, entry, &[]).map_err(|error| match error {
+        LoadError::Io(e) => e,
+        _ => unreachable!("no overlay error is possible without overlays"),
+    })
+}
+
+/// Loads a workspace with unsaved source text substituted before parsing.
+pub fn load_workspace_with(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[Overlay],
+) -> Result<LoadedWorkspace, LoadError> {
     let mut loader = Loader::default();
+    for overlay in overlays {
+        if !overlay
+            .path
+            .extension()
+            .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
+        {
+            return Err(LoadError::OverlayNotSource(overlay.path.clone()));
+        }
+        let key = overlay_key(&overlay.path).ok_or_else(|| LoadError::OverlayOutsideWorkspace {
+            path: overlay.path.clone(),
+            missing_directory: true,
+        })?;
+        loader.overlays.push((key, overlay.clone(), false));
+    }
 
     if entry.is_file() {
         match entry.parent().and_then(find_manifest_root) {
@@ -81,16 +186,24 @@ pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedW
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("no `ridl.toml` found at or above `{}`", entry.display()),
-                ));
+                )
+                .into());
             }
         }
     } else {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!("`{}` does not exist", entry.display()),
-        ));
+        )
+        .into());
     }
 
+    if let Some((_, overlay, _)) = loader.overlays.iter().find(|(_, _, consumed)| !consumed) {
+        return Err(LoadError::OverlayOutsideWorkspace {
+            path: overlay.path.clone(),
+            missing_directory: false,
+        });
+    }
     let workspace = Workspace::new(&*db, loader.packages, loader.workspace_imports);
     Ok(LoadedWorkspace {
         workspace,
@@ -115,6 +228,7 @@ type LoadedFile = (InputFile, Vec<(String, TextRange)>);
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
+    overlays: Vec<(PathBuf, Overlay, bool)>,
     sources: SourceMap,
     diagnostics: Vec<Diagnostic>,
     packages: Vec<Package>,
@@ -266,6 +380,19 @@ impl Loader {
                 source_files.push(path);
             }
         }
+        let directory_key = dir.canonicalize()?;
+        for (key, _, _) in &self.overlays {
+            if key.parent() == Some(directory_key.as_path())
+                && !source_files
+                    .iter()
+                    .any(|p| overlay_key(p).as_ref() == Some(key))
+            {
+                let added = dir.join(key.file_name().expect("overlay keys have a file name"));
+                if !source_files.contains(&added) {
+                    source_files.push(added);
+                }
+            }
+        }
         source_files.sort();
         subdirs.sort();
 
@@ -397,7 +524,19 @@ impl Loader {
         expected: Option<&str>,
     ) -> io::Result<Option<LoadedFile>> {
         let path_str = path_string(path);
-        let text = match fs::read_to_string(path) {
+        let replacement = self
+            .overlays
+            .iter_mut()
+            .filter(|(key, _, _)| overlay_key(path).as_ref() == Some(key))
+            .map(|(_, overlay, consumed)| {
+                *consumed = true;
+                overlay.text.clone()
+            })
+            .last();
+        let text = match replacement
+            .map(Ok)
+            .unwrap_or_else(|| fs::read_to_string(path))
+        {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::InvalidData => {
                 // No text means no spans; the diagnostic points at the start
@@ -574,6 +713,251 @@ mod tests {
 
     fn codes(diags: &[Diagnostic]) -> Vec<&str> {
         diags.iter().map(|d| d.code.as_str()).collect()
+    }
+
+    fn overlay_fixture() -> (TempDir, PathBuf) {
+        let dir = TempDir::new("overlay");
+        dir.write(
+            "p/ridl.toml",
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+        );
+        let path = dir.write("p/a.typl", "package p\ntype A: integer [0..1]\n");
+        (dir, path)
+    }
+
+    fn overlay(path: PathBuf, text: &str) -> Overlay {
+        Overlay {
+            path,
+            text: text.to_string(),
+        }
+    }
+
+    #[test]
+    fn overlay_replaces_the_text_of_a_file_on_disk() {
+        let (dir, path) = overlay_fixture();
+        let text = "package p\n\ntype Other: integer [0..1]\n";
+        let mut db = RidlDatabase::default();
+        let mut loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(path.clone(), text)],
+        )
+        .unwrap();
+        let file = loaded.workspace.packages(&db)[0].files(&db)[0];
+        assert_eq!(file.text(&db), text);
+        let id = loaded.sources.file_id(&path_string(&path), text);
+        assert_eq!(loaded.sources.text(id), Some(text));
+    }
+
+    #[test]
+    fn overlay_adds_a_file_to_the_package_of_its_directory() {
+        let (dir, _) = overlay_fixture();
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(dir.path().join("p/b.typl"), "package p\n")],
+        )
+        .unwrap();
+        let files = loaded.workspace.packages(&db)[0].files(&db);
+        assert_eq!(files.len(), 2);
+        assert!(files[0].path(&db).ends_with("a.typl"));
+        assert!(files[1].path(&db).ends_with("b.typl"));
+    }
+
+    #[test]
+    fn overlay_in_an_existing_subdirectory_joins_its_package() {
+        let (dir, _) = overlay_fixture();
+        dir.write("p/sub/c.typl", "package p.sub\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(dir.path().join("p/sub/d.typl"), "package p.sub\n")],
+        )
+        .unwrap();
+        let package = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .find(|p| p.name(&db) == "p.sub")
+            .unwrap();
+        let files = package.files(&db);
+        assert_eq!(files.len(), 2);
+        assert!(files[0].path(&db).ends_with("c.typl"));
+        assert!(files[1].path(&db).ends_with("d.typl"));
+    }
+
+    #[test]
+    fn an_added_file_with_the_wrong_package_name_draws_typl_002() {
+        let (dir, _) = overlay_fixture();
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(dir.path().join("p/b.typl"), "package q\n")],
+        )
+        .unwrap();
+        let diag = loaded
+            .diagnostics
+            .iter()
+            .find(|d| d.code == DiagCode::TYPL_002)
+            .unwrap();
+        assert!(
+            loaded
+                .sources
+                .path(diag.primary.file)
+                .unwrap()
+                .ends_with("b.typl")
+        );
+    }
+
+    #[test]
+    fn an_overlay_in_a_missing_directory_is_refused() {
+        let (dir, _) = overlay_fixture();
+        let result = load_workspace_with(
+            &mut RidlDatabase::default(),
+            &dir.path().join("p"),
+            &[overlay(
+                dir.path().join("p/nope/e.typl"),
+                "package p.nope\n",
+            )],
+        );
+        assert!(matches!(
+            result,
+            Err(LoadError::OverlayOutsideWorkspace {
+                missing_directory: true,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn an_overlay_outside_the_workspace_is_refused() {
+        let (dir, _) = overlay_fixture();
+        let path = dir.write("sibling/a.typl", "package sibling\n");
+        let result = load_workspace_with(
+            &mut RidlDatabase::default(),
+            &dir.path().join("p"),
+            &[overlay(path, "package sibling\n")],
+        );
+        assert!(matches!(
+            result,
+            Err(LoadError::OverlayOutsideWorkspace {
+                missing_directory: false,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn an_overlay_under_a_hidden_directory_is_refused() {
+        let (dir, _) = overlay_fixture();
+        fs::create_dir(dir.path().join("p/.hidden")).unwrap();
+        let result = load_workspace_with(
+            &mut RidlDatabase::default(),
+            &dir.path().join("p"),
+            &[overlay(
+                dir.path().join("p/.hidden/f.typl"),
+                "package p.hidden\n",
+            )],
+        );
+        assert!(matches!(
+            result,
+            Err(LoadError::OverlayOutsideWorkspace {
+                missing_directory: false,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_non_source_overlay_is_refused() {
+        let (dir, _) = overlay_fixture();
+        let result = load_workspace_with(
+            &mut RidlDatabase::default(),
+            &dir.path().join("p"),
+            &[overlay(dir.path().join("p/ridl.toml"), "")],
+        );
+        assert!(matches!(result, Err(LoadError::OverlayNotSource(_))));
+    }
+
+    #[test]
+    fn single_file_mode_takes_an_overlay_for_the_entry() {
+        let dir = TempDir::new("overlay-single");
+        let path = dir.write("x.typl", "package x\n");
+        let text = "package x\ntype Other: integer [0..1]\n";
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(&mut db, &path, &[overlay(path.clone(), text)]).unwrap();
+        assert_eq!(
+            loaded.workspace.packages(&db)[0].files(&db)[0].text(&db),
+            text
+        );
+        let result = load_workspace_with(
+            &mut db,
+            &path,
+            &[overlay(dir.path().join("y.typl"), "package y\n")],
+        );
+        assert!(matches!(
+            result,
+            Err(LoadError::OverlayOutsideWorkspace {
+                missing_directory: false,
+                ..
+            })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn overlay_matches_a_file_named_by_a_relative_entry() {
+        let (dir, path) = overlay_fixture();
+        let cwd = std::env::current_dir().unwrap();
+        let mut relative = PathBuf::new();
+        for part in cwd.components() {
+            if matches!(part, std::path::Component::Normal(_)) {
+                relative.push("..");
+            }
+        }
+        relative.push(path.strip_prefix("/").unwrap());
+        for (entry, overlay_path) in [(&relative, &path), (&path, &relative)] {
+            let mut db = RidlDatabase::default();
+            let text = "package p\ntype Other: integer [0..1]\n";
+            let loaded =
+                load_workspace_with(&mut db, entry, &[overlay(overlay_path.clone(), text)])
+                    .unwrap();
+            assert_eq!(
+                loaded.workspace.packages(&db)[0].files(&db)[0].text(&db),
+                text
+            );
+        }
+        drop(dir);
+    }
+
+    #[test]
+    fn load_workspace_without_overlays_is_unchanged() {
+        let (dir, _) = overlay_fixture();
+        let mut db = RidlDatabase::default();
+        let first = load_workspace_with(&mut db, &dir.path().join("p"), &[]).unwrap();
+        let describe = |db: &RidlDatabase, loaded: &LoadedWorkspace| {
+            loaded
+                .workspace
+                .packages(db)
+                .iter()
+                .map(|p| {
+                    (
+                        p.name(db).clone(),
+                        p.files(db)
+                            .iter()
+                            .map(|f| f.path(db).clone())
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let expected = describe(&db, &first);
+        let mut other = RidlDatabase::default();
+        let second = load_workspace(&mut other, &dir.path().join("p")).unwrap();
+        assert_eq!(expected, describe(&other, &second));
     }
 
     const PACKAGE_MANIFEST: &str = "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n";
