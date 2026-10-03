@@ -47,20 +47,30 @@ env:
 
 jobs:
   # Decides which gate jobs a pull request needs, from the files it changes.
-  # A push to main and a manual run always run everything: main is what `pages`
-  # publishes from, and a manual run exists to repeat the whole gate.
+  # A push to main and a manual run set every flag, so every path-filtered job
+  # runs: main is what `pages` publishes from, and a manual run exists to repeat
+  # the whole gate.
   #
-  # Cross-dependencies the filters have to honour, each of which a docs-only or
-  # Rust-only reading would miss:
-  #   - crates/ridl/tests/book_examples.rs compiles every fence in docs/book/,
-  #     and the Language reference chapters include docs/specification/, so a
-  #     change under either path runs the Rust jobs.
-  #   - `just doc-path-check` scans Rust source comments for docs/ paths, so the
-  #     `book` job runs on every pull request. It compiles nothing, so it is
-  #     cheap.
-  #   - `just check` (prim) covers JSON, YAML and TOML as well as Markdown, so
-  #     the `markdown` job runs for any change that is not Rust source alone.
-  # The `ci` aggregate accepts "skipped", so a skipped job does not fail it.
+  # The filter fails closed. It lists the paths that are known not to affect a
+  # job, and a pull request skips the job only when every changed file is on
+  # that list. A path nobody listed runs the job. The reverse design, a list of
+  # paths that trigger it, skips the job for every dependency nobody remembered:
+  # the Rust tests read LICENSE, THIRD-PARTY-NOTICES.txt, .editorconfig and
+  # files under docs/specification/ directly, and a trigger list missed three of
+  # those on its first draft.
+  #
+  # Two jobs are path-filtered, and `book` is not:
+  #   - `rust` and `wasm` skip when every changed file is documentation or
+  #     editor tooling that no Rust test or recipe reads. docs/book/ and
+  #     docs/specification/ are not on the list: book_examples.rs compiles the
+  #     docs/book/ fences, and Rust code reads docs/specification/ files.
+  #   - `markdown` (prim) skips when every changed file is Rust source. prim
+  #     also covers JSON, YAML and TOML, so any other file runs it.
+  #   - `book` always runs on a pull request: `just doc-path-check` scans Rust
+  #     source comments for docs/ paths, and the job compiles nothing.
+  # The diff uses --no-renames so a file moved out of a listed path shows under
+  # both its old and new name. The `ci` aggregate accepts "skipped", and lists
+  # `changes`, so a failed filter fails the aggregate.
   changes:
     name: changes
     runs-on: ubuntu-latest
@@ -70,11 +80,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # The pull_request checkout is a merge commit; its first parent is
+          # the base branch tip, so two commits are enough to diff against it.
+          fetch-depth: 2
       - id: filter
         env:
           EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           if [ "$EVENT" != "pull_request" ]; then
@@ -82,15 +93,18 @@ jobs:
             echo "markdown=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          files="$(git diff --name-only "$BASE_SHA" HEAD)"
+          files="$(git diff --name-only --no-renames HEAD^1 HEAD)"
           echo "$files"
-          rust_paths='^(crates/|xtask/|examples/|docs/book/|docs/specification/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|justfile$|install\.(sh|ps1)$|LICENSE$|THIRD-PARTY-NOTICES\.txt$|book\.toml$|\.github/workflows/|\.cargo/)'
-          if printf '%s\n' "$files" | grep -qE "$rust_paths"; then
+          # Here-strings, not `printf | grep -q`: grep -q exits at its first
+          # match, printf then dies of SIGPIPE, and pipefail reports that as a
+          # non-match once the list passes the 64 KiB pipe buffer.
+          rust_skip='^(docs/(wip|archive|decisions|design|technotes)/|docs/[^/]+\.md$|[A-Z_-]+\.md$|editors/|\.claude/|\.githooks/|\.git-std\.toml$|\.mcp\.json$)'
+          if grep -vqE "$rust_skip" <<< "$files"; then
             echo "rust=true" >> "$GITHUB_OUTPUT"
           else
             echo "rust=false" >> "$GITHUB_OUTPUT"
           fi
-          if printf '%s\n' "$files" | grep -vqE '\.rs$'; then
+          if grep -vqE '\.rs$' <<< "$files"; then
             echo "markdown=true" >> "$GITHUB_OUTPUT"
           else
             echo "markdown=false" >> "$GITHUB_OUTPUT"
