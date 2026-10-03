@@ -187,10 +187,11 @@ fn the_error_names_its_cause() {
 // `walk` reads, in a buffer whose root table and version still read, so
 // only the walk's read of that one field can reject it.
 
-/// A catalog in which every field `walk` reads is present: every enum holds
-/// a value other than its default, because planus leaves a field that holds
-/// its default out of the table. [`full_with`] varies two fields; see
-/// [`Fixture`].
+/// A catalog in which every vector of tables holds two elements, and the
+/// last element of each has every field `walk` reads present: every enum
+/// there holds a value other than its default, because planus leaves a field
+/// that holds its default out of the table. [`full_with`] varies two fields;
+/// see [`Fixture`].
 fn full() -> Vec<u8> {
     full_with(true, true)
 }
@@ -201,38 +202,77 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
         name: "p".to_owned(),
         hash: vec![0u8; 32],
         toolchain: "0.0.0".to_owned(),
-        interfaces: vec![Interface {
-            name: "I".to_owned(),
-            number: 1,
-            provisional,
-            members: vec![Member {
-                name: "m".to_owned(),
-                ordinal: 1,
-                kind: Kind::Event,
-                payloads: vec![Payload {
-                    role: "value".to_owned(),
-                    type_name: "T".to_owned(),
-                    max_sizes: vec![MaxSize {
-                        encoding: Encoding::FlatBuffers,
-                        bytes: 4,
-                        state: SizeStateTag::Unbounded,
-                        cause: UnboundedCause::Member,
-                    }],
-                }],
-                timing: timing.then(|| {
-                    Box::new(Timing {
-                        mode: TimingMode::StrictPeriodic,
-                        min_us: Some("1".to_owned()),
-                        max_us: Some("2".to_owned()),
-                    })
-                }),
-            }],
-            reserved_ordinals: vec![5],
-        }],
-        retired: vec![RetiredInterface {
-            name: "R".to_owned(),
-            number: 2,
-        }],
+        interfaces: vec![
+            Interface {
+                name: "I0".to_owned(),
+                number: 3,
+                provisional: false,
+                members: vec![],
+                reserved_ordinals: vec![],
+            },
+            Interface {
+                name: "I".to_owned(),
+                number: 1,
+                provisional,
+                members: vec![
+                    Member {
+                        name: "m0".to_owned(),
+                        ordinal: 2,
+                        kind: Kind::Signal,
+                        payloads: vec![],
+                        timing: None,
+                    },
+                    Member {
+                        name: "m".to_owned(),
+                        ordinal: 1,
+                        kind: Kind::Event,
+                        payloads: vec![
+                            Payload {
+                                role: "r0".to_owned(),
+                                type_name: "T0".to_owned(),
+                                max_sizes: vec![],
+                            },
+                            Payload {
+                                role: "value".to_owned(),
+                                type_name: "T".to_owned(),
+                                max_sizes: vec![
+                                    MaxSize {
+                                        encoding: Encoding::Proto3,
+                                        bytes: 0,
+                                        state: SizeStateTag::Bounded,
+                                        cause: UnboundedCause::Unspecified,
+                                    },
+                                    MaxSize {
+                                        encoding: Encoding::FlatBuffers,
+                                        bytes: 4,
+                                        state: SizeStateTag::Unbounded,
+                                        cause: UnboundedCause::Member,
+                                    },
+                                ],
+                            },
+                        ],
+                        timing: timing.then(|| {
+                            Box::new(Timing {
+                                mode: TimingMode::StrictPeriodic,
+                                min_us: Some("1".to_owned()),
+                                max_us: Some("2".to_owned()),
+                            })
+                        }),
+                    },
+                ],
+                reserved_ordinals: vec![5, 6],
+            },
+        ],
+        retired: vec![
+            RetiredInterface {
+                name: "R0".to_owned(),
+                number: 4,
+            },
+            RetiredInterface {
+                name: "R".to_owned(),
+                number: 2,
+            },
+        ],
     })
 }
 
@@ -308,10 +348,14 @@ fn follow(bytes: &[u8], at: usize) -> usize {
     at + u32_at(bytes, at)
 }
 
-/// The position of the first table in the vector field `slot`.
-fn first_in(bytes: &[u8], table: usize, slot: usize) -> usize {
+/// The position of the last table in the vector field `slot`. The cases
+/// damage the last of two or more elements, so a walk that stops after the
+/// first element of a vector misses the damage.
+fn last_in(bytes: &[u8], table: usize, slot: usize) -> usize {
     let vector = follow(bytes, field(bytes, table, slot));
-    follow(bytes, vector + 4)
+    let len = u32_at(bytes, vector);
+    assert!(len >= 2, "slot {slot}: the fixture has {len} elements");
+    follow(bytes, vector + 4 * len)
 }
 
 /// Makes the offset field at `at` point past the end of the buffer.
@@ -378,13 +422,13 @@ struct Tables {
 
 fn locate(bytes: &[u8]) -> Tables {
     let catalog = root(bytes);
-    let interface = first_in(bytes, catalog, CATALOG_INTERFACES);
-    let member = first_in(bytes, interface, INTERFACE_MEMBERS);
+    let interface = last_in(bytes, catalog, CATALOG_INTERFACES);
+    let member = last_in(bytes, interface, INTERFACE_MEMBERS);
     let timing = has_field(bytes, member, MEMBER_TIMING)
         .then(|| follow(bytes, field(bytes, member, MEMBER_TIMING)));
-    let payload = first_in(bytes, member, MEMBER_PAYLOADS);
-    let size = first_in(bytes, payload, PAYLOAD_MAX_SIZES);
-    let retired = first_in(bytes, catalog, CATALOG_RETIRED);
+    let payload = last_in(bytes, member, MEMBER_PAYLOADS);
+    let size = last_in(bytes, payload, PAYLOAD_MAX_SIZES);
+    let retired = last_in(bytes, catalog, CATALOG_RETIRED);
     Tables {
         catalog,
         interface,
