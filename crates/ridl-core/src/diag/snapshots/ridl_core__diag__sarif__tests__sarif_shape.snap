@@ -1,0 +1,1449 @@
+---
+source: crates/ridl-core/src/diag/sarif.rs
+expression: log
+---
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ridl",
+          "version": "0.0.0-test",
+          "rules": [
+            {
+              "id": "FORM-001",
+              "shortDescription": {
+                "text": "invalid character"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-002",
+              "shortDescription": {
+                "text": "unterminated string literal"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-003",
+              "shortDescription": {
+                "text": "unterminated regex literal"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-004",
+              "shortDescription": {
+                "text": "unterminated block comment"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-005",
+              "shortDescription": {
+                "text": "leading zeros in integer literal"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-101",
+              "shortDescription": {
+                "text": "expected a specific token, or a construct the grammar admits here"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-102",
+              "shortDescription": {
+                "text": "unexpected token"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-103",
+              "shortDescription": {
+                "text": "unclosed delimiter"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-104",
+              "shortDescription": {
+                "text": "missing `package` declaration"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-105",
+              "shortDescription": {
+                "text": "reserved word used as an identifier"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-106",
+              "shortDescription": {
+                "text": "unknown attribute key"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-107",
+              "shortDescription": {
+                "text": "attribute key not allowed on this declaration kind"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "FORM-108",
+              "shortDescription": {
+                "text": "duplicate attribute key in one block"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-001",
+              "shortDescription": {
+                "text": "more than one `package` declaration in a file"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-002",
+              "shortDescription": {
+                "text": "package name does not mirror the directory path"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-003",
+              "shortDescription": {
+                "text": "wildcard, relative, or re-exporting import"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-004",
+              "shortDescription": {
+                "text": "circular package imports"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-005",
+              "shortDescription": {
+                "text": "a public declaration exposes an `internal` type"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-006",
+              "shortDescription": {
+                "text": "conflicting imports without an alias"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-007",
+              "name": "unused-import",
+              "shortDescription": {
+                "text": "unused import"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-008",
+              "name": "unneeded-import-alias",
+              "shortDescription": {
+                "text": "import alias without an actual collision"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-009",
+              "shortDescription": {
+                "text": "duplicate definition of the same name in a package"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-010",
+              "shortDescription": {
+                "text": "package name is reserved for a package the compiler provides"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-011",
+              "shortDescription": {
+                "text": "type reference names no visible declaration"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-101",
+              "name": "unbounded-integer",
+              "shortDescription": {
+                "text": "`integer` without a range constraint"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-102",
+              "name": "unbounded-float",
+              "shortDescription": {
+                "text": "`float` without both a range and a `step`"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-103",
+              "name": "unbounded-length",
+              "shortDescription": {
+                "text": "`string`/`bytes` without explicit bounds"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-104",
+              "shortDescription": {
+                "text": "range `min > max`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-105",
+              "shortDescription": {
+                "text": "`step` type mismatch, non-positive, or larger than the range"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-106",
+              "shortDescription": {
+                "text": "invalid regex syntax in `match` or a regex `const`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-108",
+              "shortDescription": {
+                "text": "`const` value violates its declared type constraints"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-109",
+              "shortDescription": {
+                "text": "init `= value` incompatible with the type or field constraints"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-110",
+              "shortDescription": {
+                "text": "unknown or malformed UCUM unit expression"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-111",
+              "shortDescription": {
+                "text": "integer range bound outside the `int64` domain"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-115",
+              "name": "no-init-value",
+              "shortDescription": {
+                "text": "type has no derivable init value and no declared `= value`"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "TYPL-201",
+              "shortDescription": {
+                "text": "array without explicit bounds"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-202",
+              "shortDescription": {
+                "text": "map without explicit bounds"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-203",
+              "shortDescription": {
+                "text": "enum values not unique or not explicitly assigned"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-204",
+              "shortDescription": {
+                "text": "union arm with a primitive type"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-206",
+              "shortDescription": {
+                "text": "recursive composite reference, direct or transitive"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-207",
+              "shortDescription": {
+                "text": "enumset bit positions not unique"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-208",
+              "shortDescription": {
+                "text": "`string`/`bytes` used directly as a field type"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-209",
+              "shortDescription": {
+                "text": "map key is not a named string type or a primitive"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-210",
+              "shortDescription": {
+                "text": "field, arm, or enum value re-declared under a `reserved` entry"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-211",
+              "name": "duplicate-reserved",
+              "shortDescription": {
+                "text": "duplicate `reserved` entry"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-212",
+              "shortDescription": {
+                "text": "`error` modifier on a declaration other than `enum`, `struct`, `union`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-213",
+              "shortDescription": {
+                "text": "union mixes error and non-error arms without the result-union shape"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-214",
+              "shortDescription": {
+                "text": "`error union` contains a non-error-typed arm"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-215",
+              "shortDescription": {
+                "text": "field name declared twice in one struct or one tuple"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-216",
+              "shortDescription": {
+                "text": "enum value name declared twice in one enum"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-217",
+              "shortDescription": {
+                "text": "union arm name declared twice in one union"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-218",
+              "shortDescription": {
+                "text": "enumset bit name declared twice in one enumset"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-219",
+              "shortDescription": {
+                "text": "enumset bit position is not a number with an integer value"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-220",
+              "shortDescription": {
+                "text": "regex pattern the Rust `regex` crate cannot compile"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-301",
+              "shortDescription": {
+                "text": "stream type `<T>` outside interaction position"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-302",
+              "shortDescription": {
+                "text": "timing annotation or duration literal in a typl context"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-303",
+              "shortDescription": {
+                "text": "`require`/`ensure` attribute in a typl context"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-304",
+              "shortDescription": {
+                "text": "interaction declaration in a typl context"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "TYPL-404",
+              "name": "detached-doc-comment",
+              "shortDescription": {
+                "text": "blank line between a doc comment and its definition"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-405",
+              "name": "deprecated-without-reason",
+              "shortDescription": {
+                "text": "`@deprecated` doc tag without a reason string"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-100",
+              "name": "missing-timing",
+              "shortDescription": {
+                "text": "`signal` or `event` without a timing annotation"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-101",
+              "shortDescription": {
+                "text": "timing range `@[X..Y]` with `X > Y`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-102",
+              "shortDescription": {
+                "text": "zero or negative timing duration"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-103",
+              "shortDescription": {
+                "text": "strict-periodic `@Xms` on a kind other than `signal`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-104",
+              "shortDescription": {
+                "text": "explicit return type on a `command`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-105",
+              "shortDescription": {
+                "text": "`query` returning `()`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-106",
+              "shortDescription": {
+                "text": "timing annotation on `fixed`, or attribute block on `fixed`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-107",
+              "shortDescription": {
+                "text": "type declaration inside an `interface` or `service` body"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-108",
+              "name": "degenerate-timing-range",
+              "shortDescription": {
+                "text": "degenerate timing range `@[X..X]`"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-109",
+              "shortDescription": {
+                "text": "signal payload has no derivable init and no `= value` override"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-110",
+              "shortDescription": {
+                "text": "signal `= value` init override violates the payload constraints"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-112",
+              "name": "missing-response-bound",
+              "shortDescription": {
+                "text": "`command` or `query` with no declared response bound"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-140",
+              "shortDescription": {
+                "text": "duplicate `service` name across the workspace"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-141",
+              "shortDescription": {
+                "text": "`service` names a type that is not an `interface`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-143",
+              "shortDescription": {
+                "text": "`service` publishes an `internal` interface"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-144",
+              "shortDescription": {
+                "text": "duplicate member name across a service's interfaces"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-145",
+              "shortDescription": {
+                "text": "the same interface named twice in one service"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-149",
+              "shortDescription": {
+                "text": "two names in one scope collide after a pinned name transform"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-201",
+              "shortDescription": {
+                "text": "stream `<T>` on a `signal` or `event` payload"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-202",
+              "shortDescription": {
+                "text": "stream element type not a named type, `string`, or `bytes`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-301",
+              "shortDescription": {
+                "text": "`require` or `ensure` on `signal`, `event`, or `fixed`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-302",
+              "shortDescription": {
+                "text": "`ensure` on `command`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-303",
+              "shortDescription": {
+                "text": "fallible query return with no success path"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-304",
+              "name": "error-typed-parameter",
+              "shortDescription": {
+                "text": "`error`-typed or result-union parameter on a `command` or `query`"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-305",
+              "name": "ensure-without-result",
+              "shortDescription": {
+                "text": "`ensure` clause that never references `result`"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-306",
+              "shortDescription": {
+                "text": "`require`/`ensure` expression outside the guaranteed subset"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-307",
+              "name": "contract-error-name-in-enum",
+              "shortDescription": {
+                "text": "contract-error category name declared in an `error` enum"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-308",
+              "name": "named-result-union-in-query",
+              "shortDescription": {
+                "text": "named result union in query return position"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-401",
+              "shortDescription": {
+                "text": "interaction re-declared under a `reserved` name"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-402",
+              "shortDescription": {
+                "text": "duplicate interaction name in one interaction body"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-403",
+              "shortDescription": {
+                "text": "behaviour, user-interaction, or architecture declaration in a ridl context"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-404",
+              "name": "query-named-like-mutation",
+              "shortDescription": {
+                "text": "query named like a mutation"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-405",
+              "name": "shared-error-type",
+              "shortDescription": {
+                "text": "one `error` type shared across unrelated failure domains"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "RIDL-406",
+              "name": "redeclared-envelope-metadata",
+              "shortDescription": {
+                "text": "payload struct re-declares envelope metadata"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "RIDL-407",
+              "name": "ordinal-changed",
+              "shortDescription": {
+                "text": "interaction, struct field, or union arm ordinal changed against the published baseline"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-408",
+              "shortDescription": {
+                "text": "interaction removed, its tombstone dropped or moved, or its retired name redeclared"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-409",
+              "shortDescription": {
+                "text": "live `interfaces.lock` entry with no declaration"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-410",
+              "shortDescription": {
+                "text": "`interfaces.lock` is malformed"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-411",
+              "shortDescription": {
+                "text": "provisional interface number refused at publication"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-412",
+              "shortDescription": {
+                "text": "published interface number dropped without a retired entry"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-413",
+              "shortDescription": {
+                "text": "parameter name declared twice in one parameter list"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-305",
+              "shortDescription": {
+                "text": "`instances` is not a parenthesised list of one or more camelCase names"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-306",
+              "shortDescription": {
+                "text": "duplicate instance name in one component"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-307",
+              "shortDescription": {
+                "text": "`Unit` written in source"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-308",
+              "shortDescription": {
+                "text": "a component requires an interface listed by a service it offers"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-309",
+              "shortDescription": {
+                "text": "the same service or interface on two lines of one component"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-310",
+              "shortDescription": {
+                "text": "an `offers` line names something that is not a service"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-311",
+              "shortDescription": {
+                "text": "a `requires` line names a service whose shape is a list of interfaces"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-312",
+              "shortDescription": {
+                "text": "a `requires` line names neither an interface nor an inline-shape service"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-313",
+              "shortDescription": {
+                "text": "`external` written with a value"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-403",
+              "shortDescription": {
+                "text": "a closure component requires an interface no closure service lists"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-408",
+              "shortDescription": {
+                "text": "an interface listed by two services of the closure"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-409",
+              "name": "redundant-provider-set",
+              "shortDescription": {
+                "text": "a `requires` resolves to a redundant provider set"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RSDL-502",
+              "shortDescription": {
+                "text": "two closure components offer one service"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-504",
+              "shortDescription": {
+                "text": "a member line names a service that a declared component offers"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-601",
+              "shortDescription": {
+                "text": "more than one `system` in the workspace"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-602",
+              "shortDescription": {
+                "text": "a `system` member line names neither a component nor a service"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-603",
+              "shortDescription": {
+                "text": "a name listed twice in one `system` body"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-604",
+              "shortDescription": {
+                "text": "a declaration of another profile in an `.rsdl` file"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-701",
+              "shortDescription": {
+                "text": "an instance of a closure component with no placement in a deployment"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-702",
+              "shortDescription": {
+                "text": "a placement line names something outside the closure, or nothing"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-704",
+              "shortDescription": {
+                "text": "a deployment is `for` no declared `system`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-705",
+              "shortDescription": {
+                "text": "two machines with one name in one deployment"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-706",
+              "shortDescription": {
+                "text": "an instance placed twice in one deployment"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-707",
+              "shortDescription": {
+                "text": "an `external` machine lists an implemented component"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-708",
+              "shortDescription": {
+                "text": "two deployments with one name in the workspace"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-804",
+              "name": "unclaimed-backend-key",
+              "shortDescription": {
+                "text": "a backend key whose namespace no configured backend claims"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RSDL-901",
+              "shortDescription": {
+                "text": "a `PLATFORM` distribution requires into an `APPLICATION` distribution"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-903",
+              "shortDescription": {
+                "text": "a distribution member line names something outside the closure, or nothing"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-904",
+              "shortDescription": {
+                "text": "an implemented closure component in no distribution"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-905",
+              "shortDescription": {
+                "text": "a component listed by two distributions"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-906",
+              "shortDescription": {
+                "text": "a name listed twice in one distribution body"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-907",
+              "shortDescription": {
+                "text": "an `external` component listed by a distribution"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-908",
+              "shortDescription": {
+                "text": "`tier` value other than `PLATFORM` or `APPLICATION`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-001",
+              "shortDescription": {
+                "text": "invalid manifest TOML"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-002",
+              "shortDescription": {
+                "text": "manifest declares both `[package]` and `[workspace]`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-003",
+              "shortDescription": {
+                "text": "manifest declares neither `[package]` nor `[workspace]`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-004",
+              "shortDescription": {
+                "text": "nested workspace: a member manifest declares `[workspace]`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-005",
+              "name": "unknown-manifest-key",
+              "shortDescription": {
+                "text": "unknown manifest key"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "MANI-006",
+              "shortDescription": {
+                "text": "invalid package name"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-007",
+              "shortDescription": {
+                "text": "invalid import URL"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-008",
+              "shortDescription": {
+                "text": "workspace member directory has no `ridl.toml`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-009",
+              "shortDescription": {
+                "text": "invalid `[defaults].timing` value"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-010",
+              "name": "unknown-lint",
+              "shortDescription": {
+                "text": "`[lints]` entry names no lint, or its value is not a level"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "MANI-101",
+              "shortDescription": {
+                "text": "remote import fetch failed"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-102",
+              "shortDescription": {
+                "text": "fetched content hash does not match the lockfile"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-103",
+              "shortDescription": {
+                "text": "`--frozen`: no lockfile entry for a remote import"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-104",
+              "shortDescription": {
+                "text": "`--frozen`: a lockfile-pinned import is not cached"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "RIDL-100",
+          "ruleIndex": 60,
+          "level": "warning",
+          "message": {
+            "text": "signal without a timing annotation"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sensor/demo.ridl"
+                },
+                "region": {
+                  "startLine": 3,
+                  "startColumn": 10,
+                  "endLine": 3,
+                  "endColumn": 15
+                }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sensor/demo.ridl"
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 11,
+                  "endLine": 2,
+                  "endColumn": 12
+                }
+              },
+              "message": {
+                "text": "in this interface"
+              }
+            }
+          ]
+        },
+        {
+          "level": "error",
+          "message": {
+            "text": "expected a type"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "sensor/demo.ridl"
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 1,
+                  "endLine": 2,
+                  "endColumn": 10
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "MANI-101",
+          "ruleIndex": 144,
+          "level": "error",
+          "message": {
+            "text": "could not fetch `demo`"
+          }
+        }
+      ],
+      "columnKind": "unicodeCodePoints"
+    }
+  ]
+}

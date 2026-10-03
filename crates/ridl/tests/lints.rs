@@ -234,6 +234,74 @@ fn allow_is_absent_in_text_and_json() {
     );
 }
 
+/// The SARIF 2.1.0 schema, downloaded from
+/// `https://json.schemastore.org/sarif-2.1.0.json`. Every reference in it is
+/// internal, so the validator needs no network.
+const SARIF_SCHEMA: &str = include_str!("fixtures/sarif-2.1.0.json");
+
+/// Runs `ridl check --format sarif` on `root` and returns the exit code and
+/// the parsed log, after validating the log against the vendored schema.
+fn sarif_check(root: &Path) -> (i32, serde_json::Value) {
+    let (code, stdout, stderr) = ridl(&[
+        "check".as_ref(),
+        "--format".as_ref(),
+        "sarif".as_ref(),
+        root.as_os_str(),
+    ]);
+    let log: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|err| {
+        panic!("stdout is JSON ({err}):\nstdout:\n{stdout}\nstderr:\n{stderr}")
+    });
+    let schema: serde_json::Value =
+        serde_json::from_str(SARIF_SCHEMA).expect("the vendored schema is JSON");
+    let validator = jsonschema::validator_for(&schema).expect("the vendored schema compiles");
+    let errors: Vec<String> = validator
+        .iter_errors(&log)
+        .map(|err| format!("{} at {}", err, err.instance_path()))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "the log validates against the SARIF 2.1.0 schema:\n{}\nlog:\n{stdout}",
+        errors.join("\n")
+    );
+    (code, log)
+}
+
+/// The results of the one run whose `ruleId` is `code`.
+fn sarif_results<'a>(log: &'a serde_json::Value, code: &str) -> Vec<&'a serde_json::Value> {
+    log["runs"][0]["results"]
+        .as_array()
+        .expect("results is an array")
+        .iter()
+        .filter(|result| result["ruleId"] == code)
+        .collect()
+}
+
+#[test]
+fn sarif_validates_and_denies() {
+    let dir = TempDir::new("sarif-deny");
+    let root = member_workspace(&dir, DENY);
+    let (code, log) = sarif_check(&root);
+    assert_eq!(code, 1, "a lint at deny exits 1:\n{log}");
+    let ridl_100 = sarif_results(&log, "RIDL-100");
+    assert_eq!(ridl_100.len(), 1, "{log}");
+    assert_eq!(ridl_100[0]["level"], "error", "{}", ridl_100[0]);
+    assert_eq!(
+        ridl_100[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+        "sensor/sensor.ridl",
+        "{}",
+        ridl_100[0]
+    );
+
+    let dir = TempDir::new("sarif-allow");
+    let root = member_workspace(&dir, ALLOW);
+    let (code, log) = sarif_check(&root);
+    assert_eq!(code, 0, "{log}");
+    assert!(
+        sarif_results(&log, "RIDL-100").is_empty(),
+        "an allowed lint is absent from the SARIF log:\n{log}"
+    );
+}
+
 /// The rendered note line for a file whose line numbers have one digit
 /// (spec §7.2).
 const NOTE_LINE: &str = "  = lint: `missing-timing` (set its level in `[lints]` in ridl.toml)";

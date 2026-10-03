@@ -93,7 +93,8 @@ enum Command {
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
         /// default); json goes to stdout instead — see the CLI reference
-        /// (docs/book/cli-reference.md) for its schema.
+        /// (docs/book/cli-reference.md) for its schema; sarif writes one
+        /// SARIF 2.1.0 log to stdout, for code-scanning viewers.
         #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
         format: CheckFormat,
     },
@@ -246,6 +247,7 @@ enum DiffFormat {
 enum CheckFormat {
     Text,
     Json,
+    Sarif,
 }
 
 fn main() -> ExitCode {
@@ -616,7 +618,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     // the diagnostics `ridlc` already levelled do not change.
     apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
-    finish_check(run, format)
+    finish_check(run, path, format)
 }
 
 /// Publishes the workspace at `path` as a baseline.
@@ -2561,9 +2563,11 @@ fn exit_code(run: &CliRun) -> ExitCode {
     }
 }
 
-/// Ends `ridl check`: text renders to stderr through [`finish`]; JSON prints
-/// the contract to stdout and keeps the same exit code.
-fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
+/// Ends `ridl check`: text renders to stderr through [`finish`]; JSON and
+/// SARIF print their contract to stdout and keep the same exit code. `path`
+/// is the checked path: the SARIF artifact URIs are relative to it when it is
+/// a directory, and to its parent otherwise (lint foundation spec §7.3).
+fn finish_check(run: CliRun, path: &Path, format: CheckFormat) -> ExitCode {
     match format {
         CheckFormat::Text => finish(Ok(run)),
         CheckFormat::Json => {
@@ -2571,6 +2575,24 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json).expect("diagnostics serialize")
+            );
+            exit_code(&run)
+        }
+        CheckFormat::Sarif => {
+            let root = if path.is_dir() {
+                path
+            } else {
+                path.parent().unwrap_or(Path::new(""))
+            };
+            let log = ridl_core::diag::sarif::to_sarif(
+                &run.diagnostics,
+                &run.sources,
+                root,
+                env!("CARGO_PKG_VERSION"),
+            );
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&log).expect("the SARIF log serializes")
             );
             exit_code(&run)
         }

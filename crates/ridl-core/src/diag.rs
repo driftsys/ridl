@@ -45,6 +45,7 @@ use rowan::{TextRange, TextSize};
 use serde::{Serialize, Serializer};
 
 pub mod render;
+pub mod sarif;
 
 pub use render::render;
 
