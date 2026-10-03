@@ -112,7 +112,7 @@ Out of scope, and why:
 | Tool                     | Input besides `path` and `overlays`                                                         | Result                                                                                                                                                                      |
 | ------------------------ | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ridl_check`             | none; or, instead of `path`, today's `{source, profile}`                                    | `{diagnostics, workspace}`; each diagnostic is exactly what `ridl_core::diag::to_json` writes. In source mode the result is `{diagnostics}`, unchanged from today.          |
-| `ridl_explain`           | `code`: a diagnostic code (`TYPL-002`) or a diff category word (`payload_changed`); no path | `{kind: "diagnostic", code, severity, summary, reference}` or `{kind: "diff_category", category, text}`                                                                     |
+| `ridl_explain`           | `code`: a diagnostic code (`TYPL-002`) or a diff category word (`payload_changed`); no path | `{kind: "diagnostic", code, severity, summary}` or `{kind: "diff_category", category, text}`                                                                                |
 | `ridl_resolve`           | `name`; optional `from`                                                                     | `{name, package, kind, visibility, location, workspace}`, plus `alias` when the input was an import alias                                                                   |
 | `ridl_describe_type`     | `name`; optional `from`                                                                     | `{declaration, location, workspace}`; `declaration` is the IR `Decl` in the IR's own JSON form                                                                              |
 | `ridl_list_interactions` | `interface`; optional `from`                                                                | `{interface: {name, package, doc, labels, deprecated, number, provisional}, interactions, location, workspace}`; `interactions` is the interface's IR `Decl` list, in order |
@@ -129,22 +129,16 @@ the overlaid workspace. They differ from `ridl check <path>` in the ways §7.1
 lists, and in no other way.
 
 **`ridl_explain`.** A diagnostic code is looked up in
-`ridl_core::diag::ALL_CATALOGS`. `reference` is the URL of the document that
-lists the code's namespace:
-
-| Namespace | `reference`                                                                                                                             |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `TYPL`    | `https://driftsys.github.io/ridl/reference/typl.html`                                                                                   |
-| `RIDL`    | `https://driftsys.github.io/ridl/reference/ridl.html`                                                                                   |
-| `RSDL`    | `https://driftsys.github.io/ridl/reference/rsdl.html`                                                                                   |
-| `FORM`    | `https://github.com/driftsys/ridl/blob/main/docs/specification/ridl-family-overview.md#7-shared-diagnostic-namespaces--form--and-mani-` |
-| `MANI`    | the same as `FORM`                                                                                                                      |
-
-The FORM and MANI codes are listed only in `ridl-family-overview.md` §7, which
-the book does not include. A word that is not a code is looked up with
-`ridl_diff::category_from_word`, and `text` is `ridl_diff::explain(category)`.
-An input that is neither is a tool error that lists the five namespaces and says
-that diff category words are also accepted.
+`ridl_core::diag::ALL_CATALOGS`, and the result carries only what the binary
+owns: the code, its severity and its one-line summary. It carries no link to a
+document. A URL breaks when a chapter moves, and an agent often cannot fetch
+one. Where to read more about each namespace is stated in the skill (piece 1c,
+[`skill-ridl-authoring-outline.md`](skill-ridl-authoring-outline.md) §7), which
+is prose and changes together with the documents. When the long-form error index
+(E4.2) lands, it is added as an `explanation` field. A word that is not a code
+is looked up with `ridl_diff::category_from_word`, and `text` is
+`ridl_diff::explain(category)`. An input that is neither is a tool error that
+lists the five namespaces and says that diff category words are also accepted.
 
 **`ridl_resolve`.** `kind` is the `SymbolKind` in lower case (`type`, `const`,
 `struct`, `enum`, `enumset`, `union`, `interface`). `visibility` is `public` or
@@ -427,6 +421,10 @@ All tests are Rust tests, so `just test` runs them.
   the language server needs lookups by name.
 - **Write the long-form error index inside 1a.** Rejected (D-4): it is writing
   across about 200 codes, not wrapping compiler functions.
+- **A `reference` URL for each namespace in the `ridl_explain` result.**
+  Rejected: a chapter that moves breaks the URL, which is a tool contract under
+  §7.2, and the FORM and MANI codes have no book chapter at all. The skill
+  carries the mapping instead.
 - **Explain with an excerpt of the reference prose.** Rejected: the excerpt
   boundaries are guesses, and the build would depend on the Markdown in `docs/`.
 - **Path mode only for `ridl_check`.** Rejected (D-5): it breaks the documented
