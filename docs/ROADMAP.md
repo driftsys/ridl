@@ -9,8 +9,10 @@ days, M ≈ 1–2 weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
 **This page is the forward plan.** What has already shipped — the delivery
 narratives for Epics 0, 1, 2 and 9 — is in
-[the landed record](archive/roadmap-landed-record.md). The scope below was set
-by the re-scope of 2026-09-12, recorded in
+[the landed record](archive/roadmap-landed-record.md). The dated
+[issue backlog](BACKLOG.md) records current triage priorities and remaining bugs
+and technical debt. The scope below was set by the re-scope of 2026-09-12,
+recorded in
 [`2026-09-12-release-scope-and-plugin-system-design.md`](wip/2026-09-12-release-scope-and-plugin-system-design.md):
 §1 is the scope, §3 the thirteen decisions, most with the alternative each
 rejected, §4 the open items it carries.
