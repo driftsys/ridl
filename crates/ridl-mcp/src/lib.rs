@@ -6,6 +6,8 @@
 //! server is a thin consumer of the shared compiler crates — no parser, no
 //! checker of its own — and runs over stdio behind `ridl mcp`.
 
+pub mod diff;
+pub mod explain;
 pub mod query;
 pub mod refs;
 pub mod snapshot;
@@ -133,6 +135,40 @@ impl RidlMcp {
         }
     }
 
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<explain::ExplainOutput>(), description = "Explain a diagnostic code or diff category word.")]
+    async fn ridl_explain(
+        &self,
+        Parameters(input): Parameters<explain::ExplainInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || explain::explain(&input))
+            .await
+            .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<serde_json::Map<String, serde_json::Value>>(), description = "Compare source workspaces or IR snapshots. Overlays apply only to the new source side. Read-only and offline.")]
+    async fn ridl_diff(
+        &self,
+        Parameters(input): Parameters<diff::DiffInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || diff::diff(&input))
+            .await
+            .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
     #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<refs::ReferencesOutput>(), description = "List declarations and interactions using a declaration. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
     async fn ridl_references(
         &self,
