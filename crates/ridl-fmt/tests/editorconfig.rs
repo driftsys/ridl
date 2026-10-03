@@ -138,3 +138,10 @@ fn no_editorconfig_uses_the_default() {
     let dir = TestDir::new();
     assert_eq!(dir.width("file.typl"), Some(100));
 }
+
+#[test]
+fn an_empty_path_uses_default_options_when_absolute_resolution_fails() {
+    let path = Path::new("");
+    assert!(std::path::absolute(path).is_err(), "exercise the fallback");
+    assert_eq!(FormatOptions::for_path(path), FormatOptions::default());
+}
