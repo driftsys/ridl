@@ -93,8 +93,14 @@ a lint raised to `deny`.
   change to the language surface.
 - Doc lints: missing docs, a broken `[Type]` link, an unknown or malformed tag,
   `@deprecated` without a reason.
-- Language server: rendered hover, completion and go-to-definition on `[Type]`
-  links, and a quick fix that inserts a doc stub.
+- Language server: every doc comment, at every level that can carry one
+  (package, interface, interaction, parameter, field, enum value, error arm),
+  reaches the language server. Hover on a declaration or on any use of it shows
+  the rendered doc together with the rules extracted for spec 2b (range, unit,
+  bounds, contracts, timing, errors), so the editor and the generated facade
+  state the same contract. Completion items and signature help carry the same
+  doc. `[Type]` links get completion and go-to-definition, and a quick fix
+  inserts a doc stub.
 
 Open decisions: which declarations and members count as public for
 `missing-docs`; whether doc comments are allowed on every member kind (call
