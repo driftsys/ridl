@@ -5,24 +5,151 @@
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
+## Re-baseline 2026-10
+
+Stage D1 of lane E16
+([`2026-10-03-lane-e16-catalog-descriptor-driver.md`](2026-10-03-lane-e16-catalog-descriptor-driver.md))
+audited this plan against `main` at 440dfb59 on 2026-10-03 and amended it in
+place. The task numbering is unchanged, so the issues' task references stay
+valid. Each change below names the record or the driver §4 answer that caused
+it.
+
+- **Interface numbers are copied from the IR (Tasks 3, 8; §4 answer 3).** Epic
+  15 landed: `ridl-sem` folds `interfaces.lock` into `Interface.number`,
+  `Interface.provisional` and `Package.retired` (`number_interfaces` in
+  `crates/ridl-sem/src/check.rs`). Task 3 no longer assigns numbers; it copies
+  them, rejects a number of 0 as an internal error, and the descriptor's
+  `retired` list is `Package.retired`.
+- **The hash is over the protobuf binary of the reduced package, and its
+  decision record comes first (Task 4; §4 answer 4; ADR-0014 decision 9 as
+  amended 2026-09-22).** Canonical protobuf JSON is now the IR's canonical
+  encoding; the hash departs from it on purpose, and Task 4 gains step 0, the
+  decision record (the determinism rule, the reason, the golden-hash test). The
+  numbering is no longer appended after the binary: the reduced package's
+  interfaces carry `number` and `provisional` themselves. #275's criterion joins
+  the tests (§4 answer 11).
+- **Three size states, every size a `uint32` (Tasks 1, 2, 5, 8, 10; §4 answer
+  5).** `MaxSize` carries `encoding`, `state` (bounded or unbounded),
+  `bytes: uint32` and `cause` (the codegen model's `FbUnboundedCause`, same
+  members and values). An encoding with no row is absent.
+- **The descriptor defines no wire shape (Tasks 5 to 8; §4 answer 6).** The
+  induced single-field message, the induced request message and the `ok`/`err`
+  union are removed. Only a payload that is one named type is sized, through
+  `ridl_ir::projection::flatbuffers::max_size` (ADR-0019 decision 8) and
+  ADR-0017's projection. A request with zero or more than one parameter, an
+  inline `T | E` reply and a stream payload have absent sizes.
+- **No `match` narrowing (Task 5; §4 answer 7; #665).** `ascii_only` and its
+  tests are removed; a string counts 4 bytes per scalar value.
+- **Task 7 calls the projection's bound (E11.7 design D-6, in
+  `docs/archive/2026-09-20-flatbuffers-codec-design.md`; the as-built record is
+  `docs/design/flatbuffers-codec.md`).** The hand-rolled FlatBuffers charges
+  written on 2026-09-13 are deleted; the stage K8 note of 2026-09-21 that said
+  not to implement them is folded into the task's text. One ridl-ir change comes
+  with it: the cause of a missing bound, computed in
+  `crates/ridl-ir/src/codegen/unbounded.rs`, becomes public.
+- **planus (Task 1; §4 answer 8).** The three planus crates are already
+  workspace dependencies (root `Cargo.toml`); Task 1 narrows their comment and
+  extends `xtask/tests/oracle_boundary.rs` instead of adding them.
+- **Publishing (Task 1; §4 answer 9; ADR-0007 decision 14 as amended
+  2026-09-21).** `ridl-descriptor` is a workspace dependency entry with a path
+  and a version, declared `ridl-descriptor.workspace = true` by `ridlc` and
+  `ridl`, and published after `ridl-ir` and before `ridlc` in
+  `.github/workflows/crates-io-release.yml`.
+- **No `stream` flag (Tasks 1, 2, 8, 10; §4 answer 10).** A stream payload's
+  `type_name` is the spelled `<T>` and its sizes are absent. #336 appends the
+  flag and the per-element bound.
+- **IR facts that moved (Tasks 3 to 8).** `Package` has a fifth field,
+  `retired`, so every `Package` literal takes `..Default::default()`;
+  `ServiceShape` has no `id` field (field 1 is reserved); `Package::shapes()` is
+  at `crates/ridl-ir/src/lib.rs:605` and `InterfaceShape` carries `name`,
+  `interface`, `service` and a `visibility()` method; `ridl_ir::v2::to_binary`
+  exists and is documented as a derived encoding.
+- **CLI facts that moved (Tasks 9, 11).** `Emit` is at
+  `crates/ridlc/src/lib.rs:359-436` with eight values (`codegen-model` is the
+  eighth, so `catalog` is the ninth); `ir_dump_suffix` is at :484; `write_emits`
+  is at :1454 and already receives `others`. `Command` in
+  `crates/ridl/src/main.rs` is at :71-210 with nine variants (`lock`, `lsp` and
+  `mcp` postdate the plan); the dispatch is at :252. The book census in Task 11
+  step 5 is recounted against `docs/book/cli-reference.md` as of today and
+  carries every item of #326.
+- **Records (Task 12).** The crate count in `AGENTS.md` is nineteen, not
+  thirteen. The roadmap has Epic 16 rows (E16.1 to E16.6) in place of the "Epic
+  14" row the plan told Task 12 to add. The design's §7 items that §4 answers 1
+  and 2 settle are disposed of in this re-baseline, not in Task 12. The book
+  harness compiles `ridl`, `typl` and `rsdl` fences.
+- **Dependencies that already exist.** `sha2`, `serde_json`, `insta`, `syn` and
+  `prettyplease` are workspace dependencies; `xtask` already depends on `syn`
+  and `prettyplease`; `crates/ridl` has no `insta` dev-dependency yet.
+- **Left to later stages, on purpose.** The roadmap and
+  `docs/design/interaction-face.md` attribute the Rust backend's `None` sizes to
+  E16.2; D5 amends them to E16.4 (driver §3, D5). The port's catalog check and
+  what `new` does on a mismatch are D3's (driver §4, last paragraph).
+
+Decisions this re-baseline took that §4 does not settle, reported to Sebastien
+in D1's final report:
+
+1. The hash does not cover `Package.retired`: the reduced package clears it. The
+   hash is over the interfaces, their numbers and the types they reach (rsdl
+   note D-8); the retired list is carried beside it.
+2. A reduced interface takes `InterfaceShape::visibility()`, so a declared
+   interface and an inline shape hash alike (#326, third minor item).
+3. A stream payload's `type_name` is the spelled `<T>`.
+4. A request with zero parameters has absent sizes, like one with more than one:
+   neither is one named type.
+5. A proto3 state is bounded only for a struct or a union payload. ADR-0017
+   decision 1 inlines a named scalar and an enum set into their field, its
+   decision 2 rejects a wrapper message per named scalar, and an enum is a
+   declared `enum`, not a message; so none of the three has a proto3 root form,
+   and its proto3 state is absent until a record defines one. This narrows
+   driver §3 D5's "bounded or unbounded for a payload that is one named type" on
+   the proto3 side; the roadmap, the design and #380 say so. D5 does not start
+   Task 6 before Sebastien confirms this reading or names a root form (an
+   induced single-field message would be a wire shape the descriptor defines,
+   which §4 answer 6 forbids).
+6. The FlatBuffers cause comes from `ridl_ir::codegen::unbounded::attribute`,
+   made public as `ridl_ir::codegen::fb_unbounded`, not from lowering the whole
+   codegen model.
+7. `lower` returns a `Result`; `ridlc` reports a zero interface number as an
+   internal error with exit 2.
+8. The package name of `crates/ridl` is `ridl-cli` (AGENTS.md), so every cargo
+   command in Tasks 9 and 11 says `-p ridl-cli`.
+
+Changes the review of PR #667 added (pass 1, 2026-10-03):
+
+- The golden-hash test numbers the corpus snapshot's shapes (1.., provisional)
+  before hashing, because the snapshot predates Epic 15 and carries no number.
+- Task 7's `ridl-backend-rust` dev-dependency is a plain path with no version,
+  for the reason `crates/ridl-backend-rust/Cargo.toml` records, and Task 7
+  repeats the publish dry run.
+- Task 10's `to_json` is compared with
+  `flatc --json --strict-json
+  --defaults-json`, with the one difference named
+  (an absent `timing`).
+- Task 11's corpus snapshot shows one `FlatBuffers` row per payload: every
+  corpus payload is a named scalar (decision 5).
+- The ADR-0017 citations name decision 1 (inlining) and decision 2 (no wrapper
+  message); E11.7's D-6 is cited to the archived design.
+
 **Goal:** Emit the catalog descriptor of
 `2026-09-13-runtime-descriptors-design.md` — a FlatBuffers file per package that
 an engine reads without decoding — from `ridlc build --emit catalog`, verify it
-before access, print it with `ridl describe`, and derive the per-payload maximum
-encoded size for proto3 and FlatBuffers.
+before access, print it with `ridl describe`, and carry a size state per payload
+for proto3 and FlatBuffers.
 
 **Architecture:** A new crate `ridl-descriptor` holds the hand-written schema
 `catalog.fbs`, the Rust accessors generated from it by
 `cargo xtask descriptor-codegen` (planus, pure Rust, committed and drift-tested
-like the AST), the lowering from the protobuf IR, the interface numbering, the
-catalog hash, the size derivation and the verifier. `ridlc` gains the `catalog`
-emit; `ridl` gains the `describe` subcommand. The system descriptor is out of
-scope (it waits for the rsdl rewrite).
+like the AST), the lowering from the protobuf IR, the copy of the interface
+numbers the IR carries, the catalog hash, the size states and the verifier.
+`ridlc` gains the `catalog` emit; `ridl` gains the `describe` subcommand. The
+system descriptor is out of scope (it waits for the rsdl lowering's descriptor
+story).
 
 **Tech Stack:** Rust 1.98.1 (edition 2024), `planus` 1.3.0 runtime,
-`planus-translation` 1.3.0 + `planus-codegen` 1.3.0 in `xtask` only, `prost` IR
-types from `ridl-ir`, `sha2` for the hash, `serde_json` for `describe`, `insta`
-for snapshots.
+`planus-translation` 1.3.0 + `planus-codegen` 1.3.0 in `xtask` only (all three
+already in `[workspace.dependencies]`), `prost` IR types and
+`projection::flatbuffers::max_size` from `ridl-ir`, `sha2` for the hash,
+`serde_json` for `describe`, `insta` for snapshots.
 
 **Spec:** `docs/wip/2026-09-13-runtime-descriptors-design.md` (D-1 to D-10, §3,
 §4, §7); it cites `docs/wip/2026-09-12-rsdl-rewrite-decisions.md` D-7 and D-8,
@@ -42,16 +169,27 @@ for snapshots.
   descriptor accessors are generated by `cargo xtask descriptor-codegen` with
   planus and committed; a drift test fails when they are stale (the AST
   precedent in `xtask/src/codegen.rs`).
-- `planus-translation` and `planus-codegen` are `xtask` dependencies only;
-  `ridl-descriptor` depends on the `planus` runtime alone (the boundary
-  rationale in `xtask/tests/oracle_boundary.rs`).
+- The toolchain may depend on planus: `ridl-descriptor` on the `planus` runtime,
+  `xtask` on `planus-translation` and `planus-codegen`, and `ridlc` and `ridl`
+  through `ridl-descriptor`. `ridl-rt` and every generated package must not
+  (driver §4 answer 8); `xtask/tests/oracle_boundary.rs` checks it.
 - Every walk over a package's interfaces goes through `Package::shapes()`
-  (`crates/ridl-ir/src/lib.rs:452`): a `service` with an inline body carries its
+  (`crates/ridl-ir/src/lib.rs:605`): a `service` with an inline body carries its
   `Interface` in its shape list, outside `Package.interfaces`, and the item
   `InterfaceShape<'_>` carries the identity `name` (the interface's own, or the
-  owning service's dotted global name) beside `interface: &Interface`. The
-  corpus fixture `baseline-corpus/cluster.ridl` has one of each, so it yields
-  two shapes.
+  owning service's dotted global name) beside `interface: &Interface`, with
+  `visibility()` answering the owning service's visibility for an inline shape.
+  The corpus fixture `baseline-corpus/cluster.ridl` has one of each, so it
+  yields two shapes.
+- The interface numbers, the provisional flags and the retired list are the IR's
+  (`Interface.number`, `Interface.provisional`, `Package.retired`, folded from
+  `interfaces.lock` by `ridl-sem`). The descriptor copies them and computes no
+  numbering (driver §4 answer 3).
+- Every size is a `uint32`, as in `ridl_rt::contract::EncodedSizes` and the
+  codegen model (driver §4 answer 5).
+- `ridl-descriptor` is published: a `[workspace.dependencies]` entry with a path
+  and a version, no `publish = false`, published after `ridl-ir` and before
+  `ridlc` (driver §4 answer 9; ADR-0007 decision 14).
 - `ridl-descriptor` joins the `wasm-check` list in `justfile` and must compile
   for `wasm32-unknown-unknown` with `--no-default-features`: no file I/O inside
   the crate; `ridlc` and `ridl` do the reading and writing.
@@ -61,45 +199,70 @@ for snapshots.
   read, and rejects the buffer as a whole (spec D-8); the toolchain reports a
   rejection with exit code 2 and the cause named (ADR-0010 decision 1).
 - Prose in comments, commit messages and docs is plain and literal (AGENTS.md).
-- Book fences: only a fence whose language word is exactly `ridl` or `typl` is
-  compiled; a `json` transcript fence is not checked (CONTRIBUTING.md).
+- Book fences: a fence whose language word is `ridl`, `typl` or `rsdl` is
+  compiled by `crates/ridl/tests/book_examples.rs`; a `json` transcript fence is
+  not checked (CONTRIBUTING.md).
 
-## Decisions this plan takes on the spec's open items (§7)
+## Dispositions of the spec's open items, settled 2026-10-03
 
-State these in the PR description; they are dispositions of open items, not new
-design.
+Sebastien settled these on 2026-10-03 (driver §4). State them in the PR
+description of the stage that applies each; none is open.
 
-- **Crate:** `ridl-descriptor` beside `ridl-ir`, not inside it — the IR crate
-  stays the protobuf artifact ADR-0014 fixes.
-- **File identifier and extension:** `file_identifier "RDLC"`; the emit flag
-  value is `catalog` and the artifact is `<base>.catalog.binfb`, following
-  ADR-0014 decision 4 (plain-English flag value, encoding-bearing extension, as
-  `.ir.binpb`).
-- **Interface numbers before the lock file exists:** every interface shape is
-  provisional, numbered 1.. in `Package::shapes()` order — the declared
-  interfaces in source order, then the inline shapes of the services (rsdl note
-  D-7: "after the frozen ones, in a deterministic order"); the retired list is
-  empty. The lock-file reader replaces `number_interfaces` later and nothing
-  else changes.
-- **Catalog hash:** SHA-256 over the canonical protobuf binary of a reduced
-  package (every interface shape under its identity name, the reachable type
-  declarations with canonical names, doc strings blanked) followed by the
-  numbering. Derived, never recorded (rsdl note D-7, D-8).
-- **`repr(C)` column:** present in the `Encoding` enum, absent in every
-  payload's size list until E11.12 defines the C-representable layout; the
-  reader treats a missing entry as "the toolchain cannot size this payload for
-  this encoding".
-- **What a payload is on the wire:** a payload whose type is a struct or a union
-  is that message or table itself; any other payload (a scalar, a string, an
-  array, a map, a tuple, a stream element) is an induced single-field message or
-  table with the value at field 1; a request is an induced message or table
-  whose fields are the parameters in order, numbered 1..n; a fallible response
-  is a union over `ok` (1) and `err` (2). E11.1 (the frame specification) must
-  adopt or amend this; the conformance test of spec D-6 lands with E11.7/E11.8.
-- **`match` narrowing** (spec D-6): applied only when the pattern is anchored at
-  both ends and admits ASCII scalar values only, because the checker applies
-  `match` as a substring search (`regress::Regex::find` in
-  `crates/ridl-sem/src/check.rs`).
+- **Crate (answer 1):** `ridl-descriptor` beside `ridl-ir`, not inside it, so
+  only the crates that read or write a catalog take a FlatBuffers dependency. It
+  uses `ridl-ir`'s IR types and `ridl_ir::projection::flatbuffers::max_size`,
+  and copies neither.
+- **File identifier and extension (answer 2):** `file_identifier "RDLC"`; the
+  emit flag value is `catalog` and the artifact is `<base>.catalog.binfb`,
+  following ADR-0014 decision 4 (plain-English flag value, encoding-bearing
+  extension, as `.ir.binpb`).
+- **Interface numbers (answer 3):** the descriptor copies `Interface.number`,
+  `Interface.provisional` and `Package.retired` from the IR and computes no
+  numbering. `--emit catalog` writes a catalog when an interface is provisional,
+  and the descriptor flags that interface (spec D-4). A number of 0 is rejected
+  as an internal error. The hash covers the numbers, so it changes when a
+  provisional number changes.
+- **Catalog hash (answer 4):** SHA-256 over the protobuf binary of a reduced
+  package (every interface shape under its identity name with its number and
+  provisional flag, the reachable type declarations with canonical names, doc
+  strings blanked), not over the canonical JSON. The decision record (an
+  ADR-0014 amendment or a new ADR) is written before the code, with the
+  determinism rule for the binary — fields in field-number order, list elements
+  in the order the writer holds them, no `map<>` field (the IR schema has none),
+  fields at their default omitted — the reason (canonical JSON emits every
+  non-`optional` field at its default, so each additive IR field would change
+  every catalog hash at a toolchain upgrade, and the read-back bound behind
+  ADR-0014 decision 9's amendment does not apply to bytes that are only hashed),
+  and a golden-hash test in CI. Derived, never recorded (rsdl note D-7, D-8).
+- **Sizes (answer 5):** each payload and encoding has one of three states:
+  absent (no row), bounded with a byte count, or unbounded with a cause (the
+  codegen model's `FbUnboundedCause`). Every size is a `uint32`. The `repr(C)`
+  column is present in the `Encoding` enum and has no row until E11.12 (#317).
+- **Payload shapes follow the codecs (answer 6):** the descriptor does not
+  define a wire shape. It sizes a payload that is one named type through the
+  existing projections: ADR-0019 decision 8 for FlatBuffers, and ADR-0017's
+  projection of the same type for proto3. A request with zero or more than one
+  parameter and an inline `T | E` reply have absent sizes until the frame
+  specification and a codec define their encoding.
+- **No `match` narrowing (answer 7):** a string counts 4 bytes per scalar value
+  in both columns, as `max_size` and §3.11 of
+  `2026-09-12-release-scope-and-plugin-system-design.md` do. The checker and the
+  generated Rust code do not agree on what a pattern matches until the design of
+  `2026-10-01-portable-match-patterns-design.md` (approach A, #597) is
+  implemented; #665 records the narrowing, to be built once, in one function
+  that both bounds call.
+- **planus (answer 8):** the toolchain may depend on planus; `ridl-rt` and every
+  generated package must not. The root `Cargo.toml` comment says that, and
+  `xtask/tests/oracle_boundary.rs` checks `ridl-rt` and the dependency closure
+  of the generated crate.
+- **Publishing (answer 9):** `ridl-descriptor` is published to crates.io, after
+  `ridl-ir` and before `ridlc`.
+- **Streams (answer 10):** a stream payload has absent sizes and the descriptor
+  has no `stream` flag. #336 adds the per-element bound and the flag, as an
+  append to the schema.
+- **#275 (answer 11):** one identity. The catalog hash is the schema hash over
+  the IR; the hash is the same whether a build emits proto3, FlatBuffers or
+  both. #275 closes when #378 merges.
 
 ## File Structure
 
@@ -109,24 +272,28 @@ crates/ridl-descriptor/
   schema/catalog.fbs          the hand-written schema (spec D-3, D-4, D-6)
   src/lib.rs                  constants, re-exports, `verify`, `VerifyError`
   src/generated.rs            planus output — never edited by hand
-  src/number.rs               `number_interfaces` — provisional numbering (rsdl D-7)
-  src/hash.rs                 `reachable_decls`, `catalog_hash` (rsdl D-8)
-  src/size.rs                 `Ctx`, `PayloadShape`, `max_size`, string byte capacity
-  src/size/proto3.rs          proto3 upper bound per payload (ADR-0017 projection)
-  src/size/flatbuffers.rs     FlatBuffers upper bound per payload (ADR-0019 projection)
+  src/number.rs               `numbered_shapes` — the IR's numbers, copied (§4 answer 3)
+  src/hash.rs                 `reachable_decls`, `reduced_package`, `catalog_hash` (rsdl D-8)
+  src/size.rs                 `Ctx`, `PayloadShape`, `named_payload`, `SizeState`, `size_state`
+  src/size/proto3.rs          proto3 state of a named-type payload (ADR-0017 projection)
+  src/size/flatbuffers.rs     FlatBuffers state, through `ridl_ir::projection::flatbuffers::max_size`
   src/lower.rs                IR → `Catalog` → finished bytes (spec D-4)
   src/describe.rs             `CatalogRef` → strict JSON (spec D-9)
   tests/round_trip.rs         builder → verify → read every field
 xtask/src/descriptor.rs       `generate`, `write_generated`, drift test
 xtask/src/main.rs             the `descriptor-codegen` task
+xtask/tests/oracle_boundary.rs   the planus boundary for `ridl-rt` and the generated crate
+crates/ridl-ir/src/codegen.rs     `pub fn fb_unbounded` (Task 7)
 crates/ridlc/src/lib.rs       `Emit::Catalog`, the `write_emits` arm
 crates/ridl/src/main.rs       `Command::Describe`, `run_describe`
 crates/ridl/tests/describe_cli.rs   `--emit catalog` writes `<base>.catalog.binfb`;
                                     exit codes, JSON snapshot, byte stability
-docs/decisions/ADR-0010-cli-conventions.md   the `ridl describe` exit-code row
-docs/book/cli-reference.md    `--emit catalog`, `ridl describe`
+docs/decisions/                the hash decision record (Task 4 step 0);
+                               ADR-0010's `ridl describe` exit-code row
+docs/book/cli-reference.md, docs/book/getting-started.md
+                              `--emit catalog`, `ridl describe`, the census
 AGENTS.md, README.md, docs/technotes/walking-skeleton-architecture.md,
-.git-std.toml, Cargo.toml, justfile
+.git-std.toml, Cargo.toml, justfile, .github/workflows/crates-io-release.yml
 ```
 
 Types that cross task boundaries (defined once, used verbatim later):
@@ -139,25 +306,29 @@ pub const FILE_SUFFIX: &str = ".catalog.binfb";
 pub use generated::ridl::descriptor::{
     Catalog, CatalogRef, Encoding, Interface, InterfaceRef, Kind, MaxSize, MaxSizeRef,
     Member, MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
-    Timing, TimingMode, TimingRef,
+    SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
 pub enum VerifyError { TooShort(usize), WrongIdentifier([u8; 4]), WrongVersion(u32), Invalid(planus::Error) }
 pub fn verify(bytes: &[u8]) -> Result<CatalogRef<'_>, VerifyError>;
 // ridl_descriptor::number
 pub struct Numbered { pub name: String, pub number: u32, pub provisional: bool }
-pub fn number_interfaces(package: &ridl_ir::v2::Package) -> Vec<Numbered>;
+pub struct ZeroNumber(pub String);
+pub fn numbered_shapes(package: &ridl_ir::v2::Package) -> Result<Vec<Numbered>, ZeroNumber>;
 // ridl_descriptor::hash
 pub fn reachable_decls<'a>(package: &'a Package, others: &[&'a Package]) -> BTreeMap<String, &'a Decl>;
-pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered]) -> [u8; 32];
+pub fn reduced_package(package: &Package, others: &[&Package]) -> Package;
+pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32];
 // ridl_descriptor::size
-pub struct Ctx<'a> { /* private */ }
-impl<'a> Ctx<'a> { pub fn new(package: &'a Package, others: &[&'a Package]) -> Self; pub fn resolve(&self, name: &str) -> Option<&'a Decl>; }
-pub enum PayloadShape<'a> { Named(&'a str), Field(&'a FieldType), Params(&'a [Param]), Return(&'a ReturnType), Element(&'a StreamType) }
-pub fn max_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>, encoding: Encoding) -> Option<u64>;
-pub fn string_max_bytes(constraint: Option<&Constraint>, ctx: &Ctx<'_>) -> u64;
-pub fn ascii_only(pattern: &str) -> bool;
+pub struct Ctx<'a> { /* private: wraps ridl_ir::projection::flatbuffers::Packages<'a> */ }
+impl<'a> Ctx<'a> { pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self; pub fn resolve(&self, name: &str) -> Option<&'a Decl>; pub fn packages(&self) -> Packages<'a>; }
+pub enum PayloadShape<'a> { Named(&'a str), Field(&'a FieldType), Params(&'a [Param]), Return(&'a ReturnType) }
+pub fn named_payload<'a>(shape: &PayloadShape<'a>) -> Option<&'a str>;
+pub enum SizeState { Bounded(u32), Unbounded(UnboundedCause) }
+pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState>;
+pub fn string_max_bytes(constraint: Option<&Constraint>) -> u64;
 // ridl_descriptor::lower
-pub fn lower(package: &Package, others: &[&Package]) -> Vec<u8>;
+pub enum LowerError { ZeroNumber(String) }
+pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError>;
 // ridl_descriptor::describe
 pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>;
 ```
@@ -175,11 +346,14 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>;
   committed)
 - Create: `xtask/src/descriptor.rs`
 - Modify: `xtask/src/main.rs:13-24` (the task match)
-- Modify: `xtask/Cargo.toml:9-14` (dependencies)
-- Modify: `Cargo.toml:16-67` (workspace dependencies: `planus`,
-  `planus-codegen`; the `planus-translation` comment at `:31-33`)
-- Modify: `.git-std.toml:13-52` (scope `ridl-descriptor`)
-- Modify: `justfile:137-140` (the `wasm-check` crate list)
+- Modify: `xtask/Cargo.toml` (dependencies)
+- Modify: `Cargo.toml` (`[workspace.dependencies]`: the `ridl-descriptor` entry;
+  the planus comment block, about lines 55-64)
+- Modify: `.git-std.toml:13-66` (scope `ridl-descriptor`)
+- Modify: `justfile:152` (the `wasm-check` crate list)
+- Modify: `xtask/tests/oracle_boundary.rs` (the planus boundary, §4 answer 8)
+- Modify: `.github/workflows/crates-io-release.yml` (the publish order, §4
+  answer 9)
 - Test: `crates/ridl-descriptor/tests/round_trip.rs`
 
 **Interfaces:**
@@ -187,34 +361,59 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>;
 - Produces: the module `ridl_descriptor::generated::ridl::descriptor` with the
   owned tables `Catalog`, `Interface`, `RetiredInterface`, `Member`, `Payload`,
   `MaxSize`, `Timing`, the zero-copy views `CatalogRef<'a>` … `TimingRef<'a>`,
-  the enums `Kind`, `Encoding`, `TimingMode`; the constants `SCHEMA_VERSION`,
-  `FILE_IDENTIFIER`, `FILE_SUFFIX`.
+  the enums `Kind`, `Encoding`, `SizeState`, `UnboundedCause`, `TimingMode`; the
+  constants `SCHEMA_VERSION`, `FILE_IDENTIFIER`, `FILE_SUFFIX`.
 
-- [ ] **Step 1: Add the workspace dependencies and the scope**
+- [ ] **Step 1: The workspace entry, the planus boundary, the scope, the gates**
 
-In `Cargo.toml` `[workspace.dependencies]`, in alphabetical order:
+`planus`, `planus-codegen` and `planus-translation` are already in
+`[workspace.dependencies]` of the root `Cargo.toml`, all at 1.3.0; add nothing.
+Rewrite the comment block above them (it says both are dev-dependencies of
+`ridl-backend-rust` only and that nothing the workspace ships depends on either)
+to what §4 answer 8 decided: the toolchain may depend on planus —
+`ridl-descriptor` on the runtime, `xtask` on `planus-translation` and
+`planus-codegen` to generate the accessors, `ridlc` and `ridl` through
+`ridl-descriptor` — and `ridl-rt` and every generated package must not. Keep the
+sentence that ADR-0020 decision 5 permits one FlatBuffers runtime crate in
+`ridl-rt` under its `flatbuffers` feature, and say that nothing uses that
+permission today. Keep the E11.7 D-12 citation for `ridl-backend-rust`'s
+dev-dependency.
+
+In the same table, add the workspace entry, in the same form as `ridl-ir`'s
+(`ridl-ir = { path = "crates/ridl-ir", version = "<workspace version>" }`):
 
 ```toml
-planus = "1.3.0"
-planus-codegen = "1.3.0"
+ridl-descriptor = { path = "crates/ridl-descriptor", version = "<the version ridl-ir's entry carries>" }
 ```
 
-(`planus-translation = "1.3.0"` is already there; its comment,
-`Cargo.toml:31-33`, says "a dev-dependency only" — rewrite it: "a dev-dependency
-of the FlatBuffers backend, and a normal dependency of `xtask` alone, which
-generates `ridl-descriptor`'s accessors from it;
-`xtask/tests/oracle_boundary.rs` keeps it out of the backend's normal
-dependencies".) In `.git-std.toml`, add `"ridl-descriptor",` to `scopes` after
-`"ridl-ir",`. In `justfile`, in the `wasm-check` recipe, change the crate list
-to:
+In `xtask/tests/oracle_boundary.rs`, extend the `BOUNDARIES` table with the
+edges answer 8 forbids: (`ridl-rt`, `planus`), (`ridl-rt`, `planus-codegen`),
+(`ridl-rt`, `planus-translation`) — and these three are forbidden as any edge
+kind, dev included, because `ridl-rt` is what a generated package links. Then
+add a second check over the generated crate's dependency closure:
+`examples/cabin` is its own cargo workspace (AGENTS.md), so run
+`cargo metadata --format-version 1 --locked` with its manifest path (after
+`just demo` has generated the crate, or over the committed consumer manifest if
+no generation is needed to resolve) and assert no package named `planus`,
+`planus-codegen` or `planus-translation` is in the resolve graph. Read the
+file's existing rationale comment first and extend it; the file's shape is the
+one to keep. If the closure check cannot run inside `cargo test` without a
+generated crate, make it a `just` recipe member of `demo` instead and say so in
+the test file's comment — do not drop it.
 
-```
--p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir -p ridl-descriptor \
-```
+In `.git-std.toml`, add `"ridl-descriptor",` to `scopes` after `"ridl-ir",`. In
+`justfile`, in the `wasm-check` recipe, add `-p ridl-descriptor` after
+`-p ridl-ir` on the first `cargo check` line. In
+`.github/workflows/crates-io-release.yml`, add `publish ridl-descriptor` after
+`publish ridl-ir` and extend the dependency-order comment above the list with
+one sentence: `ridl-descriptor` depends on `ridl-ir` only, and `ridlc` depends
+on it.
 
 - [ ] **Step 2: Write the crate manifest**
 
-`crates/ridl-descriptor/Cargo.toml`:
+`crates/ridl-descriptor/Cargo.toml` (compare with `crates/ridl-ir/Cargo.toml`
+for the fields the published crates share — `rust-version`, `readme`, keywords —
+and copy what is there; no `publish = false`):
 
 ```toml
 [package]
@@ -230,7 +429,7 @@ description = "The catalog descriptor an engine reads: schema, accessors, loweri
 # compiler (planus-translation, planus-codegen) is an xtask dependency only:
 # the accessors are generated by `cargo xtask descriptor-codegen` and committed.
 planus.workspace = true
-ridl-ir = { path = "../ridl-ir" }
+ridl-ir.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 ```
@@ -263,12 +462,23 @@ enum Encoding : ubyte { Proto3 = 0, FlatBuffers = 1, ReprC = 2 }
 // ridl §9 timing, as the IR carries it (ridl.ir.v2.TimingMode).
 enum TimingMode : ubyte { Unspecified = 0, StrictPeriodic = 1, Range = 2 }
 
-// One column of the max-size table: the maximum encoded size of a payload
-// under one encoding, in bytes, envelope and framing excluded (D-6, D-7).
-// An encoding with no entry cannot be sized by this toolchain version.
+// Whether a row's payload has a finite bound under its encoding.
+enum SizeState : ubyte { Bounded = 0, Unbounded = 1 }
+
+// Why a payload has no finite bound: the codegen model's FbUnboundedCause
+// (ridl.codegen.v1), same members, same values. A new cause is appended
+// there and here together.
+enum UnboundedCause : ubyte { Unspecified = 0, Member = 1, Untyped = 2, Layout = 3, Aggregate = 4, Exempt = 5 }
+
+// One row of the size table: the state of a payload under one encoding
+// (D-6, D-7). An encoding with no row is absent: this toolchain version
+// computed no state for it. Bounded: `bytes` is the maximum encoded size,
+// envelope and framing excluded. Unbounded: `bytes` is 0 and `cause` says why.
 table MaxSize {
   encoding: Encoding;
-  bytes: uint64;
+  bytes: uint32;
+  state: SizeState = Bounded;
+  cause: UnboundedCause = Unspecified;
 }
 
 // One payload of an interaction (D-6): a signal, an event and a fixed have
@@ -276,11 +486,13 @@ table MaxSize {
 // a query has two ("request", "response").
 table Payload {
   role: string (required);
-  // The canonical type name; for a stream, the element type.
+  // The canonical type name of a payload that is one named type; otherwise
+  // a spelling of the shape: `<T>` for a stream, `(a: T, b: U)` for a
+  // request of several parameters, `T | E` for a fallible reply.
   type_name: string (required);
-  // The payload is a stream `<T>`: `max_sizes` is per element, the stream
-  // itself has no bound (ridl §12.2).
-  stream: bool = false;
+  // One row per encoding that has a state; empty when every encoding is
+  // absent (a stream, a request of zero or several parameters, a `T | E`
+  // reply, until a record defines their encoding).
   max_sizes: [MaxSize] (required);
 }
 
@@ -302,18 +514,19 @@ table Member {
 
 table Interface {
   name: string (required);
-  // The interface number from the lock file (rsdl note D-7).
+  // The interface number, copied from the IR's Interface.number, which
+  // ridl-sem folds from interfaces.lock (rsdl note D-7). Never 0.
   number: uint32;
-  // The number is not frozen by a lock yet; `ridl baseline` refuses it,
-  // an engine decides (D-9, §3).
+  // Copied from the IR's Interface.provisional: the number is not frozen by
+  // a lock yet; `ridl baseline` refuses it, an engine decides (D-9, §3).
   provisional: bool = false;
   members: [Member] (required);
   // Ordinals held by a `reserved` tombstone, so the ordinal space is complete.
   reserved_ordinals: [uint32] (required);
 }
 
-// A retired interface: name and number held forever, so an engine can
-// refuse a peer that still speaks it (D-4).
+// A retired interface, copied from the IR's Package.retired: name and number
+// held forever, so an engine can refuse a peer that still speaks it (D-4).
 table RetiredInterface {
   name: string (required);
   number: uint32;
@@ -340,7 +553,8 @@ file_extension "binfb";
 
 - [ ] **Step 4: Write the xtask generator**
 
-`xtask/Cargo.toml` `[dependencies]` gains:
+`xtask/Cargo.toml` `[dependencies]` gains (`syn` and `prettyplease` are already
+there):
 
 ```toml
 planus-codegen.workspace = true
@@ -452,7 +666,7 @@ pub mod generated;
 pub use generated::ridl::descriptor::{
     Catalog, CatalogRef, Encoding, Interface, InterfaceRef, Kind, MaxSize, MaxSizeRef,
     Member, MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
-    Timing, TimingMode, TimingRef,
+    SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
 
 /// The schema version this toolchain writes and accepts.
@@ -486,7 +700,8 @@ Run: `cargo xtask descriptor-codegen` Expected:
 use planus::ReadAsRoot;
 use ridl_descriptor::{
     Catalog, CatalogRef, Encoding, Interface, Kind, MaxSize, Member, Payload,
-    RetiredInterface, Timing, TimingMode, FILE_IDENTIFIER, SCHEMA_VERSION,
+    RetiredInterface, SizeStateTag, Timing, TimingMode, UnboundedCause, FILE_IDENTIFIER,
+    SCHEMA_VERSION,
 };
 
 fn sample() -> Catalog {
@@ -506,10 +721,19 @@ fn sample() -> Catalog {
                 payloads: vec![Payload {
                     role: "value".to_owned(),
                     type_name: "Speed".to_owned(),
-                    stream: false,
                     max_sizes: vec![
-                        MaxSize { encoding: Encoding::Proto3, bytes: 11 },
-                        MaxSize { encoding: Encoding::FlatBuffers, bytes: 40 },
+                        MaxSize {
+                            encoding: Encoding::Proto3,
+                            bytes: 0,
+                            state: SizeStateTag::Unbounded,
+                            cause: UnboundedCause::Member,
+                        },
+                        MaxSize {
+                            encoding: Encoding::FlatBuffers,
+                            bytes: 40,
+                            state: SizeStateTag::Bounded,
+                            cause: UnboundedCause::Unspecified,
+                        },
                     ],
                 }],
                 timing: Some(Box::new(Timing {
@@ -556,9 +780,11 @@ fn every_field_reads_back() {
     let payload = member.payloads().unwrap().get(0).unwrap();
     assert_eq!(payload.role().unwrap(), "value");
     assert_eq!(payload.type_name().unwrap(), "Speed");
-    assert!(!payload.stream().unwrap());
     let sizes = payload.max_sizes().unwrap();
+    assert_eq!(sizes.get(0).unwrap().state().unwrap(), SizeStateTag::Unbounded);
+    assert_eq!(sizes.get(0).unwrap().cause().unwrap(), UnboundedCause::Member);
     assert_eq!(sizes.get(1).unwrap().encoding().unwrap(), Encoding::FlatBuffers);
+    assert_eq!(sizes.get(1).unwrap().state().unwrap(), SizeStateTag::Bounded);
     assert_eq!(sizes.get(1).unwrap().bytes().unwrap(), 40);
 
     let retired = catalog.retired().unwrap().get(0).unwrap();
@@ -572,7 +798,7 @@ fn the_owned_form_round_trips_through_the_view() {
     let bytes = builder.finish(&sample(), Some(FILE_IDENTIFIER)).to_vec();
     let view = CatalogRef::read_as_root(&bytes).unwrap();
     let owned: Catalog = view.try_into().expect("a valid view converts");
-    assert_eq!(owned.interfaces[0].members[0].payloads[0].max_sizes[0].bytes, 11);
+    assert_eq!(owned.interfaces[0].members[0].payloads[0].max_sizes[1].bytes, 40);
 }
 ```
 
@@ -583,21 +809,23 @@ owned form is whatever planus wrote.
 - [ ] **Step 7: Run the tests**
 
 Run: `cargo test -p ridl-descriptor --locked` Expected: both tests PASS. Run:
-`cargo test -p xtask --locked descriptor` —
-`committed_generated_accessors_match_the_schema` PASS.
+`cargo test -p xtask --locked` —
+`committed_generated_accessors_match_the_schema` PASS, and the extended
+`oracle_boundary` test PASS.
 
-- [ ] **Step 8: Run the wasm and lint gates for the new crate**
+- [ ] **Step 8: Run the wasm, lint and publish gates for the new crate**
 
 Run:
-`just wasm-check && cargo clippy -p ridl-descriptor -p xtask --all-targets -- -D warnings && cargo fmt --all --check`
-Expected: all three succeed. If clippy reports inside `generated.rs`, extend the
-`#![allow(...)]` list in `HEADER` and regenerate; do not edit the generated
+`just wasm-check && cargo clippy -p ridl-descriptor -p xtask --all-targets -- -D warnings && cargo fmt --all --check && cargo publish -p ridl-descriptor --dry-run --locked`
+Expected: all four succeed; the dry run is what ADR-0007 decision 14's
+workspace-entry rule exists for. If clippy reports inside `generated.rs`, extend
+the `#![allow(...)]` list in `HEADER` and regenerate; do not edit the generated
 file.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add Cargo.toml Cargo.lock .git-std.toml justfile xtask crates/ridl-descriptor
+git add Cargo.toml Cargo.lock .git-std.toml justfile .github/workflows/crates-io-release.yml xtask crates/ridl-descriptor
 git commit -m "feat(ridl-descriptor): add the catalog descriptor schema and its generated accessors"
 ```
 
@@ -782,11 +1010,12 @@ fn walk(catalog: CatalogRef<'_>) -> planus::Result<()> {
                 let payload = payload?;
                 payload.role()?;
                 payload.type_name()?;
-                payload.stream()?;
                 for size in payload.max_sizes()? {
                     let size = size?;
                     size.encoding()?;
                     size.bytes()?;
+                    size.state()?;
+                    size.cause()?;
                 }
             }
         }
@@ -818,30 +1047,47 @@ git commit -m "feat(ridl-descriptor): verify a descriptor before the first read"
 ```
 
 ---
-### Task 3: Provisional interface numbering
+### Task 3: The interface numbers, copied from the IR
+
+Re-baselined 2026-10-03 (driver §4 answer 3): Epic 15 landed, so the IR
+carries every number. This task reads them; it assigns none.
 
 **Files:**
+
 - Create: `crates/ridl-descriptor/src/number.rs`
 - Modify: `crates/ridl-descriptor/src/lib.rs` (add `pub mod number;`)
 
 **Interfaces:**
+
 - Consumes: `ridl_ir::v2::Package` through `Package::shapes()`
-  (`crates/ridl-ir/src/lib.rs:452`), whose item `InterfaceShape<'_>` carries the
+  (`crates/ridl-ir/src/lib.rs:605`), whose item `InterfaceShape<'_>` carries the
   identity `name: &str` — a declared interface's own name, or the owning
-  service's dotted global name for an inline shape.
-- Produces: `pub struct Numbered { pub name: String, pub number: u32, pub provisional: bool }` and `pub fn number_interfaces(package: &Package) -> Vec<Numbered>` — the only place a number is assigned; the lock-file reader of rsdl note D-7 replaces this function's body later.
+  service's dotted global name for an inline shape — and
+  `interface: &Interface`, whose `number` and `provisional` fields `ridl-sem`
+  folds from `interfaces.lock` (`number_interfaces` in
+  `crates/ridl-sem/src/check.rs`, which numbers the declared interfaces and
+  the services' inline shapes alike).
+- Produces:
+  `pub struct Numbered { pub name: String, pub number: u32, pub provisional: bool }`,
+  `pub struct ZeroNumber(pub String)` and
+  `pub fn numbered_shapes(package: &Package) -> Result<Vec<Numbered>, ZeroNumber>`
+  — the one place the descriptor reads a number.
+
+Before writing the tests, read `number_interfaces` in
+`crates/ridl-sem/src/check.rs` and confirm that an inline service shape
+receives a number and a provisional flag like a declared interface. If it does
+not, stop: that contradicts §4 answer 3 and is reported, not worked around.
 
 - [ ] **Step 1: Write the failing tests**
 
 `crates/ridl-descriptor/src/number.rs`:
 
 ```rust
-//! Interface numbers (rsdl note D-7). No lock file exists yet, so every
-//! number is provisional: 1.. in `Package::shapes()` order — the declared
-//! interfaces, then the inline shapes of the services — which is D-7's
-//! "after the frozen ones, in a deterministic order" with zero frozen ones.
-//! When `ridl lock` lands, this function reads the lock first and numbers
-//! only the interfaces the lock does not hold; nothing downstream changes.
+//! The interface numbers (rsdl note D-7), copied from the IR. `ridl-sem`
+//! folds `interfaces.lock` into `Interface.number` and
+//! `Interface.provisional` for every shape, declared or inline, so the
+//! descriptor reads them and computes no numbering of its own. A number of
+//! 0 never reaches a checked package: here it is an internal error, not data.
 
 use ridl_ir::v2::Package;
 
@@ -853,90 +1099,99 @@ pub struct Numbered {
     pub provisional: bool,
 }
 
+/// An interface shape whose IR number is 0: the package was not numbered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZeroNumber(pub String);
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ridl_ir::v2::{service_shape, Interface, Service, ServiceShape};
 
-    fn package(names: &[&str]) -> Package {
-        Package {
-            name: "p".to_owned(),
-            decls: vec![],
-            interfaces: names
-                .iter()
-                .map(|name| Interface { name: (*name).to_owned(), ..Default::default() })
-                .collect(),
-            services: vec![],
-        }
+    fn interface(name: &str, number: u32, provisional: bool) -> Interface {
+        Interface { name: name.to_owned(), number, provisional, ..Default::default() }
+    }
+
+    fn package(interfaces: Vec<Interface>) -> Package {
+        Package { name: "p".to_owned(), interfaces, ..Default::default() }
     }
 
     /// A `service` with an inline body: its `Interface` lives in the shape
     /// list, not in `Package::interfaces`, and its own `name` is empty.
-    fn inline_service(name: &str) -> Service {
+    fn inline_service(name: &str, number: u32) -> Service {
         Service {
             name: name.to_owned(),
             shapes: vec![ServiceShape {
-                id: 1,
-                kind: Some(service_shape::Kind::Inline(Interface::default())),
+                kind: Some(service_shape::Kind::Inline(interface("", number, true))),
             }],
             ..Default::default()
         }
     }
 
     #[test]
-    fn numbers_follow_declaration_order_from_one() {
-        let numbered = number_interfaces(&package(&["B", "A", "C"]));
+    fn numbers_and_flags_are_copied_in_shape_order() {
+        let numbered =
+            numbered_shapes(&package(vec![interface("B", 7, false), interface("A", 2, true)]))
+                .unwrap();
         assert_eq!(
             numbered,
             vec![
-                Numbered { name: "B".to_owned(), number: 1, provisional: true },
+                Numbered { name: "B".to_owned(), number: 7, provisional: false },
                 Numbered { name: "A".to_owned(), number: 2, provisional: true },
-                Numbered { name: "C".to_owned(), number: 3, provisional: true },
             ]
         );
     }
 
     #[test]
-    fn an_inline_service_shape_is_numbered_after_the_declared_interfaces() {
-        let mut package = package(&["A"]);
-        package.services.push(inline_service("p.hvac"));
+    fn an_inline_service_shape_is_numbered_under_the_service_name() {
+        let mut package = package(vec![interface("A", 1, false)]);
+        package.services.push(inline_service("p.hvac", 3));
         assert_eq!(
-            number_interfaces(&package),
+            numbered_shapes(&package).unwrap(),
             vec![
-                Numbered { name: "A".to_owned(), number: 1, provisional: true },
-                Numbered { name: "p.hvac".to_owned(), number: 2, provisional: true },
+                Numbered { name: "A".to_owned(), number: 1, provisional: false },
+                Numbered { name: "p.hvac".to_owned(), number: 3, provisional: true },
             ]
         );
+    }
+
+    #[test]
+    fn a_zero_number_is_an_internal_error() {
+        let package = package(vec![interface("A", 1, false), interface("Z", 0, true)]);
+        assert_eq!(numbered_shapes(&package), Err(ZeroNumber("Z".to_owned())));
     }
 
     #[test]
     fn a_package_without_interfaces_numbers_nothing() {
-        assert!(number_interfaces(&package(&[])).is_empty());
+        assert!(numbered_shapes(&package(vec![])).unwrap().is_empty());
     }
 }
 ```
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cargo test -p ridl-descriptor --locked number`
-Expected: compile error, `number_interfaces` not found.
+Run: `cargo test -p ridl-descriptor --locked number` Expected: compile error,
+`numbered_shapes` not found.
 
 - [ ] **Step 3: Implement**
 
 Insert above the `#[cfg(test)]` module:
 
 ```rust
-/// Numbers every interface shape of `package` — the declared interfaces,
-/// then the inline shapes of the services, in [`Package::shapes`] order.
-/// Provisional, 1-based, until a lock file exists.
-pub fn number_interfaces(package: &Package) -> Vec<Numbered> {
+/// Every interface shape of `package` in [`Package::shapes`] order, with the
+/// number and the provisional flag the IR carries.
+pub fn numbered_shapes(package: &Package) -> Result<Vec<Numbered>, ZeroNumber> {
     package
         .shapes()
-        .enumerate()
-        .map(|(index, shape)| Numbered {
-            name: shape.name.to_owned(),
-            number: u32::try_from(index + 1).expect("fewer than 2^32 interfaces"),
-            provisional: true,
+        .map(|shape| {
+            if shape.interface.number == 0 {
+                return Err(ZeroNumber(shape.name.to_owned()));
+            }
+            Ok(Numbered {
+                name: shape.name.to_owned(),
+                number: shape.interface.number,
+                provisional: shape.interface.provisional,
+            })
         })
         .collect()
 }
@@ -946,14 +1201,13 @@ Add `pub mod number;` to `lib.rs`.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p ridl-descriptor --locked number`
-Expected: 3 tests PASS.
+Run: `cargo test -p ridl-descriptor --locked number` Expected: 4 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-descriptor
-git commit -m "feat(ridl-descriptor): number interfaces provisionally in declaration order"
+git commit -m "feat(ridl-descriptor): copy the interface numbers from the IR"
 ```
 ---
 
@@ -966,14 +1220,58 @@ git commit -m "feat(ridl-descriptor): number interfaces provisionally in declara
 
 **Interfaces:**
 
-- Consumes: `Numbered` (Task 3); `Package::shapes()` (the walk Task 3 numbers);
+- Consumes: `Package::shapes()` (the walk Task 3 reads) and
+  `InterfaceShape::visibility()`;
   `ridl_ir::v2::{Package, Decl, FieldType, StructDef, UnionDef, TypeDef, EnumSetDef, ConstDef}`
   and the oneofs `decl::Kind`, `field_type::Kind`, `stream_type::Element`,
-  `return_type::Kind`; `ridl_ir::v2::to_binary`.
+  `return_type::Kind`; `ridl_ir::v2::to_binary` (the derived binary encoding,
+  ADR-0014 decision 9 as amended; hashed on purpose, see step 0).
 - Produces:
   `pub fn reachable_decls<'a>(package: &'a Package, others: &[&'a Package]) -> BTreeMap<String, &'a Decl>`
   keyed by canonical name (`Name` for this package, `pkg.Name` for another);
-  `pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered]) -> [u8; 32]`.
+  `pub fn reduced_package(package: &Package, others: &[&Package]) -> Package`,
+  the exact input of the hash, public so the decision record's rule is testable;
+  `pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32]`.
+
+Re-baselined 2026-10-03 (driver §4 answers 4 and 11): the numbering is no longer
+appended after the binary, because the reduced package's interfaces carry
+`number` and `provisional` themselves; the hash input is the protobuf binary,
+not the canonical JSON; a golden-hash test pins it; #275's criterion is tested
+here.
+
+- [ ] **Step 0: Write the decision record**
+
+Before any code, write the decision record §4 answer 4 asks for — an amendment
+to `docs/decisions/ADR-0014-ir-encodings.md` decision 9, or a new ADR if the
+amendment would not fit decision 9's subject; read ADR-0014's `## Status` and
+its amendment convention first and follow it. The record states:
+
+- what is hashed: SHA-256 over `ridl_ir::v2::to_binary` of the reduced package —
+  name; every interface shape under its identity name, with
+  `InterfaceShape::visibility()`, the IR's `number` and `provisional`, and its
+  interactions; the reachable declarations under canonical names, in
+  canonical-name order; doc strings blanked; `services` and `retired` empty;
+- the determinism rule for the binary: fields in field-number order, list
+  elements in the order the writer holds them, no `map<>` field (the IR schema
+  has none; a `map<>` added later must not enter the reduced package), fields at
+  their default omitted. Check the first clause against the `encode_raw` prost
+  generates for `Package` (`cargo expand` or the generated file under
+  `target/`): if prost writes fields in declaration order rather than
+  field-number order, the record states what prost does and `ir.proto` must keep
+  declaring fields in number order;
+- the reason: canonical JSON emits every non-`optional` field at its default, so
+  each additive IR field would change every catalog hash at a toolchain upgrade;
+  the read-back bound that moved the canonical label (decision 9's 2026-09-22
+  amendment) does not apply to bytes that are only hashed;
+- what is not covered, and why: `Package.retired` (the hash is the identity of
+  the interfaces, their numbers and the types they reach, rsdl note D-8; the
+  retired list is carried beside it), and doc strings;
+- the golden-hash test (step 1, `tests/golden_hash.rs`), so a toolchain change
+  that moves a hash fails the gate, and the rule for moving the pinned value:
+  only with a change to the IR schema or to this record, named in the commit.
+
+Run `just fmt && just check` over the record. Commit it on its own:
+`docs(adr): hash the catalog over the protobuf binary of the reduced package`.
 
 The IR references a type by name string everywhere: `SignalDef.payload`,
 `EventDef.payload`, `FieldType::Named`, `UnionArm.type_ref`,
@@ -991,10 +1289,10 @@ unit expression, not a reference — `ir.proto:146-150`). A cross-package name i
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::number::number_interfaces;
     use ridl_ir::v2::{
-        decl, field_type, service_shape, Decl, Field, FieldType, Interface, Service, ServiceShape,
-        SignalDef, StructDef, StructMember, struct_member, TypeDef,
+        decl, field_type, service_shape, Decl, Field, FieldType, Interface, RetiredInterface,
+        Service, ServiceShape, SignalDef, StructDef, StructMember, struct_member, TypeDef,
+        Visibility,
     };
 
     fn named(name: &str) -> FieldType {
@@ -1041,16 +1339,22 @@ mod tests {
     fn inline_service(name: &str, interactions: Vec<Decl>) -> Service {
         Service {
             name: name.to_owned(),
+            visibility: Visibility::Public as i32,
             shapes: vec![ServiceShape {
-                id: 1,
-                kind: Some(service_shape::Kind::Inline(Interface { interactions, ..Default::default() })),
+                kind: Some(service_shape::Kind::Inline(Interface {
+                    interactions,
+                    number: 2,
+                    provisional: true,
+                    ..Default::default()
+                })),
             }],
             ..Default::default()
         }
     }
 
-    /// `p`: interface `I` with a signal of `Point`; `Point` has fields of
-    /// `Coord` (local) and `fw.Unit` (foreign); `Unused` is declared, not reached.
+    /// `p`: interface `I` (number 1, provisional) with a signal of `Point`;
+    /// `Point` has fields of `Coord` (local) and `fw.Unit` (foreign);
+    /// `Unused` is declared, not reached.
     fn fixture() -> (Package, Package) {
         let p = Package {
             name: "p".to_owned(),
@@ -1062,21 +1366,22 @@ mod tests {
             interfaces: vec![Interface {
                 name: "I".to_owned(),
                 interactions: vec![signal("pos", "Point")],
+                number: 1,
+                provisional: true,
                 ..Default::default()
             }],
-            services: vec![],
+            ..Default::default()
         };
         let fw = Package {
             name: "fw".to_owned(),
             decls: vec![scalar_decl("Unit"), scalar_decl("Other")],
-            interfaces: vec![],
-            services: vec![],
+            ..Default::default()
         };
         (p, fw)
     }
 
     fn hash_of(p: &Package, fw: &Package) -> [u8; 32] {
-        catalog_hash(p, &[fw], &number_interfaces(p))
+        catalog_hash(p, &[fw])
     }
 
     #[test]
@@ -1119,10 +1424,27 @@ mod tests {
 
     #[test]
     fn a_number_moves_the_hash() {
-        let (p, fw) = fixture();
-        let mut renumbered = number_interfaces(&p);
-        renumbered[0].number = 7;
-        assert_ne!(catalog_hash(&p, &[&fw], &renumbered), hash_of(&p, &fw));
+        let (mut p, fw) = fixture();
+        let before = hash_of(&p, &fw);
+        p.interfaces[0].number = 7;
+        assert_ne!(hash_of(&p, &fw), before);
+    }
+
+    #[test]
+    fn a_provisional_flag_moves_the_hash() {
+        let (mut p, fw) = fixture();
+        let before = hash_of(&p, &fw);
+        p.interfaces[0].provisional = false;
+        assert_ne!(hash_of(&p, &fw), before);
+    }
+
+    #[test]
+    fn a_retired_entry_does_not_move_the_hash() {
+        let (mut p, fw) = fixture();
+        let before = hash_of(&p, &fw);
+        p.retired.push(RetiredInterface { name: "Old".to_owned(), number: 9 });
+        assert_eq!(hash_of(&p, &fw), before);
+        assert!(reduced_package(&p, &[&fw]).retired.is_empty());
     }
 
     #[test]
@@ -1135,8 +1457,94 @@ mod tests {
         assert_eq!(reached, vec!["Coord", "Point", "fw.Unit"]);
         assert_ne!(hash_of(&p, &fw), before);
     }
+
+    /// The reduced interface of an inline shape carries the owning service's
+    /// visibility, so a declared interface and an inline shape hash alike
+    /// (driftsys/ridl#326, third minor item).
+    #[test]
+    fn an_inline_shape_hashes_the_owning_services_visibility() {
+        let (mut p, fw) = fixture();
+        p.interfaces.clear();
+        p.services.push(inline_service("p.hvac", vec![signal("temp", "Point")]));
+        let before = hash_of(&p, &fw);
+        p.services[0].visibility = Visibility::Internal as i32;
+        assert_ne!(hash_of(&p, &fw), before);
+        let reduced = reduced_package(&p, &[&fw]);
+        assert_eq!(reduced.interfaces[0].name, "p.hvac");
+        assert_eq!(reduced.interfaces[0].visibility, Visibility::Internal as i32);
+    }
 }
 ```
+
+And the golden-hash test §4 answer 4 asks for, in
+`crates/ridl-descriptor/tests/golden_hash.rs`, over the corpus package's
+checked-in IR snapshot
+(`crates/ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json`,
+read through `ridl_ir::v2::from_json`), so that a toolchain change that moves
+the hash fails the gate:
+
+```rust
+//! The catalog hash of the corpus package is pinned (driver §4 answer 4).
+//! A different value here means the reduced package or the binary encoding
+//! changed; the decision record of Task 4 step 0 says when the pin may move.
+
+use std::path::Path;
+
+use ridl_descriptor::hash::catalog_hash;
+
+/// Pinned on the first run; see the decision record for the rule on moving it.
+const CORPUS_HASH: &str = "<64 hex digits, taken from the first run>";
+
+/// The corpus snapshot was published before Epic 15, so its shapes carry no
+/// number (`"number"` does not occur in the file). The pin must cover the
+/// numbers (driver §4 answers 3 and 4), so the test numbers the shapes in
+/// `Package::shapes()` order, 1.., all provisional, before hashing.
+fn numbered_corpus() -> ridl_ir::v2::Package {
+    let snapshot = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json");
+    let text = std::fs::read_to_string(&snapshot).expect("the corpus snapshot is checked in");
+    let mut package = ridl_ir::v2::from_json(&text).expect("the snapshot is canonical IR JSON");
+    let mut next = 1u32;
+    for interface in &mut package.interfaces {
+        interface.number = next;
+        interface.provisional = true;
+        next += 1;
+    }
+    for service in &mut package.services {
+        for shape in &mut service.shapes {
+            if let Some(ridl_ir::v2::service_shape::Kind::Inline(interface)) = &mut shape.kind {
+                interface.number = next;
+                interface.provisional = true;
+                next += 1;
+            }
+        }
+    }
+    package
+}
+
+#[test]
+fn the_corpus_hash_is_pinned() {
+    let package = numbered_corpus();
+    assert!(package.shapes().all(|shape| shape.interface.number != 0));
+    let hash = catalog_hash(&package, &[]);
+    let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(hex, CORPUS_HASH);
+}
+
+/// driftsys/ridl#275's criterion (driver §4 answer 11): the hash is a
+/// property of the IR, so it does not depend on which wire schema a build
+/// emits. The hash takes no emit list; this test states the property where
+/// a reader looks for it.
+#[test]
+fn the_hash_is_the_same_whatever_a_build_emits() {
+    let package = numbered_corpus();
+    assert_eq!(catalog_hash(&package, &[]), catalog_hash(&package, &[]));
+}
+```
+
+The second test is weak on its own; Task 9 adds the strong form through the
+binary: `--emit proto,catalog`, `--emit flatbuffers,catalog` and
+`--emit catalog` write byte-identical descriptors.
 
 - [ ] **Step 2: Run the tests to see them fail**
 
@@ -1150,7 +1558,9 @@ Module body above the tests:
 ```rust
 //! The catalog hash (rsdl note D-8): SHA-256 over the interfaces, their
 //! numbers and every type they reach, transitively, wherever declared.
-//! Derived, never recorded.
+//! Derived, never recorded. The input is the protobuf binary of the reduced
+//! package, by the decision record Task 4 step 0 wrote; see it for the
+//! determinism rule and for why the canonical JSON is not the input.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1158,8 +1568,6 @@ use ridl_ir::v2::{
     decl, field_type, return_type, stream_type, Decl, FieldType, Interface, Package,
 };
 use sha2::{Digest, Sha256};
-
-use crate::number::Numbered;
 
 /// Every declaration an interface of `package` reaches, keyed by canonical
 /// name: bare for this package, `pkg.Name` for another.
@@ -1284,13 +1692,13 @@ fn collect_field_type(ty: &FieldType, out: &mut Vec<String>) {
     }
 }
 
-/// SHA-256 over the canonical protobuf binary of the reduced package —
-/// every interface shape under its identity name (`Package::shapes()`
-/// order, so an inline service shape is hashed like a declared interface),
-/// then the reached declarations in canonical-name order, doc strings
-/// blanked — followed by each shape's name, number and provisional flag in
-/// numbering order.
-pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered]) -> [u8; 32] {
+/// The exact input of the hash: the package name; every interface shape
+/// under its identity name (`Package::shapes()` order) with the owning
+/// service's visibility for an inline shape, the IR's `number` and
+/// `provisional`, and its interactions; the reached declarations under
+/// canonical names, in canonical-name order; doc strings blanked; no
+/// services and no retired entries.
+pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
     let mut reduced = Package {
         name: package.name.clone(),
         decls: reachable_decls(package, others)
@@ -1307,10 +1715,12 @@ pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered
             .map(|shape| {
                 let mut interface = shape.interface.clone();
                 interface.name = shape.name.to_owned();
+                interface.visibility = shape.visibility();
                 interface
             })
             .collect(),
         services: vec![],
+        retired: vec![],
     };
     for interface in &mut reduced.interfaces {
         interface.doc.clear();
@@ -1318,15 +1728,15 @@ pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered
             blank_docs(interaction);
         }
     }
+    reduced
+}
 
+/// SHA-256 over the protobuf binary of [`reduced_package`]. The numbers are
+/// inside: each reduced interface carries the IR's `number` and
+/// `provisional`.
+pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(ridl_ir::v2::to_binary(&reduced));
-    for entry in numbered {
-        hasher.update(entry.name.as_bytes());
-        hasher.update([0u8]);
-        hasher.update(entry.number.to_le_bytes());
-        hasher.update([u8::from(entry.provisional)]);
-    }
+    hasher.update(ridl_ir::v2::to_binary(&reduced_package(package, others)));
     hasher.finalize().into()
 }
 
@@ -1357,9 +1767,11 @@ Add `pub mod hash;` to `lib.rs`. The `match` over `decl::Kind` and
 error here, which is the reminder to decide whether the new variant reaches a
 type.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests, then pin the golden hash**
 
-Run: `cargo test -p ridl-descriptor --locked hash` Expected: 7 tests PASS.
+Run: `cargo test -p ridl-descriptor --locked hash` Expected: the 10 unit tests
+PASS and `the_corpus_hash_is_pinned` FAILS once, printing the computed hex. Put
+that value in `CORPUS_HASH`, re-run: all PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1371,13 +1783,30 @@ git commit -m "feat(ridl-descriptor): derive the catalog hash over the reachable
 ---
 ### Task 5: The size context, the type leaves, and the string byte capacity
 
+Re-baselined 2026-10-03 (driver §4 answers 5, 6 and 7): `Ctx` wraps the
+projection's `Packages`; a payload is sized only when it is one named type
+(`named_payload`); a row's state is `SizeState`; the `match` narrowing and
+`ascii_only` are gone (#665 records the narrowing).
+
 **Files:**
+
 - Create: `crates/ridl-descriptor/src/size.rs`
 - Modify: `crates/ridl-descriptor/src/lib.rs` (add `pub mod size;`)
 
 **Interfaces:**
-- Consumes: `ridl_ir::v2::{Package, Decl, FieldType, Constraint, TypeDef, StructDef, UnionDef, TupleType, ArrayType, MapType, StreamType, ReturnType, Param, IntWidth, FloatWidth, PrimitiveType}` and the oneofs `decl::Kind`, `field_type::Kind`, `backing::Kind`, `type_def::Width`.
-- Produces: `pub struct Ctx<'a>` with `new` and `resolve`; `pub enum PayloadShape<'a>`; `pub fn string_max_bytes`; `pub fn ascii_only`; and, `pub(crate)`, the shared leaf model `Scalar`, `Leaf`, `leaf_of_field_type`, `leaf_of_name`, `leaf_of_primitive` that Tasks 6 and 7 size.
+
+- Consumes:
+  `ridl_ir::v2::{Package, Decl, FieldType, Constraint, TypeDef, StructDef, UnionDef, TupleType, ArrayType, MapType, ReturnType, Param, IntWidth, FloatWidth, PrimitiveType}`,
+  the oneofs `decl::Kind`, `field_type::Kind`, `return_type::Kind`,
+  `backing::Kind`, `type_def::Width`, and
+  `ridl_ir::projection::flatbuffers::Packages`
+  (`crates/ridl-ir/src/projection/flatbuffers.rs:300`, two public fields).
+- Produces: `pub struct Ctx<'a>` with `new`, `resolve` and `packages`;
+  `pub enum PayloadShape<'a>`; `pub fn named_payload`; `pub enum SizeState`;
+  `pub fn size_state`; `pub fn string_max_bytes`; and, `pub(crate)`, the
+  shared leaf model `Scalar`, `Leaf`, `leaf_of_field_type`, `leaf_of_name`,
+  `leaf_of_primitive` that Task 6 sizes (Task 7 needs none of it: the
+  projection resolves its own types).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1387,135 +1816,130 @@ git commit -m "feat(ridl-descriptor): derive the catalog hash over the reachable
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ridl_ir::v2::{backing, decl, Backing, ConstDef, Decl, Package, PrimitiveType};
+    use ridl_ir::v2::{
+        field_type, return_type, stream_type, FallibleType, Package, Param, PrimitiveType,
+        ReturnType, StreamType,
+    };
 
-    fn ctx_with_const(name: &str, regex: &str) -> Package {
-        Package {
-            name: "p".to_owned(),
-            decls: vec![Decl {
-                name: name.to_owned(),
-                kind: Some(decl::Kind::ConstDef(ConstDef {
-                    type_ref: None,
-                    value: regex.to_owned(),
-                    regex: Some(regex.to_owned()),
-                })),
-                ..Default::default()
-            }],
-            interfaces: vec![],
-            services: vec![],
-        }
+    fn constraint(len_max: Option<u64>, pattern: Option<&str>) -> Constraint {
+        Constraint { len_max, pattern: pattern.map(str::to_owned), ..Default::default() }
     }
 
-    fn constraint(len_max: Option<u64>, pattern: Option<&str>, pattern_const: Option<&str>) -> Constraint {
-        Constraint {
-            len_max,
-            pattern: pattern.map(str::to_owned),
-            pattern_const: pattern_const.map(str::to_owned),
-            ..Default::default()
-        }
+    fn named(name: &str) -> FieldType {
+        FieldType { optional: false, kind: Some(field_type::Kind::Named(name.to_owned())) }
     }
 
     #[test]
-    fn ascii_only_accepts_an_anchored_ascii_class_pattern() {
-        assert!(ascii_only("^[A-HJ-NPR-Z0-9]{17}$"));
-        assert!(ascii_only("/^[A-Z]{2}$/"));
-        assert!(ascii_only("^(kg|lb)$"));
-        assert!(ascii_only("^\\d{3}-\\w+$"));
+    fn a_string_counts_four_bytes_per_scalar_value_whatever_its_pattern() {
+        assert_eq!(string_max_bytes(None), 1024);
+        assert_eq!(string_max_bytes(Some(&constraint(Some(17), None))), 68);
+        // No `match` narrowing in E16 (driver §4 answer 7; driftsys/ridl#665).
+        assert_eq!(string_max_bytes(Some(&constraint(Some(17), Some("^[A-Z0-9]{17}$")))), 68);
     }
 
     #[test]
-    fn ascii_only_rejects_what_can_admit_a_wide_scalar_value() {
-        assert!(!ascii_only("[A-Z]+"), "unanchored: the value may hold anything around the match");
-        assert!(!ascii_only("^a|b$"), "top-level alternation escapes the anchors");
-        assert!(!ascii_only("^.*$"), "`.` matches any scalar value");
-        assert!(!ascii_only("^[^x]$"), "a negated class matches any scalar value but x");
-        assert!(!ascii_only("^\\s$"), "`\\s` includes Unicode spaces");
-        assert!(!ascii_only("^\\p{L}$"));
-        assert!(!ascii_only("^\\u00e9$"));
-        assert!(!ascii_only("^é$"), "a non-ASCII literal");
-        assert!(!ascii_only("^\\W$") && !ascii_only("^\\D$"), "negated escapes");
+    fn only_a_payload_that_is_one_named_type_is_sized() {
+        let stream = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Stream(StreamType {
+                element: Some(stream_type::Element::Named("Point".to_owned())),
+            })),
+        };
+        let primitive = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Primitive(PrimitiveType::Integer as i32)),
+        };
+        let one = [Param { name: "at".to_owned(), r#type: Some(named("Point")) }];
+        let two = [one[0].clone(), Param { name: "flag".to_owned(), r#type: Some(primitive.clone()) }];
+        let value = ReturnType { kind: Some(return_type::Kind::Value(named("Point"))) };
+        let fallible = ReturnType {
+            kind: Some(return_type::Kind::Fallible(FallibleType {
+                ok: "Point".to_owned(),
+                err: "Coord".to_owned(),
+            })),
+        };
+        let streamed = ReturnType { kind: Some(return_type::Kind::Value(stream.clone())) };
+
+        assert_eq!(named_payload(&PayloadShape::Named("Point")), Some("Point"));
+        assert_eq!(named_payload(&PayloadShape::Field(&named("Point"))), Some("Point"));
+        assert_eq!(named_payload(&PayloadShape::Field(&primitive)), None, "not a named type");
+        assert_eq!(named_payload(&PayloadShape::Field(&stream)), None, "a stream: §4 answer 10");
+        assert_eq!(named_payload(&PayloadShape::Params(&one)), Some("Point"));
+        assert_eq!(named_payload(&PayloadShape::Params(&two)), None, "several parameters: §4 answer 6");
+        assert_eq!(named_payload(&PayloadShape::Params(&[])), None, "zero parameters");
+        assert_eq!(named_payload(&PayloadShape::Return(&value)), Some("Point"));
+        assert_eq!(named_payload(&PayloadShape::Return(&fallible)), None, "an inline `T | E`: §4 answer 6");
+        assert_eq!(named_payload(&PayloadShape::Return(&streamed)), None);
     }
 
     #[test]
-    fn a_string_defaults_to_256_scalar_values_at_four_bytes() {
-        let package = Package { name: "p".to_owned(), decls: vec![], interfaces: vec![], services: vec![] };
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(string_max_bytes(None, &ctx), 1024);
-        assert_eq!(string_max_bytes(Some(&constraint(Some(17), None, None)), &ctx), 68);
-    }
-
-    #[test]
-    fn an_anchored_ascii_pattern_narrows_to_one_byte() {
-        let package = ctx_with_const("VIN_PATTERN", "^[A-HJ-NPR-Z0-9]{17}$");
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(string_max_bytes(Some(&constraint(Some(17), Some("^[A-Z0-9]{17}$"), None)), &ctx), 17);
-        assert_eq!(string_max_bytes(Some(&constraint(Some(17), None, Some("VIN_PATTERN"))), &ctx), 17);
-        assert_eq!(string_max_bytes(Some(&constraint(Some(17), Some("[A-Z]+"), None)), &ctx), 68);
-    }
-
-    #[test]
-    fn a_primitive_leaf_has_its_projection_widths() {
-        let package = Package { name: "p".to_owned(), decls: vec![], interfaces: vec![], services: vec![] };
-        let ctx = Ctx::new(&package, &[]);
-        match leaf_of_primitive(PrimitiveType::Integer as i32, &ctx) {
-            Some(Leaf::Scalar(s)) => {
-                assert_eq!(s.proto_max(), 10);
-                assert_eq!(s.fb_width(), 8);
-            }
+    fn a_primitive_leaf_has_its_proto3_width() {
+        match leaf_of_primitive(PrimitiveType::Integer as i32) {
+            Some(Leaf::Scalar(s)) => assert_eq!(s.proto_max(), 10),
             other => panic!("integer is a scalar leaf, got {other:?}"),
         }
-        assert!(matches!(leaf_of_primitive(PrimitiveType::String as i32, &ctx), Some(Leaf::Blob(1024))));
-        assert!(matches!(leaf_of_primitive(PrimitiveType::Bytes as i32, &ctx), Some(Leaf::Blob(256))));
-        let _ = Backing::default();
-        let _ = backing::Kind::Unit(String::new());
+        assert!(matches!(leaf_of_primitive(PrimitiveType::String as i32), Some(Leaf::Blob(1024))));
+        assert!(matches!(leaf_of_primitive(PrimitiveType::Bytes as i32), Some(Leaf::Blob(256))));
+    }
+
+    #[test]
+    fn the_repr_c_column_is_absent() {
+        let package = Package { name: "p".to_owned(), ..Default::default() };
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(size_state("Point", &ctx, Encoding::ReprC), None);
     }
 }
 ```
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cargo test -p ridl-descriptor --locked size`
-Expected: compile error, the module does not exist.
+Run: `cargo test -p ridl-descriptor --locked size` Expected: compile error, the
+module does not exist.
 
 - [ ] **Step 3: Implement the module**
 
 Module body above the tests:
 
 ```rust
-//! The maximum encoded size of a payload, per core encoding (spec D-6).
+//! The size state of a payload, per core encoding (spec D-6, as re-baselined
+//! on 2026-10-03): absent (no row), bounded with a byte count, or unbounded
+//! with a cause (driver §4 answer 5). A bound is an upper bound: the largest
+//! legal value of the payload encodes to at most that many bytes under the
+//! projection the wire backend emits (ADR-0017 for proto3, ADR-0019 for
+//! FlatBuffers). Envelope and framing are excluded (spec D-7). `repr(C)` has
+//! no state until E11.12 (driftsys/ridl#317) defines the layout.
 //!
-//! Every number is an upper bound: the largest legal value of the payload
-//! encodes to at most that many bytes under the projection the wire backend
-//! emits (ADR-0017 for proto3, ADR-0019 for FlatBuffers). Envelope and
-//! framing are excluded (spec D-7). `repr(C)` is not sized until E11.12
-//! defines the layout: `max_size` returns `None` for it.
-//!
-//! A payload that is a struct or a union is that message or table itself;
-//! any other payload is an induced single-field message or table with the
-//! value at field 1; a request is an induced message or table of the
-//! parameters numbered 1..n; a fallible response is a union over `ok` (1)
-//! and `err` (2). E11.1 adopts or amends this framing.
+//! The descriptor defines no wire shape (§4 answer 6): only a payload that is
+//! one named type is sized, through the projections —
+//! `ridl_ir::projection::flatbuffers::max_size` (ADR-0019 decision 8) in
+//! `flatbuffers`, and ADR-0017's projection in `proto3`. A request of zero or
+//! several parameters, an inline `T | E` reply and a stream payload (§4
+//! answer 10) are absent until a record defines their encoding.
 
 pub(crate) mod flatbuffers;
 pub(crate) mod proto3;
 
 use std::collections::BTreeMap;
 
+use ridl_ir::projection::flatbuffers::Packages;
 use ridl_ir::v2::{
-    backing, decl, field_type, type_def, ArrayType, Constraint, Decl, FieldType, FloatWidth,
-    IntWidth, MapType, Package, Param, PrimitiveType, ReturnType, StreamType, StructDef,
+    backing, decl, field_type, return_type, type_def, ArrayType, Constraint, Decl, FieldType,
+    FloatWidth, IntWidth, MapType, Package, Param, PrimitiveType, ReturnType, StructDef,
     TupleType, TypeDef, UnionDef,
 };
 
-use crate::Encoding;
+use crate::{Encoding, UnboundedCause};
 
-/// Name resolution over a package and the packages it imports.
+/// Name resolution over a package and the packages it imports, and the
+/// projection's view of the same scope.
 pub struct Ctx<'a> {
+    packages: Packages<'a>,
     index: BTreeMap<String, &'a Decl>,
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(package: &'a Package, others: &[&'a Package]) -> Self {
+    pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self {
         let mut index = BTreeMap::new();
         for decl in &package.decls {
             index.insert(decl.name.clone(), decl);
@@ -1525,7 +1949,7 @@ impl<'a> Ctx<'a> {
                 index.insert(format!("{}.{}", other.name, decl.name), decl);
             }
         }
-        Self { index }
+        Self { packages: Packages { package, others }, index }
     }
 
     /// The declaration a canonical name refers to: bare for this package,
@@ -1533,91 +1957,75 @@ impl<'a> Ctx<'a> {
     pub fn resolve(&self, name: &str) -> Option<&'a Decl> {
         self.index.get(name).copied()
     }
+
+    /// The projection's view of the scope, for `max_size`.
+    pub fn packages(&self) -> Packages<'a> {
+        self.packages
+    }
 }
 
 /// What is being sized.
 pub enum PayloadShape<'a> {
-    /// A signal or event payload, or a named stream element: a type name.
+    /// A signal or event payload: a type name.
     Named(&'a str),
     /// A fixed payload.
     Field(&'a FieldType),
-    /// A command or query request: the parameters, fields 1..n.
+    /// A command or query request: the parameters.
     Params(&'a [Param]),
     /// A query response.
     Return(&'a ReturnType),
-    /// One element of a stream payload.
-    Element(&'a StreamType),
 }
 
-/// The maximum encoded size of `shape` under `encoding`, in bytes; `None`
-/// when this toolchain cannot size it (the `repr(C)` layout is undefined,
-/// a name does not resolve, or the projection refuses the type).
-pub fn max_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>, encoding: Encoding) -> Option<u64> {
+/// The one named type a payload is, or `None` when the payload is not one
+/// named type and so has absent sizes (driver §4 answers 6 and 10).
+pub fn named_payload<'a>(shape: &PayloadShape<'a>) -> Option<&'a str> {
+    match shape {
+        PayloadShape::Named(name) => Some(name),
+        PayloadShape::Field(ty) => named_field(ty),
+        PayloadShape::Params([single]) => single.r#type.as_ref().and_then(named_field),
+        PayloadShape::Params(_) => None,
+        PayloadShape::Return(ret) => match ret.kind.as_ref()? {
+            return_type::Kind::Value(ty) => named_field(ty),
+            return_type::Kind::Fallible(_) => None,
+        },
+    }
+}
+
+fn named_field(ty: &FieldType) -> Option<&str> {
+    match ty.kind.as_ref()? {
+        field_type::Kind::Named(name) => Some(name),
+        _ => None,
+    }
+}
+
+/// One payload's state under one encoding; the row is absent when the
+/// toolchain computed no state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SizeState {
+    Bounded(u32),
+    Unbounded(UnboundedCause),
+}
+
+/// The state of the named type `type_name` under `encoding`: `None` when
+/// this toolchain computes no state (the `repr(C)` layout is undefined, a
+/// name does not resolve, or the projection has no root form for the type).
+pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
     match encoding {
-        Encoding::Proto3 => proto3::payload_size(shape, ctx),
-        Encoding::FlatBuffers => None,
+        Encoding::Proto3 => proto3::state(type_name, ctx),
+        Encoding::FlatBuffers => flatbuffers::state(type_name, ctx),
         Encoding::ReprC => None,
     }
 }
 
 /// The byte capacity of a `string`: the bound in scalar values (default 256,
-/// typl §4.4) times four (design note §3.11), or times one when a `match`
-/// pattern is anchored and admits ASCII only.
-pub fn string_max_bytes(constraint: Option<&Constraint>, ctx: &Ctx<'_>) -> u64 {
-    let len_max = constraint.and_then(|c| c.len_max).unwrap_or(256);
-    let pattern = constraint.and_then(|c| {
-        c.pattern.clone().or_else(|| {
-            let name = c.pattern_const.as_deref()?;
-            match &ctx.resolve(name)?.kind {
-                Some(decl::Kind::ConstDef(def)) => def.regex.clone().or_else(|| Some(def.value.clone())),
-                _ => None,
-            }
-        })
-    });
-    let per_scalar_value = if pattern.as_deref().is_some_and(ascii_only) { 1 } else { 4 };
-    len_max.saturating_mul(per_scalar_value)
+/// typl §4.4) times four (design note §3.11; the FlatBuffers projection
+/// charges the same). No `match` narrowing (driver §4 answer 7; #665).
+pub fn string_max_bytes(constraint: Option<&Constraint>) -> u64 {
+    constraint.and_then(|c| c.len_max).unwrap_or(256).saturating_mul(4)
 }
 
-/// Whether every value the pattern admits is ASCII. The checker applies
-/// `match` as a substring search, so the pattern must be anchored at both
-/// ends with no top-level alternation, and must use no construct that can
-/// match a scalar value above U+007F under ECMAScript semantics (`.`, a
-/// negated class, `\s`, the negated escapes, `\p`, `\u`, `\x`, `\c`).
-pub fn ascii_only(pattern: &str) -> bool {
-    let body = pattern
-        .strip_prefix('/')
-        .and_then(|rest| rest.strip_suffix('/'))
-        .unwrap_or(pattern);
-    if !body.is_ascii() || !body.starts_with('^') || !body.ends_with('$') || body.ends_with("\\$") {
-        return false;
-    }
-    let bytes = body.as_bytes();
-    let mut depth = 0i32;
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\\' => {
-                let Some(next) = bytes.get(i + 1) else { return false };
-                if b"sSDWpPuxcB".contains(next) {
-                    return false;
-                }
-                i += 2;
-                continue;
-            }
-            b'(' => depth += 1,
-            b')' => depth -= 1,
-            b'|' if depth == 0 => return false,
-            b'.' => return false,
-            b'[' if bytes.get(i + 1) == Some(&b'^') => return false,
-            _ => {}
-        }
-        i += 1;
-    }
-    true
-}
-
-/// A scalar as both projections spell it (`proto_scalar` in the proto
-/// backend, `fbs_scalar` in the FlatBuffers backend).
+/// A scalar as the proto3 projection spells it (`proto_scalar` in the proto
+/// backend).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Scalar {
     Bool,
@@ -1636,17 +2044,6 @@ impl Scalar {
             Self::Int(IntWidth::U64 | IntWidth::I64 | IntWidth::Unspecified) => 10,
             Self::Float(FloatWidth::F32) => 4,
             Self::Float(FloatWidth::F64 | FloatWidth::Unspecified) => 8,
-        }
-    }
-
-    /// The inline width of the FlatBuffers scalar, which is also its alignment.
-    pub(crate) fn fb_width(self) -> u64 {
-        match self {
-            Self::Bool | Self::Int(IntWidth::U8 | IntWidth::I8) => 1,
-            Self::Int(IntWidth::U16 | IntWidth::I16) => 2,
-            Self::Int(IntWidth::U32 | IntWidth::I32) | Self::Float(FloatWidth::F32) => 4,
-            Self::Int(IntWidth::U64 | IntWidth::I64 | IntWidth::Unspecified)
-            | Self::Float(FloatWidth::F64 | FloatWidth::Unspecified) => 8,
         }
     }
 }
@@ -1670,19 +2067,19 @@ pub(crate) enum Leaf<'a> {
 pub(crate) fn leaf_of_field_type<'a>(ty: &'a FieldType, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     match ty.kind.as_ref()? {
         field_type::Kind::Named(name) => leaf_of_name(name, ctx),
-        field_type::Kind::Primitive(primitive) => leaf_of_primitive(*primitive, ctx),
-        field_type::Kind::InlineScalar(def) => leaf_of_type_def(def, ctx),
+        field_type::Kind::Primitive(primitive) => leaf_of_primitive(*primitive),
+        field_type::Kind::InlineScalar(def) => leaf_of_type_def(def),
         field_type::Kind::Tuple(tuple) => Some(Leaf::Tuple(tuple)),
         field_type::Kind::Array(array) => Some(Leaf::Array(array)),
         field_type::Kind::Map(map) => Some(Leaf::Map(map)),
-        // A stream is sized per element by `PayloadShape::Element`, never as a field.
+        // A stream has absent sizes (driver §4 answer 10).
         field_type::Kind::Stream(_) => None,
     }
 }
 
 pub(crate) fn leaf_of_name<'a>(name: &str, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     match ctx.resolve(name)?.kind.as_ref()? {
-        decl::Kind::TypeDef(def) => leaf_of_type_def(def, ctx),
+        decl::Kind::TypeDef(def) => leaf_of_type_def(def),
         decl::Kind::StructDef(def) => Some(Leaf::Struct(def)),
         decl::Kind::UnionDef(def) => Some(Leaf::Union(def)),
         decl::Kind::EnumDef(def) => Some(Leaf::Enum {
@@ -1702,8 +2099,7 @@ pub(crate) fn leaf_of_name<'a>(name: &str, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     }
 }
 
-pub(crate) fn leaf_of_primitive<'a>(primitive: i32, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
-    let _ = ctx;
+pub(crate) fn leaf_of_primitive<'a>(primitive: i32) -> Option<Leaf<'a>> {
     match PrimitiveType::try_from(primitive).ok()? {
         PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
         PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified))),
@@ -1714,7 +2110,7 @@ pub(crate) fn leaf_of_primitive<'a>(primitive: i32, ctx: &Ctx<'a>) -> Option<Lea
     }
 }
 
-fn leaf_of_type_def<'a>(def: &'a TypeDef, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
+fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
     let int_width = match def.width {
         Some(type_def::Width::IntWidth(w)) => IntWidth::try_from(w).unwrap_or(IntWidth::Unspecified),
         _ => IntWidth::Unspecified,
@@ -1728,7 +2124,7 @@ fn leaf_of_type_def<'a>(def: &'a TypeDef, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
             PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
             PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(int_width))),
             PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(float_width))),
-            PrimitiveType::String => Some(Leaf::Blob(string_max_bytes(def.constraint.as_ref(), ctx))),
+            PrimitiveType::String => Some(Leaf::Blob(string_max_bytes(def.constraint.as_ref()))),
             PrimitiveType::Bytes => {
                 Some(Leaf::Blob(def.constraint.as_ref().and_then(|c| c.len_max).unwrap_or(256)))
             }
@@ -1744,25 +2140,28 @@ fn leaf_of_type_def<'a>(def: &'a TypeDef, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
 }
 ```
 
-Create `crates/ridl-descriptor/src/size/proto3.rs` and `crates/ridl-descriptor/src/size/flatbuffers.rs` each holding only a module doc line for now (`//! proto3 upper bounds — Task 6.` / `//! FlatBuffers upper bounds — Task 7.`) plus, in `proto3.rs`, a `payload_size` that the `max_size` arm above compiles against:
+Create `crates/ridl-descriptor/src/size/proto3.rs` and
+`crates/ridl-descriptor/src/size/flatbuffers.rs` each holding a module doc
+line for now (`//! proto3 states — Task 6.` / `//! FlatBuffers states — Task
+7.`) plus a `state` that the `size_state` arms above compile against:
 
 ```rust
-use super::{Ctx, PayloadShape};
+use super::{Ctx, SizeState};
 
-pub(crate) fn payload_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Option<u64> {
-    let _ = (shape, ctx);
+pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
+    let _ = (type_name, ctx);
     None
 }
 ```
 
-Task 6 replaces this body the same day; the `max_size` signature is what Task 8 codes against, so it exists from here.
+Tasks 6 and 7 replace these bodies; the `size_state` signature is what Task 8
+codes against, so it exists from here.
 
 Add `pub mod size;` to `lib.rs`.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p ridl-descriptor --locked size`
-Expected: 5 tests PASS.
+Run: `cargo test -p ridl-descriptor --locked size` Expected: 4 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1772,7 +2171,7 @@ git commit -m "feat(ridl-descriptor): resolve payload types and the string byte 
 ```
 ---
 
-### Task 6: The proto3 upper bound
+### Task 6: The proto3 state
 
 **Files:**
 
@@ -1780,18 +2179,28 @@ git commit -m "feat(ridl-descriptor): resolve payload types and the string byte 
 
 **Interfaces:**
 
-- Consumes: `Ctx`, `PayloadShape`, `Leaf`, `Scalar`, `leaf_of_field_type`,
-  `leaf_of_name`, `leaf_of_primitive` (Task 5).
+- Consumes: `Ctx`, `SizeState`, `Leaf`, `Scalar`, `leaf_of_field_type`,
+  `leaf_of_name` (Task 5).
 - Produces:
-  `pub(crate) fn payload_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Option<u64>`
-  and `pub(crate) fn varint_len(v: u64) -> u64`.
+  `pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState>` and
+  `pub(crate) fn varint_len(v: u64) -> u64`.
 
-The rules are the proto3 wire format over ADR-0017's projection: a field number
-from the IR ordinal (`emit_struct`, `emit_union` in the proto backend), a struct
-as a message, a union as a message with a `oneof`, a named scalar inlined, an
-enum as a varint, an enum set as its width's scalar, an array as `repeated`
-(packed for scalars), a map as `map<K, V>`, a tuple as an induced message, a
-nested array or map refused (`None`).
+Re-baselined 2026-10-03 (driver §4 answers 5 and 6; D5 derives this bound "under
+ADR-0017 as amended today"). The rules are the proto3 wire format over
+ADR-0017's projection: a field number from the IR ordinal (`emit_struct`,
+`emit_union` in the proto backend), a struct as a message, a union as a message
+with a `oneof`, a named scalar inlined into its field, an enum as a varint, an
+enum set as its width's scalar, an array as `repeated` (packed for scalars), a
+map as `map<K, V>`, a tuple as an induced message, a nested array or map
+refused. A payload is sized only when it is a struct or a union: those are the
+two shapes ADR-0017 projects as a message. ADR-0017 decision 1 inlines a named
+scalar and an enum set into their field, its decision 2 rejects a wrapper
+message per named scalar, and an enum is a declared `enum`, not a message; so
+none of the three has a proto3 root form as a payload, and its proto3 state is
+absent until a record defines one (re-baseline decision 5, which D5 confirms
+with Sebastien before this task starts). proto3 has no unbounded state: typl
+bounds every collection, so a message is bounded or, when the projection refuses
+a member, absent. A bound above `u32::MAX` is absent, as in `MAX_ENCODABLE`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1813,51 +2222,52 @@ mod tests {
 
     #[test]
     fn a_struct_payload_is_the_message_itself() {
-        // Point { x: integer [-1000..1000], y: integer [-1000..1000] }:
-        // two sint32 fields, tag 1 byte + value 5 bytes each.
+        // Point { x: Coord, y: Coord }, Coord = integer i16: two sint32
+        // fields, tag 1 byte + value 5 bytes each.
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(payload_size(&PayloadShape::Named("Point"), &ctx), Some(12));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Point", &ctx), Some(SizeState::Bounded(12)));
     }
 
     #[test]
-    fn a_scalar_payload_is_an_induced_single_field_message() {
+    fn a_named_scalar_has_no_proto3_root_form() {
+        // ADR-0017 decision 1 inlines a named scalar and decision 2 rejects a
+        // wrapper message, so a payload of one is absent (driver §4 answer 6).
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        // bare `integer`: tag 1 + int64 varint 10
-        assert_eq!(payload_size(&PayloadShape::Field(&primitive_integer()), &ctx), Some(11));
-        // bare `string`: tag 1 + length varint 2 + 1024
-        assert_eq!(payload_size(&PayloadShape::Field(&primitive_string()), &ctx), Some(1027));
-        // Vin = string [17..17] match /^[A-HJ-NPR-Z0-9]{17}$/: 1 + 1 + 17
-        assert_eq!(payload_size(&PayloadShape::Named("Vin"), &ctx), Some(19));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Vin", &ctx), None);
+        assert_eq!(state("Coord", &ctx), None);
     }
 
     #[test]
-    fn a_packed_scalar_array_and_a_map() {
+    fn string_array_and_map_fields_inside_a_message() {
+        // Bag { tag: Vin @1, flags: [u8; 0..4] @2, index: {string [0..8]: u32; 0..2} @3 }:
+        //   tag:   1 + 1 + 17 * 4            = 70
+        //   flags: packed, 1 + 1 + 4 * 5     = 22
+        //   index: entry (1+1+32) + (1+5) = 40; 2 * (1 + 1 + 40) = 84
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        // [u8; 0..4] as uint32: tag 1 + length varint 1 + 4 * 5
-        assert_eq!(payload_size(&PayloadShape::Field(&array_u8_max4()), &ctx), Some(22));
-        // map<string [0..8], u32; 0..2>: entry = (1+1+32) + (1+5) = 40; 2 * (1 + 1 + 40)
-        assert_eq!(payload_size(&PayloadShape::Field(&map_str8_u32_max2()), &ctx), Some(84));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Bag", &ctx), Some(SizeState::Bounded(176)));
     }
 
     #[test]
-    fn a_request_and_a_fallible_response() {
+    fn a_union_payload_is_its_message_with_the_largest_arm() {
+        // Shape = Point @1 | Coord @2: arm a 1 + 1 + 12 = 14, arm b 1 + 5 = 6.
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        // (flag: boolean, at: Point): (1 + 1) + (1 + 1 + 12)
-        assert_eq!(payload_size(&PayloadShape::Params(&params_flag_point()), &ctx), Some(16));
-        // ok: Point (1 + 1 + 12 = 14) | err: Coord (1 + 5 = 6)
-        assert_eq!(payload_size(&PayloadShape::Return(&fallible_point_coord()), &ctx), Some(14));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Shape", &ctx), Some(SizeState::Bounded(14)));
     }
 
     #[test]
-    fn a_stream_element_and_an_unresolved_name() {
+    fn an_unresolved_name_is_absent() {
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(payload_size(&PayloadShape::Element(&stream_of("Point")), &ctx), Some(12));
-        assert_eq!(payload_size(&PayloadShape::Named("Missing"), &ctx), None);
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Missing", &ctx), None);
     }
 }
 ```
@@ -1869,9 +2279,9 @@ And the shared test fixtures, appended to `crates/ridl-descriptor/src/size.rs`
 #[cfg(test)]
 pub(crate) mod tests_support {
     use ridl_ir::v2::{
-        backing, decl, field_type, return_type, stream_type, type_def, ArrayType, Backing,
-        Constraint, Decl, FallibleType, Field, FieldType, IntWidth, MapType, Package, Param,
-        PrimitiveType, ReturnType, StreamType, StructDef, StructMember, struct_member, TypeDef,
+        backing, decl, field_type, type_def, ArrayType, Backing, ConstDef, Constraint, Decl,
+        Field, FieldType, IntWidth, MapType, Package, PrimitiveType, StructDef, StructMember,
+        struct_member, TypeDef, UnionArm, UnionDef,
     };
 
     fn scalar_def(primitive: PrimitiveType, width: Option<IntWidth>, constraint: Option<Constraint>) -> TypeDef {
@@ -1889,14 +2299,6 @@ pub(crate) mod tests_support {
 
     pub(crate) fn named(name: &str) -> FieldType {
         FieldType { optional: false, kind: Some(field_type::Kind::Named(name.to_owned())) }
-    }
-
-    pub(crate) fn primitive_integer() -> FieldType {
-        FieldType { optional: false, kind: Some(field_type::Kind::Primitive(PrimitiveType::Integer as i32)) }
-    }
-
-    pub(crate) fn primitive_string() -> FieldType {
-        FieldType { optional: false, kind: Some(field_type::Kind::Primitive(PrimitiveType::String as i32)) }
     }
 
     pub(crate) fn i16() -> FieldType {
@@ -1932,42 +2334,24 @@ pub(crate) mod tests_support {
         }
     }
 
-    pub(crate) fn params_flag_point() -> Vec<Param> {
-        vec![
-            Param {
-                name: "flag".to_owned(),
-                r#type: Some(FieldType {
-                    optional: false,
-                    kind: Some(field_type::Kind::Primitive(PrimitiveType::Boolean as i32)),
-                }),
-            },
-            Param { name: "at".to_owned(), r#type: Some(named("Point")) },
-        ]
-    }
-
-    pub(crate) fn fallible_point_coord() -> ReturnType {
-        ReturnType {
-            kind: Some(return_type::Kind::Fallible(FallibleType {
-                ok: "Point".to_owned(),
-                err: "Coord".to_owned(),
-            })),
-        }
-    }
-
-    pub(crate) fn stream_of(name: &str) -> StreamType {
-        StreamType { element: Some(stream_type::Element::Named(name.to_owned())) }
-    }
-
     /// `Coord = integer [-1000..1000]` (i16); `Point { x: Coord, y: Coord }`;
-    /// `Vin = string [17..17] match /^[A-HJ-NPR-Z0-9]{17}$/`.
+    /// `Vin = string [17..17] match /^[A-HJ-NPR-Z0-9]{17}$/`;
+    /// `Bag { tag: Vin, flags: [u8; 0..4], index: {string [0..8]: u32; 0..2} }`;
+    /// `Shape = Point | Coord`; `const LIMIT`.
     pub(crate) fn fixture() -> Package {
-        let field = |name: &str, ordinal: u32| StructMember {
+        let field = |name: &str, ordinal: u32, ty: FieldType| StructMember {
             member: Some(struct_member::Member::Field(Field {
                 name: name.to_owned(),
                 ordinal,
-                r#type: Some(named("Coord")),
+                r#type: Some(ty),
                 ..Default::default()
             })),
+        };
+        let arm = |name: &str, ordinal: u32, type_ref: &str| UnionArm {
+            name: name.to_owned(),
+            ordinal,
+            type_ref: type_ref.to_owned(),
+            ..Default::default()
         };
         Package {
             name: "p".to_owned(),
@@ -1980,7 +2364,7 @@ pub(crate) mod tests_support {
                 Decl {
                     name: "Point".to_owned(),
                     kind: Some(decl::Kind::StructDef(StructDef {
-                        members: vec![field("x", 1), field("y", 2)],
+                        members: vec![field("x", 1, named("Coord")), field("y", 2, named("Coord"))],
                         fixed_layout: false,
                     })),
                     ..Default::default()
@@ -1999,30 +2383,65 @@ pub(crate) mod tests_support {
                     ))),
                     ..Default::default()
                 },
+                Decl {
+                    name: "Bag".to_owned(),
+                    kind: Some(decl::Kind::StructDef(StructDef {
+                        members: vec![
+                            field("tag", 1, named("Vin")),
+                            field("flags", 2, array_u8_max4()),
+                            field("index", 3, map_str8_u32_max2()),
+                        ],
+                        fixed_layout: false,
+                    })),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "Shape".to_owned(),
+                    kind: Some(decl::Kind::UnionDef(UnionDef {
+                        arms: vec![arm("a", 1, "Point"), arm("b", 2, "Coord")],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "LIMIT".to_owned(),
+                    kind: Some(decl::Kind::ConstDef(ConstDef {
+                        type_ref: Some("Coord".to_owned()),
+                        value: "7".to_owned(),
+                        regex: None,
+                    })),
+                    ..Default::default()
+                },
             ],
-            interfaces: vec![],
-            services: vec![],
+            ..Default::default()
         }
     }
 }
 ```
 
+`i16()`, `inline()` and `named()` stay as written; delete any helper the
+compiler reports as unused, because `-D warnings` covers the test modules.
+
 - [ ] **Step 2: Run the tests to see them fail**
 
 Run: `cargo test -p ridl-descriptor --locked proto3` Expected: the six tests
-compile and every size assertion fails against `None` (`varint_len` is a compile
-error until step 3).
+compile and every bounded assertion fails against `None` (`varint_len` is a
+compile error until step 3).
 
 - [ ] **Step 3: Implement**
 
 Replace the body of `crates/ridl-descriptor/src/size/proto3.rs` above the tests:
 
 ```rust
-//! The proto3 upper bound of a payload under ADR-0017's projection.
+//! The proto3 state of a named-type payload under ADR-0017's projection:
+//! bounded for a struct (a message) and a union (a message with a `oneof`);
+//! absent for a named scalar and an enum set, which ADR-0017 decision 1
+//! inlines into their field (decision 2 rejects a wrapper message), and for
+//! an enum, a declared `enum` with no message of its own.
 
-use ridl_ir::v2::{return_type, stream_type, struct_member, ArrayType, FieldType, MapType, StructDef, TupleType, UnionDef};
+use ridl_ir::v2::{struct_member, ArrayType, FieldType, MapType, StructDef, TupleType, UnionDef};
 
-use super::{leaf_of_field_type, leaf_of_name, leaf_of_primitive, Ctx, Leaf, PayloadShape, Scalar};
+use super::{leaf_of_field_type, leaf_of_name, Ctx, Leaf, Scalar, SizeState};
 
 /// Nesting deeper than this is treated as unsizable; typl rejects recursion
 /// (§7.3), so this only guards against an IR the checker did not see.
@@ -2043,37 +2462,25 @@ fn delimited(number: u32, payload: u64) -> u64 {
     tag_len(number) + varint_len(payload) + payload
 }
 
-pub(crate) fn payload_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Option<u64> {
-    match shape {
-        PayloadShape::Named(name) => top_level(leaf_of_name(name, ctx)?, ctx),
-        PayloadShape::Field(ty) => top_level(leaf_of_field_type(ty, ctx)?, ctx),
-        PayloadShape::Params(params) => params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| field_size(i as u32 + 1, p.r#type.as_ref()?, ctx, 0))
-            .sum(),
-        PayloadShape::Return(ret) => match ret.kind.as_ref()? {
-            return_type::Kind::Value(ty) => top_level(leaf_of_field_type(ty, ctx)?, ctx),
-            return_type::Kind::Fallible(f) => Some(
-                leaf_field(1, leaf_of_name(&f.ok, ctx)?, ctx, 0)?
-                    .max(leaf_field(2, leaf_of_name(&f.err, ctx)?, ctx, 0)?),
-            ),
-        },
-        PayloadShape::Element(stream) => match stream.element.as_ref()? {
-            stream_type::Element::Named(name) => top_level(leaf_of_name(name, ctx)?, ctx),
-            stream_type::Element::Primitive(p) => leaf_field(1, leaf_of_primitive(*p, ctx)?, ctx, 0),
-        },
-    }
-}
-
-/// A struct or union payload is its own message; anything else is field 1
-/// of an induced message.
-fn top_level(leaf: Leaf<'_>, ctx: &Ctx<'_>) -> Option<u64> {
-    match leaf {
-        Leaf::Struct(def) => struct_size(def, ctx, 0),
-        Leaf::Union(def) => union_size(def, ctx, 0),
-        other => leaf_field(1, other, ctx, 0),
-    }
+/// The proto3 state of the named type `type_name`: its message's bound for
+/// a struct or a union; absent for everything else (ADR-0017 decision 1
+/// inlines a named scalar and an enum set, decision 2 rejects a wrapper
+/// message, and an enum is a declared `enum`, not a message), for a name that
+/// does not resolve, for a member the projection refuses, and for a bound
+/// above `u32::MAX`.
+pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
+    let bytes = match leaf_of_name(type_name, ctx)? {
+        Leaf::Struct(def) => struct_size(def, ctx, 0)?,
+        Leaf::Union(def) => union_size(def, ctx, 0)?,
+        Leaf::Scalar(_)
+        | Leaf::Blob(_)
+        | Leaf::Enum { .. }
+        | Leaf::EnumSet(_)
+        | Leaf::Tuple(_)
+        | Leaf::Array(_)
+        | Leaf::Map(_) => return None,
+    };
+    Some(SizeState::Bounded(u32::try_from(bytes).ok()?))
 }
 
 fn field_size(number: u32, ty: &FieldType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
@@ -2155,88 +2562,83 @@ fn map_field(number: u32, map: &MapType, ctx: &Ctx<'_>, depth: u32) -> Option<u6
 - [ ] **Step 4: Run the tests**
 
 Run: `cargo test -p ridl-descriptor --locked size` Expected: all size tests PASS
-(5 from Task 5, 6 here).
+(4 from Task 5, 6 here).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-descriptor
-git commit -m "feat(ridl-descriptor): derive the proto3 upper bound of every payload"
+git commit -m "feat(ridl-descriptor): derive the proto3 state of a named-type payload"
 ```
 
 ---
-### Task 7: The FlatBuffers upper bound
+### Task 7: The FlatBuffers state, through the projection's bound
 
-> **Amended 2026-09-21, E11.7 stage K8.** **Do not implement the bound this
-> task describes.** It was written before the FlatBuffers bound existed
-> anywhere, and E11.7's design note D-6 has since decided that the bound has
-> **one** implementation and that it is the projection's. That
-> implementation is `ridl_ir::projection::flatbuffers::max_size`, landed by
-> stage K2 (driftsys/ridl#458), and it is what the Rust codec's
-> `Payload<FlatBuffers>::MAX_SIZE` is emitted from. The catalog descriptor
-> advertises the same number to an engine, so a second derivation here would
-> be two implementations of one rule and a silent disagreement the moment
-> either changed. The steps below stay as written, because they record what
-> the charges are and what the expected numbers were; read them as the
-> specification of the bound, not as work to do.
->
-> **What this task becomes.** `size::flatbuffers::payload_size` calls
-> `ridl_ir::projection::flatbuffers::max_size` and does not compute a
-> charge of its own. Three things stand between the two signatures, and each
-> is this task's, not the projection's:
->
-> 1. **`max_size` takes a declaration, and a `PayloadShape` is not always
->    one.** Its signature is
->    `max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64>`, and
->    it answers `None` for any declaration
->    `ridl_ir::projection::flatbuffers::root_table` names no root for — which,
->    since ADR-0019 decision 8, is a constant and the kinds that are not types
->    at all, where it used to be a named scalar, an enum and an enum set too. A
->    `PayloadShape::Field`, `::Params`, `::Return` or `::Element` is a
->    payload with no declaration of its own. The bridge is the one stage K4
->    already uses to charge a single member: build a synthetic `v2::Decl` in
->    the same package that carries the shape as its body — a one-field
->    struct for a `Field` or an `Element`, a struct of the parameters for
->    `Params`, the projected union for a fallible `Return` — and hand that
->    to `max_size`. The synthetic declaration must be projected exactly as
->    the real payload is, or the advertised bound is not the emitted one;
->    that equality is what the test below asserts.
-> 2. **`Packages` is how a cross-package reference resolves.** `Ctx` already
->    carries the package and its imports; `Packages` is the projection's own
->    view of the same thing. Build one from `Ctx` rather than resolving
->    names here.
-> 3. **`None` keeps its meaning.** The projection answers `None` for an
->    unresolved reference, a cycle, a `u64` overflow, and a bound above
->    `MAX_ENCODABLE`. The descriptor's column stays `None` for all four, as
->    the last test in this task already expects for `"Missing"`.
->
-> **The test this task owes, which the cases below do not cover.** One case
-> that takes a payload the Rust backend emits a codec for, reads
-> `<T as Payload<FlatBuffers>>::MAX_SIZE` out of the generated source, and
-> asserts the descriptor advertises the same number. That is the only test
-> that fails when the two drift, and it is why the numbers in the steps
-> below are not re-derived here: if a charge changes in the projection, this
-> task's expected numbers change with it, in the same commit.
->
-> **The numbers below are the pre-K2 draft's and are not pinned by
-> anything.** They were computed by hand from the same charges the
-> projection now implements — a table its `soffset`, its inline fields, its
-> vtable and one alignment event per slot; a string four bytes per declared
-> character plus a terminator; a collection its declared maximum — but they
-> were never run. Take the projection's output as the expected value, not
-> these literals.
+Re-baselined 2026-10-03. E11.7's design D-6
+(`docs/archive/2026-09-20-flatbuffers-codec-design.md`; the as-built record,
+`docs/design/flatbuffers-codec.md`, carries the rule without the D-6 label)
+decided that the FlatBuffers bound has one implementation,
+`ridl_ir::projection::flatbuffers::max_size`
+(`crates/ridl-ir/src/projection/flatbuffers.rs:416`, landed by stage K2,
+driftsys/ridl#458), which the Rust codec's `Payload<FlatBuffers>::MAX_SIZE` is
+emitted from. This task calls it and computes no charge of its own: a second
+derivation would be two implementations of one rule and a silent disagreement
+the moment either changed (driver §2). The hand-rolled charges this task carried
+from 2026-09-13, and the stage K8 note of 2026-09-21 that said not to implement
+them, are gone; the projection's source and the codec record hold the charges.
 
 **Files:**
+
+- Modify: `crates/ridl-ir/src/codegen.rs` and
+  `crates/ridl-ir/src/codegen/unbounded.rs` (expose the cause)
 - Modify: `crates/ridl-descriptor/src/size/flatbuffers.rs`
-- Modify: `crates/ridl-descriptor/src/size.rs` (the `Encoding::FlatBuffers` arm of `max_size`)
+- Modify: `crates/ridl-descriptor/Cargo.toml` (dev-dependency
+  `ridl-backend-rust`, path only, for the agreement test)
+- Test: `crates/ridl-descriptor/tests/codec_agreement.rs`
 
 **Interfaces:**
-- Consumes: `Ctx`, `PayloadShape`, `Leaf`, `Scalar`, `leaf_of_field_type`, `leaf_of_name`, `leaf_of_primitive`, and `tests_support` (Tasks 5, 6).
-- Produces: `pub(crate) fn payload_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Option<u64>` in `size::flatbuffers`.
 
-The rules are the FlatBuffers binary layout over ADR-0019: every struct a `table` (decision 3), a union isolated in a wrapper table (1) with a non-table arm boxed in a generated table (2), a map a vector of entry tables (4), a string a length-prefixed, null-terminated byte run, a vector a length-prefixed run of inline scalars or of offsets. The bound charges every object its worst-case alignment padding: a field costs its inline width plus `align - 1`, a table 8 bytes of slack, a vector 3.
+- Consumes: `Ctx::resolve`, `Ctx::packages()`, `SizeState` (Task 5);
+  `ridl_ir::projection::flatbuffers::{max_size, root_table, MAX_ENCODABLE}`;
+  `ridl_ir::codegen::v1::{FbUnbounded, FbUnboundedCause}`.
+- Produces:
+  `pub fn ridl_ir::codegen::fb_unbounded(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded`
+  — `unbounded::attribute` made public under that name, its doc comment kept
+  (the attribution is computed over the package alone, as the module comment
+  says; the descriptor accepts that); and
+  `pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState>`
+  in `size::flatbuffers`.
 
-- [ ] **Step 1: Write the failing tests**
+The rule, from the projection's own contract:
+
+1. `ctx.resolve(type_name)` is `None`, or `root_table(decl)` is `None` (a
+   constant — ADR-0013 decision 5 — or an interaction: no FlatBuffers root)
+   → absent.
+2. `max_size(ctx.packages(), decl)` is `Some(n)` → `Bounded(n as u32)`. The
+   projection refuses any bound above `MAX_ENCODABLE`, which is `u32::MAX`, so
+   the conversion cannot fail; `expect` it with that reason.
+3. `max_size` is `None` → `Unbounded(cause)`, where `cause` is
+   `fb_unbounded(declaring_package, decl).cause` mapped member by member onto
+   the schema's `UnboundedCause` (same members, same values; an unknown value
+   maps to `Unspecified`). `fb_unbounded` takes the declaring package: for a
+   canonical name with a `pkg.` prefix, find that package in
+   `ctx.packages().others` by name.
+
+The projection answers `None` for an unresolved reference, a cycle, a `u64`
+overflow and a bound above `MAX_ENCODABLE`; every one of them reaches the
+descriptor as an unbounded row with the cause the codegen model would report
+for the same declaration, so `ridl describe` and `--emit codegen-model` agree.
+
+- [ ] **Step 1: Expose the cause**
+
+In `crates/ridl-ir/src/codegen.rs`, add
+`pub use unbounded::attribute as fb_unbounded;` beside the existing
+`pub use lower::lower;`, and change `attribute`'s visibility in
+`crates/ridl-ir/src/codegen/unbounded.rs` from `pub(crate)` to `pub`. Run
+`cargo test -p ridl-ir --locked` — unchanged. Commit:
+`refactor(ridl-ir): expose the FlatBuffers unbounded attribution`.
+
+- [ ] **Step 2: Write the failing tests**
 
 Append to `crates/ridl-descriptor/src/size/flatbuffers.rs`:
 
@@ -2245,272 +2647,166 @@ Append to `crates/ridl-descriptor/src/size/flatbuffers.rs`:
 mod tests {
     use super::*;
     use crate::size::tests_support::*;
-
-    // table_size(n fields) = vtable (4 + 2n + 2) + soffset 4 + slack 8
-    //                        + Σ (inline + align − 1 + referenced)
-    // root(table) = table + 8
+    use crate::size::{size_state, Ctx, SizeState};
+    use crate::{Encoding, UnboundedCause};
+    use ridl_ir::projection::flatbuffers::{max_size, Packages};
+    use ridl_ir::v2::Package;
 
     #[test]
-    fn a_struct_payload_is_its_table() {
-        // Point: two short fields → 22 + 3 + 3 = 28; root 36
+    fn a_bounded_type_advertises_the_projections_number() {
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(payload_size(&PayloadShape::Named("Point"), &ctx), Some(36));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        for name in ["Point", "Vin", "Coord", "Bag", "Shape"] {
+            let decl = ctx.resolve(name).unwrap();
+            let expected = max_size(Packages { package: &package, others: &[] }, decl)
+                .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
+            assert_eq!(
+                state(name, &ctx),
+                Some(SizeState::Bounded(u32::try_from(expected).unwrap())),
+                "{name}"
+            );
+        }
     }
 
     #[test]
-    fn a_scalar_payload_is_an_induced_single_field_table() {
-        let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        // bare integer → long: 20 + (8 + 7) = 35; root 43
-        assert_eq!(payload_size(&PayloadShape::Field(&primitive_integer()), &ctx), Some(43));
-        // bare string: referenced 4 + 1024 + 1 + 3 = 1032; 20 + (4 + 3 + 1032) = 1059; root 1067
-        assert_eq!(payload_size(&PayloadShape::Field(&primitive_string()), &ctx), Some(1067));
-        // Vin: referenced 4 + 17 + 1 + 3 = 25; 20 + 32 = 52; root 60
-        assert_eq!(payload_size(&PayloadShape::Named("Vin"), &ctx), Some(60));
+    fn an_unbounded_type_carries_the_models_cause() {
+        // Build the unbounded fixture the way the tests in
+        // `crates/ridl-ir/src/codegen/unbounded.rs` build theirs (read them
+        // first), so the cause here is the one the codegen model reports.
+        let package = unbounded_fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Open", &ctx), Some(SizeState::Unbounded(UnboundedCause::Member)));
     }
 
     #[test]
-    fn a_scalar_vector_and_a_map() {
+    fn a_name_with_no_root_table_or_no_declaration_is_absent() {
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        // [ubyte] max 4: referenced 4 + 4 + 0 + 3 = 11; 20 + (4 + 3 + 11) = 38; root 46
-        assert_eq!(payload_size(&PayloadShape::Field(&array_u8_max4()), &ctx), Some(46));
-        // entry table {key: string 32 bytes → referenced 40; value: uint}:
-        //   22 + (4 + 3 + 40) + (4 + 3) = 76; vector 4 + 8 + 3 + 2·76 = 167
-        //   20 + (4 + 3 + 167) = 194; root 202
-        assert_eq!(payload_size(&PayloadShape::Field(&map_str8_u32_max2()), &ctx), Some(202));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Missing", &ctx), None);
+        // A constant projects no FlatBuffers declaration (ADR-0013 decision 5).
+        assert_eq!(state("LIMIT", &ctx), None);
     }
 
     #[test]
-    fn a_request_and_a_fallible_response() {
+    fn size_state_routes_the_flatbuffers_column() {
         let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        // (bool, Point): 22 + (1 + 0) + (4 + 3 + 28) = 58; root 66
-        assert_eq!(payload_size(&PayloadShape::Params(&params_flag_point()), &ctx), Some(66));
-        // union wrapper {_type: ubyte, value: offset → max(Point 28, boxed Coord 20 + 3 = 23)}:
-        //   22 + 1 + (4 + 3 + 28) = 58; root 66
-        assert_eq!(payload_size(&PayloadShape::Return(&fallible_point_coord()), &ctx), Some(66));
-    }
-
-    #[test]
-    fn a_stream_element_and_an_unresolved_name() {
-        let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(payload_size(&PayloadShape::Element(&stream_of("Point")), &ctx), Some(36));
-        assert_eq!(payload_size(&PayloadShape::Named("Missing"), &ctx), None);
-    }
-
-    #[test]
-    fn max_size_routes_the_flatbuffers_column() {
-        let package = fixture();
-        let ctx = Ctx::new(&package, &[]);
-        assert_eq!(crate::size::max_size(&PayloadShape::Named("Point"), &ctx, crate::Encoding::FlatBuffers), Some(36));
-        assert_eq!(crate::size::max_size(&PayloadShape::Named("Point"), &ctx, crate::Encoding::ReprC), None);
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert!(matches!(size_state("Point", &ctx, Encoding::FlatBuffers), Some(SizeState::Bounded(_))));
+        assert_eq!(size_state("Point", &ctx, Encoding::ReprC), None);
     }
 }
 ```
 
-- [ ] **Step 2: Run the tests to see them fail**
+Add `unbounded_fixture()` to `tests_support` in `size.rs`: a package with a
+struct `Open` whose one member the projection cannot bound, copied from the
+shape `unbounded.rs`'s own tests use for the `Member` cause.
 
-Run: `cargo test -p ridl-descriptor --locked flatbuffers`
-Expected: compile error, `payload_size` not found in `size::flatbuffers`.
+And the test this task owes, the only one that fails when the descriptor and
+the generated codec drift: `crates/ridl-descriptor/tests/codec_agreement.rs`.
+Take the corpus package's IR snapshot
+(`crates/ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json`,
+through `ridl_ir::v2::from_json`), run the Rust backend over it in process
+(read `crates/ridl-backend-rust/src/lib.rs` for the entry point `ridlc` calls,
+and the codec emitter for the exact spelling of the `MAX_SIZE` constant it
+writes per type), extract every `MAX_SIZE` value from the generated source
+with the type it belongs to, and assert
+`size_state(name, &ctx, Encoding::FlatBuffers)` (the public entry; `state` is
+`pub(crate)`) is `Some(SizeState::Bounded(value))` for each.
+`ridl-backend-rust` becomes a dev-dependency of `ridl-descriptor` for this
+test, **as a plain path with no version**:
+`ridl-backend-rust = { path = "../ridl-backend-rust" }`, not
+`.workspace = true`. Cargo strips a dev-dependency on a workspace member at
+packaging time only when it carries no version, and `ridl-backend-rust`
+publishes after `ridl-descriptor`; the reasoning is written out in
+`crates/ridl-backend-rust/Cargo.toml` above its own `ridlc` dev-dependency,
+and the same rule holds here. Run
+`cargo publish -p ridl-descriptor --dry-run --locked` again at the end of this
+task, because Task 1's dry run ran before this dependency existed. The normal
+dependency graph does not change, which is what
+`xtask/tests/oracle_boundary.rs` still checks.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Run the tests to see them fail**
 
-Replace the body of `crates/ridl-descriptor/src/size/flatbuffers.rs` above the tests:
+Run: `cargo test -p ridl-descriptor --locked flatbuffers` Expected: the four
+unit tests compile and every bounded or unbounded assertion fails against
+`None`; `codec_agreement` fails the same way.
+
+- [ ] **Step 4: Implement**
+
+Replace the body of `crates/ridl-descriptor/src/size/flatbuffers.rs` above the
+tests:
 
 ```rust
-//! The FlatBuffers upper bound of a payload under ADR-0019's projection.
+//! The FlatBuffers state of a named-type payload: the projection's own bound
+//! (`ridl_ir::projection::flatbuffers::max_size`, E11.7 design D-6), and
+//! the codegen model's cause when there is none. Nothing is derived here.
 
-use ridl_ir::v2::{return_type, stream_type, struct_member, ArrayType, FieldType, MapType, StructDef, TupleType, UnionDef};
+use ridl_ir::codegen::fb_unbounded;
+use ridl_ir::codegen::v1::FbUnboundedCause;
+use ridl_ir::projection::flatbuffers::{max_size, root_table, MAX_ENCODABLE};
+use ridl_ir::v2::Package;
 
-use super::{leaf_of_field_type, leaf_of_name, leaf_of_primitive, Ctx, Leaf, PayloadShape, Scalar};
+use super::{Ctx, SizeState};
+use crate::UnboundedCause;
 
-const MAX_DEPTH: u32 = 64;
-
-/// One table field: what sits inline in the table, and the object it points at.
-struct FbField {
-    inline: u64,
-    align: u64,
-    referenced: u64,
-}
-
-impl FbField {
-    fn scalar(width: u64) -> Self {
-        Self { inline: width, align: width, referenced: 0 }
-    }
-
-    fn offset(referenced: u64) -> Self {
-        Self { inline: 4, align: 4, referenced }
-    }
-}
-
-/// A table with `fields`: the vtable (its two lengths and one `uint16` per
-/// field), the `soffset` to the vtable, 8 bytes of alignment slack, then each
-/// field at its width plus worst-case padding, and every referenced object.
-fn table_size(fields: &[FbField]) -> u64 {
-    let n = fields.len() as u64;
-    4 + 2 * n + 2 + 4 + 8 + fields.iter().map(|f| f.inline + f.align - 1 + f.referenced).sum::<u64>()
-}
-
-/// A length-prefixed byte run with a null terminator and vector padding.
-fn blob_object(bytes: u64) -> u64 {
-    4 + bytes + 1 + 3
-}
-
-/// The finished buffer: the root `uoffset` and alignment.
-fn root(table: u64) -> u64 {
-    table + 8
-}
-
-pub(crate) fn payload_size(shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Option<u64> {
-    match shape {
-        PayloadShape::Named(name) => top_level(leaf_of_name(name, ctx)?, ctx),
-        PayloadShape::Field(ty) => top_level(leaf_of_field_type(ty, ctx)?, ctx),
-        PayloadShape::Params(params) => {
-            let fields = params
-                .iter()
-                .map(|p| field_of_type(p.r#type.as_ref()?, ctx, 0))
-                .collect::<Option<Vec<_>>>()?;
-            Some(root(table_size(&fields)))
+pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
+    let decl = ctx.resolve(type_name)?;
+    root_table(decl)?;
+    let packages = ctx.packages();
+    Some(match max_size(packages, decl) {
+        Some(bytes) => {
+            debug_assert!(bytes <= MAX_ENCODABLE);
+            SizeState::Bounded(u32::try_from(bytes).expect("max_size refuses a bound above MAX_ENCODABLE"))
         }
-        PayloadShape::Return(ret) => match ret.kind.as_ref()? {
-            return_type::Kind::Value(ty) => top_level(leaf_of_field_type(ty, ctx)?, ctx),
-            return_type::Kind::Fallible(f) => {
-                let ok = arm_object(leaf_of_name(&f.ok, ctx)?, ctx, 0)?;
-                let err = arm_object(leaf_of_name(&f.err, ctx)?, ctx, 0)?;
-                Some(root(wrapper_table(ok.max(err))))
-            }
-        },
-        PayloadShape::Element(stream) => match stream.element.as_ref()? {
-            stream_type::Element::Named(name) => top_level(leaf_of_name(name, ctx)?, ctx),
-            stream_type::Element::Primitive(p) => {
-                Some(root(table_size(&[field_of_leaf(leaf_of_primitive(*p, ctx)?, ctx, 0)?])))
-            }
-        },
-    }
-}
-
-/// A struct payload is its table, a union payload its wrapper table;
-/// anything else is field 0 of an induced table.
-fn top_level(leaf: Leaf<'_>, ctx: &Ctx<'_>) -> Option<u64> {
-    Some(root(match leaf {
-        Leaf::Struct(def) => struct_table(def, ctx, 0)?,
-        Leaf::Union(def) => union_object(def, ctx, 0)?,
-        other => table_size(&[field_of_leaf(other, ctx, 0)?]),
-    }))
-}
-
-fn field_of_type(ty: &FieldType, ctx: &Ctx<'_>, depth: u32) -> Option<FbField> {
-    field_of_leaf(leaf_of_field_type(ty, ctx)?, ctx, depth)
-}
-
-fn field_of_leaf(leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<FbField> {
-    if depth > MAX_DEPTH {
-        return None;
-    }
-    Some(match leaf {
-        Leaf::Scalar(s) => FbField::scalar(s.fb_width()),
-        // The backend always emits `: long` (`emit_enum` never narrows), so 8 bytes.
-        Leaf::Enum { .. } => FbField::scalar(8),
-        Leaf::EnumSet(width) => FbField::scalar(Scalar::Int(width).fb_width()),
-        Leaf::Blob(bytes) => FbField::offset(blob_object(bytes)),
-        Leaf::Struct(def) => FbField::offset(struct_table(def, ctx, depth + 1)?),
-        Leaf::Union(def) => FbField::offset(union_object(def, ctx, depth + 1)?),
-        Leaf::Tuple(tuple) => FbField::offset(tuple_table(tuple, ctx, depth + 1)?),
-        Leaf::Array(array) => FbField::offset(vector_object(array, ctx, depth + 1)?),
-        Leaf::Map(map) => FbField::offset(map_object(map, ctx, depth + 1)?),
-    })
-}
-
-fn struct_table(def: &StructDef, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let fields = def
-        .members
-        .iter()
-        .map(|member| match &member.member {
-            Some(struct_member::Member::Field(field)) => field_of_type(field.r#type.as_ref()?, ctx, depth),
-            // A retired slot is a deprecated `ubyte` placeholder (ADR-0019, `emit_struct`).
-            Some(struct_member::Member::Reserved(_)) | None => Some(FbField::scalar(1)),
-        })
-        .collect::<Option<Vec<_>>>()?;
-    Some(table_size(&fields))
-}
-
-/// The wrapper table of ADR-0019 decision 1: the `_type` tag and the offset
-/// to the largest arm object.
-fn wrapper_table(largest_arm: u64) -> u64 {
-    table_size(&[FbField::scalar(1), FbField::offset(largest_arm)])
-}
-
-fn union_object(def: &UnionDef, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let mut largest = 0;
-    for arm in &def.arms {
-        largest = largest.max(arm_object(leaf_of_name(&arm.type_ref, ctx)?, ctx, depth)?);
-    }
-    Some(wrapper_table(largest))
-}
-
-/// An arm that is a table stands as it is; any other arm is boxed in a
-/// generated one-field table (ADR-0019 decision 2).
-fn arm_object(leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    Some(match leaf {
-        Leaf::Struct(def) => struct_table(def, ctx, depth + 1)?,
-        Leaf::Union(def) => union_object(def, ctx, depth + 1)?,
-        other => table_size(&[field_of_leaf(other, ctx, depth + 1)?]),
-    })
-}
-
-fn tuple_table(tuple: &TupleType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let fields = tuple
-        .fields
-        .iter()
-        .map(|f| field_of_type(f.r#type.as_ref()?, ctx, depth))
-        .collect::<Option<Vec<_>>>()?;
-    Some(table_size(&fields))
-}
-
-/// A vector of `max` elements: inline scalars, or offsets to objects. A
-/// nested array or map is refused by the projection.
-fn vector_object(array: &ArrayType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let element = leaf_of_field_type(array.element.as_ref()?, ctx)?;
-    let n = array.max;
-    Some(match element {
-        Leaf::Scalar(_) | Leaf::Enum { .. } | Leaf::EnumSet(_) => {
-            let width = field_of_leaf(element, ctx, depth)?.inline;
-            4 + n.checked_mul(width)? + (width - 1) + 3
-        }
-        Leaf::Array(_) | Leaf::Map(_) => return None,
-        other => {
-            let referenced = field_of_leaf(other, ctx, depth)?.referenced;
-            4 + n.checked_mul(4)? + 3 + n.checked_mul(referenced)?
+        None => {
+            let declaring = declaring_package(type_name, packages.package, packages.others)?;
+            SizeState::Unbounded(cause_of(fb_unbounded(declaring, decl).cause))
         }
     })
 }
 
-/// A vector of `max` entry tables `{ key, value }` (ADR-0019 decision 4).
-fn map_object(map: &MapType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let entry = table_size(&[
-        field_of_type(map.key.as_ref()?, ctx, depth)?,
-        field_of_type(map.value.as_ref()?, ctx, depth)?,
-    ]);
-    let n = map.max;
-    Some(4 + n.checked_mul(4)? + 3 + n.checked_mul(entry)?)
+/// The package a canonical name was declared in: this one for a bare name,
+/// the import named by the `pkg.` prefix otherwise.
+fn declaring_package<'a>(name: &str, package: &'a Package, others: &'a [&'a Package]) -> Option<&'a Package> {
+    match name.rsplit_once('.') {
+        None => Some(package),
+        Some((pkg, _)) => others.iter().copied().find(|other| other.name == pkg),
+    }
+}
+
+/// The schema's enum mirrors the model's, member for member.
+fn cause_of(cause: i32) -> UnboundedCause {
+    match FbUnboundedCause::try_from(cause) {
+        Ok(FbUnboundedCause::Member) => UnboundedCause::Member,
+        Ok(FbUnboundedCause::Untyped) => UnboundedCause::Untyped,
+        Ok(FbUnboundedCause::Layout) => UnboundedCause::Layout,
+        Ok(FbUnboundedCause::Aggregate) => UnboundedCause::Aggregate,
+        Ok(FbUnboundedCause::Exempt) => UnboundedCause::Exempt,
+        Ok(FbUnboundedCause::Unspecified) | Err(_) => UnboundedCause::Unspecified,
+    }
 }
 ```
 
-In `size.rs`, change the `max_size` arm to `Encoding::FlatBuffers => flatbuffers::payload_size(shape, ctx),`.
+The prost variant names of `FbUnboundedCause` follow its proto values
+(`FB_UNBOUNDED_CAUSE_MEMBER` → `Member`, and so on); read the generated enum
+if the compiler disagrees. A canonical name can contain more than one dot
+(`veh.cluster.Speed`): `rsplit_once` keeps everything before the last dot as
+the package name, which is how `reachable_decls` built the key.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 5: Run the tests**
 
-Run: `cargo test -p ridl-descriptor --locked size`
-Expected: every size test PASS (5 + 6 + 6).
+Run: `cargo test -p ridl-descriptor --locked` Expected: every size test PASS
+(4 + 6 + 4), and `codec_agreement` PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add crates/ridl-descriptor
-git commit -m "feat(ridl-descriptor): derive the FlatBuffers upper bound of every payload"
+git commit -m "feat(ridl-descriptor): advertise the projection's FlatBuffers bound per payload"
 ```
 ---
 
@@ -2524,12 +2820,20 @@ git commit -m "feat(ridl-descriptor): derive the FlatBuffers upper bound of ever
 
 **Interfaces:**
 
-- Consumes: `number_interfaces` (Task 3), `catalog_hash` (Task 4), `Ctx`,
-  `PayloadShape`, `max_size` (Tasks 5-7), `verify` (Task 2), the owned tables
-  (Task 1), `Package::shapes()` (the walk Task 3 numbers, in the same order).
-- Produces: `pub fn lower(package: &Package, others: &[&Package]) -> Vec<u8>` —
-  the finished descriptor bytes, identifier included. `ridlc` writes them
+- Consumes: `numbered_shapes` (Task 3), `catalog_hash` (Task 4), `Ctx`,
+  `PayloadShape`, `named_payload`, `size_state`, `SizeState` (Tasks 5-7),
+  `verify` (Task 2), the owned tables (Task 1), `Package::shapes()` (the walk
+  Task 3 reads, in the same order), `Package.retired`.
+- Produces: `pub enum LowerError { ZeroNumber(String) }` (with `Display`:
+  "internal error: interface `<name>` has no number") and
+  `pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError>`
+  — the finished descriptor bytes, identifier included. `ridlc` writes them
   unchanged.
+
+Re-baselined 2026-10-03: the numbers and the retired list come from the IR (§4
+answer 3); a payload's rows are the states of its one named type and are empty
+otherwise (§4 answers 5, 6, 10); no `stream` flag, a stream's `type_name` is the
+spelled `<T>`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2538,13 +2842,15 @@ git commit -m "feat(ridl-descriptor): derive the FlatBuffers upper bound of ever
 ```rust
 //! Spec D-4: what the catalog descriptor contains, checked through `verify`.
 
+use ridl_ir::projection::flatbuffers::{max_size, Packages};
 use ridl_ir::v2::{
     backing, decl, field_type, return_type, service_shape, stream_type, type_def, Backing,
     CommandDef, Decl, EventDef, Field, FieldType, FixedDef, Interface, IntWidth, Package, Param,
-    PrimitiveType, QueryDef, Reserved, ReturnType, Service, ServiceShape, SignalDef, StreamType,
-    StructDef, StructMember, struct_member, Timing, TimingMode, TypeDef,
+    PrimitiveType, QueryDef, Reserved, RetiredInterface, ReturnType, Service, ServiceShape,
+    SignalDef, StreamType, StructDef, StructMember, struct_member, Timing, TimingMode, TypeDef,
 };
-use ridl_descriptor::{lower, verify, Encoding, Kind, SCHEMA_VERSION};
+use ridl_descriptor::lower::LowerError;
+use ridl_descriptor::{lower, verify, Encoding, Kind, SizeStateTag, SCHEMA_VERSION};
 
 fn i16_def() -> TypeDef {
     TypeDef {
@@ -2585,6 +2891,8 @@ fn package() -> Package {
         ],
         interfaces: vec![Interface {
             name: "Vehicle".to_owned(),
+            number: 1,
+            provisional: true,
             interactions: vec![
                 interaction("position", 1, decl::Kind::SignalDef(SignalDef {
                     payload: "Point".to_owned(),
@@ -2615,16 +2923,40 @@ fn package() -> Package {
                     }),
                     ..Default::default()
                 })),
+                interaction("moveBoth", 8, decl::Kind::CommandDef(CommandDef {
+                    params: vec![
+                        Param { name: "a".to_owned(), r#type: Some(named("Point")) },
+                        Param { name: "b".to_owned(), r#type: Some(named("Point")) },
+                    ],
+                    ..Default::default()
+                })),
+                interaction("tryNearest", 9, decl::Kind::QueryDef(QueryDef {
+                    params: vec![Param { name: "from".to_owned(), r#type: Some(named("Point")) }],
+                    return_type: Some(ReturnType {
+                        kind: Some(return_type::Kind::Fallible(ridl_ir::v2::FallibleType {
+                            ok: "Point".to_owned(),
+                            err: "Coord".to_owned(),
+                        })),
+                    }),
+                    ..Default::default()
+                })),
             ],
             ..Default::default()
         }],
-        services: vec![],
+        ..Default::default()
     }
+}
+
+/// The FlatBuffers bound the projection gives `Point`, which the descriptor
+/// must advertise unchanged (Task 7).
+fn point_fb_bound(package: &Package) -> u32 {
+    let decl = package.decls.iter().find(|d| d.name == "Point").unwrap();
+    u32::try_from(max_size(Packages { package, others: &[] }, decl).unwrap()).unwrap()
 }
 
 #[test]
 fn the_descriptor_carries_every_member_of_every_kind() {
-    let bytes = lower(&package(), &[]);
+    let bytes = lower(&package(), &[]).unwrap();
     let catalog = verify(&bytes).expect("the lowering writes a valid descriptor");
     assert_eq!(catalog.version().unwrap(), SCHEMA_VERSION);
     assert_eq!(catalog.name().unwrap(), "veh.cluster");
@@ -2656,30 +2988,68 @@ fn the_descriptor_carries_every_member_of_every_kind() {
             ("nearest".to_owned(), 4, Kind::Query, vec!["request".to_owned(), "response".to_owned()]),
             ("vin".to_owned(), 6, Kind::Fixed, vec!["value".to_owned()]),
             ("trace".to_owned(), 7, Kind::Query, vec!["request".to_owned(), "response".to_owned()]),
+            ("moveBoth".to_owned(), 8, Kind::Command, vec!["request".to_owned()]),
+            ("tryNearest".to_owned(), 9, Kind::Query, vec!["request".to_owned(), "response".to_owned()]),
+        ]
+    );
+}
+
+/// The rows of one payload: (encoding, state, bytes).
+fn rows(payload: ridl_descriptor::PayloadRef<'_>) -> Vec<(Encoding, SizeStateTag, u32)> {
+    payload
+        .max_sizes()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            let s = s.unwrap();
+            (s.encoding().unwrap(), s.state().unwrap(), s.bytes().unwrap())
+        })
+        .collect()
+}
+
+#[test]
+fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
+    let package = package();
+    let bytes = lower(&package, &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let position = catalog.interfaces().unwrap().get(0).unwrap().members().unwrap().get(0).unwrap();
+    let payload = position.payloads().unwrap().get(0).unwrap();
+    assert_eq!(payload.type_name().unwrap(), "Point");
+    assert_eq!(
+        rows(payload),
+        vec![
+            (Encoding::Proto3, SizeStateTag::Bounded, 12),
+            (Encoding::FlatBuffers, SizeStateTag::Bounded, point_fb_bound(&package)),
         ]
     );
 }
 
 #[test]
-fn the_max_size_table_has_the_two_sized_columns_and_no_repr_c() {
-    let bytes = lower(&package(), &[]);
+fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
+    let bytes = lower(&package(), &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
-    let position = catalog.interfaces().unwrap().get(0).unwrap().members().unwrap().get(0).unwrap();
-    let payload = position.payloads().unwrap().get(0).unwrap();
-    assert_eq!(payload.type_name().unwrap(), "Point");
-    assert!(!payload.stream().unwrap());
-    let sizes: Vec<(Encoding, u64)> = payload
-        .max_sizes()
-        .unwrap()
-        .iter()
-        .map(|s| { let s = s.unwrap(); (s.encoding().unwrap(), s.bytes().unwrap()) })
-        .collect();
-    assert_eq!(sizes, vec![(Encoding::Proto3, 12), (Encoding::FlatBuffers, 36)]);
+    let members = catalog.interfaces().unwrap().get(0).unwrap().members().unwrap();
+    let move_to = members.get(2).unwrap().payloads().unwrap().get(0).unwrap();
+    assert_eq!(move_to.type_name().unwrap(), "Point");
+    assert_eq!(rows(move_to).len(), 2);
+    let move_both = members.get(6).unwrap().payloads().unwrap().get(0).unwrap();
+    assert_eq!(move_both.type_name().unwrap(), "(a: Point, b: Point)");
+    assert!(rows(move_both).is_empty(), "several parameters: driver §4 answer 6");
+}
+
+#[test]
+fn a_fallible_reply_is_absent() {
+    let bytes = lower(&package(), &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let members = catalog.interfaces().unwrap().get(0).unwrap().members().unwrap();
+    let reply = members.get(7).unwrap().payloads().unwrap().get(1).unwrap();
+    assert_eq!(reply.type_name().unwrap(), "Point | Coord");
+    assert!(rows(reply).is_empty(), "an inline `T | E`: driver §4 answer 6");
 }
 
 #[test]
 fn timing_is_carried_when_declared_and_absent_otherwise() {
-    let bytes = lower(&package(), &[]);
+    let bytes = lower(&package(), &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
     let members = catalog.interfaces().unwrap().get(0).unwrap().members().unwrap();
     let timing = members.get(0).unwrap().timing().unwrap().expect("the signal declares timing");
@@ -2690,14 +3060,14 @@ fn timing_is_carried_when_declared_and_absent_otherwise() {
 }
 
 #[test]
-fn a_stream_response_is_sized_per_element_and_flagged() {
-    let bytes = lower(&package(), &[]);
+fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
+    // Driver §4 answer 10: no `stream` flag, no per-element bound yet (#336).
+    let bytes = lower(&package(), &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
     let trace = catalog.interfaces().unwrap().get(0).unwrap().members().unwrap().get(5).unwrap();
     let response = trace.payloads().unwrap().get(1).unwrap();
-    assert!(response.stream().unwrap());
-    assert_eq!(response.type_name().unwrap(), "Point");
-    assert_eq!(response.max_sizes().unwrap().get(0).unwrap().bytes().unwrap(), 12);
+    assert_eq!(response.type_name().unwrap(), "<Point>");
+    assert!(rows(response).is_empty());
 }
 
 #[test]
@@ -2706,8 +3076,9 @@ fn an_inline_service_shape_is_an_interface_under_the_service_name() {
     package.services.push(Service {
         name: "veh.cluster.hvac".to_owned(),
         shapes: vec![ServiceShape {
-            id: 1,
             kind: Some(service_shape::Kind::Inline(Interface {
+                number: 2,
+                provisional: true,
                 interactions: vec![interaction(
                     "cabinTemp",
                     1,
@@ -2718,19 +3089,38 @@ fn an_inline_service_shape_is_an_interface_under_the_service_name() {
         }],
         ..Default::default()
     });
-    let catalog_bytes = lower(&package, &[]);
+    let catalog_bytes = lower(&package, &[]).unwrap();
     let catalog = verify(&catalog_bytes).expect("the lowering writes a valid descriptor");
     let interfaces = catalog.interfaces().unwrap();
     assert_eq!(interfaces.len(), 2);
     let hvac = interfaces.get(1).unwrap();
     assert_eq!(hvac.name().unwrap(), "veh.cluster.hvac");
     assert_eq!(hvac.number().unwrap(), 2);
+    assert!(hvac.provisional().unwrap());
     assert_eq!(hvac.members().unwrap().len(), 1);
 }
 
 #[test]
+fn the_retired_list_is_copied_from_the_ir() {
+    let mut package = package();
+    package.retired.push(RetiredInterface { name: "LaneAssist".to_owned(), number: 9 });
+    let bytes = lower(&package, &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let retired = catalog.retired().unwrap().get(0).unwrap();
+    assert_eq!(retired.name().unwrap(), "LaneAssist");
+    assert_eq!(retired.number().unwrap(), 9);
+}
+
+#[test]
+fn a_zero_number_is_an_internal_error() {
+    let mut package = package();
+    package.interfaces[0].number = 0;
+    assert_eq!(lower(&package, &[]), Err(LowerError::ZeroNumber("Vehicle".to_owned())));
+}
+
+#[test]
 fn the_bytes_are_stable_across_runs() {
-    assert_eq!(lower(&package(), &[]), lower(&package(), &[]));
+    assert_eq!(lower(&package(), &[]).unwrap(), lower(&package(), &[]).unwrap());
 }
 ```
 
@@ -2745,7 +3135,10 @@ error, `lower` not found.
 
 ```rust
 //! IR → catalog descriptor (spec D-4, D-6, D-9). One lowering writes the
-//! whole file; the toolchain version stamped in it is this crate's.
+//! whole file; the toolchain version stamped in it is this crate's. The
+//! numbers and the retired list are the IR's (driver §4 answer 3).
+
+use std::fmt;
 
 use ridl_ir::v2::{
     decl, field_type, return_type, stream_type, Decl, FieldType, Package, Param, PrimitiveType,
@@ -2753,21 +3146,45 @@ use ridl_ir::v2::{
 };
 
 use crate::hash::catalog_hash;
-use crate::number::number_interfaces;
-use crate::size::{max_size, Ctx, PayloadShape};
+use crate::number::{numbered_shapes, ZeroNumber};
+use crate::size::{named_payload, size_state, Ctx, PayloadShape, SizeState};
 use crate::{
-    Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, Timing, TimingMode,
-    FILE_IDENTIFIER, SCHEMA_VERSION,
+    Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface,
+    SizeStateTag, Timing, TimingMode, UnboundedCause, FILE_IDENTIFIER, SCHEMA_VERSION,
 };
 
-/// Every encoding the max-size table has a column for, in `Encoding` order.
+/// Every encoding the size table has a column for, in `Encoding` order.
 const COLUMNS: [Encoding; 3] = [Encoding::Proto3, Encoding::FlatBuffers, Encoding::ReprC];
+
+/// Why a checked package could not be lowered: a defect upstream, not data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LowerError {
+    /// An interface shape whose IR number is 0 (`ridl-sem` numbers every
+    /// shape of a checked package, so this is an internal error).
+    ZeroNumber(String),
+}
+
+impl fmt::Display for LowerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ZeroNumber(name) => write!(f, "internal error: interface `{name}` has no number"),
+        }
+    }
+}
+
+impl std::error::Error for LowerError {}
+
+impl From<ZeroNumber> for LowerError {
+    fn from(err: ZeroNumber) -> Self {
+        Self::ZeroNumber(err.0)
+    }
+}
 
 /// Lowers `package` to the finished descriptor bytes; `others` are the
 /// packages it imports, for name resolution and the hash closure.
-pub fn lower(package: &Package, others: &[&Package]) -> Vec<u8> {
-    let numbered = number_interfaces(package);
-    let hash = catalog_hash(package, others, &numbered);
+pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError> {
+    let numbered = numbered_shapes(package)?;
+    let hash = catalog_hash(package, others);
     let ctx = Ctx::new(package, others);
 
     let interfaces = package
@@ -2794,22 +3211,26 @@ pub fn lower(package: &Package, others: &[&Package]) -> Vec<u8> {
         hash: hash.to_vec(),
         toolchain: env!("CARGO_PKG_VERSION").to_owned(),
         interfaces,
-        retired: vec![],
+        retired: package
+            .retired
+            .iter()
+            .map(|entry| RetiredInterface { name: entry.name.clone(), number: entry.number })
+            .collect(),
     };
     let mut builder = planus::Builder::new();
-    builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec()
+    Ok(builder.finish(&catalog, Some(FILE_IDENTIFIER)).to_vec())
 }
 
 fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
     let (kind, payloads, timing) = match decl.kind.as_ref()? {
         decl::Kind::SignalDef(def) => (
             Kind::Signal,
-            vec![payload("value", def.payload.clone(), false, &PayloadShape::Named(&def.payload), ctx)],
+            vec![payload("value", def.payload.clone(), &PayloadShape::Named(&def.payload), ctx)],
             def.timing.as_ref(),
         ),
         decl::Kind::EventDef(def) => (
             Kind::Event,
-            vec![payload("occurrence", def.payload.clone(), false, &PayloadShape::Named(&def.payload), ctx)],
+            vec![payload("occurrence", def.payload.clone(), &PayloadShape::Named(&def.payload), ctx)],
             def.timing.as_ref(),
         ),
         decl::Kind::CommandDef(def) => (Kind::Command, vec![request(&def.params, ctx)], def.timing.as_ref()),
@@ -2822,7 +3243,7 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
         }
         decl::Kind::FixedDef(def) => {
             let ty = def.payload.as_ref()?;
-            (Kind::Fixed, vec![payload("value", spell(ty), false, &PayloadShape::Field(ty), ctx)], None)
+            (Kind::Fixed, vec![payload("value", spell(ty), &PayloadShape::Field(ty), ctx)], None)
         }
         // A reserved slot is listed under `reserved_ordinals`; a type
         // declaration never sits in an interface body.
@@ -2853,47 +3274,54 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
     })
 }
 
-/// The request payload: a single stream parameter is the stream itself
-/// (sized per element); anything else is the induced message of the parameters.
+/// The request payload: one parameter is spelled as its type, several as
+/// `(a: T, b: U)`; only one named parameter is sized (§4 answer 6).
 fn request(params: &[Param], ctx: &Ctx<'_>) -> Payload {
-    if let [single] = params
-        && let Some(FieldType { kind: Some(field_type::Kind::Stream(stream)), .. }) = &single.r#type
-    {
-        return payload("request", spell_stream(stream), true, &PayloadShape::Element(stream), ctx);
-    }
-    let name = format!(
-        "({})",
-        params
-            .iter()
-            .map(|p| format!("{}: {}", p.name, p.r#type.as_ref().map(spell).unwrap_or_default()))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-    payload("request", name, false, &PayloadShape::Params(params), ctx)
+    let name = match params {
+        [single] => single.r#type.as_ref().map(spell).unwrap_or_default(),
+        _ => format!(
+            "({})",
+            params
+                .iter()
+                .map(|p| format!("{}: {}", p.name, p.r#type.as_ref().map(spell).unwrap_or_default()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
+    payload("request", name, &PayloadShape::Params(params), ctx)
 }
 
 fn response(ret: &ReturnType, ctx: &Ctx<'_>) -> Payload {
-    match &ret.kind {
-        Some(return_type::Kind::Value(FieldType { kind: Some(field_type::Kind::Stream(stream)), .. })) => {
-            payload("response", spell_stream(stream), true, &PayloadShape::Element(stream), ctx)
-        }
-        Some(return_type::Kind::Value(ty)) => payload("response", spell(ty), false, &PayloadShape::Return(ret), ctx),
-        Some(return_type::Kind::Fallible(f)) => {
-            payload("response", format!("fallible({}, {})", f.ok, f.err), false, &PayloadShape::Return(ret), ctx)
-        }
-        None => payload("response", String::new(), false, &PayloadShape::Return(ret), ctx),
-    }
+    let name = match &ret.kind {
+        Some(return_type::Kind::Value(ty)) => spell(ty),
+        Some(return_type::Kind::Fallible(f)) => format!("{} | {}", f.ok, f.err),
+        None => String::new(),
+    };
+    payload("response", name, &PayloadShape::Return(ret), ctx)
 }
 
-fn payload(role: &str, type_name: String, stream: bool, shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Payload {
-    Payload {
-        role: role.to_owned(),
-        type_name,
-        stream,
-        max_sizes: COLUMNS
+/// One row per encoding that has a state; none when the payload is not one
+/// named type (§4 answers 6 and 10).
+fn payload(role: &str, type_name: String, shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Payload {
+    let max_sizes = match named_payload(shape) {
+        Some(name) => COLUMNS
             .iter()
-            .filter_map(|&encoding| max_size(shape, ctx, encoding).map(|bytes| MaxSize { encoding, bytes }))
+            .filter_map(|&encoding| size_state(name, ctx, encoding).map(|state| row(encoding, state)))
             .collect(),
+        None => Vec::new(),
+    };
+    Payload { role: role.to_owned(), type_name, max_sizes }
+}
+
+fn row(encoding: Encoding, state: SizeState) -> MaxSize {
+    match state {
+        SizeState::Bounded(bytes) => MaxSize {
+            encoding,
+            bytes,
+            state: SizeStateTag::Bounded,
+            cause: UnboundedCause::Unspecified,
+        },
+        SizeState::Unbounded(cause) => MaxSize { encoding, bytes: 0, state: SizeStateTag::Unbounded, cause },
     }
 }
 
@@ -2952,12 +3380,13 @@ fn spell_primitive(primitive: i32) -> String {
 ```
 
 If the generated `Member::timing` is `Option<Timing>` rather than
-`Option<Box<Timing>>`, drop the `Box::new`. Add `pub mod lower;` to `lib.rs`.
+`Option<Box<Timing>>`, drop the `Box::new`. `spell` already spells a stream as
+`<T>`; nothing else changes in it. Add `pub mod lower;` to `lib.rs`.
 
 - [ ] **Step 4: Run the tests**
 
 Run: `cargo test -p ridl-descriptor --locked` Expected: every test in the crate
-PASS, including the six in `lower.rs`.
+PASS, including the ten in `lower.rs`.
 
 - [ ] **Step 5: Commit**
 
@@ -2973,16 +3402,22 @@ git commit -m "feat(ridl-descriptor): lower a package to its catalog descriptor"
 **Files:**
 
 - Modify: `crates/ridlc/Cargo.toml` (dependency `ridl-descriptor`)
-- Modify: `crates/ridlc/src/lib.rs:269-310` (`Emit`), the `ir_dump_suffix` match
-  near line 363, the `write_emits` match from line 797
+- Modify: `crates/ridlc/src/lib.rs:359-436` (`Emit`, eight values today), the
+  `ir_dump_suffix` match at :484 (and `is_ir_dump` near :440,
+  `system_dump_suffix` at :510), the `write_emits` function from :1454, which
+  already receives `others: &[&Package]`
 - Test: `crates/ridl/tests/describe_cli.rs` (created here, extended in Task 11)
 
 **Interfaces:**
 
 - Consumes: `ridl_descriptor::{lower, FILE_SUFFIX}` (Tasks 1, 8).
-- Produces: `Emit::Catalog`, spelled `catalog` on the command line; the artifact
-  `<base>.catalog.binfb` beside the IR emits, written only when the package
-  declares at least one interface (spec D-1).
+- Produces: `Emit::Catalog`, spelled `catalog` on the command line, the ninth
+  emit value; the artifact `<base>.catalog.binfb` beside the IR emits, written
+  only when the package carries at least one interface shape (spec D-1, as
+  widened on 2026-10-03).
+
+The `Emit` enum is a shared file (driver §3, D6): run `gh pr list` and check for
+an open pull request that touches `crates/ridlc/src/lib.rs` before you start.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3074,24 +3509,52 @@ fn build_emits_the_same_bytes_twice() {
     let b = std::fs::read(build_catalog(second.path())).unwrap();
     assert_eq!(a, b);
 }
+
+/// driftsys/ridl#275's criterion, as driver §4 answer 11 gives it to #378:
+/// the hash — and the whole descriptor — is the same whether a build emits
+/// proto3, FlatBuffers or both beside the catalog.
+#[test]
+fn build_writes_the_same_descriptor_whatever_else_it_emits() {
+    let mut descriptors = Vec::new();
+    for (label, emits) in [("alone", "catalog"), ("proto", "proto,catalog"), ("fbs", "flatbuffers,catalog"), ("both", "proto,flatbuffers,catalog")] {
+        let out = TempDir::new(label);
+        let (code, _, stderr) = ridl(&[
+            "build".as_ref(),
+            corpus().as_os_str(),
+            "--out-dir".as_ref(),
+            out.path().as_os_str(),
+            "--emit".as_ref(),
+            emits.as_ref(),
+        ]);
+        assert_eq!(code, 0, "{emits}: {stderr}");
+        let file = std::fs::read_dir(out.path())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .find(|p| p.to_string_lossy().ends_with(".catalog.binfb"))
+            .expect("a catalog descriptor was written");
+        descriptors.push(std::fs::read(file).unwrap());
+    }
+    assert!(descriptors.windows(2).all(|w| w[0] == w[1]));
+}
 ```
 
 Before writing the test, confirm the flag spellings with
-`cargo run -p ridl -- build --help` — the `Build` variant's `out_dir` field is
-`--out-dir` under clap's derive unless an `#[arg(long = ...)]` renames it; use
-whatever `--help` prints.
+`cargo run -p ridl-cli -- build --help` — the `Build` variant's `out_dir` field
+is `--out-dir` under clap's derive unless an `#[arg(long = ...)]` renames it;
+use whatever `--help` prints.
 
 - [ ] **Step 2: Run the test to see it fail**
 
-Run: `cargo test -p ridl --locked --test describe_cli` Expected: both tests
-FAIL: `catalog` is not a valid `--emit` value (exit 2).
+Run: `cargo test -p ridl-cli --locked --test describe_cli` Expected: all three
+tests FAIL: `catalog` is not a valid `--emit` value (exit 2).
 
 - [ ] **Step 3: Implement the emit**
 
 `crates/ridlc/Cargo.toml` `[dependencies]` gains
-`ridl-descriptor = { path = "../ridl-descriptor" }`.
+`ridl-descriptor.workspace = true` (the workspace entry Task 1 added; the same
+form as `ridl-ir.workspace = true` on line 16).
 
-In `crates/ridlc/src/lib.rs`, `pub enum Emit` gains, after `Flatbuffers`:
+In `crates/ridlc/src/lib.rs`, `pub enum Emit` gains, after `CodegenModel`:
 
 ```rust
 /// The catalog descriptor an engine reads, written to
@@ -3102,18 +3565,23 @@ Catalog,
 ```
 
 The `ir_dump_suffix` match gains `Emit::Catalog => None,` (it is not an IR
-dump). The `write_emits` match gains:
+dump), and so do `is_ir_dump` and `system_dump_suffix` if they match
+exhaustively. The `write_emits` match gains:
 
 ```rust
 Emit::Catalog => {
     if ir.shapes().next().is_some() {
-        std::fs::write(
-            out_dir.join(format!("{base}{}", ridl_descriptor::FILE_SUFFIX)),
-            ridl_descriptor::lower(ir, others),
-        )?;
+        let bytes = ridl_descriptor::lower(ir, others)
+            .map_err(|err| std::io::Error::other(err.to_string()))?;
+        std::fs::write(out_dir.join(format!("{base}{}", ridl_descriptor::FILE_SUFFIX)), bytes)?;
     }
 }
 ```
+
+Read `write_emits`'s error type first: a `LowerError` is an internal error and
+must reach the user as "the tool could not answer" — exit 2 with `lower`'s
+message (ADR-0010 decision 1) — through whatever error the function already
+returns; the `io::Error::other` above assumes an `io::Result`.
 
 Every other exhaustive `match` over `Emit` in the crate (the compiler lists
 them) gains a `Catalog` arm that does what the `Flatbuffers` arm does, except
@@ -3122,7 +3590,7 @@ where the arm names an IR dump.
 - [ ] **Step 4: Run the tests**
 
 Run:
-`cargo test -p ridl --locked --test describe_cli && cargo test -p ridlc --locked`
+`cargo test -p ridl-cli --locked --test describe_cli && cargo test -p ridlc --locked`
 Expected: PASS; the ridlc CLI and golden suites still pass.
 
 - [ ] **Step 5: Commit**
@@ -3141,7 +3609,7 @@ git commit -m "feat(ridlc): emit the catalog descriptor with --emit catalog"
 
 **Interfaces:**
 - Consumes: `CatalogRef` and the other views (Task 1), `verify` (Task 2), `lower` (Task 8) in the test.
-- Produces: `pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>` — the same view `flatc --json --strict-json` gives: schema field names as keys, enums by member name, `hash` as an array of bytes, an absent `timing` as `null`.
+- Produces: `pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>` — schema field names as keys, enums by member name, `hash` as an array of bytes, an absent `timing` as `null`, and every field of a `MaxSize` row, defaults included. This is close to `flatc --json --strict-json --defaults-json`, with one difference: `flatc` omits an absent table field (`timing`) where this view writes `null`, and `--defaults-json` restores scalars at their default only (`bytes` is 0 and `cause` is `"Unspecified"` where they do not apply).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3151,7 +3619,10 @@ git commit -m "feat(ridlc): emit the catalog descriptor with --emit catalog"
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{verify, Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, FILE_IDENTIFIER, SCHEMA_VERSION};
+    use crate::{
+        verify, Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, SizeStateTag,
+        UnboundedCause, FILE_IDENTIFIER, SCHEMA_VERSION,
+    };
 
     #[test]
     fn the_view_uses_schema_names_and_enum_members() {
@@ -3170,9 +3641,21 @@ mod tests {
                     kind: Kind::Query,
                     payloads: vec![Payload {
                         role: "request".to_owned(),
-                        type_name: "()".to_owned(),
-                        stream: false,
-                        max_sizes: vec![MaxSize { encoding: Encoding::Proto3, bytes: 0 }],
+                        type_name: "Point".to_owned(),
+                        max_sizes: vec![
+                            MaxSize {
+                                encoding: Encoding::Proto3,
+                                bytes: 12,
+                                state: SizeStateTag::Bounded,
+                                cause: UnboundedCause::Unspecified,
+                            },
+                            MaxSize {
+                                encoding: Encoding::FlatBuffers,
+                                bytes: 0,
+                                state: SizeStateTag::Unbounded,
+                                cause: UnboundedCause::Layout,
+                            },
+                        ],
                     }],
                     timing: None,
                 }],
@@ -3200,9 +3683,11 @@ mod tests {
                         "kind": "Query",
                         "payloads": [{
                             "role": "request",
-                            "type_name": "()",
-                            "stream": false,
-                            "max_sizes": [{ "encoding": "Proto3", "bytes": 0 }]
+                            "type_name": "Point",
+                            "max_sizes": [
+                                { "encoding": "Proto3", "bytes": 12, "state": "Bounded", "cause": "Unspecified" },
+                                { "encoding": "FlatBuffers", "bytes": 0, "state": "Unbounded", "cause": "Layout" }
+                            ]
                         }],
                         "timing": null
                     }],
@@ -3227,11 +3712,12 @@ Module body above the tests:
 ```rust
 //! `ridl describe`'s view of a descriptor (spec D-9): strict JSON built by
 //! walking the checked accessors. There is no JSON emit; this is a rendering
-//! of the binary, and `flatc --json --strict-json` gives the same view.
+//! of the binary. `flatc --json --strict-json --defaults-json` gives the same
+//! view except that it omits an absent `timing`, which is `null` here.
 
 use serde_json::{json, Value};
 
-use crate::{CatalogRef, Encoding, Kind, TimingMode};
+use crate::{CatalogRef, Encoding, Kind, SizeStateTag, TimingMode, UnboundedCause};
 
 pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
     let mut interfaces = Vec::new();
@@ -3246,12 +3732,16 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
                 let mut sizes = Vec::new();
                 for size in payload.max_sizes()? {
                     let size = size?;
-                    sizes.push(json!({ "encoding": encoding_name(size.encoding()?), "bytes": size.bytes()? }));
+                    sizes.push(json!({
+                        "encoding": encoding_name(size.encoding()?),
+                        "bytes": size.bytes()?,
+                        "state": state_name(size.state()?),
+                        "cause": cause_name(size.cause()?),
+                    }));
                 }
                 payloads.push(json!({
                     "role": payload.role()?,
                     "type_name": payload.type_name()?,
-                    "stream": payload.stream()?,
                     "max_sizes": sizes,
                 }));
             }
@@ -3315,6 +3805,24 @@ fn timing_mode_name(mode: TimingMode) -> &'static str {
         TimingMode::Range => "Range",
     }
 }
+
+fn state_name(state: SizeStateTag) -> &'static str {
+    match state {
+        SizeStateTag::Bounded => "Bounded",
+        SizeStateTag::Unbounded => "Unbounded",
+    }
+}
+
+fn cause_name(cause: UnboundedCause) -> &'static str {
+    match cause {
+        UnboundedCause::Unspecified => "Unspecified",
+        UnboundedCause::Member => "Member",
+        UnboundedCause::Untyped => "Untyped",
+        UnboundedCause::Layout => "Layout",
+        UnboundedCause::Aggregate => "Aggregate",
+        UnboundedCause::Exempt => "Exempt",
+    }
+}
 ```
 
 If `reserved_ordinals()?` yields a vector of `u32` directly, `.iter().collect()` is right; if it yields `Result<u32>` items, collect with `.collect::<planus::Result<Vec<u32>>>()?`. The same for `hash()`.
@@ -3336,16 +3844,19 @@ git commit -m "feat(ridl-descriptor): render a descriptor as strict JSON"
 
 **Files:**
 
-- Modify: `crates/ridl/Cargo.toml` (dependencies `ridl-descriptor`;
-  dev-dependency `insta`)
-- Modify: `crates/ridl/src/main.rs:50-137` (`Command`), the dispatch in `main`
-  near line 143, a new `run_describe`
+- Modify: `crates/ridl/Cargo.toml` (dependency `ridl-descriptor`; dev-dependency
+  `insta`)
+- Modify: `crates/ridl/src/main.rs:71-210` (`Command`, nine variants today), the
+  dispatch `match cli.command` at :252, a new `run_describe`
 - Modify: `crates/ridl/tests/describe_cli.rs`
-- Modify: `docs/decisions/ADR-0010-cli-conventions.md:78-92` (the exit-code
-  table and the scoping sentence after it)
-- Modify: `docs/book/cli-reference.md` (both `--emit` value lists, near lines
-  307 and 960; a `### ridl describe` section under `## ridl`; the exit-code
-  table near line 1014)
+- Modify: `docs/decisions/ADR-0010-cli-conventions.md` (the exit-code table
+  under decision 1, twelve rows today, and the dated sentences after it)
+- Modify: `docs/book/cli-reference.md` and `docs/book/getting-started.md` (the
+  census of step 5)
+
+`crates/ridl/src/main.rs`, `docs/book/cli-reference.md` and ADR-0010 are shared
+files: the devex track's Spec 0 also changes `ridl check`, the CLI reference and
+ADR-0010 (driver §3, D7). Run `gh pr list` and coordinate before you start.
 
 **Interfaces:**
 
@@ -3412,15 +3923,14 @@ fn describe_rejects_a_truncated_and_a_flipped_descriptor() {
 ```
 
 `crates/ridl/Cargo.toml`: `[dependencies]` gains
-`ridl-descriptor = { path = "../ridl-descriptor" }`
-(`serde_json.workspace =
-true` is already there, line 25); `[dev-dependencies]`
-gains `insta.workspace = true`.
+`ridl-descriptor.workspace = true` (`serde_json.workspace = true` is already
+there, line 39); `[dev-dependencies]` gains `insta.workspace = true` (the
+workspace entry exists; `crates/ridlc` already uses it).
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cargo test -p ridl --locked --test describe_cli` Expected: the four new
-tests FAIL — `describe` is an unknown subcommand (clap exits 2 with a usage
+Run: `cargo test -p ridl-cli --locked --test describe_cli` Expected: the four
+new tests FAIL — `describe` is an unknown subcommand (clap exits 2 with a usage
 message, so the two "exit 2" tests fail on the stderr text).
 
 - [ ] **Step 3: Implement the subcommand**
@@ -3472,56 +3982,111 @@ fn run_describe(path: &Path) -> ExitCode {
 
 - [ ] **Step 4: Run the tests, then accept the snapshot**
 
-Run: `cargo test -p ridl --locked --test describe_cli` Expected: the snapshot
-test fails once with a new snapshot under
+Run: `cargo test -p ridl-cli --locked --test describe_cli` Expected: the
+snapshot test fails once with a new snapshot under
 `crates/ridl/tests/snapshots/describe_cli__corpus_catalog.snap`. Read it: two
-interfaces — `VehicleStatus` (number 1), then the inline shape of the service
-`corpus.baseline.hvac` (number 2) — each with `"provisional": true` and its
-members in ordinal order, two `max_sizes` entries per payload, no `ReprC`. Then
-run `cargo insta accept` (or move the `.snap.new` file) and re-run: all PASS.
+interfaces — `VehicleStatus`, then the inline shape of the service
+`corpus.baseline.hvac` — each with the number `ridl-sem` gave it (the corpus has
+no `interfaces.lock`, so both are `"provisional": true`) and its members in
+ordinal order; per payload, a `max_sizes` list holding the states the toolchain
+computed: one `FlatBuffers` row for each corpus payload, because every payload
+in `cluster.ridl` is a named scalar, which has no proto3 state (re-baseline
+decision 5); a struct or union payload would show two rows; none for a stream, a
+request of zero or several parameters or a `T | E` reply; no `ReprC` row
+anywhere. Then run `cargo insta accept` (or move the `.snap.new` file) and
+re-run: all PASS.
 
-- [ ] **Step 5: Record the exit-code row and the book entry**
+- [ ] **Step 5: Record the exit-code row and the book census**
 
-In `docs/decisions/ADR-0010-cli-conventions.md`, append to the table after the
-`ridlc build` row, in the same column format as the rows above it:
+Recounted on 2026-10-03 against `docs/book/cli-reference.md` and
+`docs/decisions/ADR-0010-cli-conventions.md` as they stand on `main`, with every
+item of driftsys/ridl#326 folded in. `ridl` has nine subcommands today (`check`,
+`baseline`, `build`, `test`, `fmt`, `diff`, `lock`, `lsp`, `mcp`); `describe` is
+the tenth. The CLI reference counts the subcommands that take a path across both
+binaries: seven of `ridl`'s (`lsp` and `mcp` take none) plus `ridlc check` and
+`ridlc build` make nine today, so `describe` is the tenth of those. `--emit` has
+eight values; `catalog` is the ninth. Re-run every count below against the file
+at the time you edit it: `just fmt`, `just check`, `just link-check` and
+`just book-check` count nothing and re-run no `--help`, so a stale number passes
+every gate.
 
-```markdown
-| `ridl describe` | the descriptor was printed | — | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer |
-```
+In `docs/decisions/ADR-0010-cli-conventions.md`, under decision 1:
 
-and add one sentence after the paragraph that follows the table:
-"`ridl describe` earned its row on the date of the PR that added it; the checked
-scenarios are the four `describe_cli.rs` tests." In that paragraph, "The claim
-is scoped to these eight" becomes "The claim is scoped to these nine — the eight
-of 2026-07-27, and `ridl describe` on the date of its PR". The sentence before
-the table ("across the eight subcommands the two binaries expose today") is
-dated and stays.
+- append to the exit-code table, after the `ridl lock merge` row, in the same
+  column format:
 
-In `docs/book/cli-reference.md`, in both `--emit <EMIT>` value lists (under
-`### ridl build`, near line 307, and under `### ridlc build`, near line 960),
-append a `catalog` line in the same format, with the text `--help` prints; in
-the table under `## Exit codes across the toolchain` (near line 1014), add a
-`ridl describe` row after `ridl diff` with the three cells of the ADR-0010 row
-above, and in the `ridl fmt` row change "five of the other seven" to "five of
-the other eight" (`ridl describe` names the path in its message); and add, under
-`## ridl` after `### ridl diff` (the last `ridl` subcommand section, before
-`## ridlc`), a section `### ridl describe` with one paragraph ("Prints a catalog
-descriptor written by `ridl build --emit catalog` as JSON after verifying it; a
-file that is not a descriptor, or is malformed, is rejected as a whole with exit
-code 2.") and a `json` fence holding the first twenty lines of the snapshot from
-step 4. The fence's language word is `json`, which the book harness does not
-compile (CONTRIBUTING.md, "Writing examples in the book"); the transcript is
-kept current by hand.
+  ```markdown
+  | `ridl describe` | the descriptor was printed | — | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer |
+  ```
+
+- the sentence "across the eight subcommands the two binaries expose today"
+  before the table, and "The claim is scoped to these eight, constructed this
+  way, on this date" after it, are dated (2026-07-27) and stay. Follow the
+  precedent the later rows set: the paragraph "`ridl lsp` and `ridl mcp` earned
+  their rows on 2026-09-13, when they were added and checked by
+  `crates/ridl/tests/servers.rs`" gains a sibling paragraph: "**`ridl describe`
+  earned its row on the date of its pull request, when it was added and
+  checked** by the four `describe` tests in
+  `crates/ridl/tests/describe_cli.rs`," (write the date out), which drive the
+  exit-0 outcome and every exit-2 cause above against the built `ridl` binary."
+- "A ninth subcommand earns a row here when it is added and checked, not by
+  inheriting this table" is stale already (`lsp`, `mcp` and `lock` are the ninth
+  to eleventh); make it "A later subcommand earns a row here when it is added
+  and checked, not by inheriting this table".
+- decision 6 ("Of the eight subcommands, only `ridl fmt`...") and the
+  Consequences ("six of the other seven") are dated findings of 2026-07-27 and
+  stay.
+
+In `docs/book/cli-reference.md`:
+
+- the literal `ridl --help` transcript under `## ridl` (lines 57-77, whose
+  `Commands:` block the page says is literal binary output): paste the new
+  transcript from the built binary, which gains the `describe` line;
+- under `### ridl build`, the `--emit <EMIT>` `Possible values:` block (about
+  line 493): add the `- catalog:` line with the text `--help` prints;
+- under `### ridlc build`, both the inline comma list "The artifacts to emit:
+  `rust` (default), ..., `codegen-model`" (about line 1652) and the
+  `Possible values:` block below it: add `catalog`;
+- "Of the nine subcommands that take a path" (about line 1008) becomes "Of the
+  ten subcommands that take a path", and the list that follows it is unchanged
+  (`ridl describe` names the path in every exit-2 message, so it joins
+  `ridl fmt` on the right side of that sentence — say so in one clause);
+- "Seven of the nine subcommands that take a path also share a lesser-known gap"
+  (about line 1774) becomes "Seven of the ten subcommands that take a path", and
+  the list of the seven is unchanged;
+- under `## How ridl and ridlc relate`, the sentence "`ridl baseline`,
+  `ridl test`, `ridl fmt`, `ridl diff`, and `ridl lock` have no `ridlc`
+  counterpart at all" gains `ridl describe`;
+- in the table under `## Exit codes across the toolchain`, add a `ridl describe`
+  row after `ridl lock merge` with the three cells of the ADR-0010 row above;
+  the `ridl fmt` row's wording about the other subcommands, if it counts them,
+  is recounted;
+- under `## ridl`, after `### ridl mcp` (the last `ridl` subcommand section,
+  before `## ridlc`), add `### ridl describe` with one paragraph ("Prints a
+  catalog descriptor written by `ridl build --emit catalog` as JSON after
+  verifying it; a file that is not a descriptor, or is malformed, is rejected as
+  a whole with exit code 2.") and a `json` fence holding the first twenty lines
+  of the snapshot from step 4. The fence's language word is `json`, which the
+  book harness does not compile (CONTRIBUTING.md, "Writing examples in the
+  book"); the transcript is kept current by hand.
+
+In `docs/book/getting-started.md`, under "What the compiler produces" (about
+line 783): the sentence "Seven emit targets exist today" and the seven-row
+`--emit` table below it. Add a `catalog` row (`<package>.catalog.binfb`, "the
+catalog descriptor an engine reads — interfaces, numbers, members, sizes") and
+make the count word match the row count. `codegen-model` is absent from that
+table today; whether to add it is not this task's question — count the rows that
+are there.
 
 - [ ] **Step 6: Run the docs gates**
 
 Run: `just fmt && just check && just link-check && just book-check` Expected:
-all pass.
+all pass. They do not check the counts above; re-read each edited sentence.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/ridl docs/decisions/ADR-0010-cli-conventions.md docs/book/cli-reference.md Cargo.lock
+git add crates/ridl docs/decisions/ADR-0010-cli-conventions.md docs/book/cli-reference.md docs/book/getting-started.md Cargo.lock
 git commit -m "feat(ridl): add ridl describe for the catalog descriptor"
 ```
 
@@ -3533,14 +4098,16 @@ git commit -m "feat(ridl): add ridl describe for the catalog descriptor"
 
 - Modify: `AGENTS.md` (the crate count and list in the first section)
 - Modify: `README.md` (the crate list, if it has one)
-- Modify: `docs/technotes/walking-skeleton-architecture.md:188` (the `xtask`
-  entry, the one place that lists what `cargo xtask` does:
-  `cargo xtask descriptor-codegen` beside `cargo xtask codegen`;
-  `CONTRIBUTING.md` has no generated-code section)
-- Modify: `docs/ROADMAP.md:269-271` (Epic 14: one story row)
-- Modify: `docs/wip/2026-09-13-runtime-descriptors-design.md` (§7, the two open
-  items this plan disposed of)
-- Modify: `docs/wip/README.md` (this plan's index entry gains "in execution")
+- Modify: `docs/technotes/walking-skeleton-architecture.md` (both places that
+  describe `cargo xtask`: the workspace summary near lines 25-28, which names
+  the `xtask` member, and the `xtask` entry near line 261; line 44 is inside the
+  `ridl-syntax` entry and is not one of them; `CONTRIBUTING.md` has no
+  generated-code section; `docs/decisions/ADR-0007-e1-execution.md:29` also
+  describes `cargo xtask codegen`, and stays as a dated record)
+
+The roadmap needs no row: Epic 16's rows E16.1 to E16.6 exist, and D8's
+gardening marks them landed. The design note's §7 dispositions and the
+`docs/wip/README.md` entry were updated by the re-baseline of 2026-10-03.
 
 **Interfaces:**
 
@@ -3549,7 +4116,7 @@ git commit -m "feat(ridl): add ridl describe for the catalog descriptor"
 
 - [ ] **Step 1: Update the crate inventory**
 
-In `AGENTS.md`, change "thirteen crates" to "fourteen crates" and insert
+In `AGENTS.md`, change "nineteen crates" to "twenty crates" and insert
 `` `ridl-descriptor` `` after `` `ridl-ir` `` in the list. Grep `README.md` for
 `ridl-ir`; where the crates are listed, add `ridl-descriptor` beside it with the
 one-line purpose "the catalog descriptor an engine reads".
@@ -3557,95 +4124,79 @@ one-line purpose "the catalog descriptor an engine reads".
 - [ ] **Step 2: Document the generator**
 
 In `docs/technotes/walking-skeleton-architecture.md`, the `xtask` entry near
-line 188 ("`cargo xtask codegen`, the typed-AST generator over `family.ungram`")
+line 261 ("`cargo xtask codegen`, the typed-AST generator over `family.ungram`")
 gains the second generator and its rule, as one paragraph after it:
 "`cargo xtask descriptor-codegen` regenerates
 `crates/ridl-descriptor/src/generated.rs` from
 `crates/ridl-descriptor/schema/catalog.fbs` with planus; run it after every
 schema edit. The xtask test `committed_generated_accessors_match_the_schema`
 fails while the committed file is stale. The schema is append-only: add fields
-at the end of a table, never remove or reorder one."
+at the end of a table, never remove or reorder one." The workspace summary near
+lines 25-28, where the `xtask` member is named, gains the second task in one
+clause; the `ridl-syntax` entry (which cites `cargo xtask codegen` near line 44)
+is not touched.
 
-- [ ] **Step 3: Record the story and dispose of the open items**
-
-In `docs/ROADMAP.md`, Epic 14's table gains a row after `E14.3`:
-
-```markdown
-| E14.4 | The catalog descriptor — `ridl-descriptor`, `ridlc build --emit catalog`, the per-payload maximum size for proto3 and FlatBuffers, `ridl describe` | a package builds to a descriptor that verifies, and `ridl describe` prints it | L |
-```
-
-In `docs/wip/2026-09-13-runtime-descriptors-design.md` §7, replace the first two
-bullets with their dispositions:
-
-```markdown
-- Schemas and accessors: `crates/ridl-descriptor`, with the accessors
-  generated by `cargo xtask descriptor-codegen` (planus) and committed.
-- File identifier `RDLC`; the artifact is `<base>.catalog.binfb`
-  (ADR-0014 decision 4's convention). The system descriptor's identifier is
-  still open.
-```
-
-In `docs/wip/README.md`, the entry for `2026-09-13-catalog-descriptor-plan.md`
-gains "**In execution.**" at the end.
-
-- [ ] **Step 4: Run the full gate**
+- [ ] **Step 3: Run the full gate**
 
 Run: `just verify` Expected: `lint-commits` valid for every commit on the
-branch; `build` passes every member: toolchain-check, gate-parity, fmt-check,
-book-check, link-check, compile, test, lint, wasm-check (with `ridl-descriptor`
-in the list), check.
+branch; `build` passes every member, including wasm-check (with
+`ridl-descriptor` in the list), compat-check and demo.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add AGENTS.md README.md docs/technotes docs/ROADMAP.md docs/wip
-git commit -m "docs(docs): record the catalog descriptor crate, generator and story"
+git add AGENTS.md README.md docs/technotes
+git commit -m "docs(docs): record the catalog descriptor crate and its generator"
 ```
 
-- [ ] **Step 6: Open the pull request**
+- [ ] **Step 5: Open the pull request**
 
-The PR description lists the seven dispositions under "Decisions this plan takes
-on the spec's open items" verbatim, names the two review-driven wordings that PR
-#323's pass-1 fix added to the design note after the author approved it (a
-stream payload's per-element row, D-4/D-6, and the `match` narrowing of the
-string byte capacity, design note §6), and asks for the review lane as the
-repository runs it (four seats: executable lines are present).
+The PR description names the §4 answers of the driver the stage applied, by
+number, and the decisions of the "Re-baseline 2026-10" section it relied on, and
+asks for the review lane as the repository runs it (four seats: executable lines
+are present).
 
 ---
 
 ## Self-review
+
+Re-read on 2026-10-03 after the re-baseline.
 
 **Spec coverage.** D-1 (catalog per package with at least one interface shape:
 Task 9's guard over `Package::shapes()`); D-2 (FlatBuffers, IR untouched: Task
 1); D-3 (hand-written, `version`, `file_identifier`, append-only: Task 1's
 schema header and Task 12's technote paragraph; the `flatc`/`flatcc`
 cross-compiler check is deferred by the spec until a C engine exists); D-4
-(identity, interfaces with number and provisional flag, retired entries — the
-list exists and is empty until the lock file, members with ordinal, kind,
-payload type, timing, reserved ordinals: Tasks 3, 4, 8); D-5 is the system
-descriptor, out of scope; D-6 (one row per payload, one column per encoding,
-derivation from bounds, string capacity with the `match` narrowing: Tasks 5-8;
-the conformance refutation lands with E11.7/E11.8/E11.12 as the spec says); D-7
+(identity, interfaces with the IR's number and provisional flag, the IR's
+retired entries, members with ordinal, kind, payload type, timing, reserved
+ordinals: Tasks 3, 4, 8); D-5 is the system descriptor, out of scope; D-6 (one
+row per payload and encoding that has a state, three states, the bounds from the
+projections, the string capacity at four bytes per scalar value: Tasks 5-8; the
+conformance refutation lands with E11.7/E11.8/E11.12 as the spec says); D-7
 (nothing added for payload layouts, transport, envelope); D-8 (Task 2, Task 11);
 D-9 (Task 9, Task 11; the JSON is a rendering, no JSON emit); D-10 is generated
-code and out of this plan (ADR-0013 decision 3's table gains the number and hash
-when the lock file exists — not before, or the table would carry a provisional
-number into generated code). §3: an unclaimed namespace and the rsdl errors are
-the system descriptor's; a provisional number is data (Task 8 flags it, nothing
-refuses it). §4: schema round trip (Task 1), golden files (Task 11's snapshot
-and byte-stability tests), verifier rejection (Tasks 2 and 11), book example
-(Task 11), max-size conformance deferred with the codecs.
+code: the Rust backend's `NUMBER` and `PROVISIONAL` constants exist, its zero
+`CatalogHash` is retired by D3 and its `None` sizes by D5 (driver §3). §3: an
+unclaimed namespace and the rsdl errors are the system descriptor's; a
+provisional number is data (Task 8 copies the flag, nothing refuses it); a zero
+number is an internal error (Tasks 3, 8, 9). §4: schema round trip (Task 1),
+golden files (Task 4's golden hash, Task 11's snapshot and byte-stability
+tests), verifier rejection (Tasks 2 and 11), book example (Task 11), max-size
+conformance deferred with the codecs, codec agreement (Task 7).
 
-**Placeholders.** Task 5 step 3 creates `proto3.rs` with a `payload_size`
-returning `None` so `max_size` compiles before Task 6 fills it; Task 6 replaces
-it the same day and its tests pin every size. No other step defers content.
+**Placeholders.** Task 5 step 3 creates `proto3.rs` and `flatbuffers.rs` with a
+`state` returning `None` so `size_state` compiles before Tasks 6 and 7 fill
+them; their tests pin every state. No other step defers content.
 
-**Type consistency.** `Numbered { name, number, provisional }` (Task 3) is what
-Task 4's `catalog_hash` and Task 8's `lower` consume;
-`Ctx::new(package, others)` and
-`PayloadShape::{Named, Field, Params, Return, Element}` (Task 5) are what Tasks
-6, 7 and 8 call; `max_size(shape, ctx, encoding)` returns `Option<u64>`
-everywhere; `verify(bytes) -> Result<CatalogRef, VerifyError>` (Task 2) is what
-Tasks 8, 10 and 11 read through; `to_json(CatalogRef) -> planus::Result<Value>`
-(Task 10) is what Task 11 prints; `FILE_SUFFIX = ".catalog.binfb"` (Task 1) is
-what Task 9 joins and Task 11's tests glob.
+**Type consistency.** `Numbered { name, number, provisional }` and `ZeroNumber`
+(Task 3) are what Task 8's `lower` consumes; `catalog_hash(package, others)`
+(Task 4) takes no numbering; `Ctx::new(package, others)`,
+`PayloadShape::{Named, Field, Params, Return}`, `named_payload` and
+`size_state(name, ctx, encoding) -> Option<SizeState>` (Task 5) are what Tasks
+6, 7 and 8 call; `verify(bytes) -> Result<CatalogRef, VerifyError>` (Task 2) is
+what Tasks 8, 10 and 11 read through;
+`lower(...) -> Result<Vec<u8>, LowerError>` (Task 8) is what Task 9 writes;
+`to_json(CatalogRef) -> planus::Result<Value>` (Task 10) is what Task 11 prints;
+`FILE_SUFFIX = ".catalog.binfb"` (Task 1) is what Task 9 joins and Task 11's
+tests glob; the schema's `SizeState` is re-exported as `SizeStateTag` so it does
+not collide with `size::SizeState`.

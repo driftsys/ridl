@@ -13,7 +13,9 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D1**. D0 is the pull request that added this document.
+**THIS SESSION RUNS: D2**. D0 is the pull request that added this document; D1
+re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
+every change and the decisions it took beyond §4).
 
 ## 0. How to work in this repository
 

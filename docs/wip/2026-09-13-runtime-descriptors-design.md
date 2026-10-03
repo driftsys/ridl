@@ -1,7 +1,11 @@
 # Runtime descriptors — the catalog descriptor and the system descriptor
 
 Status: working note, 2026-09-13, design agreed in conversation the same day.
-Nothing here is ratified. Read after
+Nothing here is ratified. Amended 2026-10-03 by lane E16's stage D1 with the
+answers Sebastien gave in
+[`2026-10-03-lane-e16-catalog-descriptor-driver.md`](2026-10-03-lane-e16-catalog-descriptor-driver.md)
+§4: D-1, D-4, D-6, D-9, §6 and §7 changed; each change names its answer. Read
+after
 [`2026-09-12-release-scope-and-plugin-system-design.md`](2026-09-12-release-scope-and-plugin-system-design.md)
 §3.8 and §3.13,
 [`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md) §6, and
@@ -56,11 +60,13 @@ second encoding of the IR.
 ### D-1 Two descriptors; the system descriptor is self-contained
 
 **Decision.** The compiler emits a catalog descriptor for every package that
-declares at least one interface, and a system descriptor for every `deployment`
-of a `system`. The system descriptor embeds the catalog descriptors of the
-system's closure, so an engine that configures a deployment reads one file. The
-standalone catalog descriptor is still emitted, for a consumer that hosts
-catalogs without a deployment: a broker, a test harness, a schema registry.
+carries at least one interface shape — a declared `interface`, or a `service`
+with an inline body (widened 2026-10-03; driftsys/ridl#326) — and a system
+descriptor for every `deployment` of a `system`. The system descriptor embeds
+the catalog descriptors of the system's closure, so an engine that configures a
+deployment reads one file. The standalone catalog descriptor is still emitted,
+for a consumer that hosts catalogs without a deployment: a broker, a test
+harness, a schema registry.
 
 **Rejected.** (a) The system descriptor references catalogs by hash only, and
 the engine loads the package files: two file lookups and a resolution rule on
@@ -114,16 +120,20 @@ IR's shape into every engine.
 - **Identity of the catalog**: name (the package name, V-16); the catalog hash
   (D-8 of the rsdl note: over the interfaces, their numbers, and the types they
   reach); the toolchain version that wrote it.
-- **Interfaces**: name; the frozen number from the lock file; a `provisional`
-  flag when the number is not yet frozen (rsdl note D-7); the retired entries as
-  name and number, so an engine can refuse a peer that still speaks a retired
-  interface.
+- **Interfaces**: name; the number and the `provisional` flag, copied from the
+  IR's `Interface.number` and `Interface.provisional`, which `ridl-sem` folds
+  from the lock file (rsdl note D-7; driver §4 answer 3 — the descriptor
+  computes no numbering, and a number of 0 is an internal error); the retired
+  entries as name and number, copied from `Package.retired`, so an engine can
+  refuse a peer that still speaks a retired interface.
 - **Members, per interface**: name; ordinal (position in the body, ridl §11);
   kind (`signal`, `event`, `command`, `query`, `fixed`); the payload type name
-  per payload, and for a stream payload (ridl §12) the element type and a
-  `stream` flag, because the stream itself has no bound; the bounds and QoS
-  terms the IR carries for the member (ADR-0015); and the **max-size table** of
-  D-6.
+  per payload — the canonical name of a payload that is one named type, a
+  spelling of the shape otherwise (`<T>` for a stream payload, ridl §12; no
+  `stream` flag yet: driver §4 answer 10 gives the flag and the per-element
+  bound to driftsys/ridl#336, as an append to the schema, and this replaces the
+  wording PR #323's review added here); the bounds and QoS terms the IR carries
+  for the member (ADR-0015); and the **size table** of D-6.
 - **Reserved ordinals** per interface, so the ordinal space is complete.
 
 Not contained: type layouts, field lists, constraints beyond the bounds that
@@ -164,10 +174,17 @@ facts (file paths, ports, tuning), envelope and framing overhead. Design note
 §3.13 keeps those in the runtime's own configuration; rsdl note D-5 keeps the
 fabric out of rsdl.
 
-### D-6 Every payload carries its maximum encoded size, per encoding
+### D-6 Every payload carries a size state per encoding
+
+Amended 2026-10-03 (driver §4 answers 5, 6, 7 and 10): a state per encoding in
+place of a number, the payload shapes the codecs define, no `match` narrowing,
+no `stream` flag.
 
 **Decision.** For every interaction, the catalog descriptor carries one row per
-payload the kind has, and each row carries one number per core encoding:
+payload the kind has, and each row carries, per core encoding, one of three
+states — absent (no entry: the toolchain computed no state), bounded with a byte
+count (`uint32`, as `ridl_rt::contract::EncodedSizes` and the codegen model hold
+it), or unbounded with a cause (the codegen model's `FbUnboundedCause`):
 
     kind      payloads
     signal    1   the value
@@ -176,28 +193,45 @@ payload the kind has, and each row carries one number per core encoding:
     query     2   the request, the response
     fixed     1   the provisioned value (ADR-0016 decision 9's store field)
 
-    row       proto3 · FlatBuffers · repr(C)      max encoded size, bytes
+    row       proto3 · FlatBuffers · repr(C)      a state each: absent, or
+                                                  bounded (bytes), or
+                                                  unbounded (cause)
 
 The crossing kind decides which column an engine reads: a signal's last-value
 slot in a shared-memory store is sized from the in-memory column, the same
 signal on a bus from the network column. A new core encoding appends a column.
+The `repr(C)` column has no entry until E11.12 (driftsys/ridl#317).
 
-**Derivation.** One new derivation in the lowering, from typl bounds, in bytes.
-Every payload other than a stream is finite: variable-size collections require
-explicit bounds (typl §12, TYPL-201/202), `string` and `bytes` default to
-`[0..256]` (typl §4), and recursion is rejected because it makes the wire size
-unbounded (typl §7.3). A stream payload (`<T>`, ridl §12) is the one unbounded
-position: the stream itself has no bound (ridl §12.2), so its row carries the
-maximum encoded size of one element under the `stream` flag D-4 carries, and an
-engine sizes per element, not per stream. A `string [min..max]` bound counts
-Unicode scalar values and its byte capacity is four bytes per scalar value under
-UTF-8 (design note §3.11); this note adds one narrowing, recorded in §6: when a
-`match` constraint admits only scalar values whose UTF-8 encoding is narrower,
-the narrower bound applies. Each encoding's overhead — proto3 tags and varint
-widths at their maximum, FlatBuffers vtables, offsets and alignment padding,
-`repr(C)` layout — is part of the number. Nothing in the crates computes an
-encoded size today; design note §3.8's "widths derived" covers scalar widths
-only.
+**Derivation.** The descriptor defines no wire shape. It sizes a payload that is
+one named type through the existing projections: ADR-0019 decision 8 for
+FlatBuffers — `ridl_ir::projection::flatbuffers::max_size`, the one
+implementation of that bound (E11.7's design D-6, in
+`docs/archive/2026-09-20-flatbuffers-codec-design.md`; the as-built record is
+`docs/design/flatbuffers-codec.md`), which the Rust codec's `MAX_SIZE` is
+emitted from — and ADR-0017's projection of the same type for proto3, derived in
+the lowering from typl bounds. On the proto3 side only a struct and a union have
+a message of their own: ADR-0017 decision 1 inlines a named scalar and an enum
+set, decision 2 rejects a wrapper message, and an enum is a declared `enum`, so
+a payload of one of those three has an absent proto3 state until a record gives
+it a root form (plan re-baseline decision 5, to be confirmed by Sebastien before
+stage D5 starts plan Task 6). A request with zero or more than one parameter and
+an inline `T | E` reply have absent sizes until the frame specification and a
+codec define their encoding. A stream payload (`<T>`, ridl §12) has absent
+sizes; the story that builds the stream port and its codec (driftsys/ridl#336)
+adds the per-element bound and the flag. Every payload that is sized is finite:
+variable-size collections require explicit bounds (typl §12, TYPL-201/202),
+`string` and `bytes` default to `[0..256]` (typl §4), and recursion is rejected
+because it makes the wire size unbounded (typl §7.3). A `string [min..max]`
+bound counts Unicode scalar values and its byte capacity is four bytes per
+scalar value under UTF-8 (design note §3.11), in both columns and with no
+narrowing from a `match` constraint: the checker and the generated Rust code do
+not agree on what a pattern matches until the design of
+[`2026-10-01-portable-match-patterns-design.md`](2026-10-01-portable-match-patterns-design.md)
+(approach A) is implemented, so an ASCII-only verdict is not safe for a size
+bound; driftsys/ridl#665 records the narrowing, to be built once in one function
+both bounds call. Each encoding's overhead — proto3 tags and varint widths at
+their maximum, FlatBuffers vtables, offsets and alignment padding, `repr(C)`
+layout — is part of a bound.
 
 **Refutation.** For every core encoding, a conformance test encodes the largest
 legal value of every payload in a fixture package and asserts the encoded length
@@ -208,7 +242,11 @@ is at most the descriptor's number. The test lands with each codec story: E11.8
 **Rejected.** (a) One number per payload, the largest across encodings: simpler,
 and it oversizes every in-memory slot to the proto3 bound. (b) Per type rather
 than per interaction: the descriptor is looked up by (interface, member), and
-two interactions sharing a type cost one repeated row.
+two interactions sharing a type cost one repeated row. (c) An induced
+single-field message or table for a payload that is not a struct or a union, an
+induced request message over the parameters, and an `ok`/`err` union for a
+fallible reply (the plan of 2026-09-13): the descriptor would define a wire
+shape no codec implements; removed by driver §4 answer 6.
 
 ### D-7 Not in version 1
 
@@ -237,9 +275,10 @@ version; an engine's policy on a provisional interface number (D-4) is its own.
 ### D-9 Emission and inspection
 
 - **Catalog descriptor**: `ridlc build --emit catalog`, one file per package,
-  beside the IR emits of ADR-0014 decision 4. It depends on the lock file of
-  rsdl note D-7 for frozen numbers; before the lock exists, every number is
-  provisional and flagged so.
+  beside the IR emits of ADR-0014 decision 4. The numbers are the IR's:
+  `ridl-sem` folds the lock file of rsdl note D-7 into `Interface.number` and
+  `Interface.provisional` (Epic 15), and a provisional number is written and
+  flagged (driver §4 answer 3).
 - **System descriptor**: emitted by the rsdl lowering, one file per
   `deployment`. It is Epic 6's exit artifact: the roadmap's "the IR carries the
   region map, the link set, the routing table, the permission list, the surface
@@ -319,8 +358,13 @@ version 1 (D-7).
   the descriptors'.
 - **ADR-0010**: `ridl describe` and the `catalog` emit value earn their rows.
 - **Design note** §3.13: the content list becomes the system descriptor's; §3.8
-  gains the second consumer class beside codegen backends; §3.11 gains the
-  `match` narrowing of a string's byte capacity (D-6).
+  gains the second consumer class beside codegen backends; §3.11 is unchanged —
+  four bytes per scalar value, no `match` narrowing (driver §4 answer 7; the
+  narrowing is driftsys/ridl#665's).
+- **ADR-0014 decision 9** (as amended 2026-09-22): the catalog hash is taken
+  over the protobuf binary of the reduced package, not over the canonical JSON;
+  the decision record for that, with the determinism rule and the golden-hash
+  test, is written by plan Task 4 step 0 (driver §4 answer 4).
 - **Roadmap**: Epic 6's exit criteria name the system descriptor; a story for
   the catalog descriptor and the size derivation lands with the ridl
   finalization (Epic 14), after the lock file; E11.0's interaction descriptors
@@ -331,10 +375,20 @@ version 1 (D-7).
 
 ## 7. Open
 
-- Where the schemas and the generated accessors live: a `ridl-descriptor` crate
-  beside `ridl-ir`, or inside `ridl-ir`.
-- File extensions and the two `file_identifier` values; the extension follows
-  the convention ADR-0014 decision 4 records for artifact extensions.
+Settled 2026-10-03 (driver §4 answers 1 and 2):
+
+- Schemas and accessors: `crates/ridl-descriptor`, beside `ridl-ir`, so only the
+  crates that read or write a catalog take a FlatBuffers dependency; the
+  accessors are generated by `cargo xtask descriptor-codegen` (planus) and
+  committed. It uses `ridl-ir`'s IR types and its FlatBuffers bound, and copies
+  neither. It is published to crates.io after `ridl-ir` and before `ridlc`
+  (answer 9).
+- File identifier `RDLC`; the artifact is `<base>.catalog.binfb` and the emit
+  value is `catalog` (ADR-0014 decision 4's convention). The system descriptor's
+  identifier and extension are still open.
+
+Still open:
+
 - Whether the first bus configurator needs QoS terms the IR does not yet carry;
   decide against the first consumer, not in advance.
 - Whether a runtime embeds the system descriptor at build time or loads it at

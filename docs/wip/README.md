@@ -120,10 +120,12 @@ design note, from the archive.
   toolchain. **Not ratified.**
 - **2026-09-13-catalog-descriptor-plan.md** — the twelve-task plan for the
   catalog half of that design: the `ridl-descriptor` crate with the schema and
-  its planus-generated accessors, the verifier, provisional numbering, the
-  catalog hash, the proto3 and FlatBuffers size bounds, the lowering,
-  `ridlc build --emit catalog` and `ridl describe`. The system descriptor waits
-  for the rsdl rewrite. **Not started.**
+  its planus-generated accessors, the verifier, the interface numbers copied
+  from the IR, the catalog hash, the proto3 and FlatBuffers size states, the
+  lowering, `ridlc build --emit catalog` and `ridl describe`. The system
+  descriptor waits for the rsdl lowering's descriptor story. **Re-baselined
+  2026-10-03 by lane E16's stage D1 (its first section lists every change); in
+  execution from stage D2.**
 - **2026-09-13-step1-lanes-plan.md** and its four driver prompts,
   **2026-09-13-lane-a-ridl-rt-driver.md**, **2026-09-13-lane-b-rsdl-driver.md**,
   **2026-09-13-lane-l-lock-driver.md** and **2026-09-13-lane-c-typl-driver.md**
