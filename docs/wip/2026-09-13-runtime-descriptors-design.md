@@ -205,21 +205,27 @@ The `repr(C)` column has no entry until E11.12 (driftsys/ridl#317).
 **Derivation.** The descriptor defines no wire shape. It sizes a payload that is
 one named type through the existing projections: ADR-0019 decision 8 for
 FlatBuffers — `ridl_ir::projection::flatbuffers::max_size`, the one
-implementation of that bound (E11.7's design D-6,
+implementation of that bound (E11.7's design D-6, in
+`docs/archive/2026-09-20-flatbuffers-codec-design.md`; the as-built record is
 `docs/design/flatbuffers-codec.md`), which the Rust codec's `MAX_SIZE` is
 emitted from — and ADR-0017's projection of the same type for proto3, derived in
-the lowering from typl bounds. A request with zero or more than one parameter
-and an inline `T | E` reply have absent sizes until the frame specification and
-a codec define their encoding. A stream payload (`<T>`, ridl §12) has absent
-sizes; the story that builds the stream port and its codec (driftsys/ridl#336)
-adds the per-element bound and the flag. Every payload that is sized is finite:
-variable-size collections require explicit bounds (typl §12, TYPL-201/202),
-`string` and `bytes` default to `[0..256]` (typl §4), and recursion is rejected
-because it makes the wire size unbounded (typl §7.3). A `string [min..max]`
-bound counts Unicode scalar values and its byte capacity is four bytes per
-scalar value under UTF-8 (design note §3.11), in both columns and with no
-narrowing from a `match` constraint: the checker and the generated Rust code do
-not agree on what a pattern matches until the design of
+the lowering from typl bounds. On the proto3 side only a struct and a union have
+a message of their own: ADR-0017 decision 1 inlines a named scalar and an enum
+set, decision 2 rejects a wrapper message, and an enum is a declared `enum`, so
+a payload of one of those three has an absent proto3 state until a record gives
+it a root form (plan re-baseline decision 5, to be confirmed by Sebastien before
+stage D5). A request with zero or more than one parameter and an inline `T | E`
+reply have absent sizes until the frame specification and a codec define their
+encoding. A stream payload (`<T>`, ridl §12) has absent sizes; the story that
+builds the stream port and its codec (driftsys/ridl#336) adds the per-element
+bound and the flag. Every payload that is sized is finite: variable-size
+collections require explicit bounds (typl §12, TYPL-201/202), `string` and
+`bytes` default to `[0..256]` (typl §4), and recursion is rejected because it
+makes the wire size unbounded (typl §7.3). A `string [min..max]` bound counts
+Unicode scalar values and its byte capacity is four bytes per scalar value under
+UTF-8 (design note §3.11), in both columns and with no narrowing from a `match`
+constraint: the checker and the generated Rust code do not agree on what a
+pattern matches until the design of
 [`2026-10-01-portable-match-patterns-design.md`](2026-10-01-portable-match-patterns-design.md)
 (approach A) is implemented, so an ASCII-only verdict is not safe for a size
 bound; driftsys/ridl#665 records the narrowing, to be built once in one function

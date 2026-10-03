@@ -40,7 +40,8 @@ it.
   inline `T | E` reply and a stream payload have absent sizes.
 - **No `match` narrowing (Task 5; §4 answer 7; #665).** `ascii_only` and its
   tests are removed; a string counts 4 bytes per scalar value.
-- **Task 7 calls the projection's bound (E11.7 design D-6,
+- **Task 7 calls the projection's bound (E11.7 design D-6, in
+  `docs/archive/2026-09-20-flatbuffers-codec-design.md`; the as-built record is
   `docs/design/flatbuffers-codec.md`).** The hand-rolled FlatBuffers charges
   written on 2026-09-13 are deleted; the stage K8 note of 2026-09-21 that said
   not to implement them is folded into the task's text. One ridl-ir change comes
@@ -96,14 +97,22 @@ in D1's final report:
 4. A request with zero parameters has absent sizes, like one with more than one:
    neither is one named type.
 5. A proto3 state is bounded only for a struct or a union payload. ADR-0017
-   decision 1 inlines a named scalar and rejects a wrapper message, so a named
-   scalar, an enum or an enum set has no proto3 root form, and its proto3 state
-   is absent until a record defines one.
+   decision 1 inlines a named scalar and an enum set into their field, its
+   decision 2 rejects a wrapper message per named scalar, and an enum is a
+   declared `enum`, not a message; so none of the three has a proto3 root form,
+   and its proto3 state is absent until a record defines one. This narrows
+   driver §3 D5's "bounded or unbounded for a payload that is one named type" on
+   the proto3 side; the roadmap, the design and #380 say so. D5 does not start
+   Task 6 before Sebastien confirms this reading or names a root form (an
+   induced single-field message would be a wire shape the descriptor defines,
+   which §4 answer 6 forbids).
 6. The FlatBuffers cause comes from `ridl_ir::codegen::unbounded::attribute`,
    made public as `ridl_ir::codegen::fb_unbounded`, not from lowering the whole
    codegen model.
 7. `lower` returns a `Result`; `ridlc` reports a zero interface number as an
    internal error with exit 2.
+8. The package name of `crates/ridl` is `ridl-cli` (AGENTS.md), so every cargo
+   command in Tasks 9 and 11 says `-p ridl-cli`.
 
 **Goal:** Emit the catalog descriptor of
 `2026-09-13-runtime-descriptors-design.md` — a FlatBuffers file per package that
@@ -641,7 +650,7 @@ pub mod generated;
 pub use generated::ridl::descriptor::{
     Catalog, CatalogRef, Encoding, Interface, InterfaceRef, Kind, MaxSize, MaxSizeRef,
     Member, MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
-    Timing, TimingMode, TimingRef,
+    SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
 
 /// The schema version this toolchain writes and accepts.
@@ -1470,12 +1479,37 @@ use ridl_descriptor::hash::catalog_hash;
 /// Pinned on the first run; see the decision record for the rule on moving it.
 const CORPUS_HASH: &str = "<64 hex digits, taken from the first run>";
 
-#[test]
-fn the_corpus_hash_is_pinned() {
+/// The corpus snapshot was published before Epic 15, so its shapes carry no
+/// number (`"number"` does not occur in the file). The pin must cover the
+/// numbers (driver §4 answers 3 and 4), so the test numbers the shapes in
+/// `Package::shapes()` order, 1.., all provisional, before hashing.
+fn numbered_corpus() -> ridl_ir::v2::Package {
     let snapshot = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json");
     let text = std::fs::read_to_string(&snapshot).expect("the corpus snapshot is checked in");
-    let package = ridl_ir::v2::from_json(&text).expect("the snapshot is canonical IR JSON");
+    let mut package = ridl_ir::v2::from_json(&text).expect("the snapshot is canonical IR JSON");
+    let mut next = 1u32;
+    for interface in &mut package.interfaces {
+        interface.number = next;
+        interface.provisional = true;
+        next += 1;
+    }
+    for service in &mut package.services {
+        for shape in &mut service.shapes {
+            if let Some(ridl_ir::v2::service_shape::Kind::Inline(interface)) = &mut shape.kind {
+                interface.number = next;
+                interface.provisional = true;
+                next += 1;
+            }
+        }
+    }
+    package
+}
+
+#[test]
+fn the_corpus_hash_is_pinned() {
+    let package = numbered_corpus();
+    assert!(package.shapes().all(|shape| shape.interface.number != 0));
     let hash = catalog_hash(&package, &[]);
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(hex, CORPUS_HASH);
@@ -1487,9 +1521,7 @@ fn the_corpus_hash_is_pinned() {
 /// a reader looks for it.
 #[test]
 fn the_hash_is_the_same_whatever_a_build_emits() {
-    let snapshot = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json");
-    let package = ridl_ir::v2::from_json(&std::fs::read_to_string(&snapshot).unwrap()).unwrap();
+    let package = numbered_corpus();
     assert_eq!(catalog_hash(&package, &[]), catalog_hash(&package, &[]));
 }
 ```
@@ -2146,12 +2178,13 @@ enum set as its width's scalar, an array as `repeated` (packed for scalars), a
 map as `map<K, V>`, a tuple as an induced message, a nested array or map
 refused. A payload is sized only when it is a struct or a union: those are the
 two shapes ADR-0017 projects as a message. ADR-0017 decision 1 inlines a named
-scalar and rejects a wrapper message per named scalar, so a named scalar, an
-enum or an enum set as a payload has no proto3 root form, and its proto3 state
-is absent until a record defines one (re-baseline decision 5). proto3 has no
-unbounded state: typl bounds every collection, so a message is bounded or, when
-the projection refuses a member, absent. A bound above `u32::MAX` is absent, as
-in `MAX_ENCODABLE`.
+scalar and an enum set into their field, its decision 2 rejects a wrapper
+message per named scalar, and an enum is a declared `enum`, not a message; so
+none of the three has a proto3 root form as a payload, and its proto3 state is
+absent until a record defines one (re-baseline decision 5, which D5 confirms
+with Sebastien before this task starts). proto3 has no unbounded state: typl
+bounds every collection, so a message is bounded or, when the projection refuses
+a member, absent. A bound above `u32::MAX` is absent, as in `MAX_ENCODABLE`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2183,8 +2216,8 @@ mod tests {
 
     #[test]
     fn a_named_scalar_has_no_proto3_root_form() {
-        // ADR-0017 decision 1 inlines a named scalar and rejects a wrapper
-        // message, so a payload of one is absent (driver §4 answer 6).
+        // ADR-0017 decision 1 inlines a named scalar and decision 2 rejects a
+        // wrapper message, so a payload of one is absent (driver §4 answer 6).
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
@@ -2386,8 +2419,9 @@ Replace the body of `crates/ridl-descriptor/src/size/proto3.rs` above the tests:
 ```rust
 //! The proto3 state of a named-type payload under ADR-0017's projection:
 //! bounded for a struct (a message) and a union (a message with a `oneof`);
-//! absent for a named scalar, an enum and an enum set, which ADR-0017
-//! decision 1 inlines into their field and gives no message of their own.
+//! absent for a named scalar and an enum set, which ADR-0017 decision 1
+//! inlines into their field (decision 2 rejects a wrapper message), and for
+//! an enum, a declared `enum` with no message of its own.
 
 use ridl_ir::v2::{struct_member, ArrayType, FieldType, MapType, StructDef, TupleType, UnionDef};
 
@@ -2413,8 +2447,8 @@ fn delimited(number: u32, payload: u64) -> u64 {
 }
 
 /// The proto3 state of the named type `type_name`: its message's bound for
-/// a struct or a union; absent for everything else (ADR-0017 decision 1 has
-/// no root form for a named scalar, an enum or an enum set), for a name that
+/// a struct or a union; absent for everything else (ADR-0017 decisions 1 and
+/// 2 give a named scalar, an enum or an enum set no root form), for a name that
 /// does not resolve, for a member the projection refuses, and for a bound
 /// above `u32::MAX`.
 pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
@@ -2523,8 +2557,9 @@ git commit -m "feat(ridl-descriptor): derive the proto3 state of a named-type pa
 ---
 ### Task 7: The FlatBuffers state, through the projection's bound
 
-Re-baselined 2026-10-03. E11.7's design D-6 (`docs/design/flatbuffers-codec.md`;
-the archived reasoning is `docs/archive/2026-09-20-flatbuffers-codec-design.md`)
+Re-baselined 2026-10-03. E11.7's design D-6
+(`docs/archive/2026-09-20-flatbuffers-codec-design.md`; the as-built record,
+`docs/design/flatbuffers-codec.md`, carries the rule without the D-6 label)
 decided that the FlatBuffers bound has one implementation,
 `ridl_ir::projection::flatbuffers::max_size`
 (`crates/ridl-ir/src/projection/flatbuffers.rs:416`, landed by stage K2,
@@ -2541,7 +2576,7 @@ them, are gone; the projection's source and the codec record hold the charges.
   `crates/ridl-ir/src/codegen/unbounded.rs` (expose the cause)
 - Modify: `crates/ridl-descriptor/src/size/flatbuffers.rs`
 - Modify: `crates/ridl-descriptor/Cargo.toml` (dev-dependency
-  `ridl-backend-rust`, for the agreement test)
+  `ridl-backend-rust`, path only, for the agreement test)
 - Test: `crates/ridl-descriptor/tests/codec_agreement.rs`
 
 **Interfaces:**
@@ -2661,11 +2696,21 @@ through `ridl_ir::v2::from_json`), run the Rust backend over it in process
 (read `crates/ridl-backend-rust/src/lib.rs` for the entry point `ridlc` calls,
 and the codec emitter for the exact spelling of the `MAX_SIZE` constant it
 writes per type), extract every `MAX_SIZE` value from the generated source
-with the type it belongs to, and assert `state(name, &ctx)` is
-`Some(SizeState::Bounded(value))` for each. `ridl-backend-rust` becomes a
-dev-dependency of `ridl-descriptor` for this test; the normal dependency
-graph does not change, which is what `xtask/tests/oracle_boundary.rs` still
-checks.
+with the type it belongs to, and assert
+`size_state(name, &ctx, Encoding::FlatBuffers)` (the public entry; `state` is
+`pub(crate)`) is `Some(SizeState::Bounded(value))` for each.
+`ridl-backend-rust` becomes a dev-dependency of `ridl-descriptor` for this
+test, **as a plain path with no version**:
+`ridl-backend-rust = { path = "../ridl-backend-rust" }`, not
+`.workspace = true`. Cargo strips a dev-dependency on a workspace member at
+packaging time only when it carries no version, and `ridl-backend-rust`
+publishes after `ridl-descriptor`; the reasoning is written out in
+`crates/ridl-backend-rust/Cargo.toml` above its own `ridlc` dev-dependency,
+and the same rule holds here. Run
+`cargo publish -p ridl-descriptor --dry-run --locked` again at the end of this
+task, because Task 1's dry run ran before this dependency existed. The normal
+dependency graph does not change, which is what
+`xtask/tests/oracle_boundary.rs` still checks.
 
 - [ ] **Step 3: Run the tests to see them fail**
 
@@ -3477,14 +3522,14 @@ fn build_writes_the_same_descriptor_whatever_else_it_emits() {
 ```
 
 Before writing the test, confirm the flag spellings with
-`cargo run -p ridl -- build --help` — the `Build` variant's `out_dir` field is
-`--out-dir` under clap's derive unless an `#[arg(long = ...)]` renames it; use
-whatever `--help` prints.
+`cargo run -p ridl-cli -- build --help` — the `Build` variant's `out_dir` field
+is `--out-dir` under clap's derive unless an `#[arg(long = ...)]` renames it;
+use whatever `--help` prints.
 
 - [ ] **Step 2: Run the test to see it fail**
 
-Run: `cargo test -p ridl --locked --test describe_cli` Expected: all three tests
-FAIL: `catalog` is not a valid `--emit` value (exit 2).
+Run: `cargo test -p ridl-cli --locked --test describe_cli` Expected: all three
+tests FAIL: `catalog` is not a valid `--emit` value (exit 2).
 
 - [ ] **Step 3: Implement the emit**
 
@@ -3528,7 +3573,7 @@ where the arm names an IR dump.
 - [ ] **Step 4: Run the tests**
 
 Run:
-`cargo test -p ridl --locked --test describe_cli && cargo test -p ridlc --locked`
+`cargo test -p ridl-cli --locked --test describe_cli && cargo test -p ridlc --locked`
 Expected: PASS; the ridlc CLI and golden suites still pass.
 
 - [ ] **Step 5: Commit**
@@ -3547,7 +3592,7 @@ git commit -m "feat(ridlc): emit the catalog descriptor with --emit catalog"
 
 **Interfaces:**
 - Consumes: `CatalogRef` and the other views (Task 1), `verify` (Task 2), `lower` (Task 8) in the test.
-- Produces: `pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>` — the same view `flatc --json --strict-json` gives: schema field names as keys, enums by member name, `hash` as an array of bytes, an absent `timing` as `null`, and every field of a `MaxSize` row, defaults included (`bytes` is 0 and `cause` is `"Unspecified"` where they do not apply).
+- Produces: `pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>` — the view `flatc --json --strict-json --defaults-json` gives (`--defaults-json`, because `flatc` leaves out a scalar at its default otherwise): schema field names as keys, enums by member name, `hash` as an array of bytes, an absent `timing` as `null`, and every field of a `MaxSize` row, defaults included (`bytes` is 0 and `cause` is `"Unspecified"` where they do not apply).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3650,7 +3695,8 @@ Module body above the tests:
 ```rust
 //! `ridl describe`'s view of a descriptor (spec D-9): strict JSON built by
 //! walking the checked accessors. There is no JSON emit; this is a rendering
-//! of the binary, and `flatc --json --strict-json` gives the same view.
+//! of the binary, and `flatc --json --strict-json --defaults-json` gives the
+//! same view.
 
 use serde_json::{json, Value};
 
@@ -3866,8 +3912,8 @@ workspace entry exists; `crates/ridlc` already uses it).
 
 - [ ] **Step 2: Run the tests to see them fail**
 
-Run: `cargo test -p ridl --locked --test describe_cli` Expected: the four new
-tests FAIL — `describe` is an unknown subcommand (clap exits 2 with a usage
+Run: `cargo test -p ridl-cli --locked --test describe_cli` Expected: the four
+new tests FAIL — `describe` is an unknown subcommand (clap exits 2 with a usage
 message, so the two "exit 2" tests fail on the stderr text).
 
 - [ ] **Step 3: Implement the subcommand**
@@ -3919,8 +3965,8 @@ fn run_describe(path: &Path) -> ExitCode {
 
 - [ ] **Step 4: Run the tests, then accept the snapshot**
 
-Run: `cargo test -p ridl --locked --test describe_cli` Expected: the snapshot
-test fails once with a new snapshot under
+Run: `cargo test -p ridl-cli --locked --test describe_cli` Expected: the
+snapshot test fails once with a new snapshot under
 `crates/ridl/tests/snapshots/describe_cli__corpus_catalog.snap`. Read it: two
 interfaces — `VehicleStatus`, then the inline shape of the service
 `corpus.baseline.hvac` — each with the number `ridl-sem` gave it (the corpus has
@@ -3937,9 +3983,11 @@ Recounted on 2026-10-03 against `docs/book/cli-reference.md` and
 `docs/decisions/ADR-0010-cli-conventions.md` as they stand on `main`, with every
 item of driftsys/ridl#326 folded in. `ridl` has nine subcommands today (`check`,
 `baseline`, `build`, `test`, `fmt`, `diff`, `lock`, `lsp`, `mcp`); `describe` is
-the tenth, and the ninth that takes a path (`lsp` and `mcp` take none). `--emit`
-has eight values; `catalog` is the ninth. Re-run every count below against the
-file at the time you edit it: `just fmt`, `just check`, `just link-check` and
+the tenth. The CLI reference counts the subcommands that take a path across both
+binaries: seven of `ridl`'s (`lsp` and `mcp` take none) plus `ridlc check` and
+`ridlc build` make nine today, so `describe` is the tenth of those. `--emit` has
+eight values; `catalog` is the ninth. Re-run every count below against the file
+at the time you edit it: `just fmt`, `just check`, `just link-check` and
 `just book-check` count nothing and re-run no `--help`, so a stale number passes
 every gate.
 
@@ -4032,8 +4080,8 @@ git commit -m "feat(ridl): add ridl describe for the catalog descriptor"
 - Modify: `AGENTS.md` (the crate count and list in the first section)
 - Modify: `README.md` (the crate list, if it has one)
 - Modify: `docs/technotes/walking-skeleton-architecture.md` (both places that
-  describe `cargo xtask`: the summary near lines 35-37 and the `xtask` entry
-  near line 188; `CONTRIBUTING.md` has no generated-code section;
+  describe `cargo xtask`: the workspace summary near lines 25-28 and 44, and the
+  `xtask` entry near line 261; `CONTRIBUTING.md` has no generated-code section;
   `docs/decisions/ADR-0007-e1-execution.md:29` also describes
   `cargo xtask codegen`, and stays as a dated record)
 
@@ -4056,15 +4104,15 @@ one-line purpose "the catalog descriptor an engine reads".
 - [ ] **Step 2: Document the generator**
 
 In `docs/technotes/walking-skeleton-architecture.md`, the `xtask` entry near
-line 188 ("`cargo xtask codegen`, the typed-AST generator over `family.ungram`")
+line 261 ("`cargo xtask codegen`, the typed-AST generator over `family.ungram`")
 gains the second generator and its rule, as one paragraph after it:
 "`cargo xtask descriptor-codegen` regenerates
 `crates/ridl-descriptor/src/generated.rs` from
 `crates/ridl-descriptor/schema/catalog.fbs` with planus; run it after every
 schema edit. The xtask test `committed_generated_accessors_match_the_schema`
 fails while the committed file is stale. The schema is append-only: add fields
-at the end of a table, never remove or reorder one." The summary of `xtask` near
-lines 35-37 names the second task in one clause.
+at the end of a table, never remove or reorder one." The workspace summary near
+lines 25-28 and 44 names the second task in one clause.
 
 - [ ] **Step 3: Run the full gate**
 
