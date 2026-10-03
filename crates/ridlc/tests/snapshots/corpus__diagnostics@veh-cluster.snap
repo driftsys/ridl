@@ -8,9 +8,13 @@ warning[TYPL-007]: unused import `MAX_SPEED`
   │
 9 │ import veh.common.MAX_SPEED
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = lint: `unused-import` (set its level in `[lints]` in ridl.toml)
 
 warning[RIDL-100]: event without a timing annotation — the default `@[200ms..2s]` is applied: it publishes no slower than the rate floor and a subscriber may treat a value older than the staleness bound as stale. Write the bounds this event really promises (ridl §9.1)
     ┌─ tests/corpus/veh-cluster/cluster/services.ridl:116:9
     │
 116 │   event filterClogged : FilterState
     │         ^^^^^^^^^^^^^
+    │
+    = lint: `missing-timing` (set its level in `[lints]` in ridl.toml)

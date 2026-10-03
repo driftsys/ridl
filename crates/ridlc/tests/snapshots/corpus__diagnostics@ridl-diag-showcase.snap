@@ -125,6 +125,8 @@ warning[RIDL-305]: `ensure` references no `result` — a postcondition that obse
    │
 25 │     ensure limit >= 0
    │            ^^^^^^^^^^
+   │
+   = lint: `ensure-without-result` (set its level in `[lints]` in ridl.toml)
 
 error[RIDL-306]: `result` is a query result of type `diag.ridl.Sample`, which is outside the guaranteed subset — a contract expression types boolean, numeric, duration, enum, and tuple values (expr-core §5.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/contracts.ridl:31:12
@@ -149,6 +151,8 @@ warning[RIDL-307]: `error` enum value `INVALID_VALUE` is a reserved Stratum-2 co
    │
 11 │   INVALID_VALUE = 0
    │   ^^^^^^^^^^^^^
+   │
+   = lint: `contract-error-name-in-enum` (set its level in `[lints]` in ridl.toml)
 
 error[RIDL-303]: query returns a bare error type `DiagError` — a query with no success path is not a query
    ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:18:34
@@ -161,12 +165,16 @@ warning[RIDL-304]: command parameter `fault` has error type `DiagError` — fail
    │
 21 │   command absorb(fault: DiagError) @[..50ms]
    │                         ^^^^^^^^^
+   │
+   = lint: `error-typed-parameter` (set its level in `[lints]` in ridl.toml)
 
 warning[RIDL-308]: query returns the named result union `NamedResult` — in return position the inline spelling is canonical: write `Sample | DiagError` (general form §6.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:24:30
    │
 24 │   query paged(limit: Level): NamedResult @[..50ms]
    │                              ^^^^^^^^^^^
+   │
+   = lint: `named-result-union-in-query` (set its level in `[lints]` in ridl.toml)
 
 error[RIDL-401]: `legacyTemp` is retired: this body reserves the name, and a retired name keeps its wire identity for ever, so a consumer still holding the old contract would read this interaction as the retired one. Give it a different name (ridl §11)
    ┌─ tests/corpus/ridl-diag-showcase/main/evolution.ridl:13:10
@@ -257,6 +265,8 @@ warning[RIDL-308]: query returns the named result union `NamedResult` — in ret
    │
 30 │   query paged(limit: Level): NamedResult @[..50ms]
    │                              ^^^^^^^^^^^
+   │
+   = lint: `named-result-union-in-query` (set its level in `[lints]` in ridl.toml)
 
 error[FORM-102]: signal payload must be a named type
    ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:20:23
@@ -365,6 +375,8 @@ note[TYPL-115]: type `LookaheadCode` has no derivable init value and no declared
   │
 9 │ type LookaheadCode : string [1..8 match /^(?=A)[A-Z]+$/]
   │      ^^^^^^^^^^^^^
+  │
+  = lint: `no-init-value` (set its level in `[lints]` in ridl.toml)
 
 error[TYPL-220]: the Rust `regex` crate cannot compile this pattern: look-around, including look-ahead and look-behind, is not supported — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)
   ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:9:41
@@ -429,6 +441,8 @@ warning[RIDL-100]: signal without a timing annotation — the default `@[100ms..
    │
 11 │   signal untimed : Speed
    │          ^^^^^^^
+   │
+   = lint: `missing-timing` (set its level in `[lints]` in ridl.toml)
 
 error[RIDL-101]: the rate floor `500ms` is longer than the staleness bound `100ms` — in `@[min..max]` the first bound is how often the value is published and the second how old it may get, so the first must not exceed the second (ridl §9.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:14:29
@@ -447,6 +461,8 @@ warning[RIDL-108]: the rate floor and the staleness bound are both `250ms` — a
    │
 20 │   signal degenerate : Speed @[250ms..250ms]
    │                               ^^^^^^^^^^^^
+   │
+   = lint: `degenerate-timing-range` (set its level in `[lints]` in ridl.toml)
 
 error[RIDL-103]: the strict period `@100ms` is not valid on an event — a strict period is an isochronous publication rate, and an event reports occurrences that arrive when they arrive. Write a range `@[min..max]` instead (ridl §9.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:24:23
@@ -471,48 +487,64 @@ warning[RIDL-112]: query without a declared response bound — no default is app
    │
 36 │   query unbounded(): Level
    │         ^^^^^^^^^
+   │
+   = lint: `missing-response-bound` (set its level in `[lints]` in ridl.toml)
 
 warning[RIDL-112]: command without a declared response bound — no default is applied, because a response bound is a provider obligation callers size their timeouts against, and inventing one would manufacture a promise nobody made. Write `@[..max]` to bound acceptance — the §6.1 acknowledgment, not execution (ridl §9)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:40:11
    │
 40 │   command throttledOnly(level: Level) @[20ms..]
    │           ^^^^^^^^^^^^^
+   │
+   = lint: `missing-response-bound` (set its level in `[lints]` in ridl.toml)
 
 note[TYPL-115]: type `Serial` has no derivable init value and no declared `= value`
    ┌─ tests/corpus/ridl-diag-showcase/main/vocabulary.typl:14:6
    │
 14 │ type Serial : string [4..8 match /^[A-Z]+$/]
    │      ^^^^^^
+   │
+   = lint: `no-init-value` (set its level in `[lints]` in ridl.toml)
 
 warning[RIDL-404]: query `setLevel` is named like a mutation (`set…`) — queries should be read-only or idempotent, so if it mutates state it belongs to `command` (ridl §7.2). If the name is a domain noun rather than a verb (`setPoint`, `resetReason`), ignore this.
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:11:9
    │
 11 │   query setLevel(level: Level): Level @[..50ms]
    │         ^^^^^^^^
+   │
+   = lint: `query-named-like-mutation` (set its level in `[lints]` in ridl.toml)
 
 note[RIDL-406]: signal payload `EnvelopeEcho` declares `frameCounter`, which the envelope already carries — every publication is delivered with a timestamp and a sequence number, so the payload need not re-declare them (ridl §3.1). Domain metadata distinct from transport metadata is legitimate: keep the field if it records when the fact occurred rather than when it was published, or if it counts the fact itself rather than the publication carrying it.
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:15:17
    │
 15 │   signal echo : EnvelopeEcho @[1s..10s]
    │                 ^^^^^^^^^^^^
+   │
+   = lint: `redeclared-envelope-metadata` (set its level in `[lints]` in ridl.toml)
 
 note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:18:32
    │
 18 │   query readOne(limit: Level): Sample | SharedFault @[..50ms]
    │                                ^^^^^^^^^^^^^^^^^^^^
+   │
+   = lint: `shared-error-type` (set its level in `[lints]` in ridl.toml)
 
 note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:23:32
    │
 23 │   query readTwo(limit: Level): Sample | SharedFault @[..50ms]
    │                                ^^^^^^^^^^^^^^^^^^^^
+   │
+   = lint: `shared-error-type` (set its level in `[lints]` in ridl.toml)
 
 note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:28:34
    │
 28 │   query readThree(limit: Level): Sample | SharedFault @[..50ms]
    │                                  ^^^^^^^^^^^^^^^^^^^^
+   │
+   = lint: `shared-error-type` (set its level in `[lints]` in ridl.toml)
 
 error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock tests/corpus/ridl-diag-showcase/main --rename Legacy=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock tests/corpus/ridl-diag-showcase/main --retire Legacy` when the interface is gone
   ┌─ tests/corpus/ridl-diag-showcase/main/interfaces.lock:4:1

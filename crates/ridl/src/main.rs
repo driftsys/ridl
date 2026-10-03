@@ -50,6 +50,7 @@ mod property;
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
 use ridl_core::interface_lock::LockKey;
+use ridl_core::lint::{apply_lint_levels, lint_of};
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::plugin::PluginSpec;
@@ -575,7 +576,10 @@ const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [
 /// is skipped entirely when the compile produced any other error — a diff
 /// against IR that failed to check would report noise on top of the real
 /// problem — while RIDL-409 stops nothing in lowering (an entry with no
-/// declaration has nothing to lower), so the IR it runs over is whole.
+/// declaration has nothing to lower), so the IR it runs over is whole. A lint
+/// raised to `deny` by `[lints]` is an Error for the exit code but not a
+/// compile error, so it does not skip the desk check either (lint foundation
+/// spec §6.2): the run reports the denied lint and the RIDL-407 together.
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
@@ -585,7 +589,17 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         }
     };
 
-    if lock::only_lock_orphans(&run.diagnostics) {
+    // A lint at `deny` is an Error by level, not a compile error: the IR it
+    // runs over is whole, so it does not stop the desk check (lint foundation
+    // spec §6.2). The lint diagnostics are left out of the gate here, at the
+    // `ridl check` call site only; `ridl lock` keeps the unfiltered test.
+    let compile_diagnostics: Vec<Diagnostic> = run
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| lint_of(diagnostic.code).is_none())
+        .cloned()
+        .collect();
+    if lock::only_lock_orphans(&compile_diagnostics) {
         match baseline_location(path, baseline) {
             Ok(Some(location)) => {
                 if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
@@ -596,6 +610,11 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
             Err(code) => return code,
         }
     }
+
+    // RIDL-407 is raised here, after `ridlc` applied the levels, so they are
+    // applied once more over the whole run. The function is idempotent, so
+    // the diagnostics `ridlc` already levelled do not change.
+    apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
     finish_check(run, format)
 }

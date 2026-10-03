@@ -1,0 +1,43 @@
+---
+source: crates/ridl-core/src/diag.rs
+expression: json
+---
+[
+  {
+    "code": "RIDL-100",
+    "severity": "warning",
+    "lint": "missing-timing",
+    "message": "m",
+    "span": {
+      "path": "a.ridl",
+      "start": {
+        "line": 1,
+        "column": 1
+      },
+      "end": {
+        "line": 1,
+        "column": 8
+      }
+    },
+    "labels": [],
+    "fixes": []
+  },
+  {
+    "code": "TYPL-009",
+    "severity": "error",
+    "message": "m",
+    "span": {
+      "path": "a.ridl",
+      "start": {
+        "line": 1,
+        "column": 1
+      },
+      "end": {
+        "line": 1,
+        "column": 8
+      }
+    },
+    "labels": [],
+    "fixes": []
+  }
+]

@@ -1397,10 +1397,15 @@ pub struct JsonLabel {
 /// field is always present, never omitted. `labels` passes the diagnostic's
 /// secondary annotations through verbatim, in the order the diagnostic holds
 /// them; the array is always present, empty when the diagnostic carries none.
+/// `lint` is the lint name of the code (lint foundation spec §7.1), present
+/// when the code has one and omitted otherwise; `severity` is the effective
+/// one after the `[lints]` levels are applied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct JsonDiagnostic {
     pub code: String,
     pub severity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lint: Option<String>,
     pub message: String,
     pub span: JsonSpan,
     pub labels: Vec<JsonLabel>,
@@ -1433,6 +1438,9 @@ pub fn to_json(diagnostics: &[Diagnostic], sources: &SourceMap) -> Vec<JsonDiagn
         .map(|diagnostic| JsonDiagnostic {
             code: diagnostic.code.0.to_string(),
             severity: severity_name(diagnostic.severity).to_string(),
+            lint: crate::lint::lint_of(diagnostic.code)
+                .and_then(|entry| entry.lint)
+                .map(str::to_string),
             message: diagnostic.message.clone(),
             span: json_span(diagnostic.primary, sources),
             labels: diagnostic
@@ -2508,6 +2516,41 @@ mod json_tests {
         };
 
         insta::assert_json_snapshot!(to_json(&[diagnostic], &sources));
+    }
+
+    /// `lint` names the code's lint and is omitted, not `null`, for an Error
+    /// code (lint foundation spec §7.1). The struct assertions check the
+    /// value; the snapshot pins that the key is absent from the serialized
+    /// element, which no struct assertion can see.
+    #[test]
+    fn to_json_names_the_lint_and_omits_it_for_an_error_code() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.ridl", "package p\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(0), TextSize::from(7)),
+        };
+        let diagnostic = |code, severity| Diagnostic {
+            code,
+            severity,
+            message: "m".to_string(),
+            primary: span,
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let json = to_json(
+            &[
+                diagnostic(DiagCode::RIDL_100, Severity::Warning),
+                diagnostic(DiagCode::TYPL_009, Severity::Error),
+            ],
+            &sources,
+        );
+
+        assert_eq!(json[0].code, "RIDL-100");
+        assert_eq!(json[0].lint.as_deref(), Some("missing-timing"));
+        assert_eq!(json[1].code, "TYPL-009");
+        assert_eq!(json[1].lint, None);
+        insta::assert_json_snapshot!("to_json_lint_field", json);
     }
 
     #[test]
