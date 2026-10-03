@@ -35,7 +35,10 @@ locate each function by name. Run `./bootstrap` in the worktree.
 
 ## Deviations from the spec
 
-None. The pass-1 review of PR #671 updated the spec so that the two agree: the
+One. The spec put the SARIF projection beside `to_json` in
+`crates/ridl-core/src/diag.rs`; the spec now names its own module,
+`crates/ridl-core/src/diag/sarif.rs`, and the plan creates that file (Task 6).
+The pass-1 review of PR #671 updated the spec so that the two agree: the
 directory scopes (§6.1), where the levels are applied (D-8, §6.2), the desk
 check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
 (§4.1), the validated keys (§5.1), and the language server's two call sites
@@ -66,12 +69,14 @@ check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
   `"unicodeCodePoints"`; level mapping Error→`error`, Warning→`warning`,
   Info→`note`; no `helpUri`; no `fixes`.
 - Exit codes are unchanged (ADR-0010 decision 1): 1 when any Error is present,
-  including, in `ridl check` and `ridl build`, a lint at `deny`; 2 when the
-  check could not run. No other command applies levels (spec D-8), so a lint at
-  `deny` never changes the result of `ridl diff`, `ridl test`, `ridl baseline`,
-  `ridl lock`, MCP `ridl_diff` or the MCP lookup tools.
+  including, in `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, a
+  lint at `deny`; 2 when the check could not run. No other command applies
+  levels (spec D-8), so a lint at `deny` never changes the result of
+  `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock`, MCP `ridl_diff` or the
+  MCP lookup tools.
 - Commit scopes come from `.git-std.toml` (`ridl-core`, `ridlc`, `ridl`,
-  `ridl-lsp`, `docs`, `adr`). Prose in comments and docs is plain and literal.
+  `ridl-lsp`, `ridl-mcp`, `docs`, `adr`). Prose in comments and docs is plain
+  and literal.
 - Run `just verify` before the PR. It must pass.
 
 ## Review Focus
@@ -317,11 +322,18 @@ check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
   - `check_loaded`;
   - `run_check`;
   - `run_build` and `run_build_with`, whose `succeeded` gate is computed before
-    any write;
+    it writes any artifact. `materialize_and_lock` runs earlier and writes
+    `ridl.lock`, so a denied lint does not stop the lockfile write; the lockfile
+    is not an artifact;
   - the `Compiled` struct.
 - Modify: `crates/ridlc/src/main.rs` (`Command::Build`) and
   `crates/ridl/src/main.rs` (`Command::Build`, and `run_baseline`), the callers
   of `run_build_with` and `run_build`.
+- Modify: `crates/ridlc-gen-model/tests/parity.rs` and
+  `crates/ridlc-gen-rust/tests/parity.rs`, which call `run_build_with` directly
+  (lines 161 and 170 in each) and pass `ApplyLints::Yes`. No other file calls
+  `run_build_with`; every other test calls `run_build`, whose signature does not
+  change.
 - Create: `crates/ridlc/tests/lint_levels.rs`
 
 **Interfaces:**
@@ -375,15 +387,17 @@ check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
     return the scopes in `CliRun.lints`.
   - In `run_build_with`, when `ApplyLints::Yes`, apply them after the plugin
     resolution and before `succeeded` is computed, so before `write_crate_files`
-    and every other write.
+    and every other artifact write. `materialize_and_lock` has already written
+    `ridl.lock`; the lockfile is not an artifact.
   - In `front_end`, which only `check_source` and `compile` call, apply
     `LintScopes::default()` to the result of `check_loaded`.
   - Update every `CliRun { .. }` and `WorkspaceOutput { .. }` constructor, and
     the callers of `run_build_with`.
 
-- [ ] **Step 4: Run.** `cargo test -p ridlc --locked`. Expected: pass. If an
-      existing insta snapshot changes, check that the only change is a lint
-      severity going back to its catalogue default. Review it with
+- [ ] **Step 4: Run.** `cargo test -p ridlc --locked` and
+      `cargo test -p ridlc-gen-model -p ridlc-gen-rust --locked`. Expected:
+      pass. If an existing insta snapshot changes, check that the only change is
+      a lint severity going back to its catalogue default. Review it with
       `cargo insta review` and accept it only in that case.
 
 - [ ] **Step 5: Commit.**
@@ -456,11 +470,15 @@ check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
 
 - [ ] **Step 4: Run.** `cargo test -p ridl --locked`,
       `cargo test -p ridl-core --locked` and `cargo test -p ridlc --locked`.
-      Expected: pass. The rendered diagnostics of lint codes gain the note line,
-      in the `render` insta snapshots and in
-      `crates/ridlc/tests/snapshots/corpus__diagnostics@*.snap`. Review them
-      with `cargo insta review` and accept only that change. Update
-      `check_json.rs` if it pins the exact key set.
+      Expected: pass. The ridl-core `render` snapshot holds only Error codes
+      (FORM-101 and TYPL-302), so it does not change. The lint note appears in
+      the `crates/ridlc/tests/snapshots/corpus__diagnostics@*.snap` files that
+      hold Warning or Info codes: `diag-showcase`, `ridl-diag-showcase`,
+      `rsdl-appendix-a`, `rsdl-diag-showcase` and `veh-cluster`. Add a new
+      `render` unit test in `crates/ridl-core/src/diag/render.rs` with a lint
+      Warning that snapshots the note line. Review the snapshots with
+      `cargo insta review` and accept only that change. Update `check_json.rs`
+      if it pins the exact key set.
 
 - [ ] **Step 5: Commit.**
       `feat(ridl): show lint names in check output and apply levels after the desk check`
@@ -676,13 +694,14 @@ check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
     the date of the commit: "Amended <date> by the lint foundation design (spec
     0): §4 gains the `[lints]` table, which both manifest kinds accept, and its
     resolution order."
-  - **ADR-0010 decision 1** gets one sentence: "In `ridl check` and
-    `ridl build`, a lint raised to `deny` in `[lints]` is a diagnostic error, so
-    it exits 1; the other subcommands do not apply lint levels." Its `## Status`
-    has no amendment line either, so add this paragraph after the existing
-    status paragraph, in the same form: "Amended <date> by the lint foundation
-    design (spec 0): decision 1 states that a lint raised to `deny` exits 1 in
-    `ridl check` and `ridl build`."
+  - **ADR-0010 decision 1** gets one sentence: "In `ridl check`, `ridl build`,
+    `ridlc check` and `ridlc build`, a lint raised to `deny` in `[lints]` is a
+    diagnostic error, so it exits 1; the other subcommands of both binaries do
+    not apply lint levels." Its `## Status` has no amendment line either, so add
+    this paragraph after the existing status paragraph, in the same form:
+    "Amended <date> by the lint foundation design (spec 0): decision 1 states
+    that a lint raised to `deny` exits 1 in `ridl check`, `ridl build`,
+    `ridlc check` and `ridlc build`."
   - **`ridl-sem/src/lint.rs`:** replace "There is deliberately no lint driver
     and no configuration surface in E2" with a sentence pointing at
     `ridl_core::lint` and the `[lints]` table.

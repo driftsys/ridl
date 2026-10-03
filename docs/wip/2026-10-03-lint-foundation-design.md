@@ -68,12 +68,13 @@ language server and the MCP server.
   it is released, because a `ridl.toml` refers to it.
 - **D-8. Levels apply only where diagnostics are reported to a person or an
   agent.** These are `ridl check` (including the `--baseline` desk check),
-  `ridl build`, the language server, and the MCP tool `ridl_check`. Every other
-  command (`ridl diff`, `ridl test`, `ridl baseline`, `ridl lock`, the MCP tool
-  `ridl_diff`, and the MCP lookup tools) compiles with the severities the emit
-  sites chose, so a lint at `deny` never makes one of them fail or exit 2. A
-  `[lints]` table is a reporting setting; it does not change whether a workspace
-  compiles.
+  `ridl build`, `ridlc check` and `ridlc build` (they go through `run_check` and
+  `run_build_with`), the language server, and the MCP tool `ridl_check`. Every
+  other command (`ridl diff`, `ridl test`, `ridl baseline`, `ridl lock`, the MCP
+  tool `ridl_diff`, and the MCP lookup tools) compiles with the severities the
+  emit sites chose, so a lint at `deny` never makes one of them fail or exit 2.
+  A `[lints]` table is a reporting setting; it does not change whether a
+  workspace compiles.
 - **D-9. Entering at a workspace member loads the member alone.**
   `ridl check <member>`, `ridl check` on a file inside a member, MCP path mode
   on a member, and an editor opened on a member load the member as a standalone
@@ -377,9 +378,9 @@ commands that do not apply levels (D-8), such as `ridl test`.
 ### 7.3 SARIF
 
 `ridl check --format sarif` writes one SARIF 2.1.0 log to stdout. `CheckFormat`
-gains a `Sarif` variant. The projection is a small set of `serde` structs beside
-`to_json` in `crates/ridl-core/src/diag.rs`, so the MCP server can reuse it
-later; no SARIF crate is added.
+gains a `Sarif` variant. The projection is a small set of `serde` structs in
+their own module, `crates/ridl-core/src/diag/sarif.rs`, next to `render.rs`, so
+the MCP server can reuse it later; no SARIF crate is added.
 
 - `version` is `"2.1.0"` and `$schema` names the 2.1.0 schema.
 - One run. `tool.driver` has `name` `"ridl"`, `version` the crate version, and
@@ -458,9 +459,10 @@ fields is a compatible change to the tool surface.
   a pointer to the lints page.
 - **ADR-0002 §4**, amended in place: the `[lints]` table, which manifest kinds
   accept it, and the resolution order of §5.2.
-- **ADR-0010 decision 1**, amended in place with one sentence: in `ridl check`
-  and `ridl build`, a lint at `deny` is a diagnostic error, so it exits 1; the
-  other subcommands do not apply lint levels (D-8).
+- **ADR-0010 decision 1**, amended in place with one sentence: in `ridl check`,
+  `ridl build`, `ridlc check` and `ridlc build`, a lint at `deny` is a
+  diagnostic error, so it exits 1; the other subcommands of both binaries do not
+  apply lint levels (D-8).
 - **`crates/ridl-sem/src/lint.rs`**: the header comment that says there is no
   configuration surface is updated to point at the registry.
 
