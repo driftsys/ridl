@@ -737,7 +737,7 @@ mod tests {
         let (dir, path) = overlay_fixture();
         let text = "package p\n\ntype Other: integer [0..1]\n";
         let mut db = RidlDatabase::default();
-        let mut loaded = load_workspace_with(
+        let loaded = load_workspace_with(
             &mut db,
             &dir.path().join("p"),
             &[overlay(path.clone(), text)],
@@ -745,8 +745,8 @@ mod tests {
         .unwrap();
         let file = loaded.workspace.packages(&db)[0].files(&db)[0];
         assert_eq!(file.text(&db), text);
-        let id = loaded.sources.file_id(&path_string(&path), text);
-        assert_eq!(loaded.sources.text(id), Some(text));
+        let entries: Vec<_> = loaded.sources.iter_files().collect();
+        assert!(entries.contains(&(path_string(&path).as_str(), text)));
     }
 
     #[test]
