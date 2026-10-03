@@ -46,8 +46,59 @@ env:
   MDBOOK_VERSION: 0.4.40
 
 jobs:
+  # Decides which gate jobs a pull request needs, from the files it changes.
+  # A push to main and a manual run always run everything: main is what `pages`
+  # publishes from, and a manual run exists to repeat the whole gate.
+  #
+  # Cross-dependencies the filters have to honour, each of which a docs-only or
+  # Rust-only reading would miss:
+  #   - crates/ridl/tests/book_examples.rs compiles every fence in docs/book/,
+  #     and the Language reference chapters include docs/specification/, so a
+  #     change under either path runs the Rust jobs.
+  #   - `just doc-path-check` scans Rust source comments for docs/ paths, so the
+  #     `book` job runs on every pull request. It compiles nothing, so it is
+  #     cheap.
+  #   - `just check` (prim) covers JSON, YAML and TOML as well as Markdown, so
+  #     the `markdown` job runs for any change that is not Rust source alone.
+  # The `ci` aggregate accepts "skipped", so a skipped job does not fail it.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      markdown: ${{ steps.filter.outputs.markdown }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "markdown=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$BASE_SHA" HEAD)"
+          echo "$files"
+          rust_paths='^(crates/|xtask/|examples/|docs/book/|docs/specification/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|justfile$|install\.(sh|ps1)$|book\.toml$|\.github/workflows/|\.cargo/)'
+          if printf '%s\n' "$files" | grep -qE "$rust_paths"; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+          if printf '%s\n' "$files" | grep -vqE '\.rs$'; then
+            echo "markdown=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "markdown=false" >> "$GITHUB_OUTPUT"
+          fi
   markdown:
     name: markdown
+    needs: changes
+    if: needs.changes.outputs.markdown == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +159,8 @@ jobs:
 
   rust:
     name: rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +196,8 @@ jobs:
 
   wasm:
     name: wasm
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -284,8 +339,9 @@ jobs:
     name: ci
     if: always()
     # Every job, so a red anywhere fails the aggregate. "skipped" is accepted:
-    # commit-lint only runs on pull requests.
-    needs: [markdown, book, rust, wasm, commit-lint]
+    # commit-lint only runs on pull requests, and the path-filtered jobs skip
+    # when `changes` finds nothing for them.
+    needs: [changes, markdown, book, rust, wasm, commit-lint]
     runs-on: ubuntu-latest
     steps:
       - name: check required jobs
