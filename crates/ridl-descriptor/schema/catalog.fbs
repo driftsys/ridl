@@ -1,0 +1,110 @@
+// The catalog descriptor: what a catalog contains and how it is numbered
+// (docs/wip/2026-09-13-runtime-descriptors-design.md, D-3, D-4, D-6).
+//
+// Evolution is append-only. A field is only ever added at the END of its
+// table, so every field id already written keeps its meaning. Never remove,
+// reorder or retype a field; never renumber an enum member. A reader built
+// against an older schema ignores fields it does not know.
+//
+// Regenerate the Rust accessors after every edit: `cargo xtask descriptor-codegen`.
+
+namespace ridl.descriptor;
+
+// The five interaction kinds: the table under ridl §3, "The Interaction Model".
+enum Kind : ubyte { Signal = 0, Event = 1, Command = 2, Query = 3, Fixed = 4 }
+
+// The core encodings: proto3 and FlatBuffers (ADR-0018 decision 3) and
+// repr(C) (ADR-0020 decision 1, via ADR-0018's 2026-09-12 amendment). A new
+// encoding is appended.
+enum Encoding : ubyte { Proto3 = 0, FlatBuffers = 1, ReprC = 2 }
+
+// ridl §9 timing, as the IR carries it (ridl.ir.v2.TimingMode).
+enum TimingMode : ubyte { Unspecified = 0, StrictPeriodic = 1, Range = 2 }
+
+// Whether a row's payload has a finite bound under its encoding.
+enum SizeState : ubyte { Bounded = 0, Unbounded = 1 }
+
+// Why a payload has no finite bound: the codegen model's FbUnboundedCause
+// (ridl.codegen.v1), same members, same values. A new cause is appended
+// there and here together.
+enum UnboundedCause : ubyte { Unspecified = 0, Member = 1, Untyped = 2, Layout = 3, Aggregate = 4, Exempt = 5 }
+
+// One row of the size table: the state of a payload under one encoding
+// (D-6, D-7). An encoding with no row is absent: this toolchain version
+// computed no state for it. Bounded: `bytes` is the maximum encoded size,
+// envelope and framing excluded. Unbounded: `bytes` is 0 and `cause` says why.
+table MaxSize {
+  encoding: Encoding;
+  bytes: uint32;
+  state: SizeState = Bounded;
+  cause: UnboundedCause = Unspecified;
+}
+
+// One payload of an interaction (D-6): a signal, an event and a fixed have
+// one ("value" / "occurrence" / "value"); a command has one ("request");
+// a query has two ("request", "response").
+table Payload {
+  role: string (required);
+  // The canonical type name of a payload that is one named type; otherwise
+  // a spelling of the shape: `<T>` for a stream, `(a: T, b: U)` for a
+  // request of several parameters, `T | E` for a fallible reply.
+  type_name: string (required);
+  // One row per encoding that has a state; empty when every encoding is
+  // absent (a stream, a request of zero or several parameters, a `T | E`
+  // reply, until a record defines their encoding).
+  max_sizes: [MaxSize] (required);
+}
+
+table Timing {
+  mode: TimingMode;
+  min_us: string;
+  max_us: string;
+}
+
+table Member {
+  name: string (required);
+  // Position in the interface body, one sequence regardless of kind (ridl §11).
+  ordinal: uint32;
+  kind: Kind;
+  payloads: [Payload] (required);
+  // Absent when the interaction declares none (a fixed never does).
+  timing: Timing;
+}
+
+table Interface {
+  name: string (required);
+  // The interface number, copied from the IR's Interface.number, which
+  // ridl-sem folds from interfaces.lock (rsdl note D-7). Never 0.
+  number: uint32;
+  // Copied from the IR's Interface.provisional: the number is not frozen by
+  // a lock yet; `ridl baseline` refuses it, an engine decides (D-9, §3).
+  provisional: bool = false;
+  members: [Member] (required);
+  // Ordinals held by a `reserved` tombstone, so the ordinal space is complete.
+  reserved_ordinals: [uint32] (required);
+}
+
+// A retired interface, copied from the IR's Package.retired: name and number
+// held forever, so an engine can refuse a peer that still speaks it (D-4).
+table RetiredInterface {
+  name: string (required);
+  number: uint32;
+}
+
+table Catalog {
+  // The schema version of this file; a reader rejects one it does not know.
+  version: uint32;
+  // The package name (vocabulary note V-16).
+  name: string (required);
+  // SHA-256 over the interfaces, their numbers and the types they reach
+  // (rsdl note D-8); 32 bytes.
+  hash: [ubyte] (required);
+  // The toolchain version that wrote the file.
+  toolchain: string (required);
+  interfaces: [Interface] (required);
+  retired: [RetiredInterface] (required);
+}
+
+root_type Catalog;
+file_identifier "RDLC";
+file_extension "binfb";

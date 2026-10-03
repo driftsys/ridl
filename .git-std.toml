@@ -37,6 +37,7 @@ scopes = [
   "ridl-syntax",
   "ridl-core",
   "ridl-ir",
+  "ridl-descriptor",
   "ridlc",
   "ridl-backend-rust",
   "ridl-backend-ts",

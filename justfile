@@ -160,7 +160,7 @@ wasm-check:
         fi
         rustup target add wasm32-unknown-unknown
         cargo check --target wasm32-unknown-unknown \
-            -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
+            -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir -p ridl-descriptor \
             -p ridl-backend-proto -p ridl-backend-flatbuffers \
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt -p ridl-fmt \
@@ -365,7 +365,14 @@ compat-check: toolchain-check
 # Fails on: the build drawing an error; the emitted crate or the consumer
 # failing to compile; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
-# drawing a clippy warning.
+# drawing a clippy warning; a planus crate in the resolved graph of
+# `examples/cabin`.
+#
+# The planus check is `xtask/tests/oracle_boundary.rs`'s
+# `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
+# `cargo test` because it needs the generated crate this recipe writes. A
+# generated package must not depend on planus (lane E16 driver, section 4,
+# answer 8).
 #
 # The lock pins `ridl-rt`, whose version this recipe does not own, and the
 # generated crate, whose dependencies come from the emitter. A version bump or
@@ -382,6 +389,7 @@ demo:
     # and keep this green while a fresh clone failed.
     rm -rf examples/cabin/generated
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    cargo test --locked -p xtask --test oracle_boundary -- --ignored --exact the_generated_crate_reaches_no_planus_crate
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the

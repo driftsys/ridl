@@ -1867,6 +1867,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridl-descriptor"
+version = "0.5.1"
+dependencies = [
+ "planus",
+ "ridl-ir",
+ "serde",
+]
+
+[[package]]
 name = "ridl-diff"
 version = "0.5.1"
 dependencies = [
@@ -3067,6 +3076,8 @@ dependencies = [
 name = "xtask"
 version = "0.5.1"
 dependencies = [
+ "planus-codegen",
+ "planus-translation",
  "prettyplease",
  "proc-macro2",
  "quote",

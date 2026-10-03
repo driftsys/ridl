@@ -1,0 +1,163 @@
+//! Spec §4 "Schema round trip": build a descriptor with the Rust builder,
+//! finish it with the file identifier, read every field back.
+//!
+//! planus 1.3.0 does not write the FlatBuffers layout when it is given a file
+//! identifier: `Builder::finish(root, Some(id))` writes the identifier at
+//! bytes 0..4 and the root offset at bytes 4..8, the reverse of the layout
+//! the FlatBuffers specification defines, and planus's own `read_as_root`
+//! then rejects the buffer. [`finish`] below writes the standard layout, and
+//! [`planus_writes_the_identifier_before_the_root_offset`] fails when a planus
+//! release changes that behaviour, so the workaround is removed then.
+
+use planus::ReadAsRoot;
+use ridl_descriptor::{
+    Catalog, CatalogRef, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize, Member, Payload,
+    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause,
+};
+
+/// Finishes `catalog` with [`FILE_IDENTIFIER`] in the FlatBuffers layout:
+/// the root offset at bytes 0..4, the identifier at bytes 4..8.
+///
+/// planus reserves the 8 header bytes with the root's alignment and writes
+/// them in the reverse order (see the module comment); the root offset it
+/// writes is relative to byte 4, where it put it. Moving it to byte 0 adds 4
+/// to it, and nothing after byte 8 moves.
+fn finish(catalog: &Catalog) -> Vec<u8> {
+    let mut builder = planus::Builder::new();
+    let mut bytes = builder.finish(catalog, Some(FILE_IDENTIFIER)).to_vec();
+    let from_byte_4 = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    bytes[0..4].copy_from_slice(&(from_byte_4 + 4).to_le_bytes());
+    bytes[4..8].copy_from_slice(&FILE_IDENTIFIER);
+    bytes
+}
+
+fn sample() -> Catalog {
+    Catalog {
+        version: SCHEMA_VERSION,
+        name: "veh.cluster".to_owned(),
+        hash: vec![7u8; 32],
+        toolchain: "0.0.0".to_owned(),
+        interfaces: vec![Interface {
+            name: "VehicleStatus".to_owned(),
+            number: 1,
+            provisional: true,
+            members: vec![Member {
+                name: "currentSpeed".to_owned(),
+                ordinal: 1,
+                kind: Kind::Signal,
+                payloads: vec![Payload {
+                    role: "value".to_owned(),
+                    type_name: "Speed".to_owned(),
+                    max_sizes: vec![
+                        MaxSize {
+                            encoding: Encoding::Proto3,
+                            bytes: 0,
+                            state: SizeStateTag::Unbounded,
+                            cause: UnboundedCause::Member,
+                        },
+                        MaxSize {
+                            encoding: Encoding::FlatBuffers,
+                            bytes: 40,
+                            state: SizeStateTag::Bounded,
+                            cause: UnboundedCause::Unspecified,
+                        },
+                    ],
+                }],
+                timing: Some(Box::new(Timing {
+                    mode: TimingMode::StrictPeriodic,
+                    min_us: Some("100000".to_owned()),
+                    max_us: None,
+                })),
+            }],
+            reserved_ordinals: vec![5],
+        }],
+        retired: vec![RetiredInterface {
+            name: "LaneAssist".to_owned(),
+            number: 2,
+        }],
+    }
+}
+
+#[test]
+fn every_field_reads_back() {
+    let bytes = finish(&sample());
+
+    assert_eq!(&bytes[4..8], &FILE_IDENTIFIER);
+    let catalog = CatalogRef::read_as_root(&bytes).expect("a finished buffer reads");
+    assert_eq!(catalog.version().unwrap(), SCHEMA_VERSION);
+    assert_eq!(catalog.name().unwrap(), "veh.cluster");
+    assert_eq!(catalog.hash().unwrap().len(), 32);
+    assert_eq!(catalog.toolchain().unwrap(), "0.0.0");
+
+    let interfaces = catalog.interfaces().unwrap();
+    assert_eq!(interfaces.len(), 1);
+    let interface = interfaces.get(0).unwrap().unwrap();
+    assert_eq!(interface.name().unwrap(), "VehicleStatus");
+    assert_eq!(interface.number().unwrap(), 1);
+    assert!(interface.provisional().unwrap());
+    assert_eq!(
+        interface
+            .reserved_ordinals()
+            .unwrap()
+            .iter()
+            .collect::<Vec<u32>>(),
+        vec![5]
+    );
+
+    let member = interface.members().unwrap().get(0).unwrap().unwrap();
+    assert_eq!(member.name().unwrap(), "currentSpeed");
+    assert_eq!(member.ordinal().unwrap(), 1);
+    assert_eq!(member.kind().unwrap(), Kind::Signal);
+    let timing = member.timing().unwrap().expect("timing is present");
+    assert_eq!(timing.mode().unwrap(), TimingMode::StrictPeriodic);
+    assert_eq!(timing.min_us().unwrap(), Some("100000"));
+    assert_eq!(timing.max_us().unwrap(), None);
+
+    let payload = member.payloads().unwrap().get(0).unwrap().unwrap();
+    assert_eq!(payload.role().unwrap(), "value");
+    assert_eq!(payload.type_name().unwrap(), "Speed");
+    let sizes = payload.max_sizes().unwrap();
+    assert_eq!(
+        sizes.get(0).unwrap().unwrap().state().unwrap(),
+        SizeStateTag::Unbounded
+    );
+    assert_eq!(
+        sizes.get(0).unwrap().unwrap().cause().unwrap(),
+        UnboundedCause::Member
+    );
+    assert_eq!(
+        sizes.get(1).unwrap().unwrap().encoding().unwrap(),
+        Encoding::FlatBuffers
+    );
+    assert_eq!(
+        sizes.get(1).unwrap().unwrap().state().unwrap(),
+        SizeStateTag::Bounded
+    );
+    assert_eq!(sizes.get(1).unwrap().unwrap().bytes().unwrap(), 40);
+
+    let retired = catalog.retired().unwrap().get(0).unwrap().unwrap();
+    assert_eq!(retired.name().unwrap(), "LaneAssist");
+    assert_eq!(retired.number().unwrap(), 2);
+}
+
+#[test]
+fn the_owned_form_round_trips_through_the_view() {
+    let bytes = finish(&sample());
+    let view = CatalogRef::read_as_root(&bytes).unwrap();
+    let owned: Catalog = view.try_into().expect("a valid view converts");
+    assert_eq!(
+        owned.interfaces[0].members[0].payloads[0].max_sizes[1].bytes,
+        40
+    );
+}
+
+/// Pins the planus behaviour [`finish`] works around. When this fails, a
+/// planus release writes the standard layout itself: remove [`finish`] and
+/// call `planus::Builder::finish` directly.
+#[test]
+fn planus_writes_the_identifier_before_the_root_offset() {
+    let mut builder = planus::Builder::new();
+    let bytes = builder.finish(sample(), Some(FILE_IDENTIFIER)).to_vec();
+    assert_eq!(&bytes[0..4], &FILE_IDENTIFIER);
+    assert!(CatalogRef::read_as_root(&bytes).is_err());
+}

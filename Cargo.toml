@@ -48,25 +48,32 @@ num-traits = "0.2.19"
 # code calls into. Both target prost ^0.14, matching the pin below.
 pbjson = "0.9.0"
 pbjson-build = "0.9.0"
-# The independent FlatBuffers implementation E11.7's conformance test round
-# trips against (design note D-8), and the code generator that turns an
-# emitted `.fbs` into the Rust reader that test drives. Both are
-# dev-dependencies of `ridl-backend-rust` only; nothing this workspace ships
-# and nothing a generated package links depends on either.
+# planus, the pure-Rust FlatBuffers toolchain: `planus` is the runtime,
+# `planus-codegen` the code generator, `planus-translation` the schema
+# compiler. Pinned at one 1.3 release line, because the three crates are
+# released together and `planus-codegen` emits code against the runtime of its
+# own version.
 #
-# The authority for that is the E11.7 design note's D-12, not ADR-0020
-# decision 5: decision 5 *permits* one FlatBuffers runtime crate in `ridl-rt`
-# under its `flatbuffers` feature. What keeps a third-party implementation
-# out of the shipped path is D-12's choice to leave that permission unused,
-# so ADR-0020's RA-01 dependency ceiling stays unspent. Pinned at the same
-# 1.3 release line as `planus-translation` below, because the three crates
-# are released together and `planus-codegen` emits code against the runtime
-# of its own version.
+# The toolchain may depend on planus (lane E16 driver, section 4, answer 8):
+# `ridl-descriptor` on the runtime, for the catalog descriptor's accessors;
+# `xtask` on `planus-translation` and `planus-codegen`, to generate those
+# accessors (`cargo xtask descriptor-codegen`); `ridlc` and `ridl` through
+# `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
+# not depend on any of the three, as any kind of dependency
+# (`xtask/tests/oracle_boundary.rs` enforces both).
+#
+# `ridl-backend-rust` keeps all three as dev-dependencies only, for E11.7's
+# FlatBuffers conformance test (design note D-8). The authority for that is
+# the E11.7 design note's D-12, not ADR-0020 decision 5: decision 5 *permits*
+# one FlatBuffers runtime crate in `ridl-rt` under its `flatbuffers` feature,
+# and nothing uses that permission today, so ADR-0020's RA-01 dependency
+# ceiling stays unspent.
 planus = "1.3.0"
 planus-codegen = "1.3.0"
-# The FlatBuffers schema validity oracle for `ridl-backend-flatbuffers`'s
+# Also the FlatBuffers schema validity oracle for `ridl-backend-flatbuffers`'s
 # tests (`crates/ridl-backend-flatbuffers/Cargo.toml`'s doc comment): a
-# dev-dependency only, matching how `protox` backs the proto3 backend.
+# dev-dependency of that crate only, matching how `protox` backs the proto3
+# backend.
 planus-translation = "1.3.0"
 prettyplease = "0.2.37"
 proc-macro2 = "1.0.106"
@@ -117,6 +124,7 @@ ridl-backend-ts = { path = "crates/ridl-backend-ts", version = "0.5.1" }
 # Cargo.toml for why it is not published as `ridl`.
 ridl-cli = { path = "crates/ridl", version = "0.5.1" }
 ridl-core = { path = "crates/ridl-core", version = "0.5.1" }
+ridl-descriptor = { path = "crates/ridl-descriptor", version = "0.5.1" }
 ridl-diff = { path = "crates/ridl-diff", version = "0.5.1" }
 ridl-fmt = { path = "crates/ridl-fmt", version = "0.5.1" }
 ridl-ir = { path = "crates/ridl-ir", version = "0.5.1" }
