@@ -133,20 +133,6 @@ fn items(package: &ridl_ir::v2::Package) -> impl Iterator<Item = Item<'_>> {
         )
         .chain(package.services.iter().map(Item::Service))
 }
-fn canonical(snap: &Snapshot, own: &str, reference: String) -> String {
-    let prefix = reference.rsplit_once('.').map(|(p, _)| p);
-    if prefix == Some("ridl.std")
-        || snap
-            .output
-            .checked
-            .iter()
-            .any(|c| Some(c.ir.name.as_str()) == prefix)
-    {
-        reference
-    } else {
-        format!("{own}.{reference}")
-    }
-}
 pub fn references(snap: &Snapshot, input: &NameInput) -> Result<ReferencesOutput, ToolError> {
     let found = find(snap, &input.name, input.from.as_deref())?;
     let target = format!("{}.{}", found.package, found.item.name());
@@ -155,9 +141,7 @@ pub fn references(snap: &Snapshot, input: &NameInput) -> Result<ReferencesOutput
         for item in items(&checked.ir) {
             let pairs: BTreeSet<_> = references_of(&checked.ir.name, item)
                 .into_iter()
-                .filter_map(|(interaction, reference)| {
-                    (canonical(snap, &checked.ir.name, reference) == target).then_some(interaction)
-                })
+                .filter_map(|(interaction, reference)| (reference == target).then_some(interaction))
                 .collect();
             for interaction in pairs {
                 let location = if matches!(item, Item::Service(_)) {
@@ -212,7 +196,6 @@ pub fn dependencies(
             let depends_on: BTreeSet<String> = items(&c.ir)
                 .flat_map(|item| references_of(&c.ir.name, item))
                 .filter_map(|(_, reference)| {
-                    let reference = canonical(snap, &c.ir.name, reference);
                     let (prefix, _) = reference.rsplit_once('.')?;
                     (prefix != c.ir.name && prefix != "ridl.std").then(|| prefix.to_string())
                 })
@@ -440,6 +423,30 @@ mod tests {
         assert_eq!(filtered.packages[0].name, "fx.a");
         assert_eq!(filtered.packages[0].dependents, ["fx.b"]);
         assert_eq!(filtered.packages[0].imports, ["alpha"]);
+    }
+    #[test]
+    fn dependencies_preserve_unresolved_qualified_references() {
+        let path = format!("{}/a/a.ridl", fixture("ws"));
+        let source = std::fs::read_to_string(&path).unwrap()
+            + "\nstruct MissingRefs {\n  external: ext.Thing\n  nested: foreign.deep.Thing\n  local: Missing\n}\n";
+        let snap = snapshot(&fixture("ws"), &[OverlayInput { path, source }]).unwrap();
+        assert!(snap.status().errors > 0);
+        assert!(
+            snap.output
+                .diagnostics
+                .iter()
+                .any(|d| d.code.as_str() == "TYPL-011")
+        );
+        let out = dependencies(
+            &snap,
+            &DependenciesInput {
+                path: fixture("ws"),
+                overlays: None,
+                package: Some("fx.a".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(out.packages[0].depends_on, ["ext", "foreign.deep"]);
     }
     #[test]
     fn dependencies_of_an_unknown_package_is_an_error() {

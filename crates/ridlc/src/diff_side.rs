@@ -418,6 +418,24 @@ mod tests {
         assert!(matches!(error, DiffSideError::OverlayOnSnapshot(_)));
     }
     #[test]
+    fn an_overlay_on_a_snapshot_directory_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        snapshot(dir.path());
+        let error = load(
+            dir.path(),
+            &[Overlay {
+                path: dir.path().join("p.typl"),
+                text: "package p\ntype A: integer [0..2]\n".into(),
+            }],
+        )
+        .err()
+        .unwrap();
+        let DiffSideError::OverlayOnSnapshot(path) = error else {
+            panic!("expected snapshot overlay refusal")
+        };
+        assert_eq!(path, dir.path());
+    }
+    #[test]
     fn an_overlay_reaches_a_source_side() {
         let (dir, path) = source();
         let side = load(

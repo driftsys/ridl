@@ -233,6 +233,10 @@ pub(crate) mod tests {
                 .iter()
                 .any(|c| c.ir.name == "fx.a.sub" && !c.ir.decls.is_empty())
         );
+        assert!(snap.status().errors > 0);
+        let found = crate::query::find(&snap, "fx.a.sub.Gear", None).unwrap();
+        assert_eq!(found.package, "fx.a.sub");
+        assert_eq!(found.item.name(), "Gear");
     }
     #[test]
     fn workspace_status_counts_errors_and_warnings_separately() {
