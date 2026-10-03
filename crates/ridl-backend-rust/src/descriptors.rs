@@ -527,7 +527,6 @@ pub(crate) fn query_param_type<'a>(
     }
 }
 
-/// Which of the two reasons a call has no request payload.
 /// The model's `Catalog.hash` (ADR-0014 decision 15) as 32 `u8` literals,
 /// read from the model and never recomputed, because a plugin receives only
 /// the model. A model whose hash is missing or not 32 bytes long is
@@ -553,6 +552,7 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
         .collect())
 }
 
+/// Which of the two reasons a call has no request payload.
 fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
     if params.len() != 1 {
         return GenerateError {
