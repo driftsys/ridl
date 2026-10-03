@@ -5,7 +5,11 @@ session. This document is written for an agent with no prior context. It names
 every record it relies on and carries the facts a session would otherwise need
 from a conversation. Set the `THIS SESSION RUNS` line below before you start a
 session, and do only that stage. Where this document says "stop", stop and
-report to Sebastien. Do not guess past it.
+report to Sebastien. Do not guess past it. Since 2026-10-04 Sebastien has
+delegated the lane's open decisions: a stage takes a decision this document or
+the plan reserves for him, and records it in §5 for his review, instead of
+stopping. Irreversible actions (a tag, a publish, a secret, a push to `main`)
+still stop.
 
 Where this document and an ADR disagree, the ADR wins. This document summarizes.
 The one exception is §4, which records Sebastien's answers of 2026-10-03. Where
