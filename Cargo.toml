@@ -59,8 +59,10 @@ pbjson-build = "0.9.0"
 # `xtask` on `planus-translation` and `planus-codegen`, to generate those
 # accessors (`cargo xtask descriptor-codegen`); `ridlc` and `ridl` through
 # `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
-# not depend on any of the three, as any kind of dependency
-# (`xtask/tests/oracle_boundary.rs` enforces both).
+# not depend on any of the three, as any kind of dependency.
+# `xtask/tests/oracle_boundary.rs` checks this for `ridl-rt`, with every
+# feature on, and for the dependency closure of the crate `ridl build`
+# generates for `examples/cabin`.
 #
 # `ridl-backend-rust` keeps all three as dev-dependencies only, for E11.7's
 # FlatBuffers conformance test (design note D-8). The authority for that is

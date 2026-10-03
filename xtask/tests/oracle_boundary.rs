@@ -149,15 +149,21 @@ const RUNTIME_BOUNDARIES: &[RuntimeBoundary] = &[
 /// gate makes (`justfile`): the lockfile is already the resolved graph, and
 /// this guard must read that graph, not silently re-resolve a different one.
 fn cargo_metadata() -> serde_json::Value {
-    cargo_metadata_of(None)
+    cargo_metadata_of(None, false)
 }
 
 /// [`cargo_metadata`] for the workspace whose root manifest is `manifest`,
-/// or for this workspace when it is `None`.
-fn cargo_metadata_of(manifest: Option<&Path>) -> serde_json::Value {
+/// or for this workspace when it is `None`. With `all_features`, every
+/// feature of every workspace member is on, so the resolved graph holds
+/// every optional dependency, including one that no feature in the workspace
+/// turns on.
+fn cargo_metadata_of(manifest: Option<&Path>, all_features: bool) -> serde_json::Value {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let mut command = Command::new(cargo);
     command.args(["metadata", "--format-version", "1", "--locked"]);
+    if all_features {
+        command.arg("--all-features");
+    }
     if let Some(manifest) = manifest {
         command.arg("--manifest-path").arg(manifest);
     }
@@ -366,9 +372,14 @@ fn schema_compilers_stay_dev_dependencies() {
 /// Every [`RuntimeBoundary`] holds: no planus crate is reachable from
 /// `ridl-rt` through any dependency edge, dev included (lane E16 driver,
 /// section 4, answer 8).
+///
+/// The graph is resolved with `--all-features`. A user's generated package
+/// can turn on any `ridl-rt` feature, so a planus crate behind a feature that
+/// nothing in this workspace turns on still reaches a shipped build, and
+/// this test must see it.
 #[test]
 fn the_runtime_reaches_no_planus_crate() {
-    let metadata = cargo_metadata();
+    let metadata = cargo_metadata_of(None, true);
     for boundary in RUNTIME_BOUNDARIES {
         let reached = runtime_closure(&metadata, boundary.package);
         assert!(
@@ -399,7 +410,7 @@ fn the_runtime_reaches_no_planus_crate() {
 #[ignore = "needs examples/cabin/generated, which `just demo` writes; `just demo` runs it"]
 fn the_generated_crate_reaches_no_planus_crate() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
-    let metadata = cargo_metadata_of(Some(&manifest));
+    let metadata = cargo_metadata_of(Some(&manifest), false);
     let names = package_names(&metadata);
     assert!(
         names.values().any(|&name| name == "veh_cabin"),
