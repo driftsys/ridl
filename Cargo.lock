@@ -1871,7 +1871,6 @@ name = "ridl-descriptor"
 version = "0.5.1"
 dependencies = [
  "planus",
- "ridl-ir",
  "serde",
 ]
 
