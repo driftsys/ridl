@@ -13,10 +13,13 @@ server and the MCP server.
 **Architecture:** The catalogue rows in `ridl-core` carry the lint names. The
 workspace loader reads `[lints]` from each manifest and produces a `LintScopes`
 value, which maps each package directory to its effective levels. One function,
-`ridl_core::lint::apply_lint_levels`, rewrites or removes lint diagnostics. It
-is called by `ridlc` (in `front_end` and `check_loaded`), by the CLI after the
-`--baseline` desk check, and by `ridl-lsp` (in `analyze` and for loader
-diagnostics).
+`ridl_core::lint::apply_lint_levels`, rewrites or removes lint diagnostics. The
+shared compile (`check_loaded`) does not call it; it carries the scopes out on
+`CliRun.lints` and `WorkspaceOutput.lints`. Only the entry points that report
+diagnostics call it (spec D-8, §6.2): `ridlc`'s `run_check`, `run_build_with`
+when asked, and `front_end` (for `check_source` and `compile`); the CLI after
+the `--baseline` desk check; `ridl-mcp`'s `ridl_check` in path mode; and
+`ridl-lsp` (in `load()` for loader diagnostics and in `analyze`).
 
 **Tech Stack:** Rust (workspace pin in `rust-toolchain.toml`), `toml` 1.1 with
 `Spanned`, `serde`, `codespan-reporting` (text rendering), `insta` (snapshots),
@@ -32,23 +35,12 @@ locate each function by name. Run `./bootstrap` in the worktree.
 
 ## Deviations from the spec
 
-The plan makes three changes to the spec's §6. The executor records both in the
-spec when the work lands (gardening):
-
-- **Levels resolve by directory, not by file id.** The spec gives
-  `apply_lint_levels` a `levels_for(FileId)` callback. A file id does not
-  survive: the CLI's RIDL-407 diagnostics get spans interned into the source map
-  after `ridlc` returns, and a file created in the editor after the workspace
-  loaded has no entry. `LintScopes` maps directories to levels, and the lookup
-  takes the longest directory prefix of the diagnostic's path. A member's own
-  `ridl.toml` and every file under the member directory therefore get the
-  member's levels, and the root `ridl.toml` gets the root's levels.
-- **The `--baseline` desk check ignores lint diagnostics when it decides whether
-  to run.** Today it runs only when no other error is present; a lint raised to
-  `deny` would otherwise suppress RIDL-407 for the whole run.
-- **`ridlc` applies the levels in two internal functions** (`front_end` and
-  `check_loaded`) instead of in every public function, because every public
-  function goes through one of the two.
+None. The pass-1 review of PR #671 updated the spec so that the two agree: the
+directory scopes (§6.1), where the levels are applied (D-8, §6.2), the desk
+check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
+(§4.1), the validated keys (§5.1), and the language server's two call sites
+(§6.2). The spec leaves to this plan the item names, the exact messages, the
+`ApplyLints` parameter (Task 4), and the tests.
 
 ## Global Constraints
 
@@ -62,14 +54,22 @@ spec when the work lands (gardening):
 - Lint name pattern: `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`.
 - JSON field: `"lint"`, omitted when absent
   (`#[serde(skip_serializing_if = "Option::is_none")]`).
-- Text note, exactly:
-  ``lint `<name>` (set its level in `[lints]` in ridl.toml)``.
+- Text note string, exactly:
+  ``lint: `<name>` (set its level in `[lints]` in ridl.toml)``. Rendered, for a
+  file whose line numbers have one digit, the line is exactly two spaces of
+  gutter followed by
+  ``= lint: `missing-timing` (set its level in `[lints]` in ridl.toml)``, in the
+  form of the existing fix-it note `suggestion: replace with ...`
+  (`crates/ridl-core/src/diag/render.rs`).
 - SARIF: `version` `"2.1.0"`; `$schema`
   `"https://json.schemastore.org/sarif-2.1.0.json"`; `columnKind`
   `"unicodeCodePoints"`; level mapping Error→`error`, Warning→`warning`,
   Info→`note`; no `helpUri`; no `fixes`.
 - Exit codes are unchanged (ADR-0010 decision 1): 1 when any Error is present,
-  including a lint at `deny`; 2 when the check could not run.
+  including, in `ridl check` and `ridl build`, a lint at `deny`; 2 when the
+  check could not run. No other command applies levels (spec D-8), so a lint at
+  `deny` never changes the result of `ridl diff`, `ridl test`, `ridl baseline`,
+  `ridl lock`, MCP `ridl_diff` or the MCP lookup tools.
 - Commit scopes come from `.git-std.toml` (`ridl-core`, `ridlc`, `ridl`,
   `ridl-lsp`, `docs`, `adr`). Prose in comments and docs is plain and literal.
 - Run `just verify` before the PR. It must pass.
@@ -81,7 +81,8 @@ spec when the work lands (gardening):
    --baseline` runs its desk check only when
    `lock::only_lock_orphans` sees no other error. A lint raised to `deny` must
    not count as such an error, so a project gets both its denied lint and its
-   RIDL-407 findings in one run. Test in Task 5.
+   RIDL-407 findings in one run. The filter is at the `ridl check` call site
+   only, so `ridl lock` is unchanged. Test in Task 5.
 2. **`ordinal-changed = "allow"` must silence RIDL-407.** The CLI raises it
    after `ridlc` returns, with spans interned later. Test in Task 5.
 3. **A file the editor creates after load uses its member's levels**, not the
@@ -91,6 +92,9 @@ spec when the work lands (gardening):
    silently accepted. Test in Task 3.
 5. **A lint at `deny` must stop `ridl build` before any artifact is written**,
    not only change the exit code. Test in Task 4.
+6. **A lint at `deny` must not change any other command** (spec D-8):
+   `ridl diff`, `ridl baseline` and `compile_workspace` keep the emitted
+   severities. Test in Tasks 4 and 5.
 
 ---
 
@@ -158,7 +162,7 @@ spec when the work lands (gardening):
     `"forbid"`;
   - `lint_by_name("missing-timing")` is RIDL-100;
   - `lint_by_name("RIDL-100")` is `None`;
-  - `lint_of(DiagCode::RIDL_001)`, an Error code, is `None`;
+  - `lint_of(DiagCode::RIDL_101)`, an Error code, is `None`;
   - `default_level` of RIDL-405 is `Info`.
 
 - [ ] **Step 5: Run.** `cargo test -p ridl-core --locked`. Expected: all pass,
@@ -204,7 +208,7 @@ spec when the work lands (gardening):
   - `apply_rewrites_and_removes`: four diagnostics in a file under one scope:
     - RIDL-100, set to Deny there, becomes `Severity::Error`;
     - RIDL-405, set to Allow, is removed;
-    - an Error code (`RIDL_001`) is unchanged;
+    - an Error code (`RIDL_101`) is unchanged;
     - `DiagCode::NONE` with Warning is unchanged.
   - `apply_uses_defaults_outside_scopes`: RIDL-100 emitted as `Severity::Error`
     in a file outside every scope is rewritten to Warning.
@@ -255,19 +259,27 @@ spec when the work lands (gardening):
     MANI-010 with the message
     `` `[lints].missing-timing` must be one of "allow", "info", "warn", "deny" ``.
   - `lints_not_a_table`: `lints = 1` raises one MANI-010 with the message
-    `` `[lints]` must be a table ``.
+    `` `[lints]` must be a table ``, whose primary span covers the text `1`. No
+    MANI-001 is raised, and the manifest is returned with its `[package]` name.
   - `mani_010_span_is_the_key`: the primary span of `unknown_lint_name`'s
     diagnostic covers the text `nope`.
 
 - [ ] **Step 2: Run.** `cargo test -p ridl-core --locked manifest::`. Expected:
       fail.
 
-- [ ] **Step 3: Implement.** Read `lints` as
-      `Option<Spanned<BTreeMap<Spanned<String>, Spanned<toml::Value>>>>` so the
-      key span is available. toml 1.x deserializes `Spanned` map keys. If it
-      does not, use the value span, and change the span test to match the value.
-      Add `"lints" => {}` in `check_unknown_keys`. Build each MANI-010 with the
-      existing `warning()` helper, and update that helper's doc comment
+- [ ] **Step 3: Implement.** Do not declare `lints` in `RawManifest`. A typed
+      field would make `lints = 1` fail the one typed parse, which is MANI-001
+      with no manifest. `RawManifest` has no `deny_unknown_fields`, so serde
+      ignores the key. Read the table with a second `toml::from_str` into a
+      small struct,
+      `struct RawLints { #[serde(default)] lints: Option<BTreeMap<Spanned<String>, Spanned<toml::Value>>> }`,
+      so each key span is available for the per-entry MANI-010s. toml 1.x
+      deserializes `Spanned` map keys. If that parse fails because `lints` is
+      not a table, raise one MANI-010 (`` `[lints]` must be a table ``) at the
+      span of the `lints` value, taken from the untyped
+      `BTreeMap<String, Spanned<toml::Value>>` that `check_unknown_keys` already
+      parses. Add `"lints" => {}` in `check_unknown_keys`. Build each MANI-010
+      with the existing `warning()` helper, and update that helper's doc comment
       ("MANI-005 and MANI-010").
 
 - [ ] **Step 4: Write the failing loader test** in `workspace.rs`, named
@@ -299,19 +311,32 @@ spec when the work lands (gardening):
 **Files:**
 
 - Modify: `crates/ridlc/src/lib.rs`:
-  - `front_end` at 96;
-  - `CliRun` at 537;
-  - `check_loaded` at 1154;
-  - `run_check` at 555;
-  - `run_build_with` at 618, whose `succeeded` gate is at 673;
+  - `front_end`;
+  - `WorkspaceOutput` and `compile_workspace_with`;
+  - `CliRun`;
+  - `check_loaded`;
+  - `run_check`;
+  - `run_build` and `run_build_with`, whose `succeeded` gate is computed before
+    any write;
   - the `Compiled` struct.
+- Modify: `crates/ridlc/src/main.rs` (`Command::Build`) and
+  `crates/ridl/src/main.rs` (`Command::Build`, and `run_baseline`), the callers
+  of `run_build_with` and `run_build`.
 - Create: `crates/ridlc/tests/lint_levels.rs`
 
 **Interfaces:**
 
 - Consumes: `LoadedWorkspace.lints`, `apply_lint_levels`.
-- Produces: `CliRun.lints: LintScopes`. It is empty for `check_source`, and
-  carries the loaded scopes for `run_check` and `run_build_with`.
+- Produces:
+  - `Compiled.lints: LintScopes` and `WorkspaceOutput.lints: LintScopes`,
+    carrying the loaded scopes. `check_loaded` does not apply them (spec D-8).
+  - `CliRun.lints: LintScopes`. It is empty for `check_source`, and carries the
+    loaded scopes for `run_check` and `run_build_with`.
+  - `pub enum ApplyLints { Yes, No }`, a new last parameter of `run_build_with`.
+    `ridl build` and `ridlc build` pass `Yes`. `run_build` keeps its signature
+    and passes `Yes`. `ridl baseline` changes its call from `run_build` to
+    `run_build_with` with no plugins, the default timeout and `No`, so a lint at
+    `deny` does not block a baseline publication.
 
 - [ ] **Step 1: Write the failing tests** in
       `crates/ridlc/tests/lint_levels.rs`. The fixture is a temp workspace with
@@ -326,19 +351,35 @@ spec when the work lands (gardening):
     a temp out dir has `has_error()`, and the out dir holds no generated file.
   - `check_source_uses_defaults`: `ridlc::check_source` on the same text gives a
     RIDL-100 Warning.
+  - `compile_workspace_keeps_emitted_severities`: with
+    `missing-timing =
+    "allow"`, `ridlc::compile_workspace` still reports
+    RIDL-100 as a Warning, and `WorkspaceOutput.lints` gives `Allow` for the
+    member's file.
+  - `build_without_levels_writes_artifacts`:
+    `run_build_with(...,
+    ApplyLints::No)` with `missing-timing = "deny"` has
+    no error and writes the IR file.
 
 - [ ] **Step 2: Run.** `cargo test -p ridlc --locked --test lint_levels`.
       Expected: fail.
 
 - [ ] **Step 3: Implement.**
-  - Call `apply_lint_levels` at the end of `check_loaded`, with `loaded.lints`,
-    and carry the scopes out through `Compiled` into `CliRun`.
-  - Call it in `front_end`, with `LintScopes::default()`.
-  - This must happen before `run_build_with` computes `succeeded` (673) and
-    before `write_crate_files`.
-  - 1a's `compile_workspace_with` (used by MCP path mode) goes through
-    `load_and_check` and `check_loaded`, so it needs no separate call.
-  - Update every `CliRun { .. }` constructor.
+  - In `check_loaded`, move `loaded.lints` into `Compiled.lints`. Do not apply
+    it there.
+  - In `compile_workspace_with`, move `Compiled.lints` into
+    `WorkspaceOutput.lints`, unapplied. `ridl diff`, `ridl test`, `ridl lock`,
+    `load_diff_side` and the MCP lookup tools therefore see the emitted
+    severities.
+  - In `run_check`, apply `Compiled.lints` after `materialize_and_lock`, and
+    return the scopes in `CliRun.lints`.
+  - In `run_build_with`, when `ApplyLints::Yes`, apply them after the plugin
+    resolution and before `succeeded` is computed, so before `write_crate_files`
+    and every other write.
+  - In `front_end`, which only `check_source` and `compile` call, apply
+    `LintScopes::default()` to the result of `check_loaded`.
+  - Update every `CliRun { .. }` and `WorkspaceOutput { .. }` constructor, and
+    the callers of `run_build_with`.
 
 - [ ] **Step 4: Run.** `cargo test -p ridlc --locked`. Expected: pass. If an
       existing insta snapshot changes, check that the only change is a lint
@@ -346,7 +387,7 @@ spec when the work lands (gardening):
       `cargo insta review` and accept it only in that case.
 
 - [ ] **Step 5: Commit.**
-      `feat(ridlc): apply lint levels from [lints] to every check and build`
+      `feat(ridlc): apply lint levels from [lints] in check and build`
 
 ### Task 5: CLI — JSON field, text note, baseline path
 
@@ -355,9 +396,10 @@ spec when the work lands (gardening):
 - Modify: `crates/ridl-core/src/diag.rs` (`JsonDiagnostic` 1383, `to_json` 1412)
 - Modify: `crates/ridl-core/src/diag/render.rs` (`render` at 29)
 - Modify: `crates/ridl/src/main.rs`:
-  - `run_check` at 699;
-  - the RIDL-407 emission near 1298;
-  - `lock::only_lock_orphans` (find it with grep).
+  - `run_check`, including its call of `lock::only_lock_orphans` (the function
+    is in `crates/ridl/src/lock.rs` and is not changed, because `ridl lock` also
+    uses it);
+  - the RIDL-407 emission in `desk_check`.
 - Create: `crates/ridl/tests/lints.rs`
 
 **Interfaces:**
@@ -373,10 +415,19 @@ spec when the work lands (gardening):
     `ridl check --format json` exits 1. The RIDL-100 element has
     `"severity": "error"` and `"lint": "missing-timing"`. An Error-code element
     has no `lint` key.
+  - `text_deny_exits_1`: with `deny`, `ridl check` (text) exits 1, and stderr
+    contains `error[RIDL-100]` and no `warning[RIDL-100]`.
+  - `build_fails_on_deny`: with `deny`, `ridl build --out-dir <tmp>` exits 1,
+    and the out dir holds no generated file.
+  - `diff_ignores_deny`: two copies of the fixture with
+    `missing-timing = "deny"`; `ridl diff <copy1> <copy2>` exits 0 (spec D-8).
+  - `baseline_ignores_deny`: with `missing-timing = "deny"`, `ridl baseline`
+    exits 0 and writes the snapshot (spec D-8).
   - `allow_is_absent_in_text_and_json`: exit 0, and `RIDL-100` appears in
     neither stderr (text) nor stdout (json).
-  - `text_shows_lint_note`: with the default level, stderr contains
-    ``lint `missing-timing` (set its level in `[lints]` in ridl.toml)``.
+  - `text_shows_lint_note`: with the default level, stderr contains a line
+    exactly equal to the rendered note line in Global Constraints. The fixture
+    file must have fewer than ten lines, so the gutter is two spaces wide.
   - `ordinal_changed_allow_silences_baseline`: reuse the baseline fixture setup
     from `crates/ridl/tests/baseline_desk.rs`, with an ordinal change. With
     `ordinal-changed = "allow"`, `ridl check --baseline <b>` has no RIDL-407.
@@ -391,19 +442,25 @@ spec when the work lands (gardening):
 - [ ] **Step 3: Implement.**
   - **JSON:** add
     `#[serde(skip_serializing_if = "Option::is_none")] lint: Option<String>` to
-    `JsonDiagnostic`, filled from `lint_of(d.code)`.
+    `JsonDiagnostic`, filled from
+    `lint_of(d.code).and_then(|entry| entry.lint)`.
   - **Text:** in `render`, append the note line from Global Constraints to a
     diagnostic whose code has a lint name.
-  - **Baseline:** in `main.rs`, make the desk-check gate ignore diagnostics
-    whose code has a lint name. Give `only_lock_orphans` (or its call site) a
-    filter on `lint_of(d.code).is_none()`. After `desk_check` appends its
+  - **Baseline:** in `run_check` in `main.rs`, make the desk-check gate ignore
+    diagnostics whose code has a lint name: pass `only_lock_orphans` the
+    diagnostics filtered on `lint_of(d.code).is_none()` (collect them into a
+    `Vec` at the call site). Do not change `only_lock_orphans` itself, so
+    `ridl lock --rename/--retire` is unchanged. After `desk_check` appends its
     diagnostics, call
     `apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints)`.
 
-- [ ] **Step 4: Run.** `cargo test -p ridl --locked` and
-      `cargo test -p ridl-core --locked`. Expected: pass. The `render` insta
-      snapshots of lint codes gain the note line. Review them and accept only
-      that change. Update `check_json.rs` if it pins the exact key set.
+- [ ] **Step 4: Run.** `cargo test -p ridl --locked`,
+      `cargo test -p ridl-core --locked` and `cargo test -p ridlc --locked`.
+      Expected: pass. The rendered diagnostics of lint codes gain the note line,
+      in the `render` insta snapshots and in
+      `crates/ridlc/tests/snapshots/corpus__diagnostics@*.snap`. Review them
+      with `cargo insta review` and accept only that change. Update
+      `check_json.rs` if it pins the exact key set.
 
 - [ ] **Step 5: Commit.**
       `feat(ridl): show lint names in check output and apply levels after the desk check`
@@ -442,6 +499,8 @@ spec when the work lands (gardening):
   - the RIDL-100 result has `level: "warning"`, the right `ruleIndex`, and one
     `relatedLocation`;
   - the uncoded result has no `ruleId`;
+  - a third diagnostic, a MANI-101 Error whose primary span is
+    `FileId::DETACHED`, gives a result with no `locations` key (spec §7.3);
   - no rule has a `helpUri`, and no result has `fixes`.
 
 - [ ] **Step 2: Write the failing CLI test** in `lints.rs`, named
@@ -511,14 +570,68 @@ spec when the work lands (gardening):
 - [ ] **Step 5: Commit.**
       `feat(ridl-lsp): apply lint levels to published diagnostics`
 
-### Task 8: Book page, CLI reference, ADR amendments
+### Task 8: MCP server
+
+**Files:**
+
+- Modify: `crates/ridl-mcp/src/lib.rs` (the `ridl_check` handler, its path-mode
+  arm after `snapshot`)
+- Modify: `crates/ridl-mcp/src/explain.rs` (`ExplainOutput::Diagnostic`,
+  `explain`)
+- Modify: `crates/ridl-mcp/tests/tools.json` (the `ridl_explain` output schema
+  gains two optional fields)
+- Create: `crates/ridl-mcp/tests/fixtures/ws-lints/` (a workspace root with
+  `[lints]` setting `missing-timing = "deny"`, and one member whose `.ridl` file
+  declares a `signal` without timing)
+
+**Interfaces:**
+
+- Consumes: `WorkspaceOutput.lints`, `apply_lint_levels`, `default_level`.
+- Produces: `ExplainOutput::Diagnostic` gains
+  `#[serde(skip_serializing_if = "Option::is_none")] lint: Option<String>` and
+  `#[serde(skip_serializing_if = "Option::is_none")] default_level: Option<String>`.
+
+- [ ] **Step 1: Write the failing tests** in the test modules of the two files,
+      beside `path_mode_check_matches_to_json` and `explain_a_diagnostic_code`:
+  - `path_mode_check_applies_lint_levels`: `ridl_check` with
+    `{"path": <ws-lints>}`. The RIDL-100 element has `"severity": "error"` and
+    `"lint": "missing-timing"`, and `workspace.errors` counts it.
+  - `explain_a_lint_code`: `ridl_explain` on `RIDL-100` returns
+    `lint: "missing-timing"` and `default_level: "warn"`; on `RIDL-101` both
+    fields are absent.
+  - `path_mode_check_matches_to_json` compares with `ridlc::compile_workspace`,
+    which does not apply levels. Its `ws-diag` fixture has no `[lints]`, so the
+    only possible difference is a lint severity going back to its catalogue
+    default. If the test fails for that reason, apply `output.lints` to the
+    expected value in the test as well.
+
+- [ ] **Step 2: Run.** `cargo test -p ridl-mcp --locked`. Expected: fail.
+
+- [ ] **Step 3: Implement.**
+  - In the path-mode arm of `ridl_check`, after `snapshot` returns, call
+    `apply_lint_levels(&mut snap.output.diagnostics, &snap.output.sources, &snap.output.lints)`
+    before `to_json` and before `snap.status()`. Do not apply the levels in
+    `snapshot`, which the lookup tools also use (spec D-8).
+  - In `explain`, fill `lint` from `entry.lint`, and `default_level` from
+    `default_level(entry).as_str()` only when `entry.lint` is present.
+  - Replace `tests/tools.json` with the new tool list, as the contract test's
+    message says for a change that only adds.
+
+- [ ] **Step 4: Run.** `cargo test -p ridl-mcp --locked`. Expected: pass.
+
+- [ ] **Step 5: Commit.**
+      `feat(ridl-mcp): apply lint levels in ridl_check and name lints in ridl_explain`
+
+### Task 9: Book page, CLI reference, ADR amendments
 
 **Files:**
 
 - Create: `docs/book/lints.md`
 - Modify: `docs/book/SUMMARY.md` (add `- [Lints](lints.md)` after the CLI
   reference entry, line 7)
-- Modify: `docs/book/cli-reference.md` (the `check` section near 167-200)
+- Modify: `docs/book/cli-reference.md` (the `check` section near 167-200, and
+  the rendered examples that show a lint diagnostic: the two RIDL-407 warnings
+  near 273 and 279, and the TYPL-102 warning near 826)
 - Modify: `docs/decisions/ADR-0002-module-system.md` §4 (136-181)
 - Modify: `docs/decisions/ADR-0010-cli-conventions.md` decision 1 (59-181)
 - Modify: `crates/ridl-sem/src/lint.rs` header (lines 5-9)
@@ -543,17 +656,33 @@ spec when the work lands (gardening):
 - [ ] **Step 3: Write the docs.**
   - **`lints.md`** covers: what a lint is (spec D-1); the levels (D-4); the
     `[lints]` table with a `toml` example; resolution root then member (§5.2);
-    MANI-010; the table; and one sentence under the table saying that setting
+    the commands that apply levels and those that do not (D-8); MANI-010; the
+    table; and one sentence under the table saying that setting
     `ordinal-changed` to `allow` makes `ridl check --baseline` silent for
-    ordinal changes.
+    ordinal changes. It also states the member entry point (D-9): running
+    `ridl check` on a workspace member or on a file inside one, opening an
+    editor on a member, or passing a member as the MCP `path` loads the member
+    as a standalone package, so the root `[lints]` does not apply; check from
+    the workspace root to get the root's levels. If it cites the language server
+    gap, write "#529 stays open", never a closing keyword before the number.
   - **`cli-reference.md`** gets `--format sarif`, the `lint` JSON field, and a
-    link to `lints.md`.
+    link to `lints.md`. In each rendered example near 273, 279 and 826, add the
+    note line from Global Constraints after the snippet, with the gutter width
+    of that example.
   - **ADR-0002 §4** gets a paragraph on `[lints]` (both manifest kinds, and the
-    resolution order). Add a dated amendment line in its `## Status`, following
-    the form the record already uses.
-  - **ADR-0010 decision 1** gets one sentence: "A lint raised to `deny` in
-    `[lints]` is a diagnostic error, so it exits 1." Add the matching amendment
-    line in its `## Status`.
+    resolution order). Its `## Status` holds only "Accepted." and no amendment
+    line, so add this paragraph after it, in the form ADR-0005 uses ("Amended
+    2026-10-03 by the workspace-aware MCP tools design (piece 1a): ..."), with
+    the date of the commit: "Amended <date> by the lint foundation design (spec
+    0): §4 gains the `[lints]` table, which both manifest kinds accept, and its
+    resolution order."
+  - **ADR-0010 decision 1** gets one sentence: "In `ridl check` and
+    `ridl build`, a lint raised to `deny` in `[lints]` is a diagnostic error, so
+    it exits 1; the other subcommands do not apply lint levels." Its `## Status`
+    has no amendment line either, so add this paragraph after the existing
+    status paragraph, in the same form: "Amended <date> by the lint foundation
+    design (spec 0): decision 1 states that a lint raised to `deny` exits 1 in
+    `ridl check` and `ridl build`."
   - **`ridl-sem/src/lint.rs`:** replace "There is deliberately no lint driver
     and no configuration surface in E2" with a sentence pointing at
     `ridl_core::lint` and the `[lints]` table.
@@ -569,11 +698,7 @@ spec when the work lands (gardening):
     `lint.rs` header);
   - `docs(adr): record [lints] in ADR-0002 and deny in ADR-0010`.
 
-### Task 9: Full gate and PR
+### Task 10: Full gate and PR
 
 - [ ] **Step 1:** Run `just verify`. Expected: every member passes.
-- [ ] **Step 2:** Record the three deviations from the spec (top of this plan)
-      in the spec's §6, in place.
-- [ ] **Step 3:** Open the PR against `main`. List the follow-up for after both
-      1a and this work have landed: `ridl_explain` shows a lint code's name and
-      default level (spec §7.4).
+- [ ] **Step 2:** Open the PR against `main`.
