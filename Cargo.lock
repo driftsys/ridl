@@ -1984,6 +1984,7 @@ dependencies = [
  "ridl-backend-rust",
  "ridl-backend-ts",
  "ridl-core",
+ "ridl-diff",
  "ridl-ir",
  "ridl-sem",
  "ridl-syntax",

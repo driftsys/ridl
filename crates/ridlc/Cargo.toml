@@ -13,6 +13,7 @@ ridl-backend-proto.workspace = true
 ridl-backend-rust.workspace = true
 ridl-backend-ts.workspace = true
 ridl-core.workspace = true
+ridl-diff.workspace = true
 ridl-ir.workspace = true
 ridl-sem.workspace = true
 ridl-syntax.workspace = true

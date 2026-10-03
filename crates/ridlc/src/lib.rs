@@ -41,6 +41,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+pub mod diff_side;
+pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
 pub mod plugin;
 
 use ridl_core::db::InputFile;
