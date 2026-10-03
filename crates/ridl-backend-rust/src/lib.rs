@@ -219,6 +219,9 @@ pub(crate) fn generate_pipeline_over(
 ) -> Result<Generated, GenerateError> {
     let ctx = Ctx::over(model);
     wire.check_emitted();
+    // A malformed catalog hash refuses the whole model here; inside the
+    // per-interface walk below it would only skip each interface.
+    descriptors::catalog_hash(&ctx)?;
     // Each interface is built before the package's own items, so that the
     // claim table, which runs before the codec, knows which interfaces are
     // emitted and which are skipped: a skipped one claims nothing (the

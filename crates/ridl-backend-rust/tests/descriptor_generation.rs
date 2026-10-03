@@ -58,9 +58,24 @@ fn generate_face_emits_the_interface_and_interaction_descriptors() {
         assert!(d.contains(constant), "missing interface {constant}");
     }
     assert!(d.contains("name:\"face.demo\""), "catalog package name");
+    // The catalog hash is the model's `Catalog.hash` (ADR-0014 decision 15),
+    // copied byte for byte, and not the all-zero placeholder.
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let hash = &model.catalog.as_ref().expect("a catalog").hash;
     assert!(
-        d.contains("::ridl_rt::contract::CatalogHash([0u8;32])"),
-        "zero catalog hash placeholder",
+        hash.iter().any(|byte| *byte != 0),
+        "the model's hash is not zero"
+    );
+    let bytes: Vec<String> = hash.iter().map(u8::to_string).collect();
+    // prettyplease adds a trailing comma when it wraps the array.
+    let emitted = format!("::ridl_rt::contract::CatalogHash([{}", bytes.join(","));
+    assert!(
+        d.contains(&format!("{emitted}])")) || d.contains(&format!("{emitted},])")),
+        "the emitted catalog hash is the model's hash",
+    );
+    assert!(
+        !d.contains("::ridl_rt::contract::CatalogHash([0u8;32])"),
+        "no zero catalog hash placeholder",
     );
 
     // Number and provisional flag read straight from the IR, not invented.
@@ -345,4 +360,32 @@ fn the_default_wire_encoding_is_flatbuffers() {
         .rust_source;
     assert_eq!(defaulted, stated);
     assert_eq!(WireEncoding::default(), WireEncoding::FlatBuffers);
+}
+
+/// A model whose `Catalog.hash` is not 32 bytes is malformed: the backend
+/// refuses it with an error diagnostic and writes no file, rather than
+/// padding the hash or skipping each interface.
+#[test]
+fn a_catalog_hash_that_is_not_32_bytes_refuses_the_model() {
+    use ridl_ir::codegen::{Backend as _, v1};
+
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    model.catalog.as_mut().expect("a catalog").hash.truncate(31);
+    let request = v1::CodegenRequest {
+        model: Some(model),
+        artifact_base: "face_demo".to_string(),
+        ..Default::default()
+    };
+    let response = ridl_backend_rust::Backend.generate(&request);
+    assert!(response.files.is_empty(), "no file for a malformed model");
+    let messages: Vec<&str> = response
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect();
+    assert_eq!(
+        messages,
+        ["malformed codegen model: `Catalog.hash` is 31 bytes, not 32"]
+    );
 }
