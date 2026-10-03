@@ -9,8 +9,9 @@ report to Sebastien. Do not guess past it.
 
 Where this document and an ADR disagree, the ADR wins. This document summarizes.
 The one exception is §4, which records Sebastien's answers of 2026-10-03. Where
-an answer departs from an ADR (answer 4 and ADR-0014 decision 9), the stage that
-applies it writes the decision record first.
+an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
+the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
+that applies it writes the decision record first.
 
 **THIS SESSION RUNS: D1**. D0 is the pull request that added this document.
 
@@ -175,13 +176,16 @@ Model: `fable` for the audit. Docs only. No code.
    task, record what no longer holds on `main`: a type or function that was
    renamed or removed, a file that moved, a dependency that already exists, a
    disposition that a landed record decided differently.
-2. Amend the plan in place on a branch. Apply the answers in §4. In the same
-   pull request, bring the other records that state the old criteria into line
-   with §4: the E16.2 and E16.4 rows of `docs/ROADMAP.md`, the done lines of
-   #378 and #380, and D-6 of the runtime-descriptors design (its every-payload
-   heading and its stream wording). Apply #326's items, with the census
-   recounted against today's CLI. Keep the task numbering, so the issues' task
-   references stay valid. Remove a task only if it is empty.
+2. Amend the plan in place on a branch. Apply the answers in §4. Correct every
+   other record that states a criterion a §4 answer overturns. Search for them;
+   the review of this driver found at least these. In the same pull request:
+   `docs/ROADMAP.md` (the Epic 16 exit criteria, and the E16.2 and E16.4 rows),
+   and the runtime-descriptors design (D-4's stream flag, D-6's every-payload
+   heading, its one-number-per-encoding row, its stream wording and its `match`
+   narrowing, and the §6 bullet on §3.11). With `gh issue edit`: the bodies of
+   #275, #378, #379 and #380. Apply #326's items, with the census recounted
+   against today's CLI. Keep the task numbering, so the issues' task references
+   stay valid. Remove a task only if it is empty.
 3. Write a short "Re-baseline 2026-10" section at the top of the plan. List
    every change, and the record or the §4 answer that caused each one.
 4. Open the pull request (docs-only lane), review it, fix it, and merge it.
@@ -193,11 +197,11 @@ Model: `fable` for the audit. Docs only. No code.
 
 Plan Tasks 1 and 2. A new crate `crates/ridl-descriptor/` and its
 `.git-std.toml` scope. `cargo xtask descriptor-codegen` generates the accessors,
-which are committed with a drift test. Nothing may depend on `flatc`. Planus may
-be a normal dependency of `ridl-descriptor`, `ridlc` and `ridl`, and of no other
-shipped crate (§4 answer 8). Done when a catalog round-trips through the builder
-and the reader, and a buffer with a wrong identifier or version is rejected as a
-whole.
+which are committed with a drift test. Nothing may depend on `flatc`. Toolchain
+crates may depend on planus, directly or through `ridl-descriptor`; `ridl-rt`
+and every generated package must not (§4 answer 8). Done when a catalog
+round-trips through the builder and the reader, and a buffer with a wrong
+identifier or version is rejected as a whole.
 
 ### D3 — E16.2 (#378): numbering and the catalog hash
 
@@ -229,7 +233,7 @@ records give that placeholder to E16.2 (`docs/ROADMAP.md`,
 so amend those records to say E16.4. Done when each payload carries a size state
 for both encodings: bounded or unbounded for a payload that is one named type,
 and absent for a request with more than one parameter, an inline `T | E` reply
-and a stream payload (§4 answers 5, 6 and 10).
+and a stream payload, even a stream of a named type (§4 answers 5, 6 and 10).
 
 ### D6 — E16.5 (#381): the lowering and the emit
 
