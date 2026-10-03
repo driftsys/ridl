@@ -490,4 +490,66 @@ mod tests {
             assert_eq!(out.interactions[i]["ordinal"], i + 1);
         }
     }
+
+    #[test]
+    fn resolve_reports_visibility() {
+        assert_eq!(
+            resolve(&snap(), &input("PrivateLevel", None))
+                .unwrap()
+                .visibility,
+            "internal"
+        );
+        assert_eq!(
+            resolve(&snap(), &input("Speed", None)).unwrap().visibility,
+            "public"
+        );
+    }
+    #[test]
+    fn resolve_reports_each_kind() {
+        for (name, kind) in [
+            ("Reading", "struct"),
+            ("Health", "enum"),
+            ("Outcome", "union"),
+            ("Status", "interface"),
+            ("HEALTH_PATTERN", "const"),
+            ("HealthSet", "enumset"),
+        ] {
+            assert_eq!(
+                resolve(&snap(), &input(name, None)).unwrap().kind,
+                kind,
+                "{name}"
+            );
+        }
+    }
+    #[test]
+    fn list_interactions_reports_the_header() {
+        let out = list_interactions(&snap(), &input("Status", None)).unwrap();
+        assert_eq!(out.interface.name, "Status");
+        assert_eq!(out.interface.package, "fx.b");
+        assert_eq!(out.interface.doc, "The status interface.");
+        assert_eq!(out.interface.labels, ["PRIVATE"]);
+        assert_eq!(
+            out.interface.deprecated.as_deref(),
+            Some("Use the next status interface.")
+        );
+        assert_eq!(out.interface.number, 1);
+        assert!(out.interface.provisional);
+    }
+    #[test]
+    fn locations_are_complete() {
+        let out = resolve(&snap(), &input("Speed", None)).unwrap();
+        assert_eq!(
+            serde_json::to_value(out.location).unwrap(),
+            crate::snapshot::tests::name_location("a/a.ridl", "type Speed", "Speed")
+        );
+    }
+    #[test]
+    fn no_alias_without_an_alias() {
+        assert!(
+            resolve(&snap(), &input("Level", Some("fx.b")))
+                .unwrap()
+                .alias
+                .is_none()
+        );
+    }
 }

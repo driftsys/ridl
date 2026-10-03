@@ -490,6 +490,7 @@ mod tests {
         for value in [
             json!({"source": "package p", "profile": "typl", "path": "."}),
             json!({}),
+            json!({"source": "package p"}),
             json!({"path": ".", "profile": "typl"}),
         ] {
             let result = RidlMcp::new()
@@ -505,6 +506,24 @@ mod tests {
                 "pass either `source` with `profile`, or `path` with optional `overlays`"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn source_without_profile_is_a_tool_error() {
+        let result = RidlMcp::new()
+            .ridl_check(Parameters(
+                serde_json::from_value(json!({"source": "package p"})).unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(true));
+        let [ContentBlock::Text(text)] = result.content.as_slice() else {
+            panic!("one text block");
+        };
+        assert_eq!(
+            text.text,
+            "pass either `source` with `profile`, or `path` with optional `overlays`"
+        );
     }
 
     // The fixture deliberately has no trailing newline: with one, the parser

@@ -21,3 +21,11 @@ union Outcome {
   ok: Reading
   fault: Health
 }
+
+internal type PrivateLevel: integer [0..10]
+
+enumset HealthSet: Health
+
+const HEALTH_PATTERN = /^[A-Z]+$/
+
+type HealthCode: string [1..8 match HEALTH_PATTERN] = "OK"

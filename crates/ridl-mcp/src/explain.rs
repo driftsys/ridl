@@ -110,4 +110,15 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn explain_reports_warning_and_info_severities() {
+        for (code, wanted) in [("TYPL-101", "warning"), ("TYPL-115", "info")] {
+            let result = explain(&ExplainInput { code: code.into() }).unwrap();
+            let ExplainOutput::Diagnostic { severity, .. } = result else {
+                panic!("diagnostic");
+            };
+            assert_eq!(severity, wanted);
+        }
+    }
 }

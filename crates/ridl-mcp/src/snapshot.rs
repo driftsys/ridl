@@ -295,4 +295,21 @@ pub(crate) mod tests {
         assert!(!copy.0.join("ridl.lock").exists());
         assert!(!copy.0.join(".ridl").exists());
     }
+
+    pub fn name_location(relative: &str, declaration: &str, name: &str) -> serde_json::Value {
+        let path = format!("{}/{relative}", fixture("ws"));
+        let text = fs::read_to_string(&path).unwrap();
+        let start = text.find(declaration).unwrap() + declaration.len() - name.len();
+        let before = &text[..start];
+        let line = before.bytes().filter(|b| *b == b'\n').count() + 1;
+        let column = before.rsplit('\n').next().unwrap().chars().count() + 1;
+        serde_json::json!({"path": path,
+            "start": {"line": line, "column": column},
+            "end": {"line": line, "column": column + name.chars().count()}})
+    }
+    #[test]
+    fn snapshot_root_of_a_file_path() {
+        let snap = snapshot(&format!("{}/b/b.ridl", fixture("ws")), &[]).unwrap();
+        assert_eq!(snap.root, PathBuf::from(format!("{}/b", fixture("ws"))));
+    }
 }

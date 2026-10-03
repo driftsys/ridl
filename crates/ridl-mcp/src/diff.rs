@@ -131,4 +131,41 @@ mod tests {
             _ => panic!("expected diagnostics"),
         }
     }
+
+    #[test]
+    fn diff_uses_std_as_context() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
+        let path = copy.0.join("a/a.ridl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(
+            &path,
+            text.replace(
+                "  health: Health\n}",
+                "  health: Health\n  stamp: Timestamp\n}",
+            ),
+        )
+        .unwrap();
+        let input = DiffInput {
+            old: fixture("ws"),
+            new: copy.0.to_str().unwrap().into(),
+            overlays: None,
+        };
+        let cli = std::process::Command::new("cargo")
+            .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+            .args([
+                "run", "-q", "-p", "ridl-cli", "--locked", "--", "diff", "--format", "json",
+                &input.old, &input.new,
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            cli.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&cli.stderr)
+        );
+        let expected: serde_json::Value = serde_json::from_slice(&cli.stdout).unwrap();
+        assert_eq!(expected["verdict"], "compatible");
+        assert_eq!(diff(&input).unwrap(), expected);
+    }
 }

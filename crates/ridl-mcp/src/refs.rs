@@ -401,6 +401,7 @@ mod tests {
             ]
         );
         assert!(out.references[1].location.is_none());
+        assert_eq!(out.references[1].kind, ReferenceKind::Service);
     }
     #[test]
     fn interactions_referring_to_the_same_target_are_separate_pairs() {
@@ -565,6 +566,7 @@ mod tests {
         assert_eq!(snap.status().errors, 0);
         assert_eq!(snap.status().warnings, 2);
         assert!(snap.output.system.is_some());
+        assert!(snap.notes.is_empty());
         snap
     }
     fn deps(snap: &Snapshot, package: Option<&str>) -> DependenciesOutput {
@@ -603,7 +605,35 @@ mod tests {
     }
     #[test]
     fn an_inline_require_is_not_a_reference() {
-        let out = references(&rsdl_snap(), &input("veh.climate.Temperature")).unwrap();
+        let snap = rsdl_snap();
+        let mut requires = component_requires(snap.output.system.as_ref().unwrap());
+        requires.sort();
+        assert_eq!(
+            requires,
+            [
+                (
+                    "veh.cabin".into(),
+                    "ClimateControl".into(),
+                    "veh.climate.Seats".into()
+                ),
+                (
+                    "veh.cabin".into(),
+                    "Dashboard".into(),
+                    "veh.climate.Climate".into()
+                ),
+                (
+                    "veh.cabin".into(),
+                    "Dashboard".into(),
+                    "veh.climate.Seats".into()
+                ),
+                (
+                    "veh.cabin".into(),
+                    "PhoneApp".into(),
+                    "veh.climate.Climate".into()
+                ),
+            ]
+        );
+        let out = references(&snap, &input("veh.climate.Temperature")).unwrap();
         assert!(out.references.iter().all(|r| r.declaration != "PhoneApp"));
         assert!(
             out.references
@@ -660,7 +690,18 @@ mod tests {
         let snap = snapshot(copy.0.to_str().unwrap(), &[]).unwrap();
         assert_eq!(snap.status().errors, 0);
         assert_eq!(snap.status().warnings, 2);
+        let references = references(&snap, &input("veh.climate.Seats")).unwrap();
+        assert_eq!(
+            pairs(&references),
+            [
+                ("veh.cabin", "ClimateControl", None),
+                ("veh.cabin", "Dashboard", None),
+                ("veh.climate", "veh.climate.seats", None),
+            ]
+        );
+        assert!(references.workspace.notes.is_empty());
         let out = deps(&snap, Some("veh.ops"));
+        assert!(out.workspace.notes.is_empty());
         assert_eq!(out.packages[0].depends_on, ["veh.cabin", "veh.climate"]);
     }
     #[test]
@@ -678,6 +719,7 @@ mod tests {
         assert!(snap.output.system.is_none());
         let out = references(&snap, &input("veh.climate.Seats")).unwrap();
         assert!(out.workspace.notes.iter().any(|n| n == "rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which"));
+        assert_eq!(deps(&snap, None).workspace.notes, out.workspace.notes);
         let rows = serde_json::to_value(&out.references).unwrap();
         assert!(
             rows.as_array()
@@ -696,5 +738,25 @@ mod tests {
         assert_eq!(rows[1]["package"], "fx.b");
         assert_eq!(rows[1]["declaration"], "Status");
         assert_eq!(rows[1]["kind"], "interface");
+    }
+
+    #[test]
+    fn declaration_references_have_locations() {
+        let out = references(&snap(), &input("Reading")).unwrap();
+        assert_eq!(
+            serde_json::to_value(&out.references[0].location).unwrap(),
+            crate::snapshot::tests::name_location("a/a.ridl", "union Outcome", "Outcome")
+        );
+        assert_eq!(
+            serde_json::to_value(&out.references[1].location).unwrap(),
+            crate::snapshot::tests::name_location("b/b.ridl", "interface Status", "Status")
+        );
+    }
+    #[test]
+    fn references_through_backing_enums_and_pattern_consts() {
+        let out = references(&snap(), &input("Health")).unwrap();
+        assert!(pairs(&out).contains(&("fx.a", "HealthSet", None)));
+        let out = references(&snap(), &input("HEALTH_PATTERN")).unwrap();
+        assert_eq!(pairs(&out), [("fx.a", "HealthCode", None)]);
     }
 }
