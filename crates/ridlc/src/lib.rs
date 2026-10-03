@@ -23,7 +23,7 @@
 //! the same `ridl_core::diag::to_json`.
 //!
 //! [`compile_workspace`] is the same pipeline over the loaded package model —
-//! a `.typl` file, a package directory, or a workspace root ([`load_workspace`])
+//! a `.typl` file, a package directory, or a workspace root ([`ridl_core::load_workspace`])
 //! — returning the per-package IR and the merged, render-ready diagnostics
 //! (load + parse + resolve + check). It is the library face the language server
 //! (E1.15) drives; it performs no network or lockfile side effects.
@@ -49,8 +49,8 @@ use ridl_core::diag::{
 };
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
-    Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, load_workspace,
-    materialize_imports, parse_file, parse_manifest, read_lockfile, std_package, write_lockfile,
+    Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, materialize_imports, parse_file,
+    parse_manifest, read_lockfile, std_package, write_lockfile,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
@@ -282,6 +282,8 @@ pub struct WorkspaceOutput {
     /// way — by scanning packages for a matching declared name, say — mis-binds
     /// under an alias and under a cross-package name collision.
     pub resolutions: Vec<Resolution>,
+    /// Manifest import maps, in the same order as `checked`.
+    pub imports: Vec<BTreeMap<String, String>>,
     /// The lowered IR of the built-in `ridl.std` package (typl Appendix A).
     ///
     /// `ridl.std` is deliberately absent from
@@ -321,7 +323,7 @@ pub fn std_ir() -> ridl_ir::v2::Package {
 /// package in it.
 ///
 /// `entry` is a `.typl` file (single-file mode), a package directory, or a
-/// workspace root — whatever [`load_workspace`] accepts. The function performs
+/// workspace root — whatever [`ridl_core::load_workspace`] accepts. The function performs
 /// no network or lockfile side effects: remote-import materialization and the
 /// `ridl.lock` round trip live in the command drivers ([`run_check`],
 /// [`run_build`]), so the language server can drive this on every edit without
@@ -330,15 +332,32 @@ pub fn std_ir() -> ridl_ir::v2::Package {
 /// `Err` is reserved for a filesystem failure while loading (the entry does not
 /// exist, or a file cannot be read); every content problem is a [`Diagnostic`].
 pub fn compile_workspace(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<WorkspaceOutput> {
+    compile_workspace_with(db, entry, &[]).map_err(load_io_error)
+}
+
+fn load_io_error(error: ridl_core::LoadError) -> std::io::Error {
+    match error {
+        ridl_core::LoadError::Io(e) => e,
+        _ => unreachable!("no overlay error is possible without overlays"),
+    }
+}
+
+/// Compiles a workspace with unsaved source overlays, without writes or fetches.
+pub fn compile_workspace_with(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[ridl_core::Overlay],
+) -> Result<WorkspaceOutput, ridl_core::LoadError> {
     let Compiled {
         workspace,
         std,
         checked,
         resolutions,
+        imports,
         system,
         diagnostics,
         sources,
-    } = load_and_check(db, entry)?;
+    } = load_and_check(db, entry, overlays)?;
     // `ridl.std` is checked here rather than in `load_and_check` so the command
     // drivers, which never look at its IR, do not pay for the pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
@@ -347,6 +366,7 @@ pub fn compile_workspace(db: &mut RidlDatabase, entry: &Path) -> std::io::Result
     Ok(WorkspaceOutput {
         checked,
         resolutions,
+        imports,
         std_ir,
         system,
         diagnostics,
@@ -559,7 +579,7 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         mut diagnostics,
         sources,
         ..
-    } = load_and_check(&mut db, entry)?;
+    } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
     diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
     Ok(CliRun {
         diagnostics,
@@ -632,7 +652,7 @@ pub fn run_build_with(
         mut diagnostics,
         sources,
         ..
-    } = load_and_check(&mut db, entry)?;
+    } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
 
     // Materialize remote imports and round-trip the lockfile before the emit
     // gate, so any error it raises (a manifest, lockfile, or fetch problem,
@@ -1131,6 +1151,7 @@ struct Compiled {
     std: Package,
     checked: Vec<CheckedPackage>,
     resolutions: Vec<Resolution>,
+    imports: Vec<BTreeMap<String, String>>,
     /// The checked rsdl model; its diagnostics are already in `diagnostics`.
     system: CheckedSystem,
     diagnostics: Vec<Diagnostic>,
@@ -1139,9 +1160,13 @@ struct Compiled {
 
 /// Loads the workspace at `entry` and runs parse, resolve, and check over every
 /// package, merging all diagnostics onto one [`SourceMap`].
-fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compiled> {
+fn load_and_check(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[ridl_core::Overlay],
+) -> Result<Compiled, ridl_core::LoadError> {
     let std = std_package(db);
-    let loaded = load_workspace(db, entry)?;
+    let loaded = ridl_core::load_workspace_with(db, entry, overlays)?;
     Ok(check_loaded(db, std, loaded))
 }
 
@@ -1161,6 +1186,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     let packages = workspace.packages(db).clone();
     let mut checked = Vec::with_capacity(packages.len());
     let mut resolutions: Vec<Resolution> = Vec::with_capacity(packages.len());
+    let mut imports = Vec::with_capacity(packages.len());
     for pkg in &packages {
         // Intern this package's files into the render source map; their ids are
         // the render targets the package-relative pass diagnostics remap onto.
@@ -1195,6 +1221,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
             &render_ids,
         ));
         resolutions.push(resolution);
+        imports.push(pkg.imports(db).clone());
 
         let checked_pkg = check_package(db, workspace, *pkg, std);
         diagnostics.extend(remap_diagnostics(
@@ -1239,6 +1266,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         std,
         checked,
         resolutions,
+        imports,
         system,
         diagnostics,
         sources,
