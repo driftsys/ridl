@@ -114,6 +114,22 @@ in D1's final report:
 8. The package name of `crates/ridl` is `ridl-cli` (AGENTS.md), so every cargo
    command in Tasks 9 and 11 says `-p ridl-cli`.
 
+Changes the review of PR #667 added (pass 1, 2026-10-03):
+
+- The golden-hash test numbers the corpus snapshot's shapes (1.., provisional)
+  before hashing, because the snapshot predates Epic 15 and carries no number.
+- Task 7's `ridl-backend-rust` dev-dependency is a plain path with no version,
+  for the reason `crates/ridl-backend-rust/Cargo.toml` records, and Task 7
+  repeats the publish dry run.
+- Task 10's `to_json` is compared with
+  `flatc --json --strict-json
+  --defaults-json`, with the one difference named
+  (an absent `timing`).
+- Task 11's corpus snapshot shows one `FlatBuffers` row per payload: every
+  corpus payload is a named scalar (decision 5).
+- The ADR-0017 citations name decision 1 (inlining) and decision 2 (no wrapper
+  message); E11.7's D-6 is cited to the archived design.
+
 **Goal:** Emit the catalog descriptor of
 `2026-09-13-runtime-descriptors-design.md` — a FlatBuffers file per package that
 an engine reads without decoding — from `ridlc build --emit catalog`, verify it
@@ -2447,8 +2463,9 @@ fn delimited(number: u32, payload: u64) -> u64 {
 }
 
 /// The proto3 state of the named type `type_name`: its message's bound for
-/// a struct or a union; absent for everything else (ADR-0017 decisions 1 and
-/// 2 give a named scalar, an enum or an enum set no root form), for a name that
+/// a struct or a union; absent for everything else (ADR-0017 decision 1
+/// inlines a named scalar and an enum set, decision 2 rejects a wrapper
+/// message, and an enum is a declared `enum`, not a message), for a name that
 /// does not resolve, for a member the projection refuses, and for a bound
 /// above `u32::MAX`.
 pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
@@ -3592,7 +3609,7 @@ git commit -m "feat(ridlc): emit the catalog descriptor with --emit catalog"
 
 **Interfaces:**
 - Consumes: `CatalogRef` and the other views (Task 1), `verify` (Task 2), `lower` (Task 8) in the test.
-- Produces: `pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>` — the view `flatc --json --strict-json --defaults-json` gives (`--defaults-json`, because `flatc` leaves out a scalar at its default otherwise): schema field names as keys, enums by member name, `hash` as an array of bytes, an absent `timing` as `null`, and every field of a `MaxSize` row, defaults included (`bytes` is 0 and `cause` is `"Unspecified"` where they do not apply).
+- Produces: `pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>` — schema field names as keys, enums by member name, `hash` as an array of bytes, an absent `timing` as `null`, and every field of a `MaxSize` row, defaults included. This is close to `flatc --json --strict-json --defaults-json`, with one difference: `flatc` omits an absent table field (`timing`) where this view writes `null`, and `--defaults-json` restores scalars at their default only (`bytes` is 0 and `cause` is `"Unspecified"` where they do not apply).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3695,8 +3712,8 @@ Module body above the tests:
 ```rust
 //! `ridl describe`'s view of a descriptor (spec D-9): strict JSON built by
 //! walking the checked accessors. There is no JSON emit; this is a rendering
-//! of the binary, and `flatc --json --strict-json --defaults-json` gives the
-//! same view.
+//! of the binary. `flatc --json --strict-json --defaults-json` gives the same
+//! view except that it omits an absent `timing`, which is `null` here.
 
 use serde_json::{json, Value};
 
@@ -3972,7 +3989,9 @@ interfaces — `VehicleStatus`, then the inline shape of the service
 `corpus.baseline.hvac` — each with the number `ridl-sem` gave it (the corpus has
 no `interfaces.lock`, so both are `"provisional": true`) and its members in
 ordinal order; per payload, a `max_sizes` list holding the states the toolchain
-computed: two rows for a payload that is one named type, none for a stream, a
+computed: one `FlatBuffers` row for each corpus payload, because every payload
+in `cluster.ridl` is a named scalar, which has no proto3 state (re-baseline
+decision 5); a struct or union payload would show two rows; none for a stream, a
 request of zero or several parameters or a `T | E` reply; no `ReprC` row
 anywhere. Then run `cargo insta accept` (or move the `.snap.new` file) and
 re-run: all PASS.
@@ -4080,10 +4099,11 @@ git commit -m "feat(ridl): add ridl describe for the catalog descriptor"
 - Modify: `AGENTS.md` (the crate count and list in the first section)
 - Modify: `README.md` (the crate list, if it has one)
 - Modify: `docs/technotes/walking-skeleton-architecture.md` (both places that
-  describe `cargo xtask`: the workspace summary near lines 25-28 and 44, and the
-  `xtask` entry near line 261; `CONTRIBUTING.md` has no generated-code section;
-  `docs/decisions/ADR-0007-e1-execution.md:29` also describes
-  `cargo xtask codegen`, and stays as a dated record)
+  describe `cargo xtask`: the workspace summary near lines 25-28, which names
+  the `xtask` member, and the `xtask` entry near line 261; line 44 is inside the
+  `ridl-syntax` entry and is not one of them; `CONTRIBUTING.md` has no
+  generated-code section; `docs/decisions/ADR-0007-e1-execution.md:29` also
+  describes `cargo xtask codegen`, and stays as a dated record)
 
 The roadmap needs no row: Epic 16's rows E16.1 to E16.6 exist, and D8's
 gardening marks them landed. The design note's §7 dispositions and the
@@ -4112,7 +4132,9 @@ gains the second generator and its rule, as one paragraph after it:
 schema edit. The xtask test `committed_generated_accessors_match_the_schema`
 fails while the committed file is stale. The schema is append-only: add fields
 at the end of a table, never remove or reorder one." The workspace summary near
-lines 25-28 and 44 names the second task in one clause.
+lines 25-28, where the `xtask` member is named, gains the second task in one
+clause; the `ridl-syntax` entry (which cites `cargo xtask codegen` near line 44)
+is not touched.
 
 - [ ] **Step 3: Run the full gate**
 
