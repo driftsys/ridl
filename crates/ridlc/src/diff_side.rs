@@ -127,6 +127,23 @@ impl std::fmt::Display for DiffSideError {
 impl std::error::Error for DiffSideError {}
 
 /// Loads a source path or a flat JSON snapshot set. Overlays apply only to source.
+///
+/// Only IR artifacts are recognised by name — the suffix table (issue #218
+/// item 4). Three inputs are refused rather than parsed as source: a file in
+/// a non-JSON IR encoding; a directory that holds IR artifacts but neither an
+/// `.ir.json` snapshot nor source — no `ridl.toml` and no `.typl`/`.ridl`
+/// file directly inside it; and a directory with no source whose `.ir.json`
+/// snapshots sit one level below it rather than inside it, which is a path
+/// aimed one level too high (issue #230). A fourth is refused before any of
+/// those three is considered: a directory — source tree or not — holding an
+/// entry named like a snapshot whose metadata cannot be read, which
+/// [`snapshot_files`] reports rather than skips (driftsys/ridl#339 case 3).
+/// Everything else is source. Recognising *source*
+/// by extension was tried and reverted — it refused inputs the compiler
+/// accepts, such as a `ridl.toml` path designating its workspace, an
+/// extensionless source file, or a symlink — so a renamed artifact whose
+/// name lost the `.ir.` infix still falls through to the compiler (recorded
+/// on issue #218).
 pub fn load_diff_side(
     db: &mut RidlDatabase,
     entry: &Path,
@@ -202,6 +219,10 @@ impl std::fmt::Debug for DiffSideError {
         std::fmt::Display::fmt(self, f)
     }
 }
+/// The one snapshot suffix this surface accepts — baselines and diffs stay
+/// `.ir.json` (ADR-0014 decision 5). Drawn from the emit table in `ridlc`
+/// rather than spelled here, so the recognition cannot drift from the name
+/// the artifact writer uses (issue #218 item 4).
 const IR_JSON_SUFFIX: &str = match Emit::IrJson.ir_dump_suffix() {
     Some(suffix) => suffix,
     None => panic!("`ir-json` is an IR dump"),
@@ -217,13 +238,13 @@ const IR_JSON_SUFFIX: &str = match Emit::IrJson.ir_dump_suffix() {
 /// compiler and is reported there, but not for a directory listing, where a
 /// skipped entry would read as an absent snapshot: [`snapshot_files`] tells
 /// the two apart and reports the entry it cannot read (driftsys/ridl#339).
-fn is_ir_json(path: &Path) -> bool {
+pub fn is_ir_json(path: &Path) -> bool {
     path.is_file() && has_ir_json_name(path)
 }
 
 /// Whether `path`'s file name ends [`IR_JSON_SUFFIX`], whatever the entry
 /// behind it is.
-fn has_ir_json_name(path: &Path) -> bool {
+pub fn has_ir_json_name(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.ends_with(IR_JSON_SUFFIX))
@@ -236,7 +257,7 @@ fn has_ir_json_name(path: &Path) -> bool {
 /// reviewable in a pull request. The suffixes are iterated from the table
 /// rather than spelled here, so an encoding added to `ridlc` is refused by
 /// name with no edit on this side (issue #218 item 4).
-fn is_non_json_ir(path: &Path) -> bool {
+pub fn is_non_json_ir(path: &Path) -> bool {
     path.is_file()
         && path
             .file_name()
@@ -252,7 +273,7 @@ fn is_non_json_ir(path: &Path) -> bool {
 /// a source tree from a snapshot directory ([`is_source_dir`]) — a diff
 /// *argument* is never gated on this, because a source file's own name is
 /// unconstrained ([`load_diff_side`]).
-fn is_source_file(path: &Path) -> bool {
+pub fn is_source_file(path: &Path) -> bool {
     path.is_file()
         && path.extension().is_some_and(|extension| {
             extension == "typl" || extension == "ridl" || extension == "rsdl"
@@ -262,12 +283,13 @@ fn is_source_file(path: &Path) -> bool {
 /// Whether `dir` is a source tree by its direct contents: it holds a
 /// `ridl.toml` or at least one `.typl`, `.ridl` or `.rsdl` file. A snapshot
 /// directory — `.ridl/baseline/`, or a build `--out-dir` — holds neither.
-fn is_source_dir(dir: &Path) -> bool {
+pub fn is_source_dir(dir: &Path) -> bool {
     dir.join("ridl.toml").is_file()
         || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
 }
 
-fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
+/// The files directly inside `dir` that satisfy `keep`, in file-name order.
+pub fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
         .flatten()
         .map(|entry| entry.path())
@@ -277,18 +299,48 @@ fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<Pa
     Ok(files)
 }
 
-fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+/// The `.ir.json` snapshots directly inside `dir`, in file-name order.
+pub fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     files_matching(dir, is_ir_json)
 }
 
-fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
+/// The first non-JSON IR artifact directly inside `dir`, in file-name order —
+/// the witness a directory refusal names. A read failure yields `None`: every
+/// caller has just listed the same directory through [`snapshot_files`], so
+/// its own fallback reports the cause.
+pub fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
     files_matching(dir, is_non_json_ir)
         .unwrap_or_default()
         .into_iter()
         .next()
 }
 
-fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, DiffSideError> {
+/// The first immediate subdirectory of `dir` that itself holds an `.ir.json`
+/// snapshot, in name order — the witness a nesting refusal names.
+///
+/// One level down, and no further. `ridl baseline` publishes one flat
+/// directory of snapshots and stages into a *sibling* of it, so snapshots
+/// below a snapshot directory are never a layout the toolchain writes: they
+/// are the signature of a path aimed one level too high (`.ridl` where
+/// `.ridl/baseline` was meant), which is the mistake worth telling apart from
+/// an unpublished baseline. Searching deeper would mean walking an arbitrary
+/// tree — `--baseline .` at a repository root — to answer a question about
+/// the one directory the author named, so a path aimed two or more levels
+/// high yields no snapshot from this scan (issue #230). What that empty
+/// result means is the caller's decision: `load_baseline` refuses it for an
+/// explicit `--baseline` (driftsys/ridl#235) and reads it as an unpublished
+/// baseline under auto-discovery.
+///
+/// A subdirectory that cannot be listed is exit 2, not a silent `None`. This
+/// is the one scan in this file that reads a level *no caller has listed* —
+/// [`first_non_json_ir_in`] and [`snapshot_files`] both read only `dir`
+/// itself, which the caller has already been through — so the rule
+/// [`snapshot_files`] states has to be restated here rather than inherited:
+/// a directory that cannot be read must not quietly become a directory that
+/// holds nothing. Swallowing the error would let an unreadable
+/// `.ridl/baseline/` read as an unpublished baseline and skip the desk check
+/// in silence, which is the failure this whole refusal exists to close.
+pub fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, DiffSideError> {
     let unreadable = |path: &Path, error: io::Error| DiffSideError::NestedRead {
         path: path.to_path_buf(),
         error,
@@ -310,7 +362,26 @@ fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, DiffSideErro
     }
     Ok(None)
 }
-fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, DiffSideError> {
+/// The `.ir.json` snapshots directly inside `dir`, in file-name order, with
+/// two failures turned into exit 2 — a comparison against a directory that
+/// cannot be listed must not quietly become a comparison against nothing:
+///
+/// - the directory itself cannot be listed;
+/// - an entry named like a snapshot whose metadata cannot be read — a
+///   symlink whose target is gone. [`is_ir_json`] is `false` on such an
+///   entry, so [`ir_json_files`] would skip it and the directory would read
+///   as one snapshot short, which is an absent baseline to every caller:
+///   `ridl baseline` would publish over it as a first publication, and
+///   `ridl check` under auto-discovery would skip the desk check
+///   (driftsys/ridl#339 case 3). The message names the entry, not the
+///   directory, because the directory was listed.
+///
+/// A snapshot-named entry whose metadata reads fine but which is not a file
+/// — a directory — is skipped, as [`ir_json_files`] skips it. Entries are
+/// stat'ed in file-name order, so the entry a run reports is the same each
+/// time. The metadata read follows symlinks, so a link to a readable file
+/// is the file it names.
+pub fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, DiffSideError> {
     let named = files_matching(dir, has_ir_json_name).map_err(|error| {
         DiffSideError::SnapshotDirectory {
             path: dir.to_path_buf(),
