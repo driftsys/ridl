@@ -542,6 +542,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-401",
+              "name": "broken-doc-link",
+              "shortDescription": {
+                "text": "doc link or `@see` target that does not resolve"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "TYPL-404",
               "name": "detached-doc-comment",
               "shortDescription": {
@@ -1419,7 +1429,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 64,
+          "ruleIndex": 65,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1484,7 +1494,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 148,
+          "ruleIndex": 149,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

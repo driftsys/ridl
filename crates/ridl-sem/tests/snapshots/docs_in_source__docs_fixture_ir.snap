@@ -1,0 +1,1059 @@
+---
+source: crates/ridl-sem/tests/docs_in_source.rs
+expression: json
+---
+{
+  "name": "veh.common",
+  "decls": [
+    {
+      "name": "Speed",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Vehicle speed over ground, bounded by [MAX_SPEED].",
+      "labels": [],
+      "ordinal": 0,
+      "links": [
+        {
+          "text": "MAX_SPEED",
+          "offset": 38,
+          "len": 11,
+          "target": "veh.common.MAX_SPEED"
+        }
+      ],
+      "see": [],
+      "since": [
+        "1.0"
+      ],
+      "typeDef": {
+        "backing": {
+          "unit": "km/h"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": "MAX_SPEED",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The upper bound of [Speed].",
+      "labels": [],
+      "ordinal": 0,
+      "links": [
+        {
+          "text": "Speed",
+          "offset": 19,
+          "len": 7,
+          "target": "veh.common.Speed"
+        }
+      ],
+      "see": [
+        {
+          "text": "Speed",
+          "offset": 0,
+          "len": 0,
+          "target": "veh.common.Speed"
+        }
+      ],
+      "since": [],
+      "constDef": {
+        "typeRef": "Speed",
+        "value": "250"
+      }
+    },
+    {
+      "name": "Gear",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A gear selector position; [Gear.PARK] is the init value.",
+      "labels": [
+        "QM"
+      ],
+      "ordinal": 0,
+      "links": [
+        {
+          "text": "Gear.PARK",
+          "offset": 26,
+          "len": 11,
+          "target": "veh.common.Gear.PARK"
+        }
+      ],
+      "see": [],
+      "since": [],
+      "enumDef": {
+        "values": [
+          {
+            "name": "PARK",
+            "value": "1",
+            "doc": "Parked. Every [GearSet] holds this value.",
+            "links": [
+              {
+                "text": "GearSet",
+                "offset": 14,
+                "len": 9,
+                "target": "veh.common.GearSet"
+              }
+            ],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "DRIVE",
+            "value": "2",
+            "doc": "Driving forward.",
+            "links": [],
+            "see": [],
+            "since": [
+              "1.1"
+            ]
+          }
+        ],
+        "reserved": []
+      }
+    },
+    {
+      "name": "GearSet",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The gears a transmission supports: a set of [Gear].",
+      "labels": [],
+      "ordinal": 0,
+      "links": [
+        {
+          "text": "Gear",
+          "offset": 44,
+          "len": 6,
+          "target": "veh.common.Gear"
+        }
+      ],
+      "see": [],
+      "since": [],
+      "enumSetDef": {
+        "backingEnum": "Gear",
+        "bits": [
+          {
+            "name": "PARK",
+            "value": "1",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "DRIVE",
+            "value": "2",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "width": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": "Flags",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Explicit bits.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumSetDef": {
+        "bits": [
+          {
+            "name": "FIRST",
+            "value": "0",
+            "doc": "The first bit, beside [Flags.SECOND].",
+            "links": [
+              {
+                "text": "Flags.SECOND",
+                "offset": 22,
+                "len": 14,
+                "target": "veh.common.Flags.SECOND"
+              }
+            ],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "SECOND",
+            "value": "1",
+            "doc": "The second bit.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "width": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": "Pose",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A pose: [Pose.x] and [Pose.y] are metres.",
+      "labels": [],
+      "deprecated": "use the ridl.std types",
+      "ordinal": 0,
+      "links": [
+        {
+          "text": "Pose.x",
+          "offset": 8,
+          "len": 8,
+          "target": "veh.common.Pose.x"
+        },
+        {
+          "text": "Pose.y",
+          "offset": 21,
+          "len": 8,
+          "target": "veh.common.Pose.y"
+        }
+      ],
+      "see": [],
+      "since": [
+        "2.0"
+      ],
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "x",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
+                  },
+                  "constraint": {
+                    "min": "0",
+                    "max": "100"
+                  },
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "East, read at the current [Speed] in the current [veh.common.Gear].",
+              "labels": [],
+              "deprecated": "use y",
+              "links": [
+                {
+                  "text": "Speed",
+                  "offset": 26,
+                  "len": 7,
+                  "target": "veh.common.Speed"
+                },
+                {
+                  "text": "veh.common.Gear",
+                  "offset": 49,
+                  "len": 17,
+                  "target": "veh.common.Gear"
+                }
+              ],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "y",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
+                  },
+                  "constraint": {
+                    "min": "0",
+                    "max": "100"
+                  },
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "North.",
+              "labels": [
+                "ASIL_B"
+              ],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "reserved": {
+              "ordinal": 3,
+              "name": "z"
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": "Shape",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Either shape, see [`Shape.pose`].",
+      "labels": [],
+      "ordinal": 0,
+      "links": [
+        {
+          "text": "Shape.pose",
+          "offset": 18,
+          "len": 14,
+          "target": "veh.common.Shape.pose"
+        }
+      ],
+      "see": [],
+      "since": [],
+      "unionDef": {
+        "arms": [
+          {
+            "name": "pose",
+            "ordinal": 1,
+            "typeRef": "Pose",
+            "doc": "A pose, as a [Pose].",
+            "links": [
+              {
+                "text": "Pose",
+                "offset": 13,
+                "len": 6,
+                "target": "veh.common.Pose"
+              }
+            ],
+            "see": [
+              {
+                "text": "Gear",
+                "offset": 0,
+                "len": 0,
+                "target": "veh.common.Gear"
+              }
+            ],
+            "since": []
+          },
+          {
+            "name": "speed",
+            "ordinal": 2,
+            "typeRef": "Speed",
+            "doc": "A speed.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "isResult": false,
+        "reserved": []
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": [],
+  "retired": []
+}
+{
+  "name": "veh.adas",
+  "decls": [],
+  "interfaces": [
+    {
+      "name": "CruiseControl",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Cruise control; [CruiseControl.setLever] takes a [Gear].",
+      "labels": [
+        "ASIL_B"
+      ],
+      "interactions": [
+        {
+          "name": "target",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "The target speed, a [Speed].",
+          "labels": [],
+          "ordinal": 1,
+          "links": [
+            {
+              "text": "Speed",
+              "offset": 20,
+              "len": 7,
+              "target": "veh.common.Speed"
+            }
+          ],
+          "see": [],
+          "since": [
+            "1.0"
+          ],
+          "signalDef": {
+            "payload": "veh.common.Speed",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            }
+          }
+        },
+        {
+          "name": "moved",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Raised when the lever moves, carrying a [Pose].",
+          "labels": [],
+          "ordinal": 2,
+          "links": [
+            {
+              "text": "Pose",
+              "offset": 40,
+              "len": 6,
+              "target": "veh.common.Pose"
+            }
+          ],
+          "see": [],
+          "since": [],
+          "eventDef": {
+            "payload": "veh.common.Pose",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            }
+          }
+        },
+        {
+          "name": "setLever",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Sets the lever, see [Gear.PARK].",
+          "labels": [],
+          "deprecated": "use setGear",
+          "ordinal": 3,
+          "links": [
+            {
+              "text": "Gear.PARK",
+              "offset": 20,
+              "len": 11,
+              "target": "veh.common.Gear.PARK"
+            }
+          ],
+          "see": [
+            {
+              "text": "veh.common.Gear",
+              "offset": 0,
+              "len": 0,
+              "target": "veh.common.Gear"
+            }
+          ],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "gear",
+                "type": {
+                  "optional": false,
+                  "named": "veh.common.Gear"
+                },
+                "doc": "The gear to select, one of [Gear].",
+                "links": [
+                  {
+                    "text": "Gear",
+                    "offset": 27,
+                    "len": 6,
+                    "target": "veh.common.Gear"
+                  }
+                ],
+                "see": [],
+                "since": [
+                  "1.2"
+                ]
+              },
+              {
+                "name": "limit",
+                "type": {
+                  "optional": false,
+                  "named": "veh.common.Speed"
+                },
+                "doc": "The speed limit to keep, a [Speed].",
+                "links": [
+                  {
+                    "text": "Speed",
+                    "offset": 27,
+                    "len": 7,
+                    "target": "veh.common.Speed"
+                  }
+                ],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
+          }
+        },
+        {
+          "name": "pose",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Reads the pose, see [CruiseControl.target].",
+          "labels": [],
+          "ordinal": 4,
+          "links": [
+            {
+              "text": "CruiseControl.target",
+              "offset": 20,
+              "len": 22,
+              "target": "veh.adas.CruiseControl.target"
+            }
+          ],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "veh.common.Pose"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            }
+          }
+        },
+        {
+          "name": "maxSpeed",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "The speed the controller never exceeds, a [`veh.common.Speed`].",
+          "labels": [],
+          "ordinal": 5,
+          "links": [
+            {
+              "text": "veh.common.Speed",
+              "offset": 42,
+              "len": 20,
+              "target": "veh.common.Speed"
+            }
+          ],
+          "see": [],
+          "since": [],
+          "fixedDef": {
+            "payload": {
+              "optional": false,
+              "named": "veh.common.Speed"
+            }
+          }
+        },
+        {
+          "name": "",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Retired, see [Pose].",
+          "labels": [],
+          "ordinal": 6,
+          "links": [
+            {
+              "text": "Pose",
+              "offset": 13,
+              "len": 6,
+              "target": "veh.common.Pose"
+            }
+          ],
+          "see": [],
+          "since": [],
+          "reservedSlot": {
+            "ordinal": 6,
+            "name": "oldLever"
+          }
+        }
+      ],
+      "number": 1,
+      "provisional": true,
+      "links": [
+        {
+          "text": "CruiseControl.setLever",
+          "offset": 16,
+          "len": 24,
+          "target": "veh.adas.CruiseControl.setLever"
+        },
+        {
+          "text": "Gear",
+          "offset": 49,
+          "len": 6,
+          "target": "veh.common.Gear"
+        }
+      ],
+      "see": [
+        {
+          "text": "veh.common.Speed",
+          "offset": 0,
+          "len": 0,
+          "target": "veh.common.Speed"
+        }
+      ],
+      "since": [
+        "1.0"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "veh.adas.cruise",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The published cruise service, over [CruiseControl].",
+      "labels": [],
+      "links": [
+        {
+          "text": "CruiseControl",
+          "offset": 35,
+          "len": 15,
+          "target": "veh.adas.CruiseControl"
+        }
+      ],
+      "see": [
+        {
+          "text": "veh.common.Gear",
+          "offset": 0,
+          "len": 0,
+          "target": "veh.common.Gear"
+        }
+      ],
+      "since": [
+        "1.0"
+      ],
+      "shapes": [
+        {
+          "interfaceRef": "CruiseControl"
+        }
+      ]
+    }
+  ],
+  "retired": []
+}
+{
+  "name": "veh.topology",
+  "decls": [],
+  "interfaces": [],
+  "services": [],
+  "retired": []
+}
+{
+  "name": "Vehicle",
+  "package": "veh.topology",
+  "labels": [],
+  "attributes": [],
+  "members": [
+    {
+      "component": "veh.topology.Cruise",
+      "attributes": [],
+      "doc": "Drives, through [CruiseControl].",
+      "links": [
+        {
+          "text": "CruiseControl",
+          "offset": 16,
+          "len": 15,
+          "target": "veh.adas.CruiseControl"
+        }
+      ],
+      "see": [],
+      "since": []
+    },
+    {
+      "component": "veh.topology.Panel",
+      "attributes": [],
+      "doc": "Shows the state.",
+      "links": [],
+      "see": [],
+      "since": []
+    }
+  ],
+  "components": [
+    {
+      "name": "Cruise",
+      "package": "veh.topology",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [
+        {
+          "service": "veh.adas.cruise",
+          "attributes": [],
+          "doc": "Lists [CruiseControl.target].",
+          "links": [
+            {
+              "text": "CruiseControl.target",
+              "offset": 6,
+              "len": 22,
+              "target": "veh.adas.CruiseControl.target"
+            }
+          ],
+          "see": [],
+          "since": []
+        }
+      ],
+      "requires": [],
+      "labels": [],
+      "attributes": [],
+      "doc": "The cruise component, over [CruiseControl].",
+      "links": [
+        {
+          "text": "CruiseControl",
+          "offset": 27,
+          "len": 15,
+          "target": "veh.adas.CruiseControl"
+        }
+      ],
+      "see": [
+        {
+          "text": "veh.common.Speed",
+          "offset": 0,
+          "len": 0,
+          "target": "veh.common.Speed"
+        }
+      ],
+      "since": [
+        "1.0"
+      ]
+    },
+    {
+      "name": "Panel",
+      "package": "veh.topology",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [],
+      "requires": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "producer": "veh.topology.Cruise",
+          "attributes": [],
+          "doc": "Needs [CruiseControl].",
+          "links": [
+            {
+              "text": "CruiseControl",
+              "offset": 6,
+              "len": 15,
+              "target": "veh.adas.CruiseControl"
+            }
+          ],
+          "see": [
+            {
+              "text": "veh.adas.CruiseControl.setLever",
+              "offset": 0,
+              "len": 0,
+              "target": "veh.adas.CruiseControl.setLever"
+            }
+          ],
+          "since": []
+        }
+      ],
+      "labels": [],
+      "attributes": [],
+      "doc": "The panel component.",
+      "links": [],
+      "see": [],
+      "since": []
+    }
+  ],
+  "producers": [
+    {
+      "service": "veh.adas.cruise",
+      "component": "veh.topology.Cruise",
+      "instances": [
+        "Unit"
+      ],
+      "notYetRealizable": false
+    }
+  ],
+  "grants": [
+    {
+      "component": "veh.topology.Cruise",
+      "external": false,
+      "regions": []
+    },
+    {
+      "component": "veh.topology.Panel",
+      "external": false,
+      "regions": [
+        "veh.adas"
+      ]
+    }
+  ],
+  "regions": [
+    {
+      "catalog": "veh.adas",
+      "interfaces": [
+        {
+          "name": "CruiseControl",
+          "inline": false,
+          "number": 1,
+          "provisional": true,
+          "service": "veh.adas.cruise"
+        }
+      ]
+    }
+  ],
+  "distributions": [
+    {
+      "name": "All",
+      "package": "veh.topology",
+      "members": [
+        {
+          "component": "veh.topology.Cruise",
+          "attributes": [],
+          "doc": "The cruise, over [CruiseControl].",
+          "links": [
+            {
+              "text": "CruiseControl",
+              "offset": 17,
+              "len": 15,
+              "target": "veh.adas.CruiseControl"
+            }
+          ],
+          "see": [],
+          "since": []
+        },
+        {
+          "component": "veh.topology.Panel",
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
+        }
+      ],
+      "dependsOn": [],
+      "labels": [],
+      "attributes": [],
+      "doc": "Every component, see [veh.common.Pose].",
+      "links": [
+        {
+          "text": "veh.common.Pose",
+          "offset": 21,
+          "len": 17,
+          "target": "veh.common.Pose"
+        }
+      ],
+      "see": [],
+      "since": []
+    }
+  ],
+  "deployments": [
+    {
+      "name": "Prod",
+      "package": "veh.topology",
+      "labels": [],
+      "attributes": [],
+      "machines": [
+        {
+          "name": "Box",
+          "external": false,
+          "labels": [],
+          "attributes": [],
+          "doc": "The one box, see [CruiseControl].",
+          "links": [
+            {
+              "text": "CruiseControl",
+              "offset": 17,
+              "len": 15,
+              "target": "veh.adas.CruiseControl"
+            }
+          ],
+          "see": [],
+          "since": [
+            "1.0"
+          ]
+        }
+      ],
+      "placements": [
+        {
+          "component": "veh.topology.Cruise",
+          "instance": "Unit",
+          "machine": "Box",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Panel",
+          "instance": "Unit",
+          "machine": "Box",
+          "attributes": []
+        }
+      ],
+      "links": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "Box"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "Unit",
+            "machine": "Box"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        }
+      ],
+      "routes": [
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "CruiseControl",
+          "member": "target",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "Unit",
+              "machine": "Box"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 2,
+          "interface": "CruiseControl",
+          "member": "moved",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "Unit",
+              "machine": "Box"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 3,
+          "interface": "CruiseControl",
+          "member": "setLever",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "Unit",
+              "machine": "Box"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 4,
+          "interface": "CruiseControl",
+          "member": "pose",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "Unit",
+              "machine": "Box"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 5,
+          "interface": "CruiseControl",
+          "member": "maxSpeed",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "Unit",
+              "machine": "Box"
+            }
+          ]
+        }
+      ],
+      "surface": [],
+      "installations": [
+        {
+          "distribution": "veh.topology.All",
+          "machines": [
+            "Box"
+          ]
+        }
+      ],
+      "doc": "Production, see [veh.adas.CruiseControl].",
+      "docLinks": [
+        {
+          "text": "veh.adas.CruiseControl",
+          "offset": 16,
+          "len": 24,
+          "target": "veh.adas.CruiseControl"
+        }
+      ],
+      "see": [
+        {
+          "text": "veh.common.Speed",
+          "offset": 0,
+          "len": 0,
+          "target": "veh.common.Speed"
+        }
+      ],
+      "since": []
+    }
+  ],
+  "doc": "The vehicle, which selects a [veh.common.Gear].",
+  "links": [
+    {
+      "text": "veh.common.Gear",
+      "offset": 29,
+      "len": 17,
+      "target": "veh.common.Gear"
+    }
+  ],
+  "see": [],
+  "since": [
+    "1.0"
+  ]
+}

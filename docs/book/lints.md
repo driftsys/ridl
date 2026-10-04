@@ -129,6 +129,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
+| `broken-doc-link` | TYPL-401 | warn | doc link or `@see` target that does not resolve |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its carrier |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
 | `misplaced-doc-comment` | TYPL-407 | warn | doc comment in a position that is not a carrier |

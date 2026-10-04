@@ -20,7 +20,9 @@
 //!   requiring `///` doc comments.
 //!
 //! TYPL-405 `deprecated-without-reason` stays in the checker, beside the
-//! lowering that marks the declaration deprecated.
+//! lowering that marks the declaration deprecated, and so does TYPL-401
+//! `broken-doc-link`, raised where the lowering stores the resolved links
+//! (`crate::resolve::resolve_doc_link`).
 
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, FixIt, Severity, Span};

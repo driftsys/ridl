@@ -212,6 +212,8 @@ fn system_decl(
         members,
         attrs: read.attrs,
         doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -250,6 +252,8 @@ fn component_decl(
         external: read.external,
         attrs: read.attrs,
         doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -280,6 +284,8 @@ fn distribution_decl(
         tier: read.tier,
         attrs: read.attrs,
         doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -305,6 +311,8 @@ fn deployment_decl(
         machines,
         attrs: read.attrs,
         doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -333,6 +341,8 @@ fn machine_decl(
         external: read.external,
         attrs: read.attrs,
         doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -367,6 +377,8 @@ fn member_ref(
         reference,
         backend_keys,
         doc: docs::scan(docs),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 

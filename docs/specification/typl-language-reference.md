@@ -1344,7 +1344,7 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 
 | Code     | Rule                                                                                                                                                    | Severity |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| TYPL-401 | unresolved `[TypeName]` reference in doc comment                                                                                                        | warning  |
+| TYPL-401 | doc link or `@see` target that does not resolve — the name is unknown, is `internal` in another package, or names no member of the declaration          | warning  |
 | TYPL-402 | `@labels` identifier not recognised by active profile                                                                                                   | info     |
 | TYPL-403 | `@labels` combination invalid per active profile                                                                                                        | error    |
 | TYPL-404 | blank line between a doc comment and its carrier — a declaration or a member                                                                            | warning  |

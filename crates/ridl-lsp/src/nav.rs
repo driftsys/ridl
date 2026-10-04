@@ -11,8 +11,8 @@
 //! rename feature reuses [`symbol_at`] for the same reason.
 
 use ridl_core::db::{InputFile, parse_file};
-use ridl_core::package::{Package, Workspace, package_of};
-use ridl_sem::{Resolution, Symbol, resolve_package};
+use ridl_core::package::{Package, Workspace};
+use ridl_sem::{Resolution, Symbol, resolve_doc_link, resolve_package};
 use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextRange, TextSize, TokenAtOffset};
@@ -152,15 +152,12 @@ struct Reference {
 }
 
 /// Resolves a [`Reference`] against the referencing package `pkg`'s
-/// `resolution`.
-///
-/// A single-segment reference is looked up in the package-local view (locals,
-/// imports, then `ridl.std`); a qualified reference resolves its package path
-/// through ADR-0002 §5 and reads the named declaration from that package's own
-/// resolution — never an alias or a re-export. The requesting package `pkg` is
-/// preferred when its name matches the path, so a self-qualified reference in a
-/// standalone overlay (which `package_of` cannot find) still resolves —
-/// mirroring the checker's own `package_handle`.
+/// `resolution`, through the doc-link resolver the checker uses
+/// ([`resolve_doc_link`], ADR-0026): a single-segment reference is looked up
+/// in the package-local view (locals, imports, then `ridl.std`); a qualified
+/// reference resolves its package path through ADR-0002 §5 and reads the
+/// named declaration from that package. A reference the resolver reads as a
+/// member of a declaration (`Gear.PARK`) is not a symbol, so it yields `None`.
 fn resolve_reference(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -169,24 +166,8 @@ fn resolve_reference(
     resolution: &Resolution,
     reference: &Reference,
 ) -> Option<Symbol> {
-    let (name, package_path) = reference.segments.split_last()?;
-    if package_path.is_empty() {
-        return resolution.symbols.get(name).cloned();
-    }
-    let target_path = package_path.join(".");
-    let target = if target_path == *pkg.name(db) {
-        pkg
-    } else if target_path == *std.name(db) {
-        std
-    } else {
-        package_of(db, ws, target_path.clone())?
-    };
-    let target_resolution = resolve_package(db, ws, target, std);
-    target_resolution
-        .symbols
-        .get(name)
-        .filter(|symbol| symbol.package == target_path)
-        .cloned()
+    let target = resolve_doc_link(db, ws, std, pkg, resolution, &reference.segments).ok()?;
+    target.member.is_none().then_some(target.symbol)
 }
 
 /// The reference the identifier `token` participates in: a type reference

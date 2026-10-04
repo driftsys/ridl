@@ -526,6 +526,13 @@ diag_codes! {
         TYPL_304 = "TYPL-304", Error,
             "interaction declaration in a typl context";
 
+        /// A doc link or an `@see` target that does not resolve (typl §14,
+        /// §16.5; ADR-0026): the name is unknown, is `internal` in another
+        /// package, or names no member of the declaration. Warning. Emitted by
+        /// the checker, which resolves every link candidate.
+        TYPL_401 = "TYPL-401", Warning,
+            "doc link or `@see` target that does not resolve", lint = "broken-doc-link";
+
         /// Blank line between a doc comment and its carrier (typl §14, §16.5;
         /// ADR-0026 extends it from declarations to every carrier). Warning.
         /// Emitted by the doc lints (`ridl_sem::doc_lint`).
@@ -1940,6 +1947,7 @@ mod tests {
             ("TYPL-103", "unbounded-length"),
             ("TYPL-115", "no-init-value"),
             ("TYPL-211", "duplicate-reserved"),
+            ("TYPL-401", "broken-doc-link"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
             ("TYPL-407", "misplaced-doc-comment"),

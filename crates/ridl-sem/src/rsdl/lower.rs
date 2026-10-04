@@ -53,8 +53,8 @@ pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option
         distributions: lowering.distributions(),
         deployments: lowering.deployments(),
         doc: decl.doc.doc.clone(),
-        links: Vec::new(),
-        see: Vec::new(),
+        links: decl.links.clone(),
+        see: decl.see.clone(),
         since: decl.doc.since.clone(),
     })
 }
@@ -122,8 +122,8 @@ impl<'a> Lowering<'a> {
                     component: self.component_name(component),
                     attributes: attributes(&line.backend_keys),
                     doc: line.doc.doc.clone(),
-                    links: Vec::new(),
-                    see: Vec::new(),
+                    links: line.links.clone(),
+                    see: line.see.clone(),
                     since: line.doc.since.clone(),
                 })
             })
@@ -155,8 +155,8 @@ impl<'a> Lowering<'a> {
                                 service: service.clone()?,
                                 attributes: attributes(&line.backend_keys),
                                 doc: line.doc.doc.clone(),
-                                links: Vec::new(),
-                                see: Vec::new(),
+                                links: line.links.clone(),
+                                see: line.see.clone(),
                                 since: line.doc.since.clone(),
                             })
                         })
@@ -188,8 +188,8 @@ impl<'a> Lowering<'a> {
                             attributes: line
                                 .map_or_else(Vec::new, |line| attributes(&line.backend_keys)),
                             doc: line.map(|line| line.doc.doc.clone()).unwrap_or_default(),
-                            links: Vec::new(),
-                            see: Vec::new(),
+                            links: line.map(|line| line.links.clone()).unwrap_or_default(),
+                            see: line.map(|line| line.see.clone()).unwrap_or_default(),
                             since: line.map(|line| line.doc.since.clone()).unwrap_or_default(),
                         }
                     })
@@ -206,8 +206,8 @@ impl<'a> Lowering<'a> {
                     attributes: decl
                         .map_or_else(Vec::new, |decl| attributes(&decl.attrs.backend_keys)),
                     doc: decl.map(|decl| decl.doc.doc.clone()).unwrap_or_default(),
-                    links: Vec::new(),
-                    see: Vec::new(),
+                    links: decl.map(|decl| decl.links.clone()).unwrap_or_default(),
+                    see: decl.map(|decl| decl.see.clone()).unwrap_or_default(),
                     since: decl.map(|decl| decl.doc.since.clone()).unwrap_or_default(),
                 }
             })
@@ -241,8 +241,8 @@ impl<'a> Lowering<'a> {
                 labels: machine.attrs.labels.clone(),
                 attributes: attributes(&machine.attrs.backend_keys),
                 doc: machine.doc.doc.clone(),
-                links: Vec::new(),
-                see: Vec::new(),
+                links: machine.links.clone(),
+                see: machine.see.clone(),
                 since: machine.doc.since.clone(),
             })
             .collect();
@@ -318,8 +318,8 @@ impl<'a> Lowering<'a> {
             surface,
             installations: self.installations(decl, placement),
             doc: decl.doc.doc.clone(),
-            doc_links: Vec::new(),
-            see: Vec::new(),
+            doc_links: decl.links.clone(),
+            see: decl.see.clone(),
             since: decl.doc.since.clone(),
         }
     }
@@ -496,8 +496,8 @@ impl<'a> Lowering<'a> {
                             component: self.component_name(component),
                             attributes: attributes(&line.backend_keys),
                             doc: line.doc.doc.clone(),
-                            links: Vec::new(),
-                            see: Vec::new(),
+                            links: line.links.clone(),
+                            see: line.see.clone(),
                             since: line.doc.since.clone(),
                         })
                     })
@@ -516,8 +516,8 @@ impl<'a> Lowering<'a> {
                     labels: decl.attrs.labels.clone(),
                     attributes: attributes(&decl.attrs.backend_keys),
                     doc: decl.doc.doc.clone(),
-                    links: Vec::new(),
-                    see: Vec::new(),
+                    links: decl.links.clone(),
+                    see: decl.see.clone(),
                     since: decl.doc.since.clone(),
                 }
             })
@@ -588,6 +588,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ridl_core::db::RidlDatabase;
+    use ridl_core::diag::{DiagCode, Diagnostic, Severity};
     use ridl_core::package::Workspace;
     use ridl_core::std_package;
 
@@ -906,6 +907,68 @@ mod tests {
         assert_eq!(system.components[1].requires[0].doc, "Doc requires.");
         assert_eq!(system.deployments[0].doc, "Doc deployment.");
         assert_eq!(system.deployments[0].machines[0].doc, "Doc machine.");
+    }
+
+    /// Doc links and `@see` targets on the rsdl carriers resolve in the
+    /// declaring package's view — through its imports, qualified without one,
+    /// and to a member — and reach the system IR; one that does not resolve
+    /// is TYPL-401 and is not stored.
+    #[test]
+    fn rsdl_doc_links_reach_the_system_ir() {
+        let text = "package veh.topology\n\
+                    import veh.adas.LaneAssist\n\
+                    /// Offers [veh.adas.CruiseControl.setLever].\n\
+                    /// @see veh.common.Speed\n\
+                    component Lane {\n\
+                    \x20 /// Lists [LaneAssist].\n\
+                    \x20 offers veh.adas.lane\n\
+                    }\n\
+                    component Panel {\n\
+                    \x20 /// Needs [LaneAssist].\n\
+                    \x20 requires LaneAssist\n\
+                    }\n\
+                    /// The [veh.common.LeverCmd] system.\n\
+                    system Vehicle {\n\
+                    \x20 /// Drives [Nope].\n\
+                    \x20 Lane\n\
+                    \x20 Panel\n\
+                    }\n\
+                    /// Deployed [LaneAssist.active].\n\
+                    deployment Prod for Vehicle {\n\
+                    \x20 /// @see veh.common.Engaged\n\
+                    \x20 machine Box { Lane, Panel }\n\
+                    }\n";
+        let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text)]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let typl_401: Vec<&Diagnostic> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::TYPL_401)
+            .collect();
+        assert_eq!(typl_401.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(typl_401[0].severity, Severity::Warning);
+        let range = typl_401[0].primary.range;
+        assert_eq!(
+            &text[usize::from(range.start())..usize::from(range.end())],
+            "[Nope]"
+        );
+        let system = lowered.expect("the closure lowers");
+        assert_eq!(system.links[0].target, "veh.common.LeverCmd");
+        assert_eq!(system.links[0].text, "veh.common.LeverCmd");
+        assert!(system.members[0].links.is_empty());
+        let lane = &system.components[0];
+        assert_eq!(lane.links[0].target, "veh.adas.CruiseControl.setLever");
+        assert_eq!(lane.see[0].target, "veh.common.Speed");
+        assert_eq!(lane.offers[0].links[0].target, "veh.adas.LaneAssist");
+        assert_eq!(
+            system.components[1].requires[0].links[0].target,
+            "veh.adas.LaneAssist"
+        );
+        let deployment = &system.deployments[0];
+        assert_eq!(deployment.doc_links[0].target, "veh.adas.LaneAssist.active");
+        assert_eq!(deployment.doc_links[0].offset, 9);
+        assert_eq!(deployment.doc_links[0].len, 19);
+        assert_eq!(deployment.machines[0].see[0].target, "veh.common.Engaged");
     }
 
     /// The link set of `deployment` as `(consumer instance, producer

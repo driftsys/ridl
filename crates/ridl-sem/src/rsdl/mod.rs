@@ -18,6 +18,7 @@ mod attrs;
 mod closure;
 mod collect;
 mod distribution;
+mod doc_links;
 mod lower;
 mod placement;
 mod resolve;
@@ -37,6 +38,7 @@ use std::collections::{BTreeSet, HashMap};
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_ir::v2;
 use ridl_syntax::Profile;
 use rowan::TextRange;
 
@@ -58,6 +60,7 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     let mut reporter = Reporter::new(db, ws);
     let mut system = collect::collect(db, ws, &mut reporter);
     lint_docs(db, ws, &mut reporter);
+    doc_links::resolve(db, ws, std, &mut system, &mut reporter);
     collect::check_declaration_names(db, ws, &system, &mut reporter);
     let catalog = service_catalog(db, ws, std);
     let mut lookup = closure::Lookup::new(db, ws, std, &system, &catalog);
@@ -233,6 +236,10 @@ pub struct SystemDecl {
     pub attrs: DeclAttrs,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `component` declaration (rsdl §3.2).
@@ -255,6 +262,10 @@ pub struct ComponentDecl {
     pub attrs: DeclAttrs,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `distribution` declaration (rsdl §3.3).
@@ -268,6 +279,10 @@ pub struct DistributionDecl {
     pub attrs: DeclAttrs,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `deployment` declaration and its machines (rsdl §3.4).
@@ -281,6 +296,10 @@ pub struct DeploymentDecl {
     pub attrs: DeclAttrs,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `machine` declaration inside a deployment (rsdl §3.5).
@@ -294,6 +313,10 @@ pub struct MachineDecl {
     pub attrs: DeclAttrs,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// One body line: a member line of a `system`, `distribution` or `machine`,
@@ -305,6 +328,10 @@ pub struct MemberRef {
     pub backend_keys: Vec<BackendKey>,
     /// The line's doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
+    /// The resolved doc links of the line, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A reference as written (rsdl §4): its dotted segments, its site, and the
