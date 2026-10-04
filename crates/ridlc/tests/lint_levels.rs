@@ -228,9 +228,18 @@ impl SiblingFixture {
             "ridl.toml",
             &format!("[workspace]\nmembers = [\"a\", \"b\"]\n{root_tail}"),
         );
-        write("a/ridl.toml", "[package]\nname = \"a\"\nversion = \"1.0.0\"\n");
-        write("a/a.typl", "package a\n\n/// A level.\ntype Level: integer [0..3]\n");
-        write("b/ridl.toml", "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n");
+        write(
+            "a/ridl.toml",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+        );
+        write(
+            "a/a.typl",
+            "package a\n\n/// A level.\ntype Level: integer [0..3]\n",
+        );
+        write(
+            "b/ridl.toml",
+            "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+        );
         write("b/sensor.ridl", SOURCE);
         Self { root }
     }
@@ -297,8 +306,7 @@ fn a_member_entry_reports_the_root_manifest_diagnostics() {
         .expect("the build runs");
     assert_eq!(mani_007(&run.diagnostics), 1, "{:?}", run.diagnostics);
     assert!(
-        !run
-            .diagnostics
+        !run.diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message.contains("another member")),
         "the root manifest's error is the member's own: {:?}",
