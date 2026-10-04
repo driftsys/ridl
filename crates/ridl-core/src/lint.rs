@@ -172,10 +172,9 @@ pub fn apply_lint_levels(
             .path(diagnostic.primary.file)
             .and_then(|path| scopes.for_path(Path::new(path)))
             .unwrap_or(&defaults);
-        // `entry` is a lint row, so it has a level.
-        let Some(level) = levels.level(entry) else {
-            return true;
-        };
+        let level = levels
+            .level(entry)
+            .expect("`lint_of` returns a lint row, and every lint row has a level");
         match level.severity() {
             Some(severity) => {
                 diagnostic.severity = severity;
