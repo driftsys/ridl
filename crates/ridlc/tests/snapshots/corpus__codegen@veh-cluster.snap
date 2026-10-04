@@ -5766,7 +5766,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "dt++e57qEfc3cTJ9tFPAanHRVstr/XsQKzAGgLwWGGM=",
+    "hash": "rjaDDi6cRCTCXZS/TSKYqS9MokoStdaX9aqtpYKblsE=",
     "retired": []
   },
   "flatbuffers": {

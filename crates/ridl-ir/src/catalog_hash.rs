@@ -32,9 +32,9 @@ pub fn reachable_decls<'a>(
 }
 
 /// The exact input of the hash: the package name; every interface shape
-/// under its identity name (`Package::shapes()` order) with the owning
-/// service's visibility for an inline shape, the IR's `number` and
-/// `provisional`, and its interactions; the reached declarations under
+/// under its identity name, in (number, name) order because the lock makes
+/// the number the identity, with the owning service's visibility for an
+/// inline shape, the IR's `number` and `provisional`, and its interactions; the reached declarations under
 /// canonical names, in canonical-name order, every type reference inside
 /// them rewritten to the canonical name of the declaration it resolves to;
 /// doc strings and doc tags (`labels`, `deprecated`) blanked; no services
@@ -66,6 +66,9 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
         services: vec![],
         retired: vec![],
     };
+    reduced
+        .interfaces
+        .sort_by(|a, b| (a.number, &a.name).cmp(&(b.number, &b.name)));
     for interface in &mut reduced.interfaces {
         interface.doc.clear();
         interface.labels.clear();
@@ -850,17 +853,24 @@ mod tests {
 
     /// Two packages built separately with the same declarations and the same
     /// numbering hash alike: the reduced package orders declarations by
-    /// canonical name, so the source order of `decls` does not enter the
-    /// hash. The order of the interfaces does: it is `Package::shapes()`
-    /// order (ADR-0014 decision 15).
+    /// canonical name and interfaces by (number, name), so the source order
+    /// of neither enters the hash (ADR-0014 decision 15).
     #[test]
     fn equal_packages_hash_alike_whatever_the_declaration_order() {
-        let (p, fw) = fixture();
+        let (mut p, fw) = fixture();
+        p.interfaces.push(Interface {
+            name: "J".to_owned(),
+            interactions: vec![signal("pos", "Point")],
+            number: 2,
+            ..Default::default()
+        });
         let mut reordered = p.clone();
         reordered.decls.reverse();
+        reordered.interfaces.reverse();
         let mut fw_reordered = fw.clone();
         fw_reordered.decls.reverse();
         assert_ne!(reordered.decls, p.decls);
+        assert_ne!(reordered.interfaces, p.interfaces);
         assert_eq!(
             catalog_hash(&reordered, &[&fw_reordered]),
             catalog_hash(&p, &[&fw])
@@ -1294,5 +1304,45 @@ mod tests {
                 "{kind}: a change to `T` must move the hash",
             );
         }
+    }
+
+    /// `p` with two interfaces, `I` (number 1) and `J` (number 2), each with
+    /// a signal of `Point`.
+    fn two_interface_fixture() -> (Package, Package) {
+        let (mut p, fw) = fixture();
+        p.interfaces.push(Interface {
+            name: "J".to_owned(),
+            interactions: vec![signal("pos", "Point")],
+            number: 2,
+            provisional: true,
+            ..Default::default()
+        });
+        (p, fw)
+    }
+
+    /// The lock makes the number an interface's identity, so the reduced
+    /// package lists interfaces by (number, name), and the order in which
+    /// the source declares them does not enter the hash.
+    #[test]
+    fn reordering_two_interfaces_does_not_move_the_hash() {
+        let (mut p, fw) = two_interface_fixture();
+        let before = hash_of(&p, &fw);
+        p.interfaces.reverse();
+        assert_eq!(hash_of(&p, &fw), before);
+        let names: Vec<String> = reduced_package(&p, &[&fw])
+            .interfaces
+            .into_iter()
+            .map(|i| i.name)
+            .collect();
+        assert_eq!(names, ["I", "J"]);
+    }
+
+    #[test]
+    fn swapping_two_interfaces_numbers_moves_the_hash() {
+        let (mut p, fw) = two_interface_fixture();
+        let before = hash_of(&p, &fw);
+        p.interfaces[0].number = 2;
+        p.interfaces[1].number = 1;
+        assert_ne!(hash_of(&p, &fw), before);
     }
 }
