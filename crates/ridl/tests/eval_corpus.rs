@@ -511,6 +511,39 @@ fn task_set_validation_rejects_replacing_a_seed_review_with_an_extra_design() {
 }
 
 #[test]
+fn task_set_validation_rejects_replacing_every_approved_seed_id() {
+    for id in [
+        "review-0001",
+        "review-0002",
+        "review-0003",
+        "review-0004",
+        "review-0005",
+        "evolve-0001",
+        "evolve-0002",
+        "design-0001",
+        "design-0002",
+        "design-0003",
+    ] {
+        let mut tasks = approved_task_fixture();
+        let original = tasks.iter().find(|task| task["id"] == id).unwrap().clone();
+        // Retain the kind, corpus and expectations so that replacement leaves
+        // the task count, corpus share and review coverage unchanged.
+        let replacement = format!("{}-9001", original["kind"].as_str().unwrap());
+        assert!(tasks.iter().all(|task| task["id"] != replacement));
+        let task = tasks.iter_mut().find(|task| task["id"] == id).unwrap();
+        task["id"] = replacement.into();
+        let mut restored = task.clone();
+        restored["id"] = id.into();
+        assert_eq!(restored, original, "only the fixture ID may change");
+        assert_eq!(
+            validate_task_set(&tasks),
+            Err(format!("approved seed task {id} is missing")),
+            "replacement of {id} must be rejected",
+        );
+    }
+}
+
+#[test]
 fn task_set_validation_rejects_changing_a_seed_kind_without_renaming() {
     for (id, kind) in [
         ("review-0005", "design"),

@@ -991,6 +991,25 @@ execution.
     the hook configuration changes, the controller must run any added checks
     first.
 
+25. **Test replacement of every approved seed identity** (PR 707 final pass-2
+    correction). The second review confirmed that reducing the required evolve
+    and design counts leaves the existing fixture tests passing. Keep the
+    correct validator unchanged and add an independently enumerated fixture for
+    each of the ten approved seed IDs. Replace only its ID with a fresh ID of
+    the same kind, retaining all other metadata, the total count, corpus share
+    and review coverage. Each replacement must fail with the precise
+    missing-seed message, including the later evolve and design IDs. The
+    existing future-addition acceptance test remains. Isolated mutations that
+    reduce both counts, or the design count alone, must now fail the new test;
+    restore and verify each experiment. This final correction adds test
+    maintenance for ten fixed identities and requires a deliberate fixture
+    update if the approved seed changes. It does not alter tasks or expand the
+    validator policy. Under the two-pass review policy, the controller commits
+    and pushes the correction and requires fresh CI, without a third review
+    pass. Run focused validation tests with the corpus compiler test excluded,
+    Clippy and static checks; no corpus checks, rubric authoring, full gate or
+    review dispatch occurs in this correction.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
