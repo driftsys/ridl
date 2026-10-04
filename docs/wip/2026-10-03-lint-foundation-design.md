@@ -412,9 +412,10 @@ the MCP server can reuse it later; no SARIF crate is added.
   working directory first, and `.` and `..` are resolved lexically, not through
   the filesystem, before the comparison. A file outside the working directory is
   an absolute `file://` URI with no `uriBaseId`. When the working directory
-  cannot be read, every file is an absolute `file://` URI and the run has no
-  `originalUriBaseIds`. A code-scanning upload run from the checkout root
-  therefore resolves every URI.
+  cannot be read, the run has no `originalUriBaseIds` and every file is written
+  as its path is: an absolute path as an absolute `file://` URI, a relative path
+  relative with no `uriBaseId`. A code-scanning upload run from the checkout
+  root therefore resolves every URI.
 - `run.columnKind` is `"unicodeCodePoints"`, because RIDL columns count
   characters and SARIF's default unit is UTF-16 code units.
 - Fix-its are not emitted. GitHub code scanning ignores them, and the JSON

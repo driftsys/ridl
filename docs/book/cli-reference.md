@@ -215,13 +215,18 @@ carries no fix-its, which the JSON output carries, and no `helpUri`. A
 diagnostic with no source file, such as a lockfile or remote-fetch diagnostic
 (MANI-1xx), has no location. An uncoded diagnostic has no `ruleId` and no
 `ruleIndex`. An artifact URI is relative to the current working directory,
-whatever path was checked, with `/` separators and every segment
-percent-encoded; it carries `uriBaseId` `%SRCROOT%`, which the run's
-`originalUriBaseIds` resolves to the working directory as a `file://` URI. A
-file outside the working directory is an absolute `file://` URI with no
-`uriBaseId`. Run `ridl check --format sarif` from the repository root so that
-every URI is relative to it, which is what a code-scanning upload expects. The
-exit code is the same as for the other formats.
+with `/` separators and every segment percent-encoded; it carries `uriBaseId`
+`%SRCROOT%`, which the run's `originalUriBaseIds` resolves to the working
+directory as a `file://` URI. A file outside the working directory is an
+absolute `file://` URI with no `uriBaseId`. The comparison is lexical, not
+through the filesystem: a relative path is joined onto the working directory,
+and an absolute path is compared with the working directory as the operating
+system spells it, so an absolute path that reaches the working directory
+through a symbolic link (`/tmp` on macOS, for example) counts as outside it.
+Run `ridl check --format sarif` from the repository root, with the path to
+check given relative to it, so that every URI is relative to the root, which
+is what a code-scanning upload expects. The exit code is the same as for the
+other formats.
 
 2 when the workspace itself cannot be found:
 

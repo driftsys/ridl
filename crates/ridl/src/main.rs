@@ -2564,9 +2564,13 @@ fn exit_code(run: &CliRun) -> ExitCode {
 /// Ends `ridl check`: text renders to stderr through [`finish`]; JSON and
 /// SARIF print their contract to stdout and keep the same exit code. The
 /// SARIF artifact URIs are relative to the working directory, not to the
-/// checked path, so one log has one base whatever path was given (lint
-/// foundation spec §7.3); a working directory that cannot be read gives
-/// absolute `file://` URIs.
+/// checked path, so one log has one base (lint foundation spec §7.3). The
+/// comparison is lexical: `current_dir` returns the physical path, so an
+/// absolute entry that reaches the working directory through a symbolic link
+/// is outside it and gives absolute `file://` URIs, while a relative entry is
+/// joined onto the working directory and is under it. A working directory that
+/// cannot be read gives no base: an absolute source path is an absolute
+/// `file://` URI, a relative one stays relative.
 fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
     match format {
         CheckFormat::Text => finish(Ok(run)),

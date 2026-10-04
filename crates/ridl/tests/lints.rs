@@ -209,8 +209,9 @@ fn baseline_ignores_deny() {
     );
 }
 
-/// The `signal` with no timing annotation of `SOURCE`, beside a command
-/// with a satisfiable precondition that `ridl test` samples.
+/// `SOURCE` with one more interaction: the `signal` with no timing
+/// annotation stays, and a command with a satisfiable precondition, which
+/// `ridl test` samples, is declared beside it.
 const SOURCE_WITH_CONTRACT: &str = "package demo\n\ntype Speed: integer [0..300]\n\n\
                                     interface Sensor {\n  signal speed: Speed\n  \
                                     command setRange(min: Speed, max: Speed) [\n    \
