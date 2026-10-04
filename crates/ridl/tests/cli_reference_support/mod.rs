@@ -2,7 +2,7 @@
 //! `crates/ridlc/tests/cli_reference.rs`: reads the facts about a binary that
 //! `docs/book/` states, and compares them with the binary's own output.
 //!
-//! The book states two kinds of fact about a binary:
+//! The book states four kinds of fact about a binary:
 //!
 //! - **Verbatim transcripts.** A `sh` fence holding one `<program> [<command>]
 //!   --help` line, directly followed by a `text` fence. The text fence must
@@ -15,8 +15,8 @@
 //!   codes are stated in their own sections.
 //! - **Prose.** Every long flag named in an inline code span or in a `sh`
 //!   fence must exist, and the prose count of emit targets must match.
-//! - **The version line.** `<program> --version` is compared with the version
-//!   masked as `X.Y.Z`.
+//! - **The version line.** `<program> --version` is compared with the binary's
+//!   version masked as `X.Y.Z`; the book holds the literal `X.Y.Z`.
 //!
 //! Fences and tables come from `pulldown-cmark`, under the same option set
 //! mdBook uses (see `book_examples.rs`), never from pattern matching over raw
@@ -486,7 +486,7 @@ pub fn prose_flag_failures(
 }
 
 /// Compares the `<program> --version` transcript with the binary's output,
-/// after masking the version as `X.Y.Z` in both.
+/// after masking the binary's version as `X.Y.Z`; the book holds the literal.
 pub fn version_failures(page: &Page, exe: &Path, program: &str) -> Vec<String> {
     let command = format!("{program} --version");
     let fences = fences(page);
