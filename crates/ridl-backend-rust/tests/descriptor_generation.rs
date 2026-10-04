@@ -362,16 +362,14 @@ fn the_default_wire_encoding_is_flatbuffers() {
     assert_eq!(WireEncoding::default(), WireEncoding::FlatBuffers);
 }
 
-/// A model whose `Catalog.hash` is not 32 bytes is malformed: the backend
-/// refuses it with an error diagnostic and writes no file, rather than
-/// padding the hash or skipping each interface.
-#[test]
-fn a_catalog_hash_that_is_not_32_bytes_refuses_the_model() {
+/// The diagnostics `generate` returns for the fixture's model after `edit`,
+/// asserting that no file is written.
+fn refused_with(edit: impl FnOnce(&mut ridl_ir::codegen::v1::Model)) -> Vec<String> {
     use ridl_ir::codegen::{Backend as _, v1};
 
     let package = ir::compile_fixture("interaction_face.ridl");
     let mut model = ridl_ir::codegen::lower(&package, &[]);
-    model.catalog.as_mut().expect("a catalog").hash.truncate(31);
+    edit(&mut model);
     let request = v1::CodegenRequest {
         model: Some(model),
         artifact_base: "face_demo".to_string(),
@@ -379,13 +377,37 @@ fn a_catalog_hash_that_is_not_32_bytes_refuses_the_model() {
     };
     let response = ridl_backend_rust::Backend.generate(&request);
     assert!(response.files.is_empty(), "no file for a malformed model");
-    let messages: Vec<&str> = response
+    response
         .diagnostics
-        .iter()
-        .map(|diagnostic| diagnostic.message.as_str())
-        .collect();
+        .into_iter()
+        .map(|diagnostic| diagnostic.message)
+        .collect()
+}
+
+/// A model whose `Catalog.hash` is not 32 bytes is malformed: the backend
+/// refuses it with an error diagnostic and writes no file, rather than
+/// padding the hash or skipping each interface.
+#[test]
+fn a_catalog_hash_that_is_not_32_bytes_refuses_the_model() {
+    let short = refused_with(|model| model.catalog.as_mut().expect("a catalog").hash.truncate(31));
     assert_eq!(
-        messages,
+        short,
         ["malformed codegen model: `Catalog.hash` is 31 bytes, not 32"]
+    );
+    let long = refused_with(|model| model.catalog.as_mut().expect("a catalog").hash.push(0));
+    assert_eq!(
+        long,
+        ["malformed codegen model: `Catalog.hash` is 33 bytes, not 32"]
+    );
+}
+
+/// A model with no `Catalog` has no hash, which is refused like a hash of
+/// the wrong length.
+#[test]
+fn a_model_without_a_catalog_refuses_the_model() {
+    let missing = refused_with(|model| model.catalog = None);
+    assert_eq!(
+        missing,
+        ["malformed codegen model: `Catalog.hash` is 0 bytes, not 32"]
     );
 }

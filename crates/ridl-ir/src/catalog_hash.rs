@@ -1345,4 +1345,52 @@ mod tests {
         p.interfaces[1].number = 1;
         assert_ne!(hash_of(&p, &fw), before);
     }
+
+    /// A union arm's doc and an enum value's doc are blanked like the
+    /// others; each is checked on its own, so the test fails when either
+    /// clear is missing.
+    #[test]
+    fn a_union_arm_or_enum_value_doc_comment_does_not_move_the_hash() {
+        let (mut p, fw) = fixture();
+        p.decls.push(decl_of(
+            "U",
+            decl::Kind::UnionDef(UnionDef {
+                arms: vec![UnionArm {
+                    name: "a".to_owned(),
+                    ordinal: 1,
+                    type_ref: "Coord".to_owned(),
+                    doc: String::new(),
+                }],
+                ..Default::default()
+            }),
+        ));
+        p.decls.push(decl_of(
+            "E",
+            decl::Kind::EnumDef(EnumDef {
+                values: vec![EnumValue {
+                    name: "on".to_owned(),
+                    value: 1,
+                    doc: String::new(),
+                }],
+                ..Default::default()
+            }),
+        ));
+        p.interfaces[0].interactions.push(signal("u", "U"));
+        p.interfaces[0].interactions.push(signal("e", "E"));
+        let before = hash_of(&p, &fw);
+
+        let mut arm_doc = p.clone();
+        if let Some(decl::Kind::UnionDef(def)) = &mut arm_doc.decls[3].kind {
+            def.arms[0].doc = "documented".to_owned();
+        }
+        assert_ne!(arm_doc, p);
+        assert_eq!(hash_of(&arm_doc, &fw), before, "a union arm's doc");
+
+        let mut value_doc = p.clone();
+        if let Some(decl::Kind::EnumDef(def)) = &mut value_doc.decls[4].kind {
+            def.values[0].doc = "documented".to_owned();
+        }
+        assert_ne!(value_doc, p);
+        assert_eq!(hash_of(&value_doc, &fw), before, "an enum value's doc");
+    }
 }
