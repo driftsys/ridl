@@ -75,15 +75,16 @@ member is never renumbered. A reader built against an older schema ignores the
 fields it does not know.
 
 **The accessors are generated and committed.** `cargo xtask descriptor-codegen`
-runs planus (`planus-translation` and `planus-codegen`, which `xtask` depends on
-and which `ridl-backend-rust` and `ridl-backend-flatbuffers` carry as test-only
-dependencies) over the schema and formats the output with `rustfmt` at the
-workspace edition. No `flatc` binary is involved. The test
-`committed_generated_accessors_match_the_schema` in `xtask/src/descriptor.rs`
-fails when `generated.rs` is stale. The three planus crates are pinned to
-`=1.3.0` in the root `Cargo.toml`, because the generated code calls
-`check_version_compatibility("planus-1.3.0")`, and a caret range would break the
-published crate for a consumer who resolves without the lock file.
+runs planus (`planus-translation` and `planus-codegen`, which `xtask` depends
+on; `ridl-backend-rust` carries both as test-only dependencies, and
+`ridl-backend-flatbuffers` carries `planus-translation` as one) over the schema
+and formats the output with `rustfmt` at the workspace edition. No `flatc`
+binary is involved. The test `committed_generated_accessors_match_the_schema` in
+`xtask/src/descriptor.rs` fails when `generated.rs` is stale. The three planus
+crates are pinned to `=1.3.0` in the root `Cargo.toml`, because the generated
+code calls `check_version_compatibility("planus-1.3.0")`, and a caret range
+would break the published crate for a consumer who resolves without the lock
+file.
 
 **Every buffer is finished by `ridl_descriptor::finish`.** planus 1.3.0's
 `Builder::finish(root, Some(id))` writes the identifier at bytes 0..4 and the

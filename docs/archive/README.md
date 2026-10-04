@@ -429,7 +429,8 @@ provenance. Nothing here is normative — the current references live in
   [the catalog descriptor design record](../design/catalog-descriptor.md).
 - **2026-10-03-lane-e16-catalog-descriptor-driver.md** — the driver for epic
   E16, which ran that plan (#377 to #382, then E6.17 #367). Archived verbatim
-  apart from relative links. The gardened record is
+  apart from relative links and the corrections to its own §5 "D8" entry, made
+  during the review of the gardening pull request. The gardened record is
   [the catalog descriptor design record](../design/catalog-descriptor.md); the
   decisions the stages took are in the driver's
   [§5 "Decisions taken under delegation"](2026-10-03-lane-e16-catalog-descriptor-driver.md#5-decisions-taken-under-delegation).

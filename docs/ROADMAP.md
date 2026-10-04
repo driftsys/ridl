@@ -317,9 +317,10 @@ message), and absent for a shape no record has given an encoding (a request of
 zero or several parameters, an inline `T | E` reply, a stream, and on the proto3
 side a named scalar, an enum or an enum set).
 
-**Epic 16 landed on 2026-10-04**: E16.1 in driftsys/ridl#669, E16.2 in #676,
-E16.3 in #681, E16.4 in #686, E16.5 in #692 and E16.6 in #696. The as-built
-record is [the catalog descriptor design record](design/catalog-descriptor.md).
+**Epic 16 landed on 2026-10-04**: E16.1 in driftsys/ridl#669 (2026-10-03), E16.2
+in #676, E16.3 in #681, E16.4 in #686, E16.5 in #692 and E16.6 in #696. The
+as-built record is
+[the catalog descriptor design record](design/catalog-descriptor.md).
 
 Design and plan of record, archived once the epic landed:
 [`2026-09-13-runtime-descriptors-design.md`](archive/2026-09-13-runtime-descriptors-design.md)

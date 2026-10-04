@@ -880,7 +880,7 @@ named.
    active work needs the note in `docs/wip/`. Cost if wrong: the story that
    plans the system descriptor starts from the archive instead of `docs/wip/`.
 8. **The archived design's sentence that `flatc --json` gives the same view as
-   `ridl describe` is left as written.** The archive holds the files verbatim
+   `ridl describe` is left as written.** The archive holds the design verbatim
    apart from relative links, and the design record states the difference
    (alphabetical keys, and `null` for an absent `timing`, `min_us` or `max_us`).
    That covers the item on #697. Cost if wrong: none; the archive records what
