@@ -562,6 +562,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-410",
+              "name": "doc-comment-style",
+              "shortDescription": {
+                "text": "doc comment written as `/** */`"
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
               "id": "RIDL-100",
               "name": "missing-timing",
               "shortDescription": {
@@ -1379,7 +1389,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 60,
+          "ruleIndex": 61,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1444,7 +1454,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 144,
+          "ruleIndex": 145,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

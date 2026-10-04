@@ -727,3 +727,61 @@ fn deny_lint_does_not_skip_desk_check() {
         "the desk check still runs beside the denied lint:\n{stderr}"
     );
 }
+
+/// A type documented with a `/** */` block, which draws TYPL-410
+/// (`doc-comment-style`, `allow` by default) and nothing else.
+const BLOCK_DOC_SOURCE: &str = "package demo\n\n/** A speed. */\ntype Speed: integer [0..300]\n";
+
+/// A workspace with one member whose only file is [`BLOCK_DOC_SOURCE`] and
+/// whose manifest ends with `lints`. Returns the workspace root.
+fn block_doc_workspace(dir: &TempDir, lints: &str) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"speed\"]\n");
+    dir.write(
+        "speed/ridl.toml",
+        &format!("[package]\nname = \"demo\"\nversion = \"1.0.0\"\n{lints}"),
+    );
+    dir.write("speed/speed.typl", BLOCK_DOC_SOURCE);
+    dir.path().to_path_buf()
+}
+
+#[test]
+fn doc_comment_style_is_silent_by_default() {
+    let dir = TempDir::new("doc-style-default");
+    let root = block_doc_workspace(&dir, "");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-410") && !stdout.contains("TYPL-410"),
+        "a lint that is allowed by default is not reported:\n{stderr}"
+    );
+}
+
+#[test]
+fn doc_comment_style_at_warn_is_reported() {
+    let dir = TempDir::new("doc-style-warn");
+    let root = block_doc_workspace(&dir, "\n[lints]\ndoc-comment-style = \"warn\"\n");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("warning[TYPL-410]"),
+        "the lint at warn is rendered as a warning:\n{stderr}"
+    );
+}
+
+#[test]
+fn doc_comment_style_at_deny_exits_1() {
+    let dir = TempDir::new("doc-style-deny");
+    let root = block_doc_workspace(&dir, "\n[lints]\ndoc-comment-style = \"deny\"\n");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("error[TYPL-410]"),
+        "the lint at deny is rendered as an error:\n{stderr}"
+    );
+}

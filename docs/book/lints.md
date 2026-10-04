@@ -3,8 +3,10 @@
 A lint is a diagnostic that a project can turn off, report at a different
 severity, or turn into an error. Every warning and every info diagnostic in the
 catalogue is a lint: each has a stable kebab-case name, and its catalogue
-severity is its default level. An error diagnostic is never a lint, and its
-severity cannot be changed.
+severity is its default level, unless the table at the end of this page gives
+its default as `allow`. A lint that is `allow` by default is reported only when
+a project sets its level. An error diagnostic is never a lint, and its severity
+cannot be changed.
 
 The lint name appears in every report of a lint diagnostic. The JSON report of
 [`ridl check --format json`](cli-reference.md#ridl-check) carries it in the
@@ -125,6 +127,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its definition |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
+| `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` with no declared response bound |

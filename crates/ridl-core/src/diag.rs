@@ -86,6 +86,12 @@ impl DiagCode {
 /// `lint_names_are_present_exactly_on_warnings_and_infos_and_unique` checks
 /// which rows carry a name.
 ///
+/// A lint row may follow its name with `default = allow`, which sets
+/// [`CatalogEntry::allow_by_default`] (ADR-0024 decision 1). `allow` is the
+/// only default a row can declare: any other word is a compile error. The
+/// guard `allow_by_default_is_only_on_warning_or_info_rows` checks that only a
+/// lint row declares it.
+///
 /// The macro also generates [`ALL_CATALOGS`], which the guards read to find
 /// every catalogue. That makes it invocable only once **per module** — a second
 /// invocation beside this one redefines the constant and the crate stops
@@ -112,6 +118,8 @@ impl DiagCode {
 macro_rules! diag_codes {
     (@lint) => { None };
     (@lint $lint:literal) => { Some($lint) };
+    (@allow) => { false };
+    (@allow allow) => { true };
     (
         $(
             $(#[$catalog_doc:meta])*
@@ -119,7 +127,7 @@ macro_rules! diag_codes {
                 $(
                     $(#[$code_doc:meta])*
                     $konst:ident = $code:literal, $severity:ident,
-                        $summary:literal $(, lint = $lint:literal)?;
+                        $summary:literal $(, lint = $lint:literal $(, default = $default:ident)?)?;
                 )+
             }
         )+
@@ -139,6 +147,7 @@ macro_rules! diag_codes {
                     severity: Severity::$severity,
                     summary: $summary,
                     lint: diag_codes!(@lint $($lint)?),
+                    allow_by_default: diag_codes!(@allow $($($default)?)?),
                 },)+
             ];
         )+
@@ -526,6 +535,12 @@ diag_codes! {
         /// Warning. Emitted by the checker.
         TYPL_405 = "TYPL-405", Warning,
             "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
+
+        /// Doc comment written as `/** */` (ADR-0025). Warning, `allow` by
+        /// default, so a project opts in to requiring `///`. Emitted by the
+        /// doc lints (`ridl_sem::doc_lint`).
+        TYPL_410 = "TYPL-410", Warning,
+            "doc comment written as `/** */`", lint = "doc-comment-style", default = allow;
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -1504,8 +1519,12 @@ pub struct CatalogEntry {
     pub summary: &'static str,
     /// The lint name, present exactly when `severity` is Warning or Info
     /// (ADR-0024 decision 1). The catalogue severity is the lint's default
-    /// level. A released name is never renamed or reused.
+    /// level, unless `allow_by_default` is set. A released name is never
+    /// renamed or reused.
     pub lint: Option<&'static str>,
+    /// Whether the lint's default level is `allow` rather than the level of
+    /// its severity (ADR-0024 decision 1). Only a lint row sets it.
+    pub allow_by_default: bool,
 }
 
 /// Polishes a raw parser message into the house diagnostic style —
@@ -1836,6 +1855,18 @@ mod tests {
         );
     }
 
+    /// A row may declare `allow` as its default level (ADR-0024 decision 1),
+    /// and only a lint row may: an Error row has no level to declare.
+    #[test]
+    fn allow_by_default_is_only_on_warning_or_info_rows() {
+        for entry in ALL_CATALOGS.iter().flat_map(|(_, c)| c.iter()) {
+            if entry.allow_by_default {
+                assert_ne!(entry.severity, Severity::Error, "{}", entry.code.as_str());
+                assert!(entry.lint.is_some(), "{}", entry.code.as_str());
+            }
+        }
+    }
+
     /// Every Warning and Info row carries a lint name and no Error row does;
     /// each name is lowercase words joined by `-`; no two rows share a name;
     /// and the `(code, name)` pairs are the expected list below, which mirrors
@@ -1892,6 +1923,7 @@ mod tests {
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
+            ("TYPL-410", "doc-comment-style"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),

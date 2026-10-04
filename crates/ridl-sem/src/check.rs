@@ -39,6 +39,7 @@ use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, 
 use ridl_syntax::{Profile, SyntaxKind};
 use rowan::{NodeOrToken, TextRange};
 
+use crate::doc_lint;
 use crate::docs;
 use crate::expr::{self, ContractScope, ExprType};
 use crate::init;
@@ -219,6 +220,8 @@ pub fn check_package(
     // The ridl lint pass: four advisory codes over the interaction
     // declarations, emitted as ordinary diagnostics once lowering has settled.
     lint::lint_package(&mut checker, &files);
+    // The doc lints (ADR-0025) over the package's `.typl` and `.ridl` files.
+    doc_lint::lint_package(&mut checker, &files);
 
     // The interface identity fold (lock design §3, §4, §8): every declared
     // interface and every inline shape gets its number from the package's
@@ -500,9 +503,9 @@ pub(crate) struct Checker<'db> {
     pkg: Package,
     package_name: String,
     resolution: Resolution,
-    file_ids: Vec<FileId>,
+    pub(crate) file_ids: Vec<FileId>,
     pub(crate) current_file: usize,
-    diagnostics: Vec<Diagnostic>,
+    pub(crate) diagnostics: Vec<Diagnostic>,
     /// The resolved package timing default (ridl §9.1): the parsed
     /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
     /// untimed signal and event (E2 task 9).
@@ -12473,8 +12476,10 @@ interface VehicleStatus {
         // that general form §6.1 made canonical in return position (ADR-0008
         // decisions 1 and 19), so the lint no longer fires. RIDL-308 keeps a
         // living example in the ridl diagnostic showcase, which provokes it
-        // independently.
-        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        // independently. Its interface doc is a `/** */` block, which draws
+        // TYPL-410 (`doc-comment-style`); that lint is `allow` by default, so
+        // a driver drops it and it is not an advisory the appendix shows.
+        assert_eq!(codes(&checked), ["TYPL-410"], "{:?}", checked.diagnostics);
         assert_eq!(checked.ir.name, "veh.cluster");
         assert_eq!(checked.ir.interfaces.len(), 1);
         let interface = &checked.ir.interfaces[0];

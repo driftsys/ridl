@@ -4,6 +4,8 @@
 //! (ADR-0006 decision 2).
 
 pub mod check;
+/// The doc lints (ADR-0025) — checks over the doc comments of a file.
+pub mod doc_lint;
 pub mod docs;
 pub mod expr;
 /// Total evaluation of the guaranteed subset over the exact domains

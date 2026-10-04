@@ -81,14 +81,17 @@ pub fn lint_of(code: DiagCode) -> Option<&'static CatalogEntry> {
     lint_entries().find(|entry| entry.code == code)
 }
 
-/// The default level of a lint: its catalogue severity, Warning as `Warn`
-/// and Info as `Info`. No lint defaults to `Deny`. An Error row is not a
-/// lint and has no level, so it returns `None`.
+/// The default level of a lint: `Allow` when its row declares
+/// `default = allow` (ADR-0024 decision 1), and otherwise its catalogue
+/// severity, Warning as `Warn` and Info as `Info`. No lint defaults to
+/// `Deny`. An Error row is not a lint and has no level, so it returns `None`
+/// (ADR-0024 decision 15).
 pub fn default_level(entry: &CatalogEntry) -> Option<LintLevel> {
     match entry.severity {
+        Severity::Error => None,
+        _ if entry.allow_by_default => Some(LintLevel::Allow),
         Severity::Info => Some(LintLevel::Info),
         Severity::Warning => Some(LintLevel::Warn),
-        Severity::Error => None,
     }
 }
 
@@ -241,6 +244,15 @@ mod tests {
         assert_eq!(default_level(info), Some(LintLevel::Info));
         let warn = lint_of(DiagCode::RIDL_100).expect("RIDL-100 is a lint");
         assert_eq!(default_level(warn), Some(LintLevel::Warn));
+    }
+
+    #[test]
+    fn a_row_declared_allow_defaults_to_allow() {
+        let style = lint_by_name("doc-comment-style").expect("doc-comment-style is a lint");
+        assert_eq!(default_level(style), Some(LintLevel::Allow));
+        assert_eq!(LintLevels::default().level(style), Some(LintLevel::Allow));
+        let detached = lint_of(DiagCode::TYPL_404).expect("TYPL-404 is a lint");
+        assert_eq!(default_level(detached), Some(LintLevel::Warn));
     }
 
     /// The row of an Error code, which has no lint name.

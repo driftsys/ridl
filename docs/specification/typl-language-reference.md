@@ -1349,6 +1349,7 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 | TYPL-403 | `@labels` combination invalid per active profile      | error    |
 | TYPL-404 | blank line between a doc comment and its definition   | warning  |
 | TYPL-405 | `@deprecated` doc tag without a reason string         | warning  |
+| TYPL-410 | doc comment written as `/** */` — `allow` by default  | warning  |
 
 ---
 

@@ -34,10 +34,13 @@ pub use target::{ReferenceTarget, Target, reference_at};
 
 use std::collections::{BTreeSet, HashMap};
 
-use ridl_core::db::InputFile;
+use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_syntax::Profile;
 use rowan::TextRange;
+
+use crate::resolve::source_file;
 
 /// The name of the unit instance: the one instance of a component that
 /// declares no `instances` (rsdl §7). It is never written in source; a written
@@ -53,6 +56,7 @@ pub const UNIT_INSTANCE: &str = "Unit";
 pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> CheckedSystem {
     let mut reporter = Reporter::new(db, ws);
     let mut system = collect::collect(db, ws, &mut reporter);
+    lint_docs(db, ws, &mut reporter);
     collect::check_declaration_names(db, ws, &system, &mut reporter);
     let catalog = service_catalog(db, ws, std);
     let mut lookup = closure::Lookup::new(db, ws, std, &system, &catalog);
@@ -74,6 +78,27 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     });
     system.diagnostics = reporter.diagnostics;
     system
+}
+
+/// Runs the doc lints (ADR-0025) over every `.rsdl` file of `ws`, in
+/// package-then-file order. `check_package` lints the other files.
+fn lint_docs(db: &dyn salsa::Database, ws: Workspace, reporter: &mut Reporter) {
+    for package in ws.packages(db) {
+        for file in package.files(db) {
+            if profile_of_path(file.path(db)) != Profile::Rsdl {
+                continue;
+            }
+            let file_id = reporter
+                .file_ids
+                .get(file)
+                .copied()
+                .unwrap_or(FileId::DETACHED);
+            let source = source_file(db, *file);
+            reporter
+                .diagnostics
+                .extend(crate::doc_lint::lint_rsdl_file(&source, file_id));
+        }
+    }
 }
 
 /// The checked rsdl model of one workspace. Each list holds its declarations
@@ -527,6 +552,27 @@ deployment Production for Vehicle {
 
     fn texts(lines: &[MemberRef]) -> Vec<String> {
         lines.iter().map(|line| line.reference.text()).collect()
+    }
+
+    /// The doc lints run over each `.rsdl` file once: `check_system` reports
+    /// the `/** */` doc of the `.rsdl` file against that file's id, and leaves
+    /// the `.typl` file to `check_package`.
+    #[test]
+    fn a_block_doc_in_an_rsdl_file_draws_typl_410_once() {
+        let typl = "package veh\n\n/** A speed. */\ntype Speed: integer [0..300]\n";
+        let rsdl = "package veh\n\n/** The panel. */\ncomponent Panel {}\n";
+        let system = check(&[("veh", &[("veh/a.typl", typl), ("veh/b.rsdl", rsdl)])]);
+        let found: Vec<&Diagnostic> = system
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == DiagCode::TYPL_410)
+            .collect();
+        assert_eq!(found.len(), 1, "{:?}", system.diagnostics);
+        let mut sources = SourceMap::new();
+        sources.file_id("veh/a.typl", typl);
+        let rsdl_id = sources.file_id("veh/b.rsdl", rsdl);
+        assert_eq!(found[0].primary.file, rsdl_id);
+        assert_eq!(found[0].fixits[0].replacement, "/// The panel.");
     }
 
     #[test]

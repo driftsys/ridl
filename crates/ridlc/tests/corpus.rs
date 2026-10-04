@@ -71,6 +71,7 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message,
     remap_diagnostics, render,
 };
+use ridl_core::lint::apply_lint_levels;
 use ridl_core::package::Package;
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
 use ridl_sem::{
@@ -207,6 +208,10 @@ fn compile_entry(entry: &Path) -> Compiled {
         &BTreeSet::new(),
         &mut sources,
     ));
+    // The lint levels apply as `ridlc check` applies them (ADR-0024 decision
+    // 6), so a lint that is `allow` by default, such as TYPL-410, is absent
+    // from the snapshot as it is from the command's report.
+    apply_lint_levels(&mut diagnostics, &sources, &loaded.lints);
 
     // IR JSON and generated Rust are recorded only for an entry that compiles
     // without errors. For a clean entry these are the full-pipeline golden. For
