@@ -309,10 +309,10 @@ other entry below is Accepted.
   in the brainstorming session of spec 0, two taken in the design review, and
   seven that come partly from the reviewed design (decisions 10, 11 and 12) and
   partly from the stage driver at implementation (the root-scope rule in 10, the
-  default-level mapping in 12, and 13 to 16; driftsys/ridl#678). Every Warning
-  and Info catalogue code is a lint with a stable kebab-case name, and its
-  catalogue severity is its default level; a level (`allow`, `info`, `warn` or
-  `deny`) is set only in the `[lints]` table of a `ridl.toml`, never on the
+  source of the default level in 12, and 13 to 16; driftsys/ridl#678). Every
+  Warning and Info catalogue code is a lint with a stable kebab-case name, and
+  its catalogue severity is its default level; a level (`allow`, `info`, `warn`
+  or `deny`) is set only in the `[lints]` table of a `ridl.toml`, never on the
   command line and never in source; the registry and the one function that
   applies levels live in `ridl-core`, and the entry points that report
   diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,

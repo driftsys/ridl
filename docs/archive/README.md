@@ -388,8 +388,9 @@ provenance. Nothing here is normative — the current references live in
   [the lints page of the book](../book/lints.md), the output formats are in
   [the CLI reference](../book/cli-reference.md), and the amendments are in place
   in [ADR-0002](../decisions/ADR-0002-module-system.md) §4 and
-  [ADR-0010](../decisions/ADR-0010-cli-conventions.md) decision 1. The source
-  comments now cite ADR-0024 and the other durable records; read this design for
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md) decision 1. Most source
+  comments now cite ADR-0024 and the other durable records; one still cites this
+  design by section (§7.2), and one cites the plan below. Read this design for
   the reasoning, not as a second description of the as-built behaviour.
 - **2026-10-03-lint-foundation-plan.md** — the task-by-task plan that
   implemented the design above, merged as driftsys/ridl#678. Archived verbatim.

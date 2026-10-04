@@ -15,10 +15,10 @@ driftsys/ridl#678. Sebastien agreed decisions 1 to 7 in the brainstorming
 session of 2026-10-03. The maintainer's delegate took decisions 8 and 9 in the
 pass-1 review of the design, PR #671. Decisions 11 and 12 and the base rule of
 decision 10 come from the reviewed design (§5.3, §7.3 and §5.2/§6.1). The stage
-driver added the root-scope rule for an unowned file in decision 10, the
-default-level mapping in decision 12, and decisions 13 to 16 while it
-implemented the design, and recorded them in the body of #678. The original
-design and plan are
+driver added the root-scope rule for an unowned file in decision 10, the choice
+in decision 12 to map the default level from the catalogue severity rather than
+through `default_level`, and decisions 13 to 16 while it implemented the design,
+and recorded them in the body of #678. The original design and plan are
 [`docs/archive/2026-10-03-lint-foundation-design.md`](../archive/2026-10-03-lint-foundation-design.md)
 and
 [`docs/archive/2026-10-03-lint-foundation-plan.md`](../archive/2026-10-03-lint-foundation-plan.md);

@@ -735,8 +735,8 @@ pub fn run_build_with(
     // The levels are applied before the emit gate below, so a lint at `deny`
     // is an error by the time the gate reads the list and no artifact is
     // written for it. `ridl.lock` is already written by `materialize_and_lock`
-    // above; the lockfile is not an artifact (design §6.2 in
-    // docs/archive/2026-10-03-lint-foundation-design.md).
+    // above; the lockfile is not an artifact (Task 4 of
+    // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
         apply_lint_levels(&mut diagnostics, &sources, &lints);
     }
