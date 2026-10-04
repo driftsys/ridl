@@ -13,7 +13,7 @@ use crate::projection::flatbuffers as fb;
 use crate::v2;
 
 /// Why `decl`'s own `max_size` answered `None`.
-pub(crate) fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
+pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
     let mut any_exempt = false;
     match &decl.kind {
         Some(v2::decl::Kind::StructDef(def)) => {
