@@ -134,8 +134,9 @@ nothing.
    region's hash equals the hash in its catalog's descriptor.
    `compile_workspace` (and so `ridl diff`) and the corpus runner lower through
    `ridlc::lower_workspace_system`; the system write of `ridl build` lowers with
-   `lower_system` and embeds the hashes through the same helpers, reusing the
-   `ridl.std` IR a code emit already checked.
+   `lower_system` and embeds the hashes through the same helpers. It reuses the
+   `ridl.std` IR when a code emit already checked it, and checks `ridl.std`
+   itself when a package references it and no code emit ran.
 
 8. **`ridl build` writes every artifact when the only errors are RSDL-7xx, and
    still exits 1** (plan decision P-B8, confirmed by Sebastien on 2026-09-17).

@@ -112,9 +112,10 @@ region's hash with `ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15),
 through one helper, `embed_catalog_hashes`. `compile_workspace` and the corpus
 runner lower through `ridlc::lower_workspace_system`; the system write of
 `ridl build` lowers with `lower_system` and calls `embed_catalog_hashes`
-directly, reusing the `ridl.std` IR a code emit already checked. Every lowered
-system the toolchain returns or writes therefore carries its hashes. The hash is
-computed over the region's package and the same package list
+directly. It reuses the `ridl.std` IR when a code emit already checked it, and
+checks `ridl.std` itself when a package references it and no code emit ran.
+Every lowered system the toolchain returns or writes therefore carries its
+hashes. The hash is computed over the region's package and the same package list
 `ridl build --emit catalog` gives `ridl_descriptor::lower`, built by one helper,
 `catalog_scope`: every checked package of the workspace, then `ridl.std` when a
 package of the workspace references it. A region's hash therefore equals the
