@@ -23,7 +23,7 @@ use ridl_ir::projection::flatbuffers::Packages;
 use ridl_ir::projection::proto3::{self as proto3_projection, Scalar};
 use ridl_ir::v2::{
     ArrayType, Constraint, Decl, FieldType, MapType, Package, Param, PrimitiveType, ReturnType,
-    StructDef, TupleType, TypeDef, UnionDef, backing, decl, field_type, return_type, type_def,
+    StructDef, TupleType, TypeDef, UnionDef, backing, decl, field_type, return_type,
 };
 
 use crate::{Encoding, UnboundedCause};
@@ -192,10 +192,12 @@ pub(crate) enum Leaf<'a> {
     /// sizes are `u32` (driver §4 answer 5), and the proto3 sizer narrows the
     /// value when it writes a row.
     Blob(u64),
-    /// An enum: whether a member is negative, and the largest magnitude.
+    /// An enum: its smallest and largest member values, both 0 when it has
+    /// no member. The proto backend refuses a value outside proto3's int32
+    /// range (`emit_enum`), which the sizer reproduces from these two.
     Enum {
-        negative: bool,
-        max_magnitude: u64,
+        min: i64,
+        max: i64,
     },
     Struct {
         def: &'a StructDef,
@@ -250,22 +252,18 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
             def,
             home: declaring,
         }),
-        decl::Kind::EnumDef(def) => Some(Leaf::Enum {
-            negative: def.values.iter().any(|v| v.value < 0),
-            max_magnitude: def
-                .values
-                .iter()
-                .map(|v| v.value.unsigned_abs())
-                .max()
-                .unwrap_or(0),
-        }),
-        // The `TypeDef` the proto backend builds for an enum set
-        // (`enum_set_field_type`): the width alone, so the two agree on the
-        // scalar, a width tag the IR does not define included.
-        decl::Kind::EnumSetDef(def) => Some(Leaf::Scalar(proto3_projection::scalar(&TypeDef {
-            width: Some(type_def::Width::IntWidth(def.width)),
-            ..Default::default()
-        }))),
+        decl::Kind::EnumDef(def) => {
+            let values = || def.values.iter().map(|v| v.value);
+            Some(Leaf::Enum {
+                min: values().min().unwrap_or(0),
+                max: values().max().unwrap_or(0),
+            })
+        }
+        // The scalar of the width alone, as the proto backend resolves an
+        // enum set at each use site (`enum_set_field_type`).
+        decl::Kind::EnumSetDef(def) => {
+            Some(Leaf::Scalar(proto3_projection::enum_set_scalar(def.width)))
+        }
         decl::Kind::ConstDef(_)
         | decl::Kind::SignalDef(_)
         | decl::Kind::EventDef(_)
@@ -303,12 +301,7 @@ fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
         // FlatBuffers projection answers for the same type.
         Scalar::Bytes => def.constraint.as_ref()?.len_max.map(Leaf::Blob),
         Scalar::String => match def.backing.as_ref()?.kind.as_ref()? {
-            backing::Kind::Primitive(primitive)
-                if matches!(
-                    PrimitiveType::try_from(*primitive),
-                    Ok(PrimitiveType::String)
-                ) =>
-            {
+            backing::Kind::Primitive(primitive) if *primitive == PrimitiveType::String as i32 => {
                 string_max_bytes(def.constraint.as_ref()).map(Leaf::Blob)
             }
             backing::Kind::Primitive(_) | backing::Kind::Unit(_) => None,
@@ -325,7 +318,7 @@ mod tests {
         Backing, CommandDef, ConstDef, EnumDef, EnumSetDef, EnumValue, EventDef, FallibleType,
         Field, FixedDef, FloatWidth, IntWidth, Package, Param, PrimitiveType, QueryDef, Reserved,
         ReturnType, SignalDef, StreamType, StructMember, TupleField, field_type, return_type,
-        stream_type, struct_member,
+        stream_type, struct_member, type_def,
     };
 
     fn constraint(len_max: Option<u64>, pattern: Option<&str>) -> Constraint {
@@ -844,17 +837,11 @@ mod tests {
         ));
         assert!(matches!(
             leaf_of_name("Gear", &home, &ctx),
-            Some(Leaf::Enum {
-                negative: true,
-                max_magnitude: 7
-            })
+            Some(Leaf::Enum { min: -3, max: 7 })
         ));
         assert!(matches!(
             leaf_of_name("Mode", &home, &ctx),
-            Some(Leaf::Enum {
-                negative: false,
-                max_magnitude: 5
-            })
+            Some(Leaf::Enum { min: 0, max: 5 })
         ));
         assert!(
             matches!(
@@ -866,10 +853,7 @@ mod tests {
         assert!(
             matches!(
                 leaf_of_name("Empty", &home, &ctx),
-                Some(Leaf::Enum {
-                    negative: false,
-                    max_magnitude: 0
-                })
+                Some(Leaf::Enum { min: 0, max: 0 })
             ),
             "an enum with no member has magnitude 0"
         );
@@ -966,10 +950,7 @@ mod tests {
         assert!(
             matches!(
                 leaf_of_field_type(field, home, &ctx),
-                Some(Leaf::Enum {
-                    negative: false,
-                    max_magnitude: 1
-                })
+                Some(Leaf::Enum { min: 0, max: 1 })
             ),
             "resolved against q, the field is q's enum `Inner`"
         );

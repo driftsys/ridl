@@ -28,6 +28,40 @@ pub enum Scalar {
 }
 
 impl Scalar {
+    /// Every scalar, in declaration order.
+    pub const ALL: [Scalar; 10] = [
+        Scalar::Bool,
+        Scalar::Int64,
+        Scalar::Uint32,
+        Scalar::Uint64,
+        Scalar::Sint32,
+        Scalar::Sint64,
+        Scalar::Float,
+        Scalar::Double,
+        Scalar::String,
+        Scalar::Bytes,
+    ];
+
+    /// Whether proto3 admits the scalar as a map key: any integral or string
+    /// type, never a floating-point type or `bytes` (the proto3 language
+    /// guide, "Maps"). typl admits a broader set at a map key position
+    /// (typl §12.2, TYPL-209), so a key that projects to a scalar outside
+    /// this set is refused by the proto backend (`map_key_text`) and has no
+    /// proto3 size.
+    #[must_use]
+    pub fn admitted_as_map_key(self) -> bool {
+        match self {
+            Self::Bool
+            | Self::Int64
+            | Self::Uint32
+            | Self::Uint64
+            | Self::Sint32
+            | Self::Sint64
+            | Self::String => true,
+            Self::Float | Self::Double | Self::Bytes => false,
+        }
+    }
+
     /// The scalar's spelling in a `.proto` file.
     #[must_use]
     pub fn as_str(self) -> &'static str {
@@ -107,6 +141,18 @@ pub fn scalar(td: &v2::TypeDef) -> Scalar {
             _ => Scalar::String,
         },
     }
+}
+
+/// The proto3 scalar for an enum set of integer width `width`: the scalar of
+/// that width alone, the way the proto backend resolves an enum set at each
+/// use site (`enum_set_field_type`). A width tag the IR does not define is
+/// `int64`, as for any other integer width it does not define.
+#[must_use]
+pub fn enum_set_scalar(width: i32) -> Scalar {
+    scalar(&v2::TypeDef {
+        width: Some(v2::type_def::Width::IntWidth(width)),
+        ..Default::default()
+    })
 }
 
 /// The proto3 scalar for a bare primitive at a field position: an integer
@@ -258,6 +304,31 @@ mod tests {
             "string",
             "a primitive tag the IR does not define"
         );
+    }
+
+    #[test]
+    fn an_enum_set_is_the_scalar_of_its_width() {
+        assert_eq!(enum_set_scalar(IntWidth::U8 as i32), Scalar::Uint32);
+        assert_eq!(enum_set_scalar(IntWidth::U64 as i32), Scalar::Uint64);
+        assert_eq!(enum_set_scalar(IntWidth::I16 as i32), Scalar::Sint32);
+        assert_eq!(enum_set_scalar(IntWidth::Unspecified as i32), Scalar::Int64);
+        assert_eq!(enum_set_scalar(99), Scalar::Int64);
+    }
+
+    #[test]
+    fn the_map_key_set_is_the_integral_and_string_scalars() {
+        let admitted: Vec<&str> = Scalar::ALL
+            .iter()
+            .filter(|s| s.admitted_as_map_key())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(
+            admitted,
+            [
+                "bool", "int64", "uint32", "uint64", "sint32", "sint64", "string"
+            ]
+        );
+        assert_eq!(Scalar::ALL.len(), 10, "every scalar is listed");
     }
 
     #[test]

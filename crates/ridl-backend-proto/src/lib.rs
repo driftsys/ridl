@@ -661,16 +661,6 @@ fn resolve_field_type(
     }
 }
 
-/// The proto3 scalars a map key may take: any integral or string type, never
-/// a floating-point type, `bytes`, or a message/enum name (the proto3
-/// language guide, "Maps"). typl admits a broader set at a map key position
-/// (typl §12.2, TYPL-209 — any primitive, an inline constrained scalar, or a
-/// named string type), so a key this backend resolves to a scalar outside
-/// this set is refused rather than emitted as a `map<...>` `protoc` rejects.
-const PROTO_MAP_KEY_SCALARS: [&str; 7] = [
-    "bool", "int64", "uint32", "uint64", "sint32", "sint64", "string",
-];
-
 fn map_key_text(
     packages: Packages,
     owner: &str,
@@ -697,7 +687,12 @@ fn map_key_text(
             });
         }
     };
-    if PROTO_MAP_KEY_SCALARS.contains(&text.as_str()) {
+    // The admitted set is `Scalar::admitted_as_map_key` in `ridl-ir`, shared
+    // with the descriptor's proto3 size bound, which refuses the same keys.
+    let admitted = proto3::Scalar::ALL
+        .iter()
+        .any(|scalar| scalar.admitted_as_map_key() && scalar.as_str() == text);
+    if admitted {
         Ok(text)
     } else {
         Err(GenerateError {
@@ -941,10 +936,7 @@ fn qualified_message_name(
 /// gives its declared width; the bit names and positions become one comment
 /// line each, in the form `LOW_FUEL = bit 0`.
 fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
-    let scalar = proto_scalar(&v2::TypeDef {
-        width: Some(v2::type_def::Width::IntWidth(esd.width)),
-        ..Default::default()
-    });
+    let scalar = proto3::enum_set_scalar(esd.width).as_str();
     let lines: Vec<String> = esd
         .bits
         .iter()

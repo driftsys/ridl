@@ -8,14 +8,23 @@
 //! emits: a field number from the IR ordinal (`emit_struct`, `emit_union`), a
 //! named scalar inlined into its field, an enum as a varint, an enum set as
 //! its width's scalar, an array as `repeated` (packed for a scalar and an
-//! enum), a map as `map<K, V>`, a tuple as an induced message, a nested array
-//! or map refused (`resolve_field_type`). proto3 has no unbounded state: typl
-//! bounds every collection, so a message is bounded or, when the projection
-//! refuses a member, absent. A bound above `u32::MAX` is absent, as in the
-//! FlatBuffers projection's `MAX_ENCODABLE`.
+//! enum), a map as `map<K, V>`, a tuple as an induced message. A member the
+//! backend refuses makes the payload absent, and every refusal is reproduced
+//! here, citing the backend function that holds it: a nested array or map and
+//! a map value that is an array or a map (`resolve_field_type`), a map key
+//! outside the integral and string scalars (`map_key_text`), an optional array
+//! or map field (`emit_struct`, ADR-0013 decision 7), an enum value outside
+//! int32 (`emit_enum`), and a field number protobuf reserves or exceeds
+//! (`check_field_number`). proto3 has no unbounded state: typl bounds every
+//! collection, so a message is bounded or, when the projection refuses a
+//! member, absent. Every addition and multiplication is checked, so a bound
+//! the `u64` arithmetic cannot hold is absent, and so is a bound above
+//! `u32::MAX`, as in the FlatBuffers projection's `MAX_ENCODABLE`.
 
+use ridl_ir::projection::proto3::{self as proto3_projection, Scalar};
 use ridl_ir::v2::{
-    ArrayType, FieldType, MapType, Package, StructDef, TupleType, UnionDef, struct_member,
+    ArrayType, FieldType, MapType, Package, StructDef, TupleType, UnionDef, decl, field_type,
+    struct_member,
 };
 
 use super::{Ctx, Leaf, SizeState, leaf_of_field_type, leaf_of_name};
@@ -23,6 +32,14 @@ use super::{Ctx, Leaf, SizeState, leaf_of_field_type, leaf_of_name};
 /// Nesting deeper than this is treated as unsizable; typl rejects recursion
 /// (§7.3), so this only guards against an IR the checker did not see.
 const MAX_DEPTH: u32 = 64;
+
+/// The field numbers protobuf reserves for itself, and its largest field
+/// number: the two bounds `check_field_number` in the proto backend refuses.
+const PROTO_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
+const PROTO_MAX_FIELD_NUMBER: u32 = 536_870_911;
+
+const SCALAR_IS_BOUNDED: &str = "a `Leaf::Scalar` is never `string` or `bytes`: `leaf_of_type_def` and `leaf_of_primitive` \
+     make those a `Leaf::Blob` or no leaf";
 
 /// The length of `v` as a base-128 varint.
 pub(crate) fn varint_len(v: u64) -> u64 {
@@ -38,9 +55,16 @@ fn tag_len(number: u32) -> u64 {
     varint_len((u64::from(number) << 3) | 5)
 }
 
+/// A field whose value is `len` bytes: tag and value.
+fn plain(number: u32, len: u64) -> Option<u64> {
+    tag_len(number).checked_add(len)
+}
+
 /// A length-delimited field: tag, length varint, payload.
-fn delimited(number: u32, payload: u64) -> u64 {
-    tag_len(number) + varint_len(payload) + payload
+fn delimited(number: u32, payload: u64) -> Option<u64> {
+    tag_len(number)
+        .checked_add(varint_len(payload))?
+        .checked_add(payload)
 }
 
 /// The proto3 state of the named type `type_name`: its message's bound for
@@ -74,32 +98,39 @@ fn field_size<'a>(
 }
 
 /// The largest encoding of one enum value: a negative member encodes as a
-/// ten-byte varint, otherwise the largest magnitude decides.
-fn enum_len(negative: bool, max_magnitude: u64) -> u64 {
-    if negative {
+/// ten-byte varint, otherwise the largest value decides. `None` when a member
+/// is outside proto3's int32 range, which `emit_enum` in the proto backend
+/// refuses.
+fn enum_len(min: i64, max: i64) -> Option<u64> {
+    i32::try_from(min).ok()?;
+    i32::try_from(max).ok()?;
+    Some(if min < 0 {
         10
     } else {
-        varint_len(max_magnitude)
-    }
+        varint_len(max.unsigned_abs())
+    })
 }
 
 fn leaf_field(number: u32, leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    if depth > MAX_DEPTH {
+    if depth > MAX_DEPTH || PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
         return None;
     }
-    Some(match leaf {
-        Leaf::Scalar(s) => tag_len(number) + s.max_encoded_len()?,
+    match leaf {
+        Leaf::Scalar(s) => plain(number, s.max_encoded_len().expect(SCALAR_IS_BOUNDED)),
         Leaf::Blob(bytes) => delimited(number, bytes),
-        Leaf::Enum {
-            negative,
-            max_magnitude,
-        } => tag_len(number) + enum_len(negative, max_magnitude),
+        Leaf::Enum { min, max } => plain(number, enum_len(min, max)?),
         Leaf::Struct { def, home } => delimited(number, struct_size(def, home, ctx, depth + 1)?),
         Leaf::Union { def, home } => delimited(number, union_size(def, home, ctx, depth + 1)?),
         Leaf::Tuple { def, home } => delimited(number, tuple_size(def, home, ctx, depth + 1)?),
-        Leaf::Array { def, home } => array_field(number, def, home, ctx, depth + 1)?,
-        Leaf::Map { def, home } => map_field(number, def, home, ctx, depth + 1)?,
-    })
+        Leaf::Array { def, home } => array_field(number, def, home, ctx, depth + 1),
+        Leaf::Map { def, home } => map_field(number, def, home, ctx, depth + 1),
+    }
+}
+
+/// The sum of the fields of a message; `None` when a field is, or when the
+/// sum does not fit.
+fn message_size(mut fields: impl Iterator<Item = Option<u64>>) -> Option<u64> {
+    fields.try_fold(0u64, |sum, field| sum.checked_add(field?))
 }
 
 fn struct_size<'a>(
@@ -108,15 +139,24 @@ fn struct_size<'a>(
     ctx: &Ctx<'a>,
     depth: u32,
 ) -> Option<u64> {
-    def.members
-        .iter()
-        .map(|member| match &member.member {
-            Some(struct_member::Member::Field(field)) => {
-                field_size(field.ordinal, field.r#type.as_ref()?, home, ctx, depth)
+    message_size(def.members.iter().map(|member| match &member.member {
+        Some(struct_member::Member::Field(field)) => {
+            let ty = field.r#type.as_ref()?;
+            // proto3 cannot mark a repeated or map field absent, so the proto
+            // backend refuses an optional array or map (`emit_struct`,
+            // ADR-0013 decision 7).
+            if ty.optional
+                && matches!(
+                    ty.kind,
+                    Some(field_type::Kind::Array(_) | field_type::Kind::Map(_))
+                )
+            {
+                return None;
             }
-            Some(struct_member::Member::Reserved(_)) | None => Some(0),
-        })
-        .sum()
+            field_size(field.ordinal, ty, home, ctx, depth)
+        }
+        Some(struct_member::Member::Reserved(_)) | None => Some(0),
+    }))
 }
 
 /// The largest arm, as a field of the `oneof` at the arm's ordinal.
@@ -136,20 +176,15 @@ fn tuple_size<'a>(
     ctx: &Ctx<'a>,
     depth: u32,
 ) -> Option<u64> {
-    tuple
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(i, f)| {
-            field_size(
-                u32::try_from(i + 1).ok()?,
-                f.r#type.as_ref()?,
-                home,
-                ctx,
-                depth,
-            )
-        })
-        .sum()
+    message_size(tuple.fields.iter().enumerate().map(|(i, f)| {
+        field_size(
+            u32::try_from(i + 1).ok()?,
+            f.r#type.as_ref()?,
+            home,
+            ctx,
+            depth,
+        )
+    }))
 }
 
 /// `repeated`: a scalar and an enum are packed (one tag, one length, the
@@ -165,19 +200,38 @@ fn array_field<'a>(
 ) -> Option<u64> {
     let element = leaf_of_field_type(array.element.as_ref()?, home, ctx)?;
     let n = array.max;
-    Some(match element {
-        Leaf::Scalar(s) => delimited(number, n.checked_mul(s.max_encoded_len()?)?),
-        Leaf::Enum {
-            negative,
-            max_magnitude,
-        } => delimited(number, n.checked_mul(enum_len(negative, max_magnitude))?),
-        Leaf::Array { .. } | Leaf::Map { .. } => return None,
-        other => n.checked_mul(leaf_field(number, other, ctx, depth)?)?,
-    })
+    match element {
+        Leaf::Scalar(s) => delimited(
+            number,
+            n.checked_mul(s.max_encoded_len().expect(SCALAR_IS_BOUNDED))?,
+        ),
+        Leaf::Enum { min, max } => delimited(number, n.checked_mul(enum_len(min, max)?)?),
+        Leaf::Array { .. } | Leaf::Map { .. } => None,
+        other => n.checked_mul(leaf_field(number, other, ctx, depth)?),
+    }
+}
+
+/// The proto3 scalar a map key projects to, as `map_key_text` in the proto
+/// backend resolves it: a primitive, an inline scalar, a named scalar or an
+/// enum set. A named struct, enum or union is a message or enum name, which
+/// proto3 does not admit as a key; neither does any other key kind.
+fn map_key_scalar(key: &FieldType, home: &Package, ctx: &Ctx<'_>) -> Option<Scalar> {
+    match key.kind.as_ref()? {
+        field_type::Kind::Primitive(primitive) => Some(proto3_projection::primitive(*primitive)),
+        field_type::Kind::InlineScalar(td) => Some(proto3_projection::scalar(td)),
+        field_type::Kind::Named(name) => match ctx.resolve(home, name)?.0.kind.as_ref()? {
+            decl::Kind::TypeDef(td) => Some(proto3_projection::scalar(td)),
+            decl::Kind::EnumSetDef(def) => Some(proto3_projection::enum_set_scalar(def.width)),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// `map<K, V>`: `max` entries, each a message with the key at 1 and the
-/// value at 2.
+/// value at 2. The proto backend refuses a key outside the integral and
+/// string scalars (`map_key_text`) and a value that is an array or a map
+/// (`resolve_field_type`).
 fn map_field<'a>(
     number: u32,
     map: &'a MapType,
@@ -185,14 +239,19 @@ fn map_field<'a>(
     ctx: &Ctx<'a>,
     depth: u32,
 ) -> Option<u64> {
-    let entry = field_size(1, map.key.as_ref()?, home, ctx, depth)?.checked_add(field_size(
-        2,
-        map.value.as_ref()?,
-        home,
-        ctx,
-        depth,
-    )?)?;
-    map.max.checked_mul(delimited(number, entry))
+    let key = map.key.as_ref()?;
+    let value = map.value.as_ref()?;
+    if !map_key_scalar(key, home, ctx)?.admitted_as_map_key()
+        || matches!(
+            value.kind,
+            Some(field_type::Kind::Array(_) | field_type::Kind::Map(_))
+        )
+    {
+        return None;
+    }
+    let entry = field_size(1, key, home, ctx, depth)?
+        .checked_add(field_size(2, value, home, ctx, depth)?)?;
+    map.max.checked_mul(delimited(number, entry)?)
 }
 
 #[cfg(test)]
@@ -200,8 +259,9 @@ mod tests {
     use super::*;
     use crate::size::tests_support::*;
     use ridl_ir::v2::{
-        Backing, Constraint, Decl, EnumDef, EnumValue, Field, Package, PrimitiveType, StructMember,
-        TupleField, TypeDef, backing, decl, field_type,
+        Backing, Constraint, Decl, EnumDef, EnumValue, Field, FloatWidth, IntWidth, Package,
+        PrimitiveType, StructMember, TupleField, TypeDef, UnionArm, UnionDef, backing, decl,
+        field_type, type_def,
     };
 
     #[test]
@@ -287,6 +347,46 @@ mod tests {
         FieldType {
             optional: false,
             kind: Some(kind),
+        }
+    }
+
+    fn map_of(key: FieldType, value: FieldType, max: u64) -> FieldType {
+        field(field_type::Kind::Map(Box::new(MapType {
+            key: Some(Box::new(key)),
+            value: Some(Box::new(value)),
+            min: 0,
+            max,
+        })))
+    }
+
+    fn bytes_max(len_max: u64) -> FieldType {
+        inline(TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::Bytes as i32)),
+            }),
+            constraint: Some(Constraint {
+                len_max: Some(len_max),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+    }
+
+    fn enum_decl(name: &str, values: &[i64]) -> Decl {
+        Decl {
+            name: name.to_owned(),
+            kind: Some(decl::Kind::EnumDef(EnumDef {
+                values: values
+                    .iter()
+                    .map(|&value| EnumValue {
+                        name: format!("V{}", value.unsigned_abs()),
+                        value,
+                        doc: String::new(),
+                    })
+                    .collect(),
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
         }
     }
 
@@ -384,5 +484,199 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(state("Wide", &ctx), None);
+    }
+
+    #[test]
+    fn a_near_u64_max_array_bound_is_absent() {
+        // `[u8; 0..u64::MAX / 5]`: 5 bytes per packed `uint32` value gives
+        // exactly `u64::MAX`, and the tag and length then do not fit. A
+        // wrapping addition would publish a small false bound.
+        let mut package = fixture();
+        let u8_def = TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::Integer as i32)),
+            }),
+            width: Some(type_def::Width::IntWidth(IntWidth::U8 as i32)),
+            ..Default::default()
+        };
+        package.decls.push(struct_decl(
+            "Huge",
+            vec![("items", 1, array_of(inline(u8_def), u64::MAX / 5))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Huge", &ctx), None);
+    }
+
+    #[test]
+    fn a_near_u64_max_bytes_bound_is_absent() {
+        let mut package = fixture();
+        package.decls.push(struct_decl(
+            "Vast",
+            vec![("blob", 1, bytes_max(u64::MAX - 1))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Vast", &ctx), None);
+    }
+
+    #[test]
+    fn a_map_key_outside_the_integral_and_string_scalars_is_refused() {
+        // `map_key_text` in the proto backend admits bool, the integral
+        // scalars and string; a float or bytes key is refused.
+        let mut package = fixture();
+        let f32_def = TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::Float as i32)),
+            }),
+            width: Some(type_def::Width::FloatWidth(FloatWidth::F32 as i32)),
+            ..Default::default()
+        };
+        package.decls.push(struct_decl(
+            "FloatKeyed",
+            vec![("m", 1, map_of(inline(f32_def), named("Coord"), 2))],
+        ));
+        package.decls.push(struct_decl(
+            "BytesKeyed",
+            vec![("m", 1, map_of(bytes_max(8), named("Coord"), 2))],
+        ));
+        package.decls.push(struct_decl(
+            "MessageKeyed",
+            vec![("m", 1, map_of(named("Point"), named("Coord"), 2))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("FloatKeyed", &ctx), None);
+        assert_eq!(state("BytesKeyed", &ctx), None);
+        assert_eq!(state("MessageKeyed", &ctx), None);
+        // The control: `Bag` carries a string-keyed map and is bounded.
+        assert_eq!(state("Bag", &ctx), Some(SizeState::Bounded(176)));
+    }
+
+    #[test]
+    fn a_map_value_that_is_an_array_or_a_map_is_refused() {
+        // `resolve_field_type` in the proto backend refuses both.
+        let mut package = fixture();
+        package.decls.push(struct_decl(
+            "ArrayValued",
+            vec![("m", 1, map_of(named("Coord"), array_u8_max4(), 2))],
+        ));
+        package.decls.push(struct_decl(
+            "MapValued",
+            vec![("m", 1, map_of(named("Coord"), map_str8_u32_max2(), 2))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("ArrayValued", &ctx), None);
+        assert_eq!(state("MapValued", &ctx), None);
+    }
+
+    #[test]
+    fn an_optional_array_or_map_field_is_refused() {
+        // `emit_struct` in the proto backend refuses both (ADR-0013
+        // decision 7): proto3 cannot mark a repeated or map field absent.
+        let optional = |mut ty: FieldType| {
+            ty.optional = true;
+            ty
+        };
+        let mut package = fixture();
+        package.decls.push(struct_decl(
+            "OptionalArray",
+            vec![("flags", 1, optional(array_u8_max4()))],
+        ));
+        package.decls.push(struct_decl(
+            "OptionalMap",
+            vec![("index", 1, optional(map_str8_u32_max2()))],
+        ));
+        package.decls.push(struct_decl(
+            "OptionalScalar",
+            vec![("x", 1, optional(named("Coord")))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("OptionalArray", &ctx), None);
+        assert_eq!(state("OptionalMap", &ctx), None);
+        assert_eq!(
+            state("OptionalScalar", &ctx),
+            Some(SizeState::Bounded(6)),
+            "an optional scalar is admitted and costs no more than a required one"
+        );
+    }
+
+    #[test]
+    fn an_enum_value_outside_int32_is_refused() {
+        // `emit_enum` in the proto backend refuses the value.
+        let mut package = fixture();
+        package
+            .decls
+            .push(enum_decl("Wide", &[0, i64::from(i32::MAX) + 1]));
+        package
+            .decls
+            .push(enum_decl("Deep", &[i64::from(i32::MIN) - 1, 0]));
+        package.decls.push(enum_decl(
+            "Edge",
+            &[i64::from(i32::MIN), i64::from(i32::MAX)],
+        ));
+        package
+            .decls
+            .push(struct_decl("HoldsWide", vec![("e", 1, named("Wide"))]));
+        package
+            .decls
+            .push(struct_decl("HoldsDeep", vec![("e", 1, named("Deep"))]));
+        package
+            .decls
+            .push(struct_decl("HoldsEdge", vec![("e", 1, named("Edge"))]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("HoldsWide", &ctx), None);
+        assert_eq!(state("HoldsDeep", &ctx), None);
+        assert_eq!(
+            state("HoldsEdge", &ctx),
+            Some(SizeState::Bounded(11)),
+            "the int32 bounds themselves are admitted; a negative member is a 10-byte varint"
+        );
+    }
+
+    #[test]
+    fn a_field_number_the_backend_refuses_makes_the_message_absent() {
+        // `check_field_number` in the proto backend refuses 19000..=19999 and
+        // anything above 536870911, in a struct, a union arm and a tuple.
+        let mut package = fixture();
+        package
+            .decls
+            .push(struct_decl("Reserved", vec![("x", 19_000, named("Coord"))]));
+        package.decls.push(struct_decl(
+            "Reserved2",
+            vec![("x", 19_999, named("Coord"))],
+        ));
+        package.decls.push(struct_decl(
+            "TooHigh",
+            vec![("x", 536_870_912, named("Coord"))],
+        ));
+        package.decls.push(struct_decl(
+            "Highest",
+            vec![("x", 536_870_911, named("Coord"))],
+        ));
+        package.decls.push(Decl {
+            name: "ArmReserved".to_owned(),
+            kind: Some(decl::Kind::UnionDef(UnionDef {
+                arms: vec![UnionArm {
+                    name: "a".to_owned(),
+                    ordinal: 19_500,
+                    type_ref: "Coord".to_owned(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Reserved", &ctx), None);
+        assert_eq!(state("Reserved2", &ctx), None);
+        assert_eq!(state("TooHigh", &ctx), None);
+        assert_eq!(state("ArmReserved", &ctx), None);
+        // The largest field number takes a 5-byte tag: 5 + 5.
+        assert_eq!(state("Highest", &ctx), Some(SizeState::Bounded(10)));
     }
 }
