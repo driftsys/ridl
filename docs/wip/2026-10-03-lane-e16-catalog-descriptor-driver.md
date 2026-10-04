@@ -41,8 +41,9 @@ order in planus 1.3.0. The planus crates are pinned to `=1.3.0`. D3 landed as PR
 - The golden test is `crates/ridl-descriptor/tests/golden_hash.rs`. The plan's
   `the_hash_is_the_same_whatever_a_build_emits` was removed. #275's criterion is
   tested in `crates/ridl/tests/facade.rs`.
-- `xtask/tests/shape_walk.rs` counts the lines in `catalog_hash.rs` that name
-  `.interfaces`. A new test there that builds a package changes the count.
+- `xtask/tests/shape_walk.rs` counts the non-comment lines in `catalog_hash.rs`
+  that contain `.interfaces`. A new line that reads or edits `p.interfaces`
+  changes the count; a struct literal does not.
 - Debt from the review: #679.
 
 ## 0. How to work in this repository

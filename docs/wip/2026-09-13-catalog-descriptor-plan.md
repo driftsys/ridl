@@ -116,8 +116,9 @@ Stage D3 (PR #676, 2026-10-04) implemented Tasks 3 and 4 with changes that this
 plan's task text does not show. The lane driver's header and its §5 D3 entry
 list them: the hash lives in `ridl-ir`, the interfaces are sorted by (number,
 name), expression names are followed, and the doc tags are blanked. ADR-0014
-decision 15 is current where Task 4 differs from it. Task 9 also emits the
-port's catalog check (driver §3 D6).
+decision 15 is current where Task 4 differs from it. Stage D6 also emits the
+port's catalog check in the Rust backend's generated constructors, outside Tasks
+8 and 9 (driver §3 D6).
 
 Changes the review of PR #667 added (pass 1, 2026-10-03):
 
