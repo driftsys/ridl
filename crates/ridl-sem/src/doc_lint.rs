@@ -1,4 +1,4 @@
-//! The doc lints (ADR-0025): checks over the doc comments of a file.
+//! The doc lints (ADR-0026): checks over the doc comments of a file.
 //!
 //! Two entry points share the per-file checks: [`lint_package`] runs inside
 //! `check_package` over the package's `.typl` and `.ridl` files, and

@@ -536,7 +536,7 @@ diag_codes! {
         TYPL_405 = "TYPL-405", Warning,
             "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
 
-        /// Doc comment written as `/** */` (ADR-0025). Warning, `allow` by
+        /// Doc comment written as `/** */` (ADR-0026). Warning, `allow` by
         /// default, so a project opts in to requiring `///`. Emitted by the
         /// doc lints (`ridl_sem::doc_lint`).
         TYPL_410 = "TYPL-410", Warning,

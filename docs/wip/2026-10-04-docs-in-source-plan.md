@@ -44,7 +44,7 @@ plan; section numbers below, written §N, refer to it).
   never a number listed under `reserved` (ADR-0014).
 - The only new dependency is `pulldown-cmark` for `ridl-sem`, from the workspace
   entry (`default-features = false`). `just wasm-check` must pass.
-- A source comment cites ADR-0025, ADR-0024 or a language reference section,
+- A source comment cites ADR-0026, ADR-0024 or a language reference section,
   never `docs/wip/` (those paths die when the spec is archived).
 - `@deprecated` and `@labels` keep today's behaviour (spec D-4, §3.4).
 - `just verify` passes before the PR.
@@ -150,7 +150,7 @@ and `cargo test -p ridl --test lints doc_comment_style` Expected: compile errors
   ``| `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |``.
 - ADR-0024: decision 1 states that a row may declare `allow` as its default;
   decision 15 notes `Some(Allow)` for such rows; Status gains an amendment line
-  naming ADR-0025.
+  naming ADR-0026.
 
 - [ ] **Step 4: Run the tests and `cargo test -p ridl --test book_lints`**
 
@@ -250,7 +250,7 @@ Run: `cargo test -p ridl-core find_root member_entry`;
   `didOpen` shows the error first.
 - Docs: ADR-0002 §4 states the walk; ADR-0024 decision 9 becomes "entering at a
   workspace member loads its workspace and reports on the member", with a Status
-  line naming ADR-0025; the book pages describe it.
+  line naming ADR-0026; the book pages describe it.
 
 - [ ] **Step 4: Run the tests, then `cargo test --workspace --locked`**
 
@@ -730,7 +730,7 @@ Module doc states the shape is provisional and an input to spec 2b.
 
 **Files:**
 
-- Create: `docs/decisions/ADR-0025-doc-comments.md`, `docs/book/documenting.md`
+- Create: `docs/decisions/ADR-0026-doc-comments.md`, `docs/book/documenting.md`
 - Modify: `docs/decisions/README.md`, `docs/book/SUMMARY.md` (after "Describing
   a system"), `docs/specification/typl-language-reference.md` §14 and §16,
   `docs/specification/ridl-language-reference.md` and
@@ -738,10 +738,10 @@ Module doc states the shape is provisional and an input to spec 2b.
   `docs/wip/family-general-form.md` §4.7 (not implemented, deferred to 2b),
   `docs/specification/ridl-family-overview.md` (§2, §5, §6, §7 per its footer at
   :343; ADR list), `docs/book/getting-started.md` (`/**` blocks to `///`),
-  `AGENTS.md` (ADR-0025 line in the reading map), `docs/ROADMAP.md` (Epic 8
+  `AGENTS.md` (ADR-0026 line in the reading map), `docs/ROADMAP.md` (Epic 8
   landed paragraph, as Spec 0 has)
 
-- [ ] **Step 1: Write ADR-0025** with sections Status, Context, Decision (D-3,
+- [ ] **Step 1: Write ADR-0026** with sections Status, Context, Decision (D-3,
       D-4, D-5, the carrier table §3.1, link forms §3.2, tags §3.3, the deferral
       §3.4, the allow-by-default row §5.3 and the #529 rule §8 as the amendments
       it makes), Alternatives considered (spec §12), Consequences, References;
@@ -759,6 +759,6 @@ Module doc states the shape is provisional and an input to spec 2b.
       `cargo test -p ridl --test book_examples --test book_lints`, `just check`.
       Expected: all pass.
 
-- [ ] **Step 5: Commit** — `docs(docs): ADR-0025 and the documenting chapter`
+- [ ] **Step 5: Commit** — `docs(docs): ADR-0026 and the documenting chapter`
 
 Then run `just verify` on the branch before opening the PR.

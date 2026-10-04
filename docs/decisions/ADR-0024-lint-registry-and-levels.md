@@ -24,7 +24,7 @@ and
 [`docs/archive/2026-10-03-lint-foundation-plan.md`](../archive/2026-10-03-lint-foundation-plan.md);
 the design's §10 holds the alternatives, restated below.
 
-Amended by ADR-0025 (documentation in the source): a catalogue row may declare
+Amended by ADR-0026 (documentation in the source): a catalogue row may declare
 `allow` as its default level (decisions 1, 12 and 15). TYPL-410
 (`doc-comment-style`) is the first row that does.
 
@@ -61,7 +61,7 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    stable kebab-case name, carried by its row in the diagnostic catalogue, and
    its catalogue severity is its default level (Warning is `warn`, Info is
    `info`), unless the row declares `allow` as its default (`default = allow`
-   after the lint name, amended by ADR-0025). Only a Warning or Info row may
+   after the lint name, amended by ADR-0026). Only a Warning or Info row may
    declare it, which a catalogue guard test checks. A lint that is `allow` by
    default is reported only when a project sets its level. An Error code is
    never a lint and can never be configured. There is one diagnostic channel and
@@ -173,7 +173,7 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
     catalogue row, errors included. A rule's `defaultConfiguration.level` is
     mapped directly from the catalogue severity (Error to `error`, Warning to
     `warning`, Info to `note`), or is `none` for a row whose default is `allow`
-    (amended by ADR-0025), and a result's `level` from its effective severity by
+    (amended by ADR-0026), and a result's `level` from its effective severity by
     the same mapping. `columnKind` is `unicodeCodePoints`, because RIDL columns
     count characters. The log carries no fix-its, and an `allow`ed diagnostic
     does not appear. A diagnostic with no path in the source map has no
@@ -206,7 +206,7 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
     caller can read a level off an Error code by mistake. For a row that
     declares `allow` as its default, `default_level` returns
     `Some(LintLevel::Allow)`; for any other Warning or Info row, it returns the
-    level of the catalogue severity (amended by ADR-0025).
+    level of the catalogue severity (amended by ADR-0026).
 
 16. **ADR-0010's sentence names the two servers.** In the amended decision 1,
     "the other subcommands do not apply lint levels" excludes `ridl lsp` and

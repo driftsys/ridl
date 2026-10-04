@@ -220,7 +220,7 @@ pub fn check_package(
     // The ridl lint pass: four advisory codes over the interaction
     // declarations, emitted as ordinary diagnostics once lowering has settled.
     lint::lint_package(&mut checker, &files);
-    // The doc lints (ADR-0025) over the package's `.typl` and `.ridl` files.
+    // The doc lints (ADR-0026) over the package's `.typl` and `.ridl` files.
     doc_lint::lint_package(&mut checker, &files);
 
     // The interface identity fold (lock design §3, §4, §8): every declared

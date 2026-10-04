@@ -68,7 +68,7 @@ Decisions taken on 2026-10-04:
 - **D-4 — The tags are `@see`, `@since`, `@deprecated` and `@labels`.** `@since`
   is new; the other three keep their meaning, so the language does not change
   for existing sources. The general form §4.7 promotion of `deprecated` and
-  `labels` to attributes is deferred (§3.4). Recorded in a new ADR-0025.
+  `labels` to attributes is deferred (§3.4). Recorded in a new ADR-0026.
 - **D-5 — A link resolves in the scope of the file that holds it, with the rules
   of a type reference.** A qualified link reaches any package the current
   package can depend on, without an import. One member level is allowed. The IR
@@ -169,7 +169,7 @@ The general form §4.7 is marked as not implemented, with a pointer to 2b.
 
 ## 4. Records changed
 
-A new **ADR-0025** records D-3 to D-5, the carrier table, the tag set, the link
+A new **ADR-0026** records D-3 to D-5, the carrier table, the tag set, the link
 forms and the deferral of §3.4, with the deletion-test argument and the
 ADR-0011, ADR-0012 and ADR-0015 checks:
 
@@ -192,7 +192,7 @@ Amended in place:
 - ADR-0024: decisions 1 and 15 for the allow-by-default row (§5.3); decision 9
   replaced (§8).
 - ADR-0002 §4: root discovery from a member (§8).
-- The family overview: the decision ledger, ADR-0025 in the ADR list, and the
+- The family overview: the decision ledger, ADR-0026 in the ADR list, and the
   sections its footer lists.
 
 ## 5. The doc lints
@@ -511,7 +511,7 @@ The review's tests seat mutates and reruns, as for earlier stages.
 
 The plan refines this; the first cut is:
 
-1. ADR-0025 and the allow-by-default catalogue row.
+1. ADR-0026 and the allow-by-default catalogue row.
 2. Root discovery (#529).
 3. Carriers and scanning: syntax, checker, IR.
 4. The link resolver and TYPL-401.

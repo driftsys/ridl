@@ -80,7 +80,7 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     system
 }
 
-/// Runs the doc lints (ADR-0025) over every `.rsdl` file of `ws`, in
+/// Runs the doc lints (ADR-0026) over every `.rsdl` file of `ws`, in
 /// package-then-file order. `check_package` lints the other files.
 fn lint_docs(db: &dyn salsa::Database, ws: Workspace, reporter: &mut Reporter) {
     for package in ws.packages(db) {
