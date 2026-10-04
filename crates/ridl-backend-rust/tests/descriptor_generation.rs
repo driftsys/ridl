@@ -86,6 +86,14 @@ fn encoded_sizes_carry_the_models_flatbuffers_bound() {
                     }}"
                 ));
                 assert!(d.contains(&expected), "{name}: expected {expected}");
+                // The codec writes `MAX_SIZE` from another model field
+                // (`FbRoot.bound`, `payload_impl` in `codec.rs`); the column
+                // and the constant must carry the same number.
+                assert_eq!(
+                    codec_max_size(&d, name),
+                    Some(bound),
+                    "{name}: the codec's MAX_SIZE is the descriptor's flatbuffers column"
+                );
                 seen += 1;
             }
         }
@@ -98,6 +106,24 @@ fn encoded_sizes_carry_the_models_flatbuffers_bound() {
         !d.contains("flatbuffers:::core::option::Option::None"),
         "every payload of the fixture is sized"
     );
+}
+
+/// The `MAX_SIZE` the codec's `Payload<FlatBuffers>` impl for `type_name`
+/// carries, read from the whitespace-stripped source between that impl's
+/// header and the next impl header; `None` when the impl or the constant is
+/// missing.
+fn codec_max_size(dense_source: &str, type_name: &str) -> Option<u32> {
+    const HEADER: &str = "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>for";
+    const CONST: &str = "constMAX_SIZE:::core::primitive::usize=";
+    let header = format!("{HEADER}{type_name}{{");
+    let at = dense_source.find(&header)?;
+    let body = &dense_source[at + header.len()..];
+    let body = &body[..body.find(HEADER).unwrap_or(body.len())];
+    let digits: String = body[body.find(CONST)? + CONST.len()..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok()
 }
 
 #[test]

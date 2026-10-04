@@ -34,14 +34,19 @@ fn max_sizes(source: &str) -> Vec<(String, u32)> {
             .next()
             .expect("a type name follows the header")
             .to_owned();
-        let at_const = after.find(CONST).expect("a MAX_SIZE follows the header");
+        // This impl's text ends where the next impl header begins, so a
+        // missing constant is reported for the type that lacks it.
+        let end = after.find(HEADER).unwrap_or(after.len());
+        let at_const = after[..end]
+            .find(CONST)
+            .unwrap_or_else(|| panic!("a MAX_SIZE follows the header for {type_name}"));
         let digits: String = after[at_const + CONST.len()..]
             .chars()
             .take_while(char::is_ascii_digit)
             .collect();
         let value: u32 = digits.parse().expect("MAX_SIZE is a usize literal");
         pairs.push((type_name, value));
-        rest = &after[at_const..];
+        rest = &after[end..];
     }
     pairs
 }
