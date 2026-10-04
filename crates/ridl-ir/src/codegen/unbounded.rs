@@ -12,8 +12,13 @@ use super::v1;
 use crate::projection::flatbuffers as fb;
 use crate::v2;
 
-/// Why `decl`'s own `max_size` answered `None`.
-pub(crate) fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
+/// Why `decl`'s own `max_size` answered `None`. The caller has asked
+/// `max_size` first and got `None`; this function does not ask again, so on
+/// a declaration that has a bound it still names a cause. It judges over
+/// `package` alone (the module doc): a reference into another package is a
+/// member it cannot judge, and a declaration whose other members are all
+/// bounded is attributed `Exempt`, not to that member.
+pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
     let mut any_exempt = false;
     match &decl.kind {
         Some(v2::decl::Kind::StructDef(def)) => {

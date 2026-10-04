@@ -87,22 +87,22 @@ code a consumer compiles, not precomputed and trusted by the emitter.
   (driftsys/ridl#378) replaced the `CatalogHash([0u8; 32])` placeholder the
   emitter wrote before it. No generated code compares the hash yet: the catalog
   check is story E16.5 (see "The catalog check is not emitted" below).
-- Every `PayloadInfo.max_size` field
-  (`EncodedSizes { proto3, flatbuffers,
-  repr_c }`) is `None`. `ridl-rt`'s own
-  reading of `None` is the broad one — "no size is available here", never "this
-  payload cannot be encoded this way" (`crates/ridl-rt/src/contract.rs`) — and
-  the MVP genuinely cannot derive any of the three sizes, so the emitted `None`
-  is honest under it. The doc comment the emitter writes into every generated
-  file (`crates/ridl-backend-rust/src/descriptors.rs`) still says that `ridl-rt`
-  states the other, narrower reading and that E16.2 reconciles the two. That
-  note is stale: the `ridl-rt` doc-comment change it refers to has landed.
-  Dropping it is a change to the emitter and to the checked-in fixture the
-  byte-equality guard compares against, so it is not made here. Nothing in the
-  face reads these fields — it sizes buffers from
+- `PayloadInfo.max_size` (`EncodedSizes { proto3, flatbuffers, repr_c }`) is
+  filled one column at a time. Since story E16.4 (driftsys/ridl#380) the
+  `flatbuffers` column is the codegen model's `Payload.flatbuffers_max_size`,
+  the bound `ridl_ir::projection::flatbuffers::max_size` computed — the backend,
+  like any plugin, reads the model and recomputes nothing — and `None` only when
+  the projection has no bound. The `proto3` column is `None` because this
+  backend emits no proto3 codec, and the `repr_c` column is `None` until E11.12
+  defines the C-representable layout. `ridl-rt`'s reading of `None` is the broad
+  one — "no size is available here", never "this payload cannot be encoded this
+  way" (`crates/ridl-rt/src/contract.rs`) — and the doc comment the emitter
+  writes into every generated file
+  (`crates/ridl-backend-rust/src/descriptors.rs`) states the same three facts;
+  E16.4 replaced the earlier note that said E16.2 would reconcile two readings.
+  Nothing in the face reads these fields — it sizes buffers from
   `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` directly — so the
-  absent sizes cost the face nothing and cost a future catalog consumer
-  everything, which is the right way round for a placeholder.
+  columns serve a catalog consumer, not the face.
 
 ## The contract-clause translator
 
@@ -883,13 +883,13 @@ decision 7 and ADR-0021 decision 19 record it; the design note is archived as
 
 ## What is provisional
 
-| Placeholder                                                                                    | Replaced by                                  |
-| ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The unemitted catalog check (the zero `CatalogHash` was replaced by E16.2)                     | E16.5 (driftsys/ridl#381)                    |
-| The all-`None` `EncodedSizes` columns                                                          | E16.2                                        |
-| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                         |
-| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                   |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                                                              | Replaced by                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The unemitted catalog check (the zero `CatalogHash` was replaced by E16.2)                                                               | E16.5 (driftsys/ridl#381)                    |
+| The `None` `EncodedSizes.repr_c` column (`flatbuffers` was filled by E16.4; `proto3` is `None` because this backend has no proto3 codec) | E11.12 (driftsys/ridl#317)                   |
+| The narrow contract-clause translator (`src/clauses.rs`)                                                                                 | E5.1                                         |
+| One declared parameter per call, no induced argument struct                                                                              | a recorded follow-up story                   |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion                                           | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by E11.7's D-11 in
 stage K9b. It read "the hand-written `Payload<ReprC>` implementations", and it
@@ -934,9 +934,10 @@ ports" above.
   `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
   traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
   lock design's L4, driftsys/ridl#391)
-- Replaced later by: E16.2 (the encoded sizes), E16.5 (the catalog check), E5.1
-  (the clause translator). E11.7 replaced the payload stand-in, E11.15 the
-  test-only ports, and E16.2 the zero catalog hash; all three have landed
+- Replaced later by: E11.12 (the `repr_c` size column), E16.5 (the catalog
+  check), E5.1 (the clause translator). E11.7 replaced the payload stand-in,
+  E11.15 the test-only ports, E16.2 the zero catalog hash, and E16.4 the `None`
+  `flatbuffers` size column; all four have landed
 - Reasoning trail (archived):
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),

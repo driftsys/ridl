@@ -5,6 +5,7 @@
 //! that the pipeline `generate` stays clean of the face.
 
 use ridl_backend_rust::{generate, generate_face};
+use ridl_ir::codegen::v1;
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -26,6 +27,169 @@ fn max_size_path(type_name: &str) -> String {
     dense(&format!(
         "<{type_name} as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers"
     ))
+}
+
+/// Every `PayloadInfo.max_size` carries the model's own FlatBuffers bound
+/// (`Payload.flatbuffers_max_size`, which `max_size` computed) in its
+/// `flatbuffers` column and nothing else: `proto3` is `None` because this
+/// backend emits no proto3 codec, and `repr_c` is `None` until E11.12 defines
+/// the layout. The payloads are read from the model the emitter reads, so
+/// the number asserted is the model's, not one this test derives.
+#[test]
+fn encoded_sizes_carry_the_models_flatbuffers_bound() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let face = generate_face(&package).expect("generate_face").rust_source;
+    let d = dense(&face);
+    assert!(
+        !face.contains("E16.2"),
+        "the descriptor doc comment no longer defers the sizes to E16.2"
+    );
+
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let mut seen = 0;
+    for interface in &model.interfaces {
+        for slot in &interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_ref()
+            else {
+                continue;
+            };
+            let payloads: Vec<&v1::Payload> = match interaction.shape.as_ref() {
+                Some(v1::interaction::Shape::Signal(signal)) => signal.payload.iter().collect(),
+                Some(v1::interaction::Shape::Event(event)) => event.payload.iter().collect(),
+                Some(v1::interaction::Shape::Command(command)) => command.request.iter().collect(),
+                Some(v1::interaction::Shape::Query(query)) => query
+                    .request
+                    .iter()
+                    .chain(query.reply_payload.iter())
+                    .collect(),
+                Some(v1::interaction::Shape::Fixed(fixed)) => fixed.named.iter().collect(),
+                None => Vec::new(),
+            };
+            for payload in payloads {
+                let name = payload
+                    .r#type
+                    .as_ref()
+                    .map(|reference| reference.reference.as_str())
+                    .unwrap_or_default();
+                let bound = payload
+                    .flatbuffers_max_size
+                    .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
+                let expected = dense(&format!(
+                    "::ridl_rt::contract::PayloadInfo {{
+                        type_name: \"{name}\",
+                        max_size: ::ridl_rt::contract::EncodedSizes {{
+                            proto3: ::core::option::Option::None,
+                            flatbuffers: ::core::option::Option::Some({bound}),
+                            repr_c: ::core::option::Option::None,
+                        }},
+                    }}"
+                ));
+                assert!(d.contains(&expected), "{name}: expected {expected}");
+                // The codec writes `MAX_SIZE` from another model field
+                // (`FbRoot.bound`, `payload_impl` in `codec.rs`); the column
+                // and the constant must carry the same number.
+                assert_eq!(
+                    codec_max_size(&d, name),
+                    Some(bound),
+                    "{name}: the codec's MAX_SIZE is the descriptor's flatbuffers column"
+                );
+                seen += 1;
+            }
+        }
+    }
+    assert!(
+        seen >= 10,
+        "the fixture's ten payload positions, over six types, were checked, saw {seen}"
+    );
+    assert!(
+        !d.contains("flatbuffers:::core::option::Option::None"),
+        "every payload of the fixture is sized"
+    );
+}
+
+/// A payload the model carries no FlatBuffers bound for is emitted with
+/// `None` in the `flatbuffers` column — not a number, and not the column of
+/// another payload. The fixture's payloads are all bounded, so the model is
+/// edited: `Horn.active`'s `Health` loses its bound before generation.
+#[test]
+fn a_payload_without_a_flatbuffers_bound_emits_none() {
+    use ridl_ir::codegen::Backend as _;
+
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    let mut cleared = 0;
+    for interface in &mut model.interfaces {
+        for slot in &mut interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_mut()
+            else {
+                continue;
+            };
+            let Some(v1::interaction::Shape::Signal(signal)) = interaction.shape.as_mut() else {
+                continue;
+            };
+            let Some(payload) = signal.payload.as_mut() else {
+                continue;
+            };
+            if payload.r#type.as_ref().map(|r| r.reference.as_str()) == Some("Health") {
+                payload.flatbuffers_max_size = None;
+                cleared += 1;
+            }
+        }
+    }
+    assert_eq!(cleared, 1, "`Horn.active` is the one `Health` signal");
+
+    let request = v1::CodegenRequest {
+        model: Some(model),
+        artifact_base: "face_demo".to_string(),
+        ..Default::default()
+    };
+    let response = ridl_backend_rust::Backend.generate(&request);
+    let text = response
+        .files
+        .iter()
+        .find_map(|file| match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => Some(text.as_str()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a generated file, got {:?}", response.diagnostics));
+    let d = dense(text);
+    let expected = dense(
+        "::ridl_rt::contract::PayloadInfo {
+            type_name: \"Health\",
+            max_size: ::ridl_rt::contract::EncodedSizes {
+                proto3: ::core::option::Option::None,
+                flatbuffers: ::core::option::Option::None,
+                repr_c: ::core::option::Option::None,
+            },
+        }",
+    );
+    assert!(d.contains(&expected), "expected {expected}");
+    assert_eq!(
+        d.matches("flatbuffers:::core::option::Option::None")
+            .count(),
+        1,
+        "every other payload keeps its bound"
+    );
+}
+
+/// The `MAX_SIZE` the codec's `Payload<FlatBuffers>` impl for `type_name`
+/// carries, read from the whitespace-stripped source between that impl's
+/// header and the next impl header; `None` when the impl or the constant is
+/// missing.
+fn codec_max_size(dense_source: &str, type_name: &str) -> Option<u32> {
+    const HEADER: &str = "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>for";
+    const CONST: &str = "constMAX_SIZE:::core::primitive::usize=";
+    let header = format!("{HEADER}{type_name}{{");
+    let at = dense_source.find(&header)?;
+    let body = &dense_source[at + header.len()..];
+    let body = &body[..body.find(HEADER).unwrap_or(body.len())];
+    let digits: String = body[body.find(CONST)? + CONST.len()..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok()
 }
 
 #[test]
@@ -141,14 +305,8 @@ fn generate_face_emits_the_interface_and_interaction_descriptors() {
         assert!(d.contains(kind), "missing member kind {kind}");
     }
 
-    // Every payload's encoded sizes are all absent (the M3 placeholder).
-    assert!(
-        d.contains(
-            "::ridl_rt::contract::EncodedSizes{proto3:::core::option::Option::None,\
-             flatbuffers:::core::option::Option::None,repr_c:::core::option::Option::None"
-        ),
-        "encoded sizes are all None",
-    );
+    // The encoded sizes are pinned payload by payload in
+    // `encoded_sizes_carry_the_models_flatbuffers_bound`.
 
     // Ordinals and names are carried on the member rows.
     assert!(

@@ -67,6 +67,7 @@ pub use contract::{
     request_to_json, response_from_json, response_to_json, text_file,
 };
 pub use lower::lower;
+pub use unbounded::attribute as fb_unbounded;
 
 /// The error [`to_json_pretty`] and [`to_text_format`] return, on the two
 /// paths [`crate::v2::SerializeError`] has and for the same causes — the

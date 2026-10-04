@@ -9,21 +9,21 @@
 //! The descriptor defines no wire shape (§4 answer 6): only a payload that is
 //! one named type is sized, through the projections —
 //! `ridl_ir::projection::flatbuffers::max_size` (ADR-0019 decision 8) in
-//! `flatbuffers`, and ADR-0017's projection in `proto3`. Both sizers are
-//! placeholders until Tasks 6 and 7 of the catalog descriptor plan land: this
-//! module holds the context, the leaf model and the string capacity they
-//! build on. A request of zero or several parameters, an inline `T | E` reply
-//! and a stream payload (§4 answer 10) are absent until a record defines
-//! their encoding.
+//! `flatbuffers`, and ADR-0017's projection in `proto3`. This module holds the
+//! context both sizers resolve names with, the string capacity, and the leaf
+//! model `proto3` counts over; `flatbuffers` counts nothing of its own, it
+//! reads the projection's bound and the codegen model's cause. A request of
+//! zero or several parameters, an inline `T | E` reply and a stream payload
+//! (§4 answer 10) are absent until a record defines their encoding.
 
 pub(crate) mod flatbuffers;
 pub(crate) mod proto3;
 
 use ridl_ir::projection::flatbuffers::Packages;
+use ridl_ir::projection::proto3::{self as proto3_projection, Scalar};
 use ridl_ir::v2::{
-    ArrayType, Constraint, Decl, FieldType, FloatWidth, IntWidth, MapType, Package, Param,
-    PrimitiveType, ReturnType, StructDef, TupleType, TypeDef, UnionDef, backing, decl, field_type,
-    return_type, type_def,
+    ArrayType, Constraint, Decl, FieldType, MapType, Package, Param, PrimitiveType, ReturnType,
+    StructDef, TupleType, TypeDef, UnionDef, backing, decl, field_type, return_type,
 };
 
 use crate::{Encoding, UnboundedCause};
@@ -145,12 +145,15 @@ pub enum SizeState {
 }
 
 /// The state of the named type `type_name` under `encoding`: `None` when
-/// this toolchain computes no state (the `repr(C)` layout is undefined, a
-/// name does not resolve, or the projection has no root form for the type).
-///
-/// The `Proto3` and `FlatBuffers` arms reach placeholders that panic until
-/// Tasks 6 and 7 of the catalog descriptor plan replace them; no caller
-/// outside this module's tests exists before then. The `ReprC` arm is final.
+/// this toolchain computes no state. For every encoding: the name does not
+/// resolve, or the projection has no root form for the type. For `ReprC`:
+/// always, the layout is undefined until E11.12. For `Proto3`, where no
+/// unbounded state exists (`proto3::state`): the type is not a struct or a
+/// union; a member of its message is one the proto backend refuses, or one
+/// the backend accepts that no proto3 leaf bounds (a `string` or `bytes`
+/// with no length bound, a type def with no width); an enum value it reaches
+/// is outside int32; the `u64` arithmetic overflows; the nesting passes
+/// `MAX_DEPTH`; or the bound is above `u32::MAX`.
 pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
     match encoding {
         Encoding::Proto3 => proto3::state(type_name, ctx),
@@ -172,70 +175,46 @@ pub fn string_max_bytes(constraint: Option<&Constraint>) -> Option<u64> {
     constraint?.len_max?.checked_mul(4)
 }
 
-// The leaf model below is `pub(crate)` for the proto3 sizer of Task 6
-// (driftsys/ridl#380). Until that task lands, its only callers are the tests,
-// so each item carries `allow(dead_code)`; Task 6 removes the attributes.
+// The leaf model below is what the proto3 sizer counts over (`proto3`). The
+// FlatBuffers sizer does not read it: the projection's `max_size` sizes a
+// whole declaration.
 
-/// A scalar as the proto3 projection spells it (`proto_scalar` in the proto
-/// backend).
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Scalar {
-    Bool,
-    Int(IntWidth),
-    Float(FloatWidth),
-}
-
-impl Scalar {
-    /// The largest proto3 encoding of the value, tag excluded: a varint for
-    /// the integers (`uint32`/`sint32` at most 5 bytes, `uint64`/`sint64`/
-    /// `int64` at most 10), fixed for the floats. The proto backend emits the
-    /// signed widths as `sint32`/`sint64` and an unspecified width as
-    /// `int64`, so no width reaches the 10-byte encoding of a negative
-    /// `int32`.
-    #[allow(dead_code)]
-    pub(crate) fn proto_max(self) -> u64 {
-        match self {
-            Self::Bool => 1,
-            Self::Int(
-                IntWidth::U8
-                | IntWidth::U16
-                | IntWidth::U32
-                | IntWidth::I8
-                | IntWidth::I16
-                | IntWidth::I32,
-            ) => 5,
-            Self::Int(IntWidth::U64 | IntWidth::I64 | IntWidth::Unspecified) => 10,
-            Self::Float(FloatWidth::F32) => 4,
-            Self::Float(FloatWidth::F64 | FloatWidth::Unspecified) => 8,
-        }
-    }
-}
-
-/// A type resolved to what the projections size. A composite carries `home`,
-/// the package a bare name inside it resolves against: the declaring package
-/// of a named struct or union, the package of the field for an inline tuple,
-/// array or map.
-#[allow(dead_code)]
+/// A type resolved to what the proto3 sizer counts. A composite carries
+/// `home`, the package a bare name inside it resolves against: the declaring
+/// package of a named struct or union, the package of the field for an inline
+/// tuple, array or map. A named struct or union also carries its declared
+/// `name`, which with `home`'s name identifies the declaration: the key the
+/// proto3 sizer remembers a derived bound under.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Leaf<'a> {
+    /// A scalar with a largest encoding, as the proto backend spells it
+    /// (`ridl_ir::projection::proto3`): never `string` or `bytes`, which are
+    /// a [`Leaf::Blob`] when a constraint bounds them. An enum set is the
+    /// scalar of its width (`enum_set_field_type` in the proto backend).
     Scalar(Scalar),
     /// A string or bytes value: its maximum byte length. The leaf model
-    /// counts in `u64`, as the projection does; the descriptor's sizes are
-    /// `u32` (driver §4 answer 5), and Tasks 6 and 7 narrow the value when
-    /// they write a row.
+    /// counts in `u64`, as the FlatBuffers projection does; the descriptor's
+    /// sizes are `u32` (driver §4 answer 5), and the proto3 sizer narrows the
+    /// value when it writes a row.
     Blob(u64),
-    /// An enum: whether a member is negative, and the largest magnitude.
+    /// An enum: its smallest and largest live member values, both 0 when it
+    /// has no member, which decide the varint length. `retired_in_int32` is
+    /// false when a retired (`reserved`) value is outside proto3's int32
+    /// range. A retired value is never encoded, but the proto backend
+    /// refuses it as it refuses a live value outside int32 (`emit_enum`), and
+    /// the sizer reproduces both refusals.
     Enum {
-        negative: bool,
-        max_magnitude: u64,
+        min: i64,
+        max: i64,
+        retired_in_int32: bool,
     },
-    EnumSet(IntWidth),
     Struct {
+        name: &'a str,
         def: &'a StructDef,
         home: &'a Package,
     },
     Union {
+        name: &'a str,
         def: &'a UnionDef,
         home: &'a Package,
     },
@@ -254,7 +233,6 @@ pub(crate) enum Leaf<'a> {
 }
 
 /// The leaf of a field type written in `home`.
-#[allow(dead_code)]
 pub(crate) fn leaf_of_field_type<'a>(
     ty: &'a FieldType,
     home: &'a Package,
@@ -273,31 +251,37 @@ pub(crate) fn leaf_of_field_type<'a>(
 }
 
 /// The leaf of a name written in `home`.
-#[allow(dead_code)]
 pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     let (decl, declaring) = ctx.resolve(home, name)?;
     match decl.kind.as_ref()? {
         decl::Kind::TypeDef(def) => leaf_of_type_def(def),
         decl::Kind::StructDef(def) => Some(Leaf::Struct {
+            name: &decl.name,
             def,
             home: declaring,
         }),
         decl::Kind::UnionDef(def) => Some(Leaf::Union {
+            name: &decl.name,
             def,
             home: declaring,
         }),
-        decl::Kind::EnumDef(def) => Some(Leaf::Enum {
-            negative: def.values.iter().any(|v| v.value < 0),
-            max_magnitude: def
-                .values
-                .iter()
-                .map(|v| v.value.unsigned_abs())
-                .max()
-                .unwrap_or(0),
-        }),
-        decl::Kind::EnumSetDef(def) => Some(Leaf::EnumSet(
-            IntWidth::try_from(def.width).unwrap_or(IntWidth::Unspecified),
-        )),
+        decl::Kind::EnumDef(def) => {
+            let values = || def.values.iter().map(|v| v.value);
+            Some(Leaf::Enum {
+                min: values().min().unwrap_or(0),
+                max: values().max().unwrap_or(0),
+                retired_in_int32: def
+                    .reserved
+                    .iter()
+                    .filter_map(|reserved| reserved.value)
+                    .all(|retired| i32::try_from(retired).is_ok()),
+            })
+        }
+        // The scalar of the width alone, as the proto backend resolves an
+        // enum set at each use site (`enum_set_field_type`).
+        decl::Kind::EnumSetDef(def) => {
+            Some(Leaf::Scalar(proto3_projection::enum_set_scalar(def.width)))
+        }
         decl::Kind::ConstDef(_)
         | decl::Kind::SignalDef(_)
         | decl::Kind::EventDef(_)
@@ -308,56 +292,39 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
     }
 }
 
-/// A bare primitive at a field position. A bare `string` or `bytes` carries
-/// no length bound, and the FlatBuffers projection answers `None` for a whole
-/// type that holds one, so neither has a leaf. The compiler keeps both out of a field
-/// position (TYPL-208); a map key gets typl §4.4–§4.5's `[0..256]` default as
-/// an inline scalar, which `leaf_of_type_def` sizes.
-#[allow(dead_code)]
+/// A bare primitive at a field position, as the proto backend projects it
+/// (`proto_primitive`): an integer is `int64`, a float `double`. A bare
+/// `string` or `bytes` carries no length bound, and the FlatBuffers
+/// projection answers `None` for a whole type that holds one, so neither has
+/// a leaf. The compiler keeps both out of a field position (TYPL-208); a map
+/// key gets typl §4.4–§4.5's `[0..256]` default as an inline scalar, which
+/// `leaf_of_type_def` sizes.
 pub(crate) fn leaf_of_primitive<'a>(primitive: i32) -> Option<Leaf<'a>> {
-    match PrimitiveType::try_from(primitive).ok()? {
-        PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
-        PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified))),
-        PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified))),
-        PrimitiveType::String | PrimitiveType::Bytes | PrimitiveType::Unspecified => None,
+    match proto3_projection::primitive(primitive) {
+        Scalar::String | Scalar::Bytes => None,
+        scalar => Some(Leaf::Scalar(scalar)),
     }
 }
 
-/// A named or inline scalar. The backends project it by its width when one
-/// is set (`proto_scalar` in the proto backend, `scalar_charge` in the
-/// FlatBuffers projection). Without a width they project a boolean, string or
-/// bytes backing by the backing. An integer or float backing without a width
-/// is the exception: `proto_scalar` gives `string` and `scalar_charge` gives
-/// `None`, while this function gives a bounded `Scalar` of unspecified width.
-#[allow(dead_code)]
+/// A named or inline scalar, as the proto backend projects it
+/// (`proto_scalar`): by its width when one is set, otherwise by its backing.
+/// A `string` or `bytes` is bounded by the `len_max` its constraint carries.
+/// An integer or float backing without a width, a unit backing without a
+/// derived width (typl §5.1) and a type def with no backing all project to
+/// `string`, which no constraint bounds, so none has a leaf — the FlatBuffers
+/// projection's `scalar_charge` answers `None` for the same types.
 fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
-    let width = match def.width {
-        Some(type_def::Width::IntWidth(w)) => Some(Scalar::Int(
-            IntWidth::try_from(w).unwrap_or(IntWidth::Unspecified),
-        )),
-        Some(type_def::Width::FloatWidth(w)) => Some(Scalar::Float(
-            FloatWidth::try_from(w).unwrap_or(FloatWidth::Unspecified),
-        )),
-        None => None,
-    };
-    if let Some(scalar) = width {
-        return Some(Leaf::Scalar(scalar));
-    }
-    match def.backing.as_ref()?.kind.as_ref()? {
-        backing::Kind::Primitive(primitive) => match PrimitiveType::try_from(*primitive).ok()? {
-            PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
-            PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified))),
-            PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified))),
-            PrimitiveType::String => string_max_bytes(def.constraint.as_ref()).map(Leaf::Blob),
-            // Like a string, a `bytes` without a `len_max` is unsizable, as
-            // the FlatBuffers projection answers for the same type.
-            PrimitiveType::Bytes => def.constraint.as_ref()?.len_max.map(Leaf::Blob),
-            PrimitiveType::Unspecified => None,
+    match proto3_projection::scalar(def) {
+        // Like a string, a `bytes` without a `len_max` is unsizable, as the
+        // FlatBuffers projection answers for the same type.
+        Scalar::Bytes => def.constraint.as_ref()?.len_max.map(Leaf::Blob),
+        Scalar::String => match def.backing.as_ref()?.kind.as_ref()? {
+            backing::Kind::Primitive(primitive) if *primitive == PrimitiveType::String as i32 => {
+                string_max_bytes(def.constraint.as_ref()).map(Leaf::Blob)
+            }
+            backing::Kind::Primitive(_) | backing::Kind::Unit(_) => None,
         },
-        // A unit-backed scalar carries a derived width (typl §5.1), handled
-        // above. Without a width the proto backend falls back to `string`,
-        // which has no bound, so there is no leaf.
-        backing::Kind::Unit(_) => None,
+        scalar => Some(Leaf::Scalar(scalar)),
     }
 }
 
@@ -367,8 +334,9 @@ mod tests {
     use ridl_ir::projection::flatbuffers::max_size;
     use ridl_ir::v2::{
         Backing, CommandDef, ConstDef, EnumDef, EnumSetDef, EnumValue, EventDef, FallibleType,
-        Field, FixedDef, Package, Param, PrimitiveType, QueryDef, Reserved, ReturnType, SignalDef,
-        StreamType, StructMember, TupleField, field_type, return_type, stream_type, struct_member,
+        Field, FixedDef, FloatWidth, IntWidth, Package, Param, PrimitiveType, QueryDef, Reserved,
+        ReturnType, SignalDef, StreamType, StructMember, TupleField, field_type, return_type,
+        stream_type, struct_member, type_def,
     };
 
     fn constraint(len_max: Option<u64>, pattern: Option<&str>) -> Constraint {
@@ -523,11 +491,11 @@ mod tests {
         // exactly where the projection answers `None` for the type that holds
         // it, so the proto3 column cannot claim a bound the FlatBuffers column
         // refuses for the same type. The relation does not hold elsewhere: for
-        // an unspecified integer or float width, and for `EnumSet(Unspecified)`,
-        // the projection answers `None` while proto3 emits `int64` or
-        // `double`, so a leaf exists there. A string or bytes whose bound
-        // exceeds the projection's `MAX_ENCODABLE` also has a leaf, while the
-        // projection answers `None`.
+        // a bare `integer` or `float` at a field position, and for an enum set
+        // of unspecified width, the projection answers `None` while proto3
+        // emits `int64` or `double`, so a leaf exists there. A string or bytes
+        // whose bound exceeds the projection's `MAX_ENCODABLE` also has a
+        // leaf, while the projection answers `None`.
         let string_no_bound = decl("S", Some(decl::Kind::TypeDef(string_def(None))));
         let bytes_no_bound = decl("B", Some(decl::Kind::TypeDef(bytes_def(None))));
         let bytes_bound = decl("B32", Some(decl::Kind::TypeDef(bytes_def(Some(32)))));
@@ -664,7 +632,7 @@ mod tests {
     #[test]
     fn a_primitive_leaf_has_its_proto3_width() {
         match leaf_of_primitive(PrimitiveType::Integer as i32) {
-            Some(Leaf::Scalar(s)) => assert_eq!(s.proto_max(), 10),
+            Some(Leaf::Scalar(s)) => assert_eq!(s.max_encoded_len(), Some(10)),
             other => panic!("integer is a scalar leaf, got {other:?}"),
         }
         // A bare `string` or `bytes` has no bound, so no leaf (the projection
@@ -675,17 +643,19 @@ mod tests {
 
     #[test]
     fn every_primitive_is_a_leaf_or_unsizable() {
+        // The scalar is the proto backend's (`proto_primitive`): `int64` for
+        // a bare integer, `double` for a bare float.
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Boolean as i32),
             Some(Leaf::Scalar(Scalar::Bool))
         ));
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Integer as i32),
-            Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified)))
+            Some(Leaf::Scalar(Scalar::Int64))
         ));
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Float as i32),
-            Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified)))
+            Some(Leaf::Scalar(Scalar::Double))
         ));
         assert!(leaf_of_primitive(PrimitiveType::String as i32).is_none());
         assert!(leaf_of_primitive(PrimitiveType::Bytes as i32).is_none());
@@ -697,28 +667,10 @@ mod tests {
     }
 
     #[test]
-    fn proto_max_is_the_largest_encoding_the_proto_backend_emits() {
-        // `proto_scalar` in `ridl-backend-proto`: the unsigned widths up to
-        // 32 bits are `uint32`, `U64` is `uint64`, the signed widths up to 32
-        // bits are `sint32`, `I64` is `sint64`, an unspecified width is
-        // `int64`; `F32` is `float`, anything else `double`.
-        assert_eq!(Scalar::Bool.proto_max(), 1);
-        for width in [IntWidth::U8, IntWidth::U16, IntWidth::U32] {
-            assert_eq!(Scalar::Int(width).proto_max(), 5, "{width:?} is a uint32");
-        }
-        for width in [IntWidth::I8, IntWidth::I16, IntWidth::I32] {
-            assert_eq!(Scalar::Int(width).proto_max(), 5, "{width:?} is a sint32");
-        }
-        assert_eq!(Scalar::Int(IntWidth::U64).proto_max(), 10, "uint64");
-        assert_eq!(Scalar::Int(IntWidth::I64).proto_max(), 10, "sint64");
-        assert_eq!(Scalar::Int(IntWidth::Unspecified).proto_max(), 10, "int64");
-        assert_eq!(Scalar::Float(FloatWidth::F32).proto_max(), 4);
-        assert_eq!(Scalar::Float(FloatWidth::F64).proto_max(), 8);
-        assert_eq!(Scalar::Float(FloatWidth::Unspecified).proto_max(), 8);
-    }
-
-    #[test]
     fn a_type_def_leaf_follows_its_backing_and_width() {
+        // The scalar is the proto backend's (`proto_scalar`); the table itself
+        // is pinned in `ridl_ir::projection::proto3`. What this test pins is
+        // which types have a leaf at all, and which are a `Blob`.
         let prim = |p: PrimitiveType| backing::Kind::Primitive(p as i32);
         let int_width = |w: IntWidth| Some(type_def::Width::IntWidth(w as i32));
         let float_width = |w: FloatWidth| Some(type_def::Width::FloatWidth(w as i32));
@@ -736,19 +688,23 @@ mod tests {
                 int_width(IntWidth::I16),
                 None
             )),
-            Some(Leaf::Scalar(Scalar::Int(IntWidth::I16)))
+            Some(Leaf::Scalar(Scalar::Sint32))
         ));
-        assert!(matches!(
-            leaf(&type_def(prim(PrimitiveType::Integer), None, None)),
-            Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified)))
-        ));
+        assert!(
+            leaf(&type_def(prim(PrimitiveType::Integer), None, None)).is_none(),
+            "an integer backing without a width projects to `string`, which no constraint bounds"
+        );
+        assert!(
+            leaf(&type_def(prim(PrimitiveType::Float), None, None)).is_none(),
+            "a float backing without a width projects to `string`, which no constraint bounds"
+        );
         assert!(matches!(
             leaf(&type_def(
                 prim(PrimitiveType::Float),
                 float_width(FloatWidth::F32),
                 None
             )),
-            Some(Leaf::Scalar(Scalar::Float(FloatWidth::F32)))
+            Some(Leaf::Scalar(Scalar::Float))
         ));
         assert!(matches!(leaf(&string_def(Some(17))), Some(Leaf::Blob(68))));
         assert!(
@@ -771,7 +727,7 @@ mod tests {
                 int_width(IntWidth::U16),
                 None
             )),
-            Some(Leaf::Scalar(Scalar::Int(IntWidth::U16)))
+            Some(Leaf::Scalar(Scalar::Uint32))
         ));
         assert!(matches!(
             leaf(&type_def(
@@ -779,17 +735,28 @@ mod tests {
                 float_width(FloatWidth::F32),
                 None
             )),
-            Some(Leaf::Scalar(Scalar::Float(FloatWidth::F32)))
+            Some(Leaf::Scalar(Scalar::Float))
         ));
+        assert!(
+            matches!(
+                leaf(&type_def(
+                    prim(PrimitiveType::String),
+                    int_width(IntWidth::U8),
+                    Some(constraint(Some(17), None))
+                )),
+                Some(Leaf::Scalar(Scalar::Uint32))
+            ),
+            "a string backing with a width is the width's scalar, not a blob"
+        );
 
         let unit = || backing::Kind::Unit("km/h".to_owned());
         assert!(matches!(
             leaf(&type_def(unit(), int_width(IntWidth::U16), None)),
-            Some(Leaf::Scalar(Scalar::Int(IntWidth::U16)))
+            Some(Leaf::Scalar(Scalar::Uint32))
         ));
         assert!(matches!(
             leaf(&type_def(unit(), float_width(FloatWidth::F64), None)),
-            Some(Leaf::Scalar(Scalar::Float(FloatWidth::F64)))
+            Some(Leaf::Scalar(Scalar::Double))
         ));
         assert!(
             leaf(&type_def(unit(), None, None)).is_none(),
@@ -812,9 +779,9 @@ mod tests {
                     Some(type_def::Width::IntWidth(99)),
                     None
                 )),
-                Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified)))
+                Some(Leaf::Scalar(Scalar::Int64))
             ),
-            "an integer width tag the IR does not define falls back to Unspecified"
+            "an integer width tag the IR does not define is `int64`, as the backend emits"
         );
         assert!(
             matches!(
@@ -823,9 +790,9 @@ mod tests {
                     Some(type_def::Width::FloatWidth(99)),
                     None
                 )),
-                Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified)))
+                Some(Leaf::Scalar(Scalar::Double))
             ),
-            "a float width tag the IR does not define falls back to Unspecified"
+            "a float width tag the IR does not define is `double`, as the backend emits"
         );
     }
 
@@ -889,27 +856,33 @@ mod tests {
         assert!(matches!(
             leaf_of_name("Gear", &home, &ctx),
             Some(Leaf::Enum {
-                negative: true,
-                max_magnitude: 7
+                min: -3,
+                max: 7,
+                retired_in_int32: true
             })
         ));
         assert!(matches!(
             leaf_of_name("Mode", &home, &ctx),
             Some(Leaf::Enum {
-                negative: false,
-                max_magnitude: 5
+                min: 0,
+                max: 5,
+                retired_in_int32: true
             })
         ));
-        assert!(matches!(
-            leaf_of_name("Flags", &home, &ctx),
-            Some(Leaf::EnumSet(IntWidth::U8))
-        ));
+        assert!(
+            matches!(
+                leaf_of_name("Flags", &home, &ctx),
+                Some(Leaf::Scalar(Scalar::Uint32))
+            ),
+            "an enum set is its width's scalar, as `enum_set_field_type` emits"
+        );
         assert!(
             matches!(
                 leaf_of_name("Empty", &home, &ctx),
                 Some(Leaf::Enum {
-                    negative: false,
-                    max_magnitude: 0
+                    min: 0,
+                    max: 0,
+                    retired_in_int32: true
                 })
             ),
             "an enum with no member has magnitude 0"
@@ -917,9 +890,9 @@ mod tests {
         assert!(
             matches!(
                 leaf_of_name("OddFlags", &home, &ctx),
-                Some(Leaf::EnumSet(IntWidth::Unspecified))
+                Some(Leaf::Scalar(Scalar::Int64))
             ),
-            "a width tag the IR does not define falls back to Unspecified"
+            "a width tag the IR does not define is `int64`, as the backend emits"
         );
         for name in [
             "MAX", "speed", "tick", "go", "ask", "fixed", "gone", "Untyped",
@@ -993,7 +966,7 @@ mod tests {
         let ctx = Ctx::new(&root, &others);
 
         let (def, home) = match leaf_of_name("q.Thing", &root, &ctx) {
-            Some(Leaf::Struct { def, home }) => (def, home),
+            Some(Leaf::Struct { def, home, .. }) => (def, home),
             other => panic!("q.Thing is a struct leaf, got {other:?}"),
         };
         assert_eq!(
@@ -1008,8 +981,9 @@ mod tests {
             matches!(
                 leaf_of_field_type(field, home, &ctx),
                 Some(Leaf::Enum {
-                    negative: false,
-                    max_magnitude: 1
+                    min: 0,
+                    max: 1,
+                    retired_in_int32: true
                 })
             ),
             "resolved against q, the field is q's enum `Inner`"
@@ -1174,8 +1148,8 @@ mod tests {
     #[test]
     fn the_repr_c_column_is_absent() {
         // `Point` resolves, so a `ReprC` arm routed to a sizer would reach
-        // that sizer. Both sizers are placeholders that panic until Tasks 6
-        // and 7 replace them, so such a routing fails this test.
+        // that sizer, and both sizers answer a bound for it; such a routing
+        // fails this test.
         let package = package(
             "p",
             vec![decl(
@@ -1302,5 +1276,262 @@ mod tests {
             leaf_of_field_type(&map, &imported, &ctx),
             Some(Leaf::Map { home, .. }) if home.name == "q"
         ));
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests_support {
+    use ridl_ir::v2::{
+        ArrayType, Backing, ConstDef, Constraint, Decl, Field, FieldType, IntWidth, MapType,
+        Package, PrimitiveType, StructDef, StructMember, TypeDef, UnionArm, UnionDef, backing,
+        decl, field_type, struct_member, type_def,
+    };
+
+    fn scalar_def(
+        primitive: PrimitiveType,
+        width: Option<IntWidth>,
+        constraint: Option<Constraint>,
+    ) -> TypeDef {
+        TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(primitive as i32)),
+            }),
+            constraint,
+            width: width.map(|w| type_def::Width::IntWidth(w as i32)),
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn inline(def: TypeDef) -> FieldType {
+        FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::InlineScalar(Box::new(def))),
+        }
+    }
+
+    pub(crate) fn named(name: &str) -> FieldType {
+        FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Named(name.to_owned())),
+        }
+    }
+
+    pub(crate) fn array_u8_max4() -> FieldType {
+        FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Array(Box::new(ArrayType {
+                element: Some(Box::new(inline(scalar_def(
+                    PrimitiveType::Integer,
+                    Some(IntWidth::U8),
+                    None,
+                )))),
+                min: 0,
+                max: 4,
+            }))),
+        }
+    }
+
+    pub(crate) fn map_str8_u32_max2() -> FieldType {
+        let key = inline(scalar_def(
+            PrimitiveType::String,
+            None,
+            Some(Constraint {
+                len_max: Some(8),
+                ..Default::default()
+            }),
+        ));
+        let value = inline(scalar_def(
+            PrimitiveType::Integer,
+            Some(IntWidth::U32),
+            None,
+        ));
+        FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Map(Box::new(MapType {
+                key: Some(Box::new(key)),
+                value: Some(Box::new(value)),
+                min: 0,
+                max: 2,
+            }))),
+        }
+    }
+
+    /// `Coord = integer [-1000..1000]` (i16); `Point { x: Coord, y: Coord }`;
+    /// `Vin = string [17..17] match /^[A-HJ-NPR-Z0-9]{17}$/`;
+    /// `Bag { tag: Vin, flags: [u8; 0..4], index: {string [0..8]: u32; 0..2} }`;
+    /// `Shape = Point | Coord`; `const LIMIT`.
+    pub(crate) fn fixture() -> Package {
+        let field = |name: &str, ordinal: u32, ty: FieldType| StructMember {
+            member: Some(struct_member::Member::Field(Field {
+                name: name.to_owned(),
+                ordinal,
+                r#type: Some(ty),
+                ..Default::default()
+            })),
+        };
+        let arm = |name: &str, ordinal: u32, type_ref: &str| UnionArm {
+            name: name.to_owned(),
+            ordinal,
+            type_ref: type_ref.to_owned(),
+            ..Default::default()
+        };
+        Package {
+            name: "p".to_owned(),
+            decls: vec![
+                Decl {
+                    name: "Coord".to_owned(),
+                    kind: Some(decl::Kind::TypeDef(scalar_def(
+                        PrimitiveType::Integer,
+                        Some(IntWidth::I16),
+                        None,
+                    ))),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "Point".to_owned(),
+                    kind: Some(decl::Kind::StructDef(StructDef {
+                        members: vec![field("x", 1, named("Coord")), field("y", 2, named("Coord"))],
+                        fixed_layout: false,
+                    })),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "Vin".to_owned(),
+                    kind: Some(decl::Kind::TypeDef(scalar_def(
+                        PrimitiveType::String,
+                        None,
+                        Some(Constraint {
+                            len_min: Some(17),
+                            len_max: Some(17),
+                            pattern: Some("/^[A-HJ-NPR-Z0-9]{17}$/".to_owned()),
+                            ..Default::default()
+                        }),
+                    ))),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "Bag".to_owned(),
+                    kind: Some(decl::Kind::StructDef(StructDef {
+                        members: vec![
+                            field("tag", 1, named("Vin")),
+                            field("flags", 2, array_u8_max4()),
+                            field("index", 3, map_str8_u32_max2()),
+                        ],
+                        fixed_layout: false,
+                    })),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "Shape".to_owned(),
+                    kind: Some(decl::Kind::UnionDef(UnionDef {
+                        arms: vec![arm("a", 1, "Point"), arm("b", 2, "Coord")],
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                Decl {
+                    name: "LIMIT".to_owned(),
+                    kind: Some(decl::Kind::ConstDef(ConstDef {
+                        type_ref: Some("Coord".to_owned()),
+                        value: "7".to_owned(),
+                        regex: None,
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    /// Two packages whose declarations share names, so a bare name inside a
+    /// declaration of the imported package `q` resolves differently in `q`
+    /// and in the root `p`. In `p`: `Inner { s: string [0..100] }` and
+    /// `Hole { b: boolean }`, both bounded. In `q`: `Thing { f: Inner }` over
+    /// a one-boolean `Inner`, and `Loose { f: Hole }` over a `Hole` that holds
+    /// a bare `string`, which no projection bounds. Sized in `q`, `Thing` is
+    /// small and `Loose` unbounded; sized in `p` by mistake, `Thing` is wide
+    /// and `Loose` bounded.
+    pub(crate) fn two_package_fixture() -> (Package, Package) {
+        let one_field = |name: &str, ty: FieldType| StructDef {
+            members: vec![StructMember {
+                member: Some(struct_member::Member::Field(Field {
+                    name: name.to_owned(),
+                    ordinal: 1,
+                    r#type: Some(ty),
+                    ..Default::default()
+                })),
+            }],
+            fixed_layout: false,
+        };
+        let structure = |name: &str, def: StructDef| Decl {
+            name: name.to_owned(),
+            kind: Some(decl::Kind::StructDef(def)),
+            ..Default::default()
+        };
+        let boolean = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Primitive(PrimitiveType::Boolean as i32)),
+        };
+        let bare_string = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Primitive(PrimitiveType::String as i32)),
+        };
+        let string_100 = inline(scalar_def(
+            PrimitiveType::String,
+            None,
+            Some(Constraint {
+                len_max: Some(100),
+                ..Default::default()
+            }),
+        ));
+        let root = Package {
+            name: "p".to_owned(),
+            decls: vec![
+                structure("Inner", one_field("s", string_100)),
+                structure("Hole", one_field("b", boolean.clone())),
+            ],
+            ..Default::default()
+        };
+        let imported = Package {
+            name: "q".to_owned(),
+            decls: vec![
+                structure("Thing", one_field("f", named("Inner"))),
+                structure("Inner", one_field("b", boolean)),
+                structure("Loose", one_field("f", named("Hole"))),
+                structure("Hole", one_field("text", bare_string)),
+            ],
+            ..Default::default()
+        };
+        (root, imported)
+    }
+
+    /// `Open { text: string }` with no bound on the string: the one member
+    /// the FlatBuffers projection cannot bound, so `max_size` answers `None`
+    /// and the codegen model attributes the `Member` cause to it.
+    pub(crate) fn unbounded_fixture() -> Package {
+        Package {
+            name: "q".to_owned(),
+            decls: vec![Decl {
+                name: "Open".to_owned(),
+                kind: Some(decl::Kind::StructDef(StructDef {
+                    members: vec![StructMember {
+                        member: Some(struct_member::Member::Field(Field {
+                            name: "text".to_owned(),
+                            ordinal: 1,
+                            r#type: Some(FieldType {
+                                optional: false,
+                                kind: Some(field_type::Kind::Primitive(
+                                    PrimitiveType::String as i32,
+                                )),
+                            }),
+                            ..Default::default()
+                        })),
+                    }],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
     }
 }

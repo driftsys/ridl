@@ -18,3 +18,13 @@ planus.workspace = true
 # it generates, with no option to turn that off, so the accessors do not
 # compile without serde.
 serde.workspace = true
+
+[dev-dependencies]
+# The codec agreement test (`tests/codec_agreement.rs`) runs the Rust backend
+# in process and checks every `MAX_SIZE` it writes against the FlatBuffers
+# size state this crate advertises for the same type. A plain path with no
+# version, not `.workspace = true`: cargo strips a dev-dependency on a
+# workspace member at packaging time only when it carries no version, and
+# `ridl-backend-rust` publishes after this crate. The reasoning is written
+# out above `ridlc` in `crates/ridl-backend-rust/Cargo.toml`.
+ridl-backend-rust = { path = "../ridl-backend-rust" }

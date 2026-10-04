@@ -26,6 +26,7 @@
 //! resolve is refused, rather than emitted as a name `protoc` would then
 //! fail to resolve.
 
+use ridl_ir::projection::proto3::{self, PROTO_MAX_FIELD_NUMBER, PROTO_RESERVED};
 use ridl_ir::v2;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -164,11 +165,6 @@ impl SymbolScope {
         Ok(())
     }
 }
-
-/// proto reserves field numbers 19,000 through 19,999 for its own use.
-const PROTO_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
-/// The largest field number proto admits.
-const PROTO_MAX_FIELD_NUMBER: u32 = 536_870_911;
 
 /// A dotted address becomes one CamelCase proto identifier:
 /// `corpus.baseline.hvac` gives `CorpusBaselineHvac`. A named interface has no
@@ -660,16 +656,6 @@ fn resolve_field_type(
     }
 }
 
-/// The proto3 scalars a map key may take: any integral or string type, never
-/// a floating-point type, `bytes`, or a message/enum name (the proto3
-/// language guide, "Maps"). typl admits a broader set at a map key position
-/// (typl §12.2, TYPL-209 — any primitive, an inline constrained scalar, or a
-/// named string type), so a key this backend resolves to a scalar outside
-/// this set is refused rather than emitted as a `map<...>` `protoc` rejects.
-const PROTO_MAP_KEY_SCALARS: [&str; 7] = [
-    "bool", "int64", "uint32", "uint64", "sint32", "sint64", "string",
-];
-
 fn map_key_text(
     packages: Packages,
     owner: &str,
@@ -677,15 +663,26 @@ fn map_key_text(
     key: &v2::FieldType,
     imports: &mut BTreeSet<String>,
 ) -> Result<String, GenerateError> {
-    let text = match key.kind.as_ref() {
-        Some(v2::field_type::Kind::Primitive(primitive)) => proto_primitive(*primitive).to_string(),
+    // `Ok` is the scalar the key projects to. `Err` is the name of a message
+    // or enum a named key resolved to, which proto3 never admits as a key;
+    // the refusal below names it.
+    let projected: Result<proto3::Scalar, String> = match key.kind.as_ref() {
+        Some(v2::field_type::Kind::Primitive(primitive)) => Ok(proto3::primitive(*primitive)),
         // A key written with a length bound, and a bare `string`/`bytes` key,
         // which carries typl's `[0..256]` default (typl §4.4–§4.5). The bound
         // is constraint information, which proto3 cannot carry, so it
         // projects to the backing scalar like any other inline scalar.
-        Some(v2::field_type::Kind::InlineScalar(td)) => proto_scalar(td).to_string(),
+        Some(v2::field_type::Kind::InlineScalar(td)) => Ok(proto3::scalar(td)),
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(packages, owner, field_name, reference, imports)?.0
+            let (decl, _) = resolve_named(packages, owner, field_name, reference)?;
+            match &decl.kind {
+                Some(v2::decl::Kind::TypeDef(td)) => Ok(proto3::scalar(td)),
+                Some(v2::decl::Kind::EnumSetDef(esd)) => Ok(proto3::enum_set_scalar(esd.width)),
+                // A struct, enum or union is a message or enum name, with the
+                // import a foreign one takes; any other kind is refused by
+                // `named_field_type` as it is at a field position.
+                _ => Err(named_field_type(packages, owner, field_name, reference, imports)?.0),
+            }
         }
         _ => {
             return Err(GenerateError {
@@ -696,16 +693,19 @@ fn map_key_text(
             });
         }
     };
-    if PROTO_MAP_KEY_SCALARS.contains(&text.as_str()) {
-        Ok(text)
-    } else {
-        Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} uses `{text}` as a map key, which proto3 does not \
-                 admit — a map key must be an integral or string type."
-            ),
-        })
-    }
+    // The admitted set is `Scalar::admitted_as_map_key` in `ridl-ir`, shared
+    // with the descriptor's proto3 size bound, which refuses the same keys.
+    let text = match projected {
+        Ok(scalar) if scalar.admitted_as_map_key() => return Ok(scalar.as_str().to_string()),
+        Ok(scalar) => scalar.as_str().to_string(),
+        Err(name) => name,
+    };
+    Err(GenerateError {
+        message: format!(
+            "{owner}.{field_name} uses `{text}` as a map key, which proto3 does not \
+             admit — a map key must be an integral or string type."
+        ),
+    })
 }
 
 /// A tuple type reached while walking the package, to be emitted as a
@@ -818,6 +818,52 @@ fn emit_induced_tuple(
     Ok(())
 }
 
+/// The declaration `reference` names from a field of `owner`, and the package
+/// it is qualified with when it is a foreign one (`pkg.Name`); refused when
+/// no such declaration is in the packages given to this backend.
+fn resolve_named<'a, 'r>(
+    packages: Packages<'a>,
+    owner: &str,
+    field_name: &str,
+    reference: &'r str,
+) -> Result<(&'a v2::Decl, Option<&'r str>), GenerateError> {
+    match reference.rsplit_once('.') {
+        Some((referenced_package, member)) => {
+            let resolved = packages
+                .others
+                .iter()
+                .find(|candidate| candidate.name == referenced_package)
+                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
+            let Some(decl) = resolved else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which cannot be \
+                         resolved — no package `{referenced_package}` with a declaration \
+                         named `{member}` was given to this backend."
+                    ),
+                });
+            };
+            Ok((decl, Some(referenced_package)))
+        }
+        None => {
+            let Some(decl) = packages
+                .package
+                .decls
+                .iter()
+                .find(|decl| decl.name == *reference)
+            else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which is not a \
+                         declaration of this package."
+                    ),
+                });
+            };
+            Ok((decl, None))
+        }
+    }
+}
+
 /// A resolved named-type reference at a field position. A named scalar
 /// inlines to its backing scalar and leaves its name, unit, range and step
 /// as a comment; an enum set inlines to an integer with its bits as a
@@ -854,41 +900,7 @@ fn named_field_type(
     reference: &str,
     imports: &mut BTreeSet<String>,
 ) -> Result<(String, Option<String>), GenerateError> {
-    let (decl, foreign_package) = match reference.rsplit_once('.') {
-        Some((referenced_package, member)) => {
-            let resolved = packages
-                .others
-                .iter()
-                .find(|candidate| candidate.name == referenced_package)
-                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
-            let Some(decl) = resolved else {
-                return Err(GenerateError {
-                    message: format!(
-                        "{owner}.{field_name} references `{reference}`, which cannot be \
-                         resolved — no package `{referenced_package}` with a declaration \
-                         named `{member}` was given to this backend."
-                    ),
-                });
-            };
-            (decl, Some(referenced_package))
-        }
-        None => {
-            let Some(decl) = packages
-                .package
-                .decls
-                .iter()
-                .find(|decl| decl.name == *reference)
-            else {
-                return Err(GenerateError {
-                    message: format!(
-                        "{owner}.{field_name} references `{reference}`, which is not a \
-                         declaration of this package."
-                    ),
-                });
-            };
-            (decl, None)
-        }
-    };
+    let (decl, foreign_package) = resolve_named(packages, owner, field_name, reference)?;
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
             proto_scalar(td).to_string(),
@@ -940,10 +952,7 @@ fn qualified_message_name(
 /// gives its declared width; the bit names and positions become one comment
 /// line each, in the form `LOW_FUEL = bit 0`.
 fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
-    let scalar = proto_scalar(&v2::TypeDef {
-        width: Some(v2::type_def::Width::IntWidth(esd.width)),
-        ..Default::default()
-    });
+    let scalar = proto3::enum_set_scalar(esd.width).as_str();
     let lines: Vec<String> = esd
         .bits
         .iter()
@@ -957,58 +966,18 @@ fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
     (scalar.to_string(), comment)
 }
 
-/// The proto3 scalar for a resolved typl width (typl Appendix D). proto3 has
-/// no `uint8`/`uint16` — varint keeps small values small — so both widen to
-/// `uint32`. A signed width means the declared range contains negatives, and
-/// such a range takes `sint32`/`sint64`, because plain `int32` varint costs
-/// 10 bytes for every negative value (ADR-0013 decision 4). A quantized
-/// float keeps its native form: the scaled-integer encoding of typl §4.3
-/// belongs to CAN/DBC and to SOME/IP per deployment, and a wire backend must
-/// not apply it unasked.
+/// The proto3 scalar for a resolved typl width (typl Appendix D). The table
+/// is `ridl_ir::projection::proto3::scalar`, which holds it once for this
+/// emitter and for the proto3 size bound the catalog descriptor derives, so
+/// the two cannot disagree; the rationale for each row is documented there.
 fn proto_scalar(td: &v2::TypeDef) -> &'static str {
-    match &td.width {
-        Some(v2::type_def::Width::IntWidth(width)) => match v2::IntWidth::try_from(*width) {
-            Ok(v2::IntWidth::U8 | v2::IntWidth::U16 | v2::IntWidth::U32) => "uint32",
-            Ok(v2::IntWidth::U64) => "uint64",
-            Ok(v2::IntWidth::I8 | v2::IntWidth::I16 | v2::IntWidth::I32) => "sint32",
-            Ok(v2::IntWidth::I64) => "sint64",
-            _ => "int64",
-        },
-        Some(v2::type_def::Width::FloatWidth(width)) => match v2::FloatWidth::try_from(*width) {
-            Ok(v2::FloatWidth::F32) => "float",
-            _ => "double",
-        },
-        // No width table: boolean, string and bytes backings. A unit backing
-        // implies the float primitive (typl §5.1), so its width is always
-        // derived and never reaches this arm.
-        None => match td
-            .backing
-            .as_ref()
-            .and_then(|backing| backing.kind.as_ref())
-        {
-            Some(v2::backing::Kind::Primitive(primitive)) => {
-                match v2::PrimitiveType::try_from(*primitive) {
-                    Ok(v2::PrimitiveType::Boolean) => "bool",
-                    Ok(v2::PrimitiveType::Bytes) => "bytes",
-                    _ => "string",
-                }
-            }
-            _ => "string",
-        },
-    }
+    proto3::scalar(td).as_str()
 }
 
-/// The proto3 scalar for a direct primitive use at a field position. A bare
-/// `integer` or `float` carries no derived width, so the full typl domain is
-/// emitted: int64 and float64 (typl §4).
+/// The proto3 scalar for a bare primitive at a field position
+/// (`ridl_ir::projection::proto3::primitive`).
 fn proto_primitive(primitive: i32) -> &'static str {
-    match v2::PrimitiveType::try_from(primitive) {
-        Ok(v2::PrimitiveType::Boolean) => "bool",
-        Ok(v2::PrimitiveType::Integer) => "int64",
-        Ok(v2::PrimitiveType::Float) => "double",
-        Ok(v2::PrimitiveType::Bytes) => "bytes",
-        _ => "string",
-    }
+    proto3::primitive(primitive).as_str()
 }
 
 /// The constraint information proto3 has no construct for, as a comment

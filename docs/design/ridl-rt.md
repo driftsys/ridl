@@ -186,11 +186,14 @@ and one whose size is not derivable yet. The `repr(C)` column is `None` for
 every payload until E11.12 defines the C-representable layout
 (`docs/wip/2026-09-13-catalog-descriptor-plan.md` §3), and a backend that emits
 descriptors before its codec exists writes `None` for that codec's column as
-well — which is what E11.13's MVP does for all three. The field's own
-documentation first read `None` as "that encoding cannot carry the payload"
-alone; that is the narrower of the two cases and it made a backend with no codec
-yet unable to say anything true. A consumer that needs to know which encodings a
-payload has asks the catalog descriptor, not this field.
+well. E11.13's MVP wrote `None` for all three; since E16.4 (driftsys/ridl#380)
+the Rust backend fills the `flatbuffers` column from the codegen model's bound
+and writes `None` for `proto3`, because it emits no proto3 codec, and for
+`repr_c`. The field's own documentation first read `None` as "that encoding
+cannot carry the payload" alone; that is the narrower of the two cases and it
+made a backend with no codec yet unable to say anything true. A consumer that
+needs to know which encodings a payload has asks the catalog descriptor, not
+this field.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
