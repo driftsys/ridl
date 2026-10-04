@@ -860,6 +860,117 @@ fn a_map_key_type_proto3_cannot_carry_is_refused() {
 }
 
 #[test]
+fn a_named_scalar_map_key_inlines_to_its_scalar() {
+    // A named scalar at a key position projects to its backing scalar, as it
+    // does at a field position (ADR-0017 decision 1); `GearIndex`, an i64,
+    // is `sint64`, which proto3 admits as a key.
+    let mut package = struct_package(
+        "Index",
+        "byGear",
+        1,
+        map_keyed_by(named_type("GearIndex"), float64_type()),
+    );
+    package.decls.push(v2::Decl {
+        name: "GearIndex".to_string(),
+        kind: Some(v2::decl::Kind::TypeDef(gear_index_type_def())),
+        ..Default::default()
+    });
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("map<sint64, double> by_gear = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_named_scalar_map_key_outside_the_admitted_scalars_is_refused() {
+    // `Speed` projects to `double`, which proto3 does not admit as a key;
+    // the refusal names the scalar the key projected to.
+    let mut package = struct_package(
+        "Index",
+        "bySpeed",
+        1,
+        map_keyed_by(named_type("Speed"), float64_type()),
+    );
+    package.decls.push(v2::Decl {
+        name: "Speed".to_string(),
+        kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+        ..Default::default()
+    });
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`double` as a map key"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_named_enum_set_map_key_is_the_integer_of_its_width() {
+    // An enum set is the integer of its width at a field position
+    // (ADR-0013 decision 2), and at a key position: a u32 set keys a
+    // `map<uint32, ...>`.
+    let mut package = struct_package(
+        "Index",
+        "byWarnings",
+        1,
+        map_keyed_by(named_type("Warnings"), float64_type()),
+    );
+    package.decls.push(v2::Decl {
+        name: "Warnings".to_string(),
+        kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![v2::EnumValue {
+                name: "LOW_FUEL".to_string(),
+                value: 0,
+                doc: String::new(),
+            }],
+            width: v2::IntWidth::U32 as i32,
+        })),
+        ..Default::default()
+    });
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("map<uint32, double> by_warnings = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_named_struct_map_key_is_refused() {
+    // A struct is a message name, which proto3 never admits as a key; the
+    // refusal names the message rather than a scalar.
+    let mut package = struct_package(
+        "Index",
+        "byPosition",
+        1,
+        map_keyed_by(named_type("Position"), float64_type()),
+    );
+    package.decls.push(v2::Decl {
+        name: "Position".to_string(),
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member("x", 1, float64_type())],
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    });
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`Position` as a map key"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
 fn a_map_value_that_is_itself_repeated_is_refused() {
     // proto3 does not admit a `repeated` map value.
     let package = struct_package(
@@ -1882,13 +1993,22 @@ fn array_of(element: v2::FieldType) -> v2::FieldType {
 /// A bounded map from a bare `key` primitive to `value` (typl §12.2). The
 /// bound is immaterial here for the same reason as [`array_of`].
 fn map_of(key: v2::PrimitiveType, value: v2::FieldType) -> v2::FieldType {
+    map_keyed_by(
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Primitive(key as i32)),
+        },
+        value,
+    )
+}
+
+/// [`map_of`], with the key given as any field type — for a key that is a
+/// named declaration rather than a bare primitive.
+fn map_keyed_by(key: v2::FieldType, value: v2::FieldType) -> v2::FieldType {
     v2::FieldType {
         optional: false,
         kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
-            key: Some(Box::new(v2::FieldType {
-                optional: false,
-                kind: Some(v2::field_type::Kind::Primitive(key as i32)),
-            })),
+            key: Some(Box::new(key)),
             value: Some(Box::new(value)),
             min: 0,
             max: 8,
