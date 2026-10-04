@@ -46,8 +46,82 @@ env:
   MDBOOK_VERSION: 0.4.40
 
 jobs:
+  # Decides which gate jobs a pull request needs, from the files it changes.
+  # A push to main and a manual run set every flag, so every path-filtered job
+  # runs: main is what `pages` publishes from, and a manual run exists to repeat
+  # the whole gate.
+  #
+  # The filter fails closed. It lists the paths that are known not to affect a
+  # job, and a pull request skips the job only when every changed file is on
+  # that list. A path nobody listed runs the job. The reverse design, a list of
+  # paths that trigger it, skips the job for every dependency nobody remembered:
+  # the Rust tests read LICENSE, THIRD-PARTY-NOTICES.txt, .editorconfig and
+  # files under docs/specification/ directly, and a trigger list missed three of
+  # those on its first draft.
+  #
+  # Two jobs are path-filtered, and `book` is not:
+  #   - `rust` and `wasm` skip when every changed file is documentation or
+  #     editor tooling that no Rust test or recipe reads. docs/book/ and
+  #     docs/specification/ are not on the list: book_examples.rs compiles the
+  #     docs/book/ fences, and Rust code reads docs/specification/ files.
+  #   - `markdown` (prim) skips when every changed file is Rust source. prim
+  #     also covers JSON, YAML and TOML, so any other file runs it.
+  #   - `book` always runs on a pull request: `just doc-path-check` scans Rust
+  #     source comments for docs/ paths, and the job compiles nothing.
+  # The diff uses --no-renames so a file moved out of a listed path shows under
+  # both its old and new name. The `ci` aggregate accepts "skipped", and lists
+  # `changes`, so a failed filter fails the aggregate.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      markdown: ${{ steps.filter.outputs.markdown }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The pull_request checkout is a merge commit; its first parent is
+          # the base branch tip, so two commits are enough to diff against it.
+          fetch-depth: 2
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "markdown=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only --no-renames HEAD^1 HEAD)"
+          echo "$files"
+          # An empty list is not a pull request that needs nothing; it is a
+          # diff that did not read the change. Run every job.
+          if [ -z "$files" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "markdown=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A here-string and a command substitution, not `printf | grep -q`:
+          # grep -q exits at its first match, printf then dies of SIGPIPE, and
+          # pipefail reports that as a non-match once the list passes the
+          # 64 KiB pipe buffer. `grep -vq` also returns the wrong status in
+          # BSD grep, so the test reads grep's output instead of its status.
+          rust_skip='^(docs/(wip|archive|decisions|design|technotes)/|docs/[^/]+\.md$|[A-Z_-]+\.md$|editors/|\.claude/|\.githooks/|\.git-std\.toml$|\.mcp\.json$)'
+          if [ -n "$(grep -vE "$rust_skip" <<< "$files" || true)" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$(grep -vE '\.rs$' <<< "$files" || true)" ]; then
+            echo "markdown=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "markdown=false" >> "$GITHUB_OUTPUT"
+          fi
   markdown:
     name: markdown
+    needs: changes
+    if: needs.changes.outputs.markdown == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +182,8 @@ jobs:
 
   rust:
     name: rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +219,8 @@ jobs:
 
   wasm:
     name: wasm
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -284,8 +362,9 @@ jobs:
     name: ci
     if: always()
     # Every job, so a red anywhere fails the aggregate. "skipped" is accepted:
-    # commit-lint only runs on pull requests.
-    needs: [markdown, book, rust, wasm, commit-lint]
+    # commit-lint only runs on pull requests, and the path-filtered jobs skip
+    # when `changes` finds nothing for them.
+    needs: [changes, markdown, book, rust, wasm, commit-lint]
     runs-on: ubuntu-latest
     steps:
       - name: check required jobs
