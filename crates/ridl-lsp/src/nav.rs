@@ -9,13 +9,21 @@
 //! loaded package and keeps the references that resolve to the same symbol,
 //! so the result is name-resolution based, never a textual match. The task 24
 //! rename feature reuses [`symbol_at`] for the same reason.
+//!
+//! A doc link or an `@see` target (ADR-0026) is a reference too, read off
+//! the comment rather than the tree: [`resolve_doc_link_at`] resolves the one
+//! under the cursor and [`doc_link_references`] finds every one that names a
+//! symbol, both through the resolver the checker uses for TYPL-401.
 
 use ridl_core::db::{InputFile, parse_file};
 use ridl_core::package::{Package, Workspace, package_of};
-use ridl_sem::{Resolution, Symbol, resolve_doc_link, resolve_package};
+use ridl_sem::docs::{self, LinkCandidate};
+use ridl_sem::{LinkTarget, Resolution, Symbol, resolve_doc_link, resolve_package};
 use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextRange, TextSize, TokenAtOffset};
+
+use crate::doc;
 
 /// A cursor resolved to its declared symbol.
 ///
@@ -141,6 +149,104 @@ pub fn find_references(
         }
     }
     out
+}
+
+/// A doc link or `@see` target under the cursor, resolved (ADR-0026).
+#[derive(Debug, Clone)]
+pub struct DocLink {
+    /// The link as written: its segments and source spans.
+    pub candidate: LinkCandidate,
+    /// The declaration, and the member of it, the link names.
+    pub target: LinkTarget,
+}
+
+/// Resolves the doc link or `@see` target at `offset` in `file` (a file of
+/// `pkg`), through the doc-link resolver the checker uses, so navigation
+/// agrees with TYPL-401: a link the checker reports as broken resolves to
+/// nothing here either. `None` outside a doc link or when the link does not
+/// resolve.
+pub fn resolve_doc_link_at(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    file: InputFile,
+    offset: TextSize,
+) -> Option<DocLink> {
+    let source = source_file(db, file);
+    let candidate = doc::doc_link_at(&source, offset)?;
+    let resolution = resolve_package(db, ws, pkg, std);
+    let target = resolve_doc_link(db, ws, std, pkg, &resolution, &candidate.segments).ok()?;
+    Some(DocLink { candidate, target })
+}
+
+/// Every doc link and `@see` target across `packages` that resolves to the
+/// declaration `target` — or to a member of it — as `(file, span)` pairs in
+/// package and source order, where the span is the one segment of the link
+/// that names the declaration: `Gear` in `[veh.common.Gear.PARK]`. That is
+/// the span rename rewrites and find-references reports.
+pub fn doc_link_references(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    packages: &[Package],
+    target: &Symbol,
+) -> Vec<(InputFile, TextRange)> {
+    let mut out = Vec::new();
+    for &pkg in packages {
+        let resolution = resolve_package(db, ws, pkg, std);
+        for &file in pkg.files(db) {
+            let source = source_file(db, file);
+            let text = file.text(db);
+            for run in doc::doc_runs(&source) {
+                let info = docs::scan(&run);
+                for candidate in info.links.iter().chain(&info.see) {
+                    let Ok(resolved) =
+                        resolve_doc_link(db, ws, std, pkg, &resolution, &candidate.segments)
+                    else {
+                        continue;
+                    };
+                    if resolved.symbol.package != target.package
+                        || resolved.symbol.name != target.name
+                    {
+                        continue;
+                    }
+                    if let Some(span) = symbol_segment(candidate, &resolved, text) {
+                        out.push((file, span));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The span, inside `candidate.target`, of the segment that names the
+/// declaration of `resolved`: the last segment for a declaration link, the
+/// one before it for a member link. `None` when the written target does not
+/// split into the candidate's segments (a target span cut on a character
+/// boundary the scanner did not expect).
+pub(crate) fn symbol_segment(
+    candidate: &LinkCandidate,
+    resolved: &LinkTarget,
+    text: &str,
+) -> Option<TextRange> {
+    let span = candidate.target;
+    let written = text.get(usize::from(span.start())..usize::from(span.end()))?;
+    let parts: Vec<&str> = written.split('.').collect();
+    if parts.len() != candidate.segments.len() {
+        return None;
+    }
+    let index = candidate
+        .segments
+        .len()
+        .checked_sub(1 + usize::from(resolved.member.is_some()))?;
+    let start: usize = parts[..index].iter().map(|part| part.len() + 1).sum();
+    let start = span.start() + TextSize::from(start as u32);
+    Some(TextRange::at(
+        start,
+        TextSize::from(parts[index].len() as u32),
+    ))
 }
 
 /// A name reference read off the tree: its dot-separated segments (a single

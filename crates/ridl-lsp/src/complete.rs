@@ -15,7 +15,12 @@
 //!   keywords and the `internal` / `error` modifiers;
 //! - at an interaction-start position (directly inside an `interface` body or a
 //!   service's inline shape) → the five ridl interaction keywords plus
-//!   `reserved`.
+//!   `reserved`;
+//! - inside a doc comment, after an open `[` → what the doc-link resolver can
+//!   reach (ADR-0026): the names in scope and the known packages, a package's
+//!   public declarations after its path, a declaration's members after its
+//!   name; and after `@` at the start of a doc line → the four doc tags.
+//!   Anywhere else inside a doc comment nothing is offered — it is prose.
 //!
 //! An item that names a declaration carries the declaration's doc as its
 //! `documentation`, rendered as hover renders it but without the signature
@@ -28,11 +33,15 @@
 use lsp_types as lt;
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace};
-use ridl_sem::{ConstValue, SymbolKind, const_value, resolve_package};
+use ridl_sem::{
+    ConstValue, LinkTarget, SymbolKind, const_value, doc_link_members, resolve_doc_link,
+    resolve_package,
+};
 use ridl_syntax::ast::{AstNode, Import, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextSize, TokenAtOffset};
 
+use crate::doc;
 use crate::hover::SymbolDocs;
 use crate::nav::source_file;
 
@@ -49,6 +58,10 @@ const DEFINITION_KEYWORDS: &[&str] = &[
 /// else may appear in an interface body — a typl declaration there is RIDL-107.
 const INTERACTION_KEYWORDS: &[&str] = &["signal", "event", "command", "query", "fixed", "reserved"];
 
+/// The four doc tags offered after `@` at the start of a doc line
+/// (typl §14.3, ADR-0026).
+const DOC_TAGS: &[&str] = &["see", "since", "deprecated", "labels"];
+
 /// The completion items for the cursor at `offset` in `file` (a file of `pkg`).
 ///
 /// `packages` is the every-package universe (workspace members, standalone
@@ -64,6 +77,15 @@ pub fn completion(
     packages: &[Package],
 ) -> Vec<lt::CompletionItem> {
     let source = source_file(db, file);
+    if let Some(cursor) = doc::in_doc_comment(&source, offset) {
+        return if cursor.at_line_start_at {
+            sorted(keyword_completions(DOC_TAGS))
+        } else if let Some(prefix) = cursor.after_open_bracket {
+            doc_link_completions(db, ws, std, pkg, packages, &prefix)
+        } else {
+            Vec::new()
+        };
+    }
     let Some(context) = context(source.syntax(), offset) else {
         return Vec::new();
     };
@@ -255,20 +277,7 @@ fn import_completions(
     source: &SourceFile,
     offset: TextSize,
 ) -> Vec<lt::CompletionItem> {
-    let mut items: Vec<lt::CompletionItem> = Vec::new();
-    let mut seen: Vec<String> = Vec::new();
-    for package in packages {
-        let name = package.name(db).clone();
-        if name.is_empty() || seen.contains(&name) {
-            continue;
-        }
-        seen.push(name.clone());
-        items.push(item(
-            &name,
-            lt::CompletionItemKind::MODULE,
-            "package".to_string(),
-        ));
-    }
+    let mut items = package_items(db, packages);
 
     // The package path completed before the cursor (everything but the segment
     // under the cursor). When it names a known package, offer its public
@@ -276,21 +285,7 @@ fn import_completions(
     if let Some(prefix) = import_path_prefix(source, offset)
         && let Some(target) = packages.iter().find(|package| *package.name(db) == prefix)
     {
-        let target_name = target.name(db).clone();
-        let resolution = resolve_package(db, ws, *target, std);
-        let mut docs = SymbolDocs::new(db, ws, std, *target);
-        for (name, symbol) in &resolution.symbols {
-            if symbol.package == target_name && !symbol.internal {
-                items.push(documented(
-                    item(
-                        name,
-                        symbol_kind(symbol.kind),
-                        format!("{target_name}.{name}"),
-                    ),
-                    docs.get(symbol),
-                ));
-            }
-        }
+        items.extend(public_symbol_items(db, ws, std, *target));
     }
     sorted(items)
 }
@@ -322,6 +317,106 @@ fn match_completions(
         })
         .collect();
     sorted(items)
+}
+
+/// The doc-link targets reachable after `[` and the `prefix` typed so far
+/// (ADR-0026). The segment under the cursor is dropped; what precedes it
+/// decides the list: nothing → the names in the package's view and the known
+/// packages; a declaration's path → its members; a package's path → its
+/// public declarations.
+fn doc_link_completions(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    packages: &[Package],
+    prefix: &str,
+) -> Vec<lt::CompletionItem> {
+    let resolution = resolve_package(db, ws, pkg, std);
+    let mut path: Vec<String> = prefix.split('.').map(str::to_string).collect();
+    path.pop();
+    let mut items: Vec<lt::CompletionItem> = Vec::new();
+    if path.is_empty() {
+        let mut docs = SymbolDocs::new(db, ws, std, pkg);
+        for (name, symbol) in &resolution.symbols {
+            items.push(documented(
+                item(
+                    name,
+                    symbol_kind(symbol.kind),
+                    format!("{}.{}", symbol.package, symbol.name),
+                ),
+                docs.get(symbol),
+            ));
+        }
+        items.extend(package_items(db, packages));
+        return sorted(items);
+    }
+    if let Ok(LinkTarget {
+        symbol,
+        member: None,
+    }) = resolve_doc_link(db, ws, std, pkg, &resolution, &path)
+    {
+        let owner = format!("{}.{}", symbol.package, symbol.name);
+        let kind = match symbol.kind {
+            SymbolKind::Enum | SymbolKind::EnumSet => lt::CompletionItemKind::ENUM_MEMBER,
+            SymbolKind::Interface => lt::CompletionItemKind::METHOD,
+            _ => lt::CompletionItemKind::FIELD,
+        };
+        for member in doc_link_members(db, ws, std, pkg, &symbol) {
+            items.push(item(&member, kind, format!("{owner}.{member}")));
+        }
+        return sorted(items);
+    }
+    let path = path.join(".");
+    if let Some(target) = packages.iter().find(|package| *package.name(db) == path) {
+        items.extend(public_symbol_items(db, ws, std, *target));
+    }
+    sorted(items)
+}
+
+/// One module item per distinct non-empty package name in `packages`.
+fn package_items(db: &dyn salsa::Database, packages: &[Package]) -> Vec<lt::CompletionItem> {
+    let mut items: Vec<lt::CompletionItem> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for package in packages {
+        let name = package.name(db).clone();
+        if name.is_empty() || seen.contains(&name) {
+            continue;
+        }
+        seen.push(name.clone());
+        items.push(item(
+            &name,
+            lt::CompletionItemKind::MODULE,
+            "package".to_string(),
+        ));
+    }
+    items
+}
+
+/// The public declarations of `target`, each with its doc.
+fn public_symbol_items(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    target: Package,
+) -> Vec<lt::CompletionItem> {
+    let target_name = target.name(db).clone();
+    let resolution = resolve_package(db, ws, target, std);
+    let mut docs = SymbolDocs::new(db, ws, std, target);
+    let mut items = Vec::new();
+    for (name, symbol) in &resolution.symbols {
+        if symbol.package == target_name && !symbol.internal {
+            items.push(documented(
+                item(
+                    name,
+                    symbol_kind(symbol.kind),
+                    format!("{target_name}.{name}"),
+                ),
+                docs.get(symbol),
+            ));
+        }
+    }
+    items
 }
 
 /// A fixed keyword list, kind-annotated as keywords.

@@ -71,9 +71,13 @@ pub fn hover(
     file: InputFile,
     offset: TextSize,
 ) -> Option<HoverInfo> {
+    let scope = Scope { db, ws, std, pkg };
+    // A doc link shows its target's hover (ADR-0026).
+    if let Some(info) = doc_link_hover(scope, file, offset) {
+        return Some(info);
+    }
     // A member name (a field, an enum value, an enumset bit, a union arm or a
     // parameter) is not a symbol — resolve that first.
-    let scope = Scope { db, ws, std, pkg };
     if let Some(info) = member_hover(scope, file, offset) {
         return Some(info);
     }
@@ -179,6 +183,39 @@ fn member_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option<H
     Some(HoverInfo {
         markdown,
         range: name_node.text_range(),
+    })
+}
+
+/// The hover for a doc link or an `@see` target: the hover of its target at
+/// the target's own declaration site — a declaration's, a member's or an
+/// interaction's, whichever the link names — anchored to the link's span.
+fn doc_link_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option<HoverInfo> {
+    let link = nav::resolve_doc_link_at(scope.db, scope.ws, scope.std, scope.pkg, file, offset)?;
+    let (target_file, site) = nav::canonical_site(
+        scope.db,
+        scope.ws,
+        scope.std,
+        scope.pkg,
+        &link.target.canonical(),
+    )?;
+    let owner = owner_package(
+        scope.db,
+        scope.ws,
+        scope.std,
+        scope.pkg,
+        &link.target.symbol.package,
+    )?;
+    let target = hover(
+        scope.db,
+        scope.ws,
+        scope.std,
+        owner,
+        target_file,
+        site.start(),
+    )?;
+    Some(HoverInfo {
+        markdown: target.markdown,
+        range: link.candidate.source,
     })
 }
 

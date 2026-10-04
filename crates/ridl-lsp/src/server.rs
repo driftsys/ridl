@@ -149,9 +149,16 @@ fn server_capabilities() -> lt::ServerCapabilities {
         definition_provider: Some(lt::OneOf::Left(true)),
         references_provider: Some(lt::OneOf::Left(true)),
         completion_provider: Some(lt::CompletionOptions {
-            // `.` completes an import path; `:` a type position. Identifier
-            // characters need not be listed — the client triggers on those.
-            trigger_characters: Some(vec![":".to_string(), ".".to_string()]),
+            // `.` completes an import path or a doc link's path; `:` a type
+            // position; `[` opens a doc link and `@` a doc tag (ADR-0026).
+            // Identifier characters need not be listed — the client triggers
+            // on those.
+            trigger_characters: Some(vec![
+                ":".to_string(),
+                ".".to_string(),
+                "[".to_string(),
+                "@".to_string(),
+            ]),
             ..Default::default()
         }),
         rename_provider: Some(lt::OneOf::Right(lt::RenameOptions {
@@ -818,7 +825,8 @@ impl ServerState {
     }
 
     /// `textDocument/definition`: the declaration site of the symbol the cursor
-    /// names, resolved through imports and qualified references.
+    /// names, resolved through imports and qualified references, or
+    /// the target of the doc link under the cursor (ADR-0026).
     ///
     /// In an `.rsdl` file, the declaration an rsdl reference names.
     fn goto_definition(
@@ -831,10 +839,26 @@ impl ServerState {
         let offset = self.line_index_of(file).offset(position);
         let (target, range) = if profile_of_path(&path) == Profile::Rsdl {
             rsdl::definition(&self.db, self.workspace, self.std, file, offset)?
-        } else {
-            let located =
-                nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
+        } else if let Some(located) =
+            nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
+        {
             (located.symbol.file, located.symbol.range)
+        } else {
+            let link = nav::resolve_doc_link_at(
+                &self.db,
+                self.workspace,
+                self.std,
+                package,
+                file,
+                offset,
+            )?;
+            nav::canonical_site(
+                &self.db,
+                self.workspace,
+                self.std,
+                package,
+                &link.target.canonical(),
+            )?
         };
         let location = self.location(target, range)?;
         Some(lt::GotoDefinitionResponse::Scalar(location))
@@ -842,26 +866,44 @@ impl ServerState {
 
     /// `textDocument/references`: every resolved reference to the symbol the
     /// cursor names, across every loaded package — the declaration itself
-    /// included when the client asks for it.
+    /// included when the client asks for it — and every doc link
+    /// that names the symbol (ADR-0026). The cursor may sit on a doc link to
+    /// the symbol; a link to one of its members names no symbol of its own.
     fn references(&mut self, params: &lt::ReferenceParams) -> Option<Vec<lt::Location>> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let located = nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
+        let symbol = match nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
+        {
+            Some(located) => located.symbol,
+            None => {
+                let link = nav::resolve_doc_link_at(
+                    &self.db,
+                    self.workspace,
+                    self.std,
+                    package,
+                    file,
+                    offset,
+                )?;
+                link.target.member.is_none().then_some(link.target.symbol)?
+            }
+        };
 
         let packages = self.search_packages();
-        let references = nav::find_references(
+        let mut references =
+            nav::find_references(&self.db, self.workspace, self.std, &packages, &symbol);
+        references.extend(nav::doc_link_references(
             &self.db,
             self.workspace,
             self.std,
             &packages,
-            &located.symbol,
-        );
+            &symbol,
+        ));
 
         let mut locations = Vec::new();
         if params.context.include_declaration
-            && let Some(location) = self.location(located.symbol.file, located.symbol.range)
+            && let Some(location) = self.location(symbol.file, symbol.range)
         {
             locations.push(location);
         }

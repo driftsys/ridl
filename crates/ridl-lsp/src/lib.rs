@@ -28,6 +28,7 @@
 
 pub mod complete;
 pub mod convert;
+pub(crate) mod doc;
 pub mod hover;
 pub mod inlay;
 pub mod nav;
