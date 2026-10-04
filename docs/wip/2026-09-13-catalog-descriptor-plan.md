@@ -140,7 +140,8 @@ named scalar is projected by its width first, as the backends do; an integer or
 float backing without a width is a bounded `Scalar` of unspecified width, where
 `proto_scalar` gives `string` and `scalar_charge` gives `None` (D5 changed this:
 such a type def has no leaf); a unit backing without a width has no leaf. The
-proto3 and FlatBuffers placeholders panic until Tasks 6 and 7 replace them.
+proto3 and FlatBuffers placeholders panic until Tasks 6 and 7 replace them (D5
+replaced both; see below).
 
 Stage D5 (2026-10-04) implemented Tasks 6 and 7 with changes this plan's task
 text does not show:
