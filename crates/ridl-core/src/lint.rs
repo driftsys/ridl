@@ -81,12 +81,13 @@ pub fn lint_of(code: DiagCode) -> Option<&'static CatalogEntry> {
 }
 
 /// The default level of a lint: its catalogue severity, Warning as `Warn`
-/// and Info as `Info`. No lint defaults to `Deny`.
-pub fn default_level(entry: &CatalogEntry) -> LintLevel {
+/// and Info as `Info`. No lint defaults to `Deny`. An Error row is not a
+/// lint and has no level, so it returns `None`.
+pub fn default_level(entry: &CatalogEntry) -> Option<LintLevel> {
     match entry.severity {
-        Severity::Info => LintLevel::Info,
-        // A lint row is never an Error (guarded in `diag`'s tests).
-        Severity::Warning | Severity::Error => LintLevel::Warn,
+        Severity::Info => Some(LintLevel::Info),
+        Severity::Warning => Some(LintLevel::Warn),
+        Severity::Error => None,
     }
 }
 
@@ -113,11 +114,12 @@ impl LintLevels {
     }
 
     /// The level of the lint `entry` names: its override, or its default.
-    pub fn level(&self, entry: &CatalogEntry) -> LintLevel {
+    /// `None` when `entry` is not a lint (an Error row).
+    pub fn level(&self, entry: &CatalogEntry) -> Option<LintLevel> {
         entry
             .lint
             .and_then(|name| self.overrides.get(name).copied())
-            .unwrap_or_else(|| default_level(entry))
+            .or_else(|| default_level(entry))
     }
 }
 
@@ -170,7 +172,11 @@ pub fn apply_lint_levels(
             .path(diagnostic.primary.file)
             .and_then(|path| scopes.for_path(Path::new(path)))
             .unwrap_or(&defaults);
-        match levels.level(entry).severity() {
+        // `entry` is a lint row, so it has a level.
+        let Some(level) = levels.level(entry) else {
+            return true;
+        };
+        match level.severity() {
             Some(severity) => {
                 diagnostic.severity = severity;
                 true
@@ -232,9 +238,26 @@ mod tests {
     #[test]
     fn default_level_follows_the_catalogue_severity() {
         let info = lint_of(DiagCode::RIDL_405).expect("RIDL-405 is a lint");
-        assert_eq!(default_level(info), LintLevel::Info);
+        assert_eq!(default_level(info), Some(LintLevel::Info));
         let warn = lint_of(DiagCode::RIDL_100).expect("RIDL-100 is a lint");
-        assert_eq!(default_level(warn), LintLevel::Warn);
+        assert_eq!(default_level(warn), Some(LintLevel::Warn));
+    }
+
+    /// The row of an Error code, which has no lint name.
+    fn error_row() -> &'static CatalogEntry {
+        ALL_CATALOGS
+            .iter()
+            .flat_map(|(_, catalog)| catalog.iter())
+            .find(|entry| entry.code == DiagCode::RIDL_101)
+            .expect("RIDL-101 is in the catalogue")
+    }
+
+    #[test]
+    fn an_error_row_has_no_default_level_and_no_level() {
+        let error = error_row();
+        assert_eq!(error.severity, Severity::Error);
+        assert_eq!(default_level(error), None);
+        assert_eq!(LintLevels::default().level(error), None);
     }
 
     /// `LintLevels` with one override, built the way the manifest parser does.
@@ -250,7 +273,7 @@ mod tests {
         levels.overlay(&LintTable::from([("missing-timing", LintLevel::Deny)]));
         levels.overlay(&LintTable::from([("missing-timing", LintLevel::Allow)]));
         let entry = lint_by_name("missing-timing").expect("missing-timing is a lint");
-        assert_eq!(levels.level(entry), LintLevel::Allow);
+        assert_eq!(levels.level(entry), Some(LintLevel::Allow));
     }
 
     #[test]
@@ -272,7 +295,11 @@ mod tests {
             PathBuf::from("/ws/a"),
             levels("missing-timing", LintLevel::Deny),
         );
-        let level = |path: &str| scopes.for_path(Path::new(path)).map(|l| l.level(entry));
+        let level = |path: &str| {
+            scopes
+                .for_path(Path::new(path))
+                .and_then(|l| l.level(entry))
+        };
         assert_eq!(level("/ws/a/x.ridl"), Some(LintLevel::Deny));
         assert_eq!(level("/ws/b/x.ridl"), Some(LintLevel::Warn));
         assert_eq!(level("/other/x.ridl"), None);
@@ -293,7 +320,7 @@ mod tests {
         let found = scopes
             .for_path(Path::new("/ws/a/x.ridl"))
             .expect("in scope");
-        assert_eq!(found.level(entry), LintLevel::Deny);
+        assert_eq!(found.level(entry), Some(LintLevel::Deny));
     }
 
     #[test]

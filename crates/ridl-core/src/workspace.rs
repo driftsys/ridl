@@ -1437,15 +1437,15 @@ mod tests {
         };
 
         let in_a = levels(&a_file);
-        assert_eq!(in_a.level(missing_timing), LintLevel::Warn);
-        assert_eq!(in_a.level(shared_error_type), LintLevel::Allow);
-        assert_eq!(levels(&b_file).level(missing_timing), LintLevel::Deny);
+        assert_eq!(in_a.level(missing_timing), Some(LintLevel::Warn));
+        assert_eq!(in_a.level(shared_error_type), Some(LintLevel::Allow));
+        assert_eq!(levels(&b_file).level(missing_timing), Some(LintLevel::Deny));
         let root = levels(&dir.path().join("ridl.toml"));
-        assert_eq!(root.level(missing_timing), LintLevel::Deny);
-        assert_eq!(root.level(shared_error_type), LintLevel::Allow);
+        assert_eq!(root.level(missing_timing), Some(LintLevel::Deny));
+        assert_eq!(root.level(shared_error_type), Some(LintLevel::Allow));
         assert_eq!(
             levels(&dir.path().join("a/ridl.toml")).level(missing_timing),
-            LintLevel::Warn,
+            Some(LintLevel::Warn),
         );
 
         // The path the loader recorded for the member file, not one built by
@@ -1458,7 +1458,7 @@ mod tests {
         let recorded = a.files(&db)[0].path(&db).clone();
         assert_eq!(
             levels(Path::new(&recorded)).level(missing_timing),
-            LintLevel::Warn,
+            Some(LintLevel::Warn),
             "the recorded path `{recorded}` resolves to the member's scope",
         );
     }
@@ -1493,7 +1493,7 @@ mod tests {
                 .for_path(Path::new(path))
                 .expect("the member manifest is in a scope")
                 .level(unknown_lint),
-            LintLevel::Allow,
+            Some(LintLevel::Allow),
             "the recorded manifest path `{path}` resolves to the member's scope",
         );
 
@@ -1529,7 +1529,7 @@ mod tests {
                     .for_path(path)
                     .unwrap_or_else(|| panic!("`{}` is in a scope", path.display()))
                     .level(missing_timing),
-                LintLevel::Deny,
+                Some(LintLevel::Deny),
             );
         }
 

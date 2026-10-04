@@ -72,14 +72,14 @@ fn catalogue_rows() -> BTreeSet<Row> {
         .iter()
         .flat_map(|(_, catalog)| catalog.iter())
         .filter_map(|entry| {
-            entry.lint.map(|name| {
-                (
-                    name.to_string(),
-                    entry.code.as_str().to_string(),
-                    default_level(entry).as_str().to_string(),
-                    entry.summary.to_string(),
-                )
-            })
+            let name = entry.lint?;
+            let level = default_level(entry)?;
+            Some((
+                name.to_string(),
+                entry.code.as_str().to_string(),
+                level.as_str().to_string(),
+                entry.summary.to_string(),
+            ))
         })
         .collect()
 }

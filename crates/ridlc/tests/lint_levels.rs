@@ -136,7 +136,7 @@ fn compile_workspace_keeps_emitted_severities() {
         .lints
         .for_path(&fixture.source_path())
         .expect("the member's file is in a scope");
-    assert_eq!(levels.level(missing_timing), LintLevel::Allow);
+    assert_eq!(levels.level(missing_timing), Some(LintLevel::Allow));
 }
 
 #[test]

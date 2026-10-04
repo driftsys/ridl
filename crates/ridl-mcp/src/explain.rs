@@ -41,17 +41,12 @@ pub fn explain(input: &ExplainInput) -> Result<ExplainOutput, ToolError> {
             Severity::Warning => "warning",
             Severity::Info => "info",
         };
-        // `default_level` maps an Error row to `warn`, so it is only read for
-        // a lint row, where the catalogue never holds an Error.
-        let default_level = entry
-            .lint
-            .map(|_| default_level(entry).as_str().to_string());
         return Ok(ExplainOutput::Diagnostic {
             code: entry.code.as_str().into(),
             severity: severity.into(),
             summary: entry.summary.into(),
             lint: entry.lint.map(str::to_string),
-            default_level,
+            default_level: default_level(entry).map(|level| level.as_str().to_string()),
         });
     }
     if let Some(category) = ridl_diff::category_from_word(&input.code) {
