@@ -83,6 +83,15 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    and `ridl mcp` servers, which apply them to the diagnostics they report and
    have no exit code that depends on them.
 
+   The paragraph above was added on 2026-10-04 (lint foundation design) and is
+   verified by tests, not by the direct construction below:
+   `json_carries_lint_field_and_deny_exits_1` and `build_fails_on_deny` in
+   `crates/ridl/tests/lints.rs` run the `ridl` binary;
+   `deny_turns_a_lint_into_an_error` and `deny_blocks_build` in
+   `crates/ridlc/tests/lint_levels.rs` call `ridlc::run_check` and
+   `ridlc::run_build`, and `binary_build_fails_on_deny` in the same file runs
+   the `ridlc build` binary.
+
    Verified by direct construction against the built `ridl` and `ridlc` binaries
    on this branch (2026-07-27), one input per cell, across the eight subcommands
    the two binaries expose today:
