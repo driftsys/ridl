@@ -316,12 +316,41 @@ fn compile_fixture(relative_to_fixtures: &str) -> v2::Package {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
-    assert!(
-        output.diagnostics.is_empty(),
-        "{} must compile with no diagnostic, got: {:?}",
-        path.display(),
-        output.diagnostics,
-    );
+    if relative_to_fixtures == "cruise.ridl" {
+        assert_eq!(output.diagnostics.len(), 1, "{:?}", output.diagnostics);
+        let diagnostic = &output.diagnostics[0];
+        assert_eq!(diagnostic.code, ridl_core::diag::DiagCode::TYPL_223);
+        assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
+        assert_eq!(
+            ridl_core::lint::lint_by_name("inconsistent-abbreviation")
+                .unwrap()
+                .code,
+            diagnostic.code
+        );
+        assert_eq!(
+            diagnostic.message,
+            "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`"
+        );
+        assert_eq!(usize::from(diagnostic.primary.range.start()), 1768);
+        assert_eq!(usize::from(diagnostic.primary.range.end()), 1777);
+        assert_eq!(
+            output.sources.path(diagnostic.primary.file),
+            Some(path.to_str().unwrap())
+        );
+        assert_eq!(
+            &output.sources.text(diagnostic.primary.file).unwrap()[1768..1777],
+            "setTarget"
+        );
+        assert!(diagnostic.labels.is_empty());
+        assert!(diagnostic.fixits.is_empty());
+    } else {
+        assert!(
+            output.diagnostics.is_empty(),
+            "{} must compile with no diagnostic, got: {:?}",
+            path.display(),
+            output.diagnostics,
+        );
+    }
     output.package
 }
 

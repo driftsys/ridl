@@ -937,6 +937,19 @@ reserved codes, corpus budgets, four PRs and approval stages.
     generated-output snapshots remain unchanged. Task 14 must synchronize these
     two exact expectations if the check drops or its severity changes.
 
+31. **Task 8: synchronize the remaining shared-fixture model tests** (approved
+    bounded test-only scope extension, 2026-10-04). Inspection of every Rust
+    reference to `cruise.ridl` found three remaining no-diagnostic helpers:
+    `crates/ridl-backend-flatbuffers/tests/model_drift.rs`,
+    `crates/ridl-backend-proto/tests/model_drift.rs`, and
+    `crates/ridl-backend-ts/tests/model_drift.rs`. Apply decision 29's exact
+    known finding only to that fixture, retaining empty diagnostics for every
+    other fixture and preserving source, backend production and snapshots.
+    Together with decisions 29 and 30 this synchronizes six helper files. Task
+    14 must remove these exact expectations if the abbreviation check drops or
+    update their provisional Info severity if its catalogue level changes. The
+    affected suites and one final workspace run verify the batch.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
