@@ -42,8 +42,10 @@ use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_ir::rules::{self, ItemRef, Rule};
 use ridl_ir::v2;
-use ridl_sem::{Symbol, SymbolKind, check_package};
-use ridl_syntax::ast::{AstNode, HasName, InterfaceDef, InterfaceMember, ServiceDef};
+use ridl_sem::{Symbol, SymbolKind, check_package, resolve_doc_link, resolve_package};
+use ridl_syntax::ast::{
+    AstNode, Expr, HasName, InterfaceDef, InterfaceMember, MemberExpr, ServiceDef,
+};
 use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::{TextRange, TextSize};
 
@@ -73,6 +75,9 @@ pub fn hover(
     // parameter) is not a symbol — resolve that first.
     let scope = Scope { db, ws, std, pkg };
     if let Some(info) = member_hover(scope, file, offset) {
+        return Some(info);
+    }
+    if let Some(info) = contract_use_hover(scope, file, offset) {
         return Some(info);
     }
     // Interaction and service anchors are not symbols either: an interaction
@@ -177,6 +182,91 @@ fn member_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option<H
     })
 }
 
+/// The hover for a member used inside a `require` or `ensure` clause
+/// (ridl §13), the only expressions of the built grammar: a bare name that
+/// is a parameter of the enclosing interaction or another interaction of the
+/// same shape, or the member of a `Gear.PARK` access whose head names an enum
+/// or an enumset. Each shows the hover of the member at its declaration.
+fn contract_use_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option<HoverInfo> {
+    let source = nav::source_file(scope.db, file);
+    let token = nav::identifier_at(source.syntax(), offset)?;
+    if token.kind() != SyntaxKind::Ident {
+        return None;
+    }
+    let node = token.parent()?;
+    if !node.ancestors().any(|a| a.kind() == SyntaxKind::Attribute) {
+        return None;
+    }
+    let markdown = match node.kind() {
+        SyntaxKind::PathExpr => path_use_markdown(scope, &node, token.text())?,
+        SyntaxKind::MemberExpr => {
+            let member = MemberExpr::cast(node)?;
+            if member.member_token()? != token {
+                return None;
+            }
+            enum_use_markdown(scope, &member)?
+        }
+        _ => return None,
+    };
+    Some(HoverInfo {
+        markdown,
+        range: token.text_range(),
+    })
+}
+
+/// A bare name in a contract clause: a parameter of the enclosing
+/// interaction, else an interaction of the same shape (a `require` may read
+/// the shape's own signal, ridl §13).
+fn path_use_markdown(scope: Scope<'_>, path: &SyntaxNode, name: &str) -> Option<String> {
+    let ir = check_package(scope.db, scope.ws, scope.pkg, scope.std).ir;
+    if let Some(markdown) = param_markdown(scope, &ir, path, name) {
+        return Some(markdown);
+    }
+    let interaction = path.ancestors().find_map(InterfaceMember::cast)?;
+    let (owner, shape) = enclosing_shape(&ir, interaction.syntax())?;
+    let decl = shape.interactions.iter().find(|decl| {
+        decl.name == name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
+    })?;
+    Some(interaction_markdown(scope, &ir, &owner, decl))
+}
+
+/// The member of a `Gear.PARK` or `pkg.Gear.PARK` access in a contract
+/// clause, when the access resolves, through the doc-link resolver, to a
+/// value of an enum or a bit of an enumset.
+fn enum_use_markdown(scope: Scope<'_>, member: &MemberExpr) -> Option<String> {
+    let segments = expr_segments(&Expr::Member(member.clone()))?;
+    let resolution = resolve_package(scope.db, scope.ws, scope.pkg, scope.std);
+    let target = resolve_doc_link(
+        scope.db,
+        scope.ws,
+        scope.std,
+        scope.pkg,
+        &resolution,
+        &segments,
+    )
+    .ok()?;
+    let value = target.member.as_deref()?;
+    if !matches!(target.symbol.kind, SymbolKind::Enum | SymbolKind::EnumSet) {
+        return None;
+    }
+    let ir = scope.package_ir(&target.symbol.package)?;
+    enum_value_markdown(scope, &ir, &target.symbol.name, value)
+}
+
+/// The dotted segments of a path or member-access expression, or `None` for
+/// any other expression.
+fn expr_segments(expr: &Expr) -> Option<Vec<String>> {
+    match expr {
+        Expr::Path(path) => Some(vec![path.name_token()?.text().to_string()]),
+        Expr::Member(member) => {
+            let mut segments = expr_segments(&member.base()?)?;
+            segments.push(member.member_token()?.text().to_string());
+            Some(segments)
+        }
+        _ => None,
+    }
+}
+
 /// The name of the declaration `member` sits directly in, when that
 /// declaration is of kind `kind`. A tuple field is a `FieldDef` too, but its
 /// parent is the tuple type, so it is not taken for a struct field.
@@ -244,6 +334,17 @@ fn enum_member_markdown(
         SyntaxKind::EnumSetDef
     };
     let owner = parent_declaration(member, owner_kind)?;
+    enum_value_markdown(scope, ir, &owner, name)
+}
+
+/// The value or bit `name` of the enum or enumset `owner` of `ir`: its
+/// number, then its doc and `@since`.
+fn enum_value_markdown(
+    scope: Scope<'_>,
+    ir: &v2::Package,
+    owner: &str,
+    name: &str,
+) -> Option<String> {
     let decl = ir.decls.iter().find(|decl| decl.name == owner)?;
     let values = match &decl.kind {
         Some(v2::decl::Kind::EnumDef(enum_def)) => &enum_def.values,
@@ -851,12 +952,25 @@ fn interaction_hover(
         decl.name == name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
     })?;
 
-    let mut markdown = render_interaction(db, ws, std, pkg, &owner, decl);
+    let markdown = interaction_markdown(Scope { db, ws, std, pkg }, ir, &owner, decl);
+    Some(HoverInfo { markdown, range })
+}
+
+/// The whole hover of an interaction of `ir`: the head of
+/// [`render_interaction`], then the doc sections with the interaction's rules.
+fn interaction_markdown(
+    scope: Scope<'_>,
+    ir: &v2::Package,
+    owner: &str,
+    decl: &v2::Decl,
+) -> String {
+    let Scope { db, ws, std, pkg } = scope;
+    let mut markdown = render_interaction(db, ws, std, pkg, owner, decl);
     let rules = rules::rules(ir, &[], ItemRef::Decl(decl));
     push_doc_sections(&mut markdown, &decl_parts(decl), &rules, &|target| {
-        link_location(db, ws, std, pkg, target)
+        scope.resolve(target)
     });
-    Some(HoverInfo { markdown, range })
+    markdown
 }
 
 /// The hover for a service declaration: the cursor on its dotted global name.

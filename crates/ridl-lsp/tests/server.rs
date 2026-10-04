@@ -4197,3 +4197,153 @@ fn doc_comment_style_offers_a_quick_fix_that_rewrites_the_comment() {
     shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+/// A package whose contract clauses use members: parameters, an interaction
+/// of the same shape, and enum values, bare and qualified.
+const CONTRACT_USES: &str = "package demo\n\
+\n\
+/// A speed.\n\
+type Speed : km/h [0.0..250.0]\n\
+\n\
+/// A gear.\n\
+enum Gear {\n\
+\x20 /// Parked.\n\
+\x20 PARK = 1\n\
+\x20 /// Driving.\n\
+\x20 DRIVE = 2\n\
+}\n\
+\n\
+/// The controls.\n\
+interface Controls {\n\
+\x20 /// The current speed.\n\
+\x20 signal currentSpeed : Speed @10ms\n\
+\x20 /// Sets the target.\n\
+\x20 command setTarget(\n\
+\x20   /// The target to hold.\n\
+\x20   target: Speed\n\
+\x20   limit: Speed\n\
+\x20 ) [\n\
+\x20   require target <= limit\n\
+\x20 ] @[..50ms]\n\
+\x20 /// Sets the gear.\n\
+\x20 command setGear(position: Gear) [\n\
+\x20   require position != Gear.PARK || currentSpeed == 0.0\n\
+\x20   require position != demo.Gear.DRIVE\n\
+\x20 ] @[..50ms]\n\
+}\n";
+
+/// Writes `text` as the one file of a single-package workspace `demo` and
+/// returns its URI.
+fn write_demo_file(dir: &TempDir, name: &str, text: &str) -> lt::Uri {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    uri_of(&dir.write(name, text))
+}
+
+/// Hover on a parameter used in a `require` clause shows the parameter's
+/// hover: its own doc, or the doc of its type when it has none.
+#[test]
+fn hover_on_a_parameter_used_in_a_contract() {
+    let dir = TempDir::new("doc-use-param");
+    let file = write_demo_file(&dir, "demo.ridl", CONTRACT_USES);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        file.clone(),
+        pos_in(CONTRACT_USES, "target <= limit", 0, 1),
+    );
+    assert!(value.contains("param Controls.setTarget.target"), "{value}");
+    assert!(value.contains("The target to hold."), "{value}");
+
+    let value = hover_markdown(&client, 11, file, pos_in(CONTRACT_USES, "limit\n", 0, 1));
+    assert!(value.contains("param Controls.setTarget.limit"), "{value}");
+    assert!(value.contains("From `Speed`:"), "{value}");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an interaction of the same shape read in a `require` clause
+/// shows the interaction's hover.
+#[test]
+fn hover_on_an_interaction_used_in_a_contract() {
+    let dir = TempDir::new("doc-use-signal");
+    let file = write_demo_file(&dir, "demo.ridl", CONTRACT_USES);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        file,
+        pos_in(CONTRACT_USES, "currentSpeed ==", 0, 1),
+    );
+    assert!(value.contains("signal Controls.currentSpeed"), "{value}");
+    assert!(value.contains("The current speed."), "{value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on the member of an enum access in a `require` clause, bare
+/// (`Gear.PARK`) or qualified (`demo.Gear.DRIVE`), shows the enum value's
+/// hover; hover on the parameter at the head of a comparison does not take
+/// the enum value.
+#[test]
+fn hover_on_an_enum_value_used_in_a_contract() {
+    let dir = TempDir::new("doc-use-enum");
+    let file = write_demo_file(&dir, "demo.ridl", CONTRACT_USES);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        file.clone(),
+        pos_in(CONTRACT_USES, "Gear.PARK ||", 0, 6),
+    );
+    assert!(value.contains("demo.Gear.PARK = 1"), "{value}");
+    assert!(value.contains("Parked."), "{value}");
+
+    let value = hover_markdown(
+        &client,
+        11,
+        file,
+        pos_in(CONTRACT_USES, "demo.Gear.DRIVE", 0, 11),
+    );
+    assert!(value.contains("demo.Gear.DRIVE = 2"), "{value}");
+    assert!(value.contains("Driving."), "{value}");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A doc link to an interaction whose name a parameter of an earlier
+/// interaction also spells points at the interaction, not the parameter.
+#[test]
+fn a_doc_link_to_a_member_skips_a_parameter_of_the_same_name() {
+    let dir = TempDir::new("doc-link-member");
+    let text = "package demo\n\
+/// See [I.mode].\n\
+interface I {\n\
+\x20 command set(mode: Mode) @[..50ms]\n\
+\x20 query mode(): Mode @[..50ms]\n\
+}\n\
+/// A mode.\n\
+type Mode : integer [0..3]\n";
+    let file = write_demo_file(&dir, "demo.ridl", text);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, file.clone(), pos_in(text, "I {", 0, 0));
+    let line = find_pos(text, "query mode", 0).line + 1;
+    let expected = format!("See [I.mode]({}#L{line}).", file.as_str());
+    assert!(
+        value.contains(&expected),
+        "expected `{expected}` in: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}

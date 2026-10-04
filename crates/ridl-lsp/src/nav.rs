@@ -217,8 +217,9 @@ pub(crate) fn canonical_site(
 }
 
 /// The range of the member name `member` inside the declaration whose name is
-/// at `symbol.range`: the first `Name` below the declaration, other than the
-/// declaration's own, that spells `member`.
+/// at `symbol.range`: the `Name` of a direct member of the declaration — a
+/// field, an enum value, an enumset bit, a union arm or an interaction — that
+/// spells `member`. A parameter's name is not a member of the declaration.
 fn member_name_range(db: &dyn salsa::Database, symbol: &Symbol, member: &str) -> Option<TextRange> {
     let source = source_file(db, symbol.file);
     let own = match source.syntax().covering_element(symbol.range) {
@@ -230,11 +231,32 @@ fn member_name_range(db: &dyn salsa::Database, symbol: &Symbol, member: &str) ->
         .find(|node| node.kind() == SyntaxKind::Name)?;
     let declaration = own.parent()?;
     declaration
-        .descendants()
-        .filter(|node| node.kind() == SyntaxKind::Name && *node != own)
+        .children()
+        .filter(|child| is_member_kind(child.kind()))
+        .filter_map(|child| {
+            child
+                .children()
+                .find(|node| node.kind() == SyntaxKind::Name)
+        })
         .flat_map(|node| node.children_with_tokens().filter_map(|e| e.into_token()))
         .find(|token| token.kind() == SyntaxKind::Ident && token.text() == member)
         .map(|token| token.text_range())
+}
+
+/// Whether a node of `kind` is a direct member of a declaration body.
+fn is_member_kind(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::FieldDef
+            | SyntaxKind::EnumValue
+            | SyntaxKind::EnumSetBit
+            | SyntaxKind::UnionArm
+            | SyntaxKind::SignalDef
+            | SyntaxKind::EventDef
+            | SyntaxKind::CommandDef
+            | SyntaxKind::QueryDef
+            | SyntaxKind::FixedDef
+    )
 }
 
 /// The reference the identifier `token` participates in: a type reference
