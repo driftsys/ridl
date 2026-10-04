@@ -1310,3 +1310,76 @@ fn fan_out_at_the_maximum_is_not_reported() {
         out.diagnostics
     );
 }
+
+#[test]
+fn fan_out_excludes_external_targets_at_the_workspace_maximum() {
+    use ridl_ir::v2::{decl, field_type, struct_member};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let (diagnostics, _) = design_source_set_with(
+        &[
+            ("a", "package a\ntype A: boolean\n"),
+            ("b", "package b\ntype B: boolean\n"),
+            ("c", "package c\ntype C: boolean\n"),
+            (
+                "e",
+                "package e\nimport a.A\nimport b.B\nimport c.C\nstruct Bundle { first: A second: B third: C external: boolean }\n",
+            ),
+        ],
+        |checked| {
+            // Supply an external qualified reference in checked IR without
+            // requiring an unavailable external package during resolution.
+            let package = checked.iter_mut().find(|pkg| pkg.ir.name == "e").unwrap();
+            let Some(decl::Kind::StructDef(bundle)) = &mut package.ir.decls[0].kind else {
+                panic!("struct fixture")
+            };
+            let field = bundle
+                .members
+                .iter_mut()
+                .find_map(|member| {
+                    if let Some(struct_member::Member::Field(field)) = &mut member.member
+                        && field.name == "external"
+                    {
+                        Some(field)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            field.r#type.as_mut().unwrap().kind =
+                Some(field_type::Kind::Named("foreign.deep.Remote".to_string()));
+
+            let complete = ridlc::deps::package_edges(checked, None);
+            assert_eq!(
+                complete,
+                BTreeMap::from([
+                    ("a".to_string(), BTreeSet::new()),
+                    ("b".to_string(), BTreeSet::new()),
+                    ("c".to_string(), BTreeSet::new()),
+                    (
+                        "e".to_string(),
+                        BTreeSet::from([
+                            "a".to_string(),
+                            "b".to_string(),
+                            "c".to_string(),
+                            "foreign.deep".to_string(),
+                        ])
+                    ),
+                ])
+            );
+            assert_eq!(
+                ridlc::deps::workspace_package_edges(&complete),
+                BTreeMap::from([
+                    ("a".to_string(), BTreeSet::new()),
+                    ("b".to_string(), BTreeSet::new()),
+                    ("c".to_string(), BTreeSet::new()),
+                    (
+                        "e".to_string(),
+                        BTreeSet::from(["a".to_string(), "b".to_string(), "c".to_string(),])
+                    ),
+                ])
+            );
+        },
+    );
+    assert!(fan_out(&diagnostics).is_empty(), "{diagnostics:?}");
+}
