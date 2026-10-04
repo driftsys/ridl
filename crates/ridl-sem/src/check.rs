@@ -6194,8 +6194,27 @@ mod tests {
         }
     }
 
-    /// The checker diagnostic codes, in order.
+    /// The checker diagnostic codes, in order, without TYPL-406
+    /// (`missing-docs`): most fixtures here have no docs, and a test of the
+    /// lint itself reads [`codes_all`].
     fn codes(checked: &CheckedPackage) -> Vec<&str> {
+        codes_all(checked)
+            .into_iter()
+            .filter(|code| *code != "TYPL-406")
+            .collect()
+    }
+
+    /// `checked` without its TYPL-406 (`missing-docs`) diagnostics, for a
+    /// test that reads `diagnostics` directly on a fixture with no docs.
+    fn without_missing_docs(mut checked: CheckedPackage) -> CheckedPackage {
+        checked
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
+        checked
+    }
+
+    /// Every checker diagnostic code, in order, TYPL-406 included.
+    fn codes_all(checked: &CheckedPackage) -> Vec<&str> {
         checked
             .diagnostics
             .iter()
@@ -6253,6 +6272,7 @@ mod tests {
     #[test]
     fn appendix_b_lowers_clean_end_to_end() {
         let checked = check_source("veh.common", APPENDIX_B);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "Appendix B must lower clean, got: {:?}",
@@ -6533,6 +6553,7 @@ mod tests {
     #[test]
     fn written_but_unresolved_bound_defers_and_reports() {
         let checked = check_source("app", "package app\ntype X : integer [0..TYPO]\n");
+        let checked = without_missing_docs(checked);
         let def = type_def(&checked, "X");
         assert_eq!(
             def.width, None,
@@ -6646,6 +6667,7 @@ mod tests {
     #[test]
     fn unknown_type_reference_keeps_the_description_first_shape() {
         let checked = check_source("app", "package app\nconst X: Missing = 1.0\n");
+        let checked = without_missing_docs(checked);
         assert_eq!(checked.diagnostics.len(), 1);
         assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(
@@ -6660,6 +6682,7 @@ mod tests {
             "app",
             "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nconst MAX_SPEED: Speed = 250.0\nconst A: MAX_SPEED = 1.0\n",
         );
+        let checked = without_missing_docs(checked);
         assert_eq!(checked.diagnostics.len(), 1);
         assert!(checked.diagnostics[0].code.is_empty());
         assert_eq!(
@@ -6797,6 +6820,7 @@ mod tests {
     fn typl_218_reports_every_repeat_against_the_first_declaration() {
         let source = "package app\nenumset W { A = 0, A = 1, A = 2 }\n";
         let checked = check_source("app", source);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-218", "TYPL-218"]);
         let first = source.find("A =").expect("the first bit is in the source");
         for diagnostic in &checked.diagnostics {
@@ -7670,6 +7694,7 @@ mod tests {
             "app",
             &enum_source_3("checkEngine", "CHECK_ENGINE", "Check_Engine"),
         );
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["RIDL-149", "RIDL-149"],
@@ -7759,6 +7784,7 @@ mod tests {
     fn typl_216_reports_every_repeat_against_the_first_declaration() {
         let source = enum_source_3("A", "A", "A");
         let checked = check_source("app", &source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-216", "TYPL-216"],
@@ -7942,6 +7968,7 @@ mod tests {
     fn typl_217_reports_every_repeat_against_the_first_declaration() {
         let source = union_source_3("fooBar", "fooBar", "fooBar");
         let checked = check_source("app", &source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-217", "TYPL-217"],
@@ -8219,6 +8246,7 @@ mod tests {
                value : integer [0..1]\n\
              }\n";
         let checked = check_source("app", source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-215", "TYPL-215"],
@@ -8367,6 +8395,7 @@ mod tests {
                bounds : (a : Speed, a : Speed, a : Speed)\n\
              }\n";
         let checked = check_source("app", source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-215", "TYPL-215"],
@@ -8591,6 +8620,7 @@ mod tests {
              value : Speed) @[..500ms]\n}}\n"
         );
         let checked = check_ridl("app", &source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["RIDL-413", "RIDL-413"],
@@ -9803,6 +9833,7 @@ mod tests {
             "{PRELUDE}/// @deprecated\ninterface I {{\n  /// @deprecated\n  signal speed : Speed @10ms\n}}\n"
         );
         let checked = check_ridl("app", &text);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-405", "TYPL-405"]);
         // The interface's envelope lowers after its members, so its
         // diagnostic comes second; the renderer sorts by position.
@@ -9912,6 +9943,7 @@ mod tests {
         let text =
             "package app\n/// See [Nope] and [Gear].\n/// @see Also\nenum Gear {\n  PARK = 1\n}\n";
         let checked = check_source("app", text);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-401", "TYPL-401"]);
         let spans: Vec<&str> = checked
             .diagnostics
@@ -10015,6 +10047,7 @@ mod tests {
                     enum E {\n  /// Gone, see [S].\n  /// @see Missing\n  reserved OLD\n  A = 1\n}\n\
                     union U {\n  /// Was [Absent].\n  reserved w\n  s: S\n}\n";
         let checked = check_source("app", text);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-401", "TYPL-401", "TYPL-401"]);
         let spans: Vec<&str> = checked
             .diagnostics
@@ -10701,11 +10734,13 @@ mod tests {
         check_package(&db, ws, pkg, std)
     }
 
-    /// The diagnostic messages, in order.
+    /// The diagnostic messages, in order, without those of TYPL-406
+    /// (`missing-docs`), as [`codes`] leaves them out.
     fn messages(checked: &CheckedPackage) -> Vec<&str> {
         checked
             .diagnostics
             .iter()
+            .filter(|diagnostic| diagnostic.code != DiagCode::TYPL_406)
             .map(|diagnostic| diagnostic.message.as_str())
             .collect()
     }
@@ -11385,6 +11420,7 @@ mod tests {
             ),
         ] {
             let checked = check_ridl("app", &source);
+            let checked = without_missing_docs(checked);
             assert!(
                 !checked.diagnostics.is_empty(),
                 "{name} must draw a diagnostic",
@@ -12518,6 +12554,7 @@ interface I {\n\
     #[test]
     fn interface_in_type_position_is_rejected() {
         let checked = check_ridl("app", "package app\ninterface I { }\nstruct S { f: I }\n");
+        let checked = without_missing_docs(checked);
         assert_eq!(
             messages(&checked),
             vec!["expected a type, but `I` names an interface"],
@@ -12544,6 +12581,7 @@ interface I {\n\
         );
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "the imported payload resolves, got: {:?}",
@@ -12617,6 +12655,7 @@ interface I {\n\
         for (position, body, written) in positions {
             let source = format!("{PRELUDE}{body}");
             let checked = check_ridl("app", &source);
+            let checked = without_missing_docs(checked);
             assert_eq!(codes(&checked), vec!["TYPL-011"], "{position}");
             assert_eq!(
                 messages(&checked),
@@ -12652,6 +12691,7 @@ interface I {\n\
         );
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(
             messages(&checked),
@@ -12677,6 +12717,7 @@ interface I {\n\
         let app = ridl_package(&db, "app", source);
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(messages(&checked), vec!["unknown type name `Hidden`"]);
         let range = checked.diagnostics[0].primary.range;
@@ -13242,6 +13283,7 @@ interface VehicleStatus {
         let text =
             format!("{PRELUDE}interface I {{\n  signal alpha : Speed\n  event beta : Speed\n}}\n");
         let checked = check_ridl("app", &text);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["RIDL-100", "RIDL-100"]);
 
         let spans: Vec<&str> = checked
@@ -13772,6 +13814,7 @@ interface VehicleStatus {
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "got: {:?}",
@@ -13846,6 +13889,7 @@ interface VehicleStatus {
         );
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "got: {:?}",
@@ -14428,6 +14472,7 @@ interface VehicleStatus {
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 
         let checked = check_package(&db, ws, adas, std);
+        let checked = without_missing_docs(checked);
         let catalog = service_catalog(&db, ws, std);
 
         assert!(
@@ -14459,6 +14504,7 @@ interface VehicleStatus {
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 
         let checked = check_package(&db, ws, adas, std);
+        let checked = without_missing_docs(checked);
         let catalog = service_catalog(&db, ws, std);
 
         assert!(
@@ -14483,6 +14529,7 @@ interface VehicleStatus {
                 "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.X.y : I\n"
             ),
         );
+        let checked = without_missing_docs(checked);
         let messages = messages(&checked);
         assert_eq!(messages.len(), 1, "got: {:?}", checked.diagnostics);
         assert!(
@@ -14812,6 +14859,7 @@ interface cabin { signal i : State @[100ms..1s] }
     fn an_orphan_entry_names_retire_alone() {
         let lock = "next 5\nCabin 1\nLegacy 2\nZone 3\nservice:veh.hvac.rear 4\n";
         let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), ["RIDL-409"]);
         let diagnostic = &checked.diagnostics[0];
         assert_eq!(diagnostic.severity, Severity::Error);
@@ -14846,6 +14894,7 @@ interface cabin { signal i : State @[100ms..1s] }
     fn an_orphan_entry_beside_an_unentered_declaration_names_both_commands() {
         let lock = "next 4\nCabin 1\nLegacy 2\nservice:veh.hvac.old 3\n";
         let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), ["RIDL-409", "RIDL-409"]);
         assert_eq!(
             messages(&checked),

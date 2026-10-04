@@ -55,7 +55,10 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
     )
 }
 
-const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n";
+/// The fixtures leave their items undocumented, so the manifest sets
+/// `missing-docs` (TYPL-406) to `allow`: a clean check stays silent.
+const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                        [lints]\nmissing-docs = \"allow\"\n";
 
 /// The published shape: three interactions at ordinals 1, 2, 3.
 const BASE: &str = "package veh.cluster

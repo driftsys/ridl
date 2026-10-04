@@ -8,6 +8,11 @@
 //!
 //! The checks:
 //!
+//! - TYPL-406 `missing-docs`: a covered item with no doc, or with a doc made
+//!   only of tags (ADR-0026). The covered items are a declaration that is not
+//!   `internal`, a field, enum value, enumset bit, union arm or interaction of
+//!   one, and every rsdl declaration. A parameter, a `reserved` entry and an
+//!   rsdl member line are never covered.
 //! - TYPL-404 `detached-doc-comment`: a blank line between a doc comment and
 //!   its carrier, on every carrier (typl §14, ADR-0026).
 //! - TYPL-407 `misplaced-doc-comment`: a doc comment whose next non-trivia
@@ -65,6 +70,7 @@ fn lint_file(file: &SourceFile, file_id: FileId) -> Vec<Diagnostic> {
             }
             NodeOrToken::Node(node) if is_carrier(node.kind()) => {
                 let docs = doc_comments_before(&node);
+                diagnostics.extend(missing_docs(&node, &docs, file_id));
                 if docs.is_empty() {
                     continue;
                 }
@@ -110,6 +116,128 @@ fn is_carrier(kind: SyntaxKind) -> bool {
             | SyntaxKind::MachineDef
             | SyntaxKind::MemberLine
     )
+}
+
+/// TYPL-406: a covered item (ADR-0026) whose doc is absent or has no prose,
+/// at the item's name. The fix-it inserts an empty `///` line above the item,
+/// at its indentation; it is offered only when the item starts its line.
+fn missing_docs(node: &SyntaxNode, docs: &[SyntaxToken], file_id: FileId) -> Option<Diagnostic> {
+    if !is_covered(node) || node.ancestors().any(|a| a.kind() == SyntaxKind::ErrorNode) {
+        return None;
+    }
+    if !docs.is_empty() && !docs::scan(docs).doc.trim().is_empty() {
+        return None;
+    }
+    // A carrier the parser recovered without a name has no span to report.
+    let (Some(name), range) = carrier_name(node) else {
+        return None;
+    };
+    let fixits = node
+        .descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .find(|token| !token.kind().is_trivia())
+        .and_then(|first| line_start(&first))
+        .map(|(start, indent, newline)| FixIt {
+            span: Span {
+                file: file_id,
+                range: TextRange::empty(start),
+            },
+            replacement: format!("{indent}/// {newline}"),
+            label: "add a doc comment".to_string(),
+        })
+        .into_iter()
+        .collect();
+    Some(Diagnostic {
+        code: DiagCode::TYPL_406,
+        severity: Severity::Warning,
+        message: format!("`{name}` has no doc comment"),
+        primary: Span {
+            file: file_id,
+            range,
+        },
+        labels: Vec::new(),
+        fixits,
+    })
+}
+
+/// Whether the carrier `node` must have a doc (ADR-0026): a declaration that
+/// is not `internal`; a field, enum value, enumset bit, union arm or
+/// interaction of such a declaration; or an rsdl declaration, since rsdl has
+/// no visibility.
+fn is_covered(node: &SyntaxNode) -> bool {
+    match node.kind() {
+        kind if is_declaration(kind) => !is_internal(node),
+        SyntaxKind::FieldDef
+        | SyntaxKind::EnumValue
+        | SyntaxKind::EnumSetBit
+        | SyntaxKind::UnionArm
+        | SyntaxKind::SignalDef
+        | SyntaxKind::EventDef
+        | SyntaxKind::CommandDef
+        | SyntaxKind::QueryDef
+        | SyntaxKind::FixedDef => node
+            .ancestors()
+            .find(|ancestor| is_declaration(ancestor.kind()))
+            .is_some_and(|declaration| !is_internal(&declaration)),
+        SyntaxKind::SystemDef
+        | SyntaxKind::ComponentDef
+        | SyntaxKind::DistributionDef
+        | SyntaxKind::DeploymentDef
+        | SyntaxKind::MachineDef => true,
+        _ => false,
+    }
+}
+
+/// Whether `kind` is a typl or ridl declaration that can hold members.
+fn is_declaration(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::TypeDef
+            | SyntaxKind::ConstDef
+            | SyntaxKind::StructDef
+            | SyntaxKind::EnumDef
+            | SyntaxKind::EnumSetDef
+            | SyntaxKind::UnionDef
+            | SyntaxKind::InterfaceDef
+            | SyntaxKind::ServiceDef
+    )
+}
+
+/// Whether the declaration `node` carries the `internal` modifier.
+fn is_internal(node: &SyntaxNode) -> bool {
+    node.children_with_tokens()
+        .any(|element| element.kind() == SyntaxKind::InternalKw)
+}
+
+/// The start of the line of `token`, the indentation before `token`, and the
+/// line ending of the preceding line break (`\n` when there is none). `None`
+/// when anything other than spaces and tabs precedes `token` on its line.
+fn line_start(token: &SyntaxToken) -> Option<(rowan::TextSize, String, &'static str)> {
+    let start = token.text_range().start();
+    let Some(previous) = token.prev_token() else {
+        return Some((start, String::new(), "\n"));
+    };
+    let newline = |text: &str| if text.contains("\r\n") { "\r\n" } else { "\n" };
+    if previous.kind() != SyntaxKind::Whitespace {
+        return previous
+            .text()
+            .ends_with('\n')
+            .then(|| (start, String::new(), newline(previous.text())));
+    }
+    let text = previous.text();
+    let indent = match text.rfind('\n') {
+        Some(index) => &text[index + 1..],
+        None => match previous.prev_token() {
+            None => text,
+            Some(before) if before.text().ends_with('\n') => text,
+            Some(_) => return None,
+        },
+    };
+    if !indent.chars().all(|c| c == ' ' || c == '\t') {
+        return None;
+    }
+    let indent_len = rowan::TextSize::of(indent);
+    Some((start - indent_len, indent.to_string(), newline(text)))
 }
 
 /// TYPL-407: a doc comment whose next non-trivia sibling is not a carrier
@@ -558,7 +686,7 @@ mod tests {
         }
         let checked = check_source(
             "demo.typl",
-            "package demo\nstruct S {\n  /// Doc.\n  a: boolean\n}\n",
+            "package demo\n/// A struct.\nstruct S {\n  /// Doc.\n  a: boolean\n}\n",
         );
         assert_eq!(checked.diagnostics, Vec::new());
     }
@@ -646,7 +774,8 @@ mod tests {
         let file = SourceFile::cast(parse.syntax()).expect("the root is a SourceFile");
         let found = lint_rsdl_file(&file, FileId::DETACHED);
         let codes: Vec<&str> = found.iter().map(|d| d.code.as_str()).collect();
-        assert_eq!(codes, ["TYPL-407", "TYPL-408"], "{found:?}");
+        // The system's doc is only a tag, so it is also missing (TYPL-406).
+        assert_eq!(codes, ["TYPL-407", "TYPL-406", "TYPL-408"], "{found:?}");
     }
 
     /// `check_package` leaves a `.rsdl` file to `check_system`, so its doc
@@ -658,6 +787,125 @@ mod tests {
             "package demo\n\n/** A system. */\nsystem S {}\n",
         );
         assert_eq!(typl_410(&checked), Vec::<&Diagnostic>::new());
+    }
+
+    /// The names the TYPL-406 diagnostics of `diagnostics` point at, sorted.
+    fn missing_docs_names<'a>(text: &'a str, diagnostics: &[Diagnostic]) -> Vec<&'a str> {
+        let mut names: Vec<&str> = diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::TYPL_406)
+            .map(|diagnostic| {
+                let range = diagnostic.primary.range;
+                &text[usize::from(range.start())..usize::from(range.end())]
+            })
+            .collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// TYPL-406 covers exactly the items of ADR-0026: a declaration that is
+    /// not `internal` and its members, but not a parameter, a `reserved` entry
+    /// or anything inside an `internal` declaration. A doc made only of tags
+    /// is missing.
+    #[test]
+    fn missing_docs_matrix() {
+        let text = "package demo\n\
+                    /// A level.\n\
+                    type V: integer [0..10]\n\
+                    struct Pose {\n  x: boolean\n}\n\
+                    internal struct Hidden {\n  y: boolean\n}\n\
+                    /// A gear.\n\
+                    enum Gear {\n  PARK = 0\n}\n\
+                    /// Flags.\n\
+                    enumset Flags {\n  BIT = 0\n}\n\
+                    /// A choice.\n\
+                    union Choice {\n  arm: V\n}\n\
+                    interface Cruise {\n  command set(v: V) @[..50ms]\n}\n\
+                    service demo.cruise {\n  /// A level.\n  signal level: V @10ms\n}\n\
+                    /// Old.\n\
+                    struct Old {\n  /// A.\n  a: boolean\n  reserved b\n}\n\
+                    /// @since 1.0\n\
+                    type Tagged: integer [0..1]\n";
+        let checked = check_source("demo.ridl", text);
+        assert_eq!(
+            missing_docs_names(text, &checked.diagnostics),
+            [
+                "BIT",
+                "Cruise",
+                "PARK",
+                "Pose",
+                "Tagged",
+                "arm",
+                "demo.cruise",
+                "set",
+                "x"
+            ],
+            "{:?}",
+            checked.diagnostics
+        );
+        let found = with_code(&checked, DiagCode::TYPL_406);
+        assert!(found.iter().all(|d| d.severity == Severity::Warning));
+    }
+
+    /// An item that does not start its line gets no fix-it: a `///` line
+    /// inserted above that line would document the item that starts it.
+    #[test]
+    fn missing_docs_quick_fix_needs_the_item_to_start_its_line() {
+        let text = "package demo\n/// A pose.\nstruct Pose { x: boolean }\n";
+        let checked = check_source("demo.typl", text);
+        let found = with_code(&checked, DiagCode::TYPL_406);
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(spanned(text, found[0]), "x");
+        assert_eq!(found[0].fixits, Vec::new());
+    }
+
+    /// The built-in `ridl.std` documents every item, so no TYPL-406 is raised
+    /// on it.
+    #[test]
+    fn missing_docs_is_quiet_on_ridl_std() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let ws = Workspace::new(&db, Vec::new(), BTreeMap::new());
+        let checked = check_package(&db, ws, std, std);
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_406),
+            Vec::<&Diagnostic>::new()
+        );
+    }
+
+    /// Every rsdl declaration is covered; an rsdl member line is not.
+    #[test]
+    fn missing_docs_rsdl() {
+        let text = "package demo\n\
+                    component Lane {\n  offers veh.adas.lane\n}\n\
+                    system Vehicle {\n  Lane\n}\n\
+                    distribution All { Lane }\n\
+                    deployment Prod for Vehicle {\n  machine Box { Lane }\n}\n";
+        let parse = ridl_syntax::parse(text, Profile::Rsdl);
+        let file = SourceFile::cast(parse.syntax()).expect("the root is a SourceFile");
+        let found = lint_rsdl_file(&file, FileId::DETACHED);
+        assert_eq!(
+            missing_docs_names(text, &found),
+            ["All", "Box", "Lane", "Prod", "Vehicle"],
+            "{found:?}"
+        );
+    }
+
+    /// The TYPL-406 fix-it inserts an empty `///` line above the item, at the
+    /// item's indentation.
+    #[test]
+    fn missing_docs_quick_fix() {
+        let text = "package demo\n/// A pose.\nstruct Pose {\n    x: boolean\n}\n";
+        let checked = check_source("demo.typl", text);
+        let found = with_code(&checked, DiagCode::TYPL_406);
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(spanned(text, found[0]), "x");
+        assert_eq!(found[0].fixits.len(), 1);
+        let fixit = &found[0].fixits[0];
+        let line_start = text.find("    x").expect("the fixture has the field");
+        assert_eq!(usize::from(fixit.span.range.start()), line_start);
+        assert_eq!(fixit.span.range.len(), 0.into());
+        assert_eq!(fixit.replacement, "    /// \n");
     }
 
     #[test]

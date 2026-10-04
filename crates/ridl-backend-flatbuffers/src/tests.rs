@@ -1870,8 +1870,12 @@ fn cruise_package() -> v2::Package {
         .join("../ridl-backend-proto/tests/fixtures/cruise.ridl");
     let text = std::fs::read_to_string(&path).expect("read the fixture");
     let output = ridlc::compile(&path.display().to_string(), &text);
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "the fixture compiles clean, got: {:?}",
         output.diagnostics
     );
@@ -1886,8 +1890,12 @@ fn cross_package_fixture() -> (v2::Package, v2::Package) {
     let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../ridl-backend-proto/tests/fixtures/cross-package");
     let output = ridlc::compile_workspace(&mut db, &entry).expect("load the fixture");
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "the fixture compiles clean, got: {:?}",
         output.diagnostics
     );

@@ -127,6 +127,17 @@ fn shut_down(client: &Connection, id: i32) {
     notify::<lt::notification::Exit>(client, ());
 }
 
+/// The diagnostics other than TYPL-406 (`missing-docs`), which [`codes`]
+/// leaves out too.
+fn without_missing_docs(diagnostics: &[lt::Diagnostic]) -> Vec<&lt::Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code != Some(lt::NumberOrString::String("TYPL-406".to_string()))
+        })
+        .collect()
+}
+
 fn codes(diagnostics: &[lt::Diagnostic]) -> Vec<&str> {
     diagnostics
         .iter()
@@ -134,6 +145,9 @@ fn codes(diagnostics: &[lt::Diagnostic]) -> Vec<&str> {
             Some(lt::NumberOrString::String(code)) => code.as_str(),
             other => panic!("expected a string code, got {other:?}"),
         })
+        // TYPL-406 (`missing-docs`) is left out: most fixtures here leave
+        // their items undocumented.
+        .filter(|code| *code != "TYPL-406")
         .collect()
 }
 
@@ -639,7 +653,7 @@ fn diagnostics_and_code_actions_over_an_in_memory_connection() {
     );
     let opened = next_publish(&client, &file_uri);
     assert_eq!(codes(&opened.diagnostics), vec!["FORM-101", "TYPL-302"]);
-    for diagnostic in &opened.diagnostics {
+    for diagnostic in without_missing_docs(&opened.diagnostics) {
         assert_eq!(
             diagnostic.range,
             range((1, 24), (1, 28)),
@@ -690,9 +704,9 @@ fn diagnostics_and_code_actions_over_an_in_memory_connection() {
     );
     let fixed = next_publish(&client, &file_uri);
     assert_eq!(
-        fixed.diagnostics,
-        Vec::new(),
-        "the fixed file publishes an empty diagnostic list",
+        without_missing_docs(&fixed.diagnostics),
+        Vec::<&lt::Diagnostic>::new(),
+        "the fixed file publishes no diagnostic other than TYPL-406",
     );
 
     shut_down(&client, 3);
@@ -2782,21 +2796,29 @@ const RSDL_SYSTEM: &str = "package veh.topology\n\
 \n\
 import veh.adas.LaneAssist\n\
 \n\
+/// A component.\n\
 component Cruise [ instances = (primary, backup) ] {\n\
 \x20 offers veh.adas.cruise\n\
 \x20 requires LaneAssist\n\
 }\n\
 \n\
+/// A component.\n\
 component Lane { offers veh.adas.lane }\n\
 \n\
+/// A component.\n\
 component Panel { requires veh.adas.LaneAssist, requires veh.adas.access }\n\
 \n\
+/// The system.\n\
 system Vehicle { Cruise, Lane, Panel, veh.adas.access }\n\
 \n\
+/// The distribution.\n\
 distribution Adas { veh.adas.access, Cruise, Lane, Panel }\n\
 \n\
+/// The deployment.\n\
 deployment Production for Vehicle {\n\
+\x20 /// A machine.\n\
 \x20 machine Hpc { Cruise.primary, Lane, veh.adas.access }\n\
+\x20 /// A machine.\n\
 \x20 machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }\n\
 }\n";
 
@@ -3130,11 +3152,13 @@ fn a_lock_diagnostic_is_published_under_the_lock_files_uri() {
 // --- the service catalog (issue #386) --------------------------------------
 
 /// The first member of the catalog fixture: it declares the service `x.s`.
-const CATALOG_A: &str = "package a\ninterface I {}\nservice x.s : I\n";
+const CATALOG_A: &str =
+    "package a\n/// An interface.\ninterface I {}\n/// A service.\nservice x.s : I\n";
 
 /// The second member of the catalog fixture: it declares `x.s` again, which
 /// the flat global service namespace refuses (RIDL-140).
-const CATALOG_B: &str = "package b\ninterface J {}\nservice x.s : J\n";
+const CATALOG_B: &str =
+    "package b\n/// An interface.\ninterface J {}\n/// A service.\nservice x.s : J\n";
 
 /// The `interfaces.lock` that `ridl lock` writes for [`CATALOG_A`].
 const CATALOG_LOCK: &str =

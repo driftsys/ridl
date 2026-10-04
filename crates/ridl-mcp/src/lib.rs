@@ -493,6 +493,8 @@ mod tests {
                 .unwrap()
                 .iter()
                 .map(|d| d["code"].as_str().unwrap())
+                // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
+                .filter(|code| *code != "TYPL-406")
                 .collect::<Vec<_>>(),
             ["TYPL-103", "TYPL-011"]
         );

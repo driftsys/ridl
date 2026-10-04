@@ -67,7 +67,10 @@ mod tests {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
         let texts = [
-            ("p/a.rsdl", "package p\nsystem S { Missing }\n"),
+            (
+                "p/a.rsdl",
+                "package p\n/// A system.\nsystem S { Missing }\n",
+            ),
             (
                 "p/b.ridl",
                 "package p\ninterface I {}\nservice p.s : I\nservice p.s : I\n",

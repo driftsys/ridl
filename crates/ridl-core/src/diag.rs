@@ -544,6 +544,13 @@ diag_codes! {
         TYPL_405 = "TYPL-405", Warning,
             "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
 
+        /// A covered item with no doc (ADR-0026): a declaration that is not
+        /// `internal`, a member of one, or an rsdl declaration. A doc made only
+        /// of tags counts as missing. Warning. Emitted by the doc lints
+        /// (`ridl_sem::doc_lint`).
+        TYPL_406 = "TYPL-406", Warning,
+            "item without a doc comment", lint = "missing-docs";
+
         /// Doc comment in a position that is not a carrier (ADR-0026): before
         /// `package`, an `import`, a return type or an attribute block, or at
         /// the end of a file or a body. Warning. Emitted by the doc lints
@@ -1950,6 +1957,7 @@ mod tests {
             ("TYPL-401", "broken-doc-link"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
+            ("TYPL-406", "missing-docs"),
             ("TYPL-407", "misplaced-doc-comment"),
             ("TYPL-408", "unknown-doc-tag"),
             ("TYPL-409", "malformed-doc-tag"),

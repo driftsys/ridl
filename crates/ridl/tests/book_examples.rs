@@ -69,7 +69,9 @@
 //!   `allow=` on one fence;
 //! - **any** diagnostic the block did not name — error, warning, note, or one
 //!   of the uncoded diagnostics the compiler still emits, which can never be
-//!   allowed because they have no code to name;
+//!   allowed because they have no code to name. The one exception is TYPL-406
+//!   (`missing-docs`): it is left out of a block that does not name
+//!   `allow=TYPL-406`, because most examples leave items undocumented;
 //! - an `allow=` naming a code the block does **not** draw, so that a marker
 //!   cannot outlive the example it was written for;
 //! - an `import` naming a package no block declares, a name no block in that
@@ -725,6 +727,15 @@ fn is_named(allowed: Option<&BTreeSet<String>>, code: Option<&str>) -> bool {
     }
 }
 
+/// Whether a reported diagnostic is a TYPL-406 (`missing-docs`) that the
+/// harness leaves out: most examples leave items undocumented so the prose
+/// around them stays short. A block that names `allow=TYPL-406` is about the
+/// lint, so its TYPL-406 diagnostics are checked like any other code, and its
+/// marker goes stale when the block draws none.
+fn is_quiet_missing_docs(allowed: Option<&BTreeSet<String>>, code: Option<&str>) -> bool {
+    code == Some("TYPL-406") && !allowed.is_some_and(|allowed| allowed.contains("TYPL-406"))
+}
+
 /// The pass/fail decision, given what the run produced.
 ///
 /// Isolated because each of the three terms guards a different failure and no
@@ -820,10 +831,11 @@ fn verify_book(book_root: &Path) -> Result<usize, String> {
         if let (Some(index), Some(code)) = (owner, &diagnostic.code) {
             emitted.insert((index, code.clone()));
         }
-        let allowed = is_named(
-            owner.map(|index| &examples[index].allowed),
-            diagnostic.code.as_deref(),
-        );
+        let allowed_codes = owner.map(|index| &examples[index].allowed);
+        if is_quiet_missing_docs(allowed_codes, diagnostic.code.as_deref()) {
+            continue;
+        }
+        let allowed = is_named(allowed_codes, diagnostic.code.as_deref());
         if !allowed {
             let origin = owner.map_or("<workspace>", |index| examples[index].origin.as_str());
             unallowed.push(format!(
@@ -1062,7 +1074,8 @@ fn baseline_corpus_is_a_formatter_fixed_point() {
 fn a_broken_example_is_rejected() {
     let book = book_of(
         "broken",
-        "# Chapter\n\nSome prose.\n\n```ridl\npackage veh.broken\n\ntype Bad : integer [10..0]\n```\n",
+        "# Chapter\n\nSome prose.\n\n```ridl\npackage veh.broken\n\n/// A bad range.\n\
+         type Bad : integer [10..0]\n```\n",
     );
 
     let report = verify_book(book.path()).expect_err("a broken example must be rejected");
@@ -1452,6 +1465,34 @@ fn a_self_import_is_rejected() {
     assert!(
         report.contains("from inside package"),
         "the report must name the self-import, got:\n{report}"
+    );
+}
+
+/// TYPL-406 (`missing-docs`) is left out of a block that does not name it. A
+/// block that names `allow=TYPL-406` is checked for it: the marker passes on
+/// an undocumented item and is stale on a documented one.
+#[test]
+fn missing_docs_is_quiet_unless_the_block_names_it() {
+    let undocumented = "package zz.docs\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n";
+    let documented = "package zz.docs\n\n/// A speed.\ntype Speed : km/h [0.0..250.0 step 0.5]\n";
+
+    let book = book_of("docs-quiet", &format!("```ridl\n{undocumented}```\n"));
+    verify_book(book.path()).expect("an unnamed TYPL-406 is left out");
+
+    let book = book_of(
+        "docs-named",
+        &format!("```ridl,allow=TYPL-406\n{undocumented}```\n"),
+    );
+    verify_book(book.path()).expect("a named TYPL-406 is allowed");
+
+    let book = book_of(
+        "docs-stale",
+        &format!("```ridl,allow=TYPL-406\n{documented}```\n"),
+    );
+    let report = verify_book(book.path()).expect_err("the marker is stale");
+    assert!(
+        report.contains("which the block does not draw"),
+        "the report must name the stale allowance, got:\n{report}"
     );
 }
 

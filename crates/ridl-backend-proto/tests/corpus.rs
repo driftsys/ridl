@@ -61,8 +61,12 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "{} must compile with no diagnostic, got: {:?}",
         path.display(),
         output.diagnostics,
@@ -112,8 +116,12 @@ fn the_cross_package_workspace_emits_valid_proto3() {
     let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cross-package");
     let output = ridlc::compile_workspace(&mut db, &entry)
         .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "the cross-package fixture must compile with no diagnostic, got: {:?}",
         output.diagnostics,
     );

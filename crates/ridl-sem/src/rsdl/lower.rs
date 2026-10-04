@@ -610,7 +610,11 @@ mod tests {
             package(&db, "veh.topology", topology),
         ];
         let ws = Workspace::new(&db, packages.clone(), BTreeMap::new());
-        let checked = check_system(&db, ws, std);
+        let mut checked = check_system(&db, ws, std);
+        // TYPL-406 (`missing-docs`) is left out: most fixtures have no docs.
+        checked
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != ridl_core::diag::DiagCode::TYPL_406);
         let irs: Vec<v2::Package> = packages
             .iter()
             .map(|package| {

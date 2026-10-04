@@ -1349,6 +1349,7 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 | TYPL-403 | `@labels` combination invalid per active profile                                                                                                        | error    |
 | TYPL-404 | blank line between a doc comment and its carrier — a declaration or a member                                                                            | warning  |
 | TYPL-405 | `@deprecated` doc tag without a reason string                                                                                                           | warning  |
+| TYPL-406 | item without a doc comment — a declaration that is not `internal`, a member of one, or an rsdl declaration; a doc made only of tags is missing          | warning  |
 | TYPL-407 | doc comment in a position that is not a carrier — before `package`, an `import`, a return type or an attribute block, or at the end of a file or a body | warning  |
 | TYPL-408 | doc tag other than `@see`, `@since`, `@deprecated` and `@labels`                                                                                        | warning  |
 | TYPL-409 | `@see` or `@since` with a missing or malformed value                                                                                                    | warning  |
@@ -1667,13 +1668,21 @@ package ridl.std
 
 // ---------- Regex Constants ----------
 
+/// Pattern of a UUID: five groups of 8, 4, 4, 4 and 12 lowercase hexadecimal digits
 const UUID_PATTERN  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+/// Pattern of a ULID: 26 Crockford base32 characters, the first one 0 to 7
 const ULID_PATTERN  = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+/// Pattern of a URI: a scheme, `://`, then at least one character
 const URI_PATTERN   = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/
+/// Pattern of a URL: `http://` or `https://`, then at least one character
 const URL_PATTERN   = /^https?:\/\/.+$/
+/// Pattern of an email address: a local part, `@`, and a domain that contains a dot
 const EMAIL_PATTERN = /^[^@]+@[^@]+\.[^@]+$/
+/// Pattern of an IPv4 address: four groups of 1 to 3 digits, separated by dots
 const IPV4_PATTERN  = /^(\d{1,3}\.){3}\d{1,3}$/
+/// Pattern of an IPv6 address: lowercase hexadecimal digits and colons
 const IPV6_PATTERN  = /^[0-9a-f:]+$/
+/// Pattern of a string of printable ASCII characters
 const ASCII_PATTERN = /^[\x20-\x7E]+$/
 
 // ---------- Identity Types ----------

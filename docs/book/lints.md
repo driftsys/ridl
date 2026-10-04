@@ -132,6 +132,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `broken-doc-link` | TYPL-401 | warn | doc link or `@see` target that does not resolve |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its carrier |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
+| `missing-docs` | TYPL-406 | warn | item without a doc comment |
 | `misplaced-doc-comment` | TYPL-407 | warn | doc comment in a position that is not a carrier |
 | `unknown-doc-tag` | TYPL-408 | warn | doc tag other than `@see`, `@since`, `@deprecated` and `@labels` |
 | `malformed-doc-tag` | TYPL-409 | warn | `@see` or `@since` with a missing or malformed value |

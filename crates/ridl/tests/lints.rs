@@ -978,3 +978,74 @@ fn doc_comment_style_is_silent_in_a_diff_compile_error() {
         "`ridl diff` does not report an allow-by-default lint:\n{stderr}"
     );
 }
+
+/// A two-member workspace for `missing-docs`: member `a` is documented and
+/// imports `Speed` from member `b`, whose declarations have no docs. Returns
+/// the workspace root.
+fn undocumented_dependency_workspace(dir: &TempDir) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "a/a.typl",
+        "package a\nimport b.Speed\n/// The cabin.\nstruct Cabin {\n  /// The primary speed.\n  \
+         primary: Speed\n}\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "b/speed.typl",
+        "package b\ntype Speed: integer [0..300]\nstruct Pair {\n  left: Speed\n}\n",
+    );
+    dir.path().to_path_buf()
+}
+
+/// TYPL-406 obeys ADR-0024 decision 10: checking member `a` does not report
+/// the undocumented items of member `b`, which is outside the entry's
+/// directory tree. From the root, the same items are reported.
+#[test]
+fn missing_docs_skips_dependencies() {
+    let dir = TempDir::new("missing-docs-deps");
+    let root = undocumented_dependency_workspace(&dir);
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.join("a").as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-406") && !stdout.contains("TYPL-406"),
+        "the dependency's undocumented items are not reported:\n{stderr}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[TYPL-406]").count(),
+        3,
+        "from the root, `Speed`, `Pair` and `left` are reported:\n{stderr}"
+    );
+}
+
+#[test]
+fn missing_docs_at_allow_is_silent() {
+    let dir = TempDir::new("missing-docs-allow");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"b\"]\n");
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[lints]\nmissing-docs = \"allow\"\n",
+    );
+    dir.write(
+        "b/speed.typl",
+        "package b\ntype Speed: integer [0..300]\nstruct Pair {\n  left: Speed\n}\n",
+    );
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), dir.path().as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-406") && !stdout.contains("TYPL-406"),
+        "a lint at allow is not reported:\n{stderr}"
+    );
+}

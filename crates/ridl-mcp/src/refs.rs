@@ -325,7 +325,10 @@ pub fn dependencies(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::snapshot::{snapshot, tests::fixture};
+    use crate::snapshot::{
+        snapshot,
+        tests::{fixture, without_missing_docs},
+    };
     use crate::types::OverlayInput;
     fn input(name: &str) -> NameInput {
         NameInput {
@@ -413,7 +416,9 @@ mod tests {
             "  fixed softwareVersion: Version",
             "  query readSpeed(sample: Speed): Speed @[..100ms]\n  fixed softwareVersion: Version",
         );
-        let snap = snapshot(&fixture("ws"), &[OverlayInput { path, source }]).unwrap();
+        let snap = without_missing_docs(
+            snapshot(&fixture("ws"), &[OverlayInput { path, source }]).unwrap(),
+        );
         assert_eq!(snap.status().errors, 0);
         assert_eq!(snap.status().warnings, 0);
         let out = references(&snap, &input("Speed")).unwrap();
@@ -565,7 +570,7 @@ mod tests {
         );
     }
     fn rsdl_snap() -> Snapshot {
-        let snap = snapshot(&fixture("ws-rsdl"), &[]).unwrap();
+        let snap = without_missing_docs(snapshot(&fixture("ws-rsdl"), &[]).unwrap());
         assert_eq!(snap.status().errors, 0);
         assert_eq!(snap.status().warnings, 2);
         assert!(snap.output.system.is_some());
@@ -690,7 +695,7 @@ mod tests {
         )
         .unwrap();
         fs::write(copy.0.join("ops/ops.rsdl"), "package veh.ops\nimport veh.climate.Climate\nimport veh.cabin.Dashboard\nimport veh.cabin.ClimateControl\nimport veh.cabin.SeatHeating\n\ncomponent Monitor {\n  requires Climate\n}\n\nsystem Ops {\n  Monitor\n  Dashboard\n  ClimateControl\n  SeatHeating\n}\n").unwrap();
-        let snap = snapshot(copy.0.to_str().unwrap(), &[]).unwrap();
+        let snap = without_missing_docs(snapshot(copy.0.to_str().unwrap(), &[]).unwrap());
         assert_eq!(snap.status().errors, 0);
         assert_eq!(snap.status().warnings, 2);
         let references = references(&snap, &input("veh.climate.Seats")).unwrap();

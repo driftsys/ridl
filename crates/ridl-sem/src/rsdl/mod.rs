@@ -523,7 +523,9 @@ mod tests {
         )
     }
 
-    /// Checks a workspace made of `packages`, each `(name, files)`.
+    /// Checks a workspace made of `packages`, each `(name, files)`. TYPL-406
+    /// (`missing-docs`) is left out: the fixtures have no docs, and these
+    /// tests are about the rsdl checks.
     fn check(packages: &[(&str, &[(&str, &str)])]) -> CheckedSystem {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
@@ -532,7 +534,11 @@ mod tests {
             .map(|(name, files)| package(&db, name, files))
             .collect();
         let ws = Workspace::new(&db, packages, BTreeMap::new());
-        check_system(&db, ws, std)
+        let mut system = check_system(&db, ws, std);
+        system
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
+        system
     }
 
     fn codes(system: &CheckedSystem) -> Vec<&str> {

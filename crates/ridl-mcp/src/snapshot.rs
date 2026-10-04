@@ -131,6 +131,14 @@ pub(crate) mod tests {
     pub fn fixture(name: &str) -> String {
         format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
     }
+    /// `snap` without its TYPL-406 (`missing-docs`) diagnostics, for a test
+    /// that counts warnings over a fixture that leaves items undocumented.
+    pub fn without_missing_docs(mut snap: Snapshot) -> Snapshot {
+        snap.output
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code.as_str() != "TYPL-406");
+        snap
+    }
     pub struct TempWorkspace(pub PathBuf);
     impl TempWorkspace {
         pub fn copy(name: &str) -> Self {
@@ -163,7 +171,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn snapshot_of_the_fixture_is_clean() {
-        let snap = snapshot(&fixture("ws"), &[]).unwrap();
+        let snap = without_missing_docs(snapshot(&fixture("ws"), &[]).unwrap());
         let status = snap.status();
         assert_eq!(status.errors, 0);
         assert_eq!(status.warnings, 0);
@@ -258,7 +266,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn workspace_status_counts_errors_and_warnings_separately() {
-        let snapshot = snapshot(&fixture("ws-diag"), &[]).unwrap();
+        let snapshot = without_missing_docs(snapshot(&fixture("ws-diag"), &[]).unwrap());
         assert_eq!(snapshot.status().errors, 1);
         assert_eq!(snapshot.status().warnings, 1);
     }
