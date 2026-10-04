@@ -131,11 +131,16 @@ declaration from an imported package; `leaf_of_name` and `leaf_of_field_type`
 take the home package, and the composite leaves (`Struct`, `Union`, `Tuple`,
 `Array`, `Map`) are struct variants that carry the package their inner names
 resolve against; `string_max_bytes` returns `Option<u64>`, `None` without a
-`len_max`, and a bare or unbounded `string` or `bytes` has no leaf, so the leaf
-model answers `None` wherever `max_size` does for the same shape; a named scalar
-is projected by its width first, as the backends do, and a unit backing without
-a width has no leaf. The proto3 and FlatBuffers placeholders panic until Tasks 6
-and 7 replace them.
+`len_max`, and a bare or unbounded `string` or `bytes` has no leaf, so for an
+unbounded `string` or `bytes` the leaf model answers `None` wherever `max_size`
+does for the same shape (it does not elsewhere: an unspecified integer or float
+width, `EnumSet(Unspecified)`, and a `string` or `bytes` whose bound exceeds the
+projection's `MAX_ENCODABLE` have a leaf while `max_size` answers `None`); a
+named scalar is projected by its width first, as the backends do; an integer or
+float backing without a width is a bounded `Scalar` of unspecified width, where
+`proto_scalar` gives `string` and `scalar_charge` gives `None`; a unit backing
+without a width has no leaf. The proto3 and FlatBuffers placeholders panic until
+Tasks 6 and 7 replace them.
 
 Changes the review of PR #667 added (pass 1, 2026-10-03):
 
@@ -343,7 +348,7 @@ pub fn reachable_decls<'a>(package: &'a Package, others: &[&'a Package]) -> BTre
 pub fn reduced_package(package: &Package, others: &[&Package]) -> Package;
 pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32];
 // ridl_descriptor::size
-pub struct Ctx<'a> { /* private: wraps ridl_ir::projection::flatbuffers::Packages<'a> */ }
+pub struct Ctx<'a> { /* private: wraps the root `Packages<'a>` and the per-package views `packages_for` hands out */ }
 impl<'a> Ctx<'a> { pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self; pub fn resolve(&self, home: &'a Package, name: &str) -> Option<(&'a Decl, &'a Package)>; pub fn packages(&self) -> Packages<'a>; pub fn packages_for(&self, declaring: &Package) -> Option<Packages<'_>>; }
 pub enum PayloadShape<'a> { Named(&'a str), Field(&'a FieldType), Params(&'a [Param]), Return(&'a ReturnType) }
 pub fn named_payload<'a>(shape: &PayloadShape<'a>) -> Option<&'a str>;
@@ -2198,17 +2203,27 @@ fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
 
 Create `crates/ridl-descriptor/src/size/proto3.rs` and
 `crates/ridl-descriptor/src/size/flatbuffers.rs` each holding a module doc
-line for now (`//! proto3 states — Task 6.` / `//! FlatBuffers states — Task
-7.`) plus a `state` that the `size_state` arms above compile against:
+that names the task that replaces it, plus a `state` that panics when reached,
+so a routing error in `size_state` fails a test instead of reading as an absent
+row. `proto3.rs`:
 
 ```rust
+//! proto3 states — a placeholder until Task 6 of the catalog descriptor plan
+//! (driftsys/ridl#380) replaces this body. It panics when reached, so a
+//! routing error in `size_state` fails a test instead of reading as an absent
+//! row.
+
 use super::{Ctx, SizeState};
 
-pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
-    let _ = (type_name, ctx);
-    None
+pub(crate) fn state(_type_name: &str, _ctx: &Ctx<'_>) -> Option<SizeState> {
+    unimplemented!(
+        "proto3 size states are Task 6 of the catalog descriptor plan (driftsys/ridl#380)"
+    )
 }
 ```
+
+`flatbuffers.rs` has the same shape, with Task 7 and the message
+`FlatBuffers size states are Task 7 of the catalog descriptor plan`.
 
 Tasks 6 and 7 replace these bodies; the `size_state` signature is what Task 8
 codes against, so it exists from here.
@@ -2217,7 +2232,7 @@ Add `pub mod size;` to `lib.rs`.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p ridl-descriptor --locked size` Expected: 4 tests PASS.
+Run: `cargo test -p ridl-descriptor --locked size` Expected: 15 tests PASS.
 
 - [ ] **Step 5: Commit**
 
