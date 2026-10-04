@@ -22,6 +22,10 @@ the implementation as built is described in
 Sebastien delegated the plan's decisions P-B1 to P-B9 to the lane driver on
 2026-09-15 and confirmed decision 8 below on 2026-09-17.
 
+Amended 2026-10-04 by story E6.17 (driftsys/ridl#367): the work decision 7
+deferred has landed. `Region` carries `bytes hash = 3`, and `ridlc` embeds the
+catalog hash in each region (see the second note under decision 7).
+
 It does not restate the rsdl language reference: §13 lists the facts the
 lowering produces and §14 states the two headings and that they carry no
 verdict. This record fixes the engineering choices those sections leave open.
@@ -122,6 +126,15 @@ nothing.
    decision 15). Story E6.17 no longer waits on it, and is still open: `Region`
    still has no hash field, and the driver does not yet embed one.
 
+   **Note (2026-10-04, story E6.17, driftsys/ridl#367).** The field and the
+   embedding exist. `Region` has `bytes hash = 3`. `ridl_sem::lower_system`
+   leaves it empty and does not depend on `ridl-descriptor`;
+   `ridlc::lower_workspace_system` lowers the system and sets each region's hash
+   with `ridl_ir::catalog_hash::catalog_hash`, over the same packages that
+   `ridl build --emit catalog` gives the catalog descriptor, so a region's hash
+   equals the hash in its catalog's descriptor. `compile_workspace` (and so
+   `ridl diff`), the system write of `ridl build` and the corpus runner call it.
+
 8. **`ridl build` writes every artifact when the only errors are RSDL-7xx, and
    still exits 1** (plan decision P-B8, confirmed by Sebastien on 2026-09-17).
    The build's rule was that any error-severity diagnostic writes nothing. rsdl
@@ -168,15 +181,15 @@ nothing.
 - `ridl diff`'s JSON output gains two optional keys, `placement_changed` and
   `composition_changed`, each left out when empty, so a report without a system
   change renders byte for byte as before.
-- The IR is one field short of rsdl §13 until story E6.17 lands: no consumer can
-  yet check a catalog hash from the system artifact.
+- Since story E6.17 landed (2026-10-04), the system artifact carries the catalog
+  hash of each region, so a consumer can check it against the hash in the
+  catalog's descriptor.
 
 ## Open
 
-1. **Story E6.17, the catalog hash per region** (decision 7). The function it
-   waited on, `ridl_descriptor::hash::catalog_hash`, exists since story E16.2
-   (see the note under decision 7); `Region` still has no hash field, and the
-   driver does not yet embed one.
+1. **Story E6.17, the catalog hash per region** (decision 7). Closed 2026-10-04:
+   `Region` carries the hash, and `ridlc` embeds it (see the second note under
+   decision 7).
 2. **Which system changes are breaking, and for whom** — the stability policy's
    question (roadmap E4.5a), which is why decision 9 reports them with no
    verdict.

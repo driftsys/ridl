@@ -104,6 +104,21 @@ component is `external` — the flag, not the machine, defines the boundary.
 `WorkspaceOutput::system`, so a consumer of a compiled workspace — `ridl diff` —
 reads the facts rather than lowering again.
 
+**The catalog hash per region** (story E6.17, driftsys/ridl#367). rsdl §13 lists
+the catalog hash of every catalog in the region map as an input that ridl
+computes and rsdl never computes. `ridl_sem::lower_system` therefore leaves
+`Region.hash` empty and does not depend on `ridl-descriptor`;
+`ridlc::lower_workspace_system` lowers the system and then sets each region's
+hash with `ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15).
+`compile_workspace`, the system write of `ridl build` and the corpus runner all
+call it, so every lowered system the toolchain returns or writes carries its
+hashes. The hash is computed over the region's package and the same package list
+`ridl build --emit catalog` gives `ridl_descriptor::lower`, built by one helper,
+`catalog_scope`: every checked package of the workspace, then `ridl.std` when a
+package of the workspace references it. A region's hash therefore equals the
+hash in its catalog's descriptor, including in a build that emits only the IR
+and so writes no descriptor.
+
 `ridl build` writes the lowered system beside the package IR for each IR dump
 emit, under the suffixes `Emit::system_dump_suffix` names
 ([ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 2). The
@@ -131,6 +146,10 @@ with no `[verdict]`; in JSON, the optional keys `placement_changed` and
 `composition_changed`, left out when empty — so a report with no system change
 renders byte for byte as it did before.
 
+The region map is not compared, so a changed region hash lists no system change.
+A change to an interface or a type the hash covers is reported by the contract
+comparison instead.
+
 Both sides must be source trees. A `.ir.json` snapshot carries no system, so
 `ridl diff .ridl/baseline .` lists no system change rather than reporting the
 whole system as added.
@@ -153,16 +172,6 @@ there is no runtime, and every fact it states about the lowered system and about
 
 ## What is not built yet
 
-- **The catalog hash per region** (story E6.17). rsdl §13 lists the catalog
-  hashes of every catalog in the region map, as received. The function that
-  computes one exists since story E16.2 (driftsys/ridl#378):
-  `ridl_ir::catalog_hash::catalog_hash`, re-exported as
-  `ridl_descriptor::hash::catalog_hash` (ADR-0014 decision 15). Nothing calls it
-  for a region yet, so `Region` has no hash field and the lowered system carries
-  no hash. The archived plan's Part B4 Task 9 describes the work that fills it,
-  and [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7
-  records the constraint it must satisfy: the driver embeds the hash, the rsdl
-  lowering never computes it.
 - **A runtime's system descriptor.** rsdl §13 says a runtime's descriptor is an
   emitter over these facts, specified with the runtime. The runtime descriptors
   design defines two artifacts and the roadmap plans only the catalog half (Epic
