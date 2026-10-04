@@ -45,7 +45,8 @@ impl From<ZeroNumber> for LowerError {
 }
 
 /// Lowers `package` to the finished descriptor bytes; `others` are the
-/// packages it imports, for name resolution and the hash closure.
+/// other packages of the build, which name resolution and the hash closure
+/// search.
 pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError> {
     let numbered = numbered_shapes(package)?;
     let hash = catalog_hash(package, others);

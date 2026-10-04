@@ -1,4 +1,5 @@
-//! `ridl build --emit catalog` and `ridl describe` (spec D-9), through the binary.
+//! `ridl build --emit catalog` (spec D-9), through the binary. Stage D7 extends
+//! this file.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

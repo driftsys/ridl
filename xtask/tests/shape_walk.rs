@@ -169,10 +169,10 @@ const ALLOWED: &[Allowed] = &[
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
         lines: 3,
-        why: "two tests reading the catalog descriptor's own \
-              `Catalog.interfaces` field back out of a buffer, and a test \
-              fixture that zeroes the number of the one interface its package \
-              declares; the lowering itself walks `shapes()`",
+        why: "the `vehicle()` helper and a test, each reading the catalog \
+              descriptor's own `Catalog.interfaces` field back out of a \
+              buffer, and a test that zeroes the number of the one interface \
+              its package declares; the lowering itself walks `shapes()`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
