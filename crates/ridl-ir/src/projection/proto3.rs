@@ -9,8 +9,18 @@
 //!
 //! Nothing here writes a line of schema text; the spelling the backend emits
 //! is [`Scalar::as_str`], and the backend is the only caller that emits it.
+//!
+//! The two field-number limits proto3 fixes live here for the same reason:
+//! the backend refuses a field number outside them (`check_field_number`),
+//! and the descriptor's sizer answers no bound for the same field.
 
 use crate::v2;
+
+/// The field numbers protobuf reserves for its own use (the proto3 language
+/// guide, "Assigning field numbers").
+pub const PROTO_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
+/// The largest field number proto3 admits: 2^29 - 1.
+pub const PROTO_MAX_FIELD_NUMBER: u32 = 536_870_911;
 
 /// A proto3 scalar type, as the projection spells it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

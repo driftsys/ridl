@@ -26,7 +26,7 @@
 //! resolve is refused, rather than emitted as a name `protoc` would then
 //! fail to resolve.
 
-use ridl_ir::projection::proto3;
+use ridl_ir::projection::proto3::{self, PROTO_MAX_FIELD_NUMBER, PROTO_RESERVED};
 use ridl_ir::v2;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -165,11 +165,6 @@ impl SymbolScope {
         Ok(())
     }
 }
-
-/// proto reserves field numbers 19,000 through 19,999 for its own use.
-const PROTO_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
-/// The largest field number proto admits.
-const PROTO_MAX_FIELD_NUMBER: u32 = 536_870_911;
 
 /// A dotted address becomes one CamelCase proto identifier:
 /// `corpus.baseline.hvac` gives `CorpusBaselineHvac`. A named interface has no
@@ -668,15 +663,26 @@ fn map_key_text(
     key: &v2::FieldType,
     imports: &mut BTreeSet<String>,
 ) -> Result<String, GenerateError> {
-    let text = match key.kind.as_ref() {
-        Some(v2::field_type::Kind::Primitive(primitive)) => proto_primitive(*primitive).to_string(),
+    // `Ok` is the scalar the key projects to. `Err` is the name of a message
+    // or enum a named key resolved to, which proto3 never admits as a key;
+    // the refusal below names it.
+    let projected: Result<proto3::Scalar, String> = match key.kind.as_ref() {
+        Some(v2::field_type::Kind::Primitive(primitive)) => Ok(proto3::primitive(*primitive)),
         // A key written with a length bound, and a bare `string`/`bytes` key,
         // which carries typl's `[0..256]` default (typl §4.4–§4.5). The bound
         // is constraint information, which proto3 cannot carry, so it
         // projects to the backing scalar like any other inline scalar.
-        Some(v2::field_type::Kind::InlineScalar(td)) => proto_scalar(td).to_string(),
+        Some(v2::field_type::Kind::InlineScalar(td)) => Ok(proto3::scalar(td)),
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(packages, owner, field_name, reference, imports)?.0
+            let (decl, _) = resolve_named(packages, owner, field_name, reference)?;
+            match &decl.kind {
+                Some(v2::decl::Kind::TypeDef(td)) => Ok(proto3::scalar(td)),
+                Some(v2::decl::Kind::EnumSetDef(esd)) => Ok(proto3::enum_set_scalar(esd.width)),
+                // A struct, enum or union is a message or enum name, with the
+                // import a foreign one takes; any other kind is refused by
+                // `named_field_type` as it is at a field position.
+                _ => Err(named_field_type(packages, owner, field_name, reference, imports)?.0),
+            }
         }
         _ => {
             return Err(GenerateError {
@@ -689,19 +695,17 @@ fn map_key_text(
     };
     // The admitted set is `Scalar::admitted_as_map_key` in `ridl-ir`, shared
     // with the descriptor's proto3 size bound, which refuses the same keys.
-    let admitted = proto3::Scalar::ALL
-        .iter()
-        .any(|scalar| scalar.admitted_as_map_key() && scalar.as_str() == text);
-    if admitted {
-        Ok(text)
-    } else {
-        Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} uses `{text}` as a map key, which proto3 does not \
-                 admit — a map key must be an integral or string type."
-            ),
-        })
-    }
+    let text = match projected {
+        Ok(scalar) if scalar.admitted_as_map_key() => return Ok(scalar.as_str().to_string()),
+        Ok(scalar) => scalar.as_str().to_string(),
+        Err(name) => name,
+    };
+    Err(GenerateError {
+        message: format!(
+            "{owner}.{field_name} uses `{text}` as a map key, which proto3 does not \
+             admit — a map key must be an integral or string type."
+        ),
+    })
 }
 
 /// A tuple type reached while walking the package, to be emitted as a
@@ -814,6 +818,52 @@ fn emit_induced_tuple(
     Ok(())
 }
 
+/// The declaration `reference` names from a field of `owner`, and the package
+/// it is qualified with when it is a foreign one (`pkg.Name`); refused when
+/// no such declaration is in the packages given to this backend.
+fn resolve_named<'a, 'r>(
+    packages: Packages<'a>,
+    owner: &str,
+    field_name: &str,
+    reference: &'r str,
+) -> Result<(&'a v2::Decl, Option<&'r str>), GenerateError> {
+    match reference.rsplit_once('.') {
+        Some((referenced_package, member)) => {
+            let resolved = packages
+                .others
+                .iter()
+                .find(|candidate| candidate.name == referenced_package)
+                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
+            let Some(decl) = resolved else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which cannot be \
+                         resolved — no package `{referenced_package}` with a declaration \
+                         named `{member}` was given to this backend."
+                    ),
+                });
+            };
+            Ok((decl, Some(referenced_package)))
+        }
+        None => {
+            let Some(decl) = packages
+                .package
+                .decls
+                .iter()
+                .find(|decl| decl.name == *reference)
+            else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which is not a \
+                         declaration of this package."
+                    ),
+                });
+            };
+            Ok((decl, None))
+        }
+    }
+}
+
 /// A resolved named-type reference at a field position. A named scalar
 /// inlines to its backing scalar and leaves its name, unit, range and step
 /// as a comment; an enum set inlines to an integer with its bits as a
@@ -850,41 +900,7 @@ fn named_field_type(
     reference: &str,
     imports: &mut BTreeSet<String>,
 ) -> Result<(String, Option<String>), GenerateError> {
-    let (decl, foreign_package) = match reference.rsplit_once('.') {
-        Some((referenced_package, member)) => {
-            let resolved = packages
-                .others
-                .iter()
-                .find(|candidate| candidate.name == referenced_package)
-                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
-            let Some(decl) = resolved else {
-                return Err(GenerateError {
-                    message: format!(
-                        "{owner}.{field_name} references `{reference}`, which cannot be \
-                         resolved — no package `{referenced_package}` with a declaration \
-                         named `{member}` was given to this backend."
-                    ),
-                });
-            };
-            (decl, Some(referenced_package))
-        }
-        None => {
-            let Some(decl) = packages
-                .package
-                .decls
-                .iter()
-                .find(|decl| decl.name == *reference)
-            else {
-                return Err(GenerateError {
-                    message: format!(
-                        "{owner}.{field_name} references `{reference}`, which is not a \
-                         declaration of this package."
-                    ),
-                });
-            };
-            (decl, None)
-        }
-    };
+    let (decl, foreign_package) = resolve_named(packages, owner, field_name, reference)?;
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
             proto_scalar(td).to_string(),
