@@ -693,10 +693,11 @@ mapping until blind labelling and adjudication are complete.
 
 ## Decisions taken during execution
 
-These implementation choices were approved by the user on 2026-10-04 and applied
-to this plan following that approval. Implementation has not started. They
-complete the reviewed interfaces and tests while keeping D-1 to D-9, the
-reserved codes, corpus budgets, four PRs and approval stages.
+The first seven implementation choices were approved by the user on 2026-10-04
+and applied to this plan following that approval. They complete the reviewed
+interfaces and tests while keeping D-1 to D-9, the reserved codes, corpus
+budgets, four PRs and approval stages. Later entries record choices made during
+execution.
 
 1. **Preserve the complete graph and derive a workspace-only view** (Tasks 5,
    10–11). External qualifiers remain part of the released MCP output. Metrics
@@ -736,6 +737,38 @@ reserved codes, corpus budgets, four PRs and approval stages.
    12), and call `compatible` a diff verdict (Task 4). If wrong, help, docs and
    internal callers would disagree; alias parity prevents this with no new
    `ridl` subcommand or flag.
+
+8. **Pin the ROS 2 port and its complete selected inventory** (Task 1).
+   `ros2/common_interfaces` is pinned to
+   `d8dde22160f26cf4fd8f1f8dcd819637b1b88405`, `ros-navigation/navigation2` to
+   `d7bf2ac06fe778c21c6141eb49b4d3e2c0c82d3a`, and the required dependency
+   `ros2/rcl_interfaces` to `99aea442813391cc20344c5b4c79e5191bf7f2c7`. The
+   subset includes all 105 definitions in `std_msgs`, `geometry_msgs`,
+   `sensor_msgs`, `nav_msgs` and `std_srvs`; ten `nav2_msgs` messages
+   (`BehaviorTreeLog`, `BehaviorTreeStatusChange`, `Costmap`, `CostmapMetaData`,
+   `Particle`, `ParticleCloud`, `SpeedLimit`, `TrackingFeedback`, `VoxelGrid`,
+   `WaypointStatus`); six services (`ClearEntireCostmap`, `GetCostmap`,
+   `IsPathValid`, `LoadMap`, `ManageLifecycleNodes`, `SaveMap`); seven actions
+   (`AssistedTeleop`, `BackUp`, `FollowPath`, `FollowWaypoints`,
+   `NavigateToPose`, `Spin`, `Wait`); and `builtin_interfaces.Time` and
+   `Duration` as required dependency types. The 130 definitions contain 1,672
+   upstream physical lines, leaving room for syntax translation within the
+   2,500-line source budget. The selected package licences are Apache-2.0;
+   navigation2's root licence index routes to `nav2_msgs/package.xml`, and no
+   selected definition has an override. A complete source-to-output mapping in
+   the provenance makes completeness review reproducible. If this subset exceeds
+   the budget, change it explicitly before porting further; deleting comments or
+   stubbing types would invalidate the evidence.
+
+9. **Retain whitespace within upstream comments** (Task 1). Six comment lines in
+   the ROS 2 port retain their upstream trailing spaces: two in
+   `builtin_interfaces/messages.typl` and four in `nav_msgs/messages.typl`.
+   Porting rule 1 requires verbatim comment preservation; independent Claude
+   review confirmed the source comments, and a direct comparison matched all six
+   lines after changing only the comment delimiter. `git diff --check` reports
+   them and exits 2. The mandated corpus guard, `just check` and
+   `just link-check` pass; no build gate is omitted. Removing those spaces would
+   change the reviewed upstream text, so they remain part of the corpus.
 
 ## Pull requests
 

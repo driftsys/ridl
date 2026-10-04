@@ -1,0 +1,138 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package nav2msgs
+import builtininterfaces.Time
+import geometrymsgs.Point32
+import geometrymsgs.Pose
+import geometrymsgs.PoseStamped
+import geometrymsgs.Vector3
+import stdmsgs.Header
+type RosBoolean : boolean
+type RosFloat32 : float
+type RosFloat64 : float
+type RosString : string [0..18446744073709551615]
+type RosUInt16 : integer [0..65535]
+type RosUInt32 : integer [0..4294967295]
+type RosUInt8 : integer [0..255]
+// Upstream: nav2_msgs/msg/BehaviorTreeLog.msg
+struct BehaviorTreeLog {
+  timestamp : Time // ROS time that this log message was sent.
+  eventLog : [BehaviorTreeStatusChange; 0..18446744073709551615]
+}
+// Upstream: nav2_msgs/msg/BehaviorTreeStatusChange.msg
+struct BehaviorTreeStatusChange {
+  timestamp : Time // internal behavior tree event timestamp. Typically this is wall clock time
+  nodeName : RosString
+  uid : RosUInt16 // unique ID for this node
+  previousStatus : RosString // IDLE, RUNNING, SUCCESS or FAILURE
+  currentStatus : RosString // IDLE, RUNNING, SUCCESS or FAILURE
+}
+// Upstream: nav2_msgs/msg/Costmap.msg
+struct Costmap {
+// This represents a 2-D grid map, in which each cell has an associated cost
+
+  header : Header
+
+// MetaData for the map
+  metadata : CostmapMetaData
+
+// The cost data, in row-major order, starting with (0,0).
+  data : [RosUInt8; 0..18446744073709551615]
+}
+// Upstream: nav2_msgs/msg/CostmapMetaData.msg
+struct CostmapMetaData {
+// This hold basic information about the characteristics of the Costmap
+
+// The time at which the static map was loaded
+  mapLoadTime : Time
+
+// The time of the last update to costmap
+  updateTime : Time
+
+// The corresponding layer name
+  layer : RosString
+
+// The map resolution [m/cell]
+  resolution : RosFloat32
+
+// Number of cells in the horizontal direction
+  sizeX : RosUInt32
+
+// Number of cells in the vertical direction
+  sizeY : RosUInt32
+
+// The origin of the costmap [m, m, rad].
+// This is the real-world pose of the cell (0,0) in the map.
+  origin : Pose
+}
+// Upstream: nav2_msgs/msg/Particle.msg
+struct Particle {
+// This represents an individual particle with weight produced by a particle filter
+
+  pose : Pose
+
+  weight : RosFloat64
+}
+// Upstream: nav2_msgs/msg/ParticleCloud.msg
+struct ParticleCloud {
+// This represents a particle cloud containing particle poses and weights
+
+  header : Header
+
+// Array of particles in the cloud
+  particles : [Particle; 0..18446744073709551615]
+}
+// Upstream: nav2_msgs/msg/SpeedLimit.msg
+struct SpeedLimit {
+  header : Header
+// Setting speed limit in percentage if true or in absolute values in false case
+  percentage : RosBoolean
+// Maximum allowed speed (in percent of maximum robot speed or in m/s depending
+// on "percentage" value). When no-limit it is set to 0.0
+  speedLimit : RosFloat64
+}
+// Upstream: nav2_msgs/msg/TrackingFeedback.msg
+struct TrackingFeedback {
+// Real-time tracking error for Nav2 controller
+
+  header : Header
+// The sign of the position tracking error indicates which side of the path the robot is on
+// Positive sign indicates the robot is to the left of the path, negative to the right
+  positionTrackingError : RosFloat32
+// The sign of the heading tracking error indicates the angular difference between
+// the robot's heading and the path.
+// Positive sign means the robot heading is rotated to the right of the path direction,
+// negative sign means it is rotated to the left.
+  headingTrackingError : RosFloat32
+  currentPathIndex : RosUInt32
+  robotPose : PoseStamped
+  distanceToGoal : RosFloat32
+  speed : RosFloat32
+  remainingPathLength : RosFloat32
+}
+// Upstream: nav2_msgs/msg/VoxelGrid.msg
+struct VoxelGrid {
+  header : Header
+  data : [RosUInt32; 0..18446744073709551615]
+  origin : Point32
+  resolutions : Vector3
+  sizeX : RosUInt32
+  sizeY : RosUInt32
+  sizeZ : RosUInt32
+}
+// Upstream: nav2_msgs/msg/WaypointStatus.msg
+struct WaypointStatus {
+// Waypoint state for multi-goal navigation or waypoint following
+  // ROS constant PENDING = 0; package constant WAYPOINT_STATUS_PENDING // Waypoint is not processed or processing
+  // ROS constant COMPLETED = 1; package constant WAYPOINT_STATUS_COMPLETED // Waypoint is completed
+  // ROS constant SKIPPED = 2; package constant WAYPOINT_STATUS_SKIPPED // Waypoint is skipped
+  // ROS constant FAILED = 3; package constant WAYPOINT_STATUS_FAILED // Waypoint is failed
+  waypointStatus : RosUInt8
+  waypointIndex : RosUInt32
+  waypointPose : PoseStamped
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+const WAYPOINT_STATUS_PENDING : RosUInt8 = 0 // Waypoint is not processed or processing
+const WAYPOINT_STATUS_COMPLETED : RosUInt8 = 1 // Waypoint is completed
+const WAYPOINT_STATUS_SKIPPED : RosUInt8 = 2 // Waypoint is skipped
+const WAYPOINT_STATUS_FAILED : RosUInt8 = 3 // Waypoint is failed

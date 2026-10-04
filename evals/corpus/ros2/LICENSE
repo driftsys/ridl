@@ -1,17 +1,3 @@
-RIDL remains licensed under MIT; see LICENSE.
-
-The distributed binaries may include the following third-party software.
-
--------------------------------------------------------------------------------
-ec4rs 1.2.0 — EditorConfig For Rust
-Author: TheDaemoness
-Source: https://github.com/TheDaemoness/ec4rs
-Release source commit: 14bbca047324cedd5791b89f858eb5e17e6b0b3c
-Licence: Apache-2.0
-
-The following licence text is copied from that release's LICENSE.txt.
--------------------------------------------------------------------------------
-
 
                                  Apache License
                            Version 2.0, January 2004
@@ -214,20 +200,3 @@ The following licence text is copied from that release's LICENSE.txt.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
-
--------------------------------------------------------------------------------
-ROS 2 evaluation corpus — modified RIDL translations
-Path: evals/corpus/ros2/
-Upstream projects:
-  ros2/common_interfaces — https://github.com/ros2/common_interfaces
-  ros-navigation/navigation2 (nav2_msgs) — https://github.com/ros-navigation/navigation2
-  ros2/rcl_interfaces (builtin_interfaces dependency types) — https://github.com/ros2/rcl_interfaces
-Licence: Apache-2.0 for the selected definitions from all three projects.
-
-The corpus's PROVENANCE.md records the pinned revisions, selected definitions,
-source-to-output mappings, licence evidence and translation limitations.
-Its LICENSE is a byte-exact copy of common_interfaces/std_msgs/LICENSE.
-These definitions retain their upstream licence within this MIT repository.
-They are evaluation data and are not included in the published compiler crates.
--------------------------------------------------------------------------------
