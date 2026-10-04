@@ -23,20 +23,20 @@
 //! `rustc` for the test. The crate name is `veh_cabin` in both, because that
 //! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
-//! The consumer side is the generated client, in both of its forms. Round trips 1 to 4 use the async `Client`: the signal read of
-//! round trip 1 returns at once, and `next_event` (round trip 2), the command
-//! (3) and the query (4) return a named future, polled here by hand with
-//! `ridl_rt::task::noop_waker`, the way a frame loop polls; the provider
-//! side of 3 and 4 is the generated `serve`, polled once per step. No
-//! executor is involved: each round trip is a fixed sequence of polls, and
-//! the result of each poll is asserted, so a future that resolved on the
-//! wrong poll fails the proof the way a wrong value does. Round trips 5 and
-//! 6 make the command and the query again through `blocking::Client`, which is
-//! `ridl_rt::task::block_on` over the async client and parks this thread
-//! until the outcome or its timeout; the provider side is `blocking::serve`
-//! on a second thread, called in a loop with a timeout, the way a thread
-//! that also does other work serves. The generated crate's `std` feature, on
-//! by default, is what carries the `blocking` module.
+//! The consumer side is the generated client, in both of its forms. Round trips
+//! 1 to 4 use the async `Client`: the signal read of round trip 1 returns at
+//! once, and `next_event` (round trip 2), the command (3) and the query (4)
+//! return a named future, polled here by hand with `ridl_rt::task::noop_waker`,
+//! the way a frame loop polls; the provider side of 3 and 4 is the generated
+//! `serve`, polled once per step. No executor is involved: each round trip is a
+//! fixed sequence of polls, and the result of each poll is asserted, so a
+//! future that resolved on the wrong poll fails the proof the way a wrong value
+//! does. Round trips 5 and 6 make the command and the query again through
+//! `blocking::Client`, which is `ridl_rt::task::block_on` over the async client
+//! and parks this thread until the outcome or its timeout; the provider side is
+//! `blocking::serve` on a second thread, called in a loop with a timeout, the
+//! way a thread that also does other work serves. The generated crate's `std`
+//! feature, on by default, is what carries the `blocking` module.
 //!
 //! One runtime for all six round trips, and every face over it held for the
 //! whole program, which is the shape an application has (driftsys/ridl#488).

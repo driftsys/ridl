@@ -1403,11 +1403,10 @@ fn a_local_struct_reference_names_the_bare_declared_table() {
 // comparison stays quiet — what fails then is the hand-written assertions
 // elsewhere in this file. What the comparison does catch is the emitter
 // walking away from the facts: `slot.id + 1` in `emit_struct` turns these
-// tests red while thirty others stay green. The comparison becomes
-// two-sided when `ridl-backend-rust` emits the codec from the same facts in
-// stage K5; until then the union-arm discriminant is the one fact both
-// sides derive independently, because the `.fbs` emitter writes no explicit
-// member values.
+// tests red while thirty others stay green. The comparison is two-sided
+// because `ridl-backend-rust` emits the codec from the same facts, and the
+// union-arm discriminant is the one fact both sides derive independently,
+// because the `.fbs` emitter writes no explicit member values.
 //
 // That is also what makes driftsys/ridl#302 visible. The target numbers a
 // union's arms by position while the IR numbers them by `UnionArm.ordinal`,

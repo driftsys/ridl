@@ -96,8 +96,8 @@ const ALLOWED: &[Allowed] = &[
         path: "crates/ridl-backend-rust/src/descriptors.rs",
         lines: 1,
         why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
-              `Package::interfaces`: since stage P4 this backend reads the \
-              lowered model, whose list is `Package::shapes()` order and \
+              `Package::interfaces`: this backend reads the lowered \
+              model, whose list is `Package::shapes()` order and \
               already holds an inline shape, which this walk skips by its \
               identity",
     },

@@ -1,13 +1,11 @@
-//! The process host's parity test over the Rust backend (the lane P driver,
-//! stage P4; ADR-0020 decision 11 as amended 2026-09-22): the Rust backend,
-//! run by `ridlc`'s process host, is byte-identical to the in-process path
-//! over every corpus package.
+//! The process host's parity test over the Rust backend (ADR-0020 decision 11
+//! as amended 2026-09-22): the Rust backend, run by `ridlc`'s process host, is
+//! byte-identical to the in-process path over every corpus package.
 //!
-//! This is the exit test of the plugin split and of the driver's decision D-P1.
-//! The preceding stage could only run it over `ridlc-gen-model`, because the
-//! Rust backend still read the raw IR and a plugin has none; stage P4 ported
-//! it onto the lowered model, so the backend a plugin can wrap is now the
-//! one a user's `--emit rust` reaches.
+//! This is the exit test of the plugin split. It could first only run over
+//! `ridlc-gen-model`, because the Rust backend read the raw IR and a plugin has
+//! none; the backend now reads the lowered model, so the backend a plugin can
+//! wrap is now the one a user's `--emit rust` reaches.
 //!
 //! Two levels. At the contract's level, one request per corpus package is
 //! answered by `ridl_backend_rust::Backend` in process and by

@@ -8,10 +8,10 @@ syntax = "proto3";
 // protobuf JSON, to the standard input of `ridlc-gen-<language>` and reads
 // the response, in the same encoding, from its standard output. The plugin
 // never touches the filesystem: `ridlc` writes every file the response
-// carries (ADR-0020 decision 9; the lane P driver's D-P3).
+// carries (ADR-0020 decision 9).
 //
 // The request carries the lowered model and the backend options, never the
-// raw IR (the lane P driver's D-P2). A backend that still needs a fact the
+// raw IR. A backend that still needs a fact the
 // model does not state is a gap in the model, fixed in the model.
 //
 // Versioning is the IR specification's §7: `schema` and `toolchain` are the

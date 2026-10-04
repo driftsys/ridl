@@ -8,8 +8,8 @@
 //! names the plugin — lives in `ridlc`, because it needs `std::process` and
 //! this crate builds for `wasm32` with `--no-default-features`.
 //!
-//! **The transition.** Until stage P4 of the lane P driver ports the Rust
-//! backend onto the model, every in-tree backend still reads the raw IR.
+//! **The transition.** The Rust backend reads the model alone; the other
+//! in-tree backends still read the raw IR.
 //! The trait is nevertheless the contract's own signature, over the request
 //! alone: an in-tree backend that still reads the IR is constructed with a
 //! [`RawIr`] it keeps beside the request, and its `generate` reads that
@@ -49,7 +49,7 @@ pub trait Backend {
 /// onto the model — the package and the scope `generate_with` takes today
 /// (ADR-0017 decision 1). Held by the backend value, not carried by the
 /// request, so that the request stays what the contract says it is: the
-/// model and the options, never the raw IR (the lane P driver's D-P2).
+/// model and the options, never the raw IR.
 ///
 /// Removed when the last in-tree backend is ported.
 #[derive(Clone, Copy)]
