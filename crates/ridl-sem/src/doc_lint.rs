@@ -287,16 +287,33 @@ fn misplaced_doc_comment(token: &SyntaxToken, file_id: FileId) -> Option<Diagnos
 }
 
 /// TYPL-404: a blank line between a carrier's doc comment and the carrier. The
-/// whitespace token immediately before the carrier is read — two or more line
-/// breaks is a blank line. Doc comments are trivia, so the tree attaches them
-/// across the blank line even though the spec warns about the gap.
+/// trivia run before the carrier is walked backwards: a whitespace token with
+/// two or more line breaks is a blank line, and the doc is detached when a
+/// doc-comment token stands above one — directly before the carrier, or
+/// inside the run (`/// a`, a blank line, `/// b`). Doc comments are trivia,
+/// so the tree attaches the whole run across the blank line, and the
+/// checker reads every line of it as the carrier's doc; the lint reports the
+/// gap once, at the carrier.
 fn detached_doc_comment(node: &SyntaxNode, file_id: FileId) -> Option<Diagnostic> {
-    let detached = matches!(
-        node.prev_sibling_or_token(),
-        Some(NodeOrToken::Token(token))
-            if token.kind() == SyntaxKind::Whitespace
-                && token.text().matches('\n').count() >= 2
-    );
+    let mut blank_below = false;
+    let mut detached = false;
+    let mut cursor = node.prev_sibling_or_token();
+    while let Some(NodeOrToken::Token(token)) = cursor {
+        if !token.kind().is_trivia() {
+            break;
+        }
+        match token.kind() {
+            SyntaxKind::Whitespace if token.text().matches('\n').count() >= 2 => {
+                blank_below = true;
+            }
+            SyntaxKind::DocComment if blank_below => {
+                detached = true;
+                break;
+            }
+            _ => {}
+        }
+        cursor = token.prev_sibling_or_token();
+    }
     if !detached {
         return None;
     }
@@ -595,6 +612,38 @@ mod tests {
         assert_eq!(found[0].fixits[0].replacement, "/// First.\r\n/// Second.");
     }
 
+    /// The doc the IR holds for the declaration `name` of `checked`.
+    fn doc_of(checked: &CheckedPackage, name: &str) -> String {
+        checked
+            .ir
+            .decls
+            .iter()
+            .find(|decl| decl.name == name)
+            .map(|decl| decl.doc.clone())
+            .expect("the declaration is in the IR")
+    }
+
+    /// Applying the TYPL-410 fix-it changes the comment's shape only: the
+    /// rewritten comment scans to the doc the block scanned to, with the
+    /// indentation beyond the shared indent of an undecorated block kept.
+    #[test]
+    fn doc_comment_style_fixit_keeps_the_doc_of_an_undecorated_block() {
+        let text = "package demo\n\n/** First.\n    Second.\n      indented */\ntype S: integer [0..300]\n";
+        let checked = check_source("demo.typl", text);
+        let found = typl_410(&checked);
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
+        let fixit = &found[0].fixits[0];
+        let mut rewritten = text.to_string();
+        rewritten.replace_range(
+            usize::from(fixit.span.range.start())..usize::from(fixit.span.range.end()),
+            &fixit.replacement,
+        );
+        let fixed = check_source("demo.typl", &rewritten);
+        assert_eq!(typl_410(&fixed), Vec::<&Diagnostic>::new(), "{rewritten}");
+        assert_eq!(doc_of(&checked, "S"), "First.\nSecond.\n  indented");
+        assert_eq!(doc_of(&fixed, "S"), doc_of(&checked, "S"), "{rewritten}");
+    }
+
     /// The replacement of the comment `/**{body}*/` at column 0.
     fn replacement(body: &str) -> String {
         line_doc_replacement(body, "")
@@ -719,6 +768,39 @@ mod tests {
         );
     }
 
+    /// TYPL-404 on a blank line inside the doc run: `/// A.` is separated
+    /// from `S` by a blank line even though `/// B.` is not. The warning is
+    /// raised once, and the IR keeps every line of the run as the doc of
+    /// `S` (ADR-0026 decision 1: a doc comment documents the next named
+    /// declaration).
+    #[test]
+    fn detached_doc_inside_the_run() {
+        let text = "package demo\n/// A.\n\n/// B.\ntype S: integer [0..1]\n";
+        let checked = check_source("demo.typl", text);
+        let found = with_code(&checked, DiagCode::TYPL_404);
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(spanned(text, found[0]), "S");
+        assert_eq!(doc_of(&checked, "S"), "A.\nB.");
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_407),
+            Vec::<&Diagnostic>::new()
+        );
+    }
+
+    /// A blank line above the whole doc run is not a gap: the run starts
+    /// after it.
+    #[test]
+    fn a_blank_line_above_the_doc_run_is_not_detached() {
+        let text = "package demo\n\n/// A.\n/// B.\ntype S: integer [0..1]\n";
+        let checked = check_source("demo.typl", text);
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_404),
+            Vec::<&Diagnostic>::new(),
+            "{:?}",
+            checked.diagnostics
+        );
+    }
+
     /// TYPL-408 and TYPL-409, each at the span of its tag text.
     #[test]
     fn unknown_and_malformed_tags() {
@@ -820,7 +902,9 @@ mod tests {
                     enumset Flags {\n  BIT = 0\n}\n\
                     /// A choice.\n\
                     union Choice {\n  arm: V\n}\n\
-                    interface Cruise {\n  command set(v: V) @[..50ms]\n}\n\
+                    interface Cruise {\n  command set(v: V) @[..50ms]\n  \
+                    signal spd: V @10ms\n  event evt: V @[10ms..1s]\n  \
+                    query get(): V @[..50ms]\n  fixed fx: V\n}\n\
                     service demo.cruise {\n  /// A level.\n  signal level: V @10ms\n}\n\
                     /// Old.\n\
                     struct Old {\n  /// A.\n  a: boolean\n  reserved b\n}\n\
@@ -837,7 +921,11 @@ mod tests {
                 "Tagged",
                 "arm",
                 "demo.cruise",
+                "evt",
+                "fx",
+                "get",
                 "set",
+                "spd",
                 "x"
             ],
             "{:?}",

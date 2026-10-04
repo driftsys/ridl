@@ -492,10 +492,13 @@ fn comment_lines(token: &SyntaxToken) -> Vec<Line<'_>> {
                 source + TextSize::from(indent as u32 + 1),
             ));
         } else {
-            lines.push(trimmed(
-                &line[shared_indent..],
-                source + TextSize::from(shared_indent as u32),
-            ));
+            // Only the shared indent is removed; `line` already lost its
+            // trailing whitespace, and the indentation beyond the shared
+            // part is content, as on a `///` line.
+            lines.push(Line {
+                text: &line[shared_indent..],
+                source: source + TextSize::from(shared_indent as u32),
+            });
         }
     }
     lines
@@ -794,6 +797,21 @@ mod tests {
     fn block_comment_strips_the_star_gutter() {
         let info = scan(&doc_tokens(&["/**\n * Line one\n * Line two\n */"]));
         assert_eq!(info.doc, "Line one\nLine two");
+    }
+
+    /// An undecorated block loses only the indentation its continuation
+    /// lines share: the rest is content, so an indented Markdown construct
+    /// survives, as it does on a `///` line.
+    #[test]
+    fn undecorated_block_keeps_the_indentation_beyond_the_shared_indent() {
+        let text = "/** First.\n    Second.\n      indented\n    [Speed] */";
+        let info = scan(&doc_tokens(&[text]));
+        assert_eq!(info.doc, "First.\nSecond.\n  indented\n[Speed]");
+        let range = info.links[0].source;
+        assert_eq!(
+            &text[usize::from(range.start())..usize::from(range.end())],
+            "[Speed]"
+        );
     }
 
     #[test]
