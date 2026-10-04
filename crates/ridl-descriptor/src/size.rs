@@ -33,9 +33,16 @@ use crate::{Encoding, UnboundedCause};
 pub struct Ctx<'a> {
     packages: Packages<'a>,
     /// Every package of the scope, the root first, then `others` in order.
+    /// A package in `others` with the root's name is kept here, but
+    /// `packages_for` finds the root first, so the later one is never
+    /// returned.
     scope: Vec<&'a Package>,
     /// For each package of `scope`, at the same position, the packages
-    /// beside it: what `packages_for` roots a `Packages` with.
+    /// beside it, in `scope` order: what `packages_for` roots a `Packages`
+    /// with. A package is never beside a package of its own name, so a
+    /// package of `others` with the root's name is dropped from the root's
+    /// list. In the list of any other package the root comes first, so the
+    /// root shadows that package in name lookups.
     others_of: Vec<Vec<&'a Package>>,
 }
 
@@ -318,7 +325,10 @@ pub(crate) fn leaf_of_primitive<'a>(primitive: i32) -> Option<Leaf<'a>> {
 
 /// A named or inline scalar. The backends project it by its width when one
 /// is set (`proto_scalar` in the proto backend, `scalar_charge` in the
-/// FlatBuffers projection), and by its backing otherwise.
+/// FlatBuffers projection). Without a width they project a boolean, string or
+/// bytes backing by the backing. An integer or float backing without a width
+/// is the exception: `proto_scalar` gives `string` and `scalar_charge` gives
+/// `None`, while this function gives a bounded `Scalar` of unspecified width.
 #[allow(dead_code)]
 fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
     let width = match def.width {
@@ -509,13 +519,15 @@ mod tests {
 
     #[test]
     fn an_unbounded_string_or_bytes_is_unsizable_as_in_the_projection() {
-        // For a string or bytes, the leaf model answers `None` exactly where
-        // the projection answers `None` for the type that holds it, so the
-        // proto3 column cannot claim a bound the FlatBuffers column refuses
-        // for the same type. The relation is not symmetric elsewhere: for an
-        // unspecified integer or float width, and for `EnumSet(Unspecified)`,
+        // For an unbounded string or bytes, the leaf model answers `None`
+        // exactly where the projection answers `None` for the type that holds
+        // it, so the proto3 column cannot claim a bound the FlatBuffers column
+        // refuses for the same type. The relation does not hold elsewhere: for
+        // an unspecified integer or float width, and for `EnumSet(Unspecified)`,
         // the projection answers `None` while proto3 emits `int64` or
-        // `double`, so a leaf exists there.
+        // `double`, so a leaf exists there. A string or bytes whose bound
+        // exceeds the projection's `MAX_ENCODABLE` also has a leaf, while the
+        // projection answers `None`.
         let string_no_bound = decl("S", Some(decl::Kind::TypeDef(string_def(None))));
         let bytes_no_bound = decl("B", Some(decl::Kind::TypeDef(bytes_def(None))));
         let bytes_bound = decl("B32", Some(decl::Kind::TypeDef(bytes_def(Some(32)))));
@@ -750,6 +762,26 @@ mod tests {
         );
         assert!(leaf(&type_def(prim(PrimitiveType::Unspecified), None, None)).is_none());
 
+        // `ridl-sem` never emits a backing that disagrees with its width, but
+        // `from_binary` decodes an IR file without validating it. The width
+        // decides the leaf, as the backends project by the width first.
+        assert!(matches!(
+            leaf(&type_def(
+                prim(PrimitiveType::Boolean),
+                int_width(IntWidth::U16),
+                None
+            )),
+            Some(Leaf::Scalar(Scalar::Int(IntWidth::U16)))
+        ));
+        assert!(matches!(
+            leaf(&type_def(
+                prim(PrimitiveType::Integer),
+                float_width(FloatWidth::F32),
+                None
+            )),
+            Some(Leaf::Scalar(Scalar::Float(FloatWidth::F32)))
+        ));
+
         let unit = || backing::Kind::Unit("km/h".to_owned());
         assert!(matches!(
             leaf(&type_def(unit(), int_width(IntWidth::U16), None)),
@@ -939,10 +971,13 @@ mod tests {
         // package declares a different `Inner`. The field must resolve to q's.
         let root = package(
             "p",
-            vec![decl(
-                "Inner",
-                Some(decl::Kind::StructDef(StructDef::default())),
-            )],
+            vec![
+                decl("Inner", Some(decl::Kind::StructDef(StructDef::default()))),
+                decl(
+                    "OnlyInRoot",
+                    Some(decl::Kind::StructDef(StructDef::default())),
+                ),
+            ],
         );
         let imported = package(
             "q",
@@ -986,6 +1021,57 @@ mod tests {
             leaf_of_field_type(field, &root, &ctx),
             Some(Leaf::Struct { home: h, .. }) if h.name == "p"
         ));
+        assert!(
+            leaf_of_name("OnlyInRoot", &imported, &ctx).is_none(),
+            "a bare name only the root declares does not resolve from q"
+        );
+        assert!(matches!(
+            leaf_of_name("OnlyInRoot", &root, &ctx),
+            Some(Leaf::Struct { home: h, .. }) if h.name == "p"
+        ));
+    }
+
+    #[test]
+    fn packages_for_lists_the_root_first_then_the_others_in_order() {
+        let root = package("p", vec![]);
+        let second = package("q", vec![]);
+        let third = package("r", vec![]);
+        // Same name as the root, with a declaration the root lacks.
+        let same_name = package(
+            "p",
+            vec![decl(
+                "Shadowed",
+                Some(decl::Kind::StructDef(StructDef::default())),
+            )],
+        );
+        let others = [&second, &third, &same_name];
+        let ctx = Ctx::new(&root, &others);
+        let names = |packages: Packages<'_>| -> Vec<String> {
+            std::iter::once(packages.package)
+                .chain(packages.others.iter().copied())
+                .map(|package| package.name.clone())
+                .collect()
+        };
+
+        assert_eq!(names(ctx.packages_for(&root).unwrap()), ["p", "q", "r"]);
+        assert_eq!(
+            names(ctx.packages_for(&second).unwrap()),
+            ["q", "p", "r", "p"]
+        );
+        assert_eq!(
+            names(ctx.packages_for(&third).unwrap()),
+            ["r", "p", "q", "p"]
+        );
+        // The root's own view drops the package that has the root's name, and
+        // the root shadows it in every other view.
+        assert!(
+            ctx.packages_for(&root)
+                .unwrap()
+                .others
+                .iter()
+                .all(|other| !std::ptr::eq(*other, &same_name))
+        );
+        assert!(ctx.resolve(&second, "p.Shadowed").is_none());
     }
 
     #[test]
@@ -1111,21 +1197,15 @@ mod tests {
         // the root would size q's `Thing` with the root's `Inner`.
         let root = package(
             "p",
-            vec![
-                decl(
-                    "Inner",
-                    Some(decl::Kind::StructDef(one_field_struct(FieldType {
-                        optional: false,
-                        kind: Some(field_type::Kind::InlineScalar(Box::new(string_def(Some(
-                            100,
-                        ))))),
-                    }))),
-                ),
-                decl(
-                    "OnlyInRoot",
-                    Some(decl::Kind::StructDef(StructDef::default())),
-                ),
-            ],
+            vec![decl(
+                "Inner",
+                Some(decl::Kind::StructDef(one_field_struct(FieldType {
+                    optional: false,
+                    kind: Some(field_type::Kind::InlineScalar(Box::new(string_def(Some(
+                        100,
+                    ))))),
+                }))),
+            )],
         );
         let imported = package(
             "q",
@@ -1173,10 +1253,6 @@ mod tests {
         assert!(
             ctx.packages_for(&package("r", vec![])).is_none(),
             "a package outside the scope"
-        );
-        assert!(
-            leaf_of_name("OnlyInRoot", &imported, &ctx).is_none(),
-            "a bare name only the root declares does not resolve from q"
         );
     }
 
