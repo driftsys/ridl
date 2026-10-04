@@ -1,16 +1,19 @@
 //! Workspace automation, invoked as `cargo xtask <task>` (the alias lives
 //! in `.cargo/config.toml`).
 //!
-//! Two tasks exist today:
+//! Available tasks:
 //!
 //! - `codegen` regenerates the typed AST from
 //!   `crates/ridl-syntax/family.ungram` (ADR-0007 decision 1).
 //! - `descriptor-codegen` regenerates the catalog-descriptor accessors from
 //!   `crates/ridl-descriptor/schema/catalog.fbs`.
 //!
-//! The drift test in each module fails whenever the committed output is
+//! - `calibrate` dumps corpus findings and derives levels from reviewed labels.
+//!
+//! The code generation drift tests fail whenever the committed output is
 //! stale, so a generated file can never silently diverge from its source.
 
+mod calibrate;
 mod codegen;
 mod descriptor;
 
@@ -28,8 +31,15 @@ fn main() -> ExitCode {
             println!("wrote {}", path.display());
             ExitCode::SUCCESS
         }
+        Some("calibrate") => match calibrate::run(&std::env::args().skip(2).collect::<Vec<_>>()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("calibrate: {error}");
+                ExitCode::from(2)
+            }
+        },
         _ => {
-            eprintln!("usage: cargo xtask <codegen|descriptor-codegen>");
+            eprintln!("usage: cargo xtask <codegen|descriptor-codegen|calibrate>");
             ExitCode::from(2)
         }
     }

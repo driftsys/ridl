@@ -1525,6 +1525,84 @@ execution.
     provide the required evidence. Task12 and candidate corpus dumps remain
     outside this integration.
 
+### Checks and metrics lane continuation
+
+59. **Task 12: use the public CLI JSON contract without compiler dependencies**
+    (2026-10-04). Add normal `serde`, `serde_json` and `toml` dependencies to
+    xtask, using typed finding and metric records. Build the CLI with the locked
+    dependency graph into an output-local target directory, copy each corpus
+    workspace into an output-local temporary directory, append the five `warn`
+    settings, and remove the copies when the command returns. Refuse an existing
+    corpus lint table rather than replacing it. If wrong, a dependency boundary
+    or corpus input could change; resolved dependency inspection, the existing
+    oracle tests and an unchanged-evals comparison provide evidence.
+
+60. **Task 12: reconstruct stable primary byte ranges from source positions**
+    (2026-10-04). The existing JSON diagnostic contract exposes one-based line
+    and Unicode character columns rather than byte ranges. Convert both ends
+    using the copied UTF-8 source, reject invalid positions and outside paths,
+    and assign zero-based occurrence indices in deterministic source order.
+    Normalize temporary workspace prefixes in diagnostic messages. If wrong,
+    labels could attach to different findings; the UTF-8 range test and two
+    byte-identical actual dumps test this transport without changing the CLI.
+
+61. **Task 12: specify the reviewed recall join without creating actual labels**
+    (2026-10-04). Document `[[item]]` inventory rows with `issue`, `alias` and
+    `excluded` kinds, workspace and reason; aliases name their canonical issue.
+    Document one `[[check]]` per check with a complete set of `[[check.issue]]`
+    applicability rows, reasons and matching finding IDs. Validate every
+    numbered review item, canonical alias ordering, finding workspaces, final
+    labels, retained metric metadata and all applicability rows. Actual labels
+    and the actual recall mapping remain later work. If wrong, the later mapping
+    would fail validation or recall would be miscounted; synthetic input and
+    rejection tests pin the format without editing committed rubrics.
+
+62. **Task 12: search only boundaries that change retained findings**
+    (2026-10-04). Include search-start values and observed coordinate
+    boundaries, retaining independent struct and enum thresholds and both
+    cohesion coordinates. Select the highest qualifying level, then the pair
+    retaining the most findings, with the approved coordinate tie breaks. Apply
+    the under-ten Info cap to the retained sample. Recall counts distinct
+    applicable issues independently of labels and never affects selection. If
+    wrong, thresholds or levels would differ on the same labels; the
+    hand-counted precision fixture, paired searches and recall tests verify the
+    procedure.
+
+63. **Task 12: preserve authorized output and complete the actual dump**
+    (2026-10-04). Keep build targets, temporary fixtures, command logs, the five
+    actual finding arrays and the task report under this plan's scratch
+    directory. Validate each array against this worktree's source and repeat the
+    dump with new temporary roots. Both actual dumps are byte-identical and the
+    tracked eval files remain unchanged. No labels, production thresholds,
+    levels or calibration records are written. Root inspects and commits the
+    prepared output; this worker creates no reviewers or Git metadata changes.
+    If wrong, the evidence could violate its independent review barrier;
+    output-path and unchanged-input checks provide the required evidence.
+
+64. **Task 12: preserve the separate integration guard repair** (2026-10-04).
+    All calibration and code generation unit tests pass, as do the runnable
+    oracle boundary tests and focused clippy. The first complete xtask test run
+    failed `every_direct_interfaces_read_is_justified`: the integrated cohesion,
+    metrics and design-lint tests were absent from the guard's table. Running
+    the unchanged HEAD guard reproduced that failure. A separate lane then
+    updated `xtask/tests/shape_walk.rs` during handoff; this worker preserved
+    that edit without writing the file. The complete locked package rerun now
+    passes nineteen tests, with the generated-crate oracle explicitly ignored
+    because it requires demo output. If ownership is confused, the worker could
+    claim another lane's repair or revert it; the report distinguishes the six
+    worker files, baseline failure evidence and the separate guard change.
+
+65. **Register intentional declared-interface reads in the shape-walk guard**
+    (integration compatibility repair). The approved check and metrics scope
+    excludes inline service shapes. Register the cohesion helper's one read, the
+    metrics tool's one read and seven fixture reads with their precise reasons.
+    Keep every existing entry and the exact inventory assertions. A separate
+    worker owns only this guard file; the calibration worker preserves its
+    change. The focused guards pass, and an isolated additional fixture read
+    fails at eight against seven. If the declared-interface scope is wrong, an
+    allowance could hide an omitted inline shape; the fresh review must compare
+    each reason with approved sections 4.4 and 6.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
