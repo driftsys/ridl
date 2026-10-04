@@ -48,7 +48,10 @@ other entry below is Accepted.
   the lint foundation design (ADR-0024): decision 1 states that a lint raised to
   `deny` exits 1 in `ridl check`, `ridl build`, `ridlc check` and `ridlc build`,
   and that of the other subcommands only the `ridl lsp` and `ridl mcp` servers
-  apply lint levels, with no effect on their exit code.
+  apply lint levels, with no effect on their exit code. Amended 2026-10-04
+  (#708): decision 8 and the two passages that repeat it, which gave the version
+  as `0.0.0`, now carry an amendment note that states what `--version` prints as
+  built.
 
 - **ADR-0011 — The provisioned-constant keyword.** ridl's `final` renamed to
   `fixed`, so both ridl and uxdl spell one concept one way; `final` removed from

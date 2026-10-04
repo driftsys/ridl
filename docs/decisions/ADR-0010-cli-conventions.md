@@ -463,10 +463,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    ([ADR-0007](ADR-0007-e1-execution.md) decision 14, amendment of 2026-09-21).
    `ridlc --version` prints that crate version. `ridl --version` prints the
    value of `RIDL_BUILD_VERSION`, which `crates/ridl/build.rs` sets to the
-   environment variable of that name when it is not empty (the release workflow
-   sets it to the `editor-v*` tag) and to the crate version otherwise. The
-   build-metadata suffix above is still not implemented, so the version still
-   does not name a commit.
+   environment variable of that name when it is not empty or whitespace only
+   (the release workflow sets it to the `editor-v*` tag) and to the crate
+   version otherwise. The build-metadata suffix above is still not implemented,
+   so the version still does not name a commit.
 
 ## Consequences
 
