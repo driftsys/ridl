@@ -690,6 +690,38 @@ mod tests {
         assert_eq!(reached, vec!["Coord", "Point", "fw.Unit"]);
     }
 
+    /// `ridlc`'s `catalog_scope` relies on this: the order of `others` does
+    /// not change the hash, because every declaration is keyed by its
+    /// qualified name.
+    #[test]
+    fn the_order_of_the_other_packages_does_not_move_the_hash() {
+        let p = Package {
+            name: "p".to_owned(),
+            decls: vec![struct_decl("Point", &["fa.A", "fb.B"])],
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                interactions: vec![signal("pos", "Point")],
+                number: 1,
+                provisional: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let fa = Package {
+            name: "fa".to_owned(),
+            decls: vec![scalar_decl("A")],
+            ..Default::default()
+        };
+        let fb = Package {
+            name: "fb".to_owned(),
+            decls: vec![scalar_decl("B")],
+            ..Default::default()
+        };
+        let reached: Vec<String> = reachable_decls(&p, &[&fa, &fb]).into_keys().collect();
+        assert_eq!(reached, vec!["Point", "fa.A", "fb.B"]);
+        assert_eq!(catalog_hash(&p, &[&fa, &fb]), catalog_hash(&p, &[&fb, &fa]));
+    }
+
     #[test]
     fn the_hash_is_stable_across_runs() {
         let (p, fw) = fixture();

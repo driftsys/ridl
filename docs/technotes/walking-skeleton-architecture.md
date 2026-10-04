@@ -147,7 +147,7 @@ that.
   catalog descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`,
   re-exports the hash as `ridl_descriptor::hash`, and copies the interface
   numbers from the IR in `ridl_descriptor::number`; and each `Region` of the
-  lowered rsdl system, where `ridlc::lower_workspace_system` embeds it (story
+  lowered rsdl system, where `ridlc` embeds it (`embed_catalog_hashes`, story
   E6.17).
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to

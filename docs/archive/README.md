@@ -272,9 +272,9 @@ provenance. Nothing here is normative — the current references live in
   system artifact's names), the rsdl reference §13 and §14, and
   [the rsdl implementation technote](../technotes/rsdl-implementation.md). Its
   Part B4 Task 9 is the record of the last piece of lane B to be built — the
-  catalog hash per region, story E6.17 (driftsys/ridl#367), embedded by
-  `ridlc::lower_workspace_system`. Read the rest as a plan: its tasks are the
-  sequence the implementation followed, not a description of the result.
+  catalog hash per region, story E6.17 (driftsys/ridl#367), embedded by `ridlc`
+  (see the rsdl implementation technote). Read the rest as a plan: its tasks are
+  the sequence the implementation followed, not a description of the result.
 - **2026-09-20-flatbuffers-codec-design.md** and
   **2026-09-20-flatbuffers-codec-plan.md** — the design note and the seven-task
   plan for the FlatBuffers payload codec, story E11.7, run as lane K of the same

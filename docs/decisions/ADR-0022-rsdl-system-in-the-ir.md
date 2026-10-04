@@ -128,12 +128,14 @@ nothing.
 
    **Note (2026-10-04, story E6.17, driftsys/ridl#367).** The field and the
    embedding exist. `Region` has `bytes hash = 3`. `ridl_sem::lower_system`
-   leaves it empty and does not depend on `ridl-descriptor`;
-   `ridlc::lower_workspace_system` lowers the system and sets each region's hash
-   with `ridl_ir::catalog_hash::catalog_hash`, over the same packages that
-   `ridl build --emit catalog` gives the catalog descriptor, so a region's hash
-   equals the hash in its catalog's descriptor. `compile_workspace` (and so
-   `ridl diff`), the system write of `ridl build` and the corpus runner call it.
+   leaves it empty and does not depend on `ridl-descriptor`. `ridlc` sets each
+   region's hash with `ridl_ir::catalog_hash::catalog_hash`, over the same
+   packages that `ridl build --emit catalog` gives the catalog descriptor, so a
+   region's hash equals the hash in its catalog's descriptor.
+   `compile_workspace` (and so `ridl diff`) and the corpus runner lower through
+   `ridlc::lower_workspace_system`; the system write of `ridl build` lowers with
+   `lower_system` and embeds the hashes through the same helpers, reusing the
+   `ridl.std` IR a code emit already checked.
 
 8. **`ridl build` writes every artifact when the only errors are RSDL-7xx, and
    still exits 1** (plan decision P-B8, confirmed by Sebastien on 2026-09-17).

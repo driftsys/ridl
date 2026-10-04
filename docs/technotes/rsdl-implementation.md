@@ -107,12 +107,14 @@ reads the facts rather than lowering again.
 **The catalog hash per region** (story E6.17, driftsys/ridl#367). rsdl §13 lists
 the catalog hash of every catalog in the region map as an input that ridl
 computes and rsdl never computes. `ridl_sem::lower_system` therefore leaves
-`Region.hash` empty and does not depend on `ridl-descriptor`;
-`ridlc::lower_workspace_system` lowers the system and then sets each region's
-hash with `ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15).
-`compile_workspace`, the system write of `ridl build` and the corpus runner all
-call it, so every lowered system the toolchain returns or writes carries its
-hashes. The hash is computed over the region's package and the same package list
+`Region.hash` empty and does not depend on `ridl-descriptor`. `ridlc` sets each
+region's hash with `ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15),
+through one helper, `embed_catalog_hashes`. `compile_workspace` and the corpus
+runner lower through `ridlc::lower_workspace_system`; the system write of
+`ridl build` lowers with `lower_system` and calls `embed_catalog_hashes`
+directly, reusing the `ridl.std` IR a code emit already checked. Every lowered
+system the toolchain returns or writes therefore carries its hashes. The hash is
+computed over the region's package and the same package list
 `ridl build --emit catalog` gives `ridl_descriptor::lower`, built by one helper,
 `catalog_scope`: every checked package of the workspace, then `ridl.std` when a
 package of the workspace references it. A region's hash therefore equals the
@@ -149,10 +151,10 @@ renders byte for byte as it did before.
 The region map is not compared, so a changed region hash lists no system change.
 A change to an interface or a type the hash covers is reported by the contract
 comparison instead. The hash also covers each interface's number and provisional
-flag. A frozen number changed by hand is reported (as a declaration removed and
-a declaration added), but a change to a provisional number or to the provisional
-flag alone — for example `ridl lock` freezing a provisional number — changes the
-hash with no `ridl diff` output (driftsys/ridl#700).
+flag. A frozen number changed by hand, or a frozen number made provisional, is
+reported (as a declaration removed and a declaration added). A provisional
+number that changes, or that `ridl lock` freezes, changes the hash with no
+`ridl diff` output (driftsys/ridl#700).
 
 Both sides must be source trees. A `.ir.json` snapshot carries no system, so
 `ridl diff .ridl/baseline .` lists no system change rather than reporting the

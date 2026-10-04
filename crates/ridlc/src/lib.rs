@@ -834,7 +834,7 @@ pub fn run_build_with(
         // leaving it to the target language's own import statement, so each
         // reads this (`write_emits`'s doc comment). `Emit::Catalog` is a code
         // emit, so for the catalog descriptor `ridl.std` is here exactly when
-        // `references_std` holds, the set `lower_workspace_system` hashes each
+        // `references_std` holds, the set `embed_catalog_hashes` hashes each
         // region over.
         let others = catalog_scope(&packages, std_ir.as_ref());
 

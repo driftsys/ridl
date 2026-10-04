@@ -383,10 +383,9 @@ catalog's hash (rsdl §13); Epic 16 computes it, after Epic 15 has given every
 interface its number. E6.16 lowers every other fact, and E6.17 adds the hash.
 
 **E6.17 landed on 2026-10-04** (driftsys/ridl#367). `Region` carries
-`bytes hash = 3`; `ridlc::lower_workspace_system` embeds in each region the hash
-the catalog descriptor writes for that catalog, and the rsdl lowering leaves the
-field empty ([ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision
-7).
+`bytes hash = 3`; `ridlc` embeds in each region the hash the catalog descriptor
+writes for that catalog, and the rsdl lowering leaves the field empty
+([ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7).
 
 | ID    | Story                                                                                                                                                                                                                                                                                                                      | Done when                                                                                                             | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
