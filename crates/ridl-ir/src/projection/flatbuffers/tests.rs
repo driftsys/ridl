@@ -834,8 +834,20 @@ fn a_bare_name_resolves_in_the_home_package_not_the_root() {
     // Both packages declare `Inner`; which one a bare `Inner` names depends
     // on the home it was written in, not on the package the bundle is
     // rooted at.
-    let root = package("p", vec![decl("Inner", int_type(v2::IntWidth::U8))]);
-    let imported = package("q", vec![decl("Inner", int_type(v2::IntWidth::U64))]);
+    let root = package(
+        "p",
+        vec![
+            decl("Inner", int_type(v2::IntWidth::U8)),
+            decl("RootOnly", int_type(v2::IntWidth::U8)),
+        ],
+    );
+    let imported = package(
+        "q",
+        vec![
+            decl("Inner", int_type(v2::IntWidth::U64)),
+            decl("OtherOnly", int_type(v2::IntWidth::U64)),
+        ],
+    );
     let others = [&imported];
     let packages = Packages {
         package: &root,
@@ -860,4 +872,12 @@ fn a_bare_name_resolves_in_the_home_package_not_the_root() {
     assert_eq!(packages.resolve(&root, "q.Inner").unwrap().1.name, "q");
     assert!(packages.resolve(&root, "r.Inner").is_none());
     assert!(packages.resolve(&root, "q.Nowhere").is_none());
+
+    // A bare name is looked up only in the home package: a name that only
+    // the other package declares is not found from the root home, and a name
+    // that only the root declares is not found from the other home.
+    assert!(packages.resolve(&root, "OtherOnly").is_none());
+    assert!(packages.resolve(&imported, "RootOnly").is_none());
+    assert!(packages.resolve(&root, "RootOnly").is_some());
+    assert!(packages.resolve(&imported, "OtherOnly").is_some());
 }

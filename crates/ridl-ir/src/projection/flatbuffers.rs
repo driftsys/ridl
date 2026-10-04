@@ -309,8 +309,10 @@ impl<'a> Packages<'a> {
     /// against. `home` is the package the reference was written in. The
     /// projection resolves every name through this, and so does
     /// `ridl-descriptor`, so the two agree on which names resolve;
-    /// `codegen::resolve::Scope::resolve` and the wire backends'
-    /// `resolve_reference` are still separate copies of the same walk.
+    /// `codegen::resolve::Scope::resolve` and
+    /// `ridl-backend-flatbuffers`'s `resolve_reference` are still separate
+    /// walks. The backend's takes no home, and it looks up a qualified name
+    /// only in the other packages.
     pub fn resolve(
         self,
         home: &'a v2::Package,
