@@ -2205,6 +2205,7 @@ dependencies = [
  "ridl-syntax",
  "rowan",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
 ]

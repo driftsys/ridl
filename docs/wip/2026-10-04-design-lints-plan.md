@@ -737,6 +737,14 @@ reserved codes, corpus budgets, four PRs and approval stages.
    internal callers would disagree; alias parity prevents this with no new
    `ridl` subcommand or flag.
 
+8. **Task 5: retain the canonical JSON reference walker in `ridlc`** (approved
+   ownership extension, 2026-10-04). Promote `serde` from a development
+   dependency and add `serde_json` as a workspace dependency of `ridlc`,
+   updating its lockfile entry. This preserves the released reference traversal
+   instead of introducing an unrelated typed-walker rewrite. The cost is two
+   direct library dependencies; both already exist in the workspace dependency
+   graph.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
