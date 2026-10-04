@@ -1,5 +1,5 @@
 // The catalog descriptor: what a catalog contains and how it is numbered
-// (docs/wip/2026-09-13-runtime-descriptors-design.md, D-3, D-4, D-6).
+// (docs/design/catalog-descriptor.md, D-3, D-4, D-6).
 //
 // Evolution is append-only. A field is only ever added at the END of its
 // table, so every field id already written keeps its meaning. Never remove,

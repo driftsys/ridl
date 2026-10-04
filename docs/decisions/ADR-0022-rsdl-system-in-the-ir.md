@@ -39,7 +39,9 @@ rsdl §13 states the lowering as facts and leaves their carrier open: "a
 runtime's descriptor is an emitter over them and is specified with the runtime".
 The toolchain still needed one carrier now, because three consumers already
 exist — `ridl build`, `ridl diff` at the system, and the corpus snapshots — and
-because the runtime descriptors design reads the facts rather than the source.
+because
+[the runtime descriptors design](../archive/2026-09-13-runtime-descriptors-design.md)
+reads the facts rather than the source.
 
 Two properties of the system made the choice harder than "add fields to the
 package IR". A system is workspace-wide: one `system` per workspace (rsdl §1.5),
