@@ -51,6 +51,56 @@ fn source_lines(dir: &Path) -> usize {
 }
 
 #[test]
+fn the_corpus_contains_exactly_the_selected_workspaces() {
+    let names: Vec<_> = corpus_dirs()
+        .iter()
+        .map(|dir| {
+            dir.file_name()
+                .expect("a corpus directory name")
+                .to_str()
+                .expect("a UTF-8 corpus directory name")
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(names, ["mavlink", "ros2", "vss"]);
+}
+
+#[test]
+fn source_lines_counts_physical_lines_in_nested_source_files() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the current time follows the epoch")
+        .as_nanos();
+    let root =
+        std::env::temp_dir().join(format!("ridl-source-lines-{}-{unique}", std::process::id()));
+    let nested = root.join("nested/deeper");
+    std::fs::create_dir_all(&nested).expect("create the line-count fixture");
+    std::fs::write(
+        root.join("types.typl"),
+        "\n// A comment\npackage fixture\ntype Value : integer\n",
+    )
+    .expect("write the type fixture");
+    std::fs::write(
+        root.join("nested/contract.ridl"),
+        "// A comment\n\ninterface Contract {}\n",
+    )
+    .expect("write the interface fixture");
+    std::fs::write(nested.join("system.rsdl"), "// A comment\n\n")
+        .expect("write the system fixture");
+    std::fs::write(
+        nested.join("ignored.txt"),
+        "one\ntwo\nthree\n\n// ignored\n",
+    )
+    .expect("write the ignored fixture");
+
+    let total = source_lines(&root);
+    let nested_total = source_lines(&root.join("nested"));
+    std::fs::remove_dir_all(&root).expect("remove the line-count fixture");
+    assert_eq!(total, 9, "count every source line and ignore other files");
+    assert_eq!(nested_total, 5, "count all supported nested source files");
+}
+
+#[test]
 fn every_corpus_workspace_checks_without_an_error() {
     let dirs = corpus_dirs();
     assert!(!dirs.is_empty(), "the evaluation corpus must not be empty");

@@ -250,3 +250,18 @@ limitations. Protocol documentation is cited as evidence, not translated.
 These definitions retain their upstream licence within this MIT repository.
 They are evaluation data and are not included in the published compiler crates.
 -------------------------------------------------------------------------------
+
+
+-------------------------------------------------------------------------------
+COVESA VSS evaluation corpus — modified RIDL translations
+Path: evals/corpus/vss/
+Upstream: COVESA/vehicle_signal_specification — https://github.com/COVESA/vehicle_signal_specification
+Revision: 923692329b46bd70cda88137030b662af2765770
+Licence: MPL-2.0 for all files under evals/corpus/vss/.
+
+The corpus's LICENSE is a byte-exact copy of the upstream MPL-2.0 licence.
+Its PROVENANCE.md records the selected definitions, complete source-to-output
+mappings, instance expansion, licence evidence and translation limitations.
+These files retain their upstream file-level licence within this MIT repository.
+They are evaluation data and are not included in the published compiler crates.
+-------------------------------------------------------------------------------

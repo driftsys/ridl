@@ -803,6 +803,33 @@ execution.
     exact sites and representation choices. If this review boundary is wrong,
     the corpus would require another preservation review.
 
+12. **Freeze the third port before translation** (Task 3). The definitions are
+    pinned to `923692329b46bd70cda88137030b662af2765770`. The mandatory selected
+    subtree includes its entire include closure and all eight declared station
+    instances. Every selected input carries MPL-2.0; the port remains MPL-2.0
+    inside this repository. The optional complete second subtree adds 608
+    upstream physical lines before translation, so it is excluded under the
+    1,000-line budget forecast rather than partially selected or stubbed. The
+    complete source-to-output mapping and representation limits are recorded in
+    the third port's provenance. If this forecast is too conservative, the cost
+    is a smaller third corpus, which may be extended only by an explicit subset
+    decision and another independent preservation review. No candidate check
+    runs on any actual corpus before the Task 4 rubrics are committed.
+
+13. **Complete the third port's infrastructure and preservation review** (Task
+    3). The initial output allowlist omitted the 14 member manifests the
+    workspace loader requires. The controller corrected the allowlist to 31
+    exact files, preserving the frozen 14 branch packages and source subset. The
+    external porter completed that corrected brief. Independent review checked
+    all 31 signals, 30 setter commands and 14 interfaces, sampled at least 20
+    declarations field by field, and accepted every recorded deviation. The
+    controller accepted that review before guard completion. The reviewed source
+    contains 759 physical lines; the combined corpus contains 4,845. The guard
+    enforces compilation, provenance, exact selected directories and
+    physical-line budgets. Field preservation is established by independent
+    review, not by a new golden copy of every declaration. If this boundary is
+    wrong, another preservation review is required before changing the port.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

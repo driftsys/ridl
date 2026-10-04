@@ -1,0 +1,15 @@
+package vehicle.cabin.hvac.station.row4
+
+// Modified VSS-to-RIDL translation; see the workspace PROVENANCE.md and LICENSE.
+// Licence repetition from spec/Cabin/HVAC.vspec for its documented instance expansion.
+// Copyright (c) 2016 Contributors to COVESA
+//
+// This program and the accompanying materials are made available under the
+// terms of the Mozilla Public License 2.0 which is available at
+// https://www.mozilla.org/en-US/MPL/2.0/
+//
+// SPDX-License-Identifier: MPL-2.0
+// Instance expansion of HVAC.vspec Station.instances: Vehicle.Cabin.HVAC.Station.Row4.
+// This hierarchy node has no authored leaves.
+interface Row4 {
+}
