@@ -851,11 +851,11 @@ named.
    code emit ran.** Reason: issue #367 asks for the hash the descriptor writes,
    and the hash can depend on `ridl.std` (D6 found this for the Rust face). Cost
    if wrong: one memoized `ridl.std` check in a build that emits only the IR.
-3. **`compile_workspace` embeds the hashes on every call**, so the language
-   server, `ridl-mcp`, `ridl lock` and `ridl diff` compute them although none of
-   them reads the hash. Reason: every lowered system the toolchain returns then
-   carries its hashes, as the archived rsdl plan's Part B4 Task 9 required. Cost
-   if wrong: one SHA-256 per region per call (#701).
+3. **`compile_workspace` embeds the hashes on every call**, so `ridl-mcp` and
+   `ridl lock` compute them although neither reads the hash. Reason: every
+   lowered system the toolchain returns then carries its hashes, as the archived
+   rsdl plan's Part B4 Task 9 required. Cost if wrong: one SHA-256 per region
+   per call (#701).
 4. **`ridl_sem::lower_system` stays public and returns regions with an empty
    hash.** Reason: ADR-0022 decision 7 requires the rsdl lowering not to compute
    the hash. A test pins the empty field. Cost if wrong: a caller that uses
@@ -879,10 +879,11 @@ named.
    active work needs the note in `docs/wip/`. Cost if wrong: the story that
    plans the system descriptor starts from the archive instead of `docs/wip/`.
 8. **The archived design's sentence that `flatc --json` gives the same view as
-   `ridl describe` is left as written.** The archive holds the files verbatim,
-   and the design record states the difference (alphabetical keys, and `null`
-   for an absent `timing`, `min_us` or `max_us`). That covers the item on #697.
-   Cost if wrong: none; the archive records what was true when it was written.
+   `ridl describe` is left as written.** The archive holds the files verbatim
+   apart from relative links, and the design record states the difference
+   (alphabetical keys, and `null` for an absent `timing`, `min_us` or `max_us`).
+   That covers the item on #697. Cost if wrong: none; the archive records what
+   was true when it was written.
 9. **The backlog keeps its review date and counts of 3 October 2026. A note
    records the E16 issues that have closed since then, and the E16 rows are
    marked landed in place.** Reason: the file's own refresh rule changes the
@@ -892,6 +893,6 @@ named.
     on #699**, as in D6 and D7. Pass 2's Important finding (records that named
     the wrong function for the build's system write) was fixed after pass 2, and
     a docs-seat quick pass reviewed the fix. Its one Minor finding was fixed in
-    0660adf3 without another pass. Cost if wrong: a few lines of prose that no
-    seat reviewed.
+    #699 without another pass. Cost if wrong: a few lines of prose that no seat
+    reviewed.
 11. **Debt from the review: #701.** The `ridl diff` gap is #700.
