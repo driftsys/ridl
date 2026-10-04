@@ -9,9 +9,12 @@
 //! The descriptor defines no wire shape (§4 answer 6): only a payload that is
 //! one named type is sized, through the projections —
 //! `ridl_ir::projection::flatbuffers::max_size` (ADR-0019 decision 8) in
-//! `flatbuffers`, and ADR-0017's projection in `proto3`. A request of zero or
-//! several parameters, an inline `T | E` reply and a stream payload (§4
-//! answer 10) are absent until a record defines their encoding.
+//! `flatbuffers`, and ADR-0017's projection in `proto3`. Both sizers are
+//! placeholders until Tasks 6 and 7 of the catalog descriptor plan land: this
+//! module holds the context, the leaf model and the string capacity they
+//! build on. A request of zero or several parameters, an inline `T | E` reply
+//! and a stream payload (§4 answer 10) are absent until a record defines
+//! their encoding.
 
 pub(crate) mod flatbuffers;
 pub(crate) mod proto3;
@@ -29,12 +32,32 @@ use crate::{Encoding, UnboundedCause};
 /// projection's view of the same scope.
 pub struct Ctx<'a> {
     packages: Packages<'a>,
+    /// Every package of the scope, the root first, then `others` in order.
+    scope: Vec<&'a Package>,
+    /// For each package of `scope`, at the same position, the packages
+    /// beside it: what `packages_for` roots a `Packages` with.
+    others_of: Vec<Vec<&'a Package>>,
 }
 
 impl<'a> Ctx<'a> {
     pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self {
+        let scope: Vec<&'a Package> = std::iter::once(package)
+            .chain(others.iter().copied())
+            .collect();
+        let others_of = scope
+            .iter()
+            .map(|home| {
+                scope
+                    .iter()
+                    .copied()
+                    .filter(|candidate| candidate.name != home.name)
+                    .collect()
+            })
+            .collect();
         Self {
             packages: Packages { package, others },
+            scope,
+            others_of,
         }
     }
 
@@ -47,11 +70,28 @@ impl<'a> Ctx<'a> {
         self.packages.resolve(home, name)
     }
 
-    /// The projection's view of the scope, for `max_size`. Its `package` is
-    /// the package the catalog is built for: the home of a payload's type
-    /// name.
+    /// The projection's view of the scope, rooted at the package the catalog
+    /// is built for: the home of a payload's type name.
     pub fn packages(&self) -> Packages<'a> {
         self.packages
+    }
+
+    /// The projection's view of the scope rooted at `declaring`, the package
+    /// [`Ctx::resolve`] returned a declaration with. `max_size` resolves a
+    /// bare name inside a declaration against the `package` of the
+    /// `Packages` it is given, so a declaration from an imported package is
+    /// sized with this, not with [`Ctx::packages`] — the way the codegen
+    /// lowering roots its bound (`Lowering::payload` in `ridl-ir`). `None`
+    /// when `declaring` is not a package of this scope.
+    pub fn packages_for(&self, declaring: &Package) -> Option<Packages<'_>> {
+        let position = self
+            .scope
+            .iter()
+            .position(|candidate| candidate.name == declaring.name)?;
+        Some(Packages {
+            package: self.scope[position],
+            others: &self.others_of[position],
+        })
     }
 }
 
@@ -100,6 +140,10 @@ pub enum SizeState {
 /// The state of the named type `type_name` under `encoding`: `None` when
 /// this toolchain computes no state (the `repr(C)` layout is undefined, a
 /// name does not resolve, or the projection has no root form for the type).
+///
+/// The `Proto3` and `FlatBuffers` arms reach placeholders that panic until
+/// Tasks 6 and 7 of the catalog descriptor plan replace them; no caller
+/// outside this module's tests exists before then. The `ReprC` arm is final.
 pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
     match encoding {
         Encoding::Proto3 => proto3::state(type_name, ctx),
@@ -110,9 +154,10 @@ pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<
 
 /// The byte capacity of a `string`: its bound in scalar values times four
 /// (release-scope design §3.11). `None` when the constraint carries no
-/// `len_max`: the FlatBuffers projection charges nothing for a string without
-/// a bound, and this function agrees with it on both the multiplier and the
-/// absence (`string_max_bytes_agrees_with_the_flatbuffers_projection`). The
+/// `len_max`: the FlatBuffers projection answers `None` for a whole type that
+/// holds a string without a bound, and this function agrees with it on both
+/// the multiplier and the absence
+/// (`string_max_bytes_agrees_with_the_flatbuffers_projection`). The
 /// compiler writes typl §4.4's `[0..256]` default into `len_max`, so a
 /// compiled package never reaches the `None`. No `match` narrowing (driver §4
 /// answer 7; #665).
@@ -257,8 +302,8 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
 }
 
 /// A bare primitive at a field position. A bare `string` or `bytes` carries
-/// no length bound, and the FlatBuffers projection charges nothing without
-/// one, so neither has a leaf. The compiler keeps both out of a field
+/// no length bound, and the FlatBuffers projection answers `None` for a whole
+/// type that holds one, so neither has a leaf. The compiler keeps both out of a field
 /// position (TYPL-208); a map key gets typl §4.4–§4.5's `[0..256]` default as
 /// an inline scalar, which `leaf_of_type_def` sizes.
 #[allow(dead_code)]
@@ -271,40 +316,38 @@ pub(crate) fn leaf_of_primitive<'a>(primitive: i32) -> Option<Leaf<'a>> {
     }
 }
 
+/// A named or inline scalar. The backends project it by its width when one
+/// is set (`proto_scalar` in the proto backend, `scalar_charge` in the
+/// FlatBuffers projection), and by its backing otherwise.
+#[allow(dead_code)]
 fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
-    let int_width = match def.width {
-        Some(type_def::Width::IntWidth(w)) => {
-            IntWidth::try_from(w).unwrap_or(IntWidth::Unspecified)
-        }
-        _ => IntWidth::Unspecified,
+    let width = match def.width {
+        Some(type_def::Width::IntWidth(w)) => Some(Scalar::Int(
+            IntWidth::try_from(w).unwrap_or(IntWidth::Unspecified),
+        )),
+        Some(type_def::Width::FloatWidth(w)) => Some(Scalar::Float(
+            FloatWidth::try_from(w).unwrap_or(FloatWidth::Unspecified),
+        )),
+        None => None,
     };
-    let float_width = match def.width {
-        Some(type_def::Width::FloatWidth(w)) => {
-            FloatWidth::try_from(w).unwrap_or(FloatWidth::Unspecified)
-        }
-        _ => FloatWidth::Unspecified,
-    };
+    if let Some(scalar) = width {
+        return Some(Leaf::Scalar(scalar));
+    }
     match def.backing.as_ref()?.kind.as_ref()? {
         backing::Kind::Primitive(primitive) => match PrimitiveType::try_from(*primitive).ok()? {
             PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
-            PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(int_width))),
-            PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(float_width))),
+            PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified))),
+            PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified))),
             PrimitiveType::String => string_max_bytes(def.constraint.as_ref()).map(Leaf::Blob),
             // Like a string, a `bytes` without a `len_max` is unsizable, as
             // the FlatBuffers projection answers for the same type.
             PrimitiveType::Bytes => def.constraint.as_ref()?.len_max.map(Leaf::Blob),
             PrimitiveType::Unspecified => None,
         },
-        // A unit-backed scalar carries a derived width (typl §5.1), and the
-        // backends project it by that width: integer when an integer width is
-        // set, float when a float width is set. Without a width the proto
-        // backend falls back to `string`, which has no bound, so there is no
-        // leaf.
-        backing::Kind::Unit(_) => match def.width {
-            Some(type_def::Width::IntWidth(_)) => Some(Leaf::Scalar(Scalar::Int(int_width))),
-            Some(type_def::Width::FloatWidth(_)) => Some(Leaf::Scalar(Scalar::Float(float_width))),
-            None => None,
-        },
+        // A unit-backed scalar carries a derived width (typl §5.1), handled
+        // above. Without a width the proto backend falls back to `string`,
+        // which has no bound, so there is no leaf.
+        backing::Kind::Unit(_) => None,
     }
 }
 
@@ -466,9 +509,13 @@ mod tests {
 
     #[test]
     fn an_unbounded_string_or_bytes_is_unsizable_as_in_the_projection() {
-        // Each shape the projection answers `None` for has no leaf here, so
-        // the proto3 column cannot claim a bound the FlatBuffers column
-        // refuses for the same type.
+        // For a string or bytes, the leaf model answers `None` exactly where
+        // the projection answers `None` for the type that holds it, so the
+        // proto3 column cannot claim a bound the FlatBuffers column refuses
+        // for the same type. The relation is not symmetric elsewhere: for an
+        // unspecified integer or float width, and for `EnumSet(Unspecified)`,
+        // the projection answers `None` while proto3 emits `int64` or
+        // `double`, so a leaf exists there.
         let string_no_bound = decl("S", Some(decl::Kind::TypeDef(string_def(None))));
         let bytes_no_bound = decl("B", Some(decl::Kind::TypeDef(bytes_def(None))));
         let bytes_bound = decl("B32", Some(decl::Kind::TypeDef(bytes_def(Some(32)))));
@@ -717,6 +764,37 @@ mod tests {
             "the proto backend emits `string` for a unit without a width"
         );
         assert!(leaf(&TypeDef::default()).is_none(), "no backing");
+        assert!(
+            leaf(&type_def(
+                prim(PrimitiveType::Bytes),
+                None,
+                Some(constraint(None, None))
+            ))
+            .is_none(),
+            "a constraint without `len_max`: unsizable"
+        );
+        assert!(
+            matches!(
+                leaf(&type_def(
+                    prim(PrimitiveType::Integer),
+                    Some(type_def::Width::IntWidth(99)),
+                    None
+                )),
+                Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified)))
+            ),
+            "an integer width tag the IR does not define falls back to Unspecified"
+        );
+        assert!(
+            matches!(
+                leaf(&type_def(
+                    prim(PrimitiveType::Float),
+                    Some(type_def::Width::FloatWidth(99)),
+                    None
+                )),
+                Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified)))
+            ),
+            "a float width tag the IR does not define falls back to Unspecified"
+        );
     }
 
     #[test]
@@ -744,6 +822,14 @@ mod tests {
                 decl("fixed", Some(decl::Kind::FixedDef(FixedDef::default()))),
                 decl("gone", Some(decl::Kind::ReservedSlot(Reserved::default()))),
                 decl("Untyped", None),
+                decl("Empty", Some(decl::Kind::EnumDef(enum_def(&[])))),
+                decl(
+                    "OddFlags",
+                    Some(decl::Kind::EnumSetDef(EnumSetDef {
+                        width: 99,
+                        ..Default::default()
+                    })),
+                ),
             ],
         );
         let other = package(
@@ -786,6 +872,23 @@ mod tests {
             leaf_of_name("Flags", &home, &ctx),
             Some(Leaf::EnumSet(IntWidth::U8))
         ));
+        assert!(
+            matches!(
+                leaf_of_name("Empty", &home, &ctx),
+                Some(Leaf::Enum {
+                    negative: false,
+                    max_magnitude: 0
+                })
+            ),
+            "an enum with no member has magnitude 0"
+        );
+        assert!(
+            matches!(
+                leaf_of_name("OddFlags", &home, &ctx),
+                Some(Leaf::EnumSet(IntWidth::Unspecified))
+            ),
+            "a width tag the IR does not define falls back to Unspecified"
+        );
         for name in [
             "MAX", "speed", "tick", "go", "ask", "fixed", "gone", "Untyped",
         ] {
@@ -984,9 +1087,144 @@ mod tests {
 
     #[test]
     fn the_repr_c_column_is_absent() {
-        let package = package("p", vec![]);
+        // `Point` resolves, so a `ReprC` arm routed to a sizer would reach
+        // that sizer. Both sizers are placeholders that panic until Tasks 6
+        // and 7 replace them, so such a routing fails this test.
+        let package = package(
+            "p",
+            vec![decl(
+                "Point",
+                Some(decl::Kind::StructDef(one_field_struct(primitive(
+                    PrimitiveType::Boolean,
+                )))),
+            )],
+        );
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(size_state("Point", &ctx, Encoding::ReprC), None);
+    }
+
+    #[test]
+    fn max_size_over_an_imported_declaration_is_rooted_at_its_package() {
+        // `q.Thing { f: Inner }` names q's `Inner`, a one-boolean struct;
+        // the root package declares a wider `Inner`. A `Packages` rooted at
+        // the root would size q's `Thing` with the root's `Inner`.
+        let root = package(
+            "p",
+            vec![
+                decl(
+                    "Inner",
+                    Some(decl::Kind::StructDef(one_field_struct(FieldType {
+                        optional: false,
+                        kind: Some(field_type::Kind::InlineScalar(Box::new(string_def(Some(
+                            100,
+                        ))))),
+                    }))),
+                ),
+                decl(
+                    "OnlyInRoot",
+                    Some(decl::Kind::StructDef(StructDef::default())),
+                ),
+            ],
+        );
+        let imported = package(
+            "q",
+            vec![
+                decl(
+                    "Thing",
+                    Some(decl::Kind::StructDef(one_field_struct(named("Inner")))),
+                ),
+                decl(
+                    "Inner",
+                    Some(decl::Kind::StructDef(one_field_struct(primitive(
+                        PrimitiveType::Boolean,
+                    )))),
+                ),
+            ],
+        );
+        let others = [&imported];
+        let ctx = Ctx::new(&root, &others);
+
+        let (thing, declaring) = ctx.resolve(&root, "q.Thing").expect("q.Thing resolves");
+        assert_eq!(declaring.name, "q");
+        let rooted = ctx.packages_for(declaring).expect("q is in scope");
+        assert_eq!(rooted.package.name, "q");
+        assert_eq!(rooted.others.len(), 1);
+        assert_eq!(rooted.others[0].name, "p");
+
+        let expected = max_size(
+            Packages {
+                package: &imported,
+                others: &[&root],
+            },
+            thing,
+        )
+        .expect("a one-boolean struct inside a struct is bounded");
+        assert_eq!(max_size(rooted, thing), Some(expected));
+        assert_ne!(
+            max_size(ctx.packages(), thing),
+            Some(expected),
+            "rooted at p, the bare `Inner` is p's wider struct"
+        );
+
+        let at_root = ctx.packages_for(&root).expect("the root is in scope");
+        assert_eq!(at_root.package.name, "p");
+        assert_eq!(at_root.others.len(), 1);
+        assert!(
+            ctx.packages_for(&package("r", vec![])).is_none(),
+            "a package outside the scope"
+        );
+        assert!(
+            leaf_of_name("OnlyInRoot", &imported, &ctx).is_none(),
+            "a bare name only the root declares does not resolve from q"
+        );
+    }
+
+    #[test]
+    fn an_inline_composite_leaf_carries_the_package_of_its_field() {
+        let root = package("p", vec![]);
+        let imported = package(
+            "q",
+            vec![decl(
+                "Point",
+                Some(decl::Kind::StructDef(StructDef::default())),
+            )],
+        );
+        let others = [&imported];
+        let ctx = Ctx::new(&root, &others);
+        let field = |kind: field_type::Kind| FieldType {
+            optional: false,
+            kind: Some(kind),
+        };
+        let tuple = field(field_type::Kind::Tuple(TupleType {
+            fields: vec![TupleField {
+                name: "x".to_owned(),
+                r#type: Some(named("Point")),
+            }],
+        }));
+        let array = field(field_type::Kind::Array(Box::new(ArrayType {
+            element: Some(Box::new(named("Point"))),
+            min: 0,
+            max: 4,
+        })));
+        let map = field(field_type::Kind::Map(Box::new(MapType {
+            key: Some(Box::new(named("Point"))),
+            value: Some(Box::new(named("Point"))),
+            min: 0,
+            max: 4,
+        })));
+
+        assert!(matches!(
+            leaf_of_field_type(&tuple, &imported, &ctx),
+            Some(Leaf::Tuple { home, .. }) if home.name == "q"
+        ));
+        assert!(matches!(
+            leaf_of_field_type(&array, &imported, &ctx),
+            Some(Leaf::Array { home, .. }) if home.name == "q"
+        ));
+        assert!(matches!(
+            leaf_of_field_type(&map, &imported, &ctx),
+            Some(Leaf::Map { home, .. }) if home.name == "q"
+        ));
     }
 }
