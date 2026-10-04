@@ -4838,12 +4838,11 @@ fn rename_leaves_an_aliased_doc_link_intact() {
     let (client, server) = start(uri_of(dir.path()));
 
     // The aliased link resolves: it is a reference of `Speed`.
-    let found = references_at(&client, 9, veh_uri.clone(), pos(2, 6), false)
-        .expect("references are found");
+    let found =
+        references_at(&client, 9, veh_uri.clone(), pos(2, 6), false).expect("references are found");
     assert!(
-        found
-            .iter()
-            .any(|location| location.uri == app_uri && location.range == range_of(app_text, "Velocity", 1)),
+        found.iter().any(|location| location.uri == app_uri
+            && location.range == range_of(app_text, "Velocity", 1)),
         "the `[Velocity]` link is a reference of `Speed`: {found:?}"
     );
 
