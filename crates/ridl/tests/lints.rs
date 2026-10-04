@@ -209,6 +209,72 @@ fn baseline_ignores_deny() {
     );
 }
 
+/// The `signal` with no timing annotation of `SOURCE`, beside a command
+/// with a satisfiable precondition that `ridl test` samples.
+const SOURCE_WITH_CONTRACT: &str = "package demo\n\ntype Speed: integer [0..300]\n\n\
+                                    interface Sensor {\n  signal speed: Speed\n  \
+                                    command setRange(min: Speed, max: Speed) [\n    \
+                                    require min < max\n  ] @[..50ms]\n}\n";
+
+/// `ridl test` compiles the workspace without applying levels (spec D-8): a
+/// lint at `deny` does not stop the run, which exits 2 on a compile error.
+#[test]
+fn test_ignores_deny() {
+    let dir = TempDir::new("test-deny");
+    dir.write(
+        "ridl.toml",
+        &format!("[package]\nname = \"demo\"\nversion = \"1.0.0\"\n{DENY}"),
+    );
+    dir.write("sensor.ridl", SOURCE_WITH_CONTRACT);
+    let root = dir.path();
+    // The fixture draws the denied lint: `ridl check` exits 1 over it.
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the fixture draws the denied lint:\n{stderr}");
+
+    let (code, stdout, stderr) = ridl(&["test".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "a lint at deny does not change the test run:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("Sensor.setRange.require[0]"),
+        "the contract is sampled:\n{stdout}"
+    );
+}
+
+/// Entering at a workspace member loads the member alone (spec D-9), so the
+/// root's `[lints]` does not apply: the root's `deny` is an exit 1 from the
+/// root, and from the member RIDL-100 stays at its default Warning, exit 0.
+#[test]
+fn member_entry_ignores_root_lints() {
+    let dir = TempDir::new("member-entry");
+    dir.write(
+        "ridl.toml",
+        &format!("[workspace]\nmembers = [\"sensor\"]\n{DENY}"),
+    );
+    dir.write(
+        "sensor/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("sensor/sensor.ridl", SOURCE);
+    let root = dir.path();
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "from the root, the root's deny applies:\n{stderr}");
+
+    let member = root.join("sensor");
+    let (code, _, stderr) = ridl(&["check".as_ref(), member.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "from the member, the root's table is ignored:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("warning[RIDL-100]"),
+        "the lint is at its default Warning:\n{stderr}"
+    );
+}
+
 #[test]
 fn allow_is_absent_in_text_and_json() {
     let dir = TempDir::new("allow");
