@@ -404,7 +404,7 @@ the corpus by anyone writing a rubric before this task is committed.
 
 **Interfaces:** Produces `pub(crate) fn words(ident: &str) -> Vec<String>`.
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
   - `words_split_case_digits_and_underscores` (Review Focus 3):
     `words("GPSFix") == ["gps","fix"]`, `words("HTTP2Port") == ["http","port"]`,
     `words("battery_SoC") == ["battery","soc"]`,
@@ -417,13 +417,13 @@ the corpus by anyone writing a rubric before this task is committed.
   - `abbreviation_variant_uses_its_own_span`: a variant `Temp` and identifier
     `Temperature` in one package report at the abbreviated variant token, rather
     than its enum declaration; assert the primary byte range.
-- [ ] **Step 2: Run** — expect FAIL.
-- [ ] **Step 3: Add the Info row**, the `expected` pair and the book row.
-- [ ] **Step 4: Implement** §4.2 over every declared identifier the `SiteIndex`
+- [x] **Step 2: Run** — expect FAIL.
+- [x] **Step 3: Add the Info row**, the `expected` pair and the book row.
+- [x] **Step 4: Implement** §4.2 over every declared identifier the `SiteIndex`
       can locate (types, fields, enum values, interfaces, members, parameters).
-- [ ] **Step 5: Run** `cargo test -p ridlc -p ridl-core -p ridl-cli` — expect
+- [x] **Step 5: Run** `cargo test -p ridlc -p ridl-core -p ridl-cli` — expect
       PASS.
-- [ ] **Step 6: Commit** —
+- [x] **Step 6: Commit** —
       `feat(ridlc): add the inconsistent-abbreviation lint`.
 
 ### Task 8: `duplicate-shape`
@@ -802,6 +802,61 @@ reserved codes, corpus budgets, four PRs and approval stages.
     the command driver, and the binary's JSON report and exit code. Without this
     boundary check, editor tests could pass while the command line dropped
     findings or failed to apply levels. Existing CLI tests remain unchanged.
+
+16. **Task 7: enumerate identifiers from the existing site index** (approved
+    ownership extension, 2026-10-04). Add a read-only `identifiers` method to
+    `sites.rs`, returning `IdSite` values with package, qualified identity,
+    token name and span. This preserves the lookups and standard-package
+    exclusion rather than duplicating AST or IR traversal. Only the token name
+    is split into words; package and owner names establish deterministic site
+    order. A changed identity or span could misreport the abbreviated site;
+    category and exact-span integration tests cover that risk.
+17. **Task 7: preserve a final single capital in a word** (2026-10-04). ASCII
+    case splitting keeps a final single capital with its preceding word, so
+    `SoC` becomes `soc`, as the reviewed test requires. Acronym-to-title
+    boundaries split `GPSFix` into `gps` and `fix`; digits and underscores
+    separate words and are dropped. This general rule uses no dictionary or
+    exception list. The cost is that a final single capital is not a separate
+    word; the shared helper's explicit examples pin this interpretation.
+18. **Task 7: emit one finding per site and matching word pair** (2026-10-04).
+    Repeated occurrences of one word in an identifier are deduplicated. Distinct
+    longer matches each produce a finding, in lexical word order, with the
+    representative identifier chosen by qualified-site order. This makes
+    findings reproducible and preserves every qualifying prefix pair. The cost
+    is multiple findings when a short word has multiple expansions; the
+    repeated-word and multiple-expansion test covers that behavior.
+19. **Task 7: synchronize the catalogue's derived records** (approved ownership
+    extension, 2026-10-04). TYPL-223 is registered at provisional Info in the
+    catalogue, expected lint set, book table and typl reference table. The SARIF
+    snapshot adds only that rule and adjusts its later indices. The family
+    overview's existing typl §16.3 and book pointer already covers this row; its
+    required sections were checked and need no additional edit. Stale derived
+    records would fail the existing catalogue guards.
+20. **Task 7: correct the pipeline comments** (approved documentation-only
+    extension, 2026-10-04). The semantic workspace module and compiler pipeline
+    documentation now distinguish semantic workspace passes from the shared
+    design lint pass. Incorrect comments could mislead later integration; this
+    correction changes no behavior and does not alter the deferred ADR-0008
+    prose.
+
+21. **Task 7: allow observed findings on exact book fences** (approved scope
+    extension, 2026-10-04). The covering CLI suite found 47 TYPL-223 diagnostics
+    across the existing shared book workspace. Add this code only to the
+    affected fence markers in `getting-started.md` (lines 217, 322, 359, 397,
+    434, 466, 574, 627, 647, 842, 872, 1013, 1118 and 1230) and `rsdl.md` (line
+    25), preserving example identifiers and the harness's bidirectional
+    allowance checks. The full book harness verifies that each marker is
+    necessary. No global suppression is added. Task 14 must remove these precise
+    added allowances if calibration drops the abbreviation lint.
+
+22. **Task 7: synchronize the existing MCP server expectations** (approved scope
+    extension, 2026-10-04). The existing server fixture's `readSpeed` query
+    abbreviates `Reading`, so the compiler now reports TYPL-223 there. Update
+    the exact code list in the structured compile-error diff test, and assert
+    the precise code, lint, severity, message and source span in the read-only
+    tool test. Preserve the fixture and tree metadata equality, plus every
+    existing lookup and diff assertion. Ignoring the additional diagnostic would
+    weaken the reporting contract; exact assertions preserve it.
 
 ## Pull requests
 

@@ -4,8 +4,9 @@
 //! [`compile`] runs the pipeline end to end over a single source file: it wraps
 //! the source in a single-file synthetic package, resolves it
 //! ([`resolve_package`]), checks and lowers it to IR v2 ([`check_package`]),
-//! runs the workspace-wide passes over it ([`check_workspace`]), and generates
-//! Rust source. The function is total: it never panics. Every parser,
+//! runs the semantic workspace passes ([`check_workspace`]) and design lints
+//! ([`check_design_lints`]), and generates Rust source. The function is total:
+//! it never panics. Every parser,
 //! resolver, and checker diagnostic is a coded [`Diagnostic`]
 //! collected into [`CompileOutput::diagnostics`]; if the Rust backend fails,
 //! its error joins that list and [`CompileOutput::rust_source`] is left
@@ -176,10 +177,11 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
 /// Compiles `text` (registered under `path`) end to end.
 ///
 /// The pipeline is `parse_file` (through the salsa database) →
-/// `resolve_package` → `check_package` → `check_workspace` → `generate`.
+/// `resolve_package` → `check_package` → `check_workspace` →
+/// `check_design_lints` → `generate`.
 /// Diagnostics are concatenated in that order: parser errors first, then
-/// resolver, then checker, then the workspace-wide passes and RSDL-804, then
-/// any Rust backend error. The source becomes a single-file synthetic package
+/// resolver, then checker, then semantic workspace passes, RSDL-804 and design
+/// lints, then any Rust backend error. The source becomes a single-file synthetic package
 /// named from its `package` declaration, falling back to the path's file stem
 /// — the loader's single-file rule (E1.3).
 ///

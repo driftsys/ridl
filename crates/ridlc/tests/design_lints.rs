@@ -471,3 +471,106 @@ fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
             .all(|label| sources.path(label.span.file) == Some("a/source.ridl"))
     );
 }
+
+fn abbreviations(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|d| d.code.as_str() == "TYPL-223")
+        .collect()
+}
+
+#[test]
+fn abbreviation_is_reported_where_the_short_form_is_used() {
+    let source = "package a\nstruct Reading { tempLimit: boolean, temperature: boolean }\n";
+    let out = workspace(&[("a", source)]);
+    let single = ridlc::check_source("a.ridl", source);
+    assert_no_errors(&single.diagnostics);
+    for (diagnostics, sources) in [
+        (&out.diagnostics, &out.sources),
+        (&single.diagnostics, &single.sources),
+    ] {
+        let found = abbreviations(diagnostics);
+        assert_eq!(found.len(), 1, "{diagnostics:?}");
+        assert_eq!(
+            found[0].message,
+            "`temp` in `tempLimit` abbreviates `temperature`, used in `temperature`"
+        );
+        assert_eq!(found[0].severity, Severity::Info);
+        assert_eq!(text_at(sources, found[0].primary), "tempLimit");
+        assert_eq!(
+            usize::from(found[0].primary.range.start()),
+            source.find("tempLimit").unwrap()
+        );
+    }
+}
+
+#[test]
+fn abbreviation_needs_three_letters_and_two_more() {
+    for (short, long, count) in [
+        ("id", "identity", 0),
+        ("pos", "post", 0),
+        ("pos", "position", 1),
+        ("temp", "temperature", 1),
+    ] {
+        let source = format!("package a\nstruct Reading {{ {short}: boolean, {long}: boolean }}\n");
+        let out = workspace(&[("a", &source)]);
+        assert_eq!(
+            abbreviations(&out.diagnostics).len(),
+            count,
+            "{short}/{long}: {:?}",
+            out.diagnostics
+        );
+    }
+}
+
+#[test]
+fn abbreviation_variant_uses_its_own_span() {
+    let source = "package a\nenum Mode { Temp = 0 }\nstruct Temperature { value: boolean }\n";
+    let out = workspace(&[("a", source)]);
+    let found = abbreviations(&out.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
+    let start = source.find("Temp =").unwrap();
+    assert_eq!(
+        site(&out.sources, found[0].primary),
+        ("a/source.ridl".to_string(), start..start + 4)
+    );
+}
+
+#[test]
+fn abbreviation_covers_declarations_members_and_parameters_across_packages() {
+    let first = "package a\nstruct Temp { value: boolean }\ntype Flag: boolean\ninterface TempInput { command sendTemp(tempValue: Flag) @[..1s] }\nservice a.readings { signal tempReading: Flag @[100ms..1s] }\n";
+    let second = "package b\nstruct Temperature { value: boolean }\n";
+    let out = workspace(&[("b", second), ("a", first)]);
+    let found = abbreviations(&out.diagnostics);
+    let names: Vec<_> = found
+        .iter()
+        .map(|d| text_at(&out.sources, d.primary))
+        .collect();
+    assert_eq!(
+        names,
+        ["Temp", "TempInput", "sendTemp", "tempValue", "tempReading"]
+    );
+    assert!(
+        found
+            .iter()
+            .all(|d| d.message.ends_with("used in `Temperature`"))
+    );
+}
+
+#[test]
+fn abbreviation_reports_each_word_pair_once_per_identifier() {
+    let source = "package a\nstruct Reading { tempTempPos: boolean, temperature: boolean, position: boolean, temporary: boolean }\n";
+    let out = workspace(&[("a", source)]);
+    let messages: Vec<_> = abbreviations(&out.diagnostics)
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert_eq!(
+        messages,
+        [
+            "`pos` in `tempTempPos` abbreviates `position`, used in `position`",
+            "`temp` in `tempTempPos` abbreviates `temperature`, used in `temperature`",
+            "`temp` in `tempTempPos` abbreviates `temporary`, used in `temporary`",
+        ]
+    );
+}

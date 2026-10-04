@@ -541,7 +541,7 @@ async fn diff_compile_errors_preserve_structured_diagnostics() {
                     .iter()
                     .map(|d| d["code"].as_str().unwrap())
                     .collect::<Vec<_>>(),
-                ["TYPL-103", "TYPL-011"]
+                ["TYPL-103", "TYPL-011", "TYPL-223"]
             );
         }
         client.cancel().await.unwrap();
@@ -638,7 +638,21 @@ async fn every_tool_leaves_the_tree_unchanged() {
             let output = result.structured_content.unwrap();
             assert_eq!(text, output, "{name}");
             match name {
-                "ridl_check" => assert_eq!(output["diagnostics"], json!([])),
+                "ridl_check" => {
+                    assert_eq!(output["diagnostics"], json!([{
+                        "code": "TYPL-223",
+                        "severity": "info",
+                        "lint": "inconsistent-abbreviation",
+                        "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
+                        "span": {
+                            "path": interface_path,
+                            "start": {"line": 28, "column": 9},
+                            "end": {"line": 28, "column": 18},
+                        },
+                        "labels": [],
+                        "fixes": [],
+                    }]));
+                },
                 "ridl_explain" => {
                     assert_eq!(output["kind"], "diagnostic");
                     assert_eq!(output["code"], "TYPL-002");

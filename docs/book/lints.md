@@ -124,6 +124,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
+| `inconsistent-abbreviation` | TYPL-223 | info | inconsistent identifier abbreviation |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its definition |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |

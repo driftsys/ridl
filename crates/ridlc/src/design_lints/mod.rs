@@ -10,6 +10,7 @@ use ridl_sem::{CheckedPackage, Resolution};
 
 mod sites;
 mod units;
+mod words;
 
 use sites::SiteIndex;
 
@@ -55,5 +56,7 @@ pub(crate) struct Ctx<'a> {
 }
 
 pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
-    units::check(ctx)
+    let mut diagnostics = units::check(ctx);
+    diagnostics.extend(words::check(ctx));
+    diagnostics
 }

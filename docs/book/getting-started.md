@@ -214,7 +214,7 @@ recommendation everywhere, and they are mandatory on a boundary.
 
 Add a second file, `veh/common/scalars.ridl`:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.common
 
 // physical unit types — UCUM units
@@ -319,7 +319,7 @@ demands on a binding (see the note above — no binding exists yet):
   late-joiner delivery. An occurrence that happened before you subscribed did
   not happen to you.
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.cluster
 import veh.common.Speed
 import veh.common.Temperature
@@ -356,7 +356,7 @@ bound follows from the declaring keyword — specified, not implemented:
 Events take a range only. Strict periodic `@Xms` on an event is a `RIDL-103`
 error, because an isochronous rate is meaningless for occurrences:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.cluster
 import veh.common.DoorIndex
 
@@ -394,7 +394,7 @@ explicitly.
 
 An `enum` is an integer-backed set of discrete values, for choosing one:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.common
 
 enum GearPosition {
@@ -431,7 +431,7 @@ enumset AccessFlags {
 When you need both the single value and the set, declare the `enum` and derive
 the `enumset` from it:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.common
 
 enum Warning {
@@ -463,7 +463,7 @@ interface Warnings {
 A `fixed` is a value set at build, factory, or over-the-air update, and
 immutable for the lifetime of the running software instance:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.cluster
 import veh.common.DoorCount
 import veh.common.Enabled
@@ -571,7 +571,7 @@ ridl has no `throws`, no exceptions, and no status codes. A query that can fail
 as part of its domain semantics says so in its return type, using vocabulary
 declared in typl:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.common
 
 /// Failure vocabulary — the `error` modifier marks a shape as a failure shape.
@@ -624,7 +624,7 @@ author has no knowledge to express about them.
 
 Collections are finite and always explicitly bounded:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.common
 
 struct FaultCode {
@@ -644,7 +644,7 @@ interaction position — on a command or query parameter, or a query return. Its
 element type is a named type describing one logical element; framing and
 backpressure are transport concerns.
 
-```ridl,allow=TYPL-115
+```ridl,allow=TYPL-115,allow=TYPL-223
 package veh.common
 
 type LogLine: string [1..1024] = "-"
@@ -839,7 +839,7 @@ on an error. Interactions carry implicit ordinals by declaration order, so
 appending is compatible and inserting or reordering is not. Retire an
 interaction with a `reserved` tombstone rather than deleting it:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.cluster
 import veh.common.Speed
 
@@ -869,7 +869,7 @@ resolves such an address today, so read it as the naming scheme a deployment
 will use. Service names are unique across the system and always public, and
 that uniqueness the compiler does enforce (`RIDL-140`).
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.cluster
 import veh.common.Temperature
 
@@ -1010,7 +1010,7 @@ not reach into a struct-typed one. And the engine state field is named
 `engineState`: `state` is a reserved word family-wide, so it cannot be an
 identifier.
 
-```ridl,allow=RIDL-406
+```ridl,allow=RIDL-406,allow=TYPL-223
 package veh.powertrain
 
 type RPM: /min [0.0..8000.0 step 10.0]
@@ -1115,7 +1115,7 @@ published through a struct that wraps the array rather than as a bare array.
 Command parameters name types too: `DoorIndex`, not `integer [0..7]`. And the
 lock parameter is named `lock`, because `state` is reserved.
 
-```ridl,allow=RIDL-406
+```ridl,allow=RIDL-406,allow=TYPL-223
 package veh.body
 import veh.common.Temperature
 
@@ -1227,7 +1227,7 @@ interface BodyControl {
 
 ## Annex 4 — Driver monitoring
 
-```ridl,allow=RIDL-406
+```ridl,allow=RIDL-406,allow=TYPL-223
 package veh.dms
 
 type Ratio: % [0.0..100.0 step 0.1]

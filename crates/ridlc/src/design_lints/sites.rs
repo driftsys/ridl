@@ -19,6 +19,15 @@ pub(crate) struct SiteIndex {
     packages: BTreeMap<String, Span>,
 }
 
+/// One identifier token with its qualified identity and source location.
+#[derive(Clone)]
+pub(crate) struct IdSite {
+    pub package: String,
+    pub full_name: String,
+    pub name: String,
+    pub span: Span,
+}
+
 impl SiteIndex {
     pub fn new(
         db: &RidlDatabase,
@@ -164,6 +173,41 @@ impl SiteIndex {
             }
         }
         index
+    }
+
+    /// Enumerates identifier tokens in qualified-name order. Qualifiers identify
+    /// a site, but are not part of the identifier's words.
+    pub fn identifiers(&self) -> Vec<IdSite> {
+        let mut sites = Vec::new();
+        let mut add = |pkg: &str, owner: &str, name: &str, span: Span| {
+            let full_name = if owner.is_empty() {
+                format!("{pkg}.{name}")
+            } else {
+                format!("{pkg}.{owner}.{name}")
+            };
+            sites.push(IdSite {
+                package: pkg.into(),
+                full_name,
+                name: name.into(),
+                span,
+            });
+        };
+        for ((pkg, name), span) in &self.declarations {
+            add(pkg, "", name, *span);
+        }
+        for ((pkg, owner, name), span) in self
+            .fields
+            .iter()
+            .chain(&self.variants)
+            .chain(&self.members)
+        {
+            add(pkg, owner, name, *span);
+        }
+        for ((pkg, iface, member, name), span) in &self.params {
+            add(pkg, &format!("{iface}.{member}"), name, *span);
+        }
+        sites.sort_by(|a, b| (&a.package, &a.full_name).cmp(&(&b.package, &b.full_name)));
+        sites
     }
 
     pub fn field(&self, pkg: &str, name: &str, field: &str) -> Option<Span> {

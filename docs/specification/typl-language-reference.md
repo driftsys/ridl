@@ -1328,6 +1328,7 @@ is in ridl §16.4.
 | TYPL-219 | enumset bit position is not a number with an integer value                                                                                                                     | error    |
 | TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite                                                                       | error    |
 | TYPL-222 | one field name used with different units                                                                                                                                       | info     |
+| TYPL-223 | inconsistent identifier abbreviation                                                                                                                                           | info     |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
