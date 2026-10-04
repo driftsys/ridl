@@ -1603,6 +1603,74 @@ execution.
     allowance could hide an omitted inline shape; the fresh review must compare
     each reason with approved sections 4.4 and 6.
 
+66. **Task 12 fix round 1: own the executable calibration tests** (2026-10-04).
+    Place actual caller tests in `xtask/tests/calibrate_cli.rs`. They invoke the
+    built xtask executable against isolated synthetic workspaces and a small
+    offline compiler protocol fixture, exercising dispatch, alias and write
+    behavior, copying, manifest edits, target selection, refusals, cleanup and
+    delayed publication. Calibration reads the caller's current workspace
+    directory, as the README's root invocation requires, rather than the path
+    embedded when xtask was built. No test-only flag or environment override is
+    added to production. This worker owns the new caller test file and preserves
+    the other workers' test edits. If the runtime-root choice is wrong, callers
+    invoking calibration from a subdirectory must move to the documented root;
+    the executable tests pin the explicit root-directory behavior.
+
+67. **Task 12 fix round 1: reject contained destinations before side effects**
+    (2026-10-04). Resolve existing path components and symlink ancestors without
+    creating directories; handle missing components followed by parent steps
+    before checking containment against the canonical corpus directory. Reject
+    the corpus itself and every descendant before directory creation or Cargo.
+    Require the first cohesion group opening bracket, preserving the existing
+    closing-bracket, member and group-count validation. The docs observation is
+    the same parser defect and is fixed once. If wrong, a dump could change its
+    own source or accept malformed metadata; synthetic helper and executable
+    tests assert strict rejection and unchanged source trees.
+
+68. **Task 12 fix round 1: pin the reviewed numerical and validation
+    boundaries** (2026-10-04). Use same-line multibyte span starts and
+    endpoints, exact 50% precision and nine-finding cap cases,
+    recall-independent selection with full, partial and zero recall, matching
+    below-start messages, conflicting shape-pair ties, omitted excluded
+    inventory items, reversed/cross-workspace aliases and consistent numeric
+    occurrence gaps. Cohesion size zero is already rejected by the nonempty
+    group parser; the valid one-group message tests its independent group-count
+    search start. If wrong, tests could fail at an earlier unrelated guard while
+    leaving the reviewed behavior unpinned; the cases supply otherwise valid
+    inputs and isolate the relevant guard.
+
+69. **Task 12 fix round 1: preserve the actual finding evidence** (2026-10-04).
+    Run mutation probes only on scratch copies of xtask, with isolated targets
+    and synthetic inputs, then restore those copied controls. Never mutate live
+    source for an experiment, run actual corpus checks again, or change retained
+    arrays, rubric text, labels, levels or thresholds. Keep focused tests,
+    clippy, formatting, mutation logs and per-finding responses in the plan
+    scratch. Root owns review and commits. If wrong, the fixes could invalidate
+    independent evidence or overwrite another lane; hash/input comparisons and
+    the exact worker file list distinguish this round's changes from concurrent
+    edits.
+
+70. **Preserve precise backend diagnostic expectations** (2026-10-04). The
+    unchanged shared fixtures legitimately emit the new cohesion Info. Update
+    the five affected backend test helpers to assert the complete diagnostic
+    inventory, code, level, lint name, message, source path, byte range, source
+    slice and empty labels and fixes. Preserve the abbreviation diagnostic and
+    reject every unexpected extra diagnostic. Incoming main removed a fixture
+    comment, so use byte coordinates from the current unchanged fixture. Replace
+    obsolete baseline silence with its exact sole cohesion diagnostic. If wrong,
+    assertions could conceal a compiler defect; the independent review must
+    check the groups against the source and spec. Both affected backend packages
+    passed all 110 tests without fixture edits.
+
+71. **Restart only the Task 12 handoff step** (2026-10-04). The original
+    implementer stopped producing output after the final green tests. Interrupt
+    only its identified CLI process and resume the same session to write the
+    missing reports, using medium effort for this administrative step. Reuse the
+    completed test and isolated mutation logs; do not repeat checks or change
+    code. If wrong, an incomplete operation could be mistaken for success;
+    require exact commands, results and remaining issues in the handoff and
+    fresh scoped review before completing the task.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

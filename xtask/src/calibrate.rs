@@ -147,8 +147,8 @@ fn metric_from_message(check: &str, message: &str) -> Result<Option<Metric>> {
             let groups = positive(count)?;
             let mut sizes = Vec::new();
             let mut members = BTreeSet::new();
+            let listed = listed.strip_prefix('[').ok_or_else(missing)?;
             for group in listed.split(", [") {
-                let group = group.strip_prefix('[').unwrap_or(group);
                 let group = group.strip_suffix(']').ok_or_else(missing)?;
                 let mut size = 0;
                 for member in group.split(", ") {
@@ -330,10 +330,8 @@ fn parse_args(args: &[String]) -> Result<Action> {
 }
 
 pub(crate) fn run(args: &[String]) -> Result<()> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("missing workspace root")?;
-    run_at(root, args)
+    // Calibration reads the workspace selected by the caller, as documented.
+    run_at(&std::env::current_dir()?, args)
 }
 
 fn run_at(root: &Path, args: &[String]) -> Result<()> {
@@ -527,8 +525,46 @@ fn copy_directory(source: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+fn checked_dump_destination(root: &Path, out: &Path) -> Result<PathBuf> {
+    let corpus = root.join("evals/corpus").canonicalize()?;
+    let proposed = if out.is_absolute() {
+        out.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(out)
+    };
+    let mut resolved = PathBuf::new();
+    // Resolve existing components as we encounter them. A missing component
+    // followed by `..` must not hide a later, existing symlink into the corpus.
+    // No directory is created while determining the destination.
+    for component in proposed.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                resolved.pop();
+            }
+            component => {
+                resolved.push(component.as_os_str());
+                match std::fs::symlink_metadata(&resolved) {
+                    Ok(_) => resolved = resolved.canonicalize()?,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+    }
+    if resolved.starts_with(&corpus) {
+        return Err(format!(
+            "dump destination is inside the corpus: {}",
+            resolved.display()
+        )
+        .into());
+    }
+    Ok(resolved)
+}
+
 fn dump(root: &Path, out: &Path) -> Result<()> {
-    std::fs::create_dir_all(out)?;
+    let out = checked_dump_destination(root, out)?;
+    std::fs::create_dir_all(&out)?;
     let out = out.canonicalize()?;
     let target = out.join(".calibrate-target");
     let build =
@@ -1105,6 +1141,314 @@ mod tests {
         let records = records_from_json(&fixture.0, "fixture", b"[]").unwrap();
         assert_eq!(records.len(), 5);
         assert!(records.values().all(Vec::is_empty));
+    }
+    #[test]
+    fn cohesion_requires_the_first_opening_bracket() {
+        let message = "interface `I` splits into 2 groups of members that share no type: a], [b]";
+        assert!(metric_from_message("low-cohesion-interface", message).is_err());
+        let fixture = calibration_fixture();
+        let mut finding = finding(
+            0,
+            Metric::Cohesion {
+                groups: 2,
+                min_group_size: 1,
+            },
+            true,
+        );
+        finding.id = "low-cohesion-interface:fixture:p/a.typl:0-7:0".into();
+        finding.message = message.into();
+        assert!(validate_finding(&fixture.0, "low-cohesion-interface", &finding).is_err());
+    }
+    #[test]
+    fn dump_destination_rejects_corpus_descendants_before_creation() {
+        let fixture = calibration_fixture();
+        let corpus = fixture.0.join("evals/corpus");
+        for out in [
+            corpus.clone(),
+            corpus.join("fixture/new/deep"),
+            corpus.join("fixture/missing/../new"),
+        ] {
+            assert!(
+                checked_dump_destination(&fixture.0, &out)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("inside the corpus")
+            );
+            assert!(!corpus.join("fixture/new").exists());
+            assert!(!corpus.join("fixture/missing").exists());
+        }
+        let outside = fixture.0.join("new/deep");
+        assert_eq!(
+            checked_dump_destination(&fixture.0, &outside).unwrap(),
+            outside
+        );
+        assert!(!outside.exists());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn dump_destination_resolves_symlinks_and_missing_parent_segments() {
+        let fixture = calibration_fixture();
+        let corpus = fixture.0.join("evals/corpus");
+        std::os::unix::fs::symlink(corpus.join("fixture"), fixture.0.join("alias")).unwrap();
+        for out in [
+            fixture.0.join("alias/new"),
+            fixture.0.join("missing/../alias/new"),
+            fixture.0.join("alias/missing/../new"),
+        ] {
+            assert!(
+                checked_dump_destination(&fixture.0, &out)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("inside the corpus")
+            );
+            assert!(!corpus.join("fixture/new").exists());
+        }
+    }
+    #[test]
+    fn unicode_columns_reconstruct_multibyte_starts_and_endpoints() {
+        let fixture = Fixture::new();
+        fixture.write("p/a.typl", "// é\né🙂xβ\n");
+        let json=serde_json::to_vec(&vec![serde_json::json!({"severity":"warning","lint":"inconsistent-unit","message":"synthetic unit finding","span":{"path":"p/a.typl","start":{"line":2,"column":2},"end":{"line":2,"column":5}}}),serde_json::json!({"severity":"warning","lint":"inconsistent-unit","message":"synthetic unit finding","span":{"path":"p/a.typl","start":{"line":2,"column":3},"end":{"line":2,"column":4}}})]).unwrap();
+        let records = records_from_json(&fixture.0, "fixture", &json).unwrap();
+        assert_eq!(
+            records["inconsistent-unit"][0].id,
+            "inconsistent-unit:fixture:p/a.typl:8-15:0"
+        );
+        assert_eq!(
+            records["inconsistent-unit"][1].id,
+            "inconsistent-unit:fixture:p/a.typl:12-13:0"
+        );
+    }
+    #[test]
+    fn precision_floor_and_nine_finding_cap_are_exact() {
+        for (count, accepted, level) in [
+            (10, 5, Level::Info),
+            (10, 4, Level::Dropped),
+            (100, 49, Level::Dropped),
+            (9, 9, Level::Info),
+            (10, 8, Level::Warning),
+        ] {
+            let findings = (0..count)
+                .map(|n| finding(n, Metric::FanOut { count: 4 }, n < accepted))
+                .collect::<Vec<_>>();
+            let rows = candidates("package-fan-out", &findings, &[]);
+            assert_eq!(
+                (rows[0].findings, rows[0].accepted, rows[0].level),
+                (count, accepted, level)
+            );
+        }
+    }
+    #[test]
+    fn recall_does_not_change_threshold_or_level_selection() {
+        let findings = (0..16)
+            .map(|n| {
+                finding(
+                    n,
+                    Metric::FanOut {
+                        count: if n < 4 {
+                            4
+                        } else if n < 6 {
+                            5
+                        } else {
+                            6
+                        },
+                    },
+                    (6..14).contains(&n),
+                )
+            })
+            .collect::<Vec<_>>();
+        for matches in [
+            vec![vec![findings[6].id.clone()]],
+            vec![vec![findings[6].id.clone()], vec![]],
+            vec![vec![]],
+            vec![],
+        ] {
+            let issues = matches
+                .into_iter()
+                .enumerate()
+                .map(|(n, findings)| IssueRow {
+                    id: format!("review-0001:{}", n + 1),
+                    applicable: true,
+                    reason: "Reviewed issue".into(),
+                    findings,
+                })
+                .collect::<Vec<_>>();
+            let rows = candidates("package-fan-out", &findings, &issues);
+            let selected = choose(&rows).unwrap();
+            assert_eq!(
+                (selected.threshold, selected.level, selected.findings),
+                (Threshold::FanOut(5), Level::Warning, 10)
+            );
+        }
+    }
+    #[test]
+    fn matching_metadata_below_search_starts_is_rejected() {
+        let fixture = calibration_fixture();
+        for (check, metric, message) in [
+            (
+                "duplicate-shape",
+                Metric::Struct { count: 1 },
+                "`b.B` has the same 1 fields as `a.A`",
+            ),
+            (
+                "duplicate-shape",
+                Metric::Enum { count: 1 },
+                "`b.B` has the same 1 variants as `a.A`",
+            ),
+            (
+                "low-cohesion-interface",
+                Metric::Cohesion {
+                    groups: 1,
+                    min_group_size: 1,
+                },
+                "interface `I` splits into 1 groups of members that share no type: [a]",
+            ),
+            (
+                "package-fan-out",
+                Metric::FanOut { count: 3 },
+                "package `p` depends on 3 workspace packages: a, b, c",
+            ),
+        ] {
+            assert_eq!(
+                metric_from_message(check, message).unwrap(),
+                Some(metric.clone())
+            );
+            let mut finding = finding(0, metric, true);
+            finding.id = format!("{check}:fixture:p/a.typl:0-7:0");
+            finding.message = message.into();
+            assert!(
+                validate_finding(&fixture.0, check, &finding)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("below search start")
+            );
+        }
+    }
+    #[test]
+    fn equal_shape_samples_prefer_fields_before_variants() {
+        let findings = (0..30)
+            .map(|n| {
+                finding(
+                    n,
+                    if n < 5 {
+                        Metric::Struct { count: 2 }
+                    } else if n < 10 {
+                        Metric::Enum { count: 2 }
+                    } else if n < 20 {
+                        Metric::Struct { count: 3 }
+                    } else {
+                        Metric::Enum { count: 3 }
+                    },
+                    n >= 10,
+                )
+            })
+            .collect::<Vec<_>>();
+        let rows = candidates("duplicate-shape", &findings, &[]);
+        for threshold in [Threshold::Shape(2, 3), Threshold::Shape(3, 2)] {
+            let row = rows.iter().find(|r| r.threshold == threshold).unwrap();
+            assert_eq!(
+                (row.findings, row.accepted, row.level),
+                (25, 20, Level::Warning)
+            );
+        }
+        assert_eq!(choose(&rows).unwrap().threshold, Threshold::Shape(2, 3));
+    }
+    fn recall_inputs(fixture: &Fixture) -> (Recall, BTreeMap<String, Vec<Finding>>) {
+        let recall = toml::from_str(
+            &std::fs::read_to_string(fixture.0.join("evals/calibration/recall.toml")).unwrap(),
+        )
+        .unwrap();
+        let labels = CHECKS
+            .into_iter()
+            .map(|check| {
+                let parsed: Labels = toml::from_str(
+                    &std::fs::read_to_string(
+                        fixture.0.join(format!("evals/calibration/{check}.toml")),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                (check.to_owned(), parsed.finding)
+            })
+            .collect();
+        (recall, labels)
+    }
+    #[test]
+    fn inventory_requires_excluded_items_and_complete_applicability() {
+        let fixture = calibration_fixture();
+        let (mut recall, labels) = recall_inputs(&fixture);
+        validate_recall(&fixture.0, &recall, &labels).unwrap();
+        recall.item.remove(1);
+        assert!(
+            validate_recall(&fixture.0, &recall, &labels)
+                .unwrap_err()
+                .to_string()
+                .contains("classify every")
+        );
+        let (mut recall, labels) = recall_inputs(&fixture);
+        recall.check[0].issue.clear();
+        assert!(
+            validate_recall(&fixture.0, &recall, &labels)
+                .unwrap_err()
+                .to_string()
+                .contains("missing applicability")
+        );
+    }
+    #[test]
+    fn aliases_require_lexical_order_and_the_same_workspace() {
+        let fixture = calibration_fixture();
+        let (mut recall, labels) = recall_inputs(&fixture);
+        recall.item[1].kind = "alias".into();
+        recall.item[1].canonical = Some("review-0001:1".into());
+        validate_recall(&fixture.0, &recall, &labels).unwrap();
+        recall.item[0].kind = "alias".into();
+        recall.item[0].canonical = Some("review-0001:2".into());
+        recall.item[1].kind = "issue".into();
+        recall.item[1].canonical = None;
+        for check in &mut recall.check {
+            check.issue[0].id = "review-0001:2".into();
+        }
+        assert!(
+            validate_recall(&fixture.0, &recall, &labels)
+                .unwrap_err()
+                .to_string()
+                .contains("lexically first")
+        );
+        let (mut recall, labels) = recall_inputs(&fixture);
+        fixture.write("evals/corpus/other/p/a.typl", "package p;\n");
+        fixture.write(
+            "evals/tasks/review-0002/task.toml",
+            "id = \"review-0002\"\nkind = \"review\"\ncorpus = \"other\"\n",
+        );
+        fixture.write(
+            "evals/tasks/review-0002/rubric.md",
+            "1. **must** identify an issue.\n",
+        );
+        recall.item.push(InventoryItem {
+            id: "review-0002:1".into(),
+            workspace: "other".into(),
+            kind: "alias".into(),
+            reason: "Same issue claimed in another workspace".into(),
+            canonical: Some("review-0001:1".into()),
+        });
+        assert!(
+            validate_recall(&fixture.0, &recall, &labels)
+                .unwrap_err()
+                .to_string()
+                .contains("in its workspace")
+        );
+    }
+    #[test]
+    fn numeric_occurrence_indices_must_start_at_zero_and_have_no_gaps() {
+        let fixture = calibration_fixture();
+        let labels_path = "evals/calibration/package-fan-out.toml";
+        let recall_path = "evals/calibration/recall.toml";
+        let labels = std::fs::read_to_string(fixture.0.join(labels_path)).unwrap();
+        let recall = std::fs::read_to_string(fixture.0.join(recall_path)).unwrap();
+        for (labels,recall) in [(labels.replace("0-7:0","0-7:1"),recall.replace("0-7:0","0-7:1")),(format!("{labels}\n{}",labels.replace("0-7:0","0-7:2")),recall.replace("[\"package-fan-out:fixture:p/a.typl:0-7:0\"]","[\"package-fan-out:fixture:p/a.typl:0-7:0\", \"package-fan-out:fixture:p/a.typl:0-7:2\"]"))] {
+            fixture.write(labels_path,&labels);fixture.write(recall_path,&recall);
+            assert!(read_calibration(&fixture.0).unwrap_err().to_string().contains("contiguous"));
+        }
     }
     #[test]
     fn metric_is_parsed_from_each_message_form() {

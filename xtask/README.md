@@ -8,6 +8,9 @@ cargo xtask descriptor-codegen
 cargo xtask calibrate --help
 ```
 
+Calibration reads the workspace from the current directory, so run it from the
+workspace root. Relative output paths are resolved from that directory.
+
 The first two commands regenerate the typed AST and catalog descriptor
 accessors. Their drift tests compare generated output with the committed files.
 
@@ -16,6 +19,11 @@ accessors. Their drift tests compare generated output with the committed files.
 ```sh
 cargo xtask calibrate dump <out-dir>
 ```
+
+Before creating any directory or invoking Cargo, this command resolves the
+output destination, including existing symlink ancestors and missing path
+components, and rejects a destination at or below the canonical `evals/corpus/`
+directory. This keeps copied workspaces and build output outside the corpus.
 
 This command builds `ridl-cli` with the locked dependency graph, using
 `<out-dir>/.calibrate-target` as a separate build directory. It copies every

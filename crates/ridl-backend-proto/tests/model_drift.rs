@@ -317,32 +317,48 @@ fn compile_fixture(relative_to_fixtures: &str) -> v2::Package {
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
     if relative_to_fixtures == "cruise.ridl" {
-        assert_eq!(output.diagnostics.len(), 1, "{:?}", output.diagnostics);
-        let diagnostic = &output.diagnostics[0];
-        assert_eq!(diagnostic.code, ridl_core::diag::DiagCode::TYPL_223);
-        assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
+        let expected = [
+            (
+                ridl_core::diag::DiagCode::TYPL_223,
+                "inconsistent-abbreviation",
+                "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`",
+                1752..1761,
+                "setTarget",
+            ),
+            (
+                ridl_core::diag::DiagCode::RIDL_414,
+                "low-cohesion-interface",
+                "interface `CruiseControl` splits into 3 groups of members that share no type: [currentSpeed, setTarget], [mode], [warning]",
+                1599..1612,
+                "CruiseControl",
+            ),
+        ];
         assert_eq!(
-            ridl_core::lint::lint_by_name("inconsistent-abbreviation")
-                .unwrap()
-                .code,
-            diagnostic.code
+            output.diagnostics.len(),
+            expected.len(),
+            "{:?}",
+            output.diagnostics
         );
-        assert_eq!(
-            diagnostic.message,
-            "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`"
-        );
-        assert_eq!(usize::from(diagnostic.primary.range.start()), 1768);
-        assert_eq!(usize::from(diagnostic.primary.range.end()), 1777);
-        assert_eq!(
-            output.sources.path(diagnostic.primary.file),
-            Some(path.to_str().unwrap())
-        );
-        assert_eq!(
-            &output.sources.text(diagnostic.primary.file).unwrap()[1768..1777],
-            "setTarget"
-        );
-        assert!(diagnostic.labels.is_empty());
-        assert!(diagnostic.fixits.is_empty());
+        for (diagnostic, (code, lint, message, range, identifier)) in
+            output.diagnostics.iter().zip(expected)
+        {
+            assert_eq!(diagnostic.code, code);
+            assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
+            assert_eq!(ridl_core::lint::lint_by_name(lint).unwrap().code, code);
+            assert_eq!(diagnostic.message, message);
+            assert_eq!(usize::from(diagnostic.primary.range.start()), range.start);
+            assert_eq!(usize::from(diagnostic.primary.range.end()), range.end);
+            assert_eq!(
+                output.sources.path(diagnostic.primary.file),
+                Some(path.to_str().unwrap())
+            );
+            assert_eq!(
+                &output.sources.text(diagnostic.primary.file).unwrap()[range],
+                identifier
+            );
+            assert!(diagnostic.labels.is_empty());
+            assert!(diagnostic.fixits.is_empty());
+        }
     } else {
         assert!(
             output.diagnostics.is_empty(),

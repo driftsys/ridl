@@ -62,29 +62,73 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
     if relative_to_fixtures == "cruise.ridl" {
+        let expected = [
+            (
+                ridl_core::diag::DiagCode::TYPL_223,
+                "inconsistent-abbreviation",
+                "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`",
+                1752..1761,
+                "setTarget",
+            ),
+            (
+                ridl_core::diag::DiagCode::RIDL_414,
+                "low-cohesion-interface",
+                "interface `CruiseControl` splits into 3 groups of members that share no type: [currentSpeed, setTarget], [mode], [warning]",
+                1599..1612,
+                "CruiseControl",
+            ),
+        ];
+        assert_eq!(
+            output.diagnostics.len(),
+            expected.len(),
+            "{:?}",
+            output.diagnostics
+        );
+        for (diagnostic, (code, lint, message, range, identifier)) in
+            output.diagnostics.iter().zip(expected)
+        {
+            assert_eq!(diagnostic.code, code);
+            assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
+            assert_eq!(ridl_core::lint::lint_by_name(lint).unwrap().code, code);
+            assert_eq!(diagnostic.message, message);
+            assert_eq!(usize::from(diagnostic.primary.range.start()), range.start);
+            assert_eq!(usize::from(diagnostic.primary.range.end()), range.end);
+            assert_eq!(
+                output.sources.path(diagnostic.primary.file),
+                Some(path.to_str().unwrap())
+            );
+            assert_eq!(
+                &output.sources.text(diagnostic.primary.file).unwrap()[range],
+                identifier
+            );
+            assert!(diagnostic.labels.is_empty());
+            assert!(diagnostic.fixits.is_empty());
+        }
+    } else if relative_to_fixtures == "../../../ridl/tests/baseline-corpus/cluster.ridl" {
         assert_eq!(output.diagnostics.len(), 1, "{:?}", output.diagnostics);
         let diagnostic = &output.diagnostics[0];
-        assert_eq!(diagnostic.code, ridl_core::diag::DiagCode::TYPL_223);
+        assert_eq!(diagnostic.code, ridl_core::diag::DiagCode::RIDL_414);
         assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
+        let lint = ridl_core::lint::lint_by_name("low-cohesion-interface").unwrap();
+        assert_eq!(lint.code, diagnostic.code);
+        assert_eq!(lint.lint, Some("low-cohesion-interface"));
         assert_eq!(
-            ridl_core::lint::lint_by_name("inconsistent-abbreviation")
-                .unwrap()
-                .code,
-            diagnostic.code
+            ridl_core::lint::default_level(lint),
+            Some(ridl_core::lint::LintLevel::Info)
         );
         assert_eq!(
             diagnostic.message,
-            "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`"
+            "interface `VehicleStatus` splits into 2 groups of members that share no type: [currentSpeed, legacyWheelPhase], [doorClosed, doorOpened, tyrePressure]"
         );
-        assert_eq!(usize::from(diagnostic.primary.range.start()), 1768);
-        assert_eq!(usize::from(diagnostic.primary.range.end()), 1777);
+        assert_eq!(usize::from(diagnostic.primary.range.start()), 1808);
+        assert_eq!(usize::from(diagnostic.primary.range.end()), 1821);
         assert_eq!(
             output.sources.path(diagnostic.primary.file),
             Some(path.to_str().unwrap())
         );
         assert_eq!(
-            &output.sources.text(diagnostic.primary.file).unwrap()[1768..1777],
-            "setTarget"
+            &output.sources.text(diagnostic.primary.file).unwrap()[1808..1821],
+            "VehicleStatus"
         );
         assert!(diagnostic.labels.is_empty());
         assert!(diagnostic.fixits.is_empty());
