@@ -378,9 +378,8 @@ mod tests {
         assert!(diff_systems(&base(), &base()).is_empty());
     }
 
-    /// A region's catalog hash changes only when the catalog's contract
-    /// changes, and the contract categories report that change. It is not a
-    /// placement or a composition change, so no system change is listed.
+    /// The region map is not compared, so a change to a region's catalog hash
+    /// lists no system change.
     #[test]
     fn a_region_hash_change_is_not_a_system_change() {
         let region = |hash: u8| v2::Region {

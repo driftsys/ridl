@@ -148,7 +148,9 @@ renders byte for byte as it did before.
 
 The region map is not compared, so a changed region hash lists no system change.
 A change to an interface or a type the hash covers is reported by the contract
-comparison instead.
+comparison instead. The hash also covers each interface's number and provisional
+flag, and a change to those alone — for example `ridl lock` freezing a
+provisional number — changes the hash with no `ridl diff` output.
 
 Both sides must be source trees. A `.ir.json` snapshot carries no system, so
 `ridl diff .ridl/baseline .` lists no system change rather than reporting the
