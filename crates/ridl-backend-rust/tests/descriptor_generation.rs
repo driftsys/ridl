@@ -99,12 +99,78 @@ fn encoded_sizes_carry_the_models_flatbuffers_bound() {
         }
     }
     assert!(
-        seen >= 5,
-        "the fixture's five payload types were checked, saw {seen}"
+        seen >= 10,
+        "the fixture's ten payload positions, over six types, were checked, saw {seen}"
     );
     assert!(
         !d.contains("flatbuffers:::core::option::Option::None"),
         "every payload of the fixture is sized"
+    );
+}
+
+/// A payload the model carries no FlatBuffers bound for is emitted with
+/// `None` in the `flatbuffers` column — not a number, and not the column of
+/// another payload. The fixture's payloads are all bounded, so the model is
+/// edited: `Horn.active`'s `Health` loses its bound before generation.
+#[test]
+fn a_payload_without_a_flatbuffers_bound_emits_none() {
+    use ridl_ir::codegen::Backend as _;
+
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    let mut cleared = 0;
+    for interface in &mut model.interfaces {
+        for slot in &mut interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_mut()
+            else {
+                continue;
+            };
+            let Some(v1::interaction::Shape::Signal(signal)) = interaction.shape.as_mut() else {
+                continue;
+            };
+            let Some(payload) = signal.payload.as_mut() else {
+                continue;
+            };
+            if payload.r#type.as_ref().map(|r| r.reference.as_str()) == Some("Health") {
+                payload.flatbuffers_max_size = None;
+                cleared += 1;
+            }
+        }
+    }
+    assert_eq!(cleared, 1, "`Horn.active` is the one `Health` signal");
+
+    let request = v1::CodegenRequest {
+        model: Some(model),
+        artifact_base: "face_demo".to_string(),
+        ..Default::default()
+    };
+    let response = ridl_backend_rust::Backend.generate(&request);
+    let text = response
+        .files
+        .iter()
+        .find_map(|file| match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => Some(text.as_str()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a generated file, got {:?}", response.diagnostics));
+    let d = dense(text);
+    let expected = dense(
+        "::ridl_rt::contract::PayloadInfo {
+            type_name: \"Health\",
+            max_size: ::ridl_rt::contract::EncodedSizes {
+                proto3: ::core::option::Option::None,
+                flatbuffers: ::core::option::Option::None,
+                repr_c: ::core::option::Option::None,
+            },
+        }",
+    );
+    assert!(d.contains(&expected), "expected {expected}");
+    assert_eq!(
+        d.matches("flatbuffers:::core::option::Option::None")
+            .count(),
+        1,
+        "every other payload keeps its bound"
     );
 }
 
