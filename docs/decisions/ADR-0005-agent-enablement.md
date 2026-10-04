@@ -4,10 +4,10 @@
 
 Proposed.
 
-Amended 2026-10-03 by the workspace-aware MCP tools design (piece 1a): the tools
-take a workspace path with optional unsaved overlays, `ridl_references` and
-`ridl_dependencies` are added, and the tool surface becomes a fourth contract
-surface in §7.
+Amended 2026-10-03 by the workspace-aware MCP tools (piece 1a,
+[ADR-0025](ADR-0025-workspace-aware-mcp-tools.md)): the tools take a workspace
+path with optional unsaved overlays, `ridl_references` and `ridl_dependencies`
+are added, and the tool surface becomes a fourth contract surface in §7.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept
@@ -265,8 +265,9 @@ Agent enablement is not a separate program; it rides the existing phases:
   standalone source against `ridl.std`, so the lists agree only for a standalone
   file without a manifest or imports, apart from synthetic paths. In path mode
   the tool loads the workspace with optional overlays. It omits the CLI's fetch,
-  lockfile and baseline operations; the workspace-tools design §7.1 and the
-  crate README record these omissions.
+  lockfile and baseline operations; the
+  [MCP workspace tools design record](../design/mcp-workspace-tools.md) §6 and
+  the crate README record these omissions.
 
   Cursor and Cowork are not first-class in this pass, and for Cursor the reason
   is a cost this decision accepts. `registerMcpServerDefinitionProvider`

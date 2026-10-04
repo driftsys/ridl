@@ -397,3 +397,24 @@ provenance. Nothing here is normative — the current references live in
   It has no gardened record of its own; the decisions taken while the plan was
   executed are the stage driver's additions to decisions 10 and 12 and decisions
   13 to 16 of [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md).
+- **2026-10-03-mcp-workspace-tools-design.md** — the design for piece 1a of the
+  devex and agent tracks brief (driftsys/ridl#668, #677): eight read-only MCP
+  tools over a workspace on disk, with overlays applied inside the loader. Its
+  §2 holds the six brainstorming decisions, its §4.4 the approved amendment for
+  rsdl component uses, its §7 the compatibility rules and its §10 the
+  alternatives. Archived verbatim with its two plans; its links to the brief and
+  to the skill outline point at `../wip/`. The gardened records are
+  [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md), where design
+  D-1 to D-6 are decisions 1 to 6, the amended
+  [ADR-0005](../decisions/ADR-0005-agent-enablement.md), and
+  [the design record](../design/mcp-workspace-tools.md). Read the design for the
+  reasoning and the plans' test lists, not as a second description of the
+  as-built tools.
+- **2026-10-03-mcp-workspace-tools-plan.md** and
+  **2026-10-03-mcp-tools-followup-plan.md** — the nine-task plan that #668
+  implemented, and the four-task follow-up that #677 implemented (rsdl uses in
+  the review tools, one copy of the snapshot helpers, outputs that no test
+  pinned, and small fixes). Archived verbatim. They have no gardened record of
+  their own; the decisions taken while they were executed are in the pull
+  request bodies and in decisions 7 and 8 of
+  [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
