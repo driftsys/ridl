@@ -1040,6 +1040,19 @@ reserved codes, corpus budgets, four PRs and approval stages.
     lint drops or its thresholds suppress the finding, or synchronize the exact
     severity if its final level changes.
 
+41. **Task 9 review fix: distinguish package exclusion from type exclusion**
+    (2026-10-04). Amend the controlled standard-package interface to reference
+    two nonstandard nominal types and assert its public metric has exactly two
+    singleton groups. The shared diagnostic pass must still exclude that
+    package. Removing only its package filter survives: `SiteIndex` also omits
+    standard-package spans, so the emitter cannot report that interface. The
+    original review's single-filter mutation claim therefore does not identify
+    an observable defect. A second fixture retains and connects types owned by
+    `ridl.std.extra`, while exact `ridl.std.Duration` references are excluded.
+    Replacing exact owner equality with a prefix check fails that group's
+    literal assertion. Production is restored byte for byte after mutation
+    checks; the committed fix changes only tests and this record.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

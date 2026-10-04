@@ -191,10 +191,45 @@ fn cohesion_groups_exclude_standard_types_and_members_without_named_types() {
 
 #[test]
 fn low_cohesion_interface_excludes_standard_packages_and_service_inline_shapes() {
+    use ridl_ir::v2::{decl, field_type};
+
     let standard = "package ridl.std\ntype X: boolean\ntype Y: boolean\ninterface I { command a(value: X) @[..1s] command b(value: Y) @[..1s] }\n";
     let user = "package a\ntype X: boolean\ntype Y: boolean\nservice a.example { command a(value: X) @[..1s] command b(value: Y) @[..1s] }\n";
-    let (diagnostics, _) = abbreviation_source_set(&[("ridl.std", standard), ("a", user)]);
+    let (diagnostics, _) =
+        design_source_set_with(&[("ridl.std", standard), ("a", user)], |checked| {
+            let pkg = &mut checked
+                .iter_mut()
+                .find(|package| package.ir.name == "ridl.std")
+                .unwrap()
+                .ir;
+            for (member, name) in pkg.interfaces[0]
+                .interactions
+                .iter_mut()
+                .zip(["a.X", "a.Y"])
+            {
+                let Some(decl::Kind::CommandDef(command)) = &mut member.kind else {
+                    panic!("command")
+                };
+                command.params[0].r#type.as_mut().unwrap().kind =
+                    Some(field_type::Kind::Named(name.into()));
+            }
+            assert_eq!(
+                ridlc::cohesion_groups(pkg, &pkg.interfaces[0]),
+                vec![vec!["a"], vec!["b"]]
+            );
+        });
     assert!(cohesion(&diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+#[test]
+fn cohesion_groups_exclude_only_the_exact_standard_type_owner() {
+    let source = "package ridl.std.extra\ntype X: boolean\ntype Y: boolean\ninterface I { command a(value: X, delay: Duration) @[..1s] command b(value: X) @[..1s] command c(value: Y, delay: Duration) @[..1s] command wait(delay: Duration) @[..1s] }\n";
+    let out = workspace(&[("ridl.std.extra", source)]);
+    let pkg = &out.checked[0].ir;
+    assert_eq!(
+        ridlc::cohesion_groups(pkg, &pkg.interfaces[0]),
+        vec![vec!["a", "b"], vec!["c"]]
+    );
 }
 
 fn text_at(sources: &SourceMap, span: Span) -> &str {
