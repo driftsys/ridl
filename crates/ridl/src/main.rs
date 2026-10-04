@@ -351,11 +351,18 @@ fn run_describe(path: &Path) -> ExitCode {
     };
     match ridl_descriptor::describe::to_json(catalog) {
         Ok(json) => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json).expect("a JSON value serializes")
-            );
-            ExitCode::SUCCESS
+            use std::io::Write as _;
+            let text = serde_json::to_string_pretty(&json).expect("a JSON value serializes");
+            let mut stdout = std::io::stdout().lock();
+            match writeln!(stdout, "{text}").and_then(|()| stdout.flush()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(err) => {
+                    // A closed stdout is a write I/O failure: exit 2. stderr
+                    // can be closed too, and that failure is ignored.
+                    let _ = writeln!(std::io::stderr(), "error: {}: {err}", path.display());
+                    ExitCode::from(2)
+                }
+            }
         }
         Err(err) => {
             eprintln!(

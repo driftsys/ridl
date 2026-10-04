@@ -261,4 +261,28 @@ mod tests {
             })
         );
     }
+
+    /// Every value of each enum the view renders, against the member name
+    /// the schema gives it. planus generates `ENUM_VALUES` and a derived
+    /// `Debug` from the schema, so the `Debug` text is the schema member
+    /// name and is not computed by the functions under test: two swapped
+    /// arms in one of them make this test fail.
+    #[test]
+    fn every_enum_value_renders_as_its_schema_member_name() {
+        for value in Kind::ENUM_VALUES {
+            assert_eq!(kind_name(value), format!("{value:?}"));
+        }
+        for value in Encoding::ENUM_VALUES {
+            assert_eq!(encoding_name(value), format!("{value:?}"));
+        }
+        for value in TimingMode::ENUM_VALUES {
+            assert_eq!(timing_mode_name(value), format!("{value:?}"));
+        }
+        for value in SizeStateTag::ENUM_VALUES {
+            assert_eq!(state_name(value), format!("{value:?}"));
+        }
+        for value in UnboundedCause::ENUM_VALUES {
+            assert_eq!(cause_name(value), format!("{value:?}"));
+        }
+    }
 }
