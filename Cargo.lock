@@ -2073,6 +2073,7 @@ dependencies = [
  "ridl-backend-rust",
  "ridl-ir",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

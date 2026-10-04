@@ -8,6 +8,7 @@
 //! writes the bytes [`finish`] returns and passes the bytes it read to
 //! [`verify`].
 
+pub mod describe;
 pub mod generated;
 pub mod hash;
 pub mod lower;
