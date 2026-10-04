@@ -309,6 +309,12 @@ interface Clock {\n\
     let with_face = TempDir::new("std-face");
     build_from(&file, with_face.path(), "rust,catalog");
 
+    assert_eq!(
+        catalogs_in(alone.path()),
+        ["clock.catalog.binfb"],
+        "`--emit catalog` writes no catalog for ridl.std"
+    );
+
     let name = "clock.catalog.binfb";
     let alone_bytes = std::fs::read(alone.path().join(name)).unwrap();
     let face_bytes = std::fs::read(with_face.path().join(name)).unwrap();
@@ -463,7 +469,7 @@ fn describe_rejects_a_version_this_toolchain_does_not_read() {
 /// A write I/O failure is exit 2 (ADR-0010 decision 1), not the exit 101 of
 /// a panic.
 #[test]
-fn describe_exits_2_when_stdout_is_closed() {
+fn describe_exits_2_when_the_stdout_reader_has_gone() {
     let src = TempDir::new("closed-pipe-src");
     let mut source =
         String::from("package veh.wide\ntype Level: integer [0..100]\ninterface Wide {\n");
@@ -486,8 +492,7 @@ fn describe_exits_2_when_stdout_is_closed() {
     let output = child.wait_with_output().expect("the ridl binary exits");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "{stderr}");
-    assert!(
-        stderr.starts_with(&format!("error: {}: ", catalog.display())),
-        "{stderr}"
-    );
+    // EPIPE is 32 on Linux and macOS.
+    let cause = std::io::Error::from_raw_os_error(32);
+    assert_eq!(stderr, format!("error: {}: {cause}\n", catalog.display()));
 }

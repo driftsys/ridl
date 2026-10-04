@@ -9,7 +9,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The `ridl` command-line toolchain: check, build, fmt, lock, diff, lsp, mcp, and describe, over the shared compiler crates."
+description = "The `ridl` command-line toolchain: check, baseline, build, test, fmt, diff, lock, lsp, mcp, and describe, over the shared compiler crates."
 
 [[bin]]
 name = "ridl"

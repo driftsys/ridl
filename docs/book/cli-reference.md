@@ -1058,17 +1058,19 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the eight subcommands [ADR-0010][adr-0010] decision 6 examined on
-2026-07-27, it found `ridl fmt` is the only one that reliably names the actual
-unreadable path this way in every case it was tested against. `ridl describe`,
-added later, names the path in every exit-2 message about a path it was given.
-`ridl check`, `ridl build`,
-`ridl baseline`, `ridl lock`, `ridlc check`, and `ridlc build` still exit 2 on
-the same inputs, but with the wrong cause or none: an unreadable *workspace root*
-reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
+Of the eight subcommands [ADR-0010][adr-0010] decision 6 examined on 2026-07-27,
+it found `ridl fmt` is the only one that reliably names the actual unreadable
+path this way in every case it was tested against. `ridl describe`, added later,
+names the path in every exit-2 message about a path it was given. `ridl check`,
+`ridl build`, `ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on
+the same inputs, but with the wrong cause or none: an unreadable *workspace
+root* reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
 directly against this build — and an unreadable subdirectory nested inside an
 otherwise-readable workspace reports a bare `error: Permission denied (os
-error 13)`, naming no path at all — also confirmed directly. Tracked as
+error 13)`, naming no path at all — also confirmed directly. The other two
+subcommands decision 6 examined name a path only in part: `ridl diff` names the
+unreadable directory only when it is the argument given, and `ridl test` names
+the workspace root, not the subdirectory that failed. Tracked as
 [issue driftsys/ridl#196][issue-196], not fixed as of this page.
 
 ### `ridl diff`
@@ -1687,10 +1689,13 @@ ridl describe out/corpus.baseline.catalog.binfb
 
 **Exit codes.** 0 when the descriptor was printed. 2 for a missing or
 unreadable path, a file that is not a catalog descriptor, a version this
-toolchain does not read, or a malformed buffer; the message names the path and
-the cause. There is no exit 1: `ridl describe` answers no question that can come
-back negative. The exit-0 outcome, the missing path, the foreign file and two
-malformed buffers are confirmed against the built binary by
+toolchain does not read, a malformed buffer, or an I/O failure writing to
+stdout (a pipe whose reader has gone); the message names the path and the
+cause. There is no exit 1: `ridl describe` answers no question that can come
+back negative. The exit-0 outcome, the missing path, the foreign file, a
+malformed buffer (three fixtures, of which the truncated one reaches the
+whole-buffer walk), a version the toolchain does not read, and the write
+failure on stdout are confirmed against the built binary by
 `crates/ridl/tests/describe_cli.rs`.
 
 ## `ridlc`
@@ -1884,7 +1889,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
-| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer |
+| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a

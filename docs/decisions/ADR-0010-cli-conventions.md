@@ -111,7 +111,7 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    | `ridl mcp`        | a clean shutdown — the host closes stdin after the `initialize` handshake                                                                   |                                                                                                                                                                                                                                                                                                                       | the Tokio runtime fails to build, or the transport ends before the `initialize` handshake, or a task the SDK runs for the session fails after it                                                                                                     |
    | `ridl lock`       | the file is written, or there is nothing to change                                                                                          | a diagnostic error over the source, nothing written: a live entry with no declaration when plain `ridl lock` is asked to allocate (RIDL-409); a malformed lock file, conflict markers included (RIDL-410)                                                                                                             | the path is missing or unreadable; a bad flag — `--rename` naming no live entry, or a `NEW` that is not a declaration without an entry; `--retire` naming a still-declared interface; either flag over more than one package; an I/O failure writing |
    | `ridl lock merge` | the three sides merge clean, and the result is written to OURS                                                                              | entries disagree: OURS is written with git conflict markers of MARKER_SIZE around only the disagreeing entries, and is malformed (RIDL-410) until an author resolves it                                                                                                                                               | an input cannot be read, or does not parse (OURS is left as it was); MARKER_SIZE is not a number from 1 up; an I/O failure writing OURS                                                                                                              |
-   | `ridl describe`   | the descriptor was printed                                                                                                                  |                                                                                                                                                                                                                                                                                                                       | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer                                                                                                                    |
+   | `ridl describe`   | the descriptor was printed                                                                                                                  |                                                                                                                                                                                                                                                                                                                       | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                  |
 
    The claim is scoped to these eight, constructed this way, on this date — not
    asserted as a property that holds by design of every subcommand a future PR
@@ -208,17 +208,19 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    (exit 0), `describe_reports_a_missing_path_with_exit_2`,
    `describe_rejects_a_foreign_file_before_any_read`,
    `describe_rejects_a_truncated_and_a_flipped_descriptor` (a malformed buffer,
-   three ways: truncated, a root offset past the end, and one byte flipped
-   inside the body), `describe_rejects_a_version_this_toolchain_does_not_read`
-   (a descriptor that `ridl_descriptor::finish` writes with the next schema
-   version, because the built `ridl` writes only the version it reads), and
-   `describe_exits_2_when_stdout_is_closed` (a write I/O failure). The other
-   four exit-2 tests also check that stdout is empty. A missing path and an
-   unreadable path take the same read-error path, and every
-   `ridl_descriptor::verify` error takes one exit-2 path. Its 1 column is empty,
-   as for `ridl lsp` and `ridl mcp`: `ridl describe` answers no question that
-   can come back negative — it prints the descriptor, or the tool could not
-   answer.
+   three fixtures: truncated, a root offset past the end, and one byte flipped
+   inside the body; the truncated one reaches the whole-buffer walk, and the
+   other two are rejected by the root check before it),
+   `describe_rejects_a_version_this_toolchain_does_not_read` (a descriptor that
+   `ridl_descriptor::finish` writes with the next schema version, because the
+   built `ridl` writes only the version it reads), and
+   `describe_exits_2_when_the_stdout_reader_has_gone` (a write I/O failure on a
+   pipe whose reader has gone). The other four exit-2 tests also check that
+   stdout is empty. A missing path and an unreadable path take the same
+   read-error path, and every `ridl_descriptor::verify` error takes one exit-2
+   path. Its 1 column is empty, as for `ridl lsp` and `ridl mcp`:
+   `ridl describe` answers no question that can come back negative — it prints
+   the descriptor, or the tool could not answer.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 

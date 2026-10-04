@@ -357,8 +357,11 @@ fn run_describe(path: &Path) -> ExitCode {
             match writeln!(stdout, "{text}").and_then(|()| stdout.flush()) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(err) => {
-                    // A closed stdout is a write I/O failure: exit 2. stderr
-                    // can be closed too, and that failure is ignored.
+                    // A pipe whose reader has gone (EPIPE) is a write I/O
+                    // failure: exit 2. A closed descriptor (`1>&-`) does not
+                    // reach this branch: std treats it as a sink and the exit
+                    // is 0. stderr can be closed too, and that failure is
+                    // ignored.
                     let _ = writeln!(std::io::stderr(), "error: {}: {err}", path.display());
                     ExitCode::from(2)
                 }
