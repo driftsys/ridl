@@ -945,6 +945,25 @@ impl Checker<'_> {
 
     // --- declarations -----------------------------------------------------
 
+    /// TYPL-405: a `@deprecated` with no reason string on the carrier `name`,
+    /// reported at `range`. Every carrier whose IR message has a `deprecated`
+    /// field — a declaration, an interaction, an interface, a service and a
+    /// struct field — is still marked deprecated, with an empty reason.
+    fn deprecated_without_reason(
+        &mut self,
+        doc_info: &docs::DocInfo,
+        name: &str,
+        range: TextRange,
+    ) {
+        if doc_info.deprecated_missing_reason() {
+            self.warning(
+                DiagCode::TYPL_405,
+                range,
+                format!("`@deprecated` on `{name}` has no reason string"),
+            );
+        }
+    }
+
     fn lower_definition(&mut self, definition: &Definition) -> Option<v2::Decl> {
         let name = declared_name(definition)?;
         let kind = match definition {
@@ -979,13 +998,7 @@ impl Checker<'_> {
         // ADR-0026). TYPL-405 warns when @deprecated carries no reason string;
         // the other doc lints run in `doc_lint`.
         let doc_info = docs::scan(&definition.doc_comments());
-        if doc_info.deprecated_missing_reason() {
-            self.warning(
-                DiagCode::TYPL_405,
-                name_range(definition),
-                format!("`@deprecated` on `{name}` has no reason string"),
-            );
-        }
+        self.deprecated_without_reason(&doc_info, &name, name_range(definition));
 
         Some(v2::Decl {
             name,
@@ -2254,6 +2267,11 @@ impl Checker<'_> {
         // `labels` and `deprecated` on a field, so the tags fill them as on a
         // declaration.
         let doc_info = docs::scan(&field.doc_comments());
+        self.deprecated_without_reason(
+            &doc_info,
+            &name,
+            member_name_range(field.name(), field.syntax()),
+        );
         v2::Field {
             name,
             ordinal,
@@ -3684,13 +3702,15 @@ impl Checker<'_> {
         self.interface_internal = false;
 
         let doc_info = docs::scan(&def.doc_comments());
+        let name = declared_name(def).unwrap_or_default();
+        self.deprecated_without_reason(&doc_info, &name, name_range(def));
         let visibility = if def.is_internal() {
             v2::Visibility::Internal
         } else {
             v2::Visibility::Public
         };
         v2::Interface {
-            name: declared_name(def).unwrap_or_default(),
+            name,
             visibility: visibility as i32,
             doc: doc_info.doc,
             labels: doc_info.labels,
@@ -3734,6 +3754,11 @@ impl Checker<'_> {
             }
         };
         let doc_info = docs::scan(&member.doc_comments());
+        self.deprecated_without_reason(
+            &doc_info,
+            &interaction_name,
+            member_name_range(member.name(), member.syntax()),
+        );
         v2::Decl {
             // A tombstone's `Decl` name stays empty — the retired name lives
             // in `Reserved.name` (typl §7.4).
@@ -3780,6 +3805,14 @@ impl Checker<'_> {
             self.check_service_name(dotted);
         }
         let doc_info = docs::scan(&service.doc_comments());
+        self.deprecated_without_reason(
+            &doc_info,
+            &name,
+            dotted.as_ref().map_or_else(
+                || service.syntax().text_range(),
+                |dotted| dotted.syntax().text_range(),
+            ),
+        );
         // The `:` token discriminates the two forms. A service the parser
         // recovered with neither form reads as an empty inline shape, the
         // reading `SourceFile::shapes` takes too.
@@ -9678,6 +9711,73 @@ mod tests {
             panic!("`c` is a command");
         };
         assert_eq!(command.params[0].doc, "Doc 5.");
+    }
+
+    /// A struct field's `@labels` and `@deprecated` fill the field's own IR
+    /// fields (typl §14, ADR-0026).
+    #[test]
+    fn field_labels_and_deprecated_fill_the_ir() {
+        let checked = check_source(
+            "app",
+            "package app\nstruct S {\n  /// A flag.\n  /// @labels A, B\n  /// @deprecated \"x\"\n  a: boolean\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.doc, "A flag.");
+        assert_eq!(field.labels, ["A", "B"]);
+        assert_eq!(field.deprecated.as_deref(), Some("x"));
+    }
+
+    /// TYPL-405 on a field, at the field's name, as on a declaration.
+    #[test]
+    fn typl_405_bare_deprecated_on_a_field() {
+        let text = "package app\nstruct S {\n  /// @deprecated\n  a: boolean\n}\n";
+        let checked = check_source("app", text);
+        assert_eq!(codes(&checked), vec!["TYPL-405"]);
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Warning);
+        let range = diagnostic.primary.range;
+        assert_eq!(
+            &text[usize::from(range.start())..usize::from(range.end())],
+            "a"
+        );
+        assert!(diagnostic.message.contains("`a`"), "{}", diagnostic.message);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.deprecated.as_deref(), Some(""));
+    }
+
+    /// TYPL-405 on an interaction and on an interface, which also carry
+    /// `deprecated`.
+    #[test]
+    fn typl_405_bare_deprecated_on_an_interaction_and_an_interface() {
+        let text = format!(
+            "{PRELUDE}/// @deprecated\ninterface I {{\n  /// @deprecated\n  signal speed : Speed @10ms\n}}\n"
+        );
+        let checked = check_ridl("app", &text);
+        assert_eq!(codes(&checked), vec!["TYPL-405", "TYPL-405"]);
+        // The interface's envelope lowers after its members, so its
+        // diagnostic comes second; the renderer sorts by position.
+        let spans: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let range = diagnostic.primary.range;
+                &text[usize::from(range.start())..usize::from(range.end())]
+            })
+            .collect();
+        assert_eq!(spans, ["speed", "I"]);
+        assert_eq!(
+            interaction(&checked, "speed").deprecated.as_deref(),
+            Some("")
+        );
     }
 
     #[test]

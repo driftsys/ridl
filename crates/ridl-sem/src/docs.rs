@@ -69,6 +69,11 @@ pub struct LinkCandidate {
     /// The span of the whole link in the source file — for an `@see` target,
     /// the span of the name.
     pub source: TextRange,
+    /// The span of the target name alone in the source file: the `Name` of
+    /// `[Name]`, the name inside the backticks of ``[`Name`]``, the name in
+    /// the second bracket of `[text][Name]`, or the name after `@see`. A
+    /// rename of the target replaces exactly this span.
+    pub target: TextRange,
 }
 
 /// A doc tag the scanner could not read (ADR-0026).
@@ -168,11 +173,13 @@ fn read_tag(line: &Line<'_>, info: &mut DocInfo) -> bool {
     match word {
         "see" => {
             if is_qualified_name(value) {
+                let span = line.span(value_start..text.len());
                 info.see.push(LinkCandidate {
                     segments: value.split('.').map(str::to_string).collect(),
                     text: value.to_string(),
                     doc_range: 0..0,
-                    source: line.span(value_start..text.len()),
+                    source: span,
+                    target: span,
                 });
             } else {
                 info.problems.push(TagProblem {
@@ -305,10 +312,20 @@ fn link_candidates(doc: &str, lines: &[DocLine]) -> Vec<LinkCandidate> {
             continue;
         };
         let end = candidate.doc_range.end;
-        if let Some(source) = source_span(lines, &candidate.doc_range) {
+        if let (Some(source), Some(target)) = (
+            source_span(lines, &candidate.doc_range),
+            source_span(lines, &candidate.target),
+        ) {
             links.push(LinkCandidate {
+                segments: candidate
+                    .target_text()
+                    .split('.')
+                    .map(str::to_string)
+                    .collect(),
+                text: candidate.text,
+                doc_range: candidate.doc_range,
                 source,
-                ..candidate
+                target,
             });
         }
         index = end;
@@ -316,9 +333,26 @@ fn link_candidates(doc: &str, lines: &[DocLine]) -> Vec<LinkCandidate> {
     links
 }
 
-/// A link candidate opening at `index` with a `[` of prose text, with a
-/// placeholder source span. `None` when no candidate opens there.
-fn candidate_at(doc: &str, mask: &[Mask], index: usize) -> Option<LinkCandidate> {
+/// A link candidate found in the doc body, as byte ranges of the body.
+struct Candidate<'a> {
+    doc: &'a str,
+    /// The visible text.
+    text: String,
+    /// The whole link.
+    doc_range: Range<usize>,
+    /// The target name alone.
+    target: Range<usize>,
+}
+
+impl Candidate<'_> {
+    fn target_text(&self) -> &str {
+        &self.doc[self.target.clone()]
+    }
+}
+
+/// A link candidate opening at `index` with a `[` of prose text. `None` when
+/// no candidate opens there.
+fn candidate_at<'a>(doc: &'a str, mask: &[Mask], index: usize) -> Option<Candidate<'a>> {
     let bytes = doc.as_bytes();
     if bytes[index] != b'[' || mask[index] != Mask::Text {
         return None;
@@ -335,33 +369,33 @@ fn candidate_at(doc: &str, mask: &[Mask], index: usize) -> Option<LinkCandidate>
     if bytes.get(close + 1) == Some(&b'[')
         && let Some(second_close) = closing_bracket(bytes, close + 1)
     {
-        let target = &doc[close + 2..second_close];
-        if text_only(close + 2..second_close) && is_qualified_name(target) {
-            return Some(LinkCandidate {
-                segments: target.split('.').map(str::to_string).collect(),
+        let target = close + 2..second_close;
+        if text_only(target.clone()) && is_qualified_name(&doc[target.clone()]) {
+            return Some(Candidate {
+                doc,
                 text: content.to_string(),
                 doc_range: index..second_close + 1,
-                source: TextRange::empty(0.into()),
+                target,
             });
         }
     }
     // `[Name]`.
     if text_only(index + 1..close) && is_qualified_name(content) {
-        return Some(LinkCandidate {
-            segments: content.split('.').map(str::to_string).collect(),
+        return Some(Candidate {
+            doc,
             text: content.to_string(),
             doc_range: index..close + 1,
-            source: TextRange::empty(0.into()),
+            target: index + 1..close,
         });
     }
     // ``[`Name`]``: the content is exactly one code span.
     let inner = content.strip_prefix('`')?.strip_suffix('`')?;
     if mask[index + 1..close].iter().all(|m| *m == Mask::Code) && is_qualified_name(inner) {
-        return Some(LinkCandidate {
-            segments: inner.split('.').map(str::to_string).collect(),
+        return Some(Candidate {
+            doc,
             text: inner.to_string(),
             doc_range: index..close + 1,
-            source: TextRange::empty(0.into()),
+            target: index + 2..close - 1,
         });
     }
     None
@@ -677,6 +711,26 @@ mod tests {
             &text[usize::from(range.start())..usize::from(range.end())],
             "[Speed]"
         );
+    }
+
+    /// The target span of every link form and of `@see` covers the name
+    /// alone, after the `*` decoration of a block doc and after a multibyte
+    /// character earlier on the line.
+    #[test]
+    fn scan_target_spans_cover_the_name_alone() {
+        let text =
+            "/**\n * é [Speed], é [`veh.Gear`], é [the gear][Gear.PARK].\n * @see veh.Gear\n */";
+        let info = scan(&doc_tokens(&[text]));
+        let slice = |range: TextRange| &text[usize::from(range.start())..usize::from(range.end())];
+        let targets: Vec<&str> = info.links.iter().map(|link| slice(link.target)).collect();
+        assert_eq!(targets, ["Speed", "veh.Gear", "Gear.PARK"]);
+        let sources: Vec<&str> = info.links.iter().map(|link| slice(link.source)).collect();
+        assert_eq!(
+            sources,
+            ["[Speed]", "[`veh.Gear`]", "[the gear][Gear.PARK]"]
+        );
+        assert_eq!(slice(info.see[0].target), "veh.Gear");
+        assert_eq!(info.see[0].target, info.see[0].source);
     }
 
     /// A line comment keeps the indentation after its one separating space,
