@@ -8,9 +8,9 @@ Amended 2026-10-04 by the lint foundation design (spec 0,
 [ADR-0024](ADR-0024-lint-registry-and-levels.md)): §4 gains the `[lints]` table,
 which both manifest kinds accept, and its resolution order.
 
-Amended 2026-10-04 by ADR-0026 (documentation in the source, spec 2a): §4 gains
-root discovery, so an entry inside a workspace member loads the member's
-workspace.
+Amended 2026-10-04 by [ADR-0026](ADR-0026-doc-comments.md) (documentation in the
+source, spec 2a): §4 gains root discovery, so an entry inside a workspace member
+loads the member's workspace.
 
 ## Context
 

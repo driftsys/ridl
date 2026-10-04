@@ -73,6 +73,9 @@ as-built map.
   - ADR-0025 and `docs/design/mcp-workspace-tools.md` — before changing a tool
     of `ridl-mcp`, its input or output schema, `tools.json`, or the overlay
     loader.
+  - ADR-0026 and `docs/book/documenting.md` — before changing doc comments:
+    their carriers, links, tags, the doc lints, the IR's doc fields,
+    `ridl_ir::rules`, or how a workspace member finds its root.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

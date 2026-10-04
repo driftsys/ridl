@@ -59,7 +59,7 @@ const DEFINITION_KEYWORDS: &[&str] = &[
 const INTERACTION_KEYWORDS: &[&str] = &["signal", "event", "command", "query", "fixed", "reserved"];
 
 /// The four doc tags offered after `@` at the start of a doc line
-/// (typl §14.3, ADR-0026).
+/// (typl §14.2, ADR-0026).
 const DOC_TAGS: &[&str] = &["see", "since", "deprecated", "labels"];
 
 /// The completion items for the cursor at `offset` in `file` (a file of `pkg`).

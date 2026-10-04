@@ -24,11 +24,11 @@ and
 [`docs/archive/2026-10-03-lint-foundation-plan.md`](../archive/2026-10-03-lint-foundation-plan.md);
 the design's §10 holds the alternatives, restated below.
 
-Amended by ADR-0026 (documentation in the source): a catalogue row may declare
-`allow` as its default level (decisions 1, 12 and 15). TYPL-410
-(`doc-comment-style`) is the first row that does. ADR-0026 also replaces
-decision 9: entering at a workspace member loads its workspace, and reports on
-the member (issue #529).
+Amended by [ADR-0026](ADR-0026-doc-comments.md) (documentation in the source): a
+catalogue row may declare `allow` as its default level (decisions 1, 8, 12 and
+15). TYPL-410 (`doc-comment-style`) is the first row that does. ADR-0026 also
+replaces decision 9: entering at a workspace member loads its workspace, and
+reports on the member (issue #529).
 
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
@@ -293,6 +293,9 @@ stage driver recorded none for them at implementation.
 - [ADR-0010](ADR-0010-cli-conventions.md) decision 1 — exit codes; amended.
 - [ADR-0005](ADR-0005-agent-enablement.md) §7 — the agent-legibility invariants,
   including the contract stability policy.
+- [ADR-0026](ADR-0026-doc-comments.md) decisions 8 and 10 — the lint that is
+  `allow` by default, and root discovery from a workspace member; they amend
+  decisions 1, 8, 12 and 15 and replace decision 9.
 - [The lints page](../book/lints.md) and
   [the CLI reference](../book/cli-reference.md).
 - [The toolchain architecture technote](../technotes/walking-skeleton-architecture.md)

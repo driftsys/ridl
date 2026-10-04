@@ -1184,9 +1184,12 @@ Discarded by the compiler.
 
 ## 14. Doc Comments
 
-Attached to the immediately following definition; processed by documentation
-generators and IDEs; no semantic effect. No blank line between a doc comment and
-its definition (warning).
+A doc comment documents the next named declaration or member, called its
+**carrier**. It is processed by documentation generators and editors and has no
+semantic effect: the catalog hash clears every doc field, and `ridl diff`
+classifies a change to one as `DocOnly`. No blank line may separate a doc
+comment from its carrier (TYPL-404). The decisions behind this section are
+ADR-0026.
 
 ### 14.1 Syntax
 
@@ -1195,17 +1198,36 @@ its definition (warning).
 type WheelRadius : m [0.20..0.45 step 0.001]
 ```
 
-Multi-line `/** ... */` with full [CommonMark](https://commonmark.org) markdown,
-`[TypeName]` / `[pkg.TypeName]` reference links, and code blocks — as in the
-RIDL Language Reference §15.
+`///` lines are the house style. A block `/** ... */` has the same meaning; a
+leading `*` on each of its lines is decoration and is stripped. A project can
+require `///` with the `doc-comment-style` lint (TYPL-410, `allow` by default).
+
+A doc is [CommonMark](https://commonmark.org), and a bracketed name in it is a
+link to a declaration or a member (§14.5). The carriers are listed in §14.4.
+
+Examples are written under a `# Examples` heading with a fenced code block. This
+is a convention: the compiler does not read it.
 
 ### 14.2 Tags
 
-| Tag           | Value                                 | Valid on |
-| ------------- | ------------------------------------- | -------- |
-| `@see`        | qualified type name                   | all      |
-| `@labels`     | comma-separated classification labels | all      |
-| `@deprecated` | `"reason string"`                     | all      |
+A tag is `@word` at the start of a line of the doc, after the comment markers
+and leading whitespace. An `@` anywhere else is prose. A tag line is not part of
+the doc text. Each tag may appear more than once, and every value is kept.
+
+| Tag           | Value                                               | Valid on |
+| ------------- | --------------------------------------------------- | -------- |
+| `@see`        | one qualified name, with an optional member; a link | all      |
+| `@since`      | a version, `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`     | all      |
+| `@labels`     | comma-separated classification labels (§14.3)       | all      |
+| `@deprecated` | `"reason string"`                                   | all      |
+
+Any other tag draws TYPL-408. A `@see` or `@since` with a missing or malformed
+value draws TYPL-409, and a `@see` target that does not resolve draws TYPL-401.
+A `@deprecated` with no reason draws TYPL-405. `@deprecated` and `@labels` are
+stored in the IR on every carrier that has the field — a declaration, a struct
+field, an interface, an interaction and a service. The general form's plan to
+make `deprecated` and `labels` attribute keys is not implemented (ADR-0026
+decision 4).
 
 ### 14.3 Labels
 
@@ -1214,6 +1236,48 @@ RIDL Language Reference §15.
 defines no vocabulary — an external **profile** validates labels and enforces
 combinations. The compiler passes labels through to generated metadata
 unchanged.
+
+### 14.4 Carriers
+
+| Carrier                                                                       | A doc is required (TYPL-406)           |
+| ----------------------------------------------------------------------------- | -------------------------------------- |
+| `type`, `const`, `struct`, `enum`, `enumset`, `union`, `interface`, `service` | when not `internal`                    |
+| struct field, enum value, enumset bit, union arm, interaction                 | when the declaration is not `internal` |
+| parameter of a `command` or `query`                                           | never                                  |
+| `reserved` entry                                                              | never                                  |
+| rsdl `system`, `component`, `distribution`, `deployment`, `machine`           | always                                 |
+| rsdl body line (`offers`, `requires`, a bare member reference)                | never                                  |
+
+A package needs no doc. A doc made only of tags (§14.2) counts as missing. A
+parameter's type is always a named type, which carries its own doc. A doc
+comment in any other position — before `package`, an `import`, a return type or
+an attribute block, an arm of an inline `T | E` return, or at the end of a file
+or a body — is misplaced (TYPL-407).
+
+### 14.5 Links
+
+Three bracket forms are doc links:
+
+- `[Name]` and `[pkg.Name]`;
+- ``[`Name`]``, the code-span form;
+- `[text][Name]`, with an explicit label.
+
+The bracket content is a link only when it is a qualified identifier with at
+most one member suffix: `[0..250]` and `[see below]` are prose. A name inside a
+code span or a fenced code block is not a link, and a `[Name]` that has a
+CommonMark link reference definition in the same doc is an ordinary Markdown
+link.
+
+A link resolves in the scope of the file that holds it, with the rules of a type
+reference (§3): a bare name is looked up locally, then among the imported names,
+then in `ridl.std`. A qualified `pkg.Name` names any package the current package
+can depend on (ADR-0002 §5) without an import; a remote package of `[imports]`
+is not loaded by the compiler, so a link into one does not resolve. One more
+segment names a member of the declaration: a field, enum value, enumset bit,
+union arm or interaction (`[Gear.PARK]`, `[CruiseControl.setLever]`). A
+declaration that is `internal` in another package cannot be linked to. A link
+that does not resolve draws TYPL-401; each link that resolves is stored in the
+IR with its canonical target.
 
 ---
 
@@ -2070,8 +2134,11 @@ doc_comment   = "/**" { doc_tag | markdown_text } "*/"
               | { "///" markdown_text newline } ;
 
 doc_tag       = "@see" qualified_id
+              | "@since" version
               | "@labels" label { "," label }
               | "@deprecated" string_lit ;
+
+version       = int_lit "." int_lit [ "." int_lit ] ;
 
 label         = SCREAMING_SNAKE_ID [ "(" SCREAMING_SNAKE_ID ")" ] ;
 

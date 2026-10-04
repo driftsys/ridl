@@ -841,8 +841,23 @@ diagnostics, and the language server and the MCP tool `ridl_check` apply the
 same levels. The decisions are
 [ADR-0024](decisions/ADR-0024-lint-registry-and-levels.md); the user-facing
 description is [the lints page of the book](book/lints.md). Its debt is #682,
-and #529 (a workspace member entered alone ignores the root's `[lints]`) stays
-open.
+and #529 (a workspace member entered alone ignores the root's `[lints]`) stayed
+open until spec 2a.
+
+**Spec 2a of the devex and agent tracks, documentation in the source, landed on
+2026-10-04** (closes #529). The checker reads the doc comment of every
+declaration and member, a parameter and every rsdl declaration and body line
+included, into the IR. `[Name]` doc links and `@see` targets resolve with the
+rules of a type reference, and the IR stores each resolved target. The tags are
+`@see`, `@since`, `@deprecated` and `@labels`. Six new doc lints join TYPL-404
+and TYPL-405, among them `missing-docs` and `doc-comment-style`, the first lint
+that is `allow` by default. `ridl_ir::rules` extracts the rules of an item, and
+the language server shows the doc and those rules on hover and in completion,
+and completes, follows and renames doc links. An entry inside a workspace member
+now loads its workspace in every entry point. The decisions are
+[ADR-0026](decisions/ADR-0026-doc-comments.md); the user-facing description is
+[the documenting chapter of the book](book/documenting.md). How generated code
+renders the docs is spec 2b.
 
 ---
 

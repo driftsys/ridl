@@ -753,18 +753,14 @@ defines no vocabulary:
 package veh.cluster
 import veh.common.Speed
 
-/**
- * Cruise control interface.
- * @labels SIL_2, SEC_2, PRIVATE
- */
+/// Cruise control interface.
+/// @labels SIL_2, SEC_2, PRIVATE
 interface CruiseControl {
   signal engagedSpeed: Speed @[50ms..500ms]
 }
 
-/**
- * Logging interface — no safety or security requirement.
- * @labels SIL_QM, SEC_NA, PUBLIC
- */
+/// Logging interface — no safety or security requirement.
+/// @labels SIL_QM, SEC_NA, PUBLIC
 interface LogService {
   signal lastSpeed: Speed @[1s..10s]
 }
@@ -983,12 +979,10 @@ enum DriveLayout {
   FOUR_WD = 3
 }
 
-/**
- * Vehicle identity and hardware capability manifest.
- * Provisioned at the factory. Software fields updated over the air.
- *
- * @labels SIL_QM, SEC_2, CONFIDENTIAL
- */
+/// Vehicle identity and hardware capability manifest.
+/// Provisioned at the factory. Software fields updated over the air.
+///
+/// @labels SIL_QM, SEC_2, CONFIDENTIAL
 interface VehicleIdentity {
   // vehicle identity — factory provisioned
   fixed vin: Vin
@@ -1079,11 +1073,9 @@ struct FaultPayload {
   timestamp: Timestamp
 }
 
-/**
- * Powertrain management interface.
- *
- * @labels SIL_3, SEC_2, PUBLIC
- */
+/// Powertrain management interface.
+///
+/// @labels SIL_3, SEC_2, PUBLIC
 interface PowertrainManager {
   signal engineMetrics: EngineMetrics @20ms
   signal engineRpm: RPM @20ms
@@ -1199,12 +1191,10 @@ struct AccessEvent {
   timestamp: Timestamp
 }
 
-/**
- * Body control module interface.
- * Covers doors, windows, lights and climate.
- *
- * @labels SIL_1, SEC_3, PRIVATE
- */
+/// Body control module interface.
+/// Covers doors, windows, lights and climate.
+///
+/// @labels SIL_1, SEC_3, PRIVATE
 interface BodyControl {
   signal doorStates: DoorSet @[50ms..2s]
   signal windowStates: WindowSet @[100ms..5s]
@@ -1212,10 +1202,8 @@ interface BodyControl {
 
   event doorStateChanged: DoorState @[50ms..10s]
 
-  /**
-   * Vehicle access attempt — elevated privacy.
-   * @labels SIL_1, SEC_4, CONFIDENTIAL
-   */
+  /// Vehicle access attempt — elevated privacy.
+  /// @labels SIL_1, SEC_4, CONFIDENTIAL
   event accessAttempt: AccessEvent @[100ms..30s]
 
   command setAllLocks(lock: LockState) @[..100ms]
@@ -1302,12 +1290,10 @@ struct FatigueEvent {
   timestamp: Timestamp
 }
 
-/**
- * Driver monitoring system interface.
- * Processes biometric and behavioural signals to assess driver state.
- *
- * @labels SIL_2, SEC_3, CONFIDENTIAL
- */
+/// Driver monitoring system interface.
+/// Processes biometric and behavioural signals to assess driver state.
+///
+/// @labels SIL_2, SEC_3, CONFIDENTIAL
 interface DriverMonitoring {
   signal attentionMetrics: AttentionMetrics @[100ms..500ms]
   signal drowsinessState: DrowsinessState @[500ms..5s]

@@ -6,7 +6,9 @@ other entry below is Accepted.
 - **ADR-0002 — Module system.** `package` / `import` / `as` / `internal`, the
   manifest, lockfile, and resolver. Amended 2026-10-04 by the lint foundation
   design (ADR-0024): §4 gains the `[lints]` table, which both manifest kinds
-  accept, and its resolution order.
+  accept, and its resolution order. Amended 2026-10-04 by the doc comments
+  record (ADR-0026): §4 gains root discovery, so an entry inside a workspace
+  member loads the member's workspace.
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
   order and technology choices (companion to the roadmap). Amended 2026-08-03:
   uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl
@@ -319,11 +321,12 @@ other entry below is Accepted.
   partly from the stage driver at implementation (the root-scope rule in 10, the
   source of the default level in 12, and 13 to 16; driftsys/ridl#678). Every
   Warning and Info catalogue code is a lint with a stable kebab-case name, and
-  its catalogue severity is its default level; a level (`allow`, `info`, `warn`
-  or `deny`) is set only in the `[lints]` table of a `ridl.toml`, never on the
-  command line and never in source; the registry and the one function that
-  applies levels live in `ridl-core`, and the entry points that report
-  diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,
+  its catalogue severity is its default level unless its row declares `allow`
+  (decisions 1, 8, 12 and 15, as ADR-0026 amends them); a level (`allow`,
+  `info`, `warn` or `deny`) is set only in the `[lints]` table of a `ridl.toml`,
+  never on the command line and never in source; the registry and the one
+  function that applies levels live in `ridl-core`, and the entry points that
+  report diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,
   `ridlc build`, the language server and the MCP tool `ridl_check` — while
   `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock` and the other MCP tools
   compile with the severities the emit sites chose, so a lint at `deny` never
@@ -349,6 +352,25 @@ other entry below is Accepted.
   lowered system; and the tool names and schemas change only by addition, pinned
   by `tools.json`. Amends ADR-0005 §3 and §7 in place. The as-built description
   is [the MCP workspace tools design record](../design/mcp-workspace-tools.md).
+
+- **ADR-0026 — Doc comments.** Ten decisions: six agreed in the brainstorming
+  session of spec 2a (design D-1 to D-6), the lint table of the reviewed design,
+  and the rulings taken while it was implemented. Every named declaration and
+  member is a doc comment carrier, a parameter included, and so is every rsdl
+  declaration and body line; a doc comment anywhere else draws TYPL-407. A doc
+  is CommonMark, and `[Name]`, ``[`Name`]`` and `[text][Name]` are links that
+  resolve in the scope of their file with the rules of a type reference — a
+  qualified link reaches any package the current one can depend on without an
+  import — and the IR stores each resolved target. The tags are `@see`,
+  `@since`, `@deprecated` and `@labels`; the general form's promotion of
+  `deprecated` and `labels` to attribute keys is deferred to spec 2b. The doc
+  lints are TYPL-401 and TYPL-404 to TYPL-410, `missing-docs` among them, and a
+  catalogue row may declare `allow` as its default, which `doc-comment-style`
+  does. `ridl_ir::rules` extracts the rules an editor hover shows, in a
+  provisional shape. An entry inside a workspace member loads the member's
+  workspace for every entry point (#529). Amends ADR-0002 §4, ADR-0024 decisions
+  1, 8, 12 and 15 and ADR-0025 decision 2 in place, and replaces ADR-0024
+  decision 9.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

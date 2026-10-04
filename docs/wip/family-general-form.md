@@ -313,6 +313,15 @@ Semantics:
 
 ### 4.7 Promoted metadata — `labels`, `deprecated`
 
+> **Not implemented; deferred to spec 2b** (ADR-0026 decision 4). The toolchain
+> keeps `@labels` and `@deprecated` as doc tags, beside `@see` and `@since`. An
+> attribute block exists only on `command`, `query` and `fixed` and on the rsdl
+> declarations, so removing the tags would leave `type`, `struct`, `enum`,
+> `union`, `interface`, `signal`, `event`, fields and enum values with no way to
+> be deprecated. Spec 2b, documentation in generated code, decides between this
+> promotion (adding the attribute block to the grammar) and generating
+> deprecation metadata from the doc tag.
+
 ```ridl
 /// Cruise control service contract.
 interface CruiseControl [ labels = (SIL_2, SEC_2, PRIVATE) ] {
@@ -513,7 +522,7 @@ and adds no profile-specific semantics, which no other uxdl section does.
    production; add the attribute-diagnostic set (§4.3).
 2. **typl §14.2–14.3** — `@labels` and `@deprecated` move from doc tags to
    attributes (§4.7); `@see` remains; TYPL-402/403/405 re-anchor to attribute
-   position.
+   position. Not applied: deferred with §4.7 to spec 2b (ADR-0026 decision 4).
 3. **ridl §2.3** — `init` downgraded from registry keyword to contextual
    attribute key (§4.5).
 4. **Concept note §6 (cruise example)** — rmdl node outputs use `: (…)`
