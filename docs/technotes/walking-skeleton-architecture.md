@@ -25,9 +25,9 @@ One Cargo workspace for the toolchain (`Cargo.toml`,
 `members = ["crates/*", "xtask"]`, `exclude = ["examples"]` — `examples/cabin`
 is a second, separate workspace, because one of its members is written by
 `ridl build` and is not in git): every crate under `crates/` with its directory
-named after it, and the `xtask` automation member at the root (issue #180). The
-VS Code extension (`editors/vscode`) is TypeScript and is not a workspace
-member.
+named after it, and the `xtask` automation member at the root (issue #180),
+which runs two generators, `codegen` and `descriptor-codegen`. The VS Code
+extension (`editors/vscode`) is TypeScript and is not a workspace member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
@@ -290,6 +290,13 @@ that.
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
   `ridl-descriptor`'s accessors from `schema/catalog.fbs` with planus.
+
+  `cargo xtask descriptor-codegen` regenerates
+  `crates/ridl-descriptor/src/generated.rs` from
+  `crates/ridl-descriptor/schema/catalog.fbs` with planus; run it after every
+  schema edit. The xtask test `committed_generated_accessors_match_the_schema`
+  fails while the committed file is stale. The schema is append-only: add fields
+  at the end of a table, never remove or reorder one.
 
 ## The end-to-end pipeline contract
 

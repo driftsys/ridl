@@ -689,7 +689,8 @@ Rust backend's own plugin follows its port onto the model (roadmap story
 E4.5b).
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
-(`out` by default), and — exactly like [`ridl check`](#ridl-check) —
+(`out` by default) — except that `catalog` writes none for a package that
+declares no interface and no service with an inline body — and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
 non-frozen. `<base>` in the `--emit` list above is the package name when
 `PATH` is a package directory or a workspace root, and the input file's stem
@@ -1879,7 +1880,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
-| `ridl describe` | the descriptor was printed | — | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer |
+| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a
