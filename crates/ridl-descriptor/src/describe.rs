@@ -1,16 +1,20 @@
 //! `ridl describe`'s view of a descriptor (the runtime descriptors design,
 //! D-9): strict JSON built by walking the checked accessors. There is no
 //! JSON emit; this is a rendering of the binary. `flatc --json --strict-json
-//! --defaults-json` gives the same view except that it omits an absent
-//! `timing`, which is `null` here.
+//! --defaults-json` gives the same view with two differences. First, `flatc`
+//! omits an absent `timing`, `min_us` or `max_us`, which is `null` here.
+//! Second, `flatc` prints keys in schema order, and this view prints them in
+//! alphabetical order (the workspace's `serde_json` stores an object's keys
+//! sorted).
 
 use serde_json::{Value, json};
 
 use crate::{CatalogRef, Encoding, Kind, SizeStateTag, TimingMode, UnboundedCause};
 
-/// Renders `catalog` as JSON: the schema's field names as keys in schema
-/// order, enums by member name, `hash` as an array of bytes, an absent
-/// `timing` as `null`, and every field of a `MaxSize` row, defaults included.
+/// Renders `catalog` as JSON: the schema's field names as keys, enums by
+/// member name, `hash` as an array of bytes, an absent `timing`, `min_us` or
+/// `max_us` as `null`, and every field of a `MaxSize` row, defaults included.
+/// The serialized object prints its keys in alphabetical order.
 /// A payload's `type_name` is printed as it is stored.
 pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
     let mut interfaces = Vec::new();
@@ -125,8 +129,8 @@ fn cause_name(cause: UnboundedCause) -> &'static str {
 mod tests {
     use super::*;
     use crate::{
-        Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, SCHEMA_VERSION, SizeStateTag,
-        UnboundedCause, verify,
+        Catalog, Interface, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION, Timing,
+        verify,
     };
 
     #[test]
@@ -198,6 +202,62 @@ mod tests {
                     "reserved_ordinals": []
                 }],
                 "retired": []
+            })
+        );
+    }
+
+    #[test]
+    fn the_view_writes_a_present_timing_and_the_retired_list() {
+        let catalog = Catalog {
+            version: SCHEMA_VERSION,
+            name: "p".to_owned(),
+            hash: vec![],
+            toolchain: "0.0.0".to_owned(),
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                number: 2,
+                provisional: false,
+                members: vec![Member {
+                    name: "tick".to_owned(),
+                    ordinal: 3,
+                    kind: Kind::Signal,
+                    payloads: vec![],
+                    timing: Some(Box::new(Timing {
+                        mode: TimingMode::Range,
+                        min_us: Some("100".to_owned()),
+                        max_us: None,
+                    })),
+                }],
+                reserved_ordinals: vec![1, 2],
+            }],
+            retired: vec![RetiredInterface {
+                name: "Old".to_owned(),
+                number: 1,
+            }],
+        };
+        let bytes = crate::finish(&catalog);
+        let json = to_json(verify(&bytes).unwrap()).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "version": 1,
+                "name": "p",
+                "hash": [],
+                "toolchain": "0.0.0",
+                "interfaces": [{
+                    "name": "I",
+                    "number": 2,
+                    "provisional": false,
+                    "members": [{
+                        "name": "tick",
+                        "ordinal": 3,
+                        "kind": "Signal",
+                        "payloads": [],
+                        "timing": { "mode": "Range", "min_us": "100", "max_us": null }
+                    }],
+                    "reserved_ordinals": [1, 2]
+                }],
+                "retired": [{ "name": "Old", "number": 1 }]
             })
         );
     }
