@@ -17,9 +17,9 @@ declarations have no attribute block. The design numbers its decisions D-1 to
 D-6; in this record decision 3 is design D-3, decision 4 is D-4, decision 5 is
 D-5, decision 9 is D-6 and decision 10 is D-1. Decision 7 records D-2 with the
 lint table of the reviewed design. The plan's controller took the rulings
-recorded in decisions 4 (`@deprecated` on every carrier), 5 (remote packages)
-and 10 (a member build that fails on another member's error) while it
-implemented the design.
+recorded in decisions 4 (`@deprecated` accepted on every carrier, stored on
+five), 5 (remote packages) and 10 (a member build that fails on another member's
+error) while it implemented the design.
 
 It amends three records in place, in the same change:
 

@@ -1223,11 +1223,13 @@ the doc text. Each tag may appear more than once, and every value is kept.
 
 Any other tag draws TYPL-408. A `@see` or `@since` with a missing or malformed
 value draws TYPL-409, and a `@see` target that does not resolve draws TYPL-401.
-A `@deprecated` with no reason draws TYPL-405. `@deprecated` and `@labels` are
-stored in the IR on every carrier that has the field — a declaration, a struct
-field, an interface, an interaction and a service. The general form's plan to
-make `deprecated` and `labels` attribute keys is not implemented (ADR-0026
-decision 4).
+A `@deprecated` with no reason draws TYPL-405. Every tag is accepted on every
+carrier, and `@deprecated` and `@labels` are stored in the IR on the carriers
+that have the field — a declaration, a struct field, an interface, an
+interaction and a service. On an enum value, an enumset bit, a union arm, a
+parameter and an rsdl carrier the two tags are read and dropped, with no
+diagnostic, until the general form's plan to make `deprecated` and `labels`
+attribute keys is implemented (ADR-0026 decision 4).
 
 ### 14.3 Labels
 

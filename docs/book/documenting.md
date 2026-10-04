@@ -203,8 +203,11 @@ start of a line is prose. A tag line is not part of the doc text: a doc made
 only of tags has no text, and `missing-docs` treats it as missing.
 
 `@see` and `@since` change only documentation. `@deprecated` and `@labels` are
-stored in the IR beside the doc, and a backend that emits deprecation or label
-metadata reads them there.
+stored in the IR beside the doc on a declaration, a struct field, an interface,
+an interaction and a service, and a backend that emits deprecation or label
+metadata reads them there. On an enum value, an enumset bit, a union arm, a
+parameter and an rsdl declaration or body line the two tags are accepted and
+dropped, with no diagnostic (ADR-0026 decision 4).
 
 ```ridl
 package docs.history
