@@ -120,13 +120,14 @@ member; rsdl is the apex.
                          so it is not checked. Skips docs/archive/ and
                          docs/wip/, where such a path records what was true
                          when it was written
-    just story-id-check  no story id (`E16.5`, `E2.8b`) in a tracked file
+    just story-id-check  no story id (`E16.5`, `E2.8b`) and no plan name
+                         (`epic E11`, `stage K3`, `lane M`) in a tracked file
                          under crates/, xtask/, examples/, editors/vscode/src/,
-                         docs/book/, docs/design/ or docs/technotes/ — names
-                         file:line for each match; stage and epic names are not
-                         matched. The ROADMAP, the backlog,
-                         the ADRs, the specifications, docs/archive/ and
-                         docs/wip/ may hold ids
+                         docs/book/, docs/design/ or docs/technotes/, nor in a
+                         docs/specification/ file that the book includes —
+                         names file:line for each match. The ROADMAP, the
+                         backlog, the ADRs, the rest of the specifications,
+                         docs/archive/ and docs/wip/ may hold ids
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
@@ -233,9 +234,11 @@ them.
   the catalogue. Recorded on driftsys/ridl#191.
 - **The book describes the system as built.** The one runtime in this workspace
   is `ridl-loopback`, which runs in process, is reached only from a test or a
-  program that links it, and is not reachable from anything the CLI emits (story
-  E11.14). So prose about delivery, timing behaviour, or provider-side contract
-  enforcement is still describing the specification — say so where it appears.
+  program that links it, and is not reachable from anything the CLI emits (the
+  section "The face is emitted by `ridl build`" of
+  `docs/design/interaction-face.md` says what the CLI does emit). So prose about
+  delivery, timing behaviour, or provider-side contract enforcement is still
+  describing the specification — say so where it appears.
 - **Prose — comments, commit messages, docs, PR descriptions — is plain and
   literal**: no idioms, no figures of speech. Technical terms and acronyms stay
   as they are.
@@ -245,7 +248,8 @@ them.
   now; when a gap is real, link its tracking issue (`driftsys/ridl#N`). State a
   fact once, in the record that owns it, and link to that record from elsewhere
   instead of restating it. `just story-id-check` enforces the first rule for
-  dotted story ids; stage and epic names are left to review.
+  dotted story ids and for the plan names `epic E<n>`, `stage <Letter><n>` and
+  `lane <Letter>`.
 - Documents are prose, in Markdown, under `docs/`. The specs read as one system:
   doctrines are indexed once in the overview, cited from each reference — keep
   that discipline when editing.

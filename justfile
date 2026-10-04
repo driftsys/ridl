@@ -1340,7 +1340,7 @@ doc-path-check root="":
     fi
     run_gate "$root"
 
-# Check that no story id (a dotted id such as `E16.5`) is named in shipped text.
+# Check that no story id or plan name is named in shipped text.
 #
 # Shipped text describes the system as built. A story id such as `E16.5` in a
 # rustdoc comment, a book chapter or a design record is a reference to status,
@@ -1348,22 +1348,30 @@ doc-path-check root="":
 # stale when the story lands, and nothing else reads it. State the fact, or
 # link the tracking issue (`driftsys/ridl#N`) when a gap is real.
 #
-# The pattern is an `E`, one or more digits, a dot, one or more digits and an
-# optional lowercase letter (`E2.8b`), with no letter, digit or underscore
-# directly before or after it, so a number such as `1E5.0` and a name such as
-# `TYPE1.2` do not match. Stage and epic names (`epic E11`, `stage K3`) are not
-# matched; review reads those. The check is a plain
-# text match: it does not read the context, so a match that is not a story id
-# is reworded rather than exempted.
+# Two patterns, each with no letter, digit or underscore directly before or
+# after the match, so a number such as `1E5.0` and a name such as `TYPE1.2` do
+# not match:
+#
+# - A story id: an `E`, one or more digits, a dot, one or more digits and an
+#   optional lowercase letter (`E2.8b`).
+# - A plan name: the word `epic` followed by an epic (`epic E11`, `Epic 10`),
+#   the word `stage` followed by a letter and digits (`stage K3`), or the word
+#   `lane` followed by one capital letter (`lane M`). The word matches in any
+#   case; the letter does not, so prose such as "a lane a vehicle takes" is not
+#   a plan name.
+#
+# The check is a plain text match: it does not read the context, so a match
+# that is not a story id or a plan name is reworded rather than exempted.
 #
 # Scanned, as tracked files: crates/, xtask/, examples/, editors/vscode/src/,
-# and the docs/book/, docs/design/ and docs/technotes/ trees. Not scanned,
-# because an id there is the record's own subject: docs/ROADMAP.md,
-# docs/BACKLOG.md, docs/decisions/ (a decision traces to the story it serves),
-# docs/specification/, docs/archive/, docs/wip/, CHANGELOG.md and AGENTS.md.
+# the docs/book/, docs/design/ and docs/technotes/ trees, and each file of
+# docs/specification/ that a docs/book/ file names in an `{{#include}}`, because
+# the book renders it. Not scanned, because an id there is the record's own
+# subject: docs/ROADMAP.md, docs/BACKLOG.md, docs/decisions/ (a decision traces
+# to the story it serves), the rest of docs/specification/ (its overview is the
+# ledger of the plan), docs/archive/, docs/wip/, CHANGELOG.md and AGENTS.md.
 # Files at the repository root, such as Cargo.toml, are outside the scanned
-# trees on purpose. The book includes some of docs/specification/, so an id
-# there can still render in the book.
+# trees on purpose.
 #
 # Given no argument, the gate runs over the repository this justfile is in, and
 # runs its own fixtures first, because a gate that cannot be shown to fail is
@@ -1378,12 +1386,25 @@ story-id-check root="":
     # fails the gate instead of leaving it scanning nothing.
     scanned=(crates xtask examples editors/vscode/src docs/book docs/design docs/technotes)
     id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
+    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+|[Ll][Aa][Nn][Ee] [A-Z])([^A-Za-z0-9_]|$)'
     # A git call that ignores an inherited git environment. A hook exports
     # GIT_DIR, which `git -C` does not override; see doc-path-check.
     git_at() {
         env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY \
             -u GIT_COMMON_DIR -u GIT_NAMESPACE -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
             git -C "$@"
+    }
+    # Reads a NUL-separated file list on standard input and prints each match as
+    # file:line:text. -H keeps the file name when the list holds one file.
+    scan() {
+        xargs -0 grep -HInE -e "$id_re" -e "$plan_re" || true
+    }
+    # The files of docs/specification/ that a docs/book/ file includes.
+    included_specs() {
+        git_at . -c core.quotePath=off ls-files -z -- docs/book \
+            | { xargs -0 grep -hoE '[{][{]#include [^}]*specification/[^} ]*[}][}]' || true; } \
+            | sed -n 's#.*specification/\([^} ]*\)[}][}]#docs/specification/\1#p' \
+            | sort -u
     }
     run_gate() (
         root="$1"
@@ -1394,12 +1415,12 @@ story-id-check root="":
                 exit 1
             fi
         done
-        found="$(git_at . -c core.quotePath=off ls-files -z -- "${scanned[@]}" \
-            | xargs -0 grep -HInE -- "$id_re" || true)"
+        found="$({ git_at . -c core.quotePath=off ls-files -z -- "${scanned[@]}"
+                included_specs | tr '\n' '\0'; } | scan)"
         if [ -n "$found" ]; then
             printf '%s\n' "$found" | sed 's/^\([^:]*:[0-9]*\):/story-id-check: \1: /' >&2
             count="$(printf '%s\n' "$found" | grep -c . || true)"
-            echo "story-id-check: $count line(s) above name a story id. Delete the id, or link the tracking issue as driftsys/ridl#N." >&2
+            echo "story-id-check: $count line(s) above name a story id or a plan name. Delete it, or link the tracking issue as driftsys/ridl#N." >&2
             exit 1
         fi
         echo "story-id-check: no story id in the scanned trees."
@@ -1420,12 +1441,18 @@ story-id-check root="":
         # Built from $d: this file is itself scanned by doc-path-check, and a
         # literal docs/… path that resolves nowhere would be reported here.
         d=docs
+        # Phrases that read like a plan name and are not one: no match for the
+        # letter or digit class, a lowercase letter, a bare number, and a letter
+        # directly before the word or after the name.
+        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage K3x, epic poem, epic e1, upstage K3, plane M, lane Mx"
+        # Phrases that are a plan name, in the cases the pattern states.
+        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's")
         root="$work/fixture"
         report="$work/report"
         clean_tree() {
             for tree in "${scanned[@]}"; do
                 mkdir -p "$root/$tree"
-                printf '%s\n' "// driftsys/ridl#12, 1E5.0, TYPE1.2, $(printf 'E%s.%s' 2 8)bc, $(printf 'E%s.%s' 2 8)B, $(printf 'E%s.%s' 2 8)_1 and _$(printf 'E%s.%s' 1 2) are not story ids" > "$root/$tree/clean.txt"
+                printf '%s\n' "// driftsys/ridl#12, 1E5.0, TYPE1.2, $(printf 'E%s.%s' 2 8)bc, $(printf 'E%s.%s' 2 8)B, $(printf 'E%s.%s' 2 8)_1 and _$(printf 'E%s.%s' 1 2) are not story ids; nor are $plan_clean" > "$root/$tree/clean.txt"
             done
             git_at "$root" -c core.excludesFile=/dev/null add -A
         }
@@ -1435,6 +1462,11 @@ story-id-check root="":
         # An id in a tree that is allowed to hold one.
         mkdir -p "$root/$d/decisions"
         printf '%s\n' "traces to $id" > "$root/$d/decisions/adr.md"
+        # A file at the repository root is outside the scanned trees.
+        printf '%s\n' "traces to $id, ${plan_names[0]}" > "$root/notes.txt"
+        # A specification file that no book file includes is outside them too.
+        mkdir -p "$root/$d/specification"
+        printf '%s\n' "traces to $id, ${plan_names[3]}" > "$root/$d/specification/other.md"
         git_at "$root" -c core.excludesFile=/dev/null add -A
         if ! "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
             echo "story-id-check: the gate did not pass over a fixture with no id in a scanned tree:" >&2
@@ -1472,6 +1504,60 @@ story-id-check root="":
             cat "$report" >&2
             exit 1
         fi
+        # Each plan name alone is enough to fail the gate, in each scanned tree.
+        for phrase in "${plan_names[@]}"; do
+            clean_tree
+            printf '%s\n' "// see $phrase" > "$root/crates/clean.txt"
+            git_at "$root" -c core.excludesFile=/dev/null add -A
+            if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1 \
+                || ! grep -q -- "^story-id-check: crates/clean.txt:1: // see $phrase" "$report"; then
+                echo "story-id-check: the gate no longer names the plan name '$phrase':" >&2
+                cat "$report" >&2
+                exit 1
+            fi
+        done
+        # A specification file that a book file includes is scanned, and one
+        # that no book file includes is not.
+        clean_tree
+        open='{'
+        printf '%s\n' "$open$open#include ../specification/inc.md}}" > "$root/$d/book/inc.md"
+        printf '%s\n' "traces to $id" > "$root/$d/specification/inc.md"
+        git_at "$root" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1 \
+            || ! grep -q -- "^story-id-check: $d/specification/inc.md:1: traces to $id" "$report"; then
+            echo "story-id-check: the gate no longer scans a specification file that the book includes:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        rm "$root/$d/book/inc.md" "$root/$d/specification/inc.md"
+        # With one file in the list, the match still names the file.
+        single="$work/single"
+        mkdir -p "$single"
+        printf '%s\n' "// $id" > "$single/one.txt"
+        if [ "$(cd "$single" && printf 'one.txt\0' | scan)" != "one.txt:1:// $id" ]; then
+            echo "story-id-check: a match over a single file no longer names the file." >&2
+            exit 1
+        fi
+        # The no-argument form scans the repository it runs in. The recipe is
+        # copied into a fixture repository that holds an id, and run there with
+        # no argument and with the nested-run variable set, which skips this
+        # function; the scan alone must then fail.
+        selfroot="$work/self"
+        root="$selfroot"
+        mkdir -p "$selfroot"
+        git_at "$selfroot" -c init.defaultBranch=main -c init.templateDir= init -q
+        clean_tree
+        printf '%s\n' "// $id" > "$selfroot/crates/clean.txt"
+        cp "{{justfile()}}" "$selfroot/justfile"
+        git_at "$selfroot" -c core.excludesFile=/dev/null add -A
+        if RIDL_STORY_ID_NESTED=1 "{{just_executable()}}" --justfile "$selfroot/justfile" \
+            --working-directory "$selfroot" story-id-check >"$report" 2>&1 \
+            || ! grep -q -- "^story-id-check: crates/clean.txt:1: " "$report"; then
+            echo "story-id-check: the no-argument form no longer scans the repository it runs in:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        root="$work/fixture"
         # A scanned tree that has no tracked file fails the gate, with the ids
         # gone so that the status can only come from the missing tree.
         clean_tree
@@ -1486,7 +1572,9 @@ story-id-check root="":
     if [ -n "{{root}}" ]; then
         run_gate "{{root}}"
     else
-        fixtures
+        if [ -z "${RIDL_STORY_ID_NESTED:-}" ]; then
+            fixtures
+        fi
         run_gate .
     fi
 
