@@ -259,29 +259,80 @@ fn validate_task(dir: &Path) -> Result<serde_json::Value, String> {
             "prompt and rubric must be nonempty",
         )?;
         if name == "rubric.md" {
-            let mut expected = 1;
-            // prim wraps item text; each paragraph begins with the stable item ID.
-            for line in content
-                .split("\n\n")
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-            {
-                let prefix = format!("{expected}. ");
-                let item = line
-                    .strip_prefix(&prefix)
-                    .ok_or("rubric item numbers must be consecutive")?;
-                require(
-                    ["**must** ", "**should** ", "**must not** "]
-                        .iter()
-                        .any(|mark| item.starts_with(mark)),
-                    "rubric item must have a requirement marker",
-                )?;
-                expected += 1;
-            }
-            require(expected > 1, "rubric must contain an item")?;
+            validate_rubric(&content)?;
         }
     }
     Ok(task)
+}
+
+fn validate_rubric(content: &str) -> Result<(), String> {
+    let mut expected = 1;
+    let mut item_depth = 0;
+    // Markdown item offsets preserve authored numbers, even in adjacent lists;
+    // wrapped text produces no item event and cannot hide another item.
+    for (event, range) in pulldown_cmark::Parser::new(content).into_offset_iter() {
+        match event {
+            pulldown_cmark::Event::Start(pulldown_cmark::Tag::Item) => {
+                if item_depth != 0 {
+                    return Err("rubric items must not be nested".to_owned());
+                }
+                let line_start = content[..range.start].rfind('\n').map_or(0, |pos| pos + 1);
+                let line = content[line_start..].lines().next().unwrap_or_default();
+                let prefix = format!("{expected}. ");
+                let item = line
+                    .strip_prefix(&prefix)
+                    .ok_or("rubric item numbers must be consecutive and unindented")?;
+                if !["**must** ", "**should** ", "**must not** "]
+                    .iter()
+                    .any(|mark| item.starts_with(mark))
+                {
+                    return Err("rubric item must have a requirement marker".to_owned());
+                }
+                expected += 1;
+                item_depth += 1;
+            }
+            pulldown_cmark::Event::End(pulldown_cmark::TagEnd::Item) => item_depth -= 1,
+            pulldown_cmark::Event::Start(pulldown_cmark::Tag::List(Some(_))) => {}
+            pulldown_cmark::Event::End(pulldown_cmark::TagEnd::List(_)) => {}
+            _ if item_depth == 0 => {
+                return Err("rubric content must belong to numbered items".to_owned());
+            }
+            _ => {}
+        }
+    }
+    if expected == 1 {
+        return Err("rubric must contain an item".to_owned());
+    }
+    Ok(())
+}
+
+#[test]
+fn rubric_validation_accepts_adjacent_numbered_items() {
+    assert!(
+        validate_rubric("1. **must** preserve identity.\n2. **should** explain compatibility.\n")
+            .is_ok()
+    );
+}
+
+#[test]
+fn rubric_validation_rejects_an_invalid_adjacent_marker() {
+    assert!(
+        validate_rubric("1. **must** preserve identity.\n2. **may** ignore compatibility.\n")
+            .is_err()
+    );
+}
+
+#[test]
+fn rubric_validation_rejects_a_duplicate_adjacent_item_id() {
+    assert!(
+        validate_rubric("1. **must** preserve identity.\n1. **should** explain compatibility.\n")
+            .is_err()
+    );
+}
+
+#[test]
+fn rubric_validation_accepts_indented_wrapped_continuations() {
+    assert!(validate_rubric("1. **must** preserve every existing\n   interaction identity.\n\n2. **must not** change existing\n   wire numbers.\n").is_ok());
 }
 
 #[test]

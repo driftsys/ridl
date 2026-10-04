@@ -892,6 +892,20 @@ execution.
     metric dump, finding, label or calibration data was run or read before this
     commitment; final corpus compilation uses only the pre-candidate branch.
 
+18. **Validate every authored rubric item rather than each paragraph** (Task 4
+    review fix, round 1). Fresh review found that paragraph-first-line
+    validation could accept adjacent numbered items with an invalid second
+    marker or a duplicate item ID. Regression tests reproduce both omissions
+    against the old guard. The repaired guard uses Markdown item events and
+    source offsets to validate every authored number and requirement marker,
+    including adjacent items without blank separators; indented wrapped text
+    remains a continuation. Rubrics contain consecutive, unindented, non-nested
+    numbered items with the three specified markers. This changes the guard
+    only: all approved task files and committed rubric IDs remain unchanged. If
+    Markdown parsing hides an item or formatting is rejected incorrectly, the
+    adjacent valid, invalid marker, duplicate ID and wrapped continuation
+    regressions must detect it.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
