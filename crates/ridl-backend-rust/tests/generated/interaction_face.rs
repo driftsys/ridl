@@ -1719,6 +1719,7 @@ pub mod cabin {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
     ///Panics unless `found` is the catalog the face of interface `Cabin` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Cabin as ::ridl_rt::contract::Interface>::CATALOG;
         if *found != *expected {
@@ -1860,6 +1861,7 @@ The call's bound is the member's `max`, measured from the port's clock when this
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
@@ -2441,6 +2443,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Publisher { port }
@@ -2703,6 +2706,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
 # Panics
 
 Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
@@ -2922,6 +2926,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -2996,6 +3001,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 # Panics
 
 Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         pub fn serve<H, P>(
             h: H,
             p: &mut P,
@@ -3018,6 +3024,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
     ///Panics unless `found` is the catalog the face of interface `Horn` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Horn as ::ridl_rt::contract::Interface>::CATALOG;
         if *found != *expected {
@@ -3098,6 +3105,7 @@ pub mod horn {
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Horn as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Horn` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
@@ -3151,6 +3159,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Horn as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Horn` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Publisher { port }
@@ -3183,6 +3192,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 ///The generated interaction face of interface `Siren`.
 pub mod siren {
     ///Panics unless `found` is the catalog the face of interface `Siren` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Siren as ::ridl_rt::contract::Interface>::CATALOG;
         if *found != *expected {
@@ -3212,6 +3222,7 @@ pub mod siren {
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Siren as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Siren` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
@@ -3366,6 +3377,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Siren as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Siren` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Publisher { port }
@@ -3404,6 +3416,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Siren as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Siren` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -3478,6 +3491,7 @@ pub mod valve {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct PressureCorrelation(pub ::ridl_rt::port::Correlation);
     ///Panics unless `found` is the catalog the face of interface `Valve` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Valve as ::ridl_rt::contract::Interface>::CATALOG;
         if *found != *expected {
@@ -3548,6 +3562,7 @@ The call's bound is the member's `max`, measured from the port's clock when this
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
@@ -4172,6 +4187,7 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
 # Panics
 
 Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
@@ -4375,6 +4391,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
 # Panics
 
 Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -4409,6 +4426,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 # Panics
 
 Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         pub fn serve<H, P>(
             h: H,
             p: &mut P,

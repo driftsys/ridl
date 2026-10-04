@@ -262,6 +262,7 @@ fn client(
             type Port = P;
 
             #[doc = #new_doc]
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -359,6 +360,7 @@ fn serve(iface: &Ident, iface_name: &str) -> TokenStream {
     );
     quote! {
         #[doc = #doc]
+        #[track_caller]
         pub fn serve<H, P>(
             h: H,
             p: &mut P,

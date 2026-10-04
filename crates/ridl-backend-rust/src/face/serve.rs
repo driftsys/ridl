@@ -78,6 +78,7 @@ pub(super) fn serve(
         const SERVE_BUDGET: usize = #budget;
 
         #[doc = #serve_doc]
+        #[track_caller]
         pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
         where
             #bounds,

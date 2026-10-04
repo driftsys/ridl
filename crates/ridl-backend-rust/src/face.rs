@@ -511,6 +511,7 @@ fn client(
             type Port = P;
 
             #[doc = #new_doc]
+            #[track_caller]
             fn new(port: P) -> Self {
                 check_catalog(::ridl_rt::port::Attached::catalog(&port));
                 Client { port }
@@ -919,6 +920,7 @@ fn publisher(
             type Port = W;
 
             #[doc = #new_doc]
+            #[track_caller]
             fn new(port: W) -> Self {
                 check_catalog(::ridl_rt::port::Attached::catalog(&port));
                 Publisher { port }
@@ -986,7 +988,10 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
 /// emitted once per module and called once per binding, so the generated code
 /// carries one comparison and one panic message per interface. The whole
 /// `CatalogRef` is compared, name and hash. `::core::panic!` keeps it valid
-/// under `no_std`.
+/// under `no_std`. It and every generated function that calls it — both
+/// `Bind::new`s, the blocking `Bind::new` and both `serve`s — are
+/// `#[track_caller]`, so the panic reports the program's binding call as its
+/// location, not a line of the generated file.
 fn check_catalog(iface: &Ident, iface_name: &str) -> TokenStream {
     let message = format!(
         "the face of interface `{iface_name}` was generated from catalog {{:?}}, \
@@ -1000,6 +1005,7 @@ fn check_catalog(iface: &Ident, iface_name: &str) -> TokenStream {
     );
     quote! {
         #[doc = #doc]
+        #[track_caller]
         fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
             let expected = <super::#iface as ::ridl_rt::contract::Interface>::CATALOG;
             if *found != *expected {

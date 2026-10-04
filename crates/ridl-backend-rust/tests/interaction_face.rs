@@ -2740,13 +2740,45 @@ const OTHER_NAME: CatalogRef = CatalogRef {
     hash: CATALOG.hash,
 };
 
+thread_local! {
+    /// The file of the last panic on this thread, as the panic hook
+    /// installed by [`panic_file`] records it.
+    static PANIC_FILE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f`, which must panic, and returns the panic's payload and the file
+/// its location names. The hook is installed once for the process and
+/// records into a thread-local, so tests on other threads do not see each
+/// other's panics; it then calls the hook it replaced, which prints as
+/// before.
+fn panic_file(f: impl FnOnce()) -> (Box<dyn std::any::Any + Send>, String) {
+    static HOOK: std::sync::Once = std::sync::Once::new();
+    HOOK.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let file = info.location().map(|l| l.file().to_owned());
+            PANIC_FILE.with(|cell| *cell.borrow_mut() = file);
+            previous(info);
+        }));
+    });
+    PANIC_FILE.with(|cell| *cell.borrow_mut() = None);
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .expect_err("binding to a port of another catalog panics");
+    let file = PANIC_FILE
+        .with(|cell| cell.borrow_mut().take())
+        .expect("the hook recorded the panic's location");
+    (payload, file)
+}
+
 /// Runs `bind`, which must panic, and returns the panic message. The message
 /// must name the interface, then the catalog the face was generated from,
-/// then the catalog the port is attached to.
+/// then the catalog the port is attached to. Every generated function on the
+/// path is `#[track_caller]`, so the panic's location is the binding call in
+/// this file, not a line of the generated face.
 fn mismatch_message(found: CatalogRef, bind: impl FnOnce()) -> String {
     assert_ne!(found, CATALOG, "the test catalog differs from the face's");
-    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(bind))
-        .expect_err("binding to a port of another catalog panics");
+    let (payload, file) = panic_file(bind);
     let message = payload
         .downcast_ref::<String>()
         .cloned()
@@ -2759,6 +2791,9 @@ fn mismatch_message(found: CatalogRef, bind: impl FnOnce()) -> String {
              but the port is attached to catalog {found:?}"
         )
     );
+    // The generated face is `tests/generated/interaction_face.rs`, so the
+    // whole path is compared, not the file name.
+    assert_eq!(file, file!(), "the panic is located at the binding call");
     message
 }
 
