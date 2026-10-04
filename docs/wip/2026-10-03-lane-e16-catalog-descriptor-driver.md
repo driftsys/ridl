@@ -87,12 +87,19 @@ D5 landed as PR #686 (d317c96b) on 2026-10-04. Facts D6 needs:
   answers `None`. The lowering (Task 8) calls `named_payload` first and
   `size_state` only for a payload that is one named type.
 - The proto3 column is `Some` only for a struct or a union payload, and is
-  always `Bounded`. It is `None` for a named scalar, an enum or an enum set, and
-  also for a member the proto backend refuses (map key, map value, optional
-  array or map, enum value outside int32, field number), for a member with no
-  proto3 leaf (an unbounded `string` or `bytes`, a type def with no width), for
-  a `u64` overflow and for a bound above `u32::MAX`. The backend's
-  name-collision refusals are not reproduced (#690).
+  always `Bounded`. It is `None` for a named scalar, an enum or an enum set. It
+  is also `None` in these cases, among others (`size/proto3.rs` has the full
+  list):
+  - an unresolved name;
+  - a member the proto backend refuses (a map key, a map value, an optional
+    array or map, an array of arrays or maps, an enum value outside int32, a
+    field number);
+  - a member with no proto3 leaf (an unbounded `string` or `bytes`, or an
+    integer, float or unit type def with no width);
+  - nesting deeper than `MAX_DEPTH`;
+  - a `u64` overflow, or a bound above `u32::MAX`.
+
+  The backend's name-collision refusals are not reproduced (#690).
 - The FlatBuffers column is `max_size` over `ctx.packages_for(declaring)`. When
   that answers `None`, the column is `Unbounded` with the cause from
   `ridl_ir::codegen::fb_unbounded` (now public). It is `None` for an unresolved
@@ -608,8 +615,9 @@ named.
    for compiled IR, where the width always matches the backing.
 6. **A unit backing with no width has no leaf.** Reason: `proto_scalar` emits
    `string` for it, so a numeric bound would not be an upper bound. An integer
-   or float backing with no width keeps a `Scalar(Unspecified)` leaf (D5 facts
-   above). Cost if wrong: hand-built IR only.
+   or float backing with no width keeps a `Scalar(Unspecified)` leaf. D5
+   reversed this second sentence: such a backing now has no leaf either (§5 D5
+   item 2). Cost if wrong: hand-built IR only.
 7. **An optional named payload (`T?`) is sized as `T`.** Reason: the bound of
    `T` is an upper bound for `T?` in both encodings. Cost if wrong: none found.
 8. **The leaf model uses `#[allow(dead_code)]`, not `#[expect]`.** Reason: the
@@ -632,9 +640,9 @@ named.
    codec it does not emit. Cost if wrong: a field appended to the model's
    `Payload` (`proto3_max_size`) and one emitter line.
 4. **The failing `cargo publish -p ridl-descriptor --dry-run` is a publish-order
-   fact, not a defect.** The verify build needs the `ridl-ir` APIs that D3 and
-   D5 added. Reason: §4 answer 9 publishes `ridl-ir` first. Cost if wrong: none;
-   the release workflow publishes in that order.
+   fact, not a defect.** The verify build needs the `ridl-ir` APIs that D3, D4
+   and D5 added or made public. Reason: §4 answer 9 publishes `ridl-ir` first.
+   Cost if wrong: none; the release workflow publishes in that order.
 5. **The proto3 sizer reproduces the backend's member-level refusals as an
    absent state, but not its name-collision refusals.** Reason: those refusals
    depend on names across the whole package. Copying them would be a second
