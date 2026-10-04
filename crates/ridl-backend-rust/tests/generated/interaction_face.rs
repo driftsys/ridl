@@ -1262,7 +1262,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 }
 /**Descriptor for interface `Cabin`.
 
-Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
 pub struct Cabin;
 impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1290,7 +1290,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Temperature",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(43),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1310,7 +1310,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Warning",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(60),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1330,7 +1330,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Level",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(43),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1350,7 +1350,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Window",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(46),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1358,7 +1358,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Average",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(44),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1473,7 +1473,7 @@ impl ::ridl_rt::contract::Query for CabinAverage {
 }
 /**Descriptor for interface `Horn`.
 
-Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
 pub struct Horn;
 impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1501,7 +1501,7 @@ impl ::ridl_rt::contract::Interface for Horn {
                     type_name: "Health",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(50),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1528,7 +1528,7 @@ impl ::ridl_rt::contract::Signal for HornActive {
 }
 /**Descriptor for interface `Siren`.
 
-Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
 pub struct Siren;
 impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1556,7 +1556,7 @@ impl ::ridl_rt::contract::Interface for Siren {
                     type_name: "Warning",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(60),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1595,7 +1595,7 @@ impl ::ridl_rt::contract::Event for SirenTripped {
 }
 /**Descriptor for interface `Valve`.
 
-Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
 pub struct Valve;
 impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1619,7 +1619,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "Level",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(43),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1635,7 +1635,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "Window",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(46),
                         repr_c: ::core::option::Option::None,
                     },
                 },
@@ -1643,7 +1643,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "Average",
                     max_size: ::ridl_rt::contract::EncodedSizes {
                         proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::None,
+                        flatbuffers: ::core::option::Option::Some(44),
                         repr_c: ::core::option::Option::None,
                     },
                 },

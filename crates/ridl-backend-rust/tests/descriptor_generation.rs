@@ -5,6 +5,7 @@
 //! that the pipeline `generate` stays clean of the face.
 
 use ridl_backend_rust::{generate, generate_face};
+use ridl_ir::codegen::v1;
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -26,6 +27,77 @@ fn max_size_path(type_name: &str) -> String {
     dense(&format!(
         "<{type_name} as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers"
     ))
+}
+
+/// Every `PayloadInfo.max_size` carries the model's own FlatBuffers bound
+/// (`Payload.flatbuffers_max_size`, which `max_size` computed) in its
+/// `flatbuffers` column and nothing else: `proto3` is `None` because this
+/// backend emits no proto3 codec, and `repr_c` is `None` until E11.12 defines
+/// the layout. The payloads are read from the model the emitter reads, so
+/// the number asserted is the model's, not one this test derives.
+#[test]
+fn encoded_sizes_carry_the_models_flatbuffers_bound() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let face = generate_face(&package).expect("generate_face").rust_source;
+    let d = dense(&face);
+    assert!(
+        !face.contains("E16.2"),
+        "the descriptor doc comment no longer defers the sizes to E16.2"
+    );
+
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let mut seen = 0;
+    for interface in &model.interfaces {
+        for slot in &interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_ref()
+            else {
+                continue;
+            };
+            let payloads: Vec<&v1::Payload> = match interaction.shape.as_ref() {
+                Some(v1::interaction::Shape::Signal(signal)) => signal.payload.iter().collect(),
+                Some(v1::interaction::Shape::Event(event)) => event.payload.iter().collect(),
+                Some(v1::interaction::Shape::Command(command)) => command.request.iter().collect(),
+                Some(v1::interaction::Shape::Query(query)) => query
+                    .request
+                    .iter()
+                    .chain(query.reply_payload.iter())
+                    .collect(),
+                Some(v1::interaction::Shape::Fixed(fixed)) => fixed.named.iter().collect(),
+                None => Vec::new(),
+            };
+            for payload in payloads {
+                let name = payload
+                    .r#type
+                    .as_ref()
+                    .map(|reference| reference.reference.as_str())
+                    .unwrap_or_default();
+                let bound = payload
+                    .flatbuffers_max_size
+                    .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
+                let expected = dense(&format!(
+                    "::ridl_rt::contract::PayloadInfo {{
+                        type_name: \"{name}\",
+                        max_size: ::ridl_rt::contract::EncodedSizes {{
+                            proto3: ::core::option::Option::None,
+                            flatbuffers: ::core::option::Option::Some({bound}),
+                            repr_c: ::core::option::Option::None,
+                        }},
+                    }}"
+                ));
+                assert!(d.contains(&expected), "{name}: expected {expected}");
+                seen += 1;
+            }
+        }
+    }
+    assert!(
+        seen >= 5,
+        "the fixture's five payload types were checked, saw {seen}"
+    );
+    assert!(
+        !d.contains("flatbuffers:::core::option::Option::None"),
+        "every payload of the fixture is sized"
+    );
 }
 
 #[test]
@@ -141,14 +213,8 @@ fn generate_face_emits_the_interface_and_interaction_descriptors() {
         assert!(d.contains(kind), "missing member kind {kind}");
     }
 
-    // Every payload's encoded sizes are all absent (the M3 placeholder).
-    assert!(
-        d.contains(
-            "::ridl_rt::contract::EncodedSizes{proto3:::core::option::Option::None,\
-             flatbuffers:::core::option::Option::None,repr_c:::core::option::Option::None"
-        ),
-        "encoded sizes are all None",
-    );
+    // The encoded sizes are pinned payload by payload in
+    // `encoded_sizes_carry_the_models_flatbuffers_bound`.
 
     // Ordinals and names are carried on the member rows.
     assert!(

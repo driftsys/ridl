@@ -121,10 +121,11 @@ fn one_interface(
 
     let interface_doc = format!(
         "Descriptor for interface `{iface_name}`.\n\n\
-         Every `PayloadInfo.max_size` field is `None`. The reading here is that \
-         the toolchain cannot size the payload yet, not that the encoding \
-         cannot carry it. `ridl-rt`'s own doc comment states the other reading; \
-         E16.2 reconciles the two."
+         Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers \
+         bound as the codegen model carries it (`Payload.flatbuffers_max_size`, \
+         computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` \
+         when the projection has none. `proto3` is `None`: this backend emits no \
+         proto3 codec. `repr_c` is `None` until E11.12 defines the layout."
     );
 
     items.push(quote! {
@@ -197,30 +198,30 @@ fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, G
         Some(v1::interaction::Shape::Signal(signal)) => (
             quote! { ::ridl_rt::contract::Kind::Signal },
             timing,
-            vec![payload_info(payload_reference(signal.payload.as_ref()))],
+            vec![payload_info(signal.payload.as_ref())],
         ),
         Some(v1::interaction::Shape::Event(event)) => (
             quote! { ::ridl_rt::contract::Kind::Event },
             timing,
-            vec![payload_info(payload_reference(event.payload.as_ref()))],
+            vec![payload_info(event.payload.as_ref())],
         ),
         Some(v1::interaction::Shape::Command(command)) => (
             quote! { ::ridl_rt::contract::Kind::Command },
             timing,
-            vec![payload_info(single_param_type(command, member)?)],
+            vec![payload_info(Some(single_param_payload(command, member)?))],
         ),
         Some(v1::interaction::Shape::Query(query)) => (
             quote! { ::ridl_rt::contract::Kind::Query },
             timing,
             vec![
-                payload_info(query_param_type(query, member)?),
-                payload_info(query_reply_type(query, member)?),
+                payload_info(Some(query_param_payload(query, member)?)),
+                payload_info(Some(query_reply_payload(query, member)?)),
             ],
         ),
         Some(v1::interaction::Shape::Fixed(fixed)) => (
             quote! { ::ridl_rt::contract::Kind::Fixed },
             quote! { ::core::option::Option::None },
-            vec![payload_info(fixed_payload_type(fixed, member)?)],
+            vec![payload_info(Some(fixed_payload(fixed, member)?))],
         ),
         None => return Err(not_an_interaction(member)),
     };
@@ -280,7 +281,7 @@ fn interaction_item(
             }
         }
         Some(v1::interaction::Shape::Fixed(fixed)) => {
-            let payload = type_path(fixed_payload_type(fixed, member)?);
+            let payload = type_path(payload_reference(Some(fixed_payload(fixed, member)?)));
             quote! {
                 impl ::ridl_rt::contract::Fixed for #struct_ident {
                     type Payload = #payload;
@@ -378,14 +379,29 @@ fn interaction_item(
     })
 }
 
-/// A `PayloadInfo` with all three encoded sizes absent (the M3 placeholder).
-fn payload_info(type_name: &str) -> TokenStream {
+/// The `PayloadInfo` of one payload of the model. The `flatbuffers` column
+/// is the model's `Payload.flatbuffers_max_size`: the bound
+/// `ridl_ir::projection::flatbuffers::max_size` computed, read and never
+/// recomputed, because a plugin receives only the model; `None` when the
+/// projection has none. `proto3` is `None` because this backend emits no
+/// proto3 codec (the `EncodedSizes` doc in `ridl-rt`: a backend writes `None`
+/// for a codec it does not emit). `repr_c` is `None` until E11.12
+/// (driftsys/ridl#317) defines the layout.
+fn payload_info(payload: Option<&v1::Payload>) -> TokenStream {
+    let type_name = payload_reference(payload);
+    let flatbuffers = match payload.and_then(|payload| payload.flatbuffers_max_size) {
+        Some(bound) => {
+            let bound = Literal::u32_unsuffixed(bound);
+            quote! { ::core::option::Option::Some(#bound) }
+        }
+        None => quote! { ::core::option::Option::None },
+    };
     quote! {
         ::ridl_rt::contract::PayloadInfo {
             type_name: #type_name,
             max_size: ::ridl_rt::contract::EncodedSizes {
                 proto3: ::core::option::Option::None,
-                flatbuffers: ::core::option::Option::None,
+                flatbuffers: #flatbuffers,
                 repr_c: ::core::option::Option::None,
             },
         }
@@ -510,10 +526,18 @@ pub(crate) fn single_param_type<'a>(
     command: &'a v1::CommandShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    match command.request.as_ref() {
-        Some(request) => Ok(payload_reference(Some(request))),
-        None => Err(no_single_param(&command.params, member)),
-    }
+    single_param_payload(command, member).map(|payload| payload_reference(Some(payload)))
+}
+
+/// The request payload [`single_param_type`] names, with its sizes.
+fn single_param_payload<'a>(
+    command: &'a v1::CommandShape,
+    member: &str,
+) -> Result<&'a v1::Payload, GenerateError> {
+    command
+        .request
+        .as_ref()
+        .ok_or_else(|| no_single_param(&command.params, member))
 }
 
 /// [`single_param_type`] for a query, which carries the same request payload.
@@ -521,10 +545,18 @@ pub(crate) fn query_param_type<'a>(
     query: &'a v1::QueryShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    match query.request.as_ref() {
-        Some(request) => Ok(payload_reference(Some(request))),
-        None => Err(no_single_param(&query.params, member)),
-    }
+    query_param_payload(query, member).map(|payload| payload_reference(Some(payload)))
+}
+
+/// The request payload [`query_param_type`] names, with its sizes.
+fn query_param_payload<'a>(
+    query: &'a v1::QueryShape,
+    member: &str,
+) -> Result<&'a v1::Payload, GenerateError> {
+    query
+        .request
+        .as_ref()
+        .ok_or_else(|| no_single_param(&query.params, member))
 }
 
 /// The model's `Catalog.hash` (ADR-0014 decision 15) as 32 `u8` literals,
@@ -573,8 +605,16 @@ pub(crate) fn query_reply_type<'a>(
     query: &'a v1::QueryShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
+    query_reply_payload(query, member).map(|payload| payload_reference(Some(payload)))
+}
+
+/// The reply payload [`query_reply_type`] names, with its sizes.
+fn query_reply_payload<'a>(
+    query: &'a v1::QueryShape,
+    member: &str,
+) -> Result<&'a v1::Payload, GenerateError> {
     if let Some(payload) = query.reply_payload.as_ref() {
-        return Ok(payload_reference(Some(payload)));
+        return Ok(payload);
     }
     match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {
         Some(v1::reply::Kind::Value(_)) => Err(GenerateError {
@@ -586,13 +626,13 @@ pub(crate) fn query_reply_type<'a>(
     }
 }
 
-/// A `fixed`'s payload named type. M3 provisions a named type.
-fn fixed_payload_type<'a>(
+/// A `fixed`'s payload, a named type. M3 provisions a named type.
+fn fixed_payload<'a>(
     fixed: &'a v1::FixedShape,
     member: &str,
-) -> Result<&'a str, GenerateError> {
+) -> Result<&'a v1::Payload, GenerateError> {
     match fixed.named.as_ref() {
-        Some(named) => Ok(payload_reference(Some(named))),
+        Some(named) => Ok(named),
         None => Err(GenerateError {
             message: format!("fixed `{member}`'s payload must be a named type"),
         }),
