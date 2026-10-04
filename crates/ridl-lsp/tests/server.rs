@@ -969,6 +969,96 @@ fn an_unloadable_manifest_above_an_opened_file_shows_the_error_once() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// The hover markdown on `Speed` in `app/lib.typl` of [`write_workspace`].
+fn hover_on_app_speed(client: &Connection, id: i32, app: lt::Uri) -> String {
+    let hover = hover_at(client, id, app, pos(2, 26)).expect("Speed has hover content");
+    match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    }
+}
+
+/// A file in a workspace member loads the member's workspace (ADR-0002 §4,
+/// issue #529), so its import of the sibling member `veh.common` resolves:
+/// whether the editor is opened at the member directory, or the client sends
+/// no root and the member file is the first one opened.
+#[test]
+fn a_member_file_resolves_an_import_of_a_sibling_member() {
+    let dir = TempDir::new("member-sibling");
+    let (_veh, app) = write_workspace(&dir);
+
+    let (client, server) = start(uri_of(&dir.path().join("app")));
+    did_open(&client, &app, APP);
+    let value = hover_on_app_speed(&client, 2, app.clone());
+    assert!(
+        value.contains("Vehicle speed over ground"),
+        "the doc of the sibling's type: {value}",
+    );
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    did_open(&client, &app, APP);
+    let value = hover_on_app_speed(&client, 2, app);
+    assert!(
+        value.contains("Vehicle speed over ground"),
+        "the doc of the sibling's type: {value}",
+    );
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The editor is opened at a workspace member whose root `ridl.toml` cannot
+/// be read: the load error is shown once, at initialize, and names the root
+/// manifest; opening a member file does not show it again.
+#[test]
+fn a_member_with_an_unparsable_root_manifest_shows_one_error() {
+    let dir = TempDir::new("member-bad-root");
+    std::fs::write(dir.path().join("ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app = uri_of(&dir.write("app/lib.typl", APP));
+    let (client, server) = start(uri_of(&dir.path().join("app")));
+
+    did_open(&client, &app, APP);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    let manifest = dir.path().join("ridl.toml").display().to_string();
+    assert!(
+        shown[0].message.contains(&format!("`{manifest}`")),
+        "the message names the root manifest: {}",
+        shown[0].message,
+    );
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The editor is opened at a directory whose `ridl.toml` cannot be read:
+/// the initialize notice shows the error, and the first `didOpen` under the
+/// same manifest does not show it again (issue #529, gap 2).
+#[test]
+fn the_initialize_notice_and_did_open_do_not_repeat_a_load_error() {
+    let dir = TempDir::new("repeat-load-error");
+    std::fs::create_dir_all(dir.path().join("project")).expect("create project");
+    std::fs::write(dir.path().join("project/ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
+    let first = dir.write("project/first.typl", BROKEN);
+    let (client, server) = start(uri_of(&dir.path().join("project")));
+
+    did_open(&client, &uri_of(&first), BROKEN);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    assert_eq!(shown[0].typ, lt::MessageType::WARNING);
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// A file opened before its `ridl.toml` existed is a standalone overlay. When
 /// a later `didOpen` loads the workspace that now contains it, its unsaved
 /// buffer moves onto the loaded input: the file becomes a member of its

@@ -28,6 +28,11 @@ are described in
 inputs and outputs of each tool are in
 [the `ridl-mcp` README](../../crates/ridl-mcp/README.md).
 
+Amended by ADR-0026 (documentation in the source, issue #529): root discovery
+now walks from a workspace member to its workspace for every entry point
+(ADR-0002 §4), so decision 2's note that a member loaded alone is gone, and the
+path mode reports only the diagnostics of files under the member.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It
@@ -50,8 +55,9 @@ pasted-source form.
    cache can be added behind `snapshot` without a schema change. Measured on
    2026-10-03, `ridl check examples/cabin` takes less than 10 ms. **A real
    workspace whose snapshot takes more than 500 ms reopens this decision.**
-2. **Root discovery is unchanged** (design D-2). A `path` resolves to a
-   workspace exactly as `ridl check <path>` resolves it, through
+2. **Root discovery is unchanged** (design D-2; amended by ADR-0026, see Status:
+   a member path now loads its workspace and no note is added). A `path`
+   resolves to a workspace exactly as `ridl check <path>` resolves it, through
    `ridl_core::find_manifest_root` and the nearest `ridl.toml`. A file inside a
    workspace member therefore loads that member alone, and its sibling members
    do not resolve (driftsys/ridl#529). The tools report this as a note in

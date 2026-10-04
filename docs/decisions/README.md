@@ -327,27 +327,28 @@ other entry below is Accepted.
   `ridlc build`, the language server and the MCP tool `ridl_check` — while
   `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock` and the other MCP tools
   compile with the severities the emit sites chose, so a lint at `deny` never
-  changes whether a workspace compiles. Entering at a workspace member loads it
-  alone, so the root's table does not apply (#529). A diagnostic takes the
-  levels of the directory that owns its file; a file outside the entry point's
-  tree takes the defaults. `ridl check --format sarif` writes a SARIF 2.1.0 log
-  with artifact URIs relative to the working directory. Amends ADR-0002 §4 and
-  ADR-0010 decision 1 in place.
+  changes whether a workspace compiles. Entering at a workspace member loads its
+  workspace and reports on the member, so the root's table applies (decision 9,
+  as ADR-0026 replaces it, #529). A diagnostic takes the levels of the directory
+  that owns its file; a file outside the entry point's tree takes the defaults.
+  `ridl check --format sarif` writes a SARIF 2.1.0 log with artifact URIs
+  relative to the working directory. Amends ADR-0002 §4 and ADR-0010 decision 1
+  in place.
 
 - **ADR-0025 — Workspace-aware MCP tools.** Nine decisions: six agreed in the
   brainstorming session of piece 1a, one from the reviewed design, one approved
   amendment, and one that records the contract (driftsys/ridl#668, #677). Each
   tool call loads and checks the workspace from disk behind one `snapshot`
   function and keeps no state, and a real snapshot that takes more than 500 ms
-  reopens that; root discovery is the command line's, so a member entered alone
-  loads alone (#529); the lookup tools read the checked IR and not the language
-  server; `ridl_explain` answers from the catalogues and carries no document
-  URL; `ridl_check` has a source mode and a path mode; the tools are read-only
-  and offline; unsaved text is applied inside the `ridl-core` loader; the review
-  tools count rsdl component uses from the lowered system; and the tool names
-  and schemas change only by addition, pinned by `tools.json`. Amends ADR-0005
-  §3 and §7 in place. The as-built description is
-  [the MCP workspace tools design record](../design/mcp-workspace-tools.md).
+  reopens that; root discovery is the command line's, so a member path loads its
+  workspace (ADR-0002 §4, as ADR-0026 amends it, #529); the lookup tools read
+  the checked IR and not the language server; `ridl_explain` answers from the
+  catalogues and carries no document URL; `ridl_check` has a source mode and a
+  path mode; the tools are read-only and offline; unsaved text is applied inside
+  the `ridl-core` loader; the review tools count rsdl component uses from the
+  lowered system; and the tool names and schemas change only by addition, pinned
+  by `tools.json`. Amends ADR-0005 §3 and §7 in place. The as-built description
+  is [the MCP workspace tools design record](../design/mcp-workspace-tools.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

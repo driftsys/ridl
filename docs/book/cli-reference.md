@@ -113,7 +113,12 @@ Options:
 ```
 
 `PATH` is a `.typl`/`.ridl` file, a package directory, or a workspace root, and
-defaults to the current directory. `--frozen` is the same flag
+defaults to the current directory. A `PATH` inside a workspace member loads the
+whole workspace whose `members` lists the member (ADR-0002 §4): the root's
+`[lints]`, `[defaults].timing` and `[imports]` apply, imports of sibling members
+resolve, and the report holds only the diagnostics of files under the member.
+`ridl build` on a member also writes the whole workspace, and writes nothing
+while another member has an error. `--frozen` is the same flag
 [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
 commands share one implementation and render byte-identical diagnostics on the
 same input. It now carries this description word for word under `ridl` too —
@@ -1400,8 +1405,10 @@ Zone 2
 Run again with nothing to allocate, it prints nothing, writes nothing and
 exits 0. Over a workspace it writes each package's own file, and each output
 line is prefixed with the package directory relative to `PATH` and a colon:
-`hvac: allocated Cabin 1`. Until `ridl lock` has run, a declaration with no
-entry compiles with a provisional number, which carries no identity.
+`hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
+whole workspace and allocates in, edits and reports on that member only.
+Until `ridl lock` has run, a declaration with no entry compiles with a
+provisional number, which carries no identity.
 
 The reverse case — a live entry whose interface is gone from the source — is
 RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:

@@ -122,6 +122,11 @@ The package name mirrors the directory path below the workspace root, and every
 file in the directory declares that same name. A mismatch is a hard error
 (TYPL-002).
 
+You can run `ridl` from the workspace root or from inside a member. A command
+started in `veh/cluster` finds the root manifest that lists `veh/cluster`, so
+the member still sees `veh.common`, and the root's settings apply to it. The
+check then reports only the diagnostics of files in `veh/cluster`.
+
 ## Your first vocabulary
 
 Create `veh/common/types.ridl`:

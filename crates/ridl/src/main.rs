@@ -2378,8 +2378,8 @@ impl DeclIndex {
     }
 }
 
-/// The directory tree [`DeclIndex::build`] indexes for `entry`: the manifest
-/// root at or above it, the root [`ridl_core::load_workspace`] compiles from.
+/// The directory tree [`DeclIndex::build`] indexes for `entry`: the root
+/// [`ridl_core::load_workspace`] compiles from ([`ridl_core::find_root`]).
 /// The compile covers the whole root whatever entry names it, so an entry at
 /// a file or a subdirectory would otherwise leave a change in a file above or
 /// beside it with a detached span, which no `[lints]` scope reaches. A file
@@ -2390,7 +2390,7 @@ fn index_root(entry: &Path) -> PathBuf {
     } else {
         Some(entry)
     };
-    dir.and_then(ridl_core::find_manifest_root)
+    dir.and_then(ridl_core::find_root)
         .unwrap_or_else(|| entry.to_path_buf())
 }
 

@@ -26,7 +26,9 @@ the design's §10 holds the alternatives, restated below.
 
 Amended by ADR-0026 (documentation in the source): a catalogue row may declare
 `allow` as its default level (decisions 1, 12 and 15). TYPL-410
-(`doc-comment-style`) is the first row that does.
+(`doc-comment-style`) is the first row that does. ADR-0026 also replaces
+decision 9: entering at a workspace member loads its workspace, and reports on
+the member (issue #529).
 
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
@@ -139,13 +141,16 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    default is `allow` (decision 1), so that default holds on every path (amended
    by ADR-0026).
 
-9. **Entering at a workspace member loads the member alone** (design D-9).
-   `ridl check <member>`, `ridl check` on a file inside a member, the MCP path
-   mode on a member, and an editor opened on a member load the member as a
-   standalone package, so the workspace root's `[lints]` does not apply. This is
-   how `[defaults].timing` and `[imports]` behave, and it is part of the
-   language server gap #529, which stays open. This decision does not change the
-   loader's root discovery.
+9. **Entering at a workspace member loads its workspace, and reports on the
+   member** (replaced by ADR-0026; the original decision, design D-9, loaded the
+   member alone). `ridl check <member>`, `ridl check` on a file inside a member,
+   the MCP path mode on a member, and an editor opened on a member load the
+   workspace whose `members` names the member, by the root discovery rule of
+   ADR-0002 §4. The workspace root's `[lints]`, `[defaults].timing` and
+   `[imports]` therefore apply to the member, and its imports of sibling members
+   resolve. `ridl check`, `ridl build`, `ridl lock` and the MCP path mode report
+   only the diagnostics of files under the member; the language server publishes
+   the diagnostics of every loaded file.
 
 10. **A diagnostic takes the levels of the directory that owns its primary span,
     and the root's table covers the whole root tree** (design §5.2 and §6.1; the
@@ -252,7 +257,8 @@ From the design's §10. The numbers are the decisions that reject them.
   Would give a member entry point the same levels as a root entry point, but it
   changes the loader's root discovery, and with it how `[defaults].timing` and
   `[imports]` behave at a member, which belongs with the work on #529. Rejected
-  for this record (decision 9).
+  for this record (decision 9); ADR-0026 later took this option with the work on
+  #529.
 - **A SARIF crate** (`serde-sarif`). The subset used is a few structs; a
   dependency is not worth it (decision 12).
 
@@ -275,7 +281,8 @@ stage driver recorded none for them at implementation.
 - Known limitations, both of the language server: it reads the `[lints]` tables
   once, when it loads the workspace, so an edit to a table takes effect after a
   restart; and it does not canonicalise paths when it looks up a scope. The
-  member entry point gap (decision 9) is #529.
+  member entry point gap of the original decision 9 was #529, which ADR-0026
+  closes.
 - Diagnostic codes written in Markdown stay unguarded (#191) except the lint
   table of the book, which `book_lints.rs` compares with the catalogue.
 

@@ -70,19 +70,22 @@ so a project's `[lints]` never applies to code outside its directory. When there
 is no manifest at all, for example `ridl check` on a single file outside any
 package, the default levels apply.
 
-**The levels follow the entry point.** Running `ridl check` on a workspace
-member or on a file inside a member, opening an editor on a member, or passing
-a member as the `path` of the MCP tool `ridl_check` loads the member as a
-standalone package. The workspace root's `[lints]` table does not apply in that
-case; only the member's own table does. Check from the workspace root to get
-the root's levels. `[defaults].timing` and `[imports]` behave the same way.
+**A member loads its workspace.** Running `ridl check` on a workspace member
+or on a file inside a member, opening an editor on a member, or passing a
+member as the `path` of the MCP tool `ridl_check` loads the workspace whose
+`members` lists the member. The workspace root's `[lints]` table applies to the
+member, and the member's own table is applied over it, as in a check from the
+root. `[defaults].timing` and `[imports]` behave the same way. The command
+reports only the diagnostics of files under the member; check from the
+workspace root to see every member's diagnostics. A package that no workspace
+lists stays standalone, and the search for a workspace stops at the first
+`[workspace]` manifest and at a directory that holds `.git`.
 
 **Known limitations of the language server.** The language server reads the
 `[lints]` tables once, when it loads the workspace: at start, or when the first
 file is opened. An edit to a `[lints]` table takes effect in the editor after
-the server restarts. An editor opened on
-a workspace member loads the member alone, as described above; this is part of
-the language server gap tracked in issue #529, which stays open.
+the server restarts. The language server publishes the diagnostics of every
+loaded member, also when the editor is opened on one member.
 
 ## Where levels apply
 

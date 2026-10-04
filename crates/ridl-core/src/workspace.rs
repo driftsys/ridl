@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::{TextRange, TextSize};
@@ -52,6 +52,15 @@ pub struct LoadedWorkspace {
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
     pub lints: LintScopes,
+    /// The member directory the entry lies in, when the entry is inside a
+    /// member of the loaded workspace ([`find_root`] walked from the member to
+    /// its workspace, or the entry named a path below a member); `None` for
+    /// an entry at the workspace root, a standalone package, or single-file
+    /// mode. The whole workspace is loaded and checked either way; a command
+    /// that reports diagnostics reports only those under this directory
+    /// (ADR-0024 decision 9). The path is in the same form as the file paths
+    /// in `sources`.
+    pub report_scope: Option<PathBuf>,
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -137,12 +146,17 @@ fn overlay_key(path: &Path) -> Option<PathBuf> {
 ///
 /// `entry` may be:
 ///
-/// - a `.typl` or `.ridl` file — the nearest `ridl.toml` up the tree is the
-///   root; with no manifest anywhere up the tree the file loads in
+/// - a `.typl` or `.ridl` file — [`find_root`] from the file's directory is
+///   the root; with no manifest anywhere up the tree the file loads in
 ///   single-file mode;
-/// - a package directory or workspace root — the nearest `ridl.toml` at or
-///   above the directory is the root; a `[package]` manifest loads that
-///   package's directory tree, a `[workspace]` manifest loads every member.
+/// - a package directory or workspace root — [`find_root`] from the
+///   directory is the root; a `[package]` manifest loads that package's
+///   directory tree, a `[workspace]` manifest loads every member.
+///
+/// An entry inside a workspace member loads the whole workspace, so the
+/// root's `[lints]`, `[defaults].timing` and `[imports]` apply to the member
+/// and its imports of sibling members resolve;
+/// [`LoadedWorkspace::report_scope`] records the member.
 ///
 /// `[imports]` maps stay scoped per ADR-0002 §5: each [`Package`] carries the
 /// `[imports]` of the manifest governing its directory tree (step 2), and
@@ -181,12 +195,12 @@ pub fn load_workspace_with(
     }
 
     if entry.is_file() {
-        match entry.parent().and_then(find_manifest_root) {
+        match entry.parent().and_then(find_root) {
             Some(root) => loader.load_root(db, &root)?,
             None => loader.load_single_file(db, entry)?,
         }
     } else if entry.is_dir() {
-        match find_manifest_root(entry) {
+        match find_root(entry) {
             Some(root) => loader.load_root(db, &root)?,
             None => {
                 return Err(io::Error::new(
@@ -210,22 +224,139 @@ pub fn load_workspace_with(
             missing_directory: false,
         });
     }
+    let report_scope = absolute(entry).and_then(|entry| {
+        loader
+            .member_dirs
+            .iter()
+            .find(|member| absolute(member).is_some_and(|member| entry.starts_with(member)))
+            .cloned()
+    });
     let workspace = Workspace::new(&*db, loader.packages, loader.workspace_imports);
     Ok(LoadedWorkspace {
         workspace,
         diagnostics: loader.diagnostics,
         sources: loader.sources,
         lints: loader.lints,
+        report_scope,
     })
 }
 
-/// The nearest directory at or above `dir` that contains a `ridl.toml` — the
-/// root [`load_workspace`] loads from. The language server calls it to tell a
-/// directory with no manifest above it from a load that failed.
-pub fn find_manifest_root(dir: &Path) -> Option<PathBuf> {
-    dir.ancestors()
-        .find(|candidate| candidate.join("ridl.toml").is_file())
-        .map(Path::to_path_buf)
+/// The directory [`load_workspace`] loads from for an entry at or below
+/// `dir` (ADR-0002 §4). It starts at the nearest directory at or above `dir`
+/// that contains a `ridl.toml`. When that manifest is a `[package]`, the walk
+/// continues upward:
+///
+/// - at the first `[workspace]` manifest it stops; that workspace is the root
+///   when its `members` names the package directory, and the package is the
+///   root otherwise;
+/// - a `[package]` manifest above does not stop the walk;
+/// - a manifest that cannot be read or parsed stops the walk and is the root,
+///   so the loader reports why it failed;
+/// - a directory that holds `.git` stops the walk after its own `ridl.toml`
+///   is checked, and so does the filesystem root; the package is then the
+///   root.
+///
+/// A relative `dir` gives a root in the same relative form, built with `..`
+/// when the root is above the current directory. `None` means there is no
+/// `ridl.toml` at or above `dir`. The command line, the language server and
+/// the MCP server all call this, so every entry point loads the same root.
+pub fn find_root(dir: &Path) -> Option<PathBuf> {
+    let package = dir
+        .ancestors()
+        .find(|candidate| candidate.join("ridl.toml").is_file())?
+        .to_path_buf();
+    if !matches!(
+        read_manifest_kind(&package),
+        Some(ManifestKind::Package { .. })
+    ) {
+        return Some(package);
+    }
+    let Some(absolute_package) = absolute(&package) else {
+        return Some(package);
+    };
+    for (levels, parent) in absolute_package.ancestors().skip(1).enumerate() {
+        if parent.join("ridl.toml").is_file() {
+            match read_manifest_kind(parent) {
+                None => return Some(up(&package, levels + 1)),
+                Some(ManifestKind::Workspace { members }) => {
+                    let listed = members
+                        .iter()
+                        .any(|member| normalize(&parent.join(member)) == absolute_package);
+                    return Some(if listed {
+                        up(&package, levels + 1)
+                    } else {
+                        package
+                    });
+                }
+                Some(ManifestKind::Package { .. }) => {}
+            }
+        }
+        if parent.join(".git").exists() {
+            break;
+        }
+    }
+    Some(package)
+}
+
+/// The manifest kind of `dir/ridl.toml`, or `None` when the file cannot be
+/// read as UTF-8 or does not parse as a manifest.
+fn read_manifest_kind(dir: &Path) -> Option<ManifestKind> {
+    let text = fs::read_to_string(dir.join("ridl.toml")).ok()?;
+    parse_manifest(FileId::DETACHED, &text)
+        .0
+        .map(|manifest| manifest.kind)
+}
+
+/// `path` made absolute against the current directory and normalised
+/// lexically; `None` when the current directory cannot be read.
+fn absolute(path: &Path) -> Option<PathBuf> {
+    if path.is_absolute() {
+        Some(normalize(path))
+    } else {
+        Some(normalize(&std::env::current_dir().ok()?.join(path)))
+    }
+}
+
+/// `path` with every `.` removed and every `..` applied to the component
+/// before it, without reading the filesystem. A trailing `/` is dropped.
+fn normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(
+                    normalized.components().next_back(),
+                    Some(Component::Normal(_))
+                ) {
+                    normalized.pop();
+                } else if !normalized.has_root() {
+                    normalized.push("..");
+                }
+            }
+            other => normalized.push(other),
+        }
+    }
+    normalized
+}
+
+/// The directory `levels` levels above `path`, in the path form of `path`:
+/// a trailing name is removed, and `..` is added once no name is left to
+/// remove. The empty path is the current directory, as
+/// [`Path::ancestors`] yields it.
+fn up(path: &Path, levels: usize) -> PathBuf {
+    let mut result = path.to_path_buf();
+    for _ in 0..levels {
+        match result.components().next_back() {
+            Some(Component::Normal(_)) => {
+                result.pop();
+            }
+            Some(Component::RootDir | Component::Prefix(_)) => {}
+            Some(Component::CurDir) | None => result = PathBuf::from(".."),
+            Some(Component::ParentDir) => result.push(".."),
+        }
+    }
+    result
 }
 
 /// One loaded file plus its `package` declarations (dotted name, source
@@ -257,6 +388,9 @@ struct Loader {
     /// (ADR-0024 decision 10). Each key is the directory in the path form the
     /// loader records for the files under it.
     lints: LintScopes,
+    /// Every member directory of a loaded workspace, in the path form of the
+    /// files recorded under it. Empty outside workspace mode.
+    member_dirs: Vec<PathBuf>,
 }
 
 impl Loader {
@@ -264,7 +398,14 @@ impl Loader {
     /// mode its manifest declares.
     fn load_root(&mut self, db: &mut RidlDatabase, root: &Path) -> io::Result<()> {
         let manifest_path = root.join("ridl.toml");
-        let text = fs::read_to_string(&manifest_path)?;
+        // The error names the manifest: the root may be a workspace above the
+        // entry (`find_root`), so the reader cannot assume which file failed.
+        let text = fs::read_to_string(&manifest_path).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!("cannot read `{}`: {e}", manifest_path.display()),
+            )
+        })?;
         let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
         let (manifest, diags) = parse_manifest(file_id, &text);
         self.diagnostics.extend(diags);
@@ -298,6 +439,7 @@ impl Loader {
                 self.workspace_default_timing = default_timing;
                 self.workspace_lints = root_lints;
                 for member in &members {
+                    self.member_dirs.push(root.join(member));
                     self.load_member(db, root, member, file_id, &text)?;
                 }
             }
@@ -2039,5 +2181,148 @@ service:veh.common.climate 2
             None,
             "the subdirectory package has none"
         );
+    }
+
+    // Root discovery from a member (ADR-0002 §4, issue #529).
+
+    const PACKAGE_A: &str = "[package]\nname = \"a\"\nversion = \"1.0.0\"\n";
+    const PACKAGE_B: &str = "[package]\nname = \"b\"\nversion = \"1.0.0\"\n";
+
+    #[test]
+    fn find_root_walks_from_a_member_to_its_workspace() {
+        let dir = TempDir::new("find-root-member");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+        dir.write("a/ridl.toml", PACKAGE_A);
+        dir.write("a/src/a.typl", "package a.src\n");
+        dir.write("b/ridl.toml", PACKAGE_B);
+
+        assert_eq!(
+            find_root(&dir.path().join("a/src")),
+            Some(dir.path().to_path_buf())
+        );
+        assert_eq!(
+            find_root(&dir.path().join("a")),
+            Some(dir.path().to_path_buf())
+        );
+    }
+
+    /// A member listed as `./a/` still names the package directory `a`.
+    #[test]
+    fn find_root_normalises_the_member_path() {
+        let dir = TempDir::new("find-root-normalise");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"./a/\"]\n");
+        dir.write("a/ridl.toml", PACKAGE_A);
+
+        assert_eq!(
+            find_root(&dir.path().join("a")),
+            Some(dir.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn find_root_keeps_an_unlisted_package_standalone() {
+        let dir = TempDir::new("find-root-unlisted");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"b\"]\n");
+        dir.write("a/ridl.toml", PACKAGE_A);
+        dir.write("b/ridl.toml", PACKAGE_B);
+
+        assert_eq!(find_root(&dir.path().join("a")), Some(dir.path().join("a")));
+    }
+
+    #[test]
+    fn find_root_stops_at_the_first_workspace() {
+        let dir = TempDir::new("find-root-first-workspace");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"inner/a\"]\n");
+        dir.write("inner/ridl.toml", "[workspace]\nmembers = [\"b\"]\n");
+        dir.write("inner/a/ridl.toml", PACKAGE_A);
+
+        assert_eq!(
+            find_root(&dir.path().join("inner/a")),
+            Some(dir.path().join("inner/a"))
+        );
+    }
+
+    #[test]
+    fn find_root_stops_at_a_git_directory() {
+        let dir = TempDir::new("find-root-git");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"repo/a\"]\n");
+        fs::create_dir_all(dir.path().join("repo/.git")).expect("create .git");
+        dir.write("repo/a/ridl.toml", PACKAGE_A);
+
+        assert_eq!(
+            find_root(&dir.path().join("repo/a")),
+            Some(dir.path().join("repo/a"))
+        );
+    }
+
+    /// The directory that holds `.git` is still checked for its own
+    /// `ridl.toml` before the walk stops.
+    #[test]
+    fn find_root_checks_the_manifest_beside_a_git_directory() {
+        let dir = TempDir::new("find-root-git-root");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        fs::create_dir_all(dir.path().join(".git")).expect("create .git");
+        dir.write("a/ridl.toml", PACKAGE_A);
+
+        assert_eq!(
+            find_root(&dir.path().join("a")),
+            Some(dir.path().to_path_buf())
+        );
+    }
+
+    /// A manifest above the package that cannot be read stops the walk and is
+    /// returned, so the loader reports why.
+    #[test]
+    fn find_root_returns_an_unreadable_manifest_above_the_package() {
+        let dir = TempDir::new("find-root-unreadable");
+        fs::write(dir.path().join("ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
+        dir.write("a/ridl.toml", PACKAGE_A);
+
+        assert_eq!(
+            find_root(&dir.path().join("a")),
+            Some(dir.path().to_path_buf())
+        );
+    }
+
+    /// A relative entry inside the current directory's member reaches the
+    /// workspace above the current directory, and the root keeps the
+    /// relative form.
+    #[test]
+    fn up_keeps_the_relative_form_of_the_entry() {
+        assert_eq!(up(Path::new("members/a"), 2), PathBuf::from(""));
+        assert_eq!(up(Path::new("."), 2), PathBuf::from("../.."));
+        assert_eq!(up(Path::new(""), 1), PathBuf::from(".."));
+        assert_eq!(up(Path::new("a/.."), 1), PathBuf::from("a/../.."));
+        assert_eq!(up(Path::new("/w/a"), 1), PathBuf::from("/w"));
+    }
+
+    #[test]
+    fn member_entry_sets_report_scope() {
+        let dir = TempDir::new("report-scope");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+        dir.write("a/ridl.toml", PACKAGE_A);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        dir.write("b/ridl.toml", PACKAGE_B);
+        let b_file = dir.write("b/b.typl", "package b\ntype B: integer [0..1]\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &dir.path().join("a")).expect("the workspace loads");
+        assert_eq!(loaded.report_scope, Some(dir.path().join("a")));
+        let mut names: Vec<_> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.name(&db).clone())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["a", "b"], "both members compile");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &b_file).expect("the workspace loads");
+        assert_eq!(loaded.report_scope, Some(dir.path().join("b")));
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.report_scope, None, "the root reports on everything");
     }
 }

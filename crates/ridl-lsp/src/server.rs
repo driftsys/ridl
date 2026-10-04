@@ -16,8 +16,12 @@
 //! root. When that load fails, the server shows the error with
 //! `window/showMessage`; when it fails or the client sent no root, the server
 //! loads instead from the first opened file that has a `ridl.toml` at or above
-//! it (issue #384). The nearest `ridl.toml` wins, so a file inside a member of
-//! a `[workspace]` loads that member's package only.
+//! it (issue #384). Both loads find the root with [`find_root`], so a file
+//! inside a member of a `[workspace]` loads the whole workspace and its
+//! imports of sibling members resolve (ADR-0002 §4). The server publishes the
+//! diagnostics of every loaded member; it does not narrow them to the member
+//! the editor was opened at. One load failure is shown once, whether the
+//! initialize load or the first `didOpen` meets it first.
 //!
 //! The `[lints]` levels the load resolved apply to every published
 //! diagnostic (ADR-0024 decision 6): to the loader's findings once, at
@@ -50,9 +54,7 @@ use ridl_core::diag::{
 };
 use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
-use ridl_core::{
-    LoadedWorkspace, find_manifest_root, load_workspace, profile_of_path, std_package,
-};
+use ridl_core::{LoadedWorkspace, find_root, load_workspace, profile_of_path, std_package};
 use ridl_sem::{
     CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
 };
@@ -102,6 +104,11 @@ pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result
     if let Some(root) = workspace_root(&params)
         && let Err(err) = state.load(&root)
     {
+        // The first `didOpen` under the same manifest meets the same error;
+        // recording it here keeps that `didOpen` from showing it again.
+        if let Some(manifest_dir) = find_root(&root) {
+            state.shown_load_error = Some(load_error_key(&manifest_dir, &err));
+        }
         show_message(
             &connection,
             lt::MessageType::WARNING,
@@ -240,9 +247,9 @@ struct ServerState {
     /// which is the form of the client's root URI; a `didOpen` path is in the
     /// form of its own URI. Neither side is canonicalised.
     lints: LintScopes,
-    /// The manifest directory and reason of the last load error a `didOpen`
-    /// showed, so the same error is not shown again on every later
-    /// `didOpen`.
+    /// The manifest directory and reason of the last load error shown, by the
+    /// initialize load or by a `didOpen`, so the same error is not shown
+    /// again on every later `didOpen`.
     shown_load_error: Option<String>,
     /// Every loaded workspace file, keyed by its load-time path string —
     /// the inputs `didOpen`/`didChange` overlay via `set_text`.
@@ -307,11 +314,14 @@ impl ServerState {
     /// loaded input and stops being an overlay, so the file is analyzed once,
     /// as a member of its package.
     fn load(&mut self, dir: &Path) -> io::Result<()> {
+        // `report_scope` is not used: the server publishes the diagnostics of
+        // every loaded file.
         let LoadedWorkspace {
             workspace,
             mut diagnostics,
             sources,
             lints,
+            report_scope: _,
         } = load_workspace(&mut self.db, dir)?;
         for package in workspace.packages(&self.db) {
             for file in package.files(&self.db) {
@@ -351,12 +361,13 @@ impl ServerState {
     }
 
     /// Before a `didOpen` with no workspace loaded yet: loads the workspace
-    /// of the nearest `ridl.toml` at or above the opened file (issue #384).
+    /// that [`find_root`] finds from the opened file (issue #384).
     /// No manifest there is not an error — the file becomes a standalone
     /// overlay, and the next `didOpen` tries again. A load from a manifest
     /// that fails is shown to the user. A manifest that stays unreadable
     /// fails again on each `didOpen`; its error is shown only when it differs
-    /// from the last one shown, by manifest directory or by reason.
+    /// from the last one shown, by the initialize load or by a `didOpen`, by
+    /// manifest directory or by reason.
     fn load_for_opened_file(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
         if self.loaded {
             return Ok(());
@@ -364,13 +375,13 @@ impl ServerState {
         let Some(dir) = Path::new(path).parent() else {
             return Ok(());
         };
-        let Some(root) = find_manifest_root(dir) else {
+        let Some(root) = find_root(dir) else {
             return Ok(());
         };
         let Err(err) = self.load(&root) else {
             return Ok(());
         };
-        let shown = format!("{}: {err}", root.display());
+        let shown = load_error_key(&root, &err);
         if self.shown_load_error.as_ref() == Some(&shown) {
             return Ok(());
         }
@@ -1032,6 +1043,12 @@ impl ServerState {
             range: index.range(range),
         })
     }
+}
+
+/// The key [`ServerState::shown_load_error`] compares: the manifest directory
+/// the load started from and the reason it failed.
+fn load_error_key(manifest_dir: &Path, err: &io::Error) -> String {
+    format!("{}: {err}", manifest_dir.display())
 }
 
 /// Sends a `window/showMessage` notification: the client shows `message` to

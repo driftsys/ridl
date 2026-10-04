@@ -8,6 +8,10 @@ Amended 2026-10-04 by the lint foundation design (spec 0,
 [ADR-0024](ADR-0024-lint-registry-and-levels.md)): §4 gains the `[lints]` table,
 which both manifest kinds accept, and its resolution order.
 
+Amended 2026-10-04 by ADR-0026 (documentation in the source, spec 2a): §4 gains
+root discovery, so an entry inside a workspace member loads the member's
+workspace.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -165,6 +169,28 @@ members = ["veh-common", "veh-cluster", "veh-adas"]
 Each workspace member directory contains its own `ridl.toml` in
 standalone-package mode.
 
+**Root discovery** (amended 2026-10-04, ADR-0026). The toolchain finds the root
+to load from the entry — a source file, a package directory or a workspace root
+— with one rule, which `ridl check`, `ridl build`, the other commands, the
+language server and the MCP server share. The nearest `ridl.toml` at or above
+the entry is the start. When it is a `[package]` manifest, the walk continues
+upward:
+
+- At the first `[workspace]` manifest the walk stops. That workspace is the root
+  when its `members` names the package directory (each member path joined to the
+  workspace directory and normalised); otherwise the package is the root and
+  stays standalone.
+- A `[package]` manifest above the start does not stop the walk.
+- A `ridl.toml` that cannot be read or parsed stops the walk and is the root, so
+  the load reports why it failed.
+- A directory that holds `.git` stops the walk after its own `ridl.toml` is
+  checked, and so does the filesystem root. The package is then the root.
+
+An entry inside a workspace member therefore loads the whole workspace: the
+root's `[lints]`, `[defaults].timing` and `[imports]` apply to the member, and
+its imports of sibling members resolve. A command that reports diagnostics
+reports those of the files under the member only.
+
 **The `[lints]` table** (amended 2026-10-04, lint foundation design, ADR-0024)
 sets the level of a lint, in both modes. Each key is a lint name, the name a
 Warning or Info row of the diagnostic catalogue carries; each value is one of
@@ -179,10 +205,9 @@ shared-error-type = "allow"
 The level of a lint for a package is resolved key by key, the later source
 winning: the catalogue default, then the `[lints]` table of the workspace root
 manifest when the package is a workspace member, then the package's own
-`[lints]` table. A member loaded on its own — the entry point is the member's
-directory or a file inside it — is a standalone package, so the root table does
-not apply to it. An entry that names no lint, or whose value is not a level,
-raises MANI-010 and is ignored.
+`[lints]` table. An entry inside a member loads the member's workspace (root
+discovery above), so the root table applies to it. An entry that names no lint,
+or whose value is not a level, raises MANI-010 and is ignored.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based

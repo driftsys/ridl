@@ -245,11 +245,11 @@ fn test_ignores_deny() {
     );
 }
 
-/// Entering at a workspace member loads the member alone (ADR-0024 decision 9),
-/// so the root's `[lints]` does not apply: the root's `deny` is an exit 1 from
-/// the root, and from the member RIDL-100 stays at its default Warning, exit 0.
+/// Entering at a workspace member loads its workspace (ADR-0024 decision 9,
+/// as ADR-0026 amends it), so the root's `[lints]` applies to the member: the
+/// root's `deny` is an exit 1 from the root and from the member alike.
 #[test]
-fn member_entry_ignores_root_lints() {
+fn member_entry_applies_root_lints() {
     let dir = TempDir::new("member-entry");
     dir.write(
         "ridl.toml",
@@ -268,13 +268,100 @@ fn member_entry_ignores_root_lints() {
     let (code, _, stderr) = ridl(&["check".as_ref(), member.as_os_str()]);
 
     assert_eq!(
-        code, 0,
-        "from the member, the root's table is ignored:\n{stderr}"
+        code, 1,
+        "from the member, the root's deny applies:\n{stderr}"
     );
     assert!(
-        stderr.contains("warning[RIDL-100]"),
-        "the lint is at its default Warning:\n{stderr}"
+        stderr.contains("error[RIDL-100]"),
+        "the lint is an error at the root's level:\n{stderr}"
     );
+}
+
+/// A two-member workspace: `a` imports `Speed` from `b`, and `b` also holds
+/// a file with an error. Returns the workspace root.
+fn sibling_workspace(dir: &TempDir) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "a/a.typl",
+        "package a\nimport b.Speed\nstruct Cabin { primary: Speed }\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("b/speed.typl", "package b\ntype Speed: integer [0..300]\n");
+    dir.write(
+        "b/broken.typl",
+        "package b\nstruct Broken { field: Missing }\n",
+    );
+    dir.path().to_path_buf()
+}
+
+/// Checking a member reports only the diagnostics of files under the member:
+/// the error in member `b` is not shown when checking `a`, and the exit code
+/// is 0. From the root, the same error is shown and the exit code is 1.
+#[test]
+fn member_entry_reports_only_the_member() {
+    let dir = TempDir::new("member-scope");
+    let root = sibling_workspace(&dir);
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "from the root, b's error is reported:\n{stderr}");
+    assert!(stderr.contains("broken.typl"), "{stderr}");
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.join("a").as_os_str()]);
+    assert_eq!(code, 0, "from a, b's error is not reported:\n{stderr}");
+    assert!(!stderr.contains("broken.typl"), "{stderr}");
+}
+
+/// A build entered at a member writes the whole workspace, so an error in
+/// another member still blocks every artifact. The build says why and exits
+/// 1, without showing the other member's diagnostics.
+#[test]
+fn member_build_writes_nothing_when_another_member_has_an_error() {
+    let dir = TempDir::new("member-build");
+    let root = sibling_workspace(&dir);
+    let out = TempDir::new("member-build-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.join("a").as_os_str(),
+    ]);
+
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("another member of the workspace has an error"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("broken.typl"), "{stderr}");
+    let written: Vec<PathBuf> = std::fs::read_dir(out.path())
+        .expect("the out dir is readable")
+        .map(|entry| entry.expect("a readable entry").path())
+        .collect();
+    assert!(written.is_empty(), "the build wrote: {written:?}");
+}
+
+/// A member entry resolves an import of a sibling member, from a relative
+/// entry inside the member as well (`ridl check .` from `a`).
+#[test]
+fn member_entry_resolves_a_sibling_import() {
+    let dir = TempDir::new("member-sibling");
+    let root = sibling_workspace(&dir);
+    std::fs::remove_file(root.join("b/broken.typl")).expect("remove the broken file");
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.join("a").as_os_str()]);
+    assert_eq!(code, 0, "b.Speed resolves from a:\n{stderr}");
+
+    let (code, _, stderr) = ridl_in(Some(&root.join("a")), &["check".as_ref(), ".".as_ref()]);
+    assert_eq!(code, 0, "b.Speed resolves from `.` inside a:\n{stderr}");
 }
 
 #[test]
