@@ -250,9 +250,10 @@ diag_codes! {
 
     /// The typl catalogue (ADR-0008 decision 21): every `TYPL-` code declared in
     /// this module, with the severity the typl reference §16 tables classify it
-    /// at. Six codes the reference documents are absent because no constant
+    /// at. Five codes the reference documents are absent because no constant
     /// declares them and no pass emits them — TYPL-107, TYPL-112, TYPL-205, and
-    /// the three `@labels` assurance codes TYPL-401 to TYPL-403. That inventory
+    /// the two `@labels` assurance codes TYPL-402 and TYPL-403 (TYPL-401 is
+    /// declared, as `broken-doc-link`, under ADR-0026). That inventory
     /// is recorded in issue #172; closing it means minting the constants, which
     /// is a change to what the compiler declares, not a catalogue edit.
     TYPL_CATALOG {
@@ -2084,8 +2085,8 @@ mod tests {
     ///   in made this file report its own prose about reserved and absent
     ///   codes;
     /// - a code written only in Markdown, in a `.typl`/`.ridl` fixture, or in a
-    ///   snapshot. The typl reference §16 documents six codes no constant
-    ///   declares — TYPL-107, TYPL-112, TYPL-205, and TYPL-401 to TYPL-403 — so
+    ///   snapshot. The typl reference §16 documents five codes no constant
+    ///   declares — TYPL-107, TYPL-112, TYPL-205, TYPL-402 and TYPL-403 — so
     ///   widening the scan to `.md` would fail today. That inventory belongs to
     ///   issue #172, not to this guard;
     /// - a catalogued code that nothing emits. FORM-001 to FORM-004 are declared
