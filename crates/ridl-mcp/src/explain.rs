@@ -101,6 +101,11 @@ mod tests {
         assert_eq!(lint["severity"], "warning");
         assert_eq!(lint["lint"], "missing-timing");
         assert_eq!(lint["default_level"], "warn");
+        let info = value("RIDL-405");
+        assert_eq!(info["kind"], "diagnostic");
+        assert_eq!(info["severity"], "info");
+        assert_eq!(info["lint"], "shared-error-type");
+        assert_eq!(info["default_level"], "info");
         let error = value("RIDL-101");
         assert_eq!(error["kind"], "diagnostic");
         assert_eq!(error["severity"], "error");
