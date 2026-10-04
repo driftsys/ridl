@@ -1,8 +1,7 @@
 # The codegen plugin system
 
 The backend contract `generate(CodegenRequest) → CodegenResponse`, its two
-hosts, and the reference plugin — roadmap story E4.5b's first half, as built.
-The binding choices are
+hosts, and the reference plugin — as built. The binding choices are
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decisions 8 to 12 (lower once; one contract; two hosts, the process host in this
 release; the parity test, as amended 2026-09-22; the IR stability policy first),
@@ -316,10 +315,9 @@ section (how the plugin is found and what `ridlc` does with the response).
 1. **ADR-0020 decision 11's text before its amendment, the release-scope note
    §3.8's "Proof without a second language", and issue #322's `Done when` all
    named `ridlc-gen-ts`.** Decision 11 is amended in place; the note is a
-   reasoning trail and is not edited; #322 is corrected by comment. The
-   roadmap's E4.5b row said "both in-tree backends ported onto it" and is
-   corrected to the Rust backend alone, the other three following in their own
-   stories.
+   reasoning trail and is not edited; #322 is corrected by comment. The roadmap
+   row said "both in-tree backends ported onto it" and is corrected to the Rust
+   backend alone, the other three following in their own stories.
 2. **ADR-0020 decision 9 and the driver write the request as
    `{version, model, options}`.** The IR specification §7 fixed `schema` and
    `toolchain` instead (§2 above), and `artifact_base` is added. Decision 9 is

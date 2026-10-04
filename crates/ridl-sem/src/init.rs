@@ -1,5 +1,4 @@
-//! Init-value derivation (typl language reference §5.8; docs/ROADMAP.md epic
-//! E1.9). Every lowered [`v2::TypeDef`] and [`v2::Field`] carries a populated
+//! Init-value derivation (typl language reference §5.8). Every lowered [`v2::TypeDef`] and [`v2::Field`] carries a populated
 //! [`v2::InitValue`] — either the source-declared `= value` (validated as
 //! TYPL-109 by the checker) or the value derived here per the §5.8 table.
 //!

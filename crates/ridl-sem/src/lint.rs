@@ -1,4 +1,4 @@
-//! The ridl lint pass (docs/ROADMAP.md story E2.10a): four advisory codes over
+//! The ridl lint pass: four advisory codes over
 //! a package's interaction declarations, run from [`crate::check::check_package`]
 //! once lowering has finished.
 //!
@@ -17,7 +17,7 @@
 //! | RIDL-406 | payload re-declaring envelope metadata (ridl §3.1)       | info     |
 //! | RIDL-308 | named result union in return position (general form §6.1) | warning  |
 //!
-//! The E2.10 story also lists an "alias not required" lint. It needs no work
+//! The roadmap also lists an "alias not required" lint. It needs no work
 //! here: TYPL-008 (an import alias without an actual collision, warning) has
 //! shipped from the resolver since E1, so the row is already covered.
 

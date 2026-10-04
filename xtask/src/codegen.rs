@@ -383,11 +383,11 @@ pub(crate) fn generate() -> String {
     }
 
     // ErrorNode is the one node kind with no grammar rule: error recovery
-    // (task E1.2c) wraps arbitrary skipped tokens in it, so it has no
+    // wraps arbitrary skipped tokens in it, so it has no
     // describable shape and is appended here unconditionally.
     structs.extend(quote! {
-        /// An error-recovery node wrapping the tokens the parser skipped
-        /// (task E1.2c). The one node kind with no rule in `family.ungram`.
+        /// An error-recovery node wrapping the tokens the parser skipped.
+        /// The one node kind with no rule in `family.ungram`.
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct ErrorNode {
             syntax: SyntaxNode,

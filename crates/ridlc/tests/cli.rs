@@ -1,5 +1,4 @@
-//! Integration tests for the `ridlc` plumbing binary (docs/ROADMAP.md epic
-//! E1.13): the stable `check` / `build` flag surface, the exit-code contract,
+//! Integration tests for the `ridlc` plumbing binary: the stable `check` / `build` flag surface, the exit-code contract,
 //! the `--emit` outputs, and the `--frozen` lockfile gate.
 //!
 //! Every fixture is built in an isolated temp directory (no manifest up the
@@ -792,7 +791,7 @@ fn descriptor_hash(out: &Path, catalog: &str) -> Vec<u8> {
     descriptor.hash().expect("the hash reads").to_vec()
 }
 
-/// rsdl reference §13 and roadmap E6.17 (driftsys/ridl#367): each region of
+/// rsdl reference §13 (driftsys/ridl#367): each region of
 /// the lowered system carries the catalog hash of its catalog, 32 bytes, equal
 /// to the hash in the catalog descriptor the same build writes. The build
 /// writes the same system `compile_workspace` returns.

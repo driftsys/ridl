@@ -179,6 +179,7 @@ jobs:
       - run: just book-check
       - run: just link-check
       - run: just doc-path-check
+      - run: just story-id-check
 
   rust:
     name: rust

@@ -1,4 +1,4 @@
-//! The story's acceptance check (E9.8 task 7): the cruise-control package
+//! The acceptance check: the cruise-control package
 //! emits valid proto3, and its text is pinned so a later change has to be
 //! looked at.
 //!

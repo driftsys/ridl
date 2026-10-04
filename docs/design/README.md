@@ -25,21 +25,21 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
   for the face its handles are passed to.
 - **flatbuffers-codec.md** — the generated `Payload<FlatBuffers>` implementation
-  a package carries, story E11.7: where the projection facts both emitters read
-  live, what `generate` emits per table, what `encode`, `verify`, `decode` and
-  `MAX_SIZE` do and do not promise, determinism, and conformance against an
-  independent implementation. The decisions behind its choices are
+  a package carries: where the projection facts both emitters read live, what
+  `generate` emits per table, what `encode`, `verify`, `decode` and `MAX_SIZE`
+  do and do not promise, determinism, and conformance against an independent
+  implementation. The decisions behind its choices are
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6 and 7.
 - **catalog-descriptor.md** — the FlatBuffers catalog descriptor per package as
-  built, epic E16 and story E6.17: the `RDLC` file `--emit catalog` writes, the
-  append-only schema and its generated planus accessors, what a catalog
-  contains, the catalog hash and the three artifacts that carry it, the size
-  state per payload and encoding, verification before access, `ridl describe`,
-  the port's catalog check, and the design's decisions D-1 to D-10 with what is
-  not built (the system descriptor among them). The decisions behind its choices
-  are [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
+  built: the `RDLC` file `--emit catalog` writes, the append-only schema and its
+  generated planus accessors, what a catalog contains, the catalog hash and the
+  three artifacts that carry it, the size state per payload and encoding,
+  verification before access, `ridl describe`, the port's catalog check, and the
+  design's decisions D-1 to D-10 with what is not built (the system descriptor
+  among them). The decisions behind its choices are
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 5 as amended 2026-10-03, and
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 8.
@@ -48,8 +48,7 @@ choices, see [`../decisions/`](../decisions/).
   in-tree backend, the process host behind `--plugin` (`ridlc-gen-<language>` on
   `PATH` or by path, the pipe, the timeout, the errors), the reference plugin
   `ridlc-gen-model`, and the parity test with what it does and does not prove —
-  roadmap story E4.5b's first half, as built. The decisions behind its choices
-  are
+  as built. The decisions behind its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 8 to 12, with decision 11 as amended 2026-09-22.
 - **interaction-face.md** — the generated interaction face over `ridl-rt`: per
@@ -57,12 +56,12 @@ choices, see [`../decisions/`](../decisions/).
   a `Publisher`, a `Provider` trait, and `serve`; and, under the emitted crate's
   `std` feature, a `blocking` module with the same client, and `serve` where
   there is one, as blocking calls with a timeout. The poll face underneath
-  (`send_*`, `poll_*_ack`, `poll_*_reply`, `dispatch`) is `pub(crate)`. Built by
-  stories E11.13, E11.14 and E11.21: the two emitter entry points, the
-  descriptors, the clause translator, the settlement table, and every remaining
-  placeholder with the story that replaces it. The decisions behind its choices
-  are [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), decision
-  6 for the call surface.
+  (`send_*`, `poll_*_ack`, `poll_*_reply`, `dispatch`) is `pub(crate)`. The
+  record covers the two emitter entry points, the descriptors, the clause
+  translator, the settlement table, and every remaining placeholder with the
+  story that replaces it. The decisions behind its choices are
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), decision 6
+  for the call surface.
 - **mcp-workspace-tools.md** — the eight read-only tools of `ridl mcp` as built:
   the common rules (`path`, overlays, names, locations, the workspace status),
   what each tool reads, the rsdl component uses, where the code lives (the
@@ -72,5 +71,4 @@ choices, see [`../decisions/`](../decisions/).
   and the tests. The inputs and outputs of each tool are in the crate README.
   The decisions behind its choices are
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
-  [ADR-0005](../decisions/ADR-0005-agent-enablement.md). Built by roadmap
-  stories E8.6 and E8.7.
+  [ADR-0005](../decisions/ADR-0005-agent-enablement.md).

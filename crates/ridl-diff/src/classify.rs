@@ -1,4 +1,4 @@
-//! The breaking/compatible classifier (docs/ROADMAP.md epic E2.8b).
+//! The breaking/compatible classifier.
 //!
 //! [`classify`] turns one structural [`Change`] from the walk into a directional
 //! [`Verdict`]. Direction is judged from the consumer's side (ADR-0008 decision

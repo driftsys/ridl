@@ -1,5 +1,4 @@
-//! Integration tests for the baseline-aware desk check (docs/ROADMAP.md epic
-//! E2.9, general form §6.3): `ridl baseline` writing one `.ir.json` snapshot per
+//! Integration tests for the baseline-aware desk check (general form §6.3): `ridl baseline` writing one `.ir.json` snapshot per
 //! package, and `ridl check` rendering an ordinal-affecting drift against that
 //! baseline as a RIDL-407 warning that never moves the exit code.
 

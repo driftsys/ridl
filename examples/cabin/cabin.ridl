@@ -6,7 +6,7 @@
 // `ridl build --emit rust`, compiles the emitted crate and a consumer program
 // against it with plain `rustc`, runs the program, and asserts the four round
 // trips. It is the proof that what the CLI writes is a crate an application
-// outside this workspace can link and run, which is what story E11.14 makes
+// outside this workspace can link and run, which `ridl build --emit rust` makes
 // true (driftsys/ridl#444).
 package veh.cabin
 

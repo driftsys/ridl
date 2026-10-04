@@ -33,11 +33,11 @@ Three layers of the family have a working toolchain in this repository:
   to the IR beside the package IR, and `ridl diff` at the system. See
   [Describing a system](rsdl.md).
 
-**`ridl-rt`** (epic E11 story E11.0) is the `no_std` runtime library a
+**`ridl-rt`** is the `no_std` runtime library a
 generated ridl package will link and a runtime will implement: identity, time
 and the envelope, samples, the payload traits, the interaction descriptors,
 the ports, and the contract and transport errors. It has no dependency in any
-feature combination. `ridl-loopback` (story E11.15) implements its ports in
+feature combination. `ridl-loopback` implements its ports in
 process, and nothing else does: no transport reaches a second process, and no
 payload codec (FlatBuffers, proto3, `repr(C)`) is built.
 

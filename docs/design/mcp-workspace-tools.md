@@ -8,7 +8,7 @@ tests are the source of truth. The binding choices are in
 [ADR-0005](../decisions/ADR-0005-agent-enablement.md) §3 and §7 for the tool set
 and the contract), and the inputs and outputs of each tool are in
 [the `ridl-mcp` README](../../crates/ridl-mcp/README.md), which this record does
-not repeat. Built by driftsys/ridl#668 and #677; roadmap stories E8.6 and E8.7.
+not repeat. Built by driftsys/ridl#668 and #677.
 
 ## 1. The tools in one table
 

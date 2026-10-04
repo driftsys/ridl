@@ -22,13 +22,13 @@
 //! through the raw port, with the encoder's own returned slice.
 //!
 //! The ports the round trip runs over are the aggregate handle of
-//! `ridl-loopback` (story E11.15, driftsys/ridl#445). Until that story landed
+//! `ridl-loopback` (driftsys/ridl#445). Before it
 //! they were a disposable double at `tests/support/loopback.rs`, exercised
 //! ahead of the face by a set of `support_*` tests; both the double and those
 //! tests are gone, the tests having moved to `crates/ridl-loopback/tests/`
 //! as tests of the runtime itself.
 //!
-//! **Since story E11.21 (first half) the consumer side is the async client.**
+//! **The consumer side is the async client.**
 //! A command, a query and `next_event` return a named future, polled here by
 //! hand with `ridl_rt::task::noop_waker`, the way a frame loop polls; the
 //! provider side is `serve`, polled once per step. The poll face those futures
@@ -991,7 +991,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
 }
 
 // ---------------------------------------------------------------------------
-// The async client and `serve` (story E11.21, first half; the async face
+// The async client and `serve` (the async face
 // design, notes F-3 to F-7 and F-14). The port is `RecordingPorts`: the
 // loopback's consumer-side role handles with a log of every `Caller` and
 // `Wakeable` call, so the `Loopback` stays free for `advance`, for the
@@ -2035,7 +2035,7 @@ fn two_clients_and_a_publisher_hold_one_runtime_at_once() {
 }
 
 // ---------------------------------------------------------------------------
-// The blocking client and `blocking::serve` (story E11.21, second half; the
+// The blocking client and `blocking::serve` (the
 // async face design, notes F-10, F-11 and F-14). Each blocking call is
 // `ridl_rt::task::block_on` over the async call's future, so the calling
 // thread parks until a wake or the client's own timeout. The provider side
@@ -2723,7 +2723,7 @@ fn generated_try_from_delegates_to_new() {
 }
 
 // ---------------------------------------------------------------------------
-// The catalog check (ADR-0023 decision 8, story E16.5, driftsys/ridl#381).
+// The catalog check (ADR-0023 decision 8, driftsys/ridl#381).
 // ---------------------------------------------------------------------------
 
 /// A catalog with the fixture's package name and an all-zero hash, which

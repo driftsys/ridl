@@ -1,4 +1,4 @@
-//! IR v2 package to a proto3 schema (roadmap story E9.8, ADR-0013 decision 2).
+//! IR v2 package to a proto3 schema (ADR-0013 decision 2).
 //!
 //! A **wire backend** in the sense ADR-0013 decision 1 gives the term: the
 //! target describes bytes in transit, so the emit ceiling is two tiers — the

@@ -3,7 +3,7 @@
 This workspace is crafted so its compile emits one instance of every diagnostic
 the ridl profile implements. The `@ridl-diag-showcase` diagnostics snapshot
 (`crates/ridlc/tests/snapshots/`) is the de-facto ridl diagnostic index until
-the error-index website (E4.2), the way `diag-showcase` is for the typl codes.
+the error-index website, the way `diag-showcase` is for the typl codes.
 
 Three members, because one package cannot provoke everything:
 

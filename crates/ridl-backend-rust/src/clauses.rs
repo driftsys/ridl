@@ -2,7 +2,7 @@
 //! "Contract clause bodies — a narrow, total translator").
 //!
 //! The IR carries a clause only as canonical ridl text in `Contract.source`,
-//! not as an expression tree — E5.1 is the story that replaces the text with
+//! not as an expression tree — a later change replaces the text with
 //! one. So this translator accepts exactly one expression form and refuses
 //! every other:
 //!

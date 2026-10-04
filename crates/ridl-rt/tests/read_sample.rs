@@ -1,4 +1,4 @@
-//! Roadmap story E11.0's done-when: a hand-written program links `ridl-rt`
+//! A hand-written program links `ridl-rt`
 //! and reads a sample with its provenance.
 //!
 //! The program is `examples/read_sample.rs`, compiled here as a module so the

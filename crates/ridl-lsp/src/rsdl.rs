@@ -1,5 +1,4 @@
-//! Hover and go-to-definition in an `.rsdl` file (docs/ROADMAP.md epic E6.15,
-//! rsdl reference §4).
+//! Hover and go-to-definition in an `.rsdl` file (rsdl reference §4).
 //!
 //! The cursor's reference and its target come from
 //! [`ridl_sem::rsdl::reference_at`], which reads both from the checked system

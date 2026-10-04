@@ -1,8 +1,8 @@
 # rsdl as built: the checks, the lowering and the diff
 
 How rsdl is implemented in this workspace, after lane B of the 2026-09-13 step-1
-coordination (driftsys/ridl#328) landed stories E6.12 to E6.16, E6.18 and E6.19.
-Informative: the normative records are
+coordination (driftsys/ridl#328) landed the rsdl checks, lowering and diff
+described here. Informative: the normative records are
 [the rsdl language reference](../specification/rsdl-language-reference.md) for
 the language, and [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) for
 the IR carrier, the build gate and the diff. The plan the implementation
@@ -104,23 +104,23 @@ component is `external` — the flag, not the machine, defines the boundary.
 `WorkspaceOutput::system`, so a consumer of a compiled workspace — `ridl diff` —
 reads the facts rather than lowering again.
 
-**The catalog hash per region** (story E6.17, driftsys/ridl#367). rsdl §13 lists
-the catalog hash of every catalog in the region map as an input that ridl
-computes and rsdl never computes. `ridl_sem::lower_system` therefore leaves
-`Region.hash` empty and does not depend on `ridl-descriptor`. `ridlc` sets each
-region's hash with `ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15),
-through one helper, `embed_catalog_hashes`. `compile_workspace` and the corpus
-runner lower through `ridlc::lower_workspace_system`; the system write of
-`ridl build` lowers with `lower_system` and calls `embed_catalog_hashes`
-directly. It reuses the `ridl.std` IR when a code emit already checked it, and
-checks `ridl.std` itself when a package references it and no code emit ran.
-Every lowered system the toolchain returns or writes therefore carries its
-hashes. The hash is computed over the region's package and the same package list
-`ridl build --emit catalog` gives `ridl_descriptor::lower`, built by one helper,
-`catalog_scope`: every checked package of the workspace, then `ridl.std` when a
-package of the workspace references it. A region's hash therefore equals the
-hash in its catalog's descriptor, including in a build that emits only the IR
-and so writes no descriptor.
+**The catalog hash per region** (driftsys/ridl#367). rsdl §13 lists the catalog
+hash of every catalog in the region map as an input that ridl computes and rsdl
+never computes. `ridl_sem::lower_system` therefore leaves `Region.hash` empty
+and does not depend on `ridl-descriptor`. `ridlc` sets each region's hash with
+`ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15), through one
+helper, `embed_catalog_hashes`. `compile_workspace` and the corpus runner lower
+through `ridlc::lower_workspace_system`; the system write of `ridl build` lowers
+with `lower_system` and calls `embed_catalog_hashes` directly. It reuses the
+`ridl.std` IR when a code emit already checked it, and checks `ridl.std` itself
+when a package references it and no code emit ran. Every lowered system the
+toolchain returns or writes therefore carries its hashes. The hash is computed
+over the region's package and the same package list `ridl build --emit catalog`
+gives `ridl_descriptor::lower`, built by one helper, `catalog_scope`: every
+checked package of the workspace, then `ridl.std` when a package of the
+workspace references it. A region's hash therefore equals the hash in its
+catalog's descriptor, including in a build that emits only the IR and so writes
+no descriptor.
 
 `ridl build` writes the lowered system beside the package IR for each IR dump
 emit, under the suffixes `Emit::system_dump_suffix` names

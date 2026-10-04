@@ -1,4 +1,4 @@
-//! Hover content (docs/ROADMAP.md epic E1.15b, E2.10b; ADR-0004 §10).
+//! Hover content (ADR-0004 §10).
 //!
 //! Hover on a type reference or a declaration renders the declaration's IR —
 //! qualified name, kind, backing and canonical UCUM unit, constraint, derived
@@ -9,7 +9,7 @@
 //! groundwork; the ordinal is typl §7.4), read straight from the IR so it counts
 //! reserved tombstones exactly as codegen does.
 //!
-//! The ridl layer (E2.10b) adds three more anchors, all read from the same
+//! The ridl layer adds three more anchors, all read from the same
 //! checked IR so the editor can never disagree with codegen:
 //!
 //! - **An interaction** renders its kind, resolved payload, §11 ordinal, and —
@@ -119,7 +119,7 @@ fn field_hover(
 }
 
 /// The 1-based ordinal of field `field_name` in struct `struct_name`, from the
-/// lowered IR. Shared with the inlay-hint pass (E1.16), which renders the same
+/// lowered IR. Shared with the inlay-hint pass, which renders the same
 /// ordinal beside every field.
 pub(crate) fn field_ordinal(ir: &v2::Package, struct_name: &str, field_name: &str) -> Option<u32> {
     let decl = ir.decls.iter().find(|decl| decl.name == struct_name)?;
@@ -357,7 +357,7 @@ fn symbol_kind(kind: SymbolKind) -> &'static str {
     }
 }
 
-// --- the ridl interaction layer (E2.10b) ---------------------------------
+// --- the ridl interaction layer ---------------------------------
 
 /// The general form §6.4 wording for Stratum 3. Stratum 3 is fully detected by
 /// the runtime — acks, timeouts, staleness — and merely absent from the

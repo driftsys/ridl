@@ -6,8 +6,7 @@
 //! their lines, and where each instance runs — and a change to it changes the
 //! derived links and never the contract. Such a change is listed under one of
 //! two headings and carries no verdict: neither compatible nor breaking. Which
-//! of them are breaking, and for whom, is the stability policy's (roadmap
-//! E4.5a).
+//! of them are breaking, and for whom, is the stability policy's.
 //!
 //! - **Placement changed** — a change in a deployment: a deployment added or
 //!   removed, a machine added, removed or made `external`, an instance moved to

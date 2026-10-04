@@ -23,7 +23,7 @@
 //!
 //! `ridl-loopback` is the first runtime to run it
 //! (`crates/ridl-loopback/tests/conformance.rs`). The tests came from that
-//! crate's `tests/ports.rs` (story E11.20, driftsys/ridl#514), which keeps
+//! crate's `tests/ports.rs` (driftsys/ridl#514), which keeps
 //! the tests only the loopback can express, each listed with its reason in
 //! that file's module documentation.
 //!

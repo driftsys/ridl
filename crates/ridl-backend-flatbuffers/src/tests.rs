@@ -1388,7 +1388,7 @@ fn a_local_struct_reference_names_the_bare_declared_table() {
 }
 
 // ---------------------------------------------------------------------
-// The drift test (E11.7, design note D-1 and D-10)
+// The drift test (design note D-1 and D-10)
 // ---------------------------------------------------------------------
 //
 // The `.fbs` schema this backend emits and the codec `ridl-backend-rust`
@@ -1413,7 +1413,7 @@ fn a_local_struct_reference_names_the_bare_declared_table() {
 // union's arms by position while the IR numbers them by `UnionArm.ordinal`,
 // which a tombstone keeps occupied. The two agree until an arm is retired
 // ahead of a live one, and [`a_retired_arm_drifts_the_union_discriminant`]
-// pins that disagreement with the arm named in it. E11.7 does not close
+// pins that disagreement with the arm named in it. The FlatBuffers codec does not close
 // #302 — the fix is explicit member values in the schema, and #302 records
 // that `planus` 1.3.0 rejects that form — so the test asserts the drift is
 // *detected* rather than asserting it is gone.

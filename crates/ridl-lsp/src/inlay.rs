@@ -1,10 +1,10 @@
-//! Inlay hints (docs/ROADMAP.md epic E1.16, general form §6.3).
+//! Inlay hints (general form §6.3).
 //!
 //! Two families of hint make hidden semantics visible at the desk, so the
 //! author never has to open the IR to read them:
 //!
 //! - **Ordinal hints** render, beside every struct field, union arm,
-//!   enum/enum-set value, and — since E2.10b — every interaction and
+//!   enum/enum-set value, and — since the interaction layer — every interaction and
 //!   `reserved` tombstone of an interface body or a service's inline shape,
 //!   the number that is its wire identity (typl §7.4, ridl §11).
 //!   For a struct field or union arm that is the derived declaration-order

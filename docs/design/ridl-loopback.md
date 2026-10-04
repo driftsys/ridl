@@ -22,8 +22,7 @@ Three things this crate is not.
 
 - **Not a transport.** It carries no frame, opens no socket and has no wire
   format. A value published through it is read through it, in the same process.
-  `ridl-transport-ws` (story E11.9) is the transport, and it does not link this
-  crate.
+  `ridl-transport-ws` is the transport, and it does not link this crate.
 - **Not the engine.** The store here is a map and a queue behind one lock. The
   seqlock store, the sans-IO session, the platform traits and the scheduler are
   outside this repository (the 2026-09-12 re-scope, section 3.7).
@@ -123,9 +122,8 @@ generated async `Client` over an interface with a call is bound on `Caller`,
 `Clock` and `Wakeable` together
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6),
 and a role handle that cannot build one is not a handle for that role. The Rust
-backend emits that client since story E11.21's first half; the roles were here
-first, so that it could be built over this handle. Both handles read the one
-clock in the store.
+backend emits that client; the roles were here first, so that it could be built
+over this handle. Both handles read the one clock in the store.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
 on the reader handle takes `&self`, so several threads may read one store at
@@ -251,20 +249,20 @@ does emit `invalidate_<name>`, so a provider that invalidates before its first
 ## Waking
 
 **Every handle implements `Wakeable`, and a handle stores a waker only under a
-kind of key one of its roles observes** (story E11.16). A caller handle observes
-`Outcome` and `Slot`, a source handle `Event`, and a handler handle `Claim`. For
-`Slot`, `Event` and `Claim` the store keeps one waker per kind of key per
-handle, as ADR-0021 decision 13 states the contract: one `Slot` waker on a
-caller, one `Event` waker on a source and one `Claim` waker on a handler,
-whatever interface each was registered under, and a change to any key of the
-kind wakes the stored waker, so a task that registers `Event(a)` and then
-`Event(b)` on one source is woken by an occurrence of either. Each handle's
-three are a `ridl_rt::correlate::Waiters` (story E11.18). An `Outcome` waker is
-per call: it is kept with its call in the slot of the call table,
-`ridl_rt::correlate::Table`, because the outcome is the call's, and no change
-but that call's settlement, its `forget`, or the drop of the caller handle that
-sent it wakes it (a displacement by another task does, as for every kind). The
-aggregate sends each key to the handle that observes it.
+kind of key one of its roles observes**. A caller handle observes `Outcome` and
+`Slot`, a source handle `Event`, and a handler handle `Claim`. For `Slot`,
+`Event` and `Claim` the store keeps one waker per kind of key per handle, as
+ADR-0021 decision 13 states the contract: one `Slot` waker on a caller, one
+`Event` waker on a source and one `Claim` waker on a handler, whatever interface
+each was registered under, and a change to any key of the kind wakes the stored
+waker, so a task that registers `Event(a)` and then `Event(b)` on one source is
+woken by an occurrence of either. Each handle's three are a
+`ridl_rt::correlate::Waiters`. An `Outcome` waker is per call: it is kept with
+its call in the slot of the call table, `ridl_rt::correlate::Table`, because the
+outcome is the call's, and no change but that call's settlement, its `forget`,
+or the drop of the caller handle that sent it wakes it (a displacement by
+another task does, as for every kind). The aggregate sends each key to the
+handle that observes it.
 
 What wakes a stored waker:
 
@@ -279,8 +277,8 @@ A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
 and puts it back, unwoken, when no call the handler now serves is waiting. A
 `serve` with no waker registered therefore scans nothing, as it did before the
 waker moved into a `ridl_rt::correlate::Waiters`, which has no query for an
-empty kind. This is the one change story E11.18 makes on the claim side, and it
-changes nothing about what wakes the waker.
+empty kind. This is the one change the call-table move makes on the claim side,
+and it changes nothing about what wakes the waker.
 
 A settlement, a raise, a send, a `serve`, a `forget`, a caller's drop and a
 handler's drop collect the wakers to wake inside their critical section, and
@@ -332,10 +330,10 @@ answer:
 waiting calls**, in its place by send order, so another handler that serves the
 member can take it, and every handler that serves the member is woken. The
 loopback enforces no deadline on the returned call: what bounds the caller's
-wait is the deadline the generated async client's future measures (story E11.21,
-ADR-0023 decision 6). This and the offered claim ("An offered claim", below) are
-the two ways a call is presented again, and a call is presented once more for
-each holder dropped. A returned claim keeps the id it was first presented under,
+wait is the deadline the generated async client's future measures (ADR-0023
+decision 6). This and the offered claim ("An offered claim", below) are the two
+ways a call is presented again, and a call is presented once more for each
+holder dropped. A returned claim keeps the id it was first presented under,
 because the id lives on the call's entry (driftsys/ridl#569). A dropped
 handler's offered claim is not returned, because it never left the waiting
 calls, and no handler is woken for it. A claim whose call the caller forgot is
@@ -376,21 +374,21 @@ that `Drop` returns the claims but leaves the handler's state in the store.
 
 The call table is `ridl_rt::correlate::Table`, with `Loopback::SLOTS` — sixteen
 — slots and no byte budget, because the loopback has no catalog descriptor to
-size one from (note F-9): the descriptor file is written from story E16.5
-(`--emit catalog`, driftsys/ridl#381), and no story yet wires the loopback to
-read one. A call holds a slot from the caller's send until `forget`, or the drop
-of the caller handle that sent it, reclaims it; a send with every slot taken
-answers `SendError::Busy`, on every caller handle, because the table is the
-runtime's. A correlation is `(generation << 16) | slot`, and a reclaim advances
-the slot's generation, so the correlation a reused slot had before answers as
-unknown: `ack` and `reply` answer `None`, and an `Outcome` registration under it
-is woken at once. The table holds the outcome status and the `Outcome` waker;
-the loopback keeps each call's arguments, its envelope, its place in send order
-and its reply bytes beside it, by slot. A returned claim goes back among the
-waiting calls by send order, not by correlation, because a reused slot's
-correlation is larger than that of a call sent later into a fresh slot. A
-refused send draws no sequence number, because nothing was sent. Two identities
-address a call, and they are separate:
+size one from (note F-9): the descriptor file is written by `--emit catalog`
+(driftsys/ridl#381), and nothing yet wires the loopback to read one. A call
+holds a slot from the caller's send until `forget`, or the drop of the caller
+handle that sent it, reclaims it; a send with every slot taken answers
+`SendError::Busy`, on every caller handle, because the table is the runtime's. A
+correlation is `(generation << 16) | slot`, and a reclaim advances the slot's
+generation, so the correlation a reused slot had before answers as unknown:
+`ack` and `reply` answer `None`, and an `Outcome` registration under it is woken
+at once. The table holds the outcome status and the `Outcome` waker; the
+loopback keeps each call's arguments, its envelope, its place in send order and
+its reply bytes beside it, by slot. A returned claim goes back among the waiting
+calls by send order, not by correlation, because a reused slot's correlation is
+larger than that of a call sent later into a fresh slot. A refused send draws no
+sequence number, because nothing was sent. Two identities address a call, and
+they are separate:
 
 - a **`Correlation`**, returned by `command` and `query`, is the caller's name
   for the outcome it will read back;
@@ -666,8 +664,8 @@ types below the port, which is the layering ADR-0020 decision 6 fixes.
 
 ## What it cannot report
 
-The loopback holds no catalog descriptor. Story E16.5 (driftsys/ridl#381) writes
-the descriptor file; giving the loopback one is not yet assigned to a story. So
+The loopback holds no catalog descriptor. driftsys/ridl#381 writes the
+descriptor file; giving the loopback one is not yet assigned to a story. So
 there is no member table, and therefore:
 
 - **no unknown ordinal.** Nothing here can tell an ordinal that names no member
@@ -696,8 +694,8 @@ a provider settles a call with it
 (`a_providers_busy_settlement_reaches_the_caller`); and `Attached::catalog`
 returns the `CatalogRef` the runtime was built with, unexamined. ADR-0021
 decision 3 places the check of it against an interface's own `CATALOG` in the
-generated face's constructor, once, when the face is built; since story E16.5
-(driftsys/ridl#381) the constructor the Rust backend emits makes that check and
+generated face's constructor, once, when the face is built; since
+driftsys/ridl#381 the constructor the Rust backend emits makes that check and
 panics on a mismatch (ADR-0023 decision 8). The check is the face's and not the
 runtime's.
 
@@ -705,24 +703,23 @@ Three more that are the runtime's own shape rather than the descriptor's:
 
 - **A settled outcome is kept until the caller releases it.** A call holds its
   slot of the call table until it is forgotten or its caller handle is dropped.
-  The generated async client's future (story E11.21, first half) forgets its
-  call when it leaves the waiting phase: in the poll that takes the outcome, at
-  the call's deadline, and on drop while the call is still waiting. So a program
-  that calls through the generated face holds one slot per call in flight, and a
-  call future that is neither polled to its outcome nor dropped is the one way
-  such a program keeps a slot. Before that story nothing the Rust backend
-  emitted called `Caller::forget`, and a program over one `Loopback` found every
-  send `SendError::Busy` from its seventeenth call on. This runtime holds the
-  outcome because nothing else can know the caller has read it.
+  The generated async client's future forgets its call when it leaves the
+  waiting phase: in the poll that takes the outcome, at the call's deadline, and
+  on drop while the call is still waiting. So a program that calls through the
+  generated face holds one slot per call in flight, and a call future that is
+  neither polled to its outcome nor dropped is the one way such a program keeps
+  a slot. Before the async client nothing the Rust backend emitted called
+  `Caller::forget`, and a program over one `Loopback` found every send
+  `SendError::Busy` from its seventeenth call on. This runtime holds the outcome
+  because nothing else can know the caller has read it.
 
   A program that sends through the raw `Caller` port, as some tests do, is the
   one caller that must forget a correlation itself once it has read the outcome,
   or this runtime's sixteen slots fill and it refuses the seventeenth call with
   `SendError::Busy` (decision 2 of the
   [pass-1 dispositions on driftsys/ridl#553](https://github.com/driftsys/ridl/pull/553#issuecomment-5848559640)).
-  The generated face's poll methods are `pub(crate)` since story E11.21's first
-  half, so a program that calls through the generated face never holds a
-  correlation.
+  The generated face's poll methods are `pub(crate)` since the async client, so
+  a program that calls through the generated face never holds a correlation.
 - **An unpublished channel's envelope is stamped `Timestamp(0)`, not the time
   the channel was created.** `Envelope`'s own documentation gives the creation
   time; this runtime has no channel-creation event — a channel exists when
@@ -738,22 +735,22 @@ absences:
   handler that has served nothing is presented every waiting call; once it has
   served anything, it is presented only the members it served, and another
   handler's calls stay waiting for that handler. The deviation was taken with
-  its eyes open: until story E11.21's first half nothing the Rust backend
-  emitted called `serve`, so a handler that always filtered would have been
-  presented nothing at all by the generated `dispatch`, and a handler that never
-  filtered would take a second component's calls and settle them
-  `UnknownInteraction` — two components providing different interfaces in one
-  process is the plainest use of an in-process runtime. The generated `serve`
-  now calls `Handler::serve` with the interface's command and query ordinals
-  when it is called (`crates/ridl-backend-rust/src/face/serve.rs`), so a handler
-  under it is filtered from its first poll, and `blocking::serve` is `block_on`
-  over it (story E11.21, second half). **The deviation is kept**, decided with
-  that second half: a handler under either `serve` never has an empty served
-  set, so the rule reaches only a handler driven through the port directly,
-  which is what the tests of the settlement table's unknown-route rows do;
-  retiring it would make those tests register a set first and change nothing a
-  generated program observes. `two_handlers_each_receive_only_what_they_served`,
-  in the `ridl-rt-conformance` suite this runtime runs, is that case, and
+  its eyes open: until the async client nothing the Rust backend emitted called
+  `serve`, so a handler that always filtered would have been presented nothing
+  at all by the generated `dispatch`, and a handler that never filtered would
+  take a second component's calls and settle them `UnknownInteraction` — two
+  components providing different interfaces in one process is the plainest use
+  of an in-process runtime. The generated `serve` now calls `Handler::serve`
+  with the interface's command and query ordinals when it is called
+  (`crates/ridl-backend-rust/src/face/serve.rs`), so a handler under it is
+  filtered from its first poll, and `blocking::serve` is `block_on` over it.
+  **The deviation is kept**, decided with the blocking client: a handler under
+  either `serve` never has an empty served set, so the rule reaches only a
+  handler driven through the port directly, which is what the tests of the
+  settlement table's unknown-route rows do; retiring it would make those tests
+  register a set first and change nothing a generated program observes.
+  `two_handlers_each_receive_only_what_they_served`, in the
+  `ridl-rt-conformance` suite this runtime runs, is that case, and
   `a_handler_that_served_nothing_is_presented_every_call`, in
   `crates/ridl-loopback/tests/ports.rs`, is the other side of the rule. The
   alternative rejected is recording the set without acting on it, which loses a
@@ -772,12 +769,12 @@ absences:
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
 `ridl-rt-conformance` over this runtime, the tests of both signal extensions and
-of `Wakeable` included (story E11.20, driftsys/ridl#514). The factory it writes
-for the suite is the aggregate, the `SourceHandle`, `CallerHandle` and
-`HandlerHandle` that `Loopback::source`, `Loopback::caller` and
-`Loopback::handler` hand out, `Loopback::SLOTS` as the size of the call table
-the suite fills, and `Loopback::advance` and `Loopback::fail_next_settle` as the
-suite's clock hook and fault hook.
+of `Wakeable` included (driftsys/ridl#514). The factory it writes for the suite
+is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
+`Loopback::source`, `Loopback::caller` and `Loopback::handler` hand out,
+`Loopback::SLOTS` as the size of the call table the suite fills, and
+`Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
+and fault hook.
 
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under
@@ -802,16 +799,16 @@ is deleted. In its place:
 
 - `ridl-backend-rust` gains `ridl-loopback` as a dev-dependency, and the
   `round_trip_*` tests in `crates/ridl-backend-rust/tests/interaction_face.rs`
-  build their faces over the aggregate handle or, since story E11.21's first
-  half, over the role handles `tests/support/doubles.rs` groups. At E11.15 the
-  tests' shape and `dispatch` were unchanged; what changed was the `use` line,
-  the constructor — `Loopback::new` takes a `CatalogRef` rather than a package
-  name, because a runtime is attached to a catalog and not to a string — and the
-  deletion of the `support_*` tests.
+  build their faces over the aggregate handle or, since the async client, over
+  the role handles `tests/support/doubles.rs` groups. When the loopback replaced
+  the double, the tests' shape and `dispatch` were unchanged; what changed was
+  the `use` line, the constructor — `Loopback::new` takes a `CatalogRef` rather
+  than a package name, because a runtime is attached to a catalog and not to a
+  string — and the deletion of the `support_*` tests.
 - Those `support_*` tests moved to `crates/ridl-loopback/tests/ports.rs`, where
   they are tests of the runtime rather than of the Rust backend, alongside the
-  tests of what the double did not implement. Story E11.20 later moved the ones
-  any runtime can run into `ridl-rt-conformance`.
+  tests of what the double did not implement. The ones any runtime can run were
+  later moved into `ridl-rt-conformance`.
 
 `MinimalSignalOnlyPort`, in the same test file, is not replaced. It is not a
 double of a runtime: it is a port implementing `SignalReader` and `Attached` and
@@ -831,10 +828,10 @@ that.
 
 ## Trace
 
-- Roadmap: [`docs/ROADMAP.md`](../ROADMAP.md) — E11.15
-- Tracking issue: driftsys/ridl#445, split from E11.9 (driftsys/ridl#265);
-  `Wakeable` and the caller handle's `Clock`: E11.16, driftsys/ridl#510; the
-  call table on `ridl_rt::correlate`: E11.18, driftsys/ridl#512
+- Roadmap: [`docs/ROADMAP.md`](../ROADMAP.md)
+- Tracking issue: driftsys/ridl#445, split from driftsys/ridl#265; `Wakeable`
+  and the caller handle's `Clock`: driftsys/ridl#510; the call table on
+  `ridl_rt::correlate`: driftsys/ridl#512
 - Coordination: driftsys/ridl#328
 - Binds:
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -850,9 +847,9 @@ that.
   text; driftsys/ridl#544 aligned the ridl reference with the frame
   specification on both
 - Open against it: driftsys/ridl#350's `Watermark::seq` question, on which this
-  crate takes a reading; driftsys/ridl#381 (E16.5), which writes the catalog
-  descriptor. Giving this crate one, and with it every report in "What it cannot
-  report", is not yet assigned to a story
+  crate takes a reading; driftsys/ridl#381, which writes the catalog descriptor.
+  Giving this crate one, and with it every report in "What it cannot report", is
+  not yet assigned to a story
 - `crates/ridl-loopback/src/lib.rs`, `src/handle.rs`, `src/store.rs` — the crate
   as built; `crates/ridl-loopback/tests/conformance.rs` — the port contract
   suite of `ridl-rt-conformance` run over it; `tests/ports.rs` — the tests only

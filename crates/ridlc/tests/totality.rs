@@ -1,4 +1,4 @@
-//! The totality sweep (docs/ROADMAP.md epic E2.11b).
+//! The totality sweep.
 //!
 //! `ridlc::compile` documents a hard invariant: "The function is total: it
 //! never panics." Malformed source is the only way to test it, so the

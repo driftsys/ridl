@@ -240,7 +240,7 @@ pub fn enumset_width(highest_bit: u32) -> IntWidth {
 ///
 /// This is **the** range-membership rule of the toolchain: the checker validates
 /// every declared init and constant against a range through it (TYPL-109,
-/// RIDL-110), and the E2.11a property runner drives the boundary and violation
+/// RIDL-110), and the property runner drives the boundary and violation
 /// corpora against the same function. Sharing one definition is what makes the
 /// self-corpora meaningful — a bug in this rule surfaces as a failed corpus run
 /// rather than being reimplemented identically on both sides and cancelling out.

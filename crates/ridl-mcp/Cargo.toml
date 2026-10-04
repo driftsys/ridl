@@ -1,4 +1,4 @@
-# The RIDL MCP server (ADR-0005 Layer B, docs/ROADMAP.md epic E8.6): a thin
+# The RIDL MCP server (ADR-0005 Layer B): a thin
 # consumer of the shared compiler crates behind `ridl mcp`. It is not in the
 # `wasm-check` crate list, so the async runtime it pulls in never reaches the
 # wasm32 gate.

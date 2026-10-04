@@ -120,6 +120,13 @@ member; rsdl is the apex.
                          so it is not checked. Skips docs/archive/ and
                          docs/wip/, where such a path records what was true
                          when it was written
+    just story-id-check  no story id (`E16.5`, `E2.8b`) in a tracked file
+                         under crates/, xtask/, examples/, editors/vscode/src/,
+                         docs/book/, docs/design/ or docs/technotes/ — names
+                         file:line for each match; stage and epic names are not
+                         matched. The ROADMAP, the backlog,
+                         the ADRs, the specifications, docs/archive/ and
+                         docs/wip/ may hold ids
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
@@ -142,11 +149,11 @@ member; rsdl is the apex.
                          this workspace cannot reach
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
-                         compile + test + lint + wasm-check + compat-check +
-                         demo + check — the full local gate: every member ADR-0008
+                         story-id-check + compile + test + lint + wasm-check +
+                         compat-check + demo + check — the full local gate: every member ADR-0008
                          decision 11 names, the four CI checks ADR-0009 brought
-                         back to this side, and doc-path-check and demo, which
-                         postdate both
+                         back to this side, and doc-path-check, story-id-check and
+                         demo, which postdate both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
@@ -232,6 +239,13 @@ them.
 - **Prose — comments, commit messages, docs, PR descriptions — is plain and
   literal**: no idioms, no figures of speech. Technical terms and acronyms stay
   as they are.
+- **Shipped docs and rustdoc do not name stories, stages or epics** (`E16.5`),
+  because status lives in `docs/ROADMAP.md` and the issue tracker, and a
+  reference to a story goes stale when the story lands. State what the code does
+  now; when a gap is real, link its tracking issue (`driftsys/ridl#N`). State a
+  fact once, in the record that owns it, and link to that record from elsewhere
+  instead of restating it. `just story-id-check` enforces the first rule for
+  dotted story ids; stage and epic names are left to review.
 - Documents are prose, in Markdown, under `docs/`. The specs read as one system:
   doctrines are indexed once in the overview, cited from each reference — keep
   that discipline when editing.

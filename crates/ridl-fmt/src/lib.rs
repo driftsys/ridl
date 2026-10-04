@@ -1,5 +1,5 @@
 //! `ridl fmt` — the CST-based formatter for typl, ridl and rsdl declarations
-//! (docs/ROADMAP.md epic E1.14, general form §5, typl reference §15.2).
+//! (general form §5, typl reference §15.2).
 //!
 //! The formatter parses `text` with [`ridl_syntax::parse`] and rewrites the
 //! lossless rowan tree into the canonical tight style. It is:
@@ -137,8 +137,8 @@ pub enum FormatOutcome {
     /// The parse diagnostics of a broken input, which is left unformatted.
     ///
     /// The interface returns [`ridl_syntax::SyntaxError`] rather than the coded
-    /// `Diagnostic` model (ADR-0004 §5): the diagnostics framework (task E1.10)
-    /// is not a dependency of this crate yet. The CLI facade (task E1.13) maps
+    /// `Diagnostic` model (ADR-0004 §5): the diagnostics framework
+    /// is not a dependency of this crate yet. The CLI facade maps
     /// each `SyntaxError` — which already carries its stable code — into a
     /// `Diagnostic` at the boundary.
     ParseErrors(Vec<ridl_syntax::SyntaxError>),

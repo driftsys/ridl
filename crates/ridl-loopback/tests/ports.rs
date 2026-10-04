@@ -2,7 +2,7 @@
 //!
 //! The port contract tests that any runtime can run live in
 //! `crates/ridl-rt-conformance`, and `tests/conformance.rs` runs them over
-//! this runtime (story E11.20, driftsys/ridl#514). They came from this file.
+//! this runtime (driftsys/ridl#514). They came from this file.
 //! What stays here, and why each test is not in the suite. Each reason is an
 //! item of the list "What the suite leaves out" in that crate's
 //! documentation:
@@ -56,10 +56,10 @@
 //!   `Loopback::split`.
 //!
 //! The tests under "Waking" and "The bounded call table" pin this runtime's
-//! `Wakeable` (story E11.16, driftsys/ridl#510) and its move onto
-//! `ridl_rt::correlate` (story E11.18, driftsys/ridl#512). The suite covers
+//! `Wakeable` (driftsys/ridl#510) and its move onto
+//! `ridl_rt::correlate` (driftsys/ridl#512). The suite covers
 //! the contract of both: its `wakeable` module, and the slot count its
-//! factory states (story E11.20, driftsys/ridl#514). The tests that stay
+//! factory states (driftsys/ridl#514). The tests that stay
 //! here pin what the contract leaves to a runtime, and each falls under one
 //! of the reasons below. Not every one of these reasons is an item of the
 //! list in `ridl-rt-conformance`'s documentation: that list names what the

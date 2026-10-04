@@ -623,8 +623,8 @@ surface — structs, enums, enum sets and unions, projected to proto3 messages
 and enums, with named-scalar constraints carried as comments — plus the
 interaction identity table, one enum per interface giving each signal, event,
 command, query and fixed its ordinal. It emits no `service` block, no call
-face, and no value store; store and dispatcher generation is roadmap stories
-E11.2 and E11.4 (ADR-0018 decision 16), not this emit.
+face, and no value store; store and dispatcher generation is not part of this emit
+(ADR-0018 decision 16).
 
 **`flatbuffers` is the second wire backend**, with the same two tiers and the
 same ceiling. Its projection rules differ from proto3's where the targets
@@ -686,8 +686,7 @@ The one plugin in this repository is `ridlc-gen-model`, built for the test
 suite and not installed by any release: it is `--emit codegen-model` as a
 process, and the test that runs it through this path proves the host, not a
 language. The Rust backend and the other three still run in process only; the
-Rust backend's own plugin follows its port onto the model (roadmap story
-E4.5b).
+Rust backend's own plugin follows its port onto the model.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —

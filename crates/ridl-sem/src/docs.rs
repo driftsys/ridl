@@ -1,5 +1,4 @@
-//! Doc-comment tag scanning (typl language reference §14; docs/ROADMAP.md epic
-//! E1.7b).
+//! Doc-comment tag scanning (typl language reference §14).
 //!
 //! A definition's doc comments are trivia tokens sitting before it (collected
 //! by the `ridl_syntax::ast::HasDocComments` trait). This module strips the

@@ -1,4 +1,4 @@
-//! IR v2 package to TypeScript source (E2.6a, ADR-0008 decision 7).
+//! IR v2 package to TypeScript source (ADR-0008 decision 7).
 //!
 //! The typl surface of a [`v2::Package`] is realized as one TypeScript module
 //! per package. The TypeScript language layer, fixed by this backend (typl
