@@ -21,7 +21,7 @@ impl<'a> Scope<'a> {
     /// which is the package a bare reference *inside* that declaration then
     /// resolves against. `home` is the package the reference was written in.
     ///
-    /// The same walk `projection::flatbuffers`'s `Sizer::resolve` makes, and
+    /// The same walk `projection::flatbuffers::Packages::resolve` makes, and
     /// the same one the two wire backends make in `resolve_reference`.
     pub fn resolve(
         &self,
