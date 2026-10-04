@@ -259,15 +259,23 @@ only (§6): a package many others use is normal, not a defect.
 
 ## 5. Placement and catalogue
 
-- **One pass, in `ridlc`, after the per-package checks and before
+- **One shared pass, in `ridlc`, after the per-package checks and before
   `apply_lint_levels`.** The checks need the whole checked workspace; the
   existing per-package lints in `ridl-sem/src/lint.rs` see one package. The pass
   emits each code at its catalogue severity, so ADR-0024's level handling
   applies with no change. It runs wherever the shared compile runs, including
-  `check_source`, where a workspace is one package.
+  `check_source`, where a workspace is one package. The language server calls
+  the same pass from its analysis path, using the current database inputs,
+  including unsaved buffers. It checks the loaded workspace as one set and each
+  standalone overlay as its own one-package set; it does not reload disk source
+  or combine unrelated overlays.
 - **The dependency edges are computed once**, by the function
-  `ridl_dependencies` uses, moved into `ridlc` if it lives in `ridl-mcp` today,
-  so that `package-fan-out`, `ridl_dependencies` and `ridl_metrics` agree.
+  `ridl_dependencies` uses, moved into `ridlc` if it lives in `ridl-mcp` today.
+  The shared graph preserves external package qualifiers in the existing
+  dependency-tool output. `package-fan-out` and `ridl_metrics` use the graph's
+  workspace-only view: keep edges whose targets are workspace packages. Fan-in,
+  fan-out, instability and the metrics tool's `dependsOn` use that same view;
+  the existing `ridl_dependencies` output retains the complete graph.
 - **Codes.** A check about the type vocabulary (`inconsistent-unit`,
   `inconsistent-abbreviation`, `duplicate-shape`) takes a TYPL-2xx code; a check
   about interfaces or coupling (`low-cohesion-interface`, `package-fan-out`)
@@ -324,12 +332,20 @@ Steps 2 and 3 can run in parallel; step 4 needs both.
 
 ### 7.2 Dumping the findings
 
-An `xtask` command, `cargo xtask calibrate`, copies each corpus workspace to a
-temporary directory, appends a `[lints]` table that sets every candidate check
-to `warn`, runs the check with each threshold at its search start, and writes
-one JSON file of findings per check. No `ridl` command or flag is added for
-this. For a metric check, it also writes the metric value of each finding, so
-that one labelling serves every candidate threshold.
+An `xtask` command, `cargo xtask calibrate dump <out-dir>`, copies each corpus
+workspace to a temporary directory, appends a `[lints]` table that sets every
+candidate check to `warn`, runs the check with each threshold at its search
+start, and writes one JSON file of findings per check. No `ridl` command or flag
+is added for this. Each record has a stable finding ID from its check name,
+workspace, relative source path, primary byte range and deterministic occurrence
+index. Its typed `metric` is absent for unit and abbreviation findings, is
+`{kind = "struct", count = N}` or `{kind = "enum", count = N}` for duplicate
+shapes, `{kind = "cohesion", groups = N, min_group_size = M}` for cohesion, and
+`{kind = "fan-out", count = N}` for fan-out. Preserve these fields through
+labelling, merging and derivation, so that one labelling serves every candidate
+threshold. Task 12 parses this metadata from the specified diagnostic messages:
+`fields` versus `variants` identifies shape kind, and the listed cohesion groups
+supply both coordinates; a missing or malformed value fails the dump.
 
 ### 7.3 Labelling
 
@@ -341,10 +357,11 @@ finding?" The merged file is `evals/calibration/<lint-name>.toml`:
 
 ```toml
 [[finding]]
+id = "inconsistent-unit:mavlink:mission/mission.ridl:1200-1203:0"
 workspace = "mavlink"
 location = "mission/mission.ridl:41"
 message = "field `alt` uses `m`; elsewhere `alt` uses `mm` (telemetry/position.ridl:12)"
-metric = 2         # metric checks only
+# A thresholded check also has a typed metric table as described in §7.2.
 claude = "accept"
 claude_reason = "..."
 sol = "dismiss"
@@ -354,11 +371,32 @@ final = "accept"   # set by Sebastien where claude and sol disagree
 
 ### 7.4 Derivation
 
-`cargo xtask calibrate --derive` reads the labels and prints, per check, the
-precision at each candidate threshold, the recall against the review rubrics,
-and the level and threshold D-5 gives. The output is committed as
-`evals/calibration/summary.md`, and the levels and thresholds are written into
-the catalogue and the constants by hand, in the same change.
+`cargo xtask calibrate derive` (also accepted as `calibrate --derive`) reads the
+labels and prints, per check, the precision at each candidate threshold, the
+recall against the review rubrics, and the level and threshold D-5 gives.
+`--write` writes the output to `evals/calibration/summary.md`; it is committed,
+and the levels and thresholds are written into the catalogue and the constants
+by hand, in the same change.
+
+After the blind labels and adjudication are complete, record the recall join in
+`evals/calibration/recall.toml`. Give each numbered review-rubric item a stable
+ID `<task-id>:<item-number>` without changing its originally committed text.
+Items that describe design issues form the issue inventory; other items are
+explicitly excluded with a reason. If several items describe the same issue in
+one workspace, use the lexically first item ID as the canonical issue ID and
+record the others as aliases.
+
+For each check, record every canonical issue ID in the reviewed inventory as
+applicable or inapplicable, with a reason. Each applicable issue lists matching
+finding IDs, including an empty list when no finding detects it. This mapping is
+prepared after labelling, using the rubrics, corpus and findings; it is not
+shown to the labellers. Derivation validates all IDs and complete applicability
+rows. For a check at a candidate threshold, recall is the number of distinct
+applicable issues matched by at least one retained finding divided by the number
+of applicable issues. Labels measure precision; matching issues measure recall,
+regardless of the finding's accept/dismiss label. A zero denominator is reported
+as `not applicable`, never as zero or full recall. Report numerator, denominator
+and ratio beside precision; recall remains ungated (D-9).
 
 ### 7.5 The guard
 
@@ -368,6 +406,10 @@ and compares the number of findings of each 1b lint with
 that changes a count fails the test, and its author updates the file
 deliberately, so the change is visible in review. The same test checks that each
 corpus workspace has no Error diagnostic and that the line budgets of D-2 hold.
+While the ports are being added, directory-specific guards can be conditional.
+At completion of the ports, the test asserts the exact three selected corpus
+directories; if the licence fallback is used, the documented replacement takes
+the original set's place and budget. This assertion then remains unconditional.
 
 ## 8. The eval seed
 
@@ -384,7 +426,7 @@ title = "Review the mission microservice"
 [expect]
 compiles = true          # the answer's RIDL checks with no Error
 lints = ["inconsistent-unit"]   # review: lints a good answer cites as evidence
-diff = "compatible"      # evolve: the ridl_diff category the change should have
+diff = "compatible"      # evolve: the ridl_diff verdict the change should have
 ```
 
 `prompt.md` is what a designer asks the assistant, written as the designer would
@@ -399,7 +441,7 @@ About ten tasks, spread over the three sets with at most a third on `vss`:
 - five **review** tasks, one or two per corpus workspace, whose rubrics are the
   reference of D-9;
 - two **evolve** tasks: a change request on a corpus workspace, with the
-  `ridl_diff` category the change should have;
+  `ridl_diff` verdict the change should have;
 - three **design** tasks: a short written requirement, paraphrased from the
   upstream project's public documentation, and the rubric of a good RIDL design
   for it.

@@ -10,8 +10,9 @@ design checks, set each check's default level and threshold from labelled corpus
 findings, serve the metrics through `ridl_metrics`, and seed ten eval tasks for
 piece 1c.
 
-**Architecture:** The checks run as one workspace-level pass at the end of
-`ridlc`'s `check_loaded`, over the checked IR, and locate their diagnostics
+**Architecture:** The checks run as one shared workspace-level pass at the end
+of `ridlc`'s `check_loaded` and from the language server's analysis path, over
+checked IR with the current database inputs. They locate their diagnostics
 through the AST because the IR carries no spans. The corpus and the eval tasks
 live under a top-level `evals/`, outside `crates/`. A `cargo xtask calibrate`
 command runs the `ridl` binary over the corpus and turns the labels into levels
@@ -52,9 +53,11 @@ it with this plan; section numbers below (§n) refer to it.
 
 ## Review Focus
 
-1. **A workspace with no unit types, no interfaces, or one package** (including
-   the one-package workspace of `check_source` and MCP source mode): every check
-   reports nothing and does not panic. Test in Task 6.
+1. **A fixture with no applicable findings**, including a one-package workspace
+   of `check_source` and MCP source mode: every check reports nothing and does
+   not panic. Absence of units or interfaces, or having one package, does not
+   disable other checks: duplicate shapes and abbreviation pairs can occur
+   there. Test silence and a positive `check_source` case in Task 6.
 2. **A unit type reached through an alias, an `optional`, or an inline scalar**:
    the unit is the resolved unit. An array, map or stream of a unit type is
    skipped. Test in Task 6.
@@ -92,11 +95,12 @@ crates/ridl/tests/eval_corpus.rs        new, Tasks 1, 4, 14
 xtask/src/calibrate.rs                  new, Task 12
 ```
 
-Modified: `crates/ridlc/src/lib.rs` (call the pass; `pub mod deps`),
-`crates/ridl-mcp/src/refs.rs` and `lib.rs`, `crates/ridl-core/src/diag.rs`,
-`docs/book/lints.md`, `xtask/src/main.rs`, `.primignore`,
-`THIRD-PARTY-NOTICES.txt`, `.github/workflows/ci.yml`, `.git-std.toml` if a
-scope is missing, `crates/ridl-mcp/README.md`,
+Modified: `crates/ridlc/src/lib.rs` (call and export the shared pass;
+`pub mod deps`), `crates/ridl-lsp/src/server.rs`, `crates/ridl-lsp/Cargo.toml`,
+`crates/ridl-lsp/tests/server.rs`, `crates/ridl-mcp/src/refs.rs` and `lib.rs`,
+`crates/ridl-core/src/diag.rs`, `docs/book/lints.md`, `xtask/src/main.rs`,
+`.primignore`, `THIRD-PARTY-NOTICES.txt`, `.github/workflows/ci.yml`,
+`.git-std.toml` if a scope is missing, `crates/ridl-mcp/README.md`,
 `docs/design/mcp-workspace-tools.md`.
 
 ## Driving Sol
@@ -145,6 +149,8 @@ driver reviews Sol's output before any commit; Sol never commits.
   - `every_corpus_workspace_records_its_provenance`: each directory has a
     non-empty `PROVENANCE.md` and `LICENSE`, and `PROVENANCE.md` contains the
     lines starting `Upstream:`, `Revision:`, `Licence:` and `Kind rule:`.
+    Directory-specific checks are conditional only while Tasks 1–3 add ports;
+    Task 3 makes the expected-set assertion unconditional.
 - [ ] **Step 2: Run** `cargo test -p ridl-cli --test eval_corpus` — expect FAIL
       (no corpus directory).
 - [ ] **Step 3: Port `ros2` through Sol.** Verify the licences of
@@ -178,7 +184,10 @@ driver reviews Sol's output before any commit; Sol never commits.
       `message_definitions/v1.0/common.xml`. If it is not MIT, BSD, Apache-2.0
       or MPL-2.0, port the AOSP sensors and power HAL AIDL interfaces into
       `evals/corpus/aosp-hal/` instead, with the same budget, and record the
-      switch in `evals/README.md` and the guard's budget test.
+      switch in `evals/README.md`, the guard's budget and expected-directory
+      tests, task corpus references, provenance and calibration workspace keys.
+      The replacement takes the original set's place and 2,500-line budget; it
+      does not become a fourth corpus set.
 - [ ] **Step 2: Port through Sol** with the `mavlink` row of §3.2 and §3.3.
 - [ ] **Step 3: Review** as in Task 1 Step 4.
 - [ ] **Step 4: Add** the `THIRD-PARTY-NOTICES.txt` entry.
@@ -198,7 +207,11 @@ driver reviews Sol's output before any commit; Sol never commits.
       lines.
 - [ ] **Step 3: Review** as in Task 1 Step 4.
 - [ ] **Step 4: Add** the `THIRD-PARTY-NOTICES.txt` entry.
-- [ ] **Step 5: Run** `cargo test -p ridl-cli --test eval_corpus` — expect PASS.
+- [ ] **Step 5: Complete the corpus guard**: add an unconditional assertion that
+      `corpus_dirs()` contains exactly the three selected directories, using the
+      documented Task 2 replacement if needed. Removing any selected set or
+      adding an unexpected one fails the guard. Run
+      `cargo test -p ridl-cli --test eval_corpus` — expect PASS.
 - [ ] **Step 6: Commit** — `feat(repo): add the VSS port to the evals corpus`.
 
 ### Task 4: The eval seed
@@ -221,9 +234,11 @@ the corpus by anyone writing a rubric before this task is committed.
       directory name; `kind` is `review`, `evolve` or `design`; `corpus` is
       present for `review` and `evolve` and names a directory of
       `evals/corpus/`, and is absent for `design`; each name in `expect.lints`
-      is a lint name in `ridl_core::diag::ALL_CATALOGS` or one of the five names
-      of §4; `expect.diff` is present only for `evolve`; `prompt.md` and
-      `rubric.md` exist and are not empty; every rubric item line starts
+      is a lint name in `ridl_core::diag::ALL_CATALOGS`; review expectations
+      stay empty until Task 14, so no candidate-name exemption is needed;
+      `expect.diff` is present only for `evolve` and names a `ridl_diff` verdict
+      (for example, `compatible`, rather than a change category); `prompt.md`
+      and `rubric.md` exist and are not empty; every rubric item line starts
       `N. **must**`, `N. **should**` or `N. **must not**`. Also assert there are
       at least 10 tasks and that tasks with `corpus = "vss"` are at most a
       third.
@@ -232,7 +247,9 @@ the corpus by anyone writing a rubric before this task is committed.
       per corpus workspace; two evolve tasks; three design tasks from
       requirements paraphrased from upstream public documentation. Review
       rubrics list the real design issues of the workspace and are written from
-      the corpus and its upstream only. `expect.lints` stays empty in review
+      the corpus and its upstream only. Keep item numbers stable after the
+      rubric is committed: `<task-id>:<item-number>` supplies the recall item ID
+      without changing the authored text. `expect.lints` stays empty in review
       tasks until Task 14.
 - [ ] **Step 4: Have Sol review the tasks** independently (a brief with the
       tasks and the corpus; output: one list of objections per task). Resolve or
@@ -252,11 +269,15 @@ the corpus by anyone writing a rubric before this task is committed.
 **Interfaces:**
 
 - Produces:
-  `pub fn package_edges(output: &WorkspaceOutput) -> BTreeMap<String, BTreeSet<String>>`
-  — for each workspace package, the workspace packages it depends on, with
-  `ridl.std` and the package itself excluded. The edges are exactly those
-  `ridl_dependencies` reports today: imports used by references, and rsdl
-  component uses (ADR-0025 decision 8).
+  `pub fn package_edges(checked: &[CheckedPackage], system: Option<&System>) -> BTreeMap<String, BTreeSet<String>>`
+  — for each checked workspace package, all dependency targets, including
+  external qualifiers, with `ridl.std` and the package itself excluded. The
+  edges are exactly those `ridl_dependencies` reports today: imports used by
+  references, and rsdl component uses (ADR-0025 decision 8).
+  `pub fn workspace_package_edges(edges: &BTreeMap<String, BTreeSet<String>>) -> BTreeMap<String, BTreeSet<String>>`
+  filters targets to the graph's workspace-package keys. Fan-in, fan-out,
+  instability and metrics `dependsOn` consume this filtered view; MCP
+  `ridl_dependencies` consumes the complete graph.
 
 - [ ] **Step 1: Pin today's behaviour.** Run `cargo test -p ridl-mcp` and record
       that the `ridl_dependencies` tests pass; they are the regression oracle
@@ -264,11 +285,16 @@ the corpus by anyone writing a rubric before this task is committed.
 - [ ] **Step 2: Write the failing test** in `crates/ridlc/src/deps.rs`:
       `package_edges_matches_imports_and_component_uses`, over a two-package
       workspace where `b` references a type of `a`, plus one rsdl component in
-      `c` requiring an interface of `a`: expect `{a: {}, b: {a}, c: {a}}`.
-- [ ] **Step 3: Move** the edge logic of `refs::dependencies` (including
-      `references_of`, `component_requires` and `system_member_packages`) into
-      `deps.rs`; `refs::dependencies` builds `depends_on` from `package_edges`
-      and derives `dependents` by inverting it.
+      `c` requiring an interface of `a`: expect `{a: {}, b: {a}, c: {a}}`. Add
+      an external-qualifier case: complete edges retain `ext` and
+      `foreign.deep`, while `workspace_package_edges` removes both and keeps the
+      internal target `a`.
+- [ ] **Step 3: Extract** the shared edge logic of `refs::dependencies`
+      (`references_of`, `component_requires` and `system_member_packages`) into
+      `deps.rs`, retaining the reference-detail helpers MCP also uses.
+      `refs::dependencies` passes `output.checked` and `output.system`, builds
+      `depends_on` from complete `package_edges`, and derives `dependents` by
+      inverting it. Do not filter external targets from the existing tool.
 - [ ] **Step 4: Run** `cargo test -p ridlc -p ridl-mcp` — expect PASS with the
       `ridl-mcp` tests unchanged.
 - [ ] **Step 5: Commit** —
@@ -282,6 +308,8 @@ the corpus by anyone writing a rubric before this task is committed.
   `crates/ridlc/tests/design_lints.rs`
 - Modify: `crates/ridlc/src/lib.rs` (call the pass at the end of `check_loaded`,
   after `unclaimed_backend_keys`, before `Compiled { .. }`),
+  `crates/ridl-lsp/src/server.rs`, `crates/ridl-lsp/Cargo.toml` (use the shared
+  `ridlc` pass), `crates/ridl-lsp/tests/server.rs`,
   `crates/ridl-core/src/diag.rs`, `docs/book/lints.md`
 
 **Interfaces:**
@@ -290,14 +318,22 @@ the corpus by anyone writing a rubric before this task is committed.
   - `pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic>` in `mod.rs`, where
     `Ctx` holds `&RidlDatabase`, `&[CheckedPackage]`, `&[Resolution]`,
     `&std_ir`, `Option<&System>`, `&mut SourceMap` access for `file_id`, and the
-    package edges of Task 5. Each later check adds one
-    `fn check(ctx) -> Vec<Diagnostic>` and one line in `run`.
+    workspace-only package edges of Task 5. Each later check adds one
+    `fn check(ctx) -> Vec<Diagnostic>` and one line in `run`. Export a shared
+    pass entry point accepting the current database, package inputs, their
+    checked IR/resolutions, standard IR, optional system and render source map;
+    it constructs the internal `Ctx` and `SiteIndex`. The LSP calls it after
+    semantic checks and before applying levels. It passes loaded workspace
+    inputs including unsaved changes as one set, then calls it separately for
+    each standalone overlay's one-package set. Source IDs and spans use the same
+    render map as the existing LSP diagnostics; do not call a disk-loading
+    compile entry point from analysis.
   - `sites.rs`: `pub(crate) struct SiteIndex` built once per run from the AST
     (`parse_file`), with lookups returning `Span`:
     `field(pkg, struct_name, field)`, `member(pkg, iface, member)`,
-    `param(pkg, iface, member, param)`, `decl(pkg, name)` (from
-    `Resolution.symbols`), `package_line(pkg)` (the `package` line of the first
-    file in path order).
+    `param(pkg, iface, member, param)`, `variant(pkg, enum_name, variant)`,
+    `decl(pkg, name)` (from `Resolution.symbols`), `package_line(pkg)` (the
+    `package` line of the first file in path order).
   - `units.rs`: `fn unit_of(ctx, pkg, &FieldType) -> Option<String>` returning
     the canonical UCUM unit; `named` resolves through `type_def` aliases across
     packages; `optional` unwraps; `inline_scalar` reads its own `Backing`;
@@ -327,21 +363,37 @@ the corpus by anyone writing a rubric before this task is committed.
     resolve to their units; `speed: array SpeedMs` is skipped.
   - `inconsistent_unit_covers_parameters_and_signals`: a `command` parameter and
     a `signal` payload named `speed` take part.
-  - `design_lints_are_silent_without_units_or_interfaces` (Review Focus 1): a
-    one-package workspace of plain structs and the `ridlc::check_source` path —
-    no diagnostic of the five codes. Use the syntax of
-    `docs/specification/typl-language-reference.md` §5.1 for unit types; adjust
-    literal syntax to what the parser accepts, not the assertions.
+  - `design_lints_are_silent_without_applicable_findings` (Review Focus 1): a
+    one-package fixture of plain structs with distinct shapes and no
+    abbreviation pair, through workspace compile and `ridlc::check_source` — no
+    diagnostic of the five codes. This fixture does not justify disabling a
+    check because the workspace has one package or no units/interfaces.
+  - `check_source_reports_inconsistent_unit`: pass one source containing two
+    `speed: Speed` sites and one `speed: SpeedMs` site to `ridlc::check_source`;
+    assert the one minority diagnostic, catalogue severity and field span match
+    the workspace fixture above. This test fails if source-mode diagnostics are
+    dropped. Use the syntax of `docs/specification/typl-language-reference.md`
+    §5.1 for unit types; adjust literal syntax to what the parser accepts, not
+    the assertions.
+  - In `crates/ridl-lsp/tests/server.rs`, add a workspace fixture with the same
+    unit conflict: initial published code, span and level match CLI/MCP path
+    checks. An unsaved edit that creates or removes the conflict updates the
+    published diagnostics; `allow` removes it and `deny` promotes it. Also open
+    a conflicting standalone source outside the workspace: it reports the
+    source-mode finding at its own URI without affecting workspace counts.
 - [ ] **Step 2: Run** `cargo test -p ridlc --test design_lints` — expect FAIL.
 - [ ] **Step 3: Add the catalogue row** for `inconsistent-unit` at **Info**
       ("one field name used with different units"), its pair in the `expected`
       set, and its row in `docs/book/lints.md`.
 - [ ] **Step 4: Implement** `sites.rs`, `units.rs`, the `inconsistent-unit`
       check (§4.1: group sites by exact name; most frequent unit wins; ties
-      report all), `run`, and the call in `check_loaded`. Sites in `ridl.std`
-      are skipped.
-- [ ] **Step 5: Run** `cargo test -p ridlc -p ridl-core -p ridl-cli` — expect
-      PASS (`book_lints` included).
+      report all), `run`, its shared entry point, and calls in `check_loaded`
+      and LSP analysis. Sites in `ridl.std` are skipped. Preserve the existing
+      entry points' application of lint levels; do not apply them inside the
+      shared pass.
+- [ ] **Step 5: Run**
+      `cargo test -p ridlc -p ridl-core -p ridl-cli -p ridl-lsp -p ridl-mcp` —
+      expect PASS (`book_lints` and editor/server parity included).
 - [ ] **Step 6: Commit** —
       `feat(ridlc): add the design lint pass and inconsistent-unit`.
 
@@ -362,6 +414,9 @@ the corpus by anyone writing a rubric before this task is committed.
     ``"`temp` in `tempLimit` abbreviates `temperature`, used in `temperature`"``.
   - `abbreviation_needs_three_letters_and_two_more`: `id`/`identity` and
     `pos`/`post` produce nothing; `pos`/`position` does.
+  - `abbreviation_variant_uses_its_own_span`: a variant `Temp` and identifier
+    `Temperature` in one package report at the abbreviated variant token, rather
+    than its enum declaration; assert the primary byte range.
 - [ ] **Step 2: Run** — expect FAIL.
 - [ ] **Step 3: Add the Info row**, the `expected` pair and the book row.
 - [ ] **Step 4: Implement** §4.2 over every declared identifier the `SiteIndex`
@@ -388,7 +443,13 @@ the final values).
   - `duplicate_enum_is_reported`: two enums with variants `{Low, High}`; message
     `"... has the same 2 variants as ..."`.
   - `same_simple_type_name_in_two_packages_is_not_a_duplicate` (Review Focus 4):
-    `{pose: a.Pose}` and `{pose: b.Pose}` — no diagnostic.
+    two structs with fields `{pose: a.Pose, index: integer}` and
+    `{pose: b.Pose, index: integer}` — no diagnostic for either struct. Both are
+    at the two-field search-start threshold; declare `a.Pose` and `b.Pose` with
+    different valid shapes so the fixture adds no unrelated duplicate.
+  - `same_variant_count_with_different_names_is_not_a_duplicate`: enums
+    `{Low, High}` and `{Cold, Hot}` both reach the two-variant threshold but
+    produce no duplicate diagnostic.
   - `shapes_below_the_threshold_are_not_reported`: two one-field structs — none.
 - [ ] **Step 2: Run** — expect FAIL.
 - [ ] **Step 3: Add the Info row**, the `expected` pair and the book row.
@@ -409,7 +470,7 @@ the final values).
 - Produces
   `pub fn cohesion_groups(pkg: &Package, iface: &Interface) -> Vec<Vec<String>>`
   (public: Task 11 uses it), groups of member names, each group sorted, groups
-  ordered by their first member's source order; members with no named
+  ordered by their earliest member in source order; members with no named
   non-`ridl.std` type are left out. Constants
   `LOW_COHESION_MIN_GROUPS: usize = 2`,
   `LOW_COHESION_MIN_GROUP_SIZE: usize = 1`.
@@ -417,6 +478,10 @@ the final values).
 - [ ] **Step 1: Write the failing tests**:
   - `cohesion_groups_link_members_that_share_a_type`: members `a(X)`, `b(X, Y)`,
     `c(Z)`, `reset()`; groups `[[a,b],[c]]`.
+  - `cohesion_groups_follow_first_member_source_order`: members declared in the
+    order `z(X)`, `y(X)`, `a(Z)`, `reset()` produce `[[y,z],[a]]`. Members
+    within a group are sorted, but group order follows its earliest member in
+    source, rather than the lexical order of its sorted first name.
   - `low_cohesion_interface_is_reported_with_its_groups`: message
     ``"interface `I` splits into 2 groups of members that share no type: [a, b], [c]"``,
     at the interface's declaration.
@@ -434,8 +499,8 @@ the final values).
 **Files:** Create `fan_out.rs`; modify `mod.rs`, `diag.rs`,
 `docs/book/lints.md`, the test file.
 
-**Interfaces:** Consumes `ridlc::deps::package_edges`. Produces
-`PACKAGE_FAN_OUT_MAX: usize = 3`.
+**Interfaces:** Consumes the `ridlc::deps::workspace_package_edges` view of
+`package_edges`. Produces `PACKAGE_FAN_OUT_MAX: usize = 3`.
 
 - [ ] **Step 1: Write the failing tests**:
   - `fan_out_above_the_maximum_is_reported`: package `e` depends on `a`, `b`,
@@ -459,8 +524,9 @@ the final values).
 
 **Interfaces:**
 
-- Consumes `ridlc::deps::package_edges`, `ridlc::design_lints::cohesion_groups`
-  (re-exported from `ridlc` for this use).
+- Consumes `ridlc::deps::workspace_package_edges` applied to the complete
+  `package_edges`, `ridlc::design_lints::cohesion_groups` (re-exported from
+  `ridlc` for this use).
 - Produces
   `pub fn metrics(snap: &Snapshot, input: &MetricsInput) -> Result<MetricsOutput, ToolError>`;
   `MetricsInput { path }`; the output shape of §6 with camelCase fields:
@@ -470,7 +536,11 @@ the final values).
 - [ ] **Step 1: Write the failing tests** in the `ridl-mcp` test layout the
       other tools use: `metrics_reports_fan_in_fan_out_and_instability` over the
       `ws` fixture (expected numbers derived from `ridl_dependencies` on the
-      same fixture; a package with neither edge has `instability: null`);
+      same fixture after retaining workspace targets only; a package with
+      neither edge has `instability: null`);
+      `metrics_excludes_external_dependency_targets`: the existing dependency
+      tool still lists external qualifiers, while metrics `dependsOn`, fan-in,
+      fan-out and instability use workspace edges only;
       `metrics_reports_cohesion_groups` over a fixture with one split interface;
       `metrics_writes_nothing` following the existing read-only test.
 - [ ] **Step 2: Run** `cargo test -p ridl-mcp` — expect FAIL.
@@ -494,29 +564,61 @@ string: `cargo xtask <codegen|descriptor-codegen|calibrate>`).
   (`cargo build -p ridl-cli`), copies each `evals/corpus/<set>` to a temp dir,
   appends a `[lints]` table setting the five names to `warn`, runs
   `ridl check --format json`, and writes `<out-dir>/<lint-name>.json`: an array
-  of `{workspace, location, message, metric}` where `location` is `path:line`
-  relative to the workspace and `metric` is parsed from the message (§4.3 count,
-  §4.4 group count and smallest group size, §4.5 count; absent for findings).
-- `cargo xtask calibrate derive`: reads `evals/calibration/<lint-name>.toml`
-  (§7.3 format) and the review rubrics, and prints, per check and per candidate
-  threshold, findings, accepted, precision, and the level and threshold D-5 and
-  §11 give; `--write` also writes `evals/calibration/summary.md`.
+  of `{id, workspace, location, message, metric}` where `location` is
+  `path:line` relative to the workspace. Construct stable IDs from the check
+  name, workspace, relative source path, primary byte range and deterministic
+  occurrence index; do not include temporary paths or message text. Parse the
+  typed `metric` from the message: shape `{kind: "struct" | "enum", count}` from
+  `fields`/`variants`; cohesion `{kind: "cohesion", groups, min_group_size}`
+  from the declared group count and listed groups; fan-out
+  `{kind: "fan-out",
+  count}` from the count. Unit and abbreviation records
+  have no metric. Fail on missing/malformed metadata or a cohesion count
+  inconsistent with its listed groups. Preserve these records unchanged through
+  labels and merge.
+- `cargo xtask calibrate derive` (alias: `cargo xtask calibrate --derive`):
+  reads `evals/calibration/<lint-name>.toml` (§7.3 format), the unchanged review
+  rubrics and `evals/calibration/recall.toml` (§7.4). Print, per check and
+  candidate threshold, findings, accepted, precision, detected applicable
+  issues, total applicable issues, recall (or `not applicable` for zero
+  denominator), and the level and threshold D-5 and §11 give. `--write` also
+  writes `evals/calibration/summary.md`. Help and README document the canonical
+  subcommand and its alias; both accept `--write`. Reject invalid/missing final
+  labels, finding IDs, metric coordinates, issue IDs or applicability rows.
 - xtask keeps no dependency on `ridlc` or `ridl-core`
   (`xtask/tests/oracle_boundary.rs`); it adds `serde_json` and `toml` as normal
   dependencies if they are not present.
 
 - [ ] **Step 1: Write the failing tests** in `xtask/src/calibrate.rs`:
-      `metric_is_parsed_from_each_message_form` (one message per §4.3-4.5 form
-      from Tasks 8-10);
-      `derive_picks_the_least_strict_threshold_meeting_the_bar` (findings with
-      metrics 4,5,6,7 accepted/dismissed so that precision is 50 % at >3, 80 %
-      at >5: expect threshold 5 and Warning);
+      `metric_is_parsed_from_each_message_form` (separate struct/enum messages
+      with the same count retain distinct kinds; two cohesion messages with the
+      same group count but different smallest sizes retain both coordinates;
+      also cover fan-out and reject malformed metadata);
+      `derive_picks_the_least_strict_threshold_meeting_the_bar`: 16 distinct
+      fan-out findings: four dismissals at metric 4, two dismissals at 5, eight
+      accepts and two dismissals at 6. Precision is 8/16 = 50 % at >3, 8/12 at
+      >4, and 8/10 = 80 % at >5: expect maximum 5 and Warning, with ten
+      surviving findings; >6 retains no findings and cannot qualify;
       `derive_caps_a_check_with_fewer_than_ten_findings_at_info`;
-      `derive_drops_a_check_below_the_floor`.
+      `derive_drops_a_check_below_the_floor`;
+      `derive_preserves_both_shape_thresholds_and_cohesion_coordinates`;
+      `recall_counts_distinct_applicable_issues`: two findings mapped to one
+      issue count once, an applicable issue with no finding stays in the
+      denominator, inapplicable issues are excluded, and filtering a finding by
+      threshold changes only the numerator; zero applicable issues prints
+      `not applicable`; `derive_alias_matches_the_subcommand`.
 - [ ] **Step 2: Run** `cargo test -p xtask` — expect FAIL.
-- [ ] **Step 3: Implement** both subcommands. A cohesion threshold is a pair
-      (groups, size); "least strict" is the pair reporting the most findings,
-      ties broken by the lower group count.
+- [ ] **Step 3: Implement** both subcommands and the derive alias. Keep struct
+      and enum counts separate when searching their two shape-size thresholds;
+      both contribute to the single check's precision and level. A cohesion
+      threshold is a pair (groups, size); "least strict" is the pair reporting
+      the most findings, ties broken by the lower group count, then the lower
+      group size. If several shape-threshold pairs retain the same number of
+      findings, prefer the lower field threshold, then the lower variant
+      threshold. Apply D-5 and the under-ten Info cap to the retained labelled
+      sample; zero findings have undefined precision and cannot qualify for a
+      shipped level. Recall uses the reviewed mapping of §7.4 and never selects
+      or gates a threshold.
 - [ ] **Step 4: Run** `cargo test -p xtask` and
       `cargo xtask calibrate dump
   <scratch>` — expect PASS and five JSON
@@ -527,20 +629,28 @@ string: `cargo xtask <codegen|descriptor-codegen|calibrate>`).
 ### Task 13: Labelling and adjudication
 
 No code. Needs Tasks 4 and 12. The driver must not show one labeller the other's
-labels, the spec, or the rubrics.
+labels, the spec, the rubrics or the recall mapping. Do not construct the recall
+mapping until blind labelling and adjudication are complete.
 
 - [ ] **Step 1: Dump** with `cargo xtask calibrate dump <scratch>/findings`.
 - [ ] **Step 2: Claude labels**: a fresh subagent (model: fable), given only the
       findings files, the corpus path, and the question of §7.3, writes
       `<scratch>/claude/<lint>.toml` with `claude` and `claude_reason` per
-      finding.
+      finding, copying its ID and typed metric unchanged.
 - [ ] **Step 3: Sol labels**: a `codex exec` brief with the same inputs writes
-      `<scratch>/sol/<lint>.toml`.
+      `<scratch>/sol/<lint>.toml`, preserving the same IDs and metadata.
 - [ ] **Step 4: Merge** into `evals/calibration/<lint>.toml` (§7.3), setting
       `final` where the two agree.
 - [ ] **Step 5: Ask Sebastien** to decide every disagreement and to look at ten
       agreed labels per check (sampled with a fixed seed recorded in the file).
-      Wait for the answers; write them into `final`.
+      Wait for the answers; write them into `final`. If fewer than ten agreed
+      findings exist, show all available agreements and record the shortfall.
+      After adjudication, create `evals/calibration/recall.toml`: inventory
+      rubric issue IDs, deduplicate repeated issues with explicit aliases, and
+      record each check's applicability and finding-ID mapping for every
+      canonical issue, including unfound issues. Preserve rubric text and record
+      reasons for exclusions; review the mapping with the calibration summary in
+      Task 14, without another approval gate.
 - [ ] **Step 6: Commit** —
       `feat(repo): label the design lint findings on the evals corpus`.
 
@@ -555,8 +665,13 @@ labels, the spec, or the rubrics.
       yet.
 - [ ] **Step 2: Apply** the result: each check's catalogue severity (Warning or
       Info) and threshold constants. A dropped check loses its row, its
-      `expected` pair, its book row and its code in the same change; its metric
-      stays in `ridl_metrics`. Show Sebastien the summary before this step's
+      `expected` pair, its book row, its code, its diagnostic emitter and its
+      registration in the shared pass in the same change. Remove or update tests
+      that filter the deleted code. Keep the metric computation and API used by
+      `ridl_metrics`. The final task validator accepts only catalogue lint
+      names, with no candidate-name exemption; assert that an unknown or dropped
+      name fails validation. Show Sebastien the summary, including recall
+      mappings, and obtain the existing summary approval before this step's
       commit.
 - [ ] **Step 3: Write the failing test**
       `design_lint_counts_on_the_corpus_are_pinned`: run
@@ -575,6 +690,52 @@ labels, the spec, or the rubrics.
 - [ ] **Step 7: Run** `just build` — expect PASS.
 - [ ] **Step 8: Commit** —
       `feat(ridlc): set the design lint levels from the corpus calibration`.
+
+## Decisions taken during execution
+
+These implementation choices were approved by the user on 2026-10-04 and applied
+to this plan following that approval. Implementation has not started. They
+complete the reviewed interfaces and tests while keeping D-1 to D-9, the
+reserved codes, corpus budgets, four PRs and approval stages.
+
+1. **Preserve the complete graph and derive a workspace-only view** (Tasks 5,
+   10–11). External qualifiers remain part of the released MCP output. Metrics
+   filter targets using the shared graph's workspace keys. If wrong, dependency
+   output would regress or metrics would count packages outside their scope; the
+   unchanged dependency tests and exclusion fixture must detect this.
+2. **Call the shared pass from LSP analysis using current inputs** (Task 6). The
+   editor's semantic-query path does not run `check_loaded`; it must call the
+   same pass with its existing source map, loaded workspace and separate
+   standalone overlays. If wrong, unsaved buffers, spans or scoped levels would
+   differ from CLI/MCP results; parity and edit tests cover this cost.
+3. **Keep typed calibration metadata parsed from existing messages** (Task 12).
+   Shape kind/count and both cohesion coordinates survive dump, labels and
+   merge. This preserves the existing CLI invocation and xtask dependency
+   boundary. If wrong, re-derivation would mix shape thresholds or lose the
+   group-size threshold; schema and parser tests must fail rather than guess.
+4. **Record a reviewed recall join after adjudication** (Tasks 4, 12–14). Stable
+   task/item IDs, explicit issue aliases, complete per-check applicability and
+   finding IDs define a reproducible denominator without exposing rubrics to
+   labellers or changing their text. If wrong, recall would double-count issues
+   or omit misses; it remains reported and ungated, and the mapping is
+   reviewable with the already required summary approval.
+5. **Use deterministic tie breaks and undefined values** (Task 12). For equal
+   retained counts, cohesion prefers fewer groups then smaller minimum size;
+   shape pairs prefer fewer fields then fewer variants. Zero findings cannot
+   qualify by precision; zero applicable issues report `not applicable` recall.
+   If wrong, thresholds would be reproducible but selected differently from
+   maintainer intent; changing the tie break re-runs derivation over existing
+   labels, without new labelling or configurable thresholds.
+6. **Keep intermediate guards conditional only while ports are incomplete**
+   (Tasks 1–3). Completion pins the exact selected set, including the approved
+   licence replacement, and final task validation is catalogue-only. Dropped
+   lint emitters are removed while metric APIs remain (Task 14). If wrong,
+   corpus deletion or retired lint references could pass unnoticed, or the
+   build/tool contract could break; final guard and validator tests detect it.
+7. **Use `calibrate derive` as canonical syntax with a `--derive` alias** (Task
+   12), and call `compatible` a diff verdict (Task 4). If wrong, help, docs and
+   internal callers would disagree; alias parity prevents this with no new
+   `ridl` subcommand or flag.
 
 ## Pull requests
 
