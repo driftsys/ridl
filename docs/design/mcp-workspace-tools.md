@@ -91,8 +91,8 @@ The behaviour that is not in the README:
   walk plus the rsdl edges above. A qualifier that names no workspace package
   stays as written. `dependents` is computed over the whole workspace before a
   `package` filter is applied. The tool reports the graph; a package import
-  cycle is already an error (TYPL-004) and an unused import would be a lint
-  (piece 1b); neither is a tool result.
+  cycle is already an error (TYPL-004) and an unused import is the
+  `unused-import` lint; neither is a tool result.
 - **`ridl_metrics`** applies `ridlc::deps::workspace_package_edges` to the
   complete `package_edges` graph. Its `dependsOn`, fan-in, fan-out and
   instability use workspace targets only; the dependency tool retains external
@@ -275,9 +275,8 @@ All are Rust tests, so `just test` runs them.
   `ridl_diff` agrees with `ridl diff --format json`; an overlay that introduces
   an error is reported and the file on disk is unchanged; after one call of each
   tool the fixture's files, sizes and modification times are unchanged; and
-  `tools/list` names the eight original tools. The unit test
-  `the_tool_list_is_pinned` in `crates/ridl-mcp/src/lib.rs` pins the response to
-  `tools.json`.
+  `tools/list` names the nine tools. The unit test `the_tool_list_is_pinned` in
+  `crates/ridl-mcp/src/lib.rs` pins the response to `tools.json`.
 - Inline tests in `metrics.rs` pin workspace-only edges against the dependency
   tool, null instability for a disconnected package, cohesion group order, empty
   interfaces, and unchanged file contents, sizes and modification times after a

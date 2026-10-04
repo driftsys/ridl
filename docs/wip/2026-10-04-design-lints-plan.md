@@ -1169,6 +1169,48 @@ reserved codes, corpus budgets, four PRs and approval stages.
     Compare the hook configuration each time; if it gains another command, that
     command must also run before this procedure is used.
 
+53. **Task 11 fix round 1: synchronize the CLI inventory and coverage**
+    (2026-10-04). Reproduce the stale exact CLI tool-name assertion, then add
+    only `ridl_metrics`, preserving the eight original names. Add its
+    saved-source call to the end-to-end read-only enumeration, with complete
+    package, interface and workspace expectations and text/structured equality.
+    Update the three current tool inventories and the MCP design's nine-tool
+    test description. Repair that record's pre-existing unused-import
+    description to name the already implemented lint. No schema or producer
+    behavior changes.
+
+54. **Task 11 fix round 1: verify the QUICK test claims with mutations**
+    (2026-10-04). In a source copy under this plan's absolute scratch directory,
+    with a separate target directory outside the production cache, all seven
+    alleged mutations survive the original metrics tests. Strengthen assertions
+    against literal public output and demonstrate that the mutations fail them.
+    Independently remove component requirements and system-member contributions
+    in the copied producer; the new system-only edge test must fail for each.
+    Never mutate the assigned worktree's production sources. Restore each copied
+    source and wait for every mutation process before final green validation.
+
+55. **Task 11 fix round 1: use existing fixtures for the public contracts**
+    (2026-10-04). Extend the temporary mixed-edge fixture with another referring
+    subpackage so fan-in two and fan-out one give instability one third. Extend
+    the cohesion fixture with a single connected group and exercise its actual
+    handler, including the member-path workspace note. Use the existing
+    diagnostic fixture for nonzero error and warning counts, and the timing
+    fixture under allow and deny to prove unchanged metrics while `ridl_check`
+    applies levels. The full saved-source handler inventory also excludes the
+    existing inline service. These protect public behavior without new APIs or
+    tracked fixture edits. Task 14 must synchronize literal workspace diagnostic
+    counts if final candidate severities change them; edge counts, interface
+    groups and membership remain independent of candidate thresholds and levels.
+
+56. **Task 11 fix round 1: keep verification focused** (2026-10-04). Run the
+    metrics and CLI server tests and scoped static checks. Preserve the
+    loopback-listener test and report any sandbox failure in the unfiltered MCP
+    suite for root's unrestricted rerun. No full workspace gate, repeat QUICK,
+    reviewer dispatch, merge or commit belongs to this implementer fix round.
+    Root inspects and commits the prepared changes and obtains the fresh scoped
+    review. The original normative specification and producer contracts remain
+    unchanged.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

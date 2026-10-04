@@ -52,14 +52,14 @@ choices, see [`../decisions/`](../decisions/).
   placeholder with the story that replaces it. The decisions behind its choices
   are [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), decision
   6 for the call surface.
-- **mcp-workspace-tools.md** — the eight read-only tools of `ridl mcp` as built:
+- **mcp-workspace-tools.md** — the nine read-only tools of `ridl mcp` as built:
   the common rules (`path`, overlays, names, locations, the workspace status),
-  what each tool reads, the rsdl component uses, where the code lives (the
-  overlay-aware loader in `ridl-core`, `compile_workspace_with` and
-  `load_diff_side` in `ridlc`, `snapshot` and the lookups in `ridl-mcp`), the
-  tool errors and notes, how path-mode `ridl_check` differs from `ridl check`,
-  and the tests. The inputs and outputs of each tool are in the crate README.
-  The decisions behind its choices are
-  [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
+  what each tool reads, package coupling and interface cohesion metrics, the
+  rsdl component uses, where the code lives (the overlay-aware loader in
+  `ridl-core`, `compile_workspace_with` and `load_diff_side` in `ridlc`,
+  `snapshot` and the lookups in `ridl-mcp`), the tool errors and notes, how
+  path-mode `ridl_check` differs from `ridl check`, and the tests. The inputs
+  and outputs of each tool are in the crate README. The decisions behind its
+  choices are [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
   [ADR-0005](../decisions/ADR-0005-agent-enablement.md). Built by roadmap
   stories E8.6 and E8.7.

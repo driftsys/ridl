@@ -272,15 +272,15 @@ that.
 - **`crates/ridl-lsp`** — the language server; see the LSP section below.
 
 - **`crates/ridl-mcp`** — the MCP server behind `ridl mcp` (ADR-0005 Layer B):
-  eight read-only tools for workspace checks, explanations, declarations,
-  interactions, references, dependencies and compatibility comparisons.
-  `ridlc::compile_workspace_with` applies unsaved overlays through the shared
-  loader; source-mode `ridl_check` retains `ridlc::check_source`. Diff-side
-  loading is shared with the CLI through `ridlc::load_diff_side`. Results use
-  canonical IR JSON and the compiler's JSON diagnostics, without writes or
-  remote fetching. It uses `tokio` for the stdio transport and blocking compiler
-  work; see [below](#the-lsp-overlay-design) for the LSP's separate overlay
-  design. The tools as built are in
+  nine read-only tools for workspace checks, explanations, declarations,
+  interactions, references, dependencies, design metrics and compatibility
+  comparisons. `ridlc::compile_workspace_with` applies unsaved overlays through
+  the shared loader; source-mode `ridl_check` retains `ridlc::check_source`.
+  Diff-side loading is shared with the CLI through `ridlc::load_diff_side`.
+  Results use canonical IR JSON and the compiler's JSON diagnostics, without
+  writes or remote fetching. It uses `tokio` for the stdio transport and
+  blocking compiler work; see [below](#the-lsp-overlay-design) for the LSP's
+  separate overlay design. The tools as built are in
   [the design record](../design/mcp-workspace-tools.md) and the decisions in
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
 

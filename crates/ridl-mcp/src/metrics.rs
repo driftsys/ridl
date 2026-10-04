@@ -181,16 +181,37 @@ mod tests {
         );
     }
 
-    #[test]
-    fn metrics_reports_cohesion_groups() {
+    #[tokio::test]
+    async fn metrics_reports_cohesion_groups() {
         let copy = TempWorkspace::copy("ws");
-        fs::write(copy.0.join("a/a.ridl"), "package fx.a\ntype X: integer [0..10]\ntype Z: integer [0..20]\ninterface Split {\n command z(x: X) @[..1s]\n command y(x: X) @[..1s]\n command a(z: Z) @[..1s]\n command reset() @[..1s]\n}\ninterface Empty {}\n").unwrap();
+        fs::write(copy.0.join("a/a.ridl"), "package fx.a\ntype X: integer [0..10]\ntype Z: integer [0..20]\ninterface Split {\n command z(x: X) @[..1s]\n command y(x: X) @[..1s]\n command a(z: Z) @[..1s]\n command reset() @[..1s]\n}\ninterface Empty {}\ninterface Cohesive {\n command left(x: X) @[..1s]\n command right(x: X) @[..1s]\n}\n").unwrap();
         let path = copy.0.join("a").to_str().unwrap().to_string();
         let snap = snapshot(&path, &[]).unwrap();
         assert_eq!(snap.status().errors, 0);
+        let result = crate::RidlMcp::new()
+            .ridl_metrics(rmcp::handler::server::wrapper::Parameters(MetricsInput {
+                path: path.clone(),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        let output = result.structured_content.unwrap();
+        assert_eq!(output["workspace"]["root"], path);
+        assert_eq!(output["workspace"]["errors"], 0);
+        assert_eq!(output["workspace"]["warnings"], 0);
+        let notes = output["workspace"]["notes"].as_array().unwrap();
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].as_str().unwrap().contains("driftsys/ridl#529"));
+        assert!(
+            notes[0]
+                .as_str()
+                .unwrap()
+                .contains(copy.0.to_str().unwrap())
+        );
         assert_eq!(
-            value(&snap, &path)["interfaces"],
+            output["interfaces"],
             json!([
+                {"name":"fx.a.Cohesive", "members":2, "groups":[["left", "right"]]},
                 {"name":"fx.a.Empty", "members":0, "groups":[]},
                 {"name":"fx.a.Split", "members":4, "groups":[["y","z"],["a"]]}
             ])
@@ -199,20 +220,135 @@ mod tests {
 
     #[test]
     fn metrics_reports_instability_with_incoming_and_outgoing_edges() {
-        let path = fixture("ws");
-        let snap = snapshot(&path, &[OverlayInput {
-            path: format!("{path}/a/sub/sub.ridl"),
-            source: "package fx.a.sub\nimport fx.a.Reading\nimport fx.b.Level as Window\nstruct Sample {\n reading: Reading\n window: Window\n}\n".into(),
-        }]).unwrap();
+        let copy = TempWorkspace::copy("ws");
+        fs::write(copy.0.join("a/sub/sub.ridl"), "package fx.a.sub\nimport fx.a.Reading\nimport fx.b.Level as Window\nstruct Sample {\n reading: Reading\n window: Window\n}\n").unwrap();
+        fs::create_dir(copy.0.join("a/sub/second")).unwrap();
+        fs::write(
+            copy.0.join("a/sub/second/second.ridl"),
+            "package fx.a.sub.second\nimport fx.b.Level\nstruct Sample {\n window: Level\n}\n",
+        )
+        .unwrap();
+        let path = copy.0.to_str().unwrap();
+        let snap = snapshot(path, &[]).unwrap();
         assert_eq!(snap.status().errors, 0);
         assert_eq!(
-            value(&snap, &path)["packages"],
+            value(&snap, path)["packages"],
             json!([
                 {"name":"fx.a", "fanIn":2, "fanOut":0, "instability":0.0, "dependsOn":[]},
                 {"name":"fx.a.sub", "fanIn":0, "fanOut":2, "instability":1.0, "dependsOn":["fx.a", "fx.b"]},
-                {"name":"fx.b", "fanIn":1, "fanOut":1, "instability":0.5, "dependsOn":["fx.a"]}
+                {"name":"fx.a.sub.second", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.b"]},
+                {"name":"fx.b", "fanIn":2, "fanOut":1, "instability":0.3333333333333333, "dependsOn":["fx.a"]}
             ])
         );
+    }
+
+    #[test]
+    fn metrics_includes_system_only_component_and_member_dependencies() {
+        let path = fixture("ws-rsdl");
+        let snap = snapshot(&path, &[]).unwrap();
+        assert!(snap.output.system.is_some());
+        assert!(package_edges(&snap.output.checked, None)["veh.cabin"].is_empty());
+        assert_eq!(
+            value(&snap, &path)["packages"],
+            json!([
+                {"name":"veh.cabin", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["veh.climate"]},
+                {"name":"veh.climate", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]}
+            ])
+        );
+
+        let copy = TempWorkspace::copy("ws-rsdl");
+        fs::write(
+            copy.0.join("ridl.toml"),
+            "[workspace]\nmembers = [\"climate\", \"cabin\", \"ops\"]\n",
+        )
+        .unwrap();
+        let cabin = copy.0.join("cabin/cabin.rsdl");
+        let source = fs::read_to_string(&cabin).unwrap();
+        fs::write(cabin, source.split("system Cabin").next().unwrap()).unwrap();
+        fs::create_dir(copy.0.join("ops")).unwrap();
+        fs::write(
+            copy.0.join("ops/ridl.toml"),
+            "[package]\nname = \"veh.ops\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(copy.0.join("ops/ops.rsdl"), "package veh.ops\nimport veh.climate.Climate\nimport veh.cabin.Dashboard\nimport veh.cabin.ClimateControl\nimport veh.cabin.SeatHeating\ncomponent Monitor {\n requires Climate\n}\nsystem Ops {\n Monitor\n Dashboard\n ClimateControl\n SeatHeating\n}\n").unwrap();
+        let path = copy.0.to_str().unwrap();
+        let snap = snapshot(path, &[]).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        assert!(snap.output.system.is_some());
+        assert!(package_edges(&snap.output.checked, None)["veh.ops"].is_empty());
+        assert_eq!(
+            value(&snap, path)["packages"],
+            json!([
+                {"name":"veh.cabin", "fanIn":1, "fanOut":1, "instability":0.5, "dependsOn":["veh.climate"]},
+                {"name":"veh.climate", "fanIn":2, "fanOut":0, "instability":0.0, "dependsOn":[]},
+                {"name":"veh.ops", "fanIn":0, "fanOut":2, "instability":1.0, "dependsOn":["veh.cabin", "veh.climate"]}
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn metrics_preserves_workspace_errors_and_warnings() {
+        let path = fixture("ws-diag");
+        let result = crate::RidlMcp::new()
+            .ridl_metrics(rmcp::handler::server::wrapper::Parameters(MetricsInput {
+                path: path.clone(),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        assert_eq!(
+            result.structured_content.unwrap()["workspace"],
+            json!({
+                "root":path, "errors":1, "warnings":1, "notes":[]
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn metrics_is_independent_of_allow_and_deny_levels() {
+        let copy = TempWorkspace::copy("ws-lints");
+        let path = copy.0.to_str().unwrap();
+        let manifest = copy.0.join("ridl.toml");
+        for (level, severity, errors) in [("allow", None, 0), ("deny", Some("error"), 1)] {
+            fs::write(
+                &manifest,
+                format!(
+                    "[workspace]\nmembers = [\"sensor\"]\n[lints]\nmissing-timing = \"{level}\"\n"
+                ),
+            )
+            .unwrap();
+            let server = crate::RidlMcp::new();
+            let check = server
+                .ridl_check(rmcp::handler::server::wrapper::Parameters(
+                    serde_json::from_value(json!({"path":path})).unwrap(),
+                ))
+                .await
+                .unwrap()
+                .structured_content
+                .unwrap();
+            assert_eq!(check["workspace"]["errors"], errors);
+            match severity {
+                None => assert_eq!(check["diagnostics"], json!([])),
+                Some(severity) => assert_eq!(check["diagnostics"][0]["severity"], severity),
+            }
+            let result = server
+                .ridl_metrics(rmcp::handler::server::wrapper::Parameters(MetricsInput {
+                    path: path.into(),
+                }))
+                .await
+                .unwrap();
+            assert_eq!(result.is_error, Some(false), "{level}: {result:?}");
+            assert_eq!(
+                result.structured_content.unwrap(),
+                json!({
+                    "packages":[{"name":"fx.sensor", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]}],
+                    "interfaces":[{"name":"fx.sensor.Sensor", "members":1, "groups":[["speed"]]}],
+                    "workspace":{"root":path, "errors":0, "warnings":1, "notes":[]}
+                }),
+                "{level}"
+            );
+        }
     }
 
     #[test]
@@ -283,7 +419,19 @@ mod tests {
             .unwrap();
         assert_eq!(result.is_error, Some(false));
         let content = result.structured_content.unwrap();
-        assert_eq!(content["packages"].as_array().unwrap().len(), 3);
+        assert_eq!(
+            content,
+            json!({
+                "packages": [
+                    {"name":"fx.a", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]},
+                    {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                    {"name":"fx.b", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
+                ],
+                "interfaces": [{"name":"fx.b.Status", "members":5,
+                    "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}],
+                "workspace": {"root":copy.0, "errors":0, "warnings":0, "notes":[]}
+            })
+        );
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(
                 result.content[0].as_text().unwrap().text.as_str()

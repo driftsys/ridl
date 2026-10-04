@@ -109,6 +109,7 @@ async fn ridl_mcp_advertises_ridl_check() {
                 "ridl_diff",
                 "ridl_explain",
                 "ridl_list_interactions",
+                "ridl_metrics",
                 "ridl_references",
                 "ridl_resolve"
             ]
@@ -627,6 +628,7 @@ async fn every_tool_leaves_the_tree_unchanged() {
                 "ridl_dependencies",
                 json!({"path":temp.0,"overlays":overlays}),
             ),
+            ("ridl_metrics", json!({"path":temp.0})),
             (
                 "ridl_diff",
                 json!({"old":temp.0,"new":temp.0,"overlays":overlays}),
@@ -693,6 +695,16 @@ async fn every_tool_leaves_the_tree_unchanged() {
                     let package = output["packages"].as_array().unwrap().iter().find(|p| p["name"] == "fx.b").unwrap();
                     assert_eq!(package["depends_on"], json!(["fx.a", "fx.a.sub"]));
                 },
+                "ridl_metrics" => assert_eq!(output, json!({
+                    "packages": [
+                        {"name":"fx.a", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]},
+                        {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                        {"name":"fx.b", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
+                    ],
+                    "interfaces": [{"name":"fx.b.Status", "members":5,
+                        "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}],
+                    "workspace": {"root":temp.0, "errors":0, "warnings":0, "notes":[]}
+                })),
                 "ridl_diff" => assert_eq!(output["verdict"], "breaking"),
                 _ => unreachable!(),
             }
