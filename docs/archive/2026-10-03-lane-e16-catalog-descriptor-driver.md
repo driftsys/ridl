@@ -851,11 +851,12 @@ named.
    code emit ran.** Reason: issue #367 asks for the hash the descriptor writes,
    and the hash can depend on `ridl.std` (D6 found this for the Rust face). Cost
    if wrong: one memoized `ridl.std` check in a build that emits only the IR.
-3. **`compile_workspace` embeds the hashes on every call**, so `ridl-mcp` and
-   `ridl lock` compute them although neither reads the hash. Reason: every
-   lowered system the toolchain returns then carries its hashes, as the archived
-   rsdl plan's Part B4 Task 9 required. Cost if wrong: one SHA-256 per region
-   per call (#701).
+3. **`compile_workspace` embeds the hashes on every call**, so `ridl-mcp`,
+   `ridl lock`, `ridl diff` (through `compile_workspace_with`) and the other
+   `ridl` subcommands that compile through it compute them, although none of
+   them reads the hash. Reason: every lowered system the toolchain returns then
+   carries its hashes, as the archived rsdl plan's Part B4 Task 9 required. Cost
+   if wrong: one SHA-256 per region per call (#701).
 4. **`ridl_sem::lower_system` stays public and returns regions with an empty
    hash.** Reason: ADR-0022 decision 7 requires the rsdl lowering not to compute
    the hash. A test pins the empty field. Cost if wrong: a caller that uses
