@@ -60,21 +60,25 @@ decision 9 recorded as a limitation.
    named declaration and member is a carrier.** The checker reads the doc of
    each carrier, and stores it in the IR where the IR has a field for it:
 
-   | Carrier                                                        | Before this record                      | Now                                                          |
-   | -------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
-   | `type`, `const`, `struct`, `enum`, `enumset`, `union`          | read                                    | unchanged                                                    |
-   | `interface`, `service`, each interaction                       | read                                    | unchanged                                                    |
-   | `reserved` entry                                               | in the tree; no IR field                | a carrier with no IR field; its links are checked (TYPL-401) |
-   | struct field, enum value, enumset bit, union arm               | in the tree; the IR field is left empty | read                                                         |
-   | parameter of a `command` or `query`                            | no carrier                              | read into `Param.doc`                                        |
-   | `system`, `component`, `distribution`, `deployment`, `machine` | in the tree; no IR field                | read into the system IR                                      |
-   | rsdl body line (`offers`, `requires`, a bare member reference) | in the tree; no IR field                | read, see below                                              |
+   | Carrier                                                        | Before this record                      | Now                                                                 |
+   | -------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------- |
+   | `type`, `const`, `struct`, `enum`, `enumset`, `union`          | read                                    | unchanged                                                           |
+   | `interface`, `service`, each interaction                       | read                                    | unchanged                                                           |
+   | `reserved` entry                                               | in the tree; no IR field                | read; its links are checked (TYPL-401); stored in an interface only |
+   | struct field, enum value, enumset bit, union arm               | in the tree; the IR field is left empty | read                                                                |
+   | parameter of a `command` or `query`                            | no carrier                              | read into `Param.doc`                                               |
+   | `system`, `component`, `distribution`, `deployment`, `machine` | in the tree; no IR field                | read into the system IR                                             |
+   | rsdl body line (`offers`, `requires`, a bare member reference) | in the tree; no IR field                | read, see below                                                     |
 
    The docs of the `system` and `distribution` member lines and of the `offers`
    and `requires` lines are stored in the system IR. A placement line in a
    `machine` body is a carrier and the editor shows its doc, but the system IR's
-   `Placement` has no doc field. A `reserved` entry is the same: its doc is read
-   and its links are checked, and the IR's `Reserved` has no doc field.
+   `Placement` has no doc field. A `reserved` entry in a `struct`, `enum`,
+   `enumset` or `union` body is the same: its doc is read and its links are
+   checked, and the IR's `Reserved` has no doc field. A `reserved` entry in an
+   `interface` body lowers to a `Decl` of kind `ReservedSlot`, which keeps the
+   doc, the links, `see`, `since`, labels and deprecation as any interaction's
+   `Decl` does.
 
    These positions are not carriers: before `package`, before an `import`,
    before a return type or an attribute block, an arm of an inline `T | E`
