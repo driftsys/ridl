@@ -830,6 +830,68 @@ execution.
     review, not by a new golden copy of every declaration. If this boundary is
     wrong, another preservation review is required before changing the port.
 
+14. **Draft the seed independently from candidate checks** (Task 4). The ten
+    drafts use five review tasks, two documentation-only evolution tasks and
+    three distinct design requirements drawn from already pinned public protocol
+    documentation. Review item numbers remain stable identifiers for later
+    recall joins. Every lint expectation is empty until Task 14; the validator
+    accepts catalogue names only and uses diff verdicts rather than change
+    categories. Public documentation supplies independently paraphrased factual
+    requirements with revision-specific citations only; no documentation prose
+    is copied or translated. The complete task set, including design
+    requirements, contains one task from the third source set out of ten. The
+    validator adds the existing workspace TOML dependency to the CLI test
+    target, with the corresponding lockfile dependency entry and no dependency
+    version change. Its red run fails because the task directory does not yet
+    exist. Formatting may wrap a rubric item, so the validator checks the
+    initial line of each item paragraph rather than treating an indented
+    continuation as a separate item. If these boundaries are wrong, independent
+    review and user approval must revise the drafts before commitment; candidate
+    checks remain excluded until that commitment.
+
+15. **Resolve independent seed review against the local public sources** (Task
+    4). The reviewer could not fetch revision-specific public pages, so the
+    correction review receives exact local pinned documentation paths and the
+    licence evidence. The drafts now distinguish an enforced integer range from
+    comment-only unit metadata, add separate bit-preservation and
+    name-independent selector criteria, remove a review prompt's concern
+    checklist, align the discovery prompt with fault suppression and both
+    connection states, and cite the source project's documentation licence in
+    all design prompts. Original rubric item numbers remain unchanged; new
+    independent items are appended. Frozen source remains unchanged; candidate
+    output and calibration data are neither changed nor read. If the corrections
+    still misstate the sources, the scoped second independent review must
+    identify the remaining objections before user approval.
+
+16. **Extend structural evolution coverage after the user's approval to revise**
+    (Task 4). The user accepted replacing the second documentation-only
+    evolution task with a compatible additive API query while retaining the
+    first and the other eight tasks. The replacement appends an index-only
+    convenience query using existing payload and scalar types, with a
+    nonnegative-index contract, and preserves every existing interaction
+    ordinal. An ordinary compiler check on a scratch copy reports no Error; the
+    actual JSON diff reports compatible with one interaction_appended change.
+    This checks grammar and compatibility against the pre-candidate branch
+    without running candidate design checks, metrics or calibration. A scoped
+    external review receives the revised task, frozen source, pinned public
+    documentation and scratch feasibility evidence. The user's approval
+    authorizes this revision; approval of the revised set is still required
+    before commitment. If this extension is infeasible or the rubric excludes
+    another valid implementation, the scoped review must identify that before
+    the revised set is presented for approval.
+
+17. **Approve and commit the complete corrected seed** (Task 4). On 2026-10-04
+    the user replied "lgtm" to the refreshed approval packet for all ten tasks,
+    including the corrected review and design criteria and the structural second
+    evolution task. Independent external reviews of the corrections and the
+    structural replacement reported no remaining objections and were accepted.
+    This approves commitment of the full set rather than only the earlier
+    coverage revision. Rubric item numbers become stable task-id:item-number
+    identifiers at commitment and must not be renumbered by later calibration.
+    All lint expectations remain empty until Task 14. No candidate design check,
+    metric dump, finding, label or calibration data was run or read before this
+    commitment; final corpus compilation uses only the pre-candidate branch.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

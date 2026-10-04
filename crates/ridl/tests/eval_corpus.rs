@@ -180,3 +180,133 @@ fn every_corpus_workspace_records_its_provenance() {
         }
     }
 }
+
+fn task_root() -> PathBuf {
+    corpus_root()
+        .parent()
+        .expect("the evals directory")
+        .join("tasks")
+}
+
+fn validate_task(dir: &Path) -> Result<serde_json::Value, String> {
+    let read = |name: &str| std::fs::read_to_string(dir.join(name)).map_err(|e| e.to_string());
+    let task: serde_json::Value = toml::from_str(&read("task.toml")?).map_err(|e| e.to_string())?;
+    let require = |condition: bool, message: &str| {
+        if condition {
+            Ok(())
+        } else {
+            Err(message.to_owned())
+        }
+    };
+    require(
+        task["id"].as_str() == dir.file_name().and_then(|n| n.to_str()),
+        "id must equal directory name",
+    )?;
+    let kind = task["kind"].as_str().ok_or("kind must be a string")?;
+    require(
+        matches!(kind, "review" | "evolve" | "design"),
+        "unknown task kind",
+    )?;
+    require(
+        task["title"].as_str().is_some_and(|s| !s.trim().is_empty()),
+        "title must be nonempty",
+    )?;
+    if kind == "design" {
+        require(task.get("corpus").is_none(), "design task must omit corpus")?;
+    } else {
+        let corpus = task["corpus"].as_str().ok_or("corpus must be a string")?;
+        require(
+            corpus_dirs()
+                .iter()
+                .any(|p| p.file_name().and_then(|n| n.to_str()) == Some(corpus)),
+            "corpus must name an existing workspace",
+        )?;
+    }
+    require(
+        task["expect"]["compiles"].is_boolean(),
+        "expect.compiles must be boolean",
+    )?;
+    let lints = task["expect"]["lints"]
+        .as_array()
+        .ok_or("expect.lints must be an array")?;
+    for lint in lints {
+        let name = lint.as_str().ok_or("lint name must be a string")?;
+        require(
+            ridl_core::diag::ALL_CATALOGS
+                .iter()
+                .flat_map(|(_, entries)| *entries)
+                .any(|entry| entry.lint == Some(name)),
+            "lint name must be in the catalogue",
+        )?;
+    }
+    if kind == "evolve" {
+        let _verdict = match task["expect"]["diff"].as_str() {
+            Some("identical") => ridl_diff::Verdict::Identical,
+            Some("compatible") => ridl_diff::Verdict::Compatible,
+            Some("breaking") => ridl_diff::Verdict::Breaking,
+            _ => return Err("expect.diff must name a diff verdict".to_owned()),
+        };
+    } else {
+        require(
+            task["expect"].get("diff").is_none(),
+            "only evolve tasks may name a diff verdict",
+        )?;
+    }
+    for name in ["prompt.md", "rubric.md"] {
+        let content = read(name)?;
+        require(
+            !content.trim().is_empty(),
+            "prompt and rubric must be nonempty",
+        )?;
+        if name == "rubric.md" {
+            let mut expected = 1;
+            // prim wraps item text; each paragraph begins with the stable item ID.
+            for line in content
+                .split("\n\n")
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+            {
+                let prefix = format!("{expected}. ");
+                let item = line
+                    .strip_prefix(&prefix)
+                    .ok_or("rubric item numbers must be consecutive")?;
+                require(
+                    ["**must** ", "**should** ", "**must not** "]
+                        .iter()
+                        .any(|mark| item.starts_with(mark)),
+                    "rubric item must have a requirement marker",
+                )?;
+                expected += 1;
+            }
+            require(expected > 1, "rubric must contain an item")?;
+        }
+    }
+    Ok(task)
+}
+
+#[test]
+fn every_eval_task_is_well_formed() {
+    let root = task_root();
+    let mut dirs: Vec<_> = std::fs::read_dir(&root)
+        .unwrap_or_else(|error| panic!("read {}: {error}", root.display()))
+        .map(|entry| entry.expect("read a task entry"))
+        .filter(|entry| entry.file_type().expect("read a task file type").is_dir())
+        .map(|entry| entry.path())
+        .collect();
+    dirs.sort();
+    assert!(
+        dirs.len() >= 10,
+        "at least ten evaluation tasks are required"
+    );
+    let mut third_corpus_tasks = 0;
+    for dir in &dirs {
+        let task = validate_task(dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
+        if task["corpus"] == "vss" {
+            third_corpus_tasks += 1;
+        }
+    }
+    assert!(
+        third_corpus_tasks * 3 <= dirs.len(),
+        "at most one third of tasks may use the third corpus"
+    );
+}

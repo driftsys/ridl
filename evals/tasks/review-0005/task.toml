@@ -1,0 +1,8 @@
+id = "review-0005"
+kind = "review"
+corpus = "vss"
+title = "Review repeated climate station contracts"
+
+[expect]
+compiles = true
+lints = []

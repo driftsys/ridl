@@ -1,0 +1,7 @@
+id = "design-0002"
+kind = "design"
+title = "Design reliable plan upload"
+
+[expect]
+compiles = true
+lints = []

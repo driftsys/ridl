@@ -1,0 +1,8 @@
+id = "review-0004"
+kind = "review"
+corpus = "mavlink"
+title = "Review parameter value representation"
+
+[expect]
+compiles = true
+lints = []
