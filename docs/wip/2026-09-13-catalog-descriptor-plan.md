@@ -158,6 +158,16 @@ text does not show:
   state: a map key outside the integral and string scalars, a map value that is
   an array or a map, an optional array or map field, an enum live or retired
   value outside int32, and a field number that `check_field_number` refuses.
+- `PROTO_RESERVED` and `PROTO_MAX_FIELD_NUMBER` moved to
+  `ridl_ir::projection::proto3`; the proto backend's `check_field_number` and
+  the proto3 sizer read the same two constants.
+- The proto3 sizer's `Walk` carries a memo of the bound of every named struct
+  and union it has derived, keyed by the declaring package's name and the
+  declaration's name, so a type two paths share (a diamond) is walked once. A
+  `None` is not remembered, because the depth guard may have produced it for one
+  path only.
+- `Leaf::Struct` and `Leaf::Union` carry the declaration's `name`, and
+  `struct_size` and `union_size` take it as a parameter: the memo keys on it.
 - `ridl_ir::codegen::fb_unbounded` is public.
 - The Rust backend's `PayloadInfo.max_size.flatbuffers` is the codegen model's
   `Payload.flatbuffers_max_size`. `proto3` stays `None`, because that backend
