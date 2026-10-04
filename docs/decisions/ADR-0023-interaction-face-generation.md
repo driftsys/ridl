@@ -120,6 +120,18 @@ superseded where they name `new`, `next_event`, `with_timeout`, `set_timeout`
 and `subscribe_*` as methods of the type; their signatures and behaviour are
 unchanged.
 
+**Amendment (2026-10-04) — an eighth decision: the catalog check, and a panic on
+a mismatch.** [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
+binds a port to one catalog and has the generated face compare the two once, at
+construction; its 2026-09-21 amendment and decision 5's 2026-09-21 correction
+below record that no generated code made the comparison, and leave what `new`
+does on a mismatch to the story that emits it. Story E16.5 (driftsys/ridl#381)
+emits it. Decision 8 states where the comparison is made and what a mismatch
+does: `Bind::new` and `serve` panic. Taken on delegated authority by stage D6 of
+lane E16 (the lane driver's §5 records it for Sebastien's review). The change
+that emits the check follows this amendment in the same pull request; until it
+merges, this record describes a check the fixture does not yet emit.
+
 ## Context
 
 The approved M1 design (archived at
@@ -329,6 +341,10 @@ argument for it in the command case.
    (driftsys/ridl#381), which emits it and amends this record with what `new`
    does on a mismatch. The reasons are in the 2026-10-04 note on
    [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3.
+
+   **Note (2026-10-04, story E16.5, driftsys/ridl#381).** Decision 8 is the
+   amendment the correction above waits for: `new` compares the catalogs and
+   panics on a mismatch.
 
 6. **Amendment (2026-09-26) — two clients per interface and a `serve`, and the
    poll face `pub(crate)`.** For every interface the face emits:
@@ -573,6 +589,61 @@ argument for it in the command case.
    `warning` is not refused, because `subscribe_warning` and `warning` are
    distinct).
 
+8. **Amendment (2026-10-04) — the generated face checks the port's catalog when
+   it binds to the port, and panics on a mismatch.**
+
+   - **Where.** `Bind::new` of `Client<P>` and of `Publisher<W>` compares
+     `port.catalog()` (`ridl_rt::port::Attached`) with the interface's `CATALOG`
+     (`ridl_rt::contract::Interface`), once, before it stores the port.
+     `blocking::Client::new` builds the async client through `Bind::new`, so it
+     makes the same comparison once, through that call. `serve` makes the same
+     comparison on its handler port before it calls `Handler::serve`; the
+     blocking `serve` calls the async one, so it makes it once too. No member
+     method compares anything: the comparison is made once per binding, as
+     decision 3 of ADR-0021 states, not once per call.
+   - **The comparison.** `CatalogRef` equality: the package name and the catalog
+     hash ([ADR-0014](ADR-0014-ir-encodings.md) decision 15) must both be equal.
+   - **A mismatch panics.** The panic message names the interface, the catalog
+     the face was generated from and the catalog the port is attached to. A
+     program that must not panic makes the same comparison itself before it
+     binds — `port.catalog() == <Iface as Interface>::CATALOG`, where `Iface` is
+     the interface's generated descriptor type — and handles the mismatch its
+     own way.
+   - **Why a panic, and not a `Result`.** `Bind::new` returns `Self`
+     ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19). A
+     fallible `new` is a breaking `ridl-rt` change, a 0.x minor release under
+     ADR-0021 decision 10, which changes every call site and breaks the
+     one-expression `blocking::Client::new(port).with_timeout(t)` that decision
+     7 keeps. A mismatch is a defect in how the program was put together — the
+     face was generated from one version of a package and the runtime serves
+     another — not a condition a running program meets and recovers from; the
+     fix is to regenerate one side or to configure the runtime with the other
+     catalog. The Rust convention for a broken precondition that the caller
+     controls is a panic, and the comparison a program can make first gives it
+     the non-panicking path without a second constructor. `serve` panics for the
+     same reason, although it could report an error through its future:
+     `ServeError` has no variant for a mismatch, and adding one needs a
+     `ridl-rt` release that every emitted manifest's caret requirement must then
+     name.
+   - **What it breaks.** A program whose runtime is attached to a catalog other
+     than the one its face was generated from, which until this decision read
+     and wrote another interface's slots with no error, now panics at the
+     binding. `examples/cabin` and the round trips in
+     `crates/ridl-backend-rust/tests/interaction_face.rs` built their runtimes
+     over an all-zero `CatalogHash` and take the generated `CATALOG` instead.
+     The backend change is `feat(ridl-backend-rust)!`. No `ridl-rt` item
+     changes.
+   - **What it costs if wrong.** A fallible binding is the breaking `ridl-rt`
+     change above, made later instead of now, plus the removal of the panic.
+
+   The permanent tests are in `tests/interaction_face.rs`: a `Client`, a
+   blocking `Client`, a `Publisher` and `serve`, each over a runtime attached to
+   a catalog whose hash differs from the face's, panic; and each over a runtime
+   attached to the face's own `CATALOG` binds and completes its round trip.
+   `tests/face_generation.rs` pins the comparison in the emitted `Bind::new` and
+   `serve`. Traces: driftsys/ridl#381 (the story), driftsys/ridl#448 (the
+   unemitted check).
+
 ## Alternatives considered
 
 | Alternative                                                                             | Why not                                                                                                                                                                                                                                                                                                 |
@@ -591,6 +662,8 @@ argument for it in the command case.
 | `impl Future` in return position (2026-09-26)                                           | Cannot be named, so cannot be stored in a frame loop's state, and the blocking client cannot ask it whether the call was sent after `block_on` gives up. See decision 6 and note F-10.                                                                                                                  |
 | A `deadline` parameter on every blocking call (2026-09-26)                              | Makes the two clients' signatures differ in more than the future; an absolute instant is computed from a duration by every caller anyway. See decision 6 and note F-11.                                                                                                                                 |
 | `serve` resolving to `Ok(())` when the runtime detaches (2026-09-26)                    | Hides the failure `dispatch` already hid, which is driftsys/ridl#485 item 2. See decision 6 and note F-7.                                                                                                                                                                                               |
+| A fallible `Bind::new`, returning `Result<Self, CatalogMismatch>` (2026-10-04)          | A breaking `ridl-rt` change and a 0.x minor release, a change at every call site, and the end of `blocking::Client::new(port).with_timeout(t)` as one expression, for a defect the program fixes by regenerating, not by recovering at run time. See decision 8.                                        |
+| No check, or a `debug_assert!` only (2026-10-04)                                        | Leaves a release build reading and writing another interface's slots with no error, which is the defect ADR-0021 decision 3 exists to prevent. See decision 8.                                                                                                                                          |
 
 ## Consequences
 
@@ -712,3 +785,7 @@ argument for it in the command case.
   and 4 — the name transform and the namespaces RIDL-149 checks;
   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 19 — the
   `ridl_rt::face` module and the 0.4.0 release
+- driftsys/ridl#381 — story E16.5, which emits the catalog check of decision 8;
+  driftsys/ridl#448 — the record that the check was not emitted;
+  [ADR-0014](ADR-0014-ir-encodings.md) decision 15 — the catalog hash the check
+  compares
