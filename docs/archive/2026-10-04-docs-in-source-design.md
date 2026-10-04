@@ -1,7 +1,7 @@
 # Documentation in the source — design for spec 2a
 
 Status: design spec for Spec 2a of
-[`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md),
+[`2026-10-03-devex-and-agent-tracks-brief.md`](../wip/2026-10-03-devex-and-agent-tracks-brief.md),
 written 2026-10-04 against `main` at f3f12982. Sebastien took decisions D-1 to
 D-6 in the brainstorming session of 2026-10-04 and agreed the design section by
 section (§2). Nothing here is implemented. It is archived with its plan when the

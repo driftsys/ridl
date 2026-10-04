@@ -23,6 +23,9 @@ and #677 landed. The runtime descriptors design, the catalog descriptor plan and
 the lane E16 driver were archived on 2026-10-04, after E16.1 to E16.6 and E6.17
 landed, and gardened into
 [`../design/catalog-descriptor.md`](../design/catalog-descriptor.md).
+The spec 2a design and plan
+(`2026-10-04-docs-in-source-{design,plan}.md`) were archived on 2026-10-04 with
+#703; ADR-0026 is their durable record.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

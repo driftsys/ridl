@@ -152,6 +152,8 @@ decision 9 recorded as a limitation.
      draws TYPL-401; that reach cannot be used until remote packages are loaded.
    - One more segment names a member: a field, enum value, enumset bit, union
      arm or interaction of the named declaration.
+   - When a name could be a package path or a declaration followed by a member,
+     the link resolves as a type reference resolves the same name.
    - A target that is `internal` in another package does not resolve, because
      rendered documentation of that package could not follow it. An `internal`
      target in the same package resolves.

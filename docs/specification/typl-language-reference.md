@@ -1276,10 +1276,12 @@ then in `ridl.std`. A qualified `pkg.Name` names any package the current package
 can depend on (ADR-0002 §5) without an import; a remote package of `[imports]`
 is not loaded by the compiler, so a link into one does not resolve. One more
 segment names a member of the declaration: a field, enum value, enumset bit,
-union arm or interaction (`[Gear.PARK]`, `[CruiseControl.setLever]`). A
-declaration that is `internal` in another package cannot be linked to. A link
-that does not resolve draws TYPL-401; each link that resolves is stored in the
-IR with its canonical target.
+union arm or interaction (`[Gear.PARK]`, `[CruiseControl.setLever]`). When a
+name could be a package path or a declaration followed by a member, the link
+resolves as a type reference resolves the same name. A declaration that is
+`internal` in another package cannot be linked to. A link that does not resolve
+draws TYPL-401; each link that resolves is stored in the IR with its canonical
+target.
 
 ---
 

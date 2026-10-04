@@ -845,7 +845,7 @@ and #529 (a workspace member entered alone ignores the root's `[lints]`) stayed
 open until spec 2a.
 
 **Spec 2a of the devex and agent tracks, documentation in the source, landed on
-2026-10-04** (closes #529). The checker reads the doc comment of every
+2026-10-04** (#703, closes #529). The checker reads the doc comment of every
 declaration and member, a parameter and every rsdl declaration and body line
 included, into the IR. `[Name]` doc links and `@see` targets resolve with the
 rules of a type reference, and the IR stores each resolved target. The tags are
