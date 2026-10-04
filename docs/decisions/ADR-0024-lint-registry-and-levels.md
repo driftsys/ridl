@@ -6,15 +6,19 @@ Accepted — 2026-10-04. Scope: how a warning or info diagnostic becomes a
 configurable lint — which diagnostics are lints, how a project sets a level,
 which commands apply the levels, how a level resolves for a file, and how
 `ridl check --format sarif` projects a diagnostic. It binds every later lint
-(the doc lints of spec 2a and the design lints of spec 1b), every entry point
-that reports diagnostics, and the lint names, which a `ridl.toml` refers to.
+(the planned documentation lints and the planned design lints), every entry
+point that reports diagnostics, and the lint names, which a `ridl.toml` refers
+to.
 
 Written from spec 0 of the devex and agent tracks brief, implemented in
 driftsys/ridl#678. Sebastien agreed decisions 1 to 7 in the brainstorming
 session of 2026-10-03. The maintainer's delegate took decisions 8 and 9 in the
-pass-1 review of the design, PR #671. The stage driver took decisions 10 to 16
-while it implemented the design, and recorded them in the body of #678. The
-original design and plan are
+pass-1 review of the design, PR #671. Decisions 11 and 12 and the base rule of
+decision 10 come from the reviewed design (§5.3, §7.3 and §5.2/§6.1). The stage
+driver added the root-scope rule for an unowned file in decision 10, the
+default-level mapping in decision 12, and decisions 13 to 16 while it
+implemented the design, and recorded them in the body of #678. The original
+design and plan are
 [`docs/archive/2026-10-03-lint-foundation-design.md`](../archive/2026-10-03-lint-foundation-design.md)
 and
 [`docs/archive/2026-10-03-lint-foundation-plan.md`](../archive/2026-10-03-lint-foundation-plan.md);
@@ -39,9 +43,9 @@ hard-coded their own. `ridl check` exited 1 only when an Error was present, with
 no flag to change that. `ridl check --format` accepted `text` and `json`, so a
 CI system that reads SARIF could not show findings.
 
-The doc lints of spec 2a (`missing-docs`, a broken `[Type]` link) and the design
-lints of spec 1b need a level per lint, set per project, with the same result in
-the command line, the language server and the MCP server.
+The planned documentation lints (`missing-docs`, a broken `[Type]` link) and the
+planned design lints need a level per lint, set per project, with the same
+result in the command line, the language server and the MCP server.
 
 The design numbers its decisions D-1 to D-9. In this record, **design D-n is
 decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
@@ -94,13 +98,15 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
      (`ridl build` and `ridlc build` do; `ridl baseline` does not);
    - `ridl check --baseline`, once more over the whole run, because the CLI
      itself raises RIDL-407 after `ridlc` returns;
+   - `ridlc::front_end`, with empty scopes, for `check_source` and `compile`;
    - the MCP tool `ridl_check` in path mode, with the scopes of
      `WorkspaceOutput`;
    - the language server, which applies them to the loader diagnostics in
      `load()` and to its own in `analyze`, before converting either.
 
-   `check_source` and `compile` apply no scopes, so the registry defaults apply
-   to a single source with no manifest.
+   `ridlc::front_end`, which `check_source` and `compile` call, applies the
+   levels with empty scopes, so only the registry defaults apply to a single
+   source with no manifest.
 
 7. **The lint names are a stable contract once released** (design D-7). A
    `ridl.toml` refers to a name, so a released name is never renamed or reused.
@@ -109,7 +115,9 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    here: the catalogue (`diag_codes!` in `crates/ridl-core/src/diag.rs`) is its
    source, and [the lints page](../book/lints.md#the-lints) lists it, checked
    against the catalogue by `crates/ridl/tests/book_lints.rs`. A new lint adds
-   its name to the catalogue row and a row to that page in the same change.
+   its name to the catalogue row and a row to that page in the same change. It
+   also updates the expected list in the `ridl-core` diagnostic test that
+   compares the catalogue with the lint names.
 
 8. **Levels apply only where diagnostics are reported to a person or an agent**
    (design D-8). These are `ridl check` (including the `--baseline` desk check),
@@ -206,7 +214,7 @@ From the design's §10. The numbers are the decisions that reject them.
 - **A source attribute such as `@allow(missing-docs)`.** Gives a local exception
   without turning a lint off for the whole package, but changes the language
   surface (an ADR, checked against ADR-0011, ADR-0012 and ADR-0015). Deferred
-  (decision 2) until real false positives from specs 2a or 1b show the need.
+  (decision 2) until real false positives from the planned lints show the need.
 - **`--deny-warnings`, or cargo-style `-A`/`-W`/`-D` flags.** Convenient for CI,
   but the editor and CI could then disagree. Rejected for decision 3.
 - **A `helpUri` into the book, or a long-form help text per code now.** The
@@ -234,8 +242,8 @@ From the design's §10. The numbers are the decisions that reject them.
 - **A SARIF crate** (`serde-sarif`). The subset used is a few structs; a
   dependency is not worth it (decision 12).
 
-Alternatives for decisions 10 to 16 were not documented; the stage driver took
-them at implementation.
+The design records no alternatives for decisions 10, 11 and 13 to 16, and the
+stage driver recorded none for them at implementation.
 
 ## Consequences
 
@@ -245,11 +253,11 @@ them at implementation.
   apply (decision 6), and keeps the hard-coded severity elsewhere (decision 8).
 - `ridl build` stops on a lint at `deny` before it writes any artifact. The
   other commands of decision 8 are unaffected by a project's `[lints]`.
-- Output formats: the JSON report gains an optional `lint` field (compatible
-  with the contract of ADR-0005 §7), the text report adds a note naming the lint
-  (it depends only on the code, so it also appears for commands that apply no
-  level), and `ridl check --format sarif` is new. The MCP tool `ridl_explain`
-  adds `lint` and `default_level` for a lint code.
+- Output formats: the JSON report gains an optional `lint` field (an addition,
+  which the contract stability policy of ADR-0005 §7 allows), the text report
+  adds a note naming the lint (it depends only on the code, so it also appears
+  for commands that apply no level), and `ridl check --format sarif` is new. The
+  MCP tool `ridl_explain` adds `lint` and `default_level` for a lint code.
 - Known limitations, both of the language server: it reads the `[lints]` tables
   once, when it loads the workspace, so an edit to a table takes effect after a
   restart; and it does not canonicalise paths when it looks up a scope. The
@@ -262,7 +270,8 @@ them at implementation.
 - [ADR-0002](ADR-0002-module-system.md) §4 — the manifest; amended with the
   `[lints]` table.
 - [ADR-0010](ADR-0010-cli-conventions.md) decision 1 — exit codes; amended.
-- [ADR-0005](ADR-0005-agent-enablement.md) §7 — the JSON diagnostic shape.
+- [ADR-0005](ADR-0005-agent-enablement.md) §7 — the agent-legibility invariants,
+  including the contract stability policy.
 - [The lints page](../book/lints.md) and
   [the CLI reference](../book/cli-reference.md).
 - [The toolchain architecture technote](../technotes/walking-skeleton-architecture.md)

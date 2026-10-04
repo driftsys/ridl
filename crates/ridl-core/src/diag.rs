@@ -1503,8 +1503,8 @@ pub struct CatalogEntry {
     pub code: DiagCode,
     pub severity: Severity,
     pub summary: &'static str,
-    /// The lint name, present exactly when `severity` is Warning or Info (ADR-0024
-    /// decision 1). The catalogue severity is the lint's default
+    /// The lint name, present exactly when `severity` is Warning or Info
+    /// (ADR-0024 decision 1). The catalogue severity is the lint's default
     /// level. A released name is never renamed or reused.
     pub lint: Option<&'static str>,
 }
@@ -1837,9 +1837,10 @@ mod tests {
         );
     }
 
-    /// Every Warning and Info row carries a lint name and no Error row does; each
-    /// name is lowercase words joined by `-`; no two rows share a name; and the
-    /// `(code, name)` pairs are the table in docs/book/lints.md.
+    /// Every Warning and Info row carries a lint name and no Error row does;
+    /// each name is lowercase words joined by `-`; no two rows share a name;
+    /// and the `(code, name)` pairs are the expected list below, which mirrors
+    /// the table in docs/book/lints.md (`book_lints.rs` checks that table).
     #[test]
     fn lint_names_are_present_exactly_on_warnings_and_infos_and_unique() {
         fn is_lint_name(name: &str) -> bool {
@@ -1912,7 +1913,7 @@ mod tests {
         .collect();
         assert_eq!(
             pairs, expected,
-            "the lint names differ from docs/book/lints.md"
+            "the lint names differ from the expected list in this test"
         );
     }
 

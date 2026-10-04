@@ -571,17 +571,18 @@ const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [
 /// Runs `check` and, when a baseline is available and the compile produced no
 /// error other than RIDL-409, the desk check on top of it.
 ///
-/// The desk check only ever *adds* to the diagnostics — RIDL-407 warnings,
-/// and the rename label on a RIDL-409 (lock design §4) — so `ridl check`
-/// keeps its 0/1/2 exit contract: a reordered but otherwise clean workspace
-/// still exits 0, and a workspace with an orphan lock entry still exits 1. It
-/// is skipped entirely when the compile produced any other error — a diff
-/// against IR that failed to check would report noise on top of the real
-/// problem — while RIDL-409 stops nothing in lowering (an entry with no
-/// declaration has nothing to lower), so the IR it runs over is whole. A lint
-/// raised to `deny` by `[lints]` is an Error for the exit code but not a
-/// compile error, so it does not skip the desk check either (ADR-0024
-/// decision 6): the run reports the denied lint and the RIDL-407 together.
+/// The desk check only ever *adds* to the diagnostics — RIDL-407 warnings, and
+/// the rename label on a RIDL-409 (lock design §4) — so `ridl check` keeps its
+/// 0/1/2 exit contract: a reordered but otherwise clean workspace still exits
+/// 0, and a workspace with an orphan lock entry still exits 1. It is skipped
+/// entirely when the compile produced any other error — a diff against IR that
+/// failed to check would report noise on top of the real problem — while
+/// RIDL-409 stops nothing in lowering (an entry with no declaration has nothing
+/// to lower), so the IR it runs over is whole. A lint raised to `deny` by
+/// `[lints]` is an Error for the exit code but not a compile error, so it does
+/// not skip the desk check either (see the desk-check text in
+/// docs/book/cli-reference.md): the run reports the denied lint and the
+/// RIDL-407 together.
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
@@ -592,9 +593,10 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     };
 
     // A lint at `deny` is an Error by level, not a compile error: the IR it
-    // runs over is whole, so it does not stop the desk check (ADR-0024
-    // decision 6). The lint diagnostics are left out of the gate here, at the
-    // `ridl check` call site only; `ridl lock` keeps the unfiltered test.
+    // runs over is whole, so it does not stop the desk check (see
+    // docs/book/cli-reference.md). The lint diagnostics are left out of the
+    // gate here, at the `ridl check` call site only; `ridl lock` keeps the
+    // unfiltered test.
     let compile_diagnostics = run
         .diagnostics
         .iter()

@@ -427,7 +427,8 @@ mod tests {
 
     /// One RIDL-100 Warning with a label, one uncoded Error, and one MANI-101
     /// Error on a detached span, projected onto SARIF. The snapshot pins the
-    /// wire shape; the assertions below name the properties ADR-0024 decision 12 fixes.
+    /// wire shape; the assertions below check the SARIF properties that
+    /// ADR-0024 decisions 5, 12 and 13 and docs/book/cli-reference.md describe.
     #[test]
     fn sarif_shape() {
         let text = "package p\ninterface S {\n  signal speed: Speed\n}\n";

@@ -496,9 +496,9 @@ mod tests {
         );
     }
 
-    // Path mode applies the project's `[lints]` levels (ADR-0024
-    // decisions 6 and 8): the fixture's root manifest sets `missing-timing = "deny"`,
-    // so the member's RIDL-100 is reported as an error and counted as one.
+    // Path mode applies the project's `[lints]` levels (ADR-0024 decisions 6
+    // and 8): the fixture's root manifest sets `missing-timing = "deny"`, so
+    // the member's RIDL-100 is reported as an error and counted as one.
     #[tokio::test]
     async fn path_mode_check_applies_lint_levels() {
         let path = snapshot::tests::fixture("ws-lints");

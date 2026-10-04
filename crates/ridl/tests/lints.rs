@@ -168,8 +168,8 @@ fn build_fails_on_deny() {
     assert!(written.is_empty(), "the build wrote: {written:?}");
 }
 
-/// `ridl diff` compiles both sides without applying levels (ADR-0024 decision 8): a lint
-/// at `deny` on either side does not change its result.
+/// `ridl diff` compiles both sides without applying levels (ADR-0024 decision
+/// 8): a lint at `deny` on either side does not change its result.
 #[test]
 fn diff_ignores_deny() {
     let old = TempDir::new("diff-old");
@@ -217,8 +217,9 @@ const SOURCE_WITH_CONTRACT: &str = "package demo\n\ntype Speed: integer [0..300]
                                     command setRange(min: Speed, max: Speed) [\n    \
                                     require min < max\n  ] @[..50ms]\n}\n";
 
-/// `ridl test` compiles the workspace without applying levels (ADR-0024 decision 8): a
-/// lint at `deny` does not stop the run, which exits 2 on a compile error.
+/// `ridl test` compiles the workspace without applying levels (ADR-0024
+/// decision 8): a lint at `deny` does not stop the run, which exits 2 on a
+/// compile error.
 #[test]
 fn test_ignores_deny() {
     let dir = TempDir::new("test-deny");
@@ -244,9 +245,9 @@ fn test_ignores_deny() {
     );
 }
 
-/// Entering at a workspace member loads the member alone (ADR-0024 decision 9), so the
-/// root's `[lints]` does not apply: the root's `deny` is an exit 1 from the
-/// root, and from the member RIDL-100 stays at its default Warning, exit 0.
+/// Entering at a workspace member loads the member alone (ADR-0024 decision 9),
+/// so the root's `[lints]` does not apply: the root's `deny` is an exit 1 from
+/// the root, and from the member RIDL-100 stays at its default Warning, exit 0.
 #[test]
 fn member_entry_ignores_root_lints() {
     let dir = TempDir::new("member-entry");

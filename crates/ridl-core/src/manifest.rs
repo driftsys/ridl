@@ -220,8 +220,8 @@ struct RawWorkspace {
 /// The `[lints]` table alone, read in a parse of its own so that each key
 /// carries its span. `lints` is not a field of [`RawManifest`]: a typed field
 /// there would make `lints = 1` fail the whole typed parse, which is MANI-001
-/// with no manifest, where the spec wants one MANI-010 and the rest of the
-/// manifest (ADR-0024 decision 11).
+/// with no manifest, where ADR-0024 decision 11 wants one MANI-010 and the rest
+/// of the manifest.
 #[derive(Deserialize)]
 struct RawLints {
     #[serde(default)]
@@ -229,9 +229,9 @@ struct RawLints {
 }
 
 /// Collects the `[lints]` table into a [`LintTable`] of registered lint names
-/// and levels (ADR-0002 §4). Every entry whose key is not a lint
-/// name, or whose value is not one of the four level strings, is MANI-010 on
-/// the key and is dropped (ADR-0024 decision 11). A `lints` key that is not a table is one
+/// and levels (ADR-0002 §4). Every entry whose key is not a lint name, or whose
+/// value is not one of the four level strings, is MANI-010 on the key and is
+/// dropped (ADR-0024 decision 11). A `lints` key that is not a table is one
 /// MANI-010 on the value, and the table is empty.
 fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> LintTable {
     let mut lints = LintTable::new();

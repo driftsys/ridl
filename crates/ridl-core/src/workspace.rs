@@ -253,8 +253,8 @@ struct Loader {
     /// in a standalone package load and in single-file mode.
     workspace_lints: LintLevels,
     /// The effective lint levels by directory: one scope for the root, one per
-    /// member directory, one for a standalone package, none in single-file
-    /// mode (ADR-0024 decision 10). Each key is the directory in the path form the
+    /// member directory, one for a standalone package, none in single-file mode
+    /// (ADR-0024 decision 10). Each key is the directory in the path form the
     /// loader records for the files under it.
     lints: LintScopes,
 }

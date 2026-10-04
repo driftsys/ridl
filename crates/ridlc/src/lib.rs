@@ -125,8 +125,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             workspace,
             diagnostics: Vec::new(),
             sources,
-            // No manifest: the registry defaults apply (ADR-0002
-            // §4).
+            // No manifest: the registry defaults apply (ADR-0024
+            // decision 10).
             lints: LintScopes::default(),
         },
     );
@@ -588,8 +588,8 @@ pub struct CliRun {
 }
 
 /// Whether [`run_build_with`] applies the lint levels of the loaded `[lints]`
-/// tables to its diagnostics before the emit gate (ADR-0024 decision 8,
-/// §6.2). `ridl build` and `ridlc build`, which report to a person, pass
+/// tables to its diagnostics before the emit gate (ADR-0024 decisions 6
+/// and 8). `ridl build` and `ridlc build`, which report to a person, pass
 /// [`Yes`](ApplyLints::Yes); `ridl baseline`, which publishes a snapshot,
 /// passes [`No`](ApplyLints::No), so a lint at `deny` does not block the
 /// publication.
@@ -735,7 +735,8 @@ pub fn run_build_with(
     // The levels are applied before the emit gate below, so a lint at `deny`
     // is an error by the time the gate reads the list and no artifact is
     // written for it. `ridl.lock` is already written by `materialize_and_lock`
-    // above; the lockfile is not an artifact (ADR-0024 decision 6).
+    // above; the lockfile is not an artifact (design §6.2 in
+    // docs/archive/2026-10-03-lint-foundation-design.md).
     if apply_lints == ApplyLints::Yes {
         apply_lint_levels(&mut diagnostics, &sources, &lints);
     }

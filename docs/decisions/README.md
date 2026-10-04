@@ -307,22 +307,24 @@ other entry below is Accepted.
 
 - **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed
   in the brainstorming session of spec 0, two taken in the design review, and
-  seven taken while implementing it (driftsys/ridl#678). Every Warning and Info
-  catalogue code is a lint with a stable kebab-case name, and its catalogue
-  severity is its default level; a level (`allow`, `info`, `warn` or `deny`) is
-  set only in the `[lints]` table of a `ridl.toml`, never on the command line
-  and never in source; the registry and the one function that applies levels
-  live in `ridl-core`, and the entry points that report diagnostics call it —
-  `ridl check`, `ridl build`, `ridlc check`, `ridlc build`, the language server
-  and the MCP tool `ridl_check` — while `ridl diff`, `ridl test`,
-  `ridl baseline`, `ridl lock` and the other MCP tools compile with the
-  severities the emit sites chose, so a lint at `deny` never changes whether a
-  workspace compiles. Entering at a workspace member loads it alone, so the
-  root's table does not apply (#529). A diagnostic takes the levels of the
-  directory that owns its file; a file outside the entry point's tree takes the
-  defaults. `ridl check --format sarif` writes a SARIF 2.1.0 log with artifact
-  URIs relative to the working directory. Amends ADR-0002 §4 and ADR-0010
-  decision 1 in place.
+  seven that come partly from the reviewed design (decisions 10, 11 and 12) and
+  partly from the stage driver at implementation (the root-scope rule in 10, the
+  default-level mapping in 12, and 13 to 16; driftsys/ridl#678). Every Warning
+  and Info catalogue code is a lint with a stable kebab-case name, and its
+  catalogue severity is its default level; a level (`allow`, `info`, `warn` or
+  `deny`) is set only in the `[lints]` table of a `ridl.toml`, never on the
+  command line and never in source; the registry and the one function that
+  applies levels live in `ridl-core`, and the entry points that report
+  diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,
+  `ridlc build`, the language server and the MCP tool `ridl_check` — while
+  `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock` and the other MCP tools
+  compile with the severities the emit sites chose, so a lint at `deny` never
+  changes whether a workspace compiles. Entering at a workspace member loads it
+  alone, so the root's table does not apply (#529). A diagnostic takes the
+  levels of the directory that owns its file; a file outside the entry point's
+  tree takes the defaults. `ridl check --format sarif` writes a SARIF 2.1.0 log
+  with artifact URIs relative to the working directory. Amends ADR-0002 §4 and
+  ADR-0010 decision 1 in place.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
