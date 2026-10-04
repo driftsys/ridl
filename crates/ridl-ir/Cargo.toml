@@ -19,6 +19,9 @@ serde.workspace = true
 # `from_json` needs: serde_json's own limit of 128 JSON levels would bind
 # before the crate's documented ceiling of 1,000 (ADR-0014 decision 14).
 serde_json = { workspace = true, features = ["unbounded_depth"] }
+# `catalog_hash` is SHA-256 over the protobuf binary of the reduced package
+# (ADR-0014 decision 15).
+sha2.workspace = true
 
 [build-dependencies]
 pbjson-build.workspace = true

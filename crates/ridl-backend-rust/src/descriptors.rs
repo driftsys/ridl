@@ -113,6 +113,7 @@ fn one_interface(
         )?);
     }
 
+    let catalog_hash = catalog_hash(ctx)?;
     let number = Literal::u32_unsuffixed(interface.number);
     let provisional = interface.provisional;
     let max_buffer = max_size_const(&call_sizes);
@@ -120,8 +121,6 @@ fn one_interface(
 
     let interface_doc = format!(
         "Descriptor for interface `{iface_name}`.\n\n\
-         `CATALOG.hash` is the placeholder `CatalogHash([0u8; 32])` until E16.2 \
-         (driftsys/ridl#378) computes the real catalog hash.\n\n\
          Every `PayloadInfo.max_size` field is `None`. The reading here is that \
          the toolchain cannot size the payload yet, not that the encoding \
          cannot carry it. `ridl-rt`'s own doc comment states the other reading; \
@@ -138,7 +137,7 @@ fn one_interface(
             const CATALOG: &'static ::ridl_rt::contract::CatalogRef =
                 &::ridl_rt::contract::CatalogRef {
                     name: #package_name,
-                    hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
+                    hash: ::ridl_rt::contract::CatalogHash([#(#catalog_hash),*]),
                 };
             const NUMBER: ::ridl_rt::contract::InterfaceNo =
                 ::ridl_rt::contract::InterfaceNo(#number);
@@ -526,6 +525,31 @@ pub(crate) fn query_param_type<'a>(
         Some(request) => Ok(payload_reference(Some(request))),
         None => Err(no_single_param(&query.params, member)),
     }
+}
+
+/// The model's `Catalog.hash` (ADR-0014 decision 15) as 32 `u8` literals,
+/// read from the model and never recomputed, because a plugin receives only
+/// the model. A model whose hash is missing or not 32 bytes long is
+/// malformed: it is refused, not padded.
+pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
+    let hash = ctx
+        .model
+        .catalog
+        .as_ref()
+        .map(|catalog| catalog.hash.as_slice())
+        .unwrap_or_default();
+    if hash.len() != 32 {
+        return Err(GenerateError {
+            message: format!(
+                "malformed codegen model: `Catalog.hash` is {} bytes, not 32",
+                hash.len()
+            ),
+        });
+    }
+    Ok(hash
+        .iter()
+        .map(|byte| Literal::u8_unsuffixed(*byte))
+        .collect())
 }
 
 /// Which of the two reasons a call has no request payload.

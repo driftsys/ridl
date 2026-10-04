@@ -892,7 +892,7 @@ what it stands on are placeholders with a named replacement.
 | Placeholder                                                         | Replaced by               |
 | ------------------------------------------------------------------- | ------------------------- |
 | The transport under the in-process runtime the examples run against | E11.9                     |
-| `CATALOG.hash`, an all-zero `CatalogHash`                           | E16.2 (driftsys/ridl#378) |
+| The catalog check a generated `new` does not yet perform            | E16.5 (driftsys/ridl#381) |
 | Every `PayloadInfo.max_size` field, which is `None`                 | E16.2 (driftsys/ridl#378) |
 | The contract-clause translator                                      | E5.1                      |
 

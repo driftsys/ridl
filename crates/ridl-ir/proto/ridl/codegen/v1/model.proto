@@ -607,7 +607,8 @@ message Service {
 message Catalog {
   // `CatalogRef.name`.
   string package = 1;
-  // 32 bytes; all zero until E16.2 (driftsys/ridl#378).
+  // The 32-byte SHA-256 catalog hash of ADR-0014 decision 15, the value
+  // `ridl_ir::catalog_hash::catalog_hash` returns.
   bytes hash = 2;
   // `Package.retired`, number order.
   repeated RetiredInterface retired = 3;

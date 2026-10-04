@@ -1262,14 +1262,15 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 }
 /**Descriptor for interface `Cabin`.
 
-`CATALOG.hash` is the placeholder `CatalogHash([0u8; 32])` until E16.2 (driftsys/ridl#378) computes the real catalog hash.
-
 Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
 pub struct Cabin;
 impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
-        hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
+        hash: ::ridl_rt::contract::CatalogHash([
+            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
+            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+        ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
     const PROVISIONAL: ::core::primitive::bool = true;
@@ -1472,14 +1473,15 @@ impl ::ridl_rt::contract::Query for CabinAverage {
 }
 /**Descriptor for interface `Horn`.
 
-`CATALOG.hash` is the placeholder `CatalogHash([0u8; 32])` until E16.2 (driftsys/ridl#378) computes the real catalog hash.
-
 Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
 pub struct Horn;
 impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
-        hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
+        hash: ::ridl_rt::contract::CatalogHash([
+            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
+            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+        ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
     const PROVISIONAL: ::core::primitive::bool = true;
@@ -1526,14 +1528,15 @@ impl ::ridl_rt::contract::Signal for HornActive {
 }
 /**Descriptor for interface `Siren`.
 
-`CATALOG.hash` is the placeholder `CatalogHash([0u8; 32])` until E16.2 (driftsys/ridl#378) computes the real catalog hash.
-
 Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
 pub struct Siren;
 impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
-        hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
+        hash: ::ridl_rt::contract::CatalogHash([
+            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
+            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+        ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
     const PROVISIONAL: ::core::primitive::bool = true;
@@ -1592,14 +1595,15 @@ impl ::ridl_rt::contract::Event for SirenTripped {
 }
 /**Descriptor for interface `Valve`.
 
-`CATALOG.hash` is the placeholder `CatalogHash([0u8; 32])` until E16.2 (driftsys/ridl#378) computes the real catalog hash.
-
 Every `PayloadInfo.max_size` field is `None`. The reading here is that the toolchain cannot size the payload yet, not that the encoding cannot carry it. `ridl-rt`'s own doc comment states the other reading; E16.2 reconciles the two.*/
 pub struct Valve;
 impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
-        hash: ::ridl_rt::contract::CatalogHash([0u8; 32]),
+        hash: ::ridl_rt::contract::CatalogHash([
+            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
+            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+        ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
     const PROVISIONAL: ::core::primitive::bool = true;

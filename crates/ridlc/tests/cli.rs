@@ -1357,3 +1357,52 @@ printf '{"files": [{"path": "echo/%s.txt", "text": "base=%s\\n"}], "diagnostics"
         .expect("the plugin's file is written under --out-dir, directories created");
     assert_eq!(echoed, "base=veh.common\n");
 }
+
+/// The `Catalog.hash` that `ridlc build --emit codegen-model` writes for a
+/// package with cross-package references is
+/// `ridl_ir::catalog_hash::catalog_hash` over that package and the other
+/// packages of the build. The build passes every package, the hashed one
+/// included, as `others`; the hash must be the one computed without that
+/// copy (ADR-0014 decision 15).
+#[test]
+fn build_writes_the_catalog_hash_over_the_other_packages_of_the_build() {
+    let entry = Path::new("tests/corpus/veh-cluster");
+    let out = TempDir::new("catalog-hash-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "codegen-model".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the corpus entry must exit 0, stderr:\n{stderr}");
+    let json = std::fs::read_to_string(out.path().join("veh.cluster.codegen.json"))
+        .expect("codegen-model writes <pkg-name>.codegen.json");
+    let model = ridl_ir::codegen::from_json(&json).expect("the model is canonical JSON");
+    let written = model.catalog.expect("a catalog").hash;
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, entry).expect("the corpus entry loads");
+    let cluster = output
+        .checked
+        .iter()
+        .map(|checked| &checked.ir)
+        .find(|ir| ir.name == "veh.cluster")
+        .expect("the entry declares veh.cluster");
+    let others: Vec<&ridl_ir::v2::Package> = output
+        .checked
+        .iter()
+        .map(|checked| &checked.ir)
+        .filter(|ir| ir.name != "veh.cluster")
+        .chain(std::iter::once(&output.std_ir))
+        .collect();
+    let expected = ridl_ir::catalog_hash::catalog_hash(cluster, &others);
+    assert_eq!(written, expected.to_vec());
+    // The interfaces reach `veh.common`, so the scope is part of the hash.
+    assert_ne!(
+        expected,
+        ridl_ir::catalog_hash::catalog_hash(cluster, &[]),
+        "veh.cluster's interfaces reach a declaration of veh.common"
+    );
+}

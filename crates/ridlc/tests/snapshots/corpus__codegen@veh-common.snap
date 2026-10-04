@@ -1454,7 +1454,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
   "services": [],
   "catalog": {
     "package": "veh.common",
-    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "hash": "wdQQXr2wooWK1v/hYizJQahjDToitBMCwHEv9u3LwDQ=",
     "retired": []
   },
   "flatbuffers": {

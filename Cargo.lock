@@ -1871,6 +1871,7 @@ name = "ridl-descriptor"
 version = "0.5.1"
 dependencies = [
  "planus",
+ "ridl-ir",
  "serde",
 ]
 
@@ -1904,6 +1905,7 @@ dependencies = [
  "protox",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

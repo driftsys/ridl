@@ -385,12 +385,18 @@ fn the_face_fixture_carries_the_whole_ipc_floor() {
         );
     }
 
-    // The catalog's placeholder hash (the frame specification §6.1).
+    // The catalog hash (the frame specification §6.1) is the one ADR-0014
+    // decision 15 defines, over the package and the scope the model was
+    // lowered over.
     let catalog = model.catalog.as_ref().expect("a catalog");
-    assert_eq!(catalog.hash.len(), 32, "the hash is 32 bytes");
+    assert_eq!(
+        catalog.hash,
+        ridl_ir::catalog_hash::catalog_hash(&compiled.package, &[]).to_vec(),
+        "the hash is `ridl_ir::catalog_hash::catalog_hash` over the lowered package"
+    );
     assert!(
-        catalog.hash.iter().all(|byte| *byte == 0),
-        "the hash is the placeholder until E16.2 (driftsys/ridl#378)"
+        catalog.hash.iter().any(|byte| *byte != 0),
+        "the hash is not the all-zero placeholder"
     );
 }
 

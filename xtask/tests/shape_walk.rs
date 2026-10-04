@@ -151,6 +151,13 @@ const ALLOWED: &[Allowed] = &[
               field in a buffer, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/tests/golden_hash.rs",
+        lines: 1,
+        why: "a test fixture that numbers the corpus package's named \
+              interfaces, then its services' inline shapes, before it pins \
+              the hash; the hash itself walks `shapes()`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
         lines: 1,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
@@ -161,6 +168,14 @@ const ALLOWED: &[Allowed] = &[
         lines: 1,
         why: "a test case naming the catalog descriptor's own `Catalog.interfaces` \
               field, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-ir/src/catalog_hash.rs",
+        lines: 34,
+        why: "the reduced package's own `interfaces` field, which the hash \
+              fills from a `shapes()` walk, sorts and blanks; the rest are \
+              test fixtures that build or edit a package's named \
+              interfaces",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",

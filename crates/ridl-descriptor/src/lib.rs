@@ -9,6 +9,8 @@
 //! [`verify`].
 
 pub mod generated;
+pub mod hash;
+pub mod number;
 
 use planus::ReadAsRoot;
 
