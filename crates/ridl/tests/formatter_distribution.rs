@@ -64,6 +64,16 @@ fn ec4rs_licence_text_matches_the_upstream_release() {
         format!("{:x}", Sha256::digest(licence.as_bytes())),
         "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac"
     );
+    // Retain the authentic licence, including its final newline, as the last notice.
+    let licence_end = notices.find(licence).unwrap() + licence.len();
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(ec4rs_licence_text(&notices[..licence_end]).as_bytes())
+        ),
+        "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac",
+        "the complete upstream licence must also match at end of file"
+    );
 }
 
 fn ec4rs_licence_text(notices: &str) -> &str {

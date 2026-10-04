@@ -947,6 +947,17 @@ execution.
     include unrelated notices. This change adds no corpus or task edits and runs
     no candidate checks or calibration procedure.
 
+22. **Exercise the licence check when it is the final notice** (PR 2 QUICK
+    review fix). The advisory tests review found that both existing fixtures had
+    later notice sections, so returning an empty string at end of file escaped
+    them. Add one assertion that ends the real notices file immediately after
+    its already hash-verified upstream licence, retaining the final newline, and
+    compares the extracted text with the same unchanged SHA-256. A scratch
+    mutation replacing only the end-of-file fallback with an empty string must
+    fail this assertion. The helper, all notice bytes, corpus sources and tasks
+    remain unchanged. This fixes one untested branch without another review
+    cycle over the QUICK fix or another full gate run.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
