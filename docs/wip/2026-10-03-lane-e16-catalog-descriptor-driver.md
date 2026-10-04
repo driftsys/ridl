@@ -17,7 +17,7 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D5**. D0 is the pull request that added this document; D1
+**THIS SESSION RUNS: D6**. D0 is the pull request that added this document; D1
 re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
 every change and the decisions it took beyond §4). D2 landed as PR #669 on
 2026-10-03. Every buffer is finished with `ridl_descriptor::finish`, not with
@@ -71,7 +71,8 @@ D4 landed as PR #681 (eb36d16b) on 2026-10-04. The plan's types block and Tasks
   `proto_scalar` and `scalar_charge` do. An integer or float backing with no
   width still gives a bounded `Scalar(Unspecified)`, where `proto_scalar` emits
   `string` and `scalar_charge` answers `None`; ridl-sem always sets the width,
-  and Task 6 may align the two.
+  and Task 6 may align the two. (D5 aligned them: such a backing now has no
+  leaf.)
 - The leaf model counts in `u64`; `proto_max` excludes the tag and `Blob`
   excludes the length prefix. Task 6 adds both, and Tasks 6 and 7 narrow to the
   descriptor's `u32` with a checked conversion.
@@ -79,6 +80,44 @@ D4 landed as PR #681 (eb36d16b) on 2026-10-04. The plan's types block and Tasks
   removes it.
 - Debt from the review: #684 (one name resolver; one proto3 width table, which
   Task 6 can take on when it writes the proto3 bound).
+
+D5 landed as PR #686 (d317c96b) on 2026-10-04. Facts D6 needs:
+
+- `size_state(type_name, &ctx, encoding)` is complete. Neither column panics,
+  and no `unimplemented!()` is left in `ridl-descriptor`. `Encoding::ReprC`
+  answers `None`. The lowering (Task 8) calls `named_payload` first and
+  `size_state` only for a payload that is one named type.
+- The proto3 column is `Some` only for a struct or a union payload, and is
+  always `Bounded`. It is `None` for a named scalar, an enum or an enum set. It
+  is also `None` in these cases, among others (the `size_state` rustdoc in
+  `size.rs` has the full list):
+  - an unresolved name;
+  - a member the proto backend refuses (a map key, a map value, an optional
+    array or map, an array of arrays or maps, an enum value outside int32, a
+    field number);
+  - a member with no proto3 leaf (an unbounded `string` or `bytes`, or an
+    integer, float or unit type def with no width);
+  - nesting deeper than `MAX_DEPTH`;
+  - a `u64` overflow, or a bound above `u32::MAX`.
+
+  The backend's name-collision refusals are not reproduced (#690).
+- The FlatBuffers column is `max_size` over `ctx.packages_for(declaring)`. When
+  that answers `None`, the column is `Unbounded` with the cause from
+  `ridl_ir::codegen::fb_unbounded` (now public). It is `None` for an unresolved
+  name or a declaration with no root table.
+- The proto3 scalar table, the map-key set and the field-number limits live in
+  `ridl_ir::projection::proto3`, which the proto backend uses too (#684, second
+  item).
+- The Rust backend's `PayloadInfo.max_size.flatbuffers` is the codegen model's
+  `Payload.flatbuffers_max_size`. `proto3` stays `None` because that backend
+  emits no proto3 codec, and `repr_c` stays `None` until E11.12.
+- `cargo publish -p ridl-descriptor --dry-run` packages the crate, but its
+  verify build fails until the matching `ridl-ir` is on crates.io (publish
+  order, §4 answer 9).
+- The `ridl-backend-rust` dev-dependency of `ridl-descriptor` is a plain path
+  (the `codec_agreement` test). `xtask/tests/shape_walk.rs` allows two lines in
+  `crates/ridl-backend-rust/tests/descriptor_generation.rs`.
+- Debt from the review: #690.
 
 ## 0. How to work in this repository
 
@@ -577,10 +616,46 @@ named.
    for compiled IR, where the width always matches the backing.
 6. **A unit backing with no width has no leaf.** Reason: `proto_scalar` emits
    `string` for it, so a numeric bound would not be an upper bound. An integer
-   or float backing with no width keeps a `Scalar(Unspecified)` leaf (D5 facts
-   above). Cost if wrong: hand-built IR only.
+   or float backing with no width keeps a `Scalar(Unspecified)` leaf. D5
+   reversed this last sentence: such a backing now has no leaf either (§5 D5
+   item 2). Cost if wrong: hand-built IR only.
 7. **An optional named payload (`T?`) is sized as `T`.** Reason: the bound of
    `T` is an upper bound for `T?` in both encodings. Cost if wrong: none found.
 8. **The leaf model uses `#[allow(dead_code)]`, not `#[expect]`.** Reason: the
    tests use the items, so `expect` is unfulfilled under `cfg(test)`. Cost if
    wrong: Task 6 must remember to remove the attributes.
+
+### D5 — PR #686 (d317c96b)
+
+1. **The proto3 scalar table moved to `ridl_ir::projection::proto3`, and the
+   proto backend uses it (#684, second item).** Reason: one table, so the bound
+   and the backend cannot disagree on a scalar. Cost if wrong: a small public
+   module in `ridl-ir` that a later story moves.
+2. **An integer or float type def with no width has no proto3 bound.** Reason:
+   `proto_scalar` emits `string` for it, which has no bound. Cost if wrong: none
+   for compiled IR, which always carries a width.
+3. **The Rust backend fills only the `flatbuffers` column of `EncodedSizes`,
+   from the codegen model. `proto3` stays `None`.** Reason: a plugin reads only
+   the model, and the model's value is `max_size`'s. The backend emits no proto3
+   codec, and `ridl-rt`'s `EncodedSizes` doc says a backend writes `None` for a
+   codec it does not emit. Cost if wrong: a field appended to the model's
+   `Payload` (`proto3_max_size`) and one emitter line.
+4. **The failing `cargo publish -p ridl-descriptor --dry-run` is a publish-order
+   fact, not a defect.** The verify build needs the `ridl-ir` APIs that D3, D4
+   and D5 added or made public. Reason: §4 answer 9 publishes `ridl-ir` first.
+   Cost if wrong: none; the release workflow publishes in that order.
+5. **The proto3 sizer reproduces the backend's member-level refusals as an
+   absent state, but not its name-collision refusals.** Reason: those refusals
+   depend on names across the whole package. Copying them would be a second
+   implementation, and #690 moves them into `ridl_ir::projection::proto3`. Cost
+   if wrong: until #690, a payload in a package the proto backend refuses on a
+   name collision has a proto3 bound for an encoding nobody can produce.
+6. **The proto3 sizer remembers each named struct and union by (declaring
+   package, name) within one call.** Reason: a diamond of shared types took
+   exponential time. Cost if wrong: none found; the guard against excessive
+   nesting depth now depends on the order in which types are visited (#690).
+7. **The review's pass 2 Important findings were fixed after pass 2 without a
+   third pass.** All four were tests or docs, with no change to executable
+   behaviour, and each new test was checked by mutation. Reason: two passes is
+   the cap, and filing them as debt would have left a misleading doc on `main`.
+   Cost if wrong: about 300 lines of tests and docs that no seat reviewed.
