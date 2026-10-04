@@ -17,7 +17,7 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D6**. D0 is the pull request that added this document; D1
+**THIS SESSION RUNS: D7**. D0 is the pull request that added this document; D1
 re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
 every change and the decisions it took beyond §4). D2 landed as PR #669 on
 2026-10-03. Every buffer is finished with `ridl_descriptor::finish`, not with
@@ -118,6 +118,43 @@ D5 landed as PR #686 (d317c96b) on 2026-10-04. Facts D6 needs:
   (the `codec_agreement` test). `xtask/tests/shape_walk.rs` allows two lines in
   `crates/ridl-backend-rust/tests/descriptor_generation.rs`.
 - Debt from the review: #690.
+
+D6 landed as PR #692 (a8ad508e) on 2026-10-04 and closed #381. Facts D7 needs:
+
+- `ridl_descriptor::lower(package, others) -> Result<Vec<u8>, LowerError>` is
+  re-exported at the crate root. `LowerError::ZeroNumber` reaches the user as an
+  I/O error with exit 2.
+- `Emit::Catalog` is the ninth emit value. The `--emit` summary line in
+  `crates/ridlc/src/main.rs` and the help census test in
+  `crates/ridlc/tests/cli.rs` already name `catalog`. The book does not.
+  `docs/book/cli-reference.md` shows eight values in its `ridl build` and
+  `ridlc build` help transcripts, which Task 11's census covers.
+  `docs/book/getting-started.md` has an emit table of seven rows ("Seven emit
+  targets exist today", without `codegen-model`), which Task 11 step 5 covers
+  but for the `codegen-model` row. `docs/book/cli-reference.md` also says "one
+  file per package per `--emit` target", which is not true for `catalog`; that
+  sentence is in neither Task 11 nor #382, so D7 adds it to its census.
+- `Emit::Catalog` is classed as a code emit, so a build with `--emit catalog`
+  alone keeps `ridl.std` in `others` and hashes as the Rust face does. A test
+  pins it. The cost is a codegen request that nothing reads (#693).
+- `crates/ridl/tests/describe_cli.rs` exists with nine tests and the helpers
+  `TempDir`, `ridl`, `corpus`, `build` and `the_catalog`. `TempDir::new` empties
+  a leftover directory first. A new test must use a label the file does not
+  already use. `xtask/tests/shape_walk.rs` allows the file's reads of
+  `Catalog.interfaces`; a new read there changes the count.
+- A payload's `type_name` is written in the typl syntax over the IR's canonical
+  values. Examples: `[T; N]` for an exact-length array, `[K: V; min..max]` for a
+  map, `km/h [0..250 step 0.5]` for an inline scalar, `<T>` for a stream and
+  `A | E` for a fallible reply. Task 10's JSON view prints these strings
+  unchanged.
+- The Rust backend emits no descriptor type and no face for a service's inline
+  shape. The catalog descriptor does carry the inline shape, under the service's
+  dotted name.
+- The generated `Bind::new` and `serve` compare the port's catalog with the
+  interface's `CATALOG` and panic on a mismatch, and both are `#[track_caller]`
+  (ADR-0023 decision 8). This is a breaking face change; #693 asks for the
+  ridlc-gen-kotlin heads-up.
+- Debt from the review: #693.
 
 ## 0. How to work in this repository
 
@@ -659,3 +696,59 @@ named.
    behaviour, and each new test was checked by mutation. Reason: two passes is
    the cap, and filing them as debt would have left a misleading doc on `main`.
    Cost if wrong: about 300 lines of tests and docs that no seat reviewed.
+
+### D6 — PR #692 (a8ad508e)
+
+1. **A face bound to a port of another catalog panics. `Bind::new` and `serve`
+   do not return an error** (ADR-0023 decision 8, committed before the code).
+   Reason: `Bind::new` returns `Self` (ADR-0021 decision 19). A fallible binding
+   is a breaking `ridl-rt` 0.x minor release, would change every call site, and
+   would break `blocking::Client::new(port).with_timeout(t)`. A mismatch is an
+   error in how the program was assembled; it is fixed by regenerating the face,
+   not handled while the program runs. A program that must not panic runs
+   `port.catalog() == <Iface as Interface>::CATALOG` first. The generated
+   rustdoc of each `new` and `serve` says so under `# Panics`. Cost if wrong:
+   the breaking `ridl-rt` change later, and the panic removed.
+2. **`serve` is checked too, not only the constructors.** Reason: a provider
+   served over a handler of another catalog reads and settles the wrong slots,
+   which is the same defect. `ServeError` has no variant for it, and adding one
+   needs a `ridl-rt` release that every emitted manifest must require. Cost if
+   wrong: two generated call sites and their tests.
+3. **`check_catalog`, every `Bind::new` and `serve` are `#[track_caller]`.**
+   Reason: the panic then reports the program's binding call, which is the line
+   to fix. A test pins the location. Cost if wrong: none found; the attribute is
+   accepted under edition 2021 at `ridl-rt`'s rust-version.
+4. **`Emit::Catalog` is a code emit.** Reason: this keeps `ridl.std` in `others`
+   for `--emit catalog` alone, so the descriptor's hash equals the face's. Cost
+   if wrong: a codegen request is built that nothing reads, which costs build
+   time only (#693).
+5. **The plan's doc comment for `Emit::Catalog` was not used.** Reason: it cited
+   a `docs/wip/` path, which gardening breaks with no gate to catch it, and it
+   is clap's `--help` text. The doc is now a sentence for users. Cost if wrong:
+   one comment.
+6. **`spell` writes the typl syntax over the IR's canonical values.** It writes
+   `[T; N]` for an exact-length array and `[K: V; min..max]` for a map. It
+   writes decimals as the IR holds them, not as the source literals. Reason: the
+   plan's forms (`[T; N..N]`, `{K: V; ..}`) matched no source form. Cost if
+   wrong: `type_name` strings, which no reader parses.
+7. **The help census in `crates/ridlc` names `catalog` now. The book does not.**
+   Reason: the census test failed without the change. The book transcripts are
+   D7's Task 11. Cost if wrong: none; D7 updates the book.
+8. **The descriptor-hash test checks every `CatalogHash` the face carries, and
+   needs at least one.** Reason: the Rust backend emits no descriptor type for
+   an inline service shape, so the corpus face has one hash, not two. Cost if
+   wrong: none; the inline-shape gap is documented in `descriptors.rs`.
+9. **The `/review` passes replaced the plan skill's final review over the whole
+   branch.** Reason: the stage instructions require `/review`, and running both
+   would review the same diff twice. Cost if wrong: one review seat fewer.
+10. **Pass 2's Important finding was fixed after pass 2. A tests-seat quick pass
+    reviewed that fix.** The finding was a missing test for the `ridl.std` hash
+    dependency. Reason: the lane driver's instruction for this stage. The quick
+    pass caught every mutation it ran, and its one Minor finding is on #693.
+    Cost if wrong: none found.
+11. **One failure of `descriptor_hash_equals_the_rust_face_hash` was treated as
+    interference, not a flaky test.** It failed once on pass 1's first run. It
+    did not fail in 32 later runs by the review seat or in 90 runs by the agent
+    that fixed pass 1's findings. During pass 1, review seats were mutating the
+    shared worktree in place. Cost if wrong: an intermittent CI failure, which
+    would show in CI.
