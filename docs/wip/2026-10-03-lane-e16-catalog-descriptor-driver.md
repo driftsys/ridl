@@ -17,7 +17,7 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D4**. D0 is the pull request that added this document; D1
+**THIS SESSION RUNS: D5**. D0 is the pull request that added this document; D1
 re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
 every change and the decisions it took beyond §4). D2 landed as PR #669 on
 2026-10-03. Every buffer is finished with `ridl_descriptor::finish`, not with
@@ -46,6 +46,39 @@ order in planus 1.3.0. The planus crates are pinned to `=1.3.0`. D3 landed as PR
   edits a package's `.interfaces` field changes the count; a struct-literal
   field written `interfaces: vec![..]` does not.
 - Debt from the review: #679.
+
+D4 landed as PR #681 (eb36d16b) on 2026-10-04. The plan's types block and Tasks
+5 to 7 were amended to the as-built interface in that pull request (its
+"Re-baseline 2026-10" section has a D4 paragraph). Facts D5 needs:
+
+- Name resolution is relative to a home package. `Ctx::resolve(home, name)`
+  returns the declaration and the package that declares it, through
+  `ridl_ir::projection::flatbuffers::Packages::resolve`, the projection's own
+  resolver, made public. `leaf_of_name` and `leaf_of_field_type` take the home
+  package, and the composite leaves are struct variants that carry it
+  (`Leaf::Struct { def, home }`, and the same for `Union`, `Tuple`, `Array` and
+  `Map`).
+- Task 7 calls `max_size` with `ctx.packages_for(declaring)`, which returns the
+  projection's `Packages` rooted at the declaring package (`None` for a package
+  outside the scope). `ctx.packages()` is rooted at the root package only.
+- `proto3::state` and `flatbuffers::state` are `unimplemented!()` placeholders.
+  Tasks 6 and 7 replace them. Nothing calls `size_state` before Task 8, and D5
+  must land before the next release tag, because the crate is published.
+- A string or bytes with no `len_max` has no leaf (unsizable), as in `max_size`.
+  `string_max_bytes` returns `Option<u64>`. A compiled package always carries
+  `len_max`.
+- `leaf_of_type_def` projects by the width first, then by the backing, as
+  `proto_scalar` and `scalar_charge` do. An integer or float backing with no
+  width still gives a bounded `Scalar(Unspecified)`, where `proto_scalar` emits
+  `string` and `scalar_charge` answers `None`; ridl-sem always sets the width,
+  and Task 6 may align the two.
+- The leaf model counts in `u64`; `proto_max` excludes the tag and `Blob`
+  excludes the length prefix. Task 6 adds both, and Tasks 6 and 7 narrow to the
+  descriptor's `u32` with a checked conversion.
+- The leaf model carries `#[allow(dead_code)]` until Task 6 calls it; Task 6
+  removes it.
+- Debt from the review: #684 (one name resolver; one proto3 width table, which
+  Task 6 can take on when it writes the proto3 bound).
 
 ## 0. How to work in this repository
 
@@ -512,3 +545,42 @@ named.
     the hash; the golden test pins only the reduction and the encoding.**
     Reason: the golden test reads a frozen IR snapshot. Cost if wrong: a pinned
     value from compiled source (#679).
+
+### D4 — PR #681 (eb36d16b)
+
+1. **Name resolution is relative to the home package, through the projection's
+   resolver.** `Sizer::resolve` became the public `Packages::resolve` in
+   `ridl-ir`, and `Ctx::resolve(home, name)` returns the declaring package with
+   the declaration. This changes the plan's `Ctx::resolve(name)`. Reason: the
+   plan resolved every bare name in the root package, so a bare name inside an
+   imported declaration reached the wrong declaration or none, which can give a
+   bound below the true size. The lane delegate accepted it. Cost if wrong: one
+   more argument at each call site.
+2. **A string or bytes with no `len_max` is unsizable in both columns**, not
+   1024 or 256 bytes as the plan wrote. Reason: `max_size` answers `None` for
+   the same shapes, and the two columns must agree on what is unsizable (answer
+   1). The lane delegate accepted it. Cost if wrong: hand-built IR with no
+   `len_max` has no proto3 row; a compiled package always carries `len_max`.
+3. **`Ctx::packages_for(declaring)` hands Task 7 the projection's view rooted at
+   the declaring package.** Reason: `max_size` resolves a declaration's inner
+   names in `Packages.package`, so the root-rooted view gave a wrong bound for
+   an imported type (the review reproduced it). Ctx precomputes one view per
+   package. Cost if wrong: a few dozen references per `Ctx`.
+4. **The proto3 and FlatBuffers placeholders panic (`unimplemented!`) until
+   Tasks 6 and 7.** Reason: with `None` bodies, no test could tell a wrong
+   `repr(C)` routing apart. Cost if wrong: a caller that lands before D5 panics;
+   the plan's order puts the first caller in Task 8 (D6), and a release tag
+   before D5 would publish the panic.
+5. **`leaf_of_type_def` projects by the width first**, as `proto_scalar` and
+   `scalar_charge` do. Reason: the bound must hold for the scalar the backend
+   emits; `from_binary` reads an IR file without validation. Cost if wrong: none
+   for compiled IR, where the width always matches the backing.
+6. **A unit backing with no width has no leaf.** Reason: `proto_scalar` emits
+   `string` for it, so a numeric bound would not be an upper bound. An integer
+   or float backing with no width keeps a `Scalar(Unspecified)` leaf (D5 facts
+   above). Cost if wrong: hand-built IR only.
+7. **An optional named payload (`T?`) is sized as `T`.** Reason: the bound of
+   `T` is an upper bound for `T?` in both encodings. Cost if wrong: none found.
+8. **The leaf model uses `#[allow(dead_code)]`, not `#[expect]`.** Reason: the
+   tests use the items, so `expect` is unfulfilled under `cfg(test)`. Cost if
+   wrong: Task 6 must remember to remove the attributes.
