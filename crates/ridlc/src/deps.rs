@@ -288,4 +288,65 @@ mod tests {
             edges(&[("b", &["a", "ext", "foreign.deep"])])["b"]
         );
     }
+
+    #[test]
+    fn package_edges_counts_interface_and_service_targets_independently() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("ridl.toml"),
+            "[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n",
+        )
+        .unwrap();
+        for (name, source) in [
+            ("a", "package a\ntype Reading: integer [0..10]\n"),
+            (
+                "b",
+                "package b\ntype Level: integer [0..10]\ninterface Sensor {\n  signal level: Level @[100ms..1s]\n}\n",
+            ),
+            (
+                "c",
+                "package c\nimport a.Reading\nimport b.Sensor\ninterface Monitor {\n  signal reading: Reading @[100ms..1s]\n}\nservice c.sensor: Sensor\n",
+            ),
+        ] {
+            std::fs::create_dir(dir.path().join(name)).unwrap();
+            std::fs::write(
+                dir.path().join(name).join("ridl.toml"),
+                format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+            )
+            .unwrap();
+            std::fs::write(dir.path().join(name).join(format!("{name}.ridl")), source).unwrap();
+        }
+        let output = crate::compile_workspace(&mut RidlDatabase::default(), dir.path()).unwrap();
+        assert!(
+            !output
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == ridl_core::diag::Severity::Error)
+        );
+        let graph = super::package_edges(&output.checked, None);
+        assert!(
+            graph["c"].contains("a"),
+            "the interface payload creates the only edge to a"
+        );
+        assert!(
+            graph["c"].contains("b"),
+            "the service shape creates the only edge to b"
+        );
+        assert_eq!(graph, edges(&[("a", &[]), ("b", &[]), ("c", &["a", "b"])]));
+    }
+
+    #[test]
+    fn workspace_package_edges_keeps_dotted_keys_without_matching_external_prefixes() {
+        let complete = edges(&[
+            (
+                "consumer",
+                &["team.types", "team.types.external", "team.remote"],
+            ),
+            ("team.types", &[]),
+        ]);
+        assert_eq!(
+            super::workspace_package_edges(&complete),
+            edges(&[("consumer", &["team.types"]), ("team.types", &[])])
+        );
+    }
 }

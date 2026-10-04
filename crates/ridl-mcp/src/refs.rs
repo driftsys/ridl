@@ -665,4 +665,21 @@ mod tests {
         let out = references(&snap(), &input("HEALTH_PATTERN")).unwrap();
         assert_eq!(pairs(&out), [("fx.a", "HealthCode", None)]);
     }
+
+    #[test]
+    fn dependencies_preserve_all_workspace_dependents_before_package_filtering() {
+        let snap = snapshot(
+            &fixture("ws"),
+            &[OverlayInput {
+                path: format!("{}/a/sub/sub.ridl", fixture("ws")),
+                source: "package fx.a.sub\nimport fx.a.Reading\nstruct Sample {\n  reading: Reading\n}\n".into(),
+            }],
+        ).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        for package in [None, Some("fx.a")] {
+            let output = deps(&snap, package);
+            let a = output.packages.iter().find(|p| p.name == "fx.a").unwrap();
+            assert_eq!(a.dependents, ["fx.a.sub", "fx.b"]);
+        }
+    }
 }
