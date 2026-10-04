@@ -435,7 +435,7 @@ the test file.
 and `DUPLICATE_SHAPE_MIN_VARIANTS: usize = 2` (the search start; Task 14 sets
 the final values).
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
   - `duplicate_struct_is_reported_on_the_later_declaration`:
     `a.Point3 {x,y,z: float}` and `b.Vec3 {x,y,z: float}`; one diagnostic at
     `b.Vec3`, message ``"`b.Vec3` has the same 3 fields as `a.Point3`"``, label
@@ -451,13 +451,13 @@ the final values).
     `{Low, High}` and `{Cold, Hot}` both reach the two-variant threshold but
     produce no duplicate diagnostic.
   - `shapes_below_the_threshold_are_not_reported`: two one-field structs — none.
-- [ ] **Step 2: Run** — expect FAIL.
-- [ ] **Step 3: Add the Info row**, the `expected` pair and the book row.
-- [ ] **Step 4: Implement** §4.3: key each struct by its sorted (name, canonical
+- [x] **Step 2: Run** — expect FAIL.
+- [x] **Step 3: Add the Info row**, the `expected` pair and the book row.
+- [x] **Step 4: Implement** §4.3: key each struct by its sorted (name, canonical
       qualified type) list, each enum by its sorted variant names; report every
       declaration after the first of a key, ordered by package name then source
       order. The number in the message is the field or variant count.
-- [ ] **Step 5: Run** — expect PASS. **Step 6: Commit** —
+- [x] **Step 5: Run** — expect PASS. **Step 6: Commit** —
       `feat(ridlc): add the duplicate-shape lint`.
 
 ### Task 9: `low-cohesion-interface`
@@ -880,6 +880,62 @@ reserved codes, corpus budgets, four PRs and approval stages.
     exact message and primary range, and the existing empty label list.
     Replacing first-wins insertion with overwrite makes this test fail. This
     adds coverage without changing the label contract.
+
+25. **Task 8: compare canonical nominal type identities** (2026-10-04). Checked
+    references already resolve import aliases, but local references can remain
+    bare. Qualify every named reference with its owning package, recursively
+    through tuples, arrays, maps and streams, before using the existing IR JSON
+    serialization as a type key. Optionality and container bounds remain part of
+    the key; field ordinals, initial values and docs do not. Named types retain
+    nominal identity rather than being expanded into their definitions. Losing
+    qualification would merge distinct types from different packages; the
+    same-simple-name negative fixture and imported alias positive fixture detect
+    that error.
+26. **Task 8: preserve source order within sorted packages** (2026-10-04). Sort
+    checked packages by name and traverse each package's checked declarations in
+    their existing source order, retaining the first shape as the
+    representative. All later matches label that first declaration. Compare
+    sorted field pairs and sorted variant names, ignoring enum values.
+    Reordering declarations by their names would select the wrong
+    representative; the `Z`, `A`, `B` enum fixture detects that error.
+27. **Task 8: synchronize the catalogue's derived records** (approved ownership
+    extension, 2026-10-04). Register TYPL-224 at provisional Info, with both
+    search-start thresholds at 2, in the catalogue, expected lint set, book
+    table and typl reference table. Add its SARIF rule and adjust only the two
+    derived result indices. The family overview's required sections were
+    checked; its existing typl §16.3 and book pointer already covers this row.
+
+28. **Task 8: allow the observed duplicate enum on its book fence** (approved
+    scope extension, 2026-10-04). The covering CLI suite reports TYPL-224 on
+    `veh.powertrain.GearPosition` at `getting-started.md:1039`, matching
+    `veh.common.GearPosition`. Add only TYPL-224 to the fence starting at line
+    1013, preserving its RIDL-406 and TYPL-223 allowances and all source text.
+    The book harness verifies that the allowance is necessary. Task 14 must
+    revalidate and remove this precise added allowance if calibration drops
+    duplicate-shape or its chosen variant threshold suppresses this finding.
+
+29. **Task 8: synchronize an existing backend test's Task 7 finding** (approved
+    test-only scope extension, 2026-10-04). The broad workspace suite found six
+    FlatBuffers tests whose shared `cruise_package` helper requires no
+    diagnostics. Its source now legitimately reports one TYPL-223 Info on
+    `setTarget`. Preserve the source and assert exactly that code, lint
+    identity, severity, message, fixture path, byte range 1768..1777, token, and
+    empty labels and fixits. All other diagnostics remain rejected, and the
+    separate cross-package helper still requires an empty list. The affected
+    tests rerun against these assertions. Task 14 must remove this specific
+    expectation if calibration drops the abbreviation check, or update its exact
+    provisional Info assertion if calibration changes the catalogue severity.
+
+30. **Task 8: synchronize the same finding in backend integration helpers**
+    (approved test-only scope extension, 2026-10-04). The resumed workspace
+    suite passes the FlatBuffers unit tests and reaches the equivalent
+    no-diagnostic assertion in
+    `crates/ridl-backend-flatbuffers/tests/corpus.rs`. Its counterpart in
+    `crates/ridl-backend-proto/tests/corpus.rs` shares the fixture. Both helpers
+    now assert the exact TYPL-223 finding of decision 29 only for `cruise.ridl`;
+    all other fixture diagnostics must still be empty. Source and
+    generated-output snapshots remain unchanged. Task 14 must synchronize these
+    two exact expectations if the check drops or its severity changes.
 
 ## Pull requests
 

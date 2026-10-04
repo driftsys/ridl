@@ -708,3 +708,132 @@ fn abbreviation_chooses_the_first_qualified_expansion_independent_of_input_order
         assert!(found[0].labels.is_empty(), "{:?}", found[0].labels);
     }
 }
+
+fn shapes(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|d| d.code.as_str() == "TYPL-224")
+        .collect()
+}
+
+#[test]
+fn duplicate_struct_is_reported_on_the_later_declaration() {
+    let a = "package a\nstruct Point3 { x: float, y: float, z: float }\n";
+    let b = "package b\nstruct Vec3 { z: float, x: float, y: float }\n";
+    let out = workspace(&[("b", b), ("a", a)]);
+    let found = shapes(&out.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
+    assert_eq!(
+        found[0].message,
+        "`b.Vec3` has the same 3 fields as `a.Point3`"
+    );
+    assert_eq!(found[0].severity, Severity::Info);
+    assert_eq!(
+        site(&out.sources, found[0].primary),
+        ("b/source.ridl".into(), 17..21)
+    );
+    assert_eq!(found[0].labels.len(), 1);
+    assert_eq!(text_at(&out.sources, found[0].labels[0].span), "Point3");
+}
+
+#[test]
+fn duplicate_enum_is_reported() {
+    let source = "package a\nenum Z { Low = 0, High = 1 }\nenum A { High = 5, Low = 7 }\nenum B { Low = 8, High = 9 }\n";
+    let out = ridlc::check_source("a.ridl", source);
+    assert_no_errors(&out.diagnostics);
+    let found = shapes(&out.diagnostics);
+    assert_eq!(
+        found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(),
+        [
+            "`a.A` has the same 2 variants as `a.Z`",
+            "`a.B` has the same 2 variants as `a.Z`"
+        ]
+    );
+    for (d, token) in found.iter().zip(["A", "B"]) {
+        assert_eq!(text_at(&out.sources, d.primary), token);
+        assert_eq!(text_at(&out.sources, d.labels[0].span), "Z");
+    }
+}
+
+#[test]
+fn same_simple_type_name_in_two_packages_is_not_a_duplicate() {
+    let a = "package a\nstruct Pose { x: float }\nstruct Entry { pose: Pose, index: integer }\n";
+    let b = "package b\nstruct Pose { enabled: boolean }\nstruct Entry { pose: Pose, index: integer }\n";
+    let out = workspace(&[("a", a), ("b", b)]);
+    assert!(shapes(&out.diagnostics).is_empty(), "{:?}", out.diagnostics);
+}
+
+#[test]
+fn same_variant_count_with_different_names_is_not_a_duplicate() {
+    let out = ridlc::check_source(
+        "a.ridl",
+        "package a\nenum First { Low = 0, High = 1 }\nenum Second { Cold = 0, Hot = 1 }\n",
+    );
+    assert_no_errors(&out.diagnostics);
+    assert!(shapes(&out.diagnostics).is_empty(), "{:?}", out.diagnostics);
+}
+
+#[test]
+fn shapes_below_the_threshold_are_not_reported() {
+    let out = ridlc::check_source(
+        "a.ridl",
+        "package a\nstruct First { x: float }\nstruct Second { x: float }\nenum One { Low = 0 }\nenum Two { Low = 1 }\n",
+    );
+    assert_no_errors(&out.diagnostics);
+    assert!(shapes(&out.diagnostics).is_empty(), "{:?}", out.diagnostics);
+}
+
+#[test]
+fn duplicate_shape_canonicalizes_import_aliases_and_nested_local_types() {
+    let a =
+        "package a\nstruct Pose { x: float }\nstruct First { poses: [Pose; 2], index: integer }\n";
+    let b = "package b\nimport a.Pose as Location\nstruct Second { index: integer, poses: [Location; 2] }\nstruct Optional { index: integer, poses: [Location; 2]? }\nstruct Larger { index: integer, poses: [Location; 3] }\n";
+    let out = workspace(&[("b", b), ("a", a)]);
+    assert_eq!(
+        shapes(&out.diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`b.Second` has the same 2 fields as `a.First`"]
+    );
+}
+
+#[test]
+fn duplicate_shape_excludes_standard_declarations() {
+    let standard =
+        "package ridl.std\nstruct First { x: float, y: float }\nenum Mode { Low = 0, High = 1 }\n";
+    let user =
+        "package a\nstruct Second { x: float, y: float }\nenum Choice { Low = 0, High = 1 }\n";
+    let (diagnostics, _) = abbreviation_source_set(&[("ridl.std", standard), ("a", user)]);
+    assert!(shapes(&diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+#[test]
+fn duplicate_shape_orders_packages_independently_of_source_set_order() {
+    let a = "package a\nstruct Z { x: boolean, y: boolean }\nstruct A { y: boolean, x: boolean }\n";
+    let b = "package b\nstruct B { x: boolean, y: boolean }\n";
+    let c = "package c\nstruct C { x: boolean, y: boolean }\n";
+    for packages in [
+        vec![("c", c), ("b", b), ("a", a)],
+        vec![("a", a), ("b", b), ("c", c)],
+    ] {
+        let (diagnostics, sources) = abbreviation_source_set(&packages);
+        let found = shapes(&diagnostics);
+        assert_eq!(
+            found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(),
+            [
+                "`a.A` has the same 2 fields as `a.Z`",
+                "`b.B` has the same 2 fields as `a.Z`",
+                "`c.C` has the same 2 fields as `a.Z`",
+            ]
+        );
+        let first = a.find("Z {").unwrap();
+        for d in found {
+            assert_eq!(
+                site(&sources, d.labels[0].span),
+                ("a/source.ridl".into(), first..first + 1)
+            );
+            assert_eq!(d.labels[0].message, "`a.Z` declared here");
+        }
+    }
+}

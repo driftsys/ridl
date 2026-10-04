@@ -503,6 +503,11 @@ diag_codes! {
         TYPL_223 = "TYPL-223", Info,
             "inconsistent identifier abbreviation", lint = "inconsistent-abbreviation";
 
+        /// Two differently named declarations have equal field or variant sets.
+        /// Emitted by the design lint pass.
+        TYPL_224 = "TYPL-224", Info,
+            "duplicate declaration shape", lint = "duplicate-shape";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
         /// the checker for struct fields and collections in a `.ridl` file
@@ -1903,6 +1908,7 @@ mod tests {
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-222", "inconsistent-unit"),
             ("TYPL-223", "inconsistent-abbreviation"),
+            ("TYPL-224", "duplicate-shape"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
             ("RIDL-100", "missing-timing"),

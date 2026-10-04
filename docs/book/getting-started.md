@@ -1010,7 +1010,7 @@ not reach into a struct-typed one. And the engine state field is named
 `engineState`: `state` is a reserved word family-wide, so it cannot be an
 identifier.
 
-```ridl,allow=RIDL-406,allow=TYPL-223
+```ridl,allow=RIDL-406,allow=TYPL-223,allow=TYPL-224
 package veh.powertrain
 
 type RPM: /min [0.0..8000.0 step 10.0]

@@ -526,6 +526,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-224",
+              "name": "duplicate-shape",
+              "shortDescription": {
+                "text": "duplicate declaration shape"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "TYPL-301",
               "shortDescription": {
                 "text": "stream type `<T>` outside interaction position"
@@ -1399,7 +1409,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 62,
+          "ruleIndex": 63,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1464,7 +1474,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 146,
+          "ruleIndex": 147,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

@@ -8,6 +8,7 @@ use ridl_core::package::Package;
 use ridl_ir::v2;
 use ridl_sem::{CheckedPackage, Resolution};
 
+mod shapes;
 mod sites;
 mod units;
 mod words;
@@ -58,5 +59,6 @@ pub(crate) struct Ctx<'a> {
 pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
     let mut diagnostics = units::check(ctx);
     diagnostics.extend(words::check(ctx));
+    diagnostics.extend(shapes::check(ctx));
     diagnostics
 }
