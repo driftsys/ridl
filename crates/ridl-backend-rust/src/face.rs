@@ -34,9 +34,9 @@
 //! - `Provider`, the trait the application implements, with one method per
 //!   command and query;
 //! - `check_catalog`, private, which panics unless a port's catalog is the
-//!   interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` of `Client` and
-//!   of `Publisher`, and `serve`, call it once, before they store or use the
-//!   port; the blocking face reaches it through the async face;
+//!   interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new`
+//!   of the face, and `serve` where the interface emits one, call it once,
+//!   before they store or use the port; the blocking face reaches it through the async face;
 //! - `serve`, which registers the interface's calls with the handler and
 //!   returns the future that settles every claim, and resolves only when the
 //!   handler port fails;
@@ -1000,8 +1000,9 @@ fn check_catalog(iface: &Ident, iface_name: &str) -> TokenStream {
     let doc = format!(
         "Panics unless `found` is the catalog the face of interface \
          `{iface_name}` was generated from, the interface's `CATALOG` \
-         (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before \
-         they store or use the port."
+         (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where \
+         the interface emits one, call it once, before they store or use the \
+         port."
     );
     quote! {
         #[doc = #doc]

@@ -356,7 +356,7 @@ fn serve(iface: &Ident, iface_name: &str) -> TokenStream {
          `Ok(())`, so a loop that also does other work can call this \
          repeatedly. With `None` it returns only on a failure. `h` is dropped \
          when this returns.\n\n{panics}",
-        panics = catalog_panics_doc(iface, "h", "the comparison is made once, by `super::serve`",),
+        panics = catalog_panics_doc(iface, "h", "the comparison is made once, by `super::serve`"),
     );
     quote! {
         #[doc = #doc]

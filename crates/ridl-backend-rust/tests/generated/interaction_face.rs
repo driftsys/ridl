@@ -1718,7 +1718,7 @@ pub mod cabin {
     ///Identifies one sent query `average` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
-    ///Panics unless `found` is the catalog the face of interface `Cabin` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    ///Panics unless `found` is the catalog the face of interface `Cabin` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Cabin as ::ridl_rt::contract::Interface>::CATALOG;
@@ -3023,7 +3023,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
 }
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
-    ///Panics unless `found` is the catalog the face of interface `Horn` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    ///Panics unless `found` is the catalog the face of interface `Horn` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Horn as ::ridl_rt::contract::Interface>::CATALOG;
@@ -3191,7 +3191,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 }
 ///The generated interaction face of interface `Siren`.
 pub mod siren {
-    ///Panics unless `found` is the catalog the face of interface `Siren` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    ///Panics unless `found` is the catalog the face of interface `Siren` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Siren as ::ridl_rt::contract::Interface>::CATALOG;
@@ -3490,7 +3490,7 @@ pub mod valve {
     ///Identifies one sent query `pressure` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct PressureCorrelation(pub ::ridl_rt::port::Correlation);
-    ///Panics unless `found` is the catalog the face of interface `Valve` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). `Bind::new` and `serve` call it once, before they store or use the port.
+    ///Panics unless `found` is the catalog the face of interface `Valve` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Valve as ::ridl_rt::contract::Interface>::CATALOG;
