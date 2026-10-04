@@ -693,10 +693,11 @@ mapping until blind labelling and adjudication are complete.
 
 ## Decisions taken during execution
 
-These implementation choices were approved by the user on 2026-10-04 and applied
-to this plan following that approval. Implementation has not started. They
-complete the reviewed interfaces and tests while keeping D-1 to D-9, the
-reserved codes, corpus budgets, four PRs and approval stages.
+The first seven implementation choices were approved by the user on 2026-10-04
+and applied to this plan following that approval. They complete the reviewed
+interfaces and tests while keeping D-1 to D-9, the reserved codes, corpus
+budgets, four PRs and approval stages. Later entries record choices made during
+execution.
 
 1. **Preserve the complete graph and derive a workspace-only view** (Tasks 5,
    10–11). External qualifiers remain part of the released MCP output. Metrics
@@ -736,6 +737,278 @@ reserved codes, corpus budgets, four PRs and approval stages.
    12), and call `compatible` a diff verdict (Task 4). If wrong, help, docs and
    internal callers would disagree; alias parity prevents this with no new
    `ridl` subcommand or flag.
+
+8. **Pin the ROS 2 port and its complete selected inventory** (Task 1).
+   `ros2/common_interfaces` is pinned to
+   `d8dde22160f26cf4fd8f1f8dcd819637b1b88405`, `ros-navigation/navigation2` to
+   `d7bf2ac06fe778c21c6141eb49b4d3e2c0c82d3a`, and the required dependency
+   `ros2/rcl_interfaces` to `99aea442813391cc20344c5b4c79e5191bf7f2c7`. The
+   subset includes all 105 definitions in `std_msgs`, `geometry_msgs`,
+   `sensor_msgs`, `nav_msgs` and `std_srvs`; ten `nav2_msgs` messages
+   (`BehaviorTreeLog`, `BehaviorTreeStatusChange`, `Costmap`, `CostmapMetaData`,
+   `Particle`, `ParticleCloud`, `SpeedLimit`, `TrackingFeedback`, `VoxelGrid`,
+   `WaypointStatus`); six services (`ClearEntireCostmap`, `GetCostmap`,
+   `IsPathValid`, `LoadMap`, `ManageLifecycleNodes`, `SaveMap`); seven actions
+   (`AssistedTeleop`, `BackUp`, `FollowPath`, `FollowWaypoints`,
+   `NavigateToPose`, `Spin`, `Wait`); and `builtin_interfaces.Time` and
+   `Duration` as required dependency types. The 130 definitions contain 1,672
+   upstream physical lines, leaving room for syntax translation within the
+   2,500-line source budget. The selected package licences are Apache-2.0;
+   navigation2's root licence index routes to `nav2_msgs/package.xml`, and no
+   selected definition has an override. A complete source-to-output mapping in
+   the provenance makes completeness review reproducible. If this subset exceeds
+   the budget, change it explicitly before porting further; deleting comments or
+   stubbing types would invalidate the evidence.
+
+9. **Retain whitespace within upstream comments** (Task 1). Six comment lines in
+   the ROS 2 port retain their upstream trailing spaces: two in
+   `builtin_interfaces/messages.typl` and four in `nav_msgs/messages.typl`.
+   Porting rule 1 requires verbatim comment preservation; independent Claude
+   review confirmed the source comments, and a direct comparison matched all six
+   lines after changing only the comment delimiter. `git diff --check` reports
+   them and exits 2. The mandated corpus guard, `just check` and
+   `just link-check` pass; no build gate is omitted. Removing those spaces would
+   change the reviewed upstream text, so they remain part of the corpus.
+
+10. **Freeze the second port and its protocol evidence** (Task 2). The
+    definitions input is pinned to `527637cb39cb4e52293bea40441810b53f23ff25`;
+    official protocol and licence documentation is pinned to
+    `7412790c2a38162a3f31fa1c2fdac9263d65a1d3`. The frozen subset contains 27
+    message declarations and 16 required enums, 43 declarations in total, with
+    1,130 selected upstream physical lines. One large enum retains five selected
+    entries; its other 165 entries are explicitly outside the subset. Every
+    other selected enum is complete, including a parameter dependency reached
+    through selected enum entries. Original include layers remain separate
+    packages, and five interfaces follow documented protocol boundaries. The
+    [corpus provenance](../../evals/corpus/mavlink/PROVENANCE.md) records exact
+    names, declaration mappings, protocol choices and representation limits.
+    Selected XML definitions are MIT; generator code is excluded. The full
+    upstream COPYING is retained byte-exactly as licence evidence. Protocol
+    documentation is cited without translating its separately licensed prose. If
+    the frozen subset cannot fit the 2,500-line budget, change it explicitly
+    before continuing; removing comments, stubbing dependencies or inventing
+    protocol boundaries would invalidate the evidence. No candidate design check
+    runs on the corpus before the Task 4 rubrics are committed.
+
+11. **Complete the independent port review before committing** (Task 2). The
+    external reviewer checked all 43 selected declarations and 20 detailed
+    samples. Its advisory correction removed one translator-created duplicate
+    comment while preserving the single upstream comment, and documented a
+    frozen import used only by parameter metadata. The corrected provenance
+    records 1,695 physical source lines and all 165 omitted enum entries. A
+    second external review checked the correction and the omitted-entry list
+    exhaustively. Other port sources and the licence remain byte-identical to
+    the previously reviewed files. Upstream whitespace remains verbatim. The
+    [corpus provenance](../../evals/corpus/mavlink/PROVENANCE.md) records the
+    exact sites and representation choices. If this review boundary is wrong,
+    the corpus would require another preservation review.
+
+12. **Freeze the third port before translation** (Task 3). The definitions are
+    pinned to `923692329b46bd70cda88137030b662af2765770`. The mandatory selected
+    subtree includes its entire include closure and all eight declared station
+    instances. Every selected input carries MPL-2.0; the port remains MPL-2.0
+    inside this repository. The optional complete second subtree adds 608
+    upstream physical lines before translation, so it is excluded under the
+    1,000-line budget forecast rather than partially selected or stubbed. The
+    complete source-to-output mapping and representation limits are recorded in
+    the third port's provenance. If this forecast is too conservative, the cost
+    is a smaller third corpus, which may be extended only by an explicit subset
+    decision and another independent preservation review. No candidate check
+    runs on any actual corpus before the Task 4 rubrics are committed.
+
+13. **Complete the third port's infrastructure and preservation review** (Task
+    3). The initial output allowlist omitted the 14 member manifests the
+    workspace loader requires. The controller corrected the allowlist to 31
+    exact files, preserving the frozen 14 branch packages and source subset. The
+    external porter completed that corrected brief. Independent review checked
+    all 31 signals, 30 setter commands and 14 interfaces, sampled at least 20
+    declarations field by field, and accepted every recorded deviation. The
+    controller accepted that review before guard completion. The reviewed source
+    contains 759 physical lines; the combined corpus contains 4,845. The guard
+    enforces compilation, provenance, exact selected directories and
+    physical-line budgets. Field preservation is established by independent
+    review, not by a new golden copy of every declaration. If this boundary is
+    wrong, another preservation review is required before changing the port.
+
+14. **Draft the seed independently from candidate checks** (Task 4). The ten
+    drafts use five review tasks, two documentation-only evolution tasks and
+    three distinct design requirements drawn from already pinned public protocol
+    documentation. Review item numbers remain stable identifiers for later
+    recall joins. Every lint expectation is empty until Task 14; the validator
+    accepts catalogue names only and uses diff verdicts rather than change
+    categories. Public documentation supplies independently paraphrased factual
+    requirements with revision-specific citations only; no documentation prose
+    is copied or translated. The complete task set, including design
+    requirements, contains one task from the third source set out of ten. The
+    validator adds the existing workspace TOML dependency to the CLI test
+    target, with the corresponding lockfile dependency entry and no dependency
+    version change. Its red run fails because the task directory does not yet
+    exist. Formatting may wrap a rubric item, so the validator checks the
+    initial line of each item paragraph rather than treating an indented
+    continuation as a separate item. If these boundaries are wrong, independent
+    review and user approval must revise the drafts before commitment; candidate
+    checks remain excluded until that commitment.
+
+15. **Resolve independent seed review against the local public sources** (Task
+    4). The reviewer could not fetch revision-specific public pages, so the
+    correction review receives exact local pinned documentation paths and the
+    licence evidence. The drafts now distinguish an enforced integer range from
+    comment-only unit metadata, add separate bit-preservation and
+    name-independent selector criteria, remove a review prompt's concern
+    checklist, align the discovery prompt with fault suppression and both
+    connection states, and cite the source project's documentation licence in
+    all design prompts. Original rubric item numbers remain unchanged; new
+    independent items are appended. Frozen source remains unchanged; candidate
+    output and calibration data are neither changed nor read. If the corrections
+    still misstate the sources, the scoped second independent review must
+    identify the remaining objections before user approval.
+
+16. **Extend structural evolution coverage after the user's approval to revise**
+    (Task 4). The user accepted replacing the second documentation-only
+    evolution task with a compatible additive API query while retaining the
+    first and the other eight tasks. The replacement appends an index-only
+    convenience query using existing payload and scalar types, with a
+    nonnegative-index contract, and preserves every existing interaction
+    ordinal. An ordinary compiler check on a scratch copy reports no Error; the
+    actual JSON diff reports compatible with one interaction_appended change.
+    This checks grammar and compatibility against the pre-candidate branch
+    without running candidate design checks, metrics or calibration. A scoped
+    external review receives the revised task, frozen source, pinned public
+    documentation and scratch feasibility evidence. The user's approval
+    authorizes this revision; approval of the revised set is still required
+    before commitment. If this extension is infeasible or the rubric excludes
+    another valid implementation, the scoped review must identify that before
+    the revised set is presented for approval.
+
+17. **Approve and commit the complete corrected seed** (Task 4). On 2026-10-04
+    the user replied "lgtm" to the refreshed approval packet for all ten tasks,
+    including the corrected review and design criteria and the structural second
+    evolution task. Independent external reviews of the corrections and the
+    structural replacement reported no remaining objections and were accepted.
+    This approves commitment of the full set rather than only the earlier
+    coverage revision. Rubric item numbers become stable task-id:item-number
+    identifiers at commitment and must not be renumbered by later calibration.
+    All lint expectations remain empty until Task 14. No candidate design check,
+    metric dump, finding, label or calibration data was run or read before this
+    commitment; final corpus compilation uses only the pre-candidate branch.
+
+18. **Validate every authored rubric item rather than each paragraph** (Task 4
+    review fix, round 1). Fresh review found that paragraph-first-line
+    validation could accept adjacent numbered items with an invalid second
+    marker or a duplicate item ID. Regression tests reproduce both omissions
+    against the old guard. The repaired guard uses Markdown item events and
+    source offsets to validate every authored number and requirement marker,
+    including adjacent items without blank separators; indented wrapped text
+    remains a continuation. Rubrics contain consecutive, unindented, non-nested
+    numbered items with the three specified markers. This changes the guard
+    only: all approved task files and committed rubric IDs remain unchanged. If
+    Markdown parsing hides an item or formatting is rejected incorrectly, the
+    adjacent valid, invalid marker, duplicate ID and wrapped continuation
+    regressions must detect it.
+
+19. **Exercise catalogue validation with isolated task metadata** (Task 4 review
+    fix, round 2). The approved task set intentionally has empty lint
+    expectations until Task 14, so its successful validation did not exercise
+    catalogue membership or string-entry rejection. Three otherwise valid
+    synthetic tasks now pin acceptance of one released catalogue lint and
+    rejection of an unknown name and a non-string entry. Controlled mutations
+    deleting the validation loop and inverting membership each make two new
+    regressions fail; the guard file is restored byte for byte after each
+    mutation. No candidate-name exemption or broad malformed-task suite is
+    introduced, and all approved task files and stable rubric IDs remain
+    unchanged. If catalogue validation is later weakened, these focused
+    regressions must fail even while the seed's lint arrays remain empty.
+
+20. **Integrate current main before the corpus PR review** (PR 2 integration).
+    Merge main at `112da94d863860091be0542594c5791b039e2594` into the corpus
+    branch at `9689d0a4a3ff9fd6966b66fbba6ad6e646c21339`, preserving every
+    automatic upstream change. Resolve only the CLI manifest conflict by
+    retaining the corpus guard's TOML dev-dependency and upstream's snapshot
+    dev-dependency, descriptor runtime dependency and updated description. This
+    makes the approved corpus reviewable against current main without rewriting
+    its commits or changing the thirty approved task files or corpus sources.
+    The lockfile merges automatically and is checked with locked metadata and
+    the thirteen corpus tests. If either side's dependencies are lost, the CLI
+    or corpus guard can fail to build; static checks and the focused tests must
+    detect that before commitment. The integration adds no version bump and runs
+    no candidate check, metric dump, finding or calibration procedure.
+
+21. **Bound the existing upstream licence check to its notice section** (PR 2
+    integration fix). The full verification run found that the distribution test
+    hashed the complete suffix after the upstream licence header, including all
+    newly appended corpus notices. The upstream licence bytes and their recorded
+    SHA-256 remain unchanged. Extract the licence up to the next generic notice
+    separator, or end of file when it is the last notice, preserving its final
+    newline. Keep every notice byte and the original hash. A focused regression
+    checks that modified and truncated licence text still fails that hash
+    comparison; release archive checks continue to compare the complete notices
+    file byte for byte. If the separator convention changes, the extraction must
+    be revised and reviewed; the exact upstream hash must not be updated to
+    include unrelated notices. This change adds no corpus or task edits and runs
+    no candidate checks or calibration procedure.
+
+22. **Exercise the licence check when it is the final notice** (PR 2 QUICK
+    review fix). The advisory tests review found that both existing fixtures had
+    later notice sections, so returning an empty string at end of file escaped
+    them. Add one assertion that ends the real notices file immediately after
+    its already hash-verified upstream licence, retaining the final newline, and
+    compares the extracted text with the same unchanged SHA-256. A scratch
+    mutation replacing only the end-of-file fallback with an empty string must
+    fail this assertion. The helper, all notice bytes, corpus sources and tasks
+    remain unchanged. This fixes one untested branch without another review
+    cycle over the QUICK fix or another full gate run.
+
+23. **Preserve the approved seed and exercise diff expectations** (PR 707
+    full-review fix wave). Keep the ten approved seed IDs and their five review,
+    two evolve and three design kinds, and require a review for every selected
+    corpus. Additional valid tasks remain permitted under the original minimum
+    count and maximum share rules. The whole-set guard checks these constraints
+    after each task passes the existing metadata validator. Focused regressions
+    replace a seed review with an extra design, change seed kinds without
+    renaming, remove review coverage and accept a future addition. Isolated
+    mutations must fail when seed or coverage checks are removed. Diff fixtures
+    accept all three recognized evolve verdicts and reject missing or unknown
+    verdicts and a verdict on either other kind, with literal failure messages.
+    Removing either rejection must fail the corresponding fixtures. A monotonic
+    fixture counter prevents concurrent tests from reusing a timestamp-based
+    directory. Correct only the provenance aggregate sentence to describe the
+    4,845 physical source lines after all three ports; the earlier test handoff
+    remains a historical statement. All thirty approved task files, ported
+    sources and licence bytes remain unchanged. If the seed identity policy
+    changes later, it requires a deliberate guard update; adding tasks alone
+    does not. This wave runs focused tests, isolated mutations, Clippy and
+    static checks, with no candidate checks, new review, commit or push by the
+    implementer. The controller inspects the output before committing, pushing
+    and requesting fresh pass 2 and CI.
+
+24. **Run configured commit checks without the shared stash wrapper** (PR 707
+    fix commit). The current pre-commit configuration contains only `prim .`;
+    commit-msg contains only `git std lint --file {msg}`. Run both exact
+    commands before staging the three authorized files, save the checked tree,
+    and commit with `GIT_STD_SKIP_HOOKS=1` because the shared fix-mode stash
+    wrapper previously failed when another worktree changed the stash stack. No
+    other worktree or stash is touched, and no configured check is omitted. If
+    the hook configuration changes, the controller must run any added checks
+    first.
+
+25. **Test replacement of every approved seed identity** (PR 707 final pass-2
+    correction). The second review confirmed that reducing the required evolve
+    and design counts leaves the existing fixture tests passing. Keep the
+    correct validator unchanged and add an independently enumerated fixture for
+    each of the ten approved seed IDs. Replace only its ID with a fresh ID of
+    the same kind, retaining all other metadata, the total count, corpus share
+    and review coverage. Each replacement must fail with the precise
+    missing-seed message, including the later evolve and design IDs. The
+    existing future-addition acceptance test remains. Isolated mutations that
+    reduce both counts, or the design count alone, must now fail the new test;
+    restore and verify each experiment. This final correction adds test
+    maintenance for ten fixed identities and requires a deliberate fixture
+    update if the approved seed changes. It does not alter tasks or expand the
+    validator policy. Under the two-pass review policy, the controller commits
+    and pushes the correction and requires fresh CI, without a third review
+    pass. Run focused validation tests with the corpus compiler test excluded,
+    Clippy and static checks; no corpus checks, rubric authoring, full gate or
+    review dispatch occurs in this correction.
 
 ## Pull requests
 

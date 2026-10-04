@@ -58,14 +58,54 @@ fn ec4rs_licence_text_matches_the_upstream_release() {
         )),
         "the ec4rs attribution must accompany its licence"
     );
-    let (_, licence) = notices.split_once(
-        "The following licence text is copied from that release's LICENSE.txt.\n-------------------------------------------------------------------------------\n\n"
-    ).expect("the ec4rs licence follows its attribution");
+    let licence = ec4rs_licence_text(&notices);
     // SHA-256 of LICENSE.txt at ec4rs source commit 14bbca047324cedd5791b89f858eb5e17e6b0b3c.
     assert_eq!(
         format!("{:x}", Sha256::digest(licence.as_bytes())),
         "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac"
     );
+    // Retain the authentic licence, including its final newline, as the last notice.
+    let licence_end = notices.find(licence).unwrap() + licence.len();
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(ec4rs_licence_text(&notices[..licence_end]).as_bytes())
+        ),
+        "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac",
+        "the complete upstream licence must also match at end of file"
+    );
+}
+
+fn ec4rs_licence_text(notices: &str) -> &str {
+    let (_, licence) = notices.split_once(
+        "The following licence text is copied from that release's LICENSE.txt.\n-------------------------------------------------------------------------------\n\n"
+    ).expect("the ec4rs licence follows its attribution");
+    // A later notice starts at a separator; preserve the licence's final newline.
+    licence
+        .split_once(
+            "\n-------------------------------------------------------------------------------\n",
+        )
+        .map_or(licence, |(licence, _)| licence)
+}
+
+#[test]
+fn ec4rs_licence_check_rejects_modified_or_truncated_text() {
+    let notices = std::fs::read_to_string(repo().join("THIRD-PARTY-NOTICES.txt")).unwrap();
+    for (original, replacement) in [
+        ("Version 2.0, January 2004", "Version 3.0, January 2004"),
+        ("   limitations under the License.\n", ""),
+    ] {
+        assert!(notices.contains(original));
+        let changed = notices.replacen(original, replacement, 1);
+        assert_ne!(
+            format!(
+                "{:x}",
+                Sha256::digest(ec4rs_licence_text(&changed).as_bytes())
+            ),
+            "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac",
+            "the upstream licence must remain byte-exact"
+        );
+    }
 }
 
 #[cfg(unix)]

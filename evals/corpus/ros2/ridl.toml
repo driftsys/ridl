@@ -1,0 +1,10 @@
+[workspace]
+members = [
+  "std_msgs",
+  "geometry_msgs",
+  "sensor_msgs",
+  "nav_msgs",
+  "std_srvs",
+  "nav2_msgs",
+  "builtin_interfaces",
+]

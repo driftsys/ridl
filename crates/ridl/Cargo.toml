@@ -44,6 +44,7 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+toml.workspace = true
 # `describe_cli` snapshots the JSON `ridl describe` prints.
 insta.workspace = true
 jsonschema.workspace = true

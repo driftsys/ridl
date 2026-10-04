@@ -1,0 +1,7 @@
+id = "design-0001"
+kind = "design"
+title = "Design component discovery"
+
+[expect]
+compiles = true
+lints = []

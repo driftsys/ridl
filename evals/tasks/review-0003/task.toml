@@ -1,0 +1,8 @@
+id = "review-0003"
+kind = "review"
+corpus = "mavlink"
+title = "Review mission transfer contracts"
+
+[expect]
+compiles = true
+lints = []

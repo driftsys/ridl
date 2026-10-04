@@ -1,0 +1,5 @@
+package minimal
+
+interface HeartbeatProtocol {
+  signal heartbeat: Heartbeat
+}
