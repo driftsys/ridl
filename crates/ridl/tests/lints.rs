@@ -349,6 +349,65 @@ fn member_build_writes_nothing_when_another_member_has_an_error() {
     assert!(written.is_empty(), "the build wrote: {written:?}");
 }
 
+/// A build entered at a member, while another member holds an RSDL-7xx
+/// error, writes the packages and the system without the blocked deployment
+/// (rsdl reference §13). The build exits 1 and says that another member has
+/// an error, without showing it.
+#[test]
+fn member_build_exits_1_when_another_member_leaves_out_a_deployment() {
+    let dir = TempDir::new("member-build-rsdl");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"demo\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("a/a.typl", "package a\ntype Level: integer [0..3]\n");
+    dir.write(
+        "demo/ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "demo/lane.ridl",
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    // `Panel` is not placed in `Bad`: RSDL-701 blocks that deployment only.
+    dir.write(
+        "demo/topology.rsdl",
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n\
+         deployment Good for Vehicle { machine A { Lane, Panel } }\n\
+         deployment Bad for Vehicle { machine A { Lane } }\n",
+    );
+    let out = TempDir::new("member-build-rsdl-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        dir.path().join("a").as_os_str(),
+    ]);
+
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("another member of the workspace has an error"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("RSDL-701"), "{stderr}");
+    assert!(
+        out.path().join("a.ir.json").is_file(),
+        "the packages are written"
+    );
+    let json = std::fs::read_to_string(out.path().join("veh.demo.Vehicle.system.json"))
+        .expect("the system is written");
+    assert!(json.contains("Good") && !json.contains("\"Bad\""), "{json}");
+}
+
 /// A member entry resolves an import of a sibling member, from a relative
 /// entry inside the member as well (`ridl check .` from `a`).
 #[test]

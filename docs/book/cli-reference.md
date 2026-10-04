@@ -117,8 +117,10 @@ defaults to the current directory. A `PATH` inside a workspace member loads the
 whole workspace whose `members` lists the member (ADR-0002 §4): the root's
 `[lints]`, `[defaults].timing` and `[imports]` apply, imports of sibling members
 resolve, and the report holds only the diagnostics of files under the member.
-`ridl build` on a member also writes the whole workspace, and writes nothing
-while another member has an error. `--frozen` is the same flag
+`ridl build` on a member also writes the whole workspace. An error in another
+member makes it exit 1 with one error that says so; it then writes nothing, or,
+for an RSDL-7xx error, leaves that deployment out of the system. The workspace
+root's `.ridl/baseline/` and `ridl.lock` serve a member entry too. `--frozen` is the same flag
 [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
 commands share one implementation and render byte-identical diagnostics on the
 same input. It now carries this description word for word under `ridl` too —

@@ -808,16 +808,6 @@ pub fn run_build_with(
     } else {
         drop_allowed_by_default(&mut diagnostics);
     }
-    if outside_scope.iter().any(blocks_every_artifact) {
-        diagnostics.push(error_diagnostic(
-            "",
-            "the build wrote nothing, because another member of the workspace has an error; \
-             run `ridl check` on the workspace root to see it"
-                .to_string(),
-            FileId::DETACHED,
-            TextRange::default(),
-        ));
-    }
 
     // A build must not emit artifacts for a workspace that failed: code
     // generation over error-bearing IR produces invalid or misleading output,
@@ -830,7 +820,26 @@ pub fn run_build_with(
     // blocks the lowering of its own deployment only. Every package and the
     // system's other deployments are sound, so they are written, and the
     // error still makes the build exit 1.
-    let succeeded = !diagnostics.iter().any(blocks_every_artifact);
+    //
+    // For an entry inside a member, the other members' diagnostics are not
+    // reported, but they gate the same way. Any error among them makes the
+    // build exit 1 with one detached error that says so: either nothing was
+    // written, or (an RSDL-7xx error) a deployment was left out of the system.
+    let succeeded = !diagnostics.iter().any(blocks_every_artifact)
+        && !outside_scope.iter().any(blocks_every_artifact);
+    if outside_scope
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        diagnostics.push(error_diagnostic(
+            "",
+            "another member of the workspace has an error, so this build wrote nothing or left \
+             out what that error blocks; run `ridl check` on the workspace root to see it"
+                .to_string(),
+            FileId::DETACHED,
+            TextRange::default(),
+        ));
+    }
     if succeeded {
         std::fs::create_dir_all(out_dir)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();

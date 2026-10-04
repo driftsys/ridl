@@ -308,6 +308,9 @@ impl ServerState {
     /// cold, from-disk load in the server's lifetime; every later recompute
     /// reuses these inputs. On an error no field of the state changes; the
     /// salsa inputs the failed load created stay in the database, unused.
+    /// A load that reads no package and whose root `ridl.toml` draws an
+    /// error (a TOML syntax error, for example) is an error too, so it is
+    /// shown like a manifest that cannot be read.
     ///
     /// An open overlay whose path the loaded workspace contains (a file
     /// opened before its `ridl.toml` existed) moves its buffer onto the
@@ -323,6 +326,20 @@ impl ServerState {
             lints,
             report_scope: _,
         } = load_workspace(&mut self.db, dir)?;
+        if workspace.packages(&self.db).is_empty()
+            && let Some(root) = find_root(dir)
+        {
+            let manifest = root.join("ridl.toml").to_string_lossy().into_owned();
+            if let Some(error) = diagnostics.iter().find(|diagnostic| {
+                diagnostic.severity == Severity::Error
+                    && sources.path(diagnostic.primary.file) == Some(manifest.as_str())
+            }) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("`{manifest}` is not a valid manifest: {}", error.message),
+                ));
+            }
+        }
         for package in workspace.packages(&self.db) {
             for file in package.files(&self.db) {
                 self.files.insert(file.path(&self.db).clone(), *file);

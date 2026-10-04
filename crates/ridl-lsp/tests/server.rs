@@ -1039,6 +1039,35 @@ fn a_member_with_an_unparsable_root_manifest_shows_one_error() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// The editor is opened at a workspace member whose root `ridl.toml` has a
+/// TOML syntax error: the load reads no package, so it is a load error. It is
+/// shown once and names the root manifest.
+#[test]
+fn a_member_with_a_root_manifest_syntax_error_shows_one_error() {
+    let dir = TempDir::new("member-syntax-root");
+    dir.write("ridl.toml", "[workspace\nmembers = [\"app\"]\n");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app = uri_of(&dir.write("app/lib.typl", APP));
+    let (client, server) = start(uri_of(&dir.path().join("app")));
+
+    did_open(&client, &app, APP);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    let manifest = dir.path().join("ridl.toml").display().to_string();
+    assert!(
+        shown[0].message.contains(&format!("`{manifest}`")),
+        "the message names the root manifest: {}",
+        shown[0].message,
+    );
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// The editor is opened at a directory whose `ridl.toml` cannot be read:
 /// the initialize notice shows the error, and the first `didOpen` under the
 /// same manifest does not show it again (issue #529, gap 2).
