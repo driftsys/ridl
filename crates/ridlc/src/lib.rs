@@ -894,14 +894,22 @@ pub fn run_build_with(
         // The lowered system, beside the package IR, for each IR dump emit
         // (rsdl reference §13). An error in the closure has already stopped
         // the build above, so the lowering is `None` here only when the
-        // workspace declares no `system`. `ridl.std` is checked here even
-        // when no code emit checked it above, because the region hashes must
-        // equal the hashes a `--emit catalog` build writes; the check is a
-        // memoized query, so a build that already ran it pays only for a copy
-        // of the IR.
+        // workspace declares no `system`. The region hashes must equal the
+        // hashes a `--emit catalog` build writes, so `ridl.std` is in their
+        // scope whenever a package references it: the `std_ir` above when a
+        // code emit computed it, otherwise checked here.
         if emits.iter().any(|emit| emit.system_dump_suffix().is_some()) {
-            let std_package_ir = check_package(&db, workspace, std, std).ir;
-            if let Some(lowered) = lower_workspace_system(&system, &packages, &std_package_ir) {
+            let checked_std;
+            let hash_std = match &std_ir {
+                Some(std_ir) => Some(std_ir),
+                None if references_std => {
+                    checked_std = check_package(&db, workspace, std, std).ir;
+                    Some(&checked_std)
+                }
+                None => None,
+            };
+            if let Some(mut lowered) = lower_system(&system, &packages) {
+                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
                 write_system_emits(out_dir, &lowered, emits, &mut diagnostics)?;
             }
         }
@@ -1222,14 +1230,24 @@ pub fn lower_workspace_system(
 ) -> Option<ridl_ir::v2::System> {
     let mut lowered = lower_system(system, packages)?;
     let others = catalog_scope(packages, references_std(packages).then_some(std_ir));
+    embed_catalog_hashes(&mut lowered, packages, &others);
+    Some(lowered)
+}
+
+/// Sets each region's hash of `lowered` to the catalog hash of its package,
+/// computed over `others`, which [`catalog_scope`] builds.
+fn embed_catalog_hashes(
+    lowered: &mut ridl_ir::v2::System,
+    packages: &[&ridl_ir::v2::Package],
+    others: &[&ridl_ir::v2::Package],
+) {
     for region in &mut lowered.regions {
         let package = packages
             .iter()
             .find(|package| package.name == region.catalog)
             .expect("a region's catalog is a package of the workspace");
-        region.hash = ridl_ir::catalog_hash::catalog_hash(package, &others).to_vec();
+        region.hash = ridl_ir::catalog_hash::catalog_hash(package, others).to_vec();
     }
-    Some(lowered)
 }
 
 /// Whether any package of the workspace names a declaration of `ridl.std`.
@@ -1243,8 +1261,9 @@ fn references_std(packages: &[&ridl_ir::v2::Package]) -> bool {
 /// The packages a package of the build is resolved against when the build
 /// writes it: every checked package of the workspace, then `ridl.std` when
 /// it is given. A backend and the catalog descriptor read it as `others`, and
-/// the catalog hash is computed over it. The order is part of the contract:
-/// the descriptor's hash and a region's hash are computed over one list.
+/// the catalog hash is computed over it. The descriptor's hash and a region's
+/// hash are computed over the same set of packages. The order of the list does
+/// not change the hash, which keys every declaration by its qualified name.
 fn catalog_scope<'a>(
     packages: &[&'a ridl_ir::v2::Package],
     std_ir: Option<&'a ridl_ir::v2::Package>,

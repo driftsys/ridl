@@ -139,9 +139,9 @@ and #677 landed.
   change a shared file when; each lane's own spec decides the design. The
   coordination issue is #328. Lane A (`ridl-rt` 0.1.0) landed; its own
   design/plan pair is archived — see
-  [`../archive/README.md`](../archive/README.md). Lane B (rsdl) landed except
-  for story E6.17, the catalog hash per region; its plan
-  (`2026-09-15-rsdl-plan.md`) is archived too, and its durable records are
+  [`../archive/README.md`](../archive/README.md). Lane B (rsdl) landed, story
+  E6.17, the catalog hash per region, last; its plan (`2026-09-15-rsdl-plan.md`)
+  is archived too, and its durable records are
   [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
   [the rsdl implementation technote](../technotes/rsdl-implementation.md). The
   state of the other two lanes is on #328.

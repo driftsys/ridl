@@ -1247,6 +1247,10 @@ mod tests {
             ]
         );
 
+        // The catalog hash is an input from ridl (rsdl §13): the lowering
+        // leaves it empty for the driver to embed.
+        assert!(system.regions.iter().all(|region| region.hash.is_empty()));
+
         assert_eq!(
             grant_rows(&system),
             [

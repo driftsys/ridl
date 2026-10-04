@@ -824,7 +824,7 @@ fn each_region_carries_its_catalog_hash() {
 
 /// A region whose catalog reaches a `ridl.std` type: the region hash is the
 /// descriptor's, which covers that type, and a build that emits only the IR
-/// (no code emit, so the build itself never checks `ridl.std`) writes the same
+/// (no code emit, so only the system write checks `ridl.std`) writes the same
 /// hash.
 #[test]
 fn a_region_hash_covers_the_standard_types_its_catalog_reaches() {
