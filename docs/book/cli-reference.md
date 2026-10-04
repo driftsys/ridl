@@ -212,8 +212,9 @@ default level as `defaultConfiguration.level`. Each result has the code as its
 message, and one location; each label becomes a related location. Columns
 count Unicode code points (`columnKind` is `unicodeCodePoints`). The log
 carries no fix-its, which the JSON output carries, and no `helpUri`. A
-diagnostic with no source file, such as a manifest or lockfile diagnostic, has
-no location. An artifact URI is relative to the checked path — the directory
+diagnostic with no source file, such as a lockfile or remote-fetch diagnostic
+(MANI-1xx), has no location. An uncoded diagnostic has no `ruleId` and no
+`ruleIndex`. An artifact URI is relative to the checked path — the directory
 given, or the parent directory of a file given — with `/` separators; a file
 outside that path keeps its path as it is. Run `ridl check --format sarif`
 from the repository root, with no `PATH` or with `.`, so that the URIs are
@@ -323,7 +324,9 @@ exactly as it would with no baseline present. A workspace whose only errors
 are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
 declaration without an entry has the published shape of the orphan entry's
 interface, the desk check adds a label to that RIDL-409 naming the
-[`ridl lock --rename`](#ridl-lock) command to run.
+[`ridl lock --rename`](#ridl-lock) command to run. A lint raised to `deny` in
+`[lints]` is an error for the exit code but does not stop the desk check: the
+run reports the denied lint and the RIDL-407 warnings together, and exits 1.
 
 ### `ridl baseline`
 
