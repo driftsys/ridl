@@ -27,19 +27,18 @@ Version: 0.1.0 — Draft
 > this document.**
 >
 > **Specified, not built.** No compiler in this repository accepts rxdl. This
-> reference lands as normative with epic E7.1; ridl's boundary-model core (E3)
-> is its precondition. E3.4 is parked; see
-> `docs/archive/roadmap-landed-record.md`.
+> reference lands as normative with the unrestricted profile; ridl's
+> boundary-model core is its precondition. Part of that core is parked; see
+> `docs/ROADMAP.md`.
 >
 > **Scope, as of 2026-09-12.** rxdl stays a member of the family, and the part
 > of it the plan carries is narrower than this document. **The unrestricted
 > profile covers types, interfaces and wiring in one file**, with the
-> per-package tightening of §9 — roadmap story E7.1, which the current release
-> plan sequences. **The model layer of that profile, the domain spellings of §3
-> to §5, and the bindings they generate wait for rmdl**: the roadmap parks E7's
-> ecosystem half (E7.2 to E7.6) and the spellings with their bindings (E7.7 to
-> E7.9) as one block, reopened by rmdl. Nothing here is retired, only partly
-> deferred. Recorded in
+> per-package tightening of §9, which the current release plan sequences. **The
+> model layer of that profile, the domain spellings of §3 to §5, and the
+> bindings they generate wait for rmdl**: the roadmap parks the ecosystem half
+> of rxdl and the spellings with their bindings as one block, reopened by rmdl.
+> Nothing here is retired, only partly deferred. Recorded in
 > [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
 > §3.2.
 
@@ -371,9 +370,9 @@ interface Cluster {
 ```
 
 Obligation attributes are omitted above; ridl §3.3 carries the working
-spellings, which settle with E3.4. The point of the example is that four
-families sit in one interface, each declaring what it corresponds to, and that
-the first word of every line says which.
+spellings, which settle with the boundary model. The point of the example is
+that four families sit in one interface, each declaring what it corresponds to,
+and that the first word of every line says which.
 
 ## Appendix B — Prior Art: uxil and uxdl
 

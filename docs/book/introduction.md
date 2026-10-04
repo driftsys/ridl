@@ -23,12 +23,12 @@ interaction families (ADR-0012).
 
 Three layers of the family have a working toolchain in this repository:
 
-- **typl** — the vocabulary layer (epic E1): compiler, `ridl fmt`, an LSP
+- **typl** — the vocabulary layer: compiler, `ridl fmt`, an LSP
   server, and a VS Code extension.
-- **ridl** — the interface layer over it (epic E2): the five interaction kinds,
+- **ridl** — the interface layer over it: the five interaction kinds,
   timing annotations, contracts, interfaces and services, a TypeScript code
   generator beside the Rust one, and `ridl diff`.
-- **rsdl** — the architecture layer (epic E6): components, the system,
+- **rsdl** — the architecture layer: components, the system,
   distributions and deployments, checked against the rsdl reference and lowered
   to the IR beside the package IR, and `ridl diff` at the system. See
   [Describing a system](rsdl.md).

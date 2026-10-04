@@ -12,21 +12,19 @@ request is written under are
 [the IR specification](../specification/ir-specification.md) §3 (what canonical
 fixes), §6 (the compatibility rule) and §7 (versioning, and the two fields a
 request leads with). The reasoning behind the model the request carries is
-[the codegen model design note](../wip/2026-09-22-codegen-model-design.md), and
-the sequencing is [the lane P driver](../wip/2026-09-22-lane-p-driver.md), whose
-decisions D-P1 (the parity test runs over the Rust backend, not the TypeScript
-one), D-P2 (the request carries the model, never the raw IR) and D-P3 (the
-plugin never touches the filesystem) this record implements.
+[the codegen model design note](../wip/2026-09-22-codegen-model-design.md). This
+record implements three rules: the parity test runs over the Rust backend, not
+the TypeScript one; the request carries the model, never the raw IR; and the
+plugin never touches the filesystem.
 
 **What is built and what is not.** The contract, the in-process host over every
 in-tree backend, the process host, the `--plugin` flag and the two reference
-plugins are built, and both parity tests run under `just test`. Stage P4 of the
-driver ported the **Rust backend** onto the lowered model, so it reads the
-request's model and nothing else and is run as a plugin, `ridlc-gen-rust`; the
-parity test over it is the exit test D-P1 asks for. The other three in-tree
-backends — TypeScript, proto3 and FlatBuffers — still read the raw IR through
-`RawIr` and are not plugins; each is ported by its own story. §6 says what each
-parity test proves.
+plugins are built, and both parity tests run under `just test`. The **Rust
+backend** reads the lowered model, so it reads the request's model and nothing
+else and is run as a plugin, `ridlc-gen-rust`; the parity test over it is the
+exit test of the plugin split. The other three in-tree backends — TypeScript,
+proto3 and FlatBuffers — still read the raw IR through `RawIr` and are not
+plugins; each waits to be ported. §6 says what each parity test proves.
 
 ## 1. Where the code is
 
@@ -233,9 +231,8 @@ unknown `schema` the same way, generates through the same
 `ridl_backend_rust::Backend` the in-process host calls — one file,
 `<artifact_base>.rs`, from `generate_pipeline` over the request's model — and
 writes the response to its standard output. It opens no file. It depends on
-`ridl-ir` and `ridl-backend-rust`. It exists because stage P4 ported the Rust
-backend onto the model: before that the backend read the raw IR, and a plugin
-has none.
+`ridl-ir` and `ridl-backend-rust`. It exists because the Rust backend reads the
+model: before that the backend read the raw IR, and a plugin has none.
 
 Both are test-only: `publish = false`, not installed by any release, never on a
 user's `PATH`. The test suite reaches each as `CARGO_BIN_EXE_<name>`, which
@@ -247,21 +244,22 @@ no network, under `just test` as it is. Each adds its own scope to
 ## 6. The parity test, and what it proves
 
 ADR-0020 decision 11, as amended 2026-09-22, makes the parity test the in-tree
-Rust backend run as a plugin; the driver's D-P1 says the same. That test exists
-since stage P4, in `crates/ridlc-gen-rust/tests/parity.rs`, on the two levels
-below with `ridl_backend_rust::Backend` and `ridlc-gen-rust` in place of
-`ModelBackend` and `ridlc-gen-model`, and `--emit rust` in place of
-`--emit codegen-model`. Its command's level compares the per-package `.rs`
-sources: `lib.rs` and `Cargo.toml` are what `ridlc` writes for itself, no
-backend produces them, and a build that names only a plugin writes neither.
+Rust backend run as a plugin; that test exists in
+`crates/ridlc-gen-rust/tests/parity.rs`, on the two levels below with
+`ridl_backend_rust::Backend` and `ridlc-gen-rust` in place of `ModelBackend` and
+`ridlc-gen-model`, and `--emit rust` in place of `--emit codegen-model`. Its
+command's level compares the per-package `.rs` sources: `lib.rs` and
+`Cargo.toml` are what `ridlc` writes for itself, no backend produces them, and a
+build that names only a plugin writes neither.
 
 It could not be written before the port. The Rust backend read the raw IR, a
-plugin has none (D-P2), so no test could make it byte-identical through the
-host. The two ways to run it anyway — carry the raw IR in the request during the
+plugin has none, so no test could make it byte-identical through the host. The
+two ways to run it anyway — carry the raw IR in the request during the
 transition, or reconstruct the IR from the model in the plugin — were rejected:
-the first violates D-P2 and, under the compatibility rule, leaves a field in
-`ridl.codegen.v1` that can never be removed; the second is a second lowering in
-reverse, thrown away at P4.
+the first violates the rule that the request carries the model and, under the
+compatibility rule, leaves a field in `ridl.codegen.v1` that can never be
+removed; the second is a second lowering in reverse, thrown away once the
+backend was ported.
 
 The `ridlc-gen-model` test stays beside it, and is the one described below: it
 is the narrower proof, over the one backend whose output is a function of the
@@ -323,10 +321,10 @@ section (how the plugin is found and what `ridlc` does with the response).
    `toolchain` instead (§2 above), and `artifact_base` is added. Decision 9 is
    not edited: it summarizes, and the specification is the record it defers to
    for the request's fields.
-3. **The driver's P3 bullet names the reference plugin as "a binary that wraps
-   the in-process Rust backend".** §6 above: not possible before P4 without
-   violating D-P2, so P3's wraps `ModelBackend`, and P4 added the Rust wrapper
-   `ridlc-gen-rust` beside it.
+3. **The sequencing plan names the reference plugin as "a binary that wraps the
+   in-process Rust backend".** §6 above: not possible before the Rust backend
+   read the model without violating the model-only rule, so the first reference
+   plugin wraps `ModelBackend`, and `ridlc-gen-rust` was added beside it.
 4. **The design note §8.3 says "no second entry point over the model is added:
    `generate_with` keeps its signature".** True; the trait is a second face over
    the same entry points, not a second entry point, and `generate_with` is
