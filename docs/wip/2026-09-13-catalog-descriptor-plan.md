@@ -83,7 +83,8 @@ it.
 - **Left to later stages, on purpose.** The roadmap and
   `docs/design/interaction-face.md` attribute the Rust backend's `None` sizes to
   E16.2; D5 amends them to E16.4 (driver §3, D5). The port's catalog check and
-  what `new` does on a mismatch are D3's (driver §4, last paragraph).
+  what `new` does on a mismatch were D3's to place (driver §4, last paragraph);
+  D3 gave both to D6 (driver §5, D3 item 6).
 
 Decisions this re-baseline took that §4 does not settle, reported to Sebastien
 in D1's final report:
