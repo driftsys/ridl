@@ -17,6 +17,10 @@
 //!   service's inline shape) → the five ridl interaction keywords plus
 //!   `reserved`.
 //!
+//! An item that names a declaration carries the declaration's doc as its
+//! `documentation`, rendered as hover renders it but without the signature
+//! or the Contract list, to keep the item short (ADR-0026).
+//!
 //! The context is decided from the token to the left of the cursor and the
 //! identifier the cursor is completing, not from a well-formed tree — the same
 //! discipline the resolver and navigation use.
@@ -29,6 +33,7 @@ use ridl_syntax::ast::{AstNode, Import, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextSize, TokenAtOffset};
 
+use crate::hover::SymbolDocs;
 use crate::nav::source_file;
 
 /// The five typl primitives, offered wherever a named type may appear.
@@ -214,15 +219,19 @@ fn type_completions(
     pkg: Package,
 ) -> Vec<lt::CompletionItem> {
     let resolution = resolve_package(db, ws, pkg, std);
+    let mut docs = SymbolDocs::new(db, ws, std, pkg);
     let mut items: Vec<lt::CompletionItem> = resolution
         .symbols
         .iter()
         .filter(|(_, symbol)| symbol.kind != SymbolKind::Const)
         .map(|(name, symbol)| {
-            item(
-                name,
-                type_kind(symbol.kind),
-                format!("{}.{}", symbol.package, symbol.name),
+            documented(
+                item(
+                    name,
+                    type_kind(symbol.kind),
+                    format!("{}.{}", symbol.package, symbol.name),
+                ),
+                docs.get(symbol),
             )
         })
         .collect();
@@ -269,12 +278,16 @@ fn import_completions(
     {
         let target_name = target.name(db).clone();
         let resolution = resolve_package(db, ws, *target, std);
+        let mut docs = SymbolDocs::new(db, ws, std, *target);
         for (name, symbol) in &resolution.symbols {
             if symbol.package == target_name && !symbol.internal {
-                items.push(item(
-                    name,
-                    symbol_kind(symbol.kind),
-                    format!("{target_name}.{name}"),
+                items.push(documented(
+                    item(
+                        name,
+                        symbol_kind(symbol.kind),
+                        format!("{target_name}.{name}"),
+                    ),
+                    docs.get(symbol),
                 ));
             }
         }
@@ -290,6 +303,7 @@ fn match_completions(
     pkg: Package,
 ) -> Vec<lt::CompletionItem> {
     let resolution = resolve_package(db, ws, pkg, std);
+    let mut docs = SymbolDocs::new(db, ws, std, pkg);
     let items = resolution
         .symbols
         .iter()
@@ -300,7 +314,12 @@ fn match_completions(
                 Some(ConstValue::Regex(_))
             )
         })
-        .map(|(name, _)| item(name, lt::CompletionItemKind::CONSTANT, "regex".to_string()))
+        .map(|(name, symbol)| {
+            documented(
+                item(name, lt::CompletionItemKind::CONSTANT, "regex".to_string()),
+                docs.get(symbol),
+            )
+        })
         .collect();
     sorted(items)
 }
@@ -368,6 +387,17 @@ fn item(label: &str, kind: lt::CompletionItemKind, detail: String) -> lt::Comple
         detail: Some(detail),
         ..Default::default()
     }
+}
+
+/// Sets an item's `documentation` to `doc`, as Markdown, when there is one.
+fn documented(mut item: lt::CompletionItem, doc: Option<String>) -> lt::CompletionItem {
+    item.documentation = doc.map(|value| {
+        lt::Documentation::MarkupContent(lt::MarkupContent {
+            kind: lt::MarkupKind::Markdown,
+            value,
+        })
+    });
+    item
 }
 
 /// Sorts items by label for a deterministic list (resolution is a `HashMap`).

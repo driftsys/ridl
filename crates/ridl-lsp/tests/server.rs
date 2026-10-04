@@ -3064,7 +3064,7 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
             13,
             "requires veh.adas.LaneAssist",
             20,
-            &["`veh.adas.LaneAssist`", "interface"],
+            &["interface veh.adas.LaneAssist"],
         ),
         (
             14,
@@ -3684,5 +3684,516 @@ fn formatting_reads_the_edited_buffer() {
     assert_eq!(format_request(&client, 21, &app, tabs()), None);
 
     shut_down(&client, 22);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+// --- docs in the source: hover, completion and quick fixes (ADR-0026) ------
+
+/// The vocabulary of the docs fixture: a doc on a type, an enum value, an
+/// enumset bit, a struct field, a union arm, and a declaration with every
+/// tag that hover shows. `LIMIT`'s doc holds a two-byte `ö` and a `ß` before
+/// its link, so the link's byte offset and its character offset differ.
+const DOC_VOCAB: &str = "package veh.common\n\
+\n\
+/// Vehicle speed over ground.\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+\n\
+/// A gear selector position.\n\
+enum Gear {\n\
+\x20 /// Parked.\n\
+\x20 PARK = 1\n\
+\x20 /// Driving forward.\n\
+\x20 DRIVE = 2\n\
+}\n\
+\n\
+/// Explicit bits.\n\
+enumset Flags {\n\
+\x20 /// The first bit.\n\
+\x20 FIRST = 0\n\
+}\n\
+\n\
+/// One motion sample.\n\
+struct Motion {\n\
+\x20 /// Current speed.\n\
+\x20 speed: Speed\n\
+\x20 /// The gear in use, a [Gear].\n\
+\x20 gear: Gear\n\
+}\n\
+\n\
+/// Either reading.\n\
+union Reading {\n\
+\x20 /// A speed reading.\n\
+\x20 speed: Speed\n\
+}\n\
+\n\
+/// Gr\u{f6}\u{df}e: [Speed]\n\
+const LIMIT : Speed = 100.0\n\
+\n\
+/// An old speed.\n\
+/// @since 1.1\n\
+/// @labels QM\n\
+/// @deprecated \"use Speed\"\n\
+type OldSpeed : km/h [0.0..100.0]\n";
+
+/// The contract of the docs fixture: a command with one documented
+/// parameter and one parameter without a doc.
+const DOC_CONTRACT: &str = "package veh.adas\n\
+\n\
+import veh.common.Speed\n\
+\n\
+/// Cruise control.\n\
+interface CruiseControl {\n\
+\x20 /// Sets the target.\n\
+\x20 command setTarget(\n\
+\x20   /// The target to hold.\n\
+\x20   target: Speed\n\
+\x20   limit: Speed\n\
+\x20 ) @[..50ms]\n\
+}\n";
+
+/// Writes the docs fixture as a two-member workspace and returns the
+/// `(vocabulary, contract)` file URIs.
+fn write_doc_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"adas\"]\n",
+    );
+    for (member, package) in [("veh-common", "veh.common"), ("adas", "veh.adas")] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let vocab = dir.write("veh-common/lib.typl", DOC_VOCAB);
+    let contract = dir.write("adas/adas.ridl", DOC_CONTRACT);
+    (uri_of(&vocab), uri_of(&contract))
+}
+
+/// Hover on a struct field shows its doc, then a **Contract** list with the
+/// rules of its type, `Speed`.
+#[test]
+fn hover_on_a_field_shows_doc_and_contract() {
+    let dir = TempDir::new("doc-field");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab, pos_in(DOC_VOCAB, "speed: Speed", 0, 1));
+    assert!(value.contains("speed"), "names the field: {value}");
+    assert!(value.contains("#1"), "keeps the ordinal: {value}");
+    let doc = value.find("Current speed.").expect("the field's doc");
+    let contract = value.find("**Contract**").expect("a Contract section");
+    assert!(doc < contract, "the doc comes before the Contract: {value}");
+    assert!(
+        value[contract..].contains("- range 0 ..= 250"),
+        "the range of `Speed`: {value}"
+    );
+    assert!(
+        value[contract..].contains("- unit km/h"),
+        "the unit of `Speed`: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an enum value, an enumset bit, a union arm and a documented
+/// parameter shows the doc of each.
+#[test]
+fn hover_on_an_enum_value_union_arm_and_parameter() {
+    let dir = TempDir::new("doc-members");
+    let (vocab, contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab.clone(), pos_in(DOC_VOCAB, "PARK", 0, 1));
+    assert!(value.contains("PARK"), "names the value: {value}");
+    assert!(value.contains("Parked."), "the value's doc: {value}");
+    assert!(
+        !value.contains("Driving forward."),
+        "only this value: {value}"
+    );
+
+    let value = hover_markdown(&client, 11, vocab.clone(), pos_in(DOC_VOCAB, "FIRST", 0, 1));
+    assert!(value.contains("The first bit."), "the bit's doc: {value}");
+
+    // The union arm `speed`, the second `speed: Speed` in the file.
+    let value = hover_markdown(&client, 12, vocab, pos_in(DOC_VOCAB, "speed: Speed", 1, 1));
+    assert!(value.contains("A speed reading."), "the arm's doc: {value}");
+    assert!(!value.contains("Current speed."), "not the field: {value}");
+
+    let value = hover_markdown(
+        &client,
+        13,
+        contract,
+        pos_in(DOC_CONTRACT, "target: Speed", 0, 1),
+    );
+    assert!(
+        value.contains("The target to hold."),
+        "the parameter's doc: {value}"
+    );
+    assert!(
+        !value.contains("From `Speed`:"),
+        "a documented parameter does not fall back: {value}"
+    );
+    assert!(
+        value.contains("**Contract**") && value.contains("- range 0 ..= 250"),
+        "the parameter's type rules: {value}"
+    );
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A parameter with no doc shows the doc of its type under the line
+/// "From `Speed`:".
+#[test]
+fn hover_on_a_parameter_without_doc_falls_back_to_its_type() {
+    let dir = TempDir::new("doc-param");
+    let (_vocab, contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        pos_in(DOC_CONTRACT, "limit: Speed", 0, 1),
+    );
+    let from = value.find("From `Speed`:").expect("the fallback line");
+    let doc = value
+        .find("Vehicle speed over ground.")
+        .expect("the type's doc");
+    assert!(from < doc, "the type's doc follows the line: {value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A doc link renders as a Markdown link to the target's file, with a
+/// 1-based line fragment.
+#[test]
+fn hover_renders_a_doc_link_as_a_markdown_link() {
+    let dir = TempDir::new("doc-link");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(DOC_VOCAB, "gear: Gear", 0, 1),
+    );
+    let line = find_pos(DOC_VOCAB, "enum Gear", 0).line + 1;
+    let expected = format!("The gear in use, a [Gear]({}#L{line}).", vocab.as_str());
+    assert!(
+        value.contains(&expected),
+        "expected `{expected}` in: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The doc link after `Größe: ` is replaced at its byte offset, and its
+/// target line is the line of `type Speed` (Review Focus 3).
+#[test]
+fn hover_link_after_multibyte_text() {
+    let dir = TempDir::new("doc-utf8");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab.clone(), pos_in(DOC_VOCAB, "LIMIT", 0, 1));
+    let line = find_pos(DOC_VOCAB, "type Speed", 0).line + 1;
+    let expected = format!("Gr\u{f6}\u{df}e: [Speed]({}#L{line})", vocab.as_str());
+    assert!(
+        value.contains(&expected),
+        "expected `{expected}` in: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover shows, in order: the signature, the doc, the Contract, then
+/// `@since`, the labels and the deprecation reason.
+#[test]
+fn hover_shows_since_labels_and_deprecation_in_order() {
+    let dir = TempDir::new("doc-order");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab, pos_in(DOC_VOCAB, "OldSpeed", 0, 1));
+    let positions: Vec<usize> = [
+        "type veh.common.OldSpeed",
+        "An old speed.",
+        "**Contract**",
+        "**Since:** 1.1",
+        "**Labels:** QM",
+        "**Deprecated:** use Speed",
+    ]
+    .iter()
+    .map(|part| {
+        value
+            .find(part)
+            .unwrap_or_else(|| panic!("`{part}` in: {value}"))
+    })
+    .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "the sections are in order: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an rsdl component — on a reference to it and on its own name —
+/// shows its doc; hover on the system shows the system's doc.
+#[test]
+fn hover_on_an_rsdl_component_shows_its_doc() {
+    let dir = TempDir::new("doc-rsdl");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+    );
+    assert!(value.contains("component veh.topology.Cruise"), "{value}");
+    assert!(
+        value.contains("A component."),
+        "the component's doc: {value}"
+    );
+
+    let value = hover_markdown(
+        &client,
+        11,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "component Lane", 0, 11),
+    );
+    assert!(value.contains("component veh.topology.Lane"), "{value}");
+    assert!(
+        value.contains("A component."),
+        "the declaration's doc: {value}"
+    );
+
+    let value = hover_markdown(
+        &client,
+        12,
+        system,
+        pos_in(RSDL_SYSTEM, "for Vehicle", 0, 5),
+    );
+    assert!(value.contains("The system."), "the system's doc: {value}");
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an interface's name shows its doc.
+#[test]
+fn hover_on_an_interface_shows_its_doc() {
+    let dir = TempDir::new("doc-interface");
+    let (_vocab, contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        pos_in(DOC_CONTRACT, "CruiseControl", 0, 1),
+    );
+    assert!(
+        value.contains("interface veh.adas.CruiseControl"),
+        "{value}"
+    );
+    assert!(
+        value.contains("Cruise control."),
+        "the interface's doc: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on the name of a distribution, a deployment and a machine shows the
+/// doc of each, and hover on a body line with a doc shows that doc below the
+/// hover of the declaration the line names.
+#[test]
+fn hover_on_rsdl_declaration_names_and_lines_shows_their_docs() {
+    let dir = TempDir::new("doc-rsdl-names");
+    let (_contracts, _system) = write_rsdl_workspace(&dir);
+    let text = RSDL_SYSTEM.replace(
+        "system Vehicle { Cruise,",
+        "system Vehicle {\n  /// Cruise is on board.\n  Cruise,",
+    );
+    let system = uri_of(&dir.write("topology/system.rsdl", &text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let cases: [(i32, &str, &str); 3] = [
+        (10, "distribution Adas", "The distribution."),
+        (11, "deployment Production", "The deployment."),
+        (12, "machine Hpc", "A machine."),
+    ];
+    for (id, needle, doc) in cases {
+        let (keyword, name) = needle.split_once(' ').expect("a keyword and a name");
+        let cursor = pos_in(&text, needle, 0, keyword.len() as u32 + 2);
+        let value = hover_markdown(&client, id, system.clone(), cursor);
+        assert!(
+            value.contains(&format!("{keyword} veh.topology.")),
+            "{value}"
+        );
+        assert!(value.contains(name), "{value}");
+        assert!(value.contains(doc), "`{doc}` at `{needle}`: {value}");
+    }
+
+    let value = hover_markdown(&client, 13, system, pos_in(&text, "  Cruise,", 0, 3));
+    let component = value
+        .find("component veh.topology.Cruise")
+        .expect("the component's hover");
+    let line = value.find("Cruise is on board.").expect("the line's doc");
+    assert!(component < line, "the line's doc follows: {value}");
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A completion item for a named type carries the type's doc as its
+/// `documentation`, without the Contract list.
+#[test]
+fn completion_items_carry_documentation() {
+    let uri = path_to_uri("/ridl-lsp-complete-doc/types.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `struct Holder { item: }` on line 3; a cursor at column 22 sits just
+    // past `: `.
+    let text =
+        "package demo\n/// Vehicle speed.\ntype Speed: integer [0..10]\nstruct Holder { item: }\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(3, 22));
+    let speed = items
+        .iter()
+        .find(|item| item.label == "Speed")
+        .expect("`Speed` is offered");
+    let documentation = match &speed.documentation {
+        Some(lt::Documentation::MarkupContent(markup)) => {
+            assert_eq!(markup.kind, lt::MarkupKind::Markdown);
+            markup.value.clone()
+        }
+        other => panic!("expected markdown documentation, got {other:?}"),
+    };
+    assert_eq!(documentation, "Vehicle speed.");
+    assert!(!documentation.contains("Contract"));
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Sends a code-action request over `range` and returns the quick fixes.
+fn code_actions_at(
+    client: &Connection,
+    id: i32,
+    uri: &lt::Uri,
+    range: lt::Range,
+) -> Vec<lt::CodeAction> {
+    request::<lt::request::CodeActionRequest>(
+        client,
+        id,
+        lt::CodeActionParams {
+            text_document: lt::TextDocumentIdentifier { uri: uri.clone() },
+            range,
+            context: lt::CodeActionContext::default(),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        },
+    );
+    let response = next_response(client);
+    let actions: Vec<lt::CodeActionOrCommand> =
+        serde_json::from_value(response.response_result.expect("code actions succeed"))
+            .expect("a valid code action list");
+    actions
+        .into_iter()
+        .map(|action| match action {
+            lt::CodeActionOrCommand::CodeAction(action) => action,
+            other => panic!("expected a code action, got {other:?}"),
+        })
+        .collect()
+}
+
+/// The one text edit a quick fix makes in `uri`.
+fn single_edit(action: &lt::CodeAction, uri: &lt::Uri) -> lt::TextEdit {
+    let edits = edits_for(action.edit.as_ref().expect("the fix edits"), uri);
+    assert_eq!(edits.len(), 1, "one edit: {edits:?}");
+    edits[0].clone()
+}
+
+/// A `missing-docs` (TYPL-406) diagnostic offers a quick fix that inserts a
+/// `///` line above the item, at the item's indentation.
+#[test]
+fn missing_docs_offers_a_quick_fix_that_inserts_a_doc_line() {
+    let dir = TempDir::new("doc-fix-406");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let text = "package demo\n\n/// A holder.\nstruct Holder {\n  item: integer\n}\n";
+    let file = uri_of(&dir.write("demo.typl", text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &file);
+    let diagnostic = published
+        .diagnostics
+        .iter()
+        .find(|d| d.code == Some(lt::NumberOrString::String("TYPL-406".to_string())))
+        .expect("TYPL-406 on the undocumented field");
+    assert_eq!(diagnostic.range, range_of(text, "item", 0));
+
+    let actions = code_actions_at(&client, 10, &file, diagnostic.range);
+    assert_eq!(actions.len(), 1, "one quick fix: {actions:?}");
+    assert_eq!(actions[0].kind, Some(lt::CodeActionKind::QUICKFIX));
+    let edit = single_edit(&actions[0], &file);
+    assert_eq!(
+        edit.range,
+        range((4, 0), (4, 0)),
+        "at the start of the line"
+    );
+    assert_eq!(edit.new_text, "  /// \n", "a `///` line at the indentation");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A `doc-comment-style` (TYPL-410) diagnostic, raised with the lint at
+/// `warn`, offers a quick fix that rewrites the `/** */` comment as `///`
+/// lines.
+#[test]
+fn doc_comment_style_offers_a_quick_fix_that_rewrites_the_comment() {
+    let dir = TempDir::new("doc-fix-410");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\n[lints]\ndoc-comment-style = \"warn\"\n",
+    );
+    let text = "package demo\n\n/**\n * A speed.\n * In km/h.\n */\ntype Speed: integer [0..10]\n";
+    let file = uri_of(&dir.write("demo.typl", text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &file);
+    let diagnostic = published
+        .diagnostics
+        .iter()
+        .find(|d| d.code == Some(lt::NumberOrString::String("TYPL-410".to_string())))
+        .expect("TYPL-410 at `warn`");
+    assert_eq!(diagnostic.severity, Some(lt::DiagnosticSeverity::WARNING));
+    assert_eq!(diagnostic.range, range((2, 0), (5, 3)), "the whole comment");
+
+    let actions = code_actions_at(&client, 10, &file, diagnostic.range);
+    assert_eq!(actions.len(), 1, "one quick fix: {actions:?}");
+    let edit = single_edit(&actions[0], &file);
+    assert_eq!(edit.range, range((2, 0), (5, 3)));
+    assert_eq!(edit.new_text, "/// A speed.\n/// In km/h.");
+
+    shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");
 }

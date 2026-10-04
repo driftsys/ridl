@@ -9,6 +9,13 @@
 //! groundwork; the ordinal is typl §7.4), read straight from the IR so it counts
 //! reserved tombstones exactly as codegen does.
 //!
+//! Every hover shows, in order (ADR-0026): the signature, the doc comment
+//! with each doc link rendered as a Markdown link to the target's location
+//! ([`render_doc`]), a **Contract** list from [`ridl_ir::rules`], and the
+//! `@since` versions, the labels and the deprecation reason. An enum value,
+//! an enumset bit, a union arm and a parameter have their own hover; a
+//! parameter with no doc shows the doc of its named type.
+//!
 //! The ridl layer adds three more anchors, all read from the same
 //! checked IR so the editor can never disagree with codegen:
 //!
@@ -28,14 +35,19 @@
 //!   states the ridl §14.5 posture neutrality, because a service declaration
 //!   says nothing about how it is realized on the wire.
 
+use std::collections::HashMap;
+
+use lsp_types as lt;
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, package_of};
+use ridl_ir::rules::{self, ItemRef, Rule};
 use ridl_ir::v2;
 use ridl_sem::{Symbol, SymbolKind, check_package};
-use ridl_syntax::ast::{AstNode, HasName, InterfaceDef, InterfaceMember, ServiceDef, StructDef};
+use ridl_syntax::ast::{AstNode, HasName, InterfaceDef, InterfaceMember, ServiceDef};
 use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::{TextRange, TextSize};
 
+use crate::convert;
 use crate::nav::{self, symbol_at};
 
 /// Rendered hover content plus the source range it describes.
@@ -57,8 +69,10 @@ pub fn hover(
     file: InputFile,
     offset: TextSize,
 ) -> Option<HoverInfo> {
-    // A struct field shows its ordinal, not a symbol — resolve that first.
-    if let Some(info) = field_hover(db, ws, std, pkg, file, offset) {
+    // A member name (a field, an enum value, an enumset bit, a union arm or a
+    // parameter) is not a symbol — resolve that first.
+    let scope = Scope { db, ws, std, pkg };
+    if let Some(info) = member_hover(scope, file, offset) {
         return Some(info);
     }
     // Interaction and service anchors are not symbols either: an interaction
@@ -79,43 +93,272 @@ pub fn hover(
     })
 }
 
-/// The hover for a struct field: `field \`name\` — ordinal \`#N\``, with the
-/// ordinal read from the lowered IR (which counts reserved tombstones). Returns
-/// `None` when the cursor is not on a struct field's name.
-fn field_hover(
-    db: &dyn salsa::Database,
+/// The packages and database a hover reads from: the cursor's package `pkg`,
+/// the workspace, and the embedded `ridl.std`.
+#[derive(Clone, Copy)]
+struct Scope<'db> {
+    db: &'db dyn salsa::Database,
     ws: Workspace,
     std: Package,
     pkg: Package,
-    file: InputFile,
-    offset: TextSize,
-) -> Option<HoverInfo> {
-    let source = nav::source_file(db, file);
+}
+
+impl Scope<'_> {
+    /// The location a doc link to the canonical `target` points at.
+    fn resolve(&self, target: &str) -> Option<lt::Location> {
+        link_location(self.db, self.ws, self.std, self.pkg, target)
+    }
+
+    /// The IR of the package named `name`.
+    fn package_ir(&self, name: &str) -> Option<v2::Package> {
+        let package = owner_package(self.db, self.ws, self.std, self.pkg, name)?;
+        Some(check_package(self.db, self.ws, package, self.std).ir)
+    }
+
+    /// The IR of the package a named field or parameter type comes from, when
+    /// that is not the cursor's package: the `deps` of [`rules::rules`].
+    fn deps_of(&self, field_type: Option<&v2::FieldType>) -> Vec<v2::Package> {
+        match field_type
+            .and_then(named_ref)
+            .and_then(|name| name.rsplit_once('.'))
+        {
+            Some((package, _)) if package != self.pkg.name(self.db) => {
+                self.package_ir(package).into_iter().collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The rules of the declaration the canonical type reference `reference`
+    /// names; a bare reference is in the cursor's package.
+    fn named_rules(&self, reference: &str) -> Vec<Rule> {
+        let package = match reference.rsplit_once('.') {
+            Some((package, _)) => package.to_string(),
+            None => self.pkg.name(self.db).clone(),
+        };
+        let name = reference.rsplit('.').next().unwrap_or(reference);
+        let Some(ir) = self.package_ir(&package) else {
+            return Vec::new();
+        };
+        match ir.decls.iter().find(|decl| decl.name == name) {
+            Some(decl) => rules::rules(&ir, &[], ItemRef::Decl(decl)),
+            None => Vec::new(),
+        }
+    }
+}
+
+/// The hover for a member name at its declaration: a struct field, an enum
+/// value, an enumset bit, a union arm, or a command or query parameter. Each
+/// is read from the lowered IR, so a field's ordinal counts reserved
+/// tombstones exactly as codegen does. Returns `None` when the cursor is not
+/// on such a name.
+fn member_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option<HoverInfo> {
+    let source = nav::source_file(scope.db, file);
     let token = nav::identifier_at(source.syntax(), offset)?;
     let name_node = token.parent()?;
     if name_node.kind() != SyntaxKind::Name {
         return None;
     }
-    let field_node = name_node.parent()?;
-    if field_node.kind() != SyntaxKind::FieldDef {
-        return None;
-    }
-    let field_name = token.text().to_string();
-    let struct_node = field_node
-        .ancestors()
-        .find(|node| node.kind() == SyntaxKind::StructDef)?;
-    let struct_name = StructDef::cast(struct_node)?
-        .name()?
-        .ident_token()?
-        .text()
-        .to_string();
-
-    let ir = &check_package(db, ws, pkg, std).ir;
-    let ordinal = field_ordinal(ir, &struct_name, &field_name)?;
+    let member = name_node.parent()?;
+    let name = token.text();
+    let ir = check_package(scope.db, scope.ws, scope.pkg, scope.std).ir;
+    let markdown = match member.kind() {
+        SyntaxKind::FieldDef => field_markdown(scope, &ir, &member, name)?,
+        SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => {
+            enum_member_markdown(scope, &ir, &member, name)?
+        }
+        SyntaxKind::UnionArm => arm_markdown(scope, &ir, &member, name)?,
+        SyntaxKind::Param => param_markdown(scope, &ir, &member, name)?,
+        _ => return None,
+    };
     Some(HoverInfo {
-        markdown: format!("field `{field_name}` — ordinal `#{ordinal}`"),
+        markdown,
         range: name_node.text_range(),
     })
+}
+
+/// The name of the declaration `member` sits directly in, when that
+/// declaration is of kind `kind`. A tuple field is a `FieldDef` too, but its
+/// parent is the tuple type, so it is not taken for a struct field.
+fn parent_declaration(member: &SyntaxNode, kind: SyntaxKind) -> Option<String> {
+    let parent = member.parent().filter(|parent| parent.kind() == kind)?;
+    let name = parent
+        .children()
+        .find(|child| child.kind() == SyntaxKind::Name)?;
+    name.children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .find(|token| token.kind() == SyntaxKind::Ident)
+        .map(|token| token.text().to_string())
+}
+
+/// A struct field: its type and ordinal, then its doc, the rules of its type,
+/// and its tags.
+fn field_markdown(
+    scope: Scope<'_>,
+    ir: &v2::Package,
+    member: &SyntaxNode,
+    name: &str,
+) -> Option<String> {
+    let owner = parent_declaration(member, SyntaxKind::StructDef)?;
+    let decl = ir.decls.iter().find(|decl| decl.name == owner)?;
+    let Some(v2::decl::Kind::StructDef(struct_def)) = &decl.kind else {
+        return None;
+    };
+    let field = struct_def
+        .members
+        .iter()
+        .find_map(|slot| match &slot.member {
+            Some(v2::struct_member::Member::Field(field)) if field.name == name => Some(field),
+            _ => None,
+        })?;
+    let mut out = format!(
+        "```typl\nfield {}.{owner}.{name} : {}\n```\n\n**Ordinal:** `#{}`",
+        ir.name,
+        type_text(field.r#type.as_ref()),
+        field.ordinal,
+    );
+    let deps = scope.deps_of(field.r#type.as_ref());
+    let deps: Vec<&v2::Package> = deps.iter().collect();
+    let rules = rules::rules(ir, &deps, ItemRef::Field(field));
+    let parts = DocParts {
+        doc: &field.doc,
+        links: &field.links,
+        since: &field.since,
+        labels: &field.labels,
+        deprecated: field.deprecated.as_deref(),
+    };
+    push_doc_sections(&mut out, &parts, &rules, &|target| scope.resolve(target));
+    Some(out)
+}
+
+/// An enum value or an enumset bit: its number, then its doc and `@since`.
+fn enum_member_markdown(
+    scope: Scope<'_>,
+    ir: &v2::Package,
+    member: &SyntaxNode,
+    name: &str,
+) -> Option<String> {
+    let owner_kind = if member.kind() == SyntaxKind::EnumValue {
+        SyntaxKind::EnumDef
+    } else {
+        SyntaxKind::EnumSetDef
+    };
+    let owner = parent_declaration(member, owner_kind)?;
+    let decl = ir.decls.iter().find(|decl| decl.name == owner)?;
+    let values = match &decl.kind {
+        Some(v2::decl::Kind::EnumDef(enum_def)) => &enum_def.values,
+        Some(v2::decl::Kind::EnumSetDef(set)) => &set.bits,
+        _ => return None,
+    };
+    let value = values.iter().find(|value| value.name == name)?;
+    let mut out = format!("```typl\n{}.{owner}.{name} = {}\n```", ir.name, value.value);
+    let parts = DocParts {
+        doc: &value.doc,
+        links: &value.links,
+        since: &value.since,
+        ..DocParts::default()
+    };
+    push_doc_sections(&mut out, &parts, &[], &|target| scope.resolve(target));
+    Some(out)
+}
+
+/// A union arm: its type and ordinal, then its doc, the rules of its type,
+/// and `@since`.
+fn arm_markdown(
+    scope: Scope<'_>,
+    ir: &v2::Package,
+    member: &SyntaxNode,
+    name: &str,
+) -> Option<String> {
+    let owner = parent_declaration(member, SyntaxKind::UnionDef)?;
+    let decl = ir.decls.iter().find(|decl| decl.name == owner)?;
+    let Some(v2::decl::Kind::UnionDef(union_def)) = &decl.kind else {
+        return None;
+    };
+    let arm = union_def.arms.iter().find(|arm| arm.name == name)?;
+    let mut out = format!(
+        "```typl\narm {}.{owner}.{name} : {}\n```\n\n**Ordinal:** `#{}`",
+        ir.name, arm.type_ref, arm.ordinal,
+    );
+    let rules = scope.named_rules(&arm.type_ref);
+    let parts = DocParts {
+        doc: &arm.doc,
+        links: &arm.links,
+        since: &arm.since,
+        ..DocParts::default()
+    };
+    push_doc_sections(&mut out, &parts, &rules, &|target| scope.resolve(target));
+    Some(out)
+}
+
+/// A command or query parameter: its type, then its doc — or, when it has
+/// none, the doc of its named type under the line "From `TypeName`:" — the
+/// rules of its type, and `@since`.
+fn param_markdown(
+    scope: Scope<'_>,
+    ir: &v2::Package,
+    member: &SyntaxNode,
+    name: &str,
+) -> Option<String> {
+    let interaction = member.ancestors().find_map(InterfaceMember::cast)?;
+    let interaction_name = interaction.name()?.ident_token()?.text().to_string();
+    let (owner, shape) = enclosing_shape(ir, interaction.syntax())?;
+    let decl = shape.interactions.iter().find(|decl| {
+        decl.name == interaction_name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
+    })?;
+    let params = match &decl.kind {
+        Some(v2::decl::Kind::CommandDef(command)) => &command.params,
+        Some(v2::decl::Kind::QueryDef(query)) => &query.params,
+        _ => return None,
+    };
+    let param = params.iter().find(|param| param.name == name)?;
+    let mut out = format!(
+        "```ridl\nparam {owner}.{interaction_name}.{name} : {}\n```",
+        type_text(param.r#type.as_ref()),
+    );
+    let deps = scope.deps_of(param.r#type.as_ref());
+    let deps: Vec<&v2::Package> = deps.iter().collect();
+    let rules = rules::rules(ir, &deps, ItemRef::Param(param));
+    let resolve = |target: &str| scope.resolve(target);
+
+    let fallback = if param.doc.trim().is_empty() {
+        param
+            .r#type
+            .as_ref()
+            .and_then(named_ref)
+            .and_then(|named| decl_of_ref(scope.db, scope.ws, scope.std, scope.pkg, named))
+            .filter(|type_decl| !type_decl.doc.trim().is_empty())
+    } else {
+        None
+    };
+    let parts = match &fallback {
+        Some(type_decl) => {
+            out.push_str(&format!(
+                "\n\nFrom `{}`:\n\n{}",
+                type_decl.name,
+                render_doc(&type_decl.doc, &type_decl.links, resolve),
+            ));
+            DocParts {
+                since: &param.since,
+                ..DocParts::default()
+            }
+        }
+        None => DocParts {
+            doc: &param.doc,
+            links: &param.links,
+            since: &param.since,
+            ..DocParts::default()
+        },
+    };
+    push_doc_sections(&mut out, &parts, &rules, &resolve);
+    Some(out)
+}
+
+/// The source form of an optional field type, `?` when it is absent.
+fn type_text(field_type: Option<&v2::FieldType>) -> String {
+    field_type
+        .map(field_type_text)
+        .unwrap_or_else(|| "?".to_string())
 }
 
 /// The 1-based ordinal of field `field_name` in struct `struct_name`, from the
@@ -151,25 +394,227 @@ pub(crate) fn symbol_markdown(
     symbol: &Symbol,
 ) -> String {
     let qualified = format!("{}.{}", symbol.package, symbol.name);
-    let target = if symbol.package == *pkg.name(db) {
-        Some(pkg)
-    } else if symbol.package == *std.name(db) {
-        Some(std)
-    } else {
-        package_of(db, ws, symbol.package.clone())
-    };
-    if let Some(target) = target {
+    let resolve = |target: &str| link_location(db, ws, std, pkg, target);
+    if let Some(target) = owner_package(db, ws, std, pkg, &symbol.package) {
         let ir = check_package(db, ws, target, std).ir;
         if let Some(decl) = ir.decls.iter().find(|decl| decl.name == symbol.name) {
-            return render_decl(&qualified, decl);
+            let rules = rules::rules(&ir, &[], ItemRef::Decl(decl));
+            return render_decl(&qualified, decl, &rules, &resolve);
+        }
+        if symbol.kind == SymbolKind::Interface
+            && let Some(interface) = named_interface(&ir, &symbol.name)
+        {
+            let mut out = format!("```ridl\ninterface {qualified}\n```");
+            push_doc_sections(&mut out, &interface_parts(interface), &[], &resolve);
+            return out;
         }
     }
     format!("**`{qualified}`** — {}", symbol_kind(symbol.kind))
 }
 
+/// The docs of resolved symbols for completion items (ADR-0026): the
+/// rendered doc, `@since`, the labels and the deprecation reason, without
+/// the signature or the Contract list. The IR of each owning package is read
+/// once per completion request, not once per item.
+pub(crate) struct SymbolDocs<'db> {
+    scope: Scope<'db>,
+    irs: HashMap<String, Option<v2::Package>>,
+}
+
+impl<'db> SymbolDocs<'db> {
+    /// The docs as seen from `pkg`, the package of the file being completed.
+    pub(crate) fn new(
+        db: &'db dyn salsa::Database,
+        ws: Workspace,
+        std: Package,
+        pkg: Package,
+    ) -> Self {
+        Self {
+            scope: Scope { db, ws, std, pkg },
+            irs: HashMap::new(),
+        }
+    }
+
+    /// The doc of `symbol`, or `None` when it has none.
+    pub(crate) fn get(&mut self, symbol: &Symbol) -> Option<String> {
+        let scope = self.scope;
+        let ir = self
+            .irs
+            .entry(symbol.package.clone())
+            .or_insert_with(|| scope.package_ir(&symbol.package))
+            .as_ref()?;
+        let parts = match ir.decls.iter().find(|decl| decl.name == symbol.name) {
+            Some(decl) => decl_parts(decl),
+            None => interface_parts(named_interface(ir, &symbol.name)?),
+        };
+        let mut out = String::new();
+        push_doc_sections(&mut out, &parts, &[], &|target| scope.resolve(target));
+        let out = out.trim_start();
+        (!out.is_empty()).then(|| out.to_string())
+    }
+}
+
+/// The `interface` declaration `name` of `ir`. The walk is over every
+/// shape; an inline shape is keyed by its dotted service name, which no
+/// interface name spells.
+fn named_interface<'a>(ir: &'a v2::Package, name: &str) -> Option<&'a v2::Interface> {
+    ir.shapes()
+        .find(|shape| shape.name == name)
+        .map(|shape| shape.interface)
+}
+
+/// The package named `name`: the cursor's package `pkg` when the names match
+/// (a standalone overlay, which `package_of` cannot find, included), the
+/// embedded `ridl.std`, or a workspace package.
+fn owner_package(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    name: &str,
+) -> Option<Package> {
+    if name == pkg.name(db) {
+        Some(pkg)
+    } else if name == std.name(db) {
+        Some(std)
+    } else {
+        package_of(db, ws, name.to_string())
+    }
+}
+
+/// The location of the canonical doc-link target `target` (`pkg.Name` or
+/// `pkg.Name.member`): the target's file and the range of its name. `None`
+/// when the target is not found or its file has no `file://` URI.
+pub(crate) fn link_location(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    target: &str,
+) -> Option<lt::Location> {
+    let (file, range) = nav::canonical_site(db, ws, std, pkg, target)?;
+    let uri = convert::path_to_uri(file.path(db))?;
+    Some(lt::Location {
+        uri,
+        range: convert::line_index(file.text(db)).range(range),
+    })
+}
+
+/// Renders a doc body as Markdown: each resolved doc link becomes a link to
+/// its target's location, a `file:` URI with a 1-based line fragment
+/// (`#L12`). A link `resolve` gives no location for becomes a code span.
+///
+/// `links` carry byte offsets into `doc` (ADR-0026). A link whose range does
+/// not fall on character boundaries of `doc`, or overlaps an earlier link, is
+/// left as written. A `@see` entry has length 0 and is skipped.
+pub fn render_doc(
+    doc: &str,
+    links: &[v2::DocLink],
+    resolve: impl Fn(&str) -> Option<lt::Location>,
+) -> String {
+    let mut links: Vec<&v2::DocLink> = links.iter().filter(|link| link.len > 0).collect();
+    links.sort_by_key(|link| link.offset);
+    let mut out = String::with_capacity(doc.len());
+    let mut written = 0;
+    for link in links {
+        let start = link.offset as usize;
+        let end = start + link.len as usize;
+        if start < written || doc.get(start..end).is_none() {
+            continue;
+        }
+        out.push_str(&doc[written..start]);
+        match resolve(&link.target) {
+            Some(location) => out.push_str(&format!(
+                "[{}]({}#L{})",
+                link.text,
+                location.uri.as_str(),
+                location.range.start.line + 1
+            )),
+            None if link.text.starts_with('`') => out.push_str(&link.text),
+            None => out.push_str(&format!("`{}`", link.text)),
+        }
+        written = end;
+    }
+    out.push_str(&doc[written..]);
+    out
+}
+
+/// The doc fields of one carrier, borrowed from its IR message. A carrier
+/// without labels or a deprecation leaves those fields empty.
+#[derive(Default)]
+pub(crate) struct DocParts<'a> {
+    pub doc: &'a str,
+    pub links: &'a [v2::DocLink],
+    pub since: &'a [String],
+    pub labels: &'a [String],
+    pub deprecated: Option<&'a str>,
+}
+
+fn decl_parts(decl: &v2::Decl) -> DocParts<'_> {
+    DocParts {
+        doc: &decl.doc,
+        links: &decl.links,
+        since: &decl.since,
+        labels: &decl.labels,
+        deprecated: decl.deprecated.as_deref(),
+    }
+}
+
+fn interface_parts(interface: &v2::Interface) -> DocParts<'_> {
+    DocParts {
+        doc: &interface.doc,
+        links: &interface.links,
+        since: &interface.since,
+        labels: &interface.labels,
+        deprecated: interface.deprecated.as_deref(),
+    }
+}
+
+/// Appends what follows the signature in a hover (ADR-0026), in order: the
+/// rendered doc, a **Contract** list with one item per rule (left out when no
+/// rule renders to text), then `@since`, the labels and the deprecation
+/// reason.
+pub(crate) fn push_doc_sections(
+    out: &mut String,
+    parts: &DocParts<'_>,
+    rules: &[Rule],
+    resolve: &dyn Fn(&str) -> Option<lt::Location>,
+) {
+    if !parts.doc.trim().is_empty() {
+        out.push_str("\n\n");
+        out.push_str(&render_doc(parts.doc, parts.links, resolve));
+    }
+    let items: Vec<String> = rules
+        .iter()
+        .map(rules::render)
+        .filter(|item| !item.is_empty())
+        .collect();
+    if !items.is_empty() {
+        out.push_str("\n\n**Contract**\n");
+        for item in items {
+            out.push_str(&format!("\n- {item}"));
+        }
+    }
+    if !parts.since.is_empty() {
+        out.push_str(&format!("\n\n**Since:** {}", parts.since.join(", ")));
+    }
+    if !parts.labels.is_empty() {
+        out.push_str(&format!("\n\n**Labels:** {}", parts.labels.join(", ")));
+    }
+    if let Some(reason) = parts.deprecated {
+        out.push_str(&format!("\n\n**Deprecated:** {reason}"));
+    }
+}
+
 /// Renders one IR declaration as a hover markdown block: a fenced typl
-/// signature line, then the derived width, doc comment, labels, and deprecation.
-fn render_decl(qualified: &str, decl: &v2::Decl) -> String {
+/// signature line and the derived width, then the doc sections of
+/// [`push_doc_sections`].
+fn render_decl(
+    qualified: &str,
+    decl: &v2::Decl,
+    rules: &[Rule],
+    resolve: &dyn Fn(&str) -> Option<lt::Location>,
+) -> String {
     let mut lines = String::new();
     lines.push_str("```typl\n");
     lines.push_str(&signature(qualified, decl));
@@ -180,16 +625,7 @@ fn render_decl(qualified: &str, decl: &v2::Decl) -> String {
     {
         lines.push_str(&format!("\n\n**Width:** `{width}`"));
     }
-    if !decl.doc.is_empty() {
-        lines.push_str("\n\n");
-        lines.push_str(&decl.doc);
-    }
-    if !decl.labels.is_empty() {
-        lines.push_str(&format!("\n\n**Labels:** {}", decl.labels.join(", ")));
-    }
-    if let Some(reason) = &decl.deprecated {
-        lines.push_str(&format!("\n\n**Deprecated:** {reason}"));
-    }
+    push_doc_sections(&mut lines, &decl_parts(decl), rules, resolve);
     lines
 }
 
@@ -415,10 +851,12 @@ fn interaction_hover(
         decl.name == name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
     })?;
 
-    Some(HoverInfo {
-        markdown: render_interaction(db, ws, std, pkg, &owner, decl),
-        range,
-    })
+    let mut markdown = render_interaction(db, ws, std, pkg, &owner, decl);
+    let rules = rules::rules(ir, &[], ItemRef::Decl(decl));
+    push_doc_sections(&mut markdown, &decl_parts(decl), &rules, &|target| {
+        link_location(db, ws, std, pkg, target)
+    });
+    Some(HoverInfo { markdown, range })
 }
 
 /// The hover for a service declaration: the cursor on its dotted global name.
@@ -445,7 +883,7 @@ fn service_hover(
     let ir = &check_package(db, ws, pkg, std).ir;
     let service = ir.services.iter().find(|service| service.name == name)?;
     Some(HoverInfo {
-        markdown: render_service(service),
+        markdown: render_service(service, &|target| link_location(db, ws, std, pkg, target)),
         range: dotted.text_range(),
     })
 }
@@ -484,10 +922,10 @@ fn enclosing_shape<'a>(
     None
 }
 
-/// Renders one interaction: the signature, the §11 ordinal, the payload with
-/// its typl detail, the resolved — on an RPC, declared — timing with its
-/// per-kind reading, the error strata note for a fallible return, and the doc
-/// envelope.
+/// Renders the head of one interaction's hover: the signature, the §11
+/// ordinal, the payload with its typl detail, the resolved — on an RPC,
+/// declared — timing with its per-kind reading, and the error strata note
+/// for a fallible return. The caller appends the doc sections.
 fn render_interaction(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -540,17 +978,6 @@ fn render_interaction(
             }
         }
         _ => {}
-    }
-
-    if !decl.doc.is_empty() {
-        out.push_str("\n\n");
-        out.push_str(&decl.doc);
-    }
-    if !decl.labels.is_empty() {
-        out.push_str(&format!("\n\n**Labels:** {}", decl.labels.join(", ")));
-    }
-    if let Some(reason) = &decl.deprecated {
-        out.push_str(&format!("\n\n**Deprecated:** {reason}"));
     }
     out
 }
@@ -769,11 +1196,14 @@ fn strata_note(fallible: &v2::FallibleType) -> String {
     )
 }
 
-/// Renders a service declaration: its list of interfaces, and the ridl §14.5
-/// posture note. A named-form service renders every reference in source
-/// order (ADR-0015 decision 12), so the hover shows the same list the source
-/// declares.
-pub(crate) fn render_service(service: &v2::Service) -> String {
+/// Renders a service declaration: its list of interfaces, the ridl §14.5
+/// posture note, and the doc sections. A named-form service renders every
+/// reference in source order (ADR-0015 decision 12), so the hover shows the
+/// same list the source declares.
+pub(crate) fn render_service(
+    service: &v2::Service,
+    resolve: &dyn Fn(&str) -> Option<lt::Location>,
+) -> String {
     let inline = service.shapes.iter().find_map(|slot| match &slot.kind {
         Some(v2::service_shape::Kind::Inline(shape)) => Some(shape),
         _ => None,
@@ -819,16 +1249,14 @@ pub(crate) fn render_service(service: &v2::Service) -> String {
     }
 
     out.push_str(&format!("\n\n{POSTURE_NOTE}"));
-    if !service.doc.is_empty() {
-        out.push_str("\n\n");
-        out.push_str(&service.doc);
-    }
-    if !service.labels.is_empty() {
-        out.push_str(&format!("\n\n**Labels:** {}", service.labels.join(", ")));
-    }
-    if let Some(reason) = &service.deprecated {
-        out.push_str(&format!("\n\n**Deprecated:** {reason}"));
-    }
+    let parts = DocParts {
+        doc: &service.doc,
+        links: &service.links,
+        since: &service.since,
+        labels: &service.labels,
+        deprecated: service.deprecated.as_deref(),
+    };
+    push_doc_sections(&mut out, &parts, &[], resolve);
     out
 }
 
@@ -952,13 +1380,7 @@ fn decl_of_ref(
         Some((path, name)) => (path.to_string(), name.to_string()),
         None => (pkg.name(db).clone(), canonical.to_string()),
     };
-    let target = if package_path == *pkg.name(db) {
-        Some(pkg)
-    } else if package_path == *std.name(db) {
-        Some(std)
-    } else {
-        package_of(db, ws, package_path)
-    }?;
+    let target = owner_package(db, ws, std, pkg, &package_path)?;
     check_package(db, ws, target, std)
         .ir
         .decls
@@ -984,5 +1406,53 @@ fn type_summary(decl: &v2::Decl) -> Option<String> {
         Some(v2::decl::Kind::EnumSetDef(_)) => Some("enumset".to_string()),
         Some(v2::decl::Kind::UnionDef(_)) => Some("union".to_string()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn link(text: &str, offset: u32, len: u32, target: &str) -> v2::DocLink {
+        v2::DocLink {
+            text: text.to_string(),
+            offset,
+            len,
+            target: target.to_string(),
+        }
+    }
+
+    fn location(line: u32) -> lt::Location {
+        lt::Location {
+            uri: convert::path_to_uri("/w/lib.typl").expect("an absolute path"),
+            range: lt::Range::new(lt::Position::new(line, 5), lt::Position::new(line, 10)),
+        }
+    }
+
+    #[test]
+    fn render_doc_links_a_resolved_target_and_spans_an_unresolved_one() {
+        let doc = "See [Speed] and [`Gear`].";
+        let links = [
+            link("Speed", 4, 7, "veh.Speed"),
+            link("`Gear`", 16, 8, "veh.Gear"),
+        ];
+        let rendered = render_doc(doc, &links, |target| {
+            (target == "veh.Speed").then(|| location(2))
+        });
+        assert_eq!(rendered, "See [Speed](file:///w/lib.typl#L3) and `Gear`.");
+    }
+
+    #[test]
+    fn render_doc_leaves_a_link_off_a_character_boundary_as_written() {
+        // `ö` is two bytes: offset 1 is inside it.
+        let doc = "ö [A]";
+        let links = [link("A", 1, 3, "veh.A")];
+        assert_eq!(render_doc(doc, &links, |_| Some(location(0))), doc);
+    }
+
+    #[test]
+    fn render_doc_skips_a_see_entry() {
+        let links = [link("Speed", 0, 0, "veh.Speed")];
+        assert_eq!(render_doc("Text.", &links, |_| Some(location(0))), "Text.");
     }
 }

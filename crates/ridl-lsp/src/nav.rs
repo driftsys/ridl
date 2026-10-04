@@ -11,7 +11,7 @@
 //! rename feature reuses [`symbol_at`] for the same reason.
 
 use ridl_core::db::{InputFile, parse_file};
-use ridl_core::package::{Package, Workspace};
+use ridl_core::package::{Package, Workspace, package_of};
 use ridl_sem::{Resolution, Symbol, resolve_doc_link, resolve_package};
 use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
@@ -168,6 +168,73 @@ fn resolve_reference(
 ) -> Option<Symbol> {
     let target = resolve_doc_link(db, ws, std, pkg, resolution, &reference.segments).ok()?;
     target.member.is_none().then_some(target.symbol)
+}
+
+/// The declaration site of a canonical doc-link target (ADR-0026):
+/// `pkg.Name` names a declaration, `pkg.Name.member` a member of one. The
+/// package path is read off the front, so a dotted package name works; `pkg`
+/// is the package the cursor is in, which a standalone overlay is found
+/// through. A member resolves to its own name inside the declaration, or to
+/// the declaration when the member's name is not found there.
+pub(crate) fn canonical_site(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    target: &str,
+) -> Option<(InputFile, TextRange)> {
+    let segments: Vec<&str> = target.split('.').collect();
+    let declared = |package: &[&str], name: &str| {
+        let package = package.join(".");
+        let owner = if package == *pkg.name(db) {
+            pkg
+        } else if package == *std.name(db) {
+            std
+        } else {
+            package_of(db, ws, package.clone())?
+        };
+        resolve_package(db, ws, owner, std)
+            .symbols
+            .get(name)
+            .filter(|symbol| symbol.package == package)
+            .cloned()
+    };
+    if let [package @ .., name] = segments.as_slice()
+        && !package.is_empty()
+        && let Some(symbol) = declared(package, name)
+    {
+        return Some((symbol.file, symbol.range));
+    }
+    let [package @ .., name, member] = segments.as_slice() else {
+        return None;
+    };
+    if package.is_empty() {
+        return None;
+    }
+    let symbol = declared(package, name)?;
+    let site = member_name_range(db, &symbol, member).unwrap_or(symbol.range);
+    Some((symbol.file, site))
+}
+
+/// The range of the member name `member` inside the declaration whose name is
+/// at `symbol.range`: the first `Name` below the declaration, other than the
+/// declaration's own, that spells `member`.
+fn member_name_range(db: &dyn salsa::Database, symbol: &Symbol, member: &str) -> Option<TextRange> {
+    let source = source_file(db, symbol.file);
+    let own = match source.syntax().covering_element(symbol.range) {
+        rowan::NodeOrToken::Node(node) => node,
+        rowan::NodeOrToken::Token(token) => token.parent()?,
+    };
+    let own = own
+        .ancestors()
+        .find(|node| node.kind() == SyntaxKind::Name)?;
+    let declaration = own.parent()?;
+    declaration
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::Name && *node != own)
+        .flat_map(|node| node.children_with_tokens().filter_map(|e| e.into_token()))
+        .find(|token| token.kind() == SyntaxKind::Ident && token.text() == member)
+        .map(|token| token.text_range())
 }
 
 /// The reference the identifier `token` participates in: a type reference
