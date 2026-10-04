@@ -83,7 +83,8 @@ it.
 - **Left to later stages, on purpose.** The roadmap and
   `docs/design/interaction-face.md` attribute the Rust backend's `None` sizes to
   E16.2; D5 amends them to E16.4 (driver §3, D5). The port's catalog check and
-  what `new` does on a mismatch are D3's (driver §4, last paragraph).
+  what `new` does on a mismatch were D3's to place (driver §4, last paragraph);
+  D3 gave both to D6 (driver §5, D3 item 6).
 
 Decisions this re-baseline took that §4 does not settle, reported to Sebastien
 in D1's final report:
@@ -111,6 +112,14 @@ in D1's final report:
    internal error with exit 2.
 8. The package name of `crates/ridl` is `ridl-cli` (AGENTS.md), so every cargo
    command in Tasks 9 and 11 says `-p ridl-cli`.
+
+Stage D3 (PR #676, 2026-10-04) implemented Tasks 3 and 4 with changes that this
+plan's task text does not show. The lane driver's header and its §5 D3 entry
+list them: the hash lives in `ridl-ir`, the interfaces are sorted by (number,
+name), expression names are followed, and the doc tags are blanked. ADR-0014
+decision 15 is current where Task 4 differs from it. Stage D6 also emits the
+port's catalog check in the Rust backend's generated constructors, outside Tasks
+8 and 9 (driver §3 D6).
 
 Changes the review of PR #667 added (pass 1, 2026-10-03):
 

@@ -17,15 +17,35 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D3**. D0 is the pull request that added this document; D1
+**THIS SESSION RUNS: D4**. D0 is the pull request that added this document; D1
 re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
 every change and the decisions it took beyond §4). D2 landed as PR #669 on
 2026-10-03. Every buffer is finished with `ridl_descriptor::finish`, not with
 planus's `Builder::finish(.., Some(id))`, which writes the header in the wrong
-order in planus 1.3.0. The planus crates are pinned to `=1.3.0`.
-`ridl-descriptor` has no `ridl-ir` dependency yet: D3 adds it, and restores the
-"depends on `ridl-ir`" sentence in `.github/workflows/crates-io-release.yml`
-(#670).
+order in planus 1.3.0. The planus crates are pinned to `=1.3.0`. D3 landed as PR
+#676 (742c0a3f) on 2026-10-04. Facts from D3 that the plan text does not have:
+
+- The catalog hash is computed in `ridl-ir`, not in `ridl-descriptor`:
+  `ridl_ir::catalog_hash::{catalog_hash, reduced_package, reachable_decls}`,
+  re-exported as `ridl_descriptor::hash`. The codegen model's `Catalog.hash`
+  carries it, and the Rust backend writes it into every `Interface::CATALOG`.
+  ADR-0014 decision 15 is the record.
+- `ridl-descriptor` depends on `ridl-ir` (no `sha2`, no `serde_json` yet), and
+  `ridl_descriptor::number::numbered_shapes` copies the numbers. The retired
+  list is copied by the lowering (Task 8).
+- The reduced package sorts its interfaces by (number, name), not in
+  `Package::shapes()` order. It follows names inside contract clauses and
+  constant values. It blanks `labels` and `deprecated` as well as doc strings.
+  Plan Task 4's text still shows the earlier forms; the code and ADR-0014
+  decision 15 are current.
+- The golden test is `crates/ridl-descriptor/tests/golden_hash.rs`. The plan's
+  `the_hash_is_the_same_whatever_a_build_emits` was removed. #275's criterion is
+  tested in `crates/ridl/tests/facade.rs`.
+- `xtask/tests/shape_walk.rs` counts the non-comment lines in `catalog_hash.rs`
+  that contain `.interfaces`, whatever the receiver. A new line that reads or
+  edits a package's `.interfaces` field changes the count; a struct-literal
+  field written `interfaces: vec![..]` does not.
+- Debt from the review: #679.
 
 ## 0. How to work in this repository
 
@@ -251,8 +271,17 @@ and a stream payload, even a stream of a named type (§4 answers 5, 6 and 10).
 ### D6 — E16.5 (#381): the lowering and the emit
 
 Plan Tasks 8 and 9. The `Emit` enum in `crates/ridlc/src/lib.rs` is a shared
-file. Check open pull requests first. Done when the corpus package writes a
-descriptor that verifies, and two runs write the same bytes.
+file. Check open pull requests first. D3 gave this stage the port's catalog
+check (§5, D3 item 6): emit the comparison of `port.catalog()` with the
+interface's `CATALOG` in each generated constructor (ADR-0021 decision 3), and
+record what the generated `new` does on a mismatch as an amendment to ADR-0023.
+The runtimes built in `crates/ridl-backend-rust/tests/interaction_face.rs` and
+in `examples/cabin/consumer` then take the generated `CATALOG`, not a zero
+`CatalogHash`. `generate_face` and `generate_face_with` lower with no other
+packages, so their hash differs from `ridl build`'s for a package that
+references another. Done when the corpus package writes a descriptor that
+verifies, two runs write the same bytes, and a face built over a port bound to
+another catalog does what the amendment says.
 
 ### D7 — E16.6 (#382): `ridl describe` and the records
 
@@ -431,3 +460,55 @@ named.
    `.github/workflows/crates-io-release.yml` keeps the publish position answer 9
    sets, and its comment says the crate has no internal dependency. Cost if
    wrong: D3 adds `ridl-ir` back and restores that comment's sentence (#670).
+
+### D3 — PR #676 (742c0a3f)
+
+1. **The hash lives in `ridl-ir` (`ridl_ir::catalog_hash`), and
+   `ridl-descriptor` re-exports it.** Reason: the codegen model is lowered in
+   `ridl-ir` and must carry the hash, plugins and the Rust backend see only the
+   model, and `ridl-ir` cannot depend on `ridl-descriptor`. Cost if wrong: a
+   module move, and `sha2` stays a `ridl-ir` dependency.
+2. **The decision record is an ADR-0014 amendment (decision 15), not a new
+   ADR.** Reason: ADR-0014's scope is how the IR is encoded on every surface
+   that writes it. Cost if wrong: moving the text to a new ADR.
+3. **A bare reference inside another package's declaration resolves in that
+   package, and the reduced package writes every type reference under its
+   canonical name.** Reason: the IR writes a same-package reference bare, so
+   resolving it in the root package reached the wrong declaration or none. Cost
+   if wrong: none found; the corpus hash did not move.
+4. **The doc tags `@labels` and `@deprecated` are blanked like doc strings.**
+   Reason: they are metadata for generated code, not wire identity, and a
+   deprecation must not make peers refuse each other. The lane delegate
+   confirmed it. Cost if wrong: one field un-blanked, and the pinned values move
+   once.
+5. **The reduced interfaces are sorted by (number, name).** Reason: the lock
+   makes the number the identity, and declarations are already sorted by
+   canonical name. The lane delegate ruled it during review. Cost if wrong: one
+   sort, and the pinned values move once.
+6. **The port's catalog check is emitted by D6 (E16.5, #381), which also decides
+   what `new` does on a mismatch.** Reason: the smaller scope for D3. ADR-0021
+   decision 3 lets the check land with E16.2 or after it, and the mismatch
+   behaviour changes every generated `new`. E16.5 writes the descriptor, which
+   is the other artifact a pair is built from. Cost if wrong: until D6 merges, a
+   face built over a port bound to another catalog reads and writes the wrong
+   slots with no error, although the hash could already tell the two catalogs
+   apart.
+7. **Names inside expression strings are followed into the closure.** This
+   covers contract clauses, and constant values for the cyclic case the lowering
+   keeps as a name. A bare name the declaring package does not hold is looked up
+   in every other package of the build, because the IR records no imports.
+   Reason: a constant used only in a `require` clause changed without moving the
+   hash. Cost if wrong: the hash covers some declarations it does not need, so
+   it moves on a few unrelated changes. An import alias is still not followed
+   (#679).
+8. **`catalog_hash` skips an entry of `others` that has the root package's
+   name.** Reason: `ridlc` passes the root among its own others. Cost if wrong:
+   none observable.
+9. **The Rust backend refuses a model whose hash is missing or is not 32 bytes
+   long, for the whole emit.** Reason: a malformed model, and an error inside
+   one interface only skips that interface. Cost if wrong: an older model with
+   no catalog cannot be emitted.
+10. **The codegen corpus snapshots are the guard for compiler-driven changes to
+    the hash; the golden test pins only the reduction and the encoding.**
+    Reason: the golden test reads a frozen IR snapshot. Cost if wrong: a pinned
+    value from compiled source (#679).
