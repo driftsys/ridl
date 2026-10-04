@@ -418,4 +418,8 @@ fn describe_rejects_a_truncated_and_a_flipped_descriptor() {
     std::fs::write(&path, &flipped).unwrap();
     let (code, _, stderr) = ridl(&["describe".as_ref(), path.as_os_str()]);
     assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.starts_with(&format!("error: {}: ", path.display())),
+        "{stderr}"
+    );
 }
