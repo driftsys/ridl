@@ -128,9 +128,7 @@ below record that no generated code made the comparison, and leave what `new`
 does on a mismatch to the story that emits it. Story E16.5 (driftsys/ridl#381)
 emits it. Decision 8 states where the comparison is made and what a mismatch
 does: `Bind::new` and `serve` panic. Taken on delegated authority by stage D6 of
-lane E16 (the lane driver's §5 records it for Sebastien's review). The change
-that emits the check follows this amendment in the same pull request; until it
-merges, this record describes a check the fixture does not yet emit.
+lane E16 (the lane driver's §5 records it for Sebastien's review).
 
 ## Context
 
