@@ -1,0 +1,276 @@
+//! The proto3 projection facts, as ADR-0017 fixes them.
+//!
+//! Two readers have to agree on the scalar a typl type projects to: the
+//! `.proto` schema `ridl-backend-proto` writes, and the size bound
+//! `ridl-descriptor` derives for the catalog descriptor's proto3 column
+//! (roadmap story E16.4). They share no emission code, so what they share is
+//! this table: one function from a width, or from a backing without a width,
+//! to the proto3 scalar, and the largest encoding of one value of that scalar.
+//!
+//! Nothing here writes a line of schema text; the spelling the backend emits
+//! is [`Scalar::as_str`], and the backend is the only caller that emits it.
+
+use crate::v2;
+
+/// A proto3 scalar type, as the projection spells it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scalar {
+    Bool,
+    Int64,
+    Uint32,
+    Uint64,
+    Sint32,
+    Sint64,
+    Float,
+    Double,
+    String,
+    Bytes,
+}
+
+impl Scalar {
+    /// The scalar's spelling in a `.proto` file.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Bool => "bool",
+            Self::Int64 => "int64",
+            Self::Uint32 => "uint32",
+            Self::Uint64 => "uint64",
+            Self::Sint32 => "sint32",
+            Self::Sint64 => "sint64",
+            Self::Float => "float",
+            Self::Double => "double",
+            Self::String => "string",
+            Self::Bytes => "bytes",
+        }
+    }
+
+    /// The largest encoding of one value of this scalar, its tag excluded: a
+    /// varint for the integers (`uint32`/`sint32` at most 5 bytes;
+    /// `int64`/`uint64`/`sint64` at most 10), fixed for the floats, one byte
+    /// for `bool`. `None` for `string` and `bytes`, whose length is the
+    /// value's own and is bounded only by a constraint the type carries.
+    #[must_use]
+    pub fn max_encoded_len(self) -> Option<u64> {
+        match self {
+            Self::Bool => Some(1),
+            Self::Uint32 | Self::Sint32 => Some(5),
+            Self::Int64 | Self::Uint64 | Self::Sint64 => Some(10),
+            Self::Float => Some(4),
+            Self::Double => Some(8),
+            Self::String | Self::Bytes => None,
+        }
+    }
+}
+
+/// The proto3 scalar for a named or inline scalar (typl Appendix D). proto3
+/// has no `uint8`/`uint16` — varint keeps small values small — so both widen
+/// to `uint32`. A signed width means the declared range contains negatives,
+/// and such a range takes `sint32`/`sint64`, because plain `int32` varint
+/// costs 10 bytes for every negative value (ADR-0013 decision 4). A
+/// quantized float keeps its native form: the scaled-integer encoding of typl
+/// §4.3 belongs to CAN/DBC and to SOME/IP per deployment, and a wire backend
+/// must not apply it unasked.
+///
+/// Without a width, a boolean, string or bytes backing projects by the
+/// backing; every other case — an integer or float backing with no width, a
+/// unit backing with no derived width, no backing at all — projects to
+/// `string`. A unit backing implies the float primitive (typl §5.1), so its
+/// width is derived and the `string` fallback does not reach it from a
+/// compiled package.
+#[must_use]
+pub fn scalar(td: &v2::TypeDef) -> Scalar {
+    match &td.width {
+        Some(v2::type_def::Width::IntWidth(width)) => match v2::IntWidth::try_from(*width) {
+            Ok(v2::IntWidth::U8 | v2::IntWidth::U16 | v2::IntWidth::U32) => Scalar::Uint32,
+            Ok(v2::IntWidth::U64) => Scalar::Uint64,
+            Ok(v2::IntWidth::I8 | v2::IntWidth::I16 | v2::IntWidth::I32) => Scalar::Sint32,
+            Ok(v2::IntWidth::I64) => Scalar::Sint64,
+            _ => Scalar::Int64,
+        },
+        Some(v2::type_def::Width::FloatWidth(width)) => match v2::FloatWidth::try_from(*width) {
+            Ok(v2::FloatWidth::F32) => Scalar::Float,
+            _ => Scalar::Double,
+        },
+        None => match td
+            .backing
+            .as_ref()
+            .and_then(|backing| backing.kind.as_ref())
+        {
+            Some(v2::backing::Kind::Primitive(primitive)) => {
+                match v2::PrimitiveType::try_from(*primitive) {
+                    Ok(v2::PrimitiveType::Boolean) => Scalar::Bool,
+                    Ok(v2::PrimitiveType::Bytes) => Scalar::Bytes,
+                    _ => Scalar::String,
+                }
+            }
+            _ => Scalar::String,
+        },
+    }
+}
+
+/// The proto3 scalar for a bare primitive at a field position: an integer
+/// with no declared width is `int64`, a float `double`; a tag the IR does
+/// not define is `string`.
+#[must_use]
+pub fn primitive(primitive: i32) -> Scalar {
+    match v2::PrimitiveType::try_from(primitive) {
+        Ok(v2::PrimitiveType::Boolean) => Scalar::Bool,
+        Ok(v2::PrimitiveType::Integer) => Scalar::Int64,
+        Ok(v2::PrimitiveType::Float) => Scalar::Double,
+        Ok(v2::PrimitiveType::Bytes) => Scalar::Bytes,
+        _ => Scalar::String,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::v2::{Backing, FloatWidth, IntWidth, PrimitiveType, TypeDef, backing, type_def};
+
+    fn with_int_width(width: i32) -> TypeDef {
+        TypeDef {
+            width: Some(type_def::Width::IntWidth(width)),
+            ..Default::default()
+        }
+    }
+
+    fn with_float_width(width: i32) -> TypeDef {
+        TypeDef {
+            width: Some(type_def::Width::FloatWidth(width)),
+            ..Default::default()
+        }
+    }
+
+    fn with_backing(kind: backing::Kind) -> TypeDef {
+        TypeDef {
+            backing: Some(Backing { kind: Some(kind) }),
+            ..Default::default()
+        }
+    }
+
+    fn prim(primitive: PrimitiveType) -> backing::Kind {
+        backing::Kind::Primitive(primitive as i32)
+    }
+
+    #[test]
+    fn the_width_table_is_the_one_the_proto_backend_emits() {
+        for width in [IntWidth::U8, IntWidth::U16, IntWidth::U32] {
+            assert_eq!(scalar(&with_int_width(width as i32)).as_str(), "uint32");
+        }
+        assert_eq!(
+            scalar(&with_int_width(IntWidth::U64 as i32)).as_str(),
+            "uint64"
+        );
+        for width in [IntWidth::I8, IntWidth::I16, IntWidth::I32] {
+            assert_eq!(scalar(&with_int_width(width as i32)).as_str(), "sint32");
+        }
+        assert_eq!(
+            scalar(&with_int_width(IntWidth::I64 as i32)).as_str(),
+            "sint64"
+        );
+        assert_eq!(
+            scalar(&with_int_width(IntWidth::Unspecified as i32)).as_str(),
+            "int64"
+        );
+        assert_eq!(
+            scalar(&with_int_width(99)).as_str(),
+            "int64",
+            "an integer width tag the IR does not define"
+        );
+        assert_eq!(
+            scalar(&with_float_width(FloatWidth::F32 as i32)).as_str(),
+            "float"
+        );
+        assert_eq!(
+            scalar(&with_float_width(FloatWidth::F64 as i32)).as_str(),
+            "double"
+        );
+        assert_eq!(
+            scalar(&with_float_width(FloatWidth::Unspecified as i32)).as_str(),
+            "double"
+        );
+        assert_eq!(
+            scalar(&with_float_width(99)).as_str(),
+            "double",
+            "a float width tag the IR does not define"
+        );
+    }
+
+    #[test]
+    fn without_a_width_the_backing_decides() {
+        assert_eq!(
+            scalar(&with_backing(prim(PrimitiveType::Boolean))).as_str(),
+            "bool"
+        );
+        assert_eq!(
+            scalar(&with_backing(prim(PrimitiveType::Bytes))).as_str(),
+            "bytes"
+        );
+        assert_eq!(
+            scalar(&with_backing(prim(PrimitiveType::String))).as_str(),
+            "string"
+        );
+        assert_eq!(
+            scalar(&with_backing(prim(PrimitiveType::Integer))).as_str(),
+            "string",
+            "an integer backing without a width"
+        );
+        assert_eq!(
+            scalar(&with_backing(prim(PrimitiveType::Float))).as_str(),
+            "string",
+            "a float backing without a width"
+        );
+        assert_eq!(
+            scalar(&with_backing(prim(PrimitiveType::Unspecified))).as_str(),
+            "string"
+        );
+        assert_eq!(
+            scalar(&with_backing(backing::Kind::Unit("km/h".to_owned()))).as_str(),
+            "string",
+            "a unit backing without a derived width"
+        );
+        assert_eq!(scalar(&TypeDef::default()).as_str(), "string", "no backing");
+        // The width wins over a backing that disagrees with it.
+        assert_eq!(
+            scalar(&TypeDef {
+                width: Some(type_def::Width::IntWidth(IntWidth::U16 as i32)),
+                ..with_backing(prim(PrimitiveType::Boolean))
+            })
+            .as_str(),
+            "uint32"
+        );
+    }
+
+    #[test]
+    fn a_bare_primitive_has_its_own_table() {
+        assert_eq!(primitive(PrimitiveType::Boolean as i32).as_str(), "bool");
+        assert_eq!(primitive(PrimitiveType::Integer as i32).as_str(), "int64");
+        assert_eq!(primitive(PrimitiveType::Float as i32).as_str(), "double");
+        assert_eq!(primitive(PrimitiveType::Bytes as i32).as_str(), "bytes");
+        assert_eq!(primitive(PrimitiveType::String as i32).as_str(), "string");
+        assert_eq!(
+            primitive(PrimitiveType::Unspecified as i32).as_str(),
+            "string"
+        );
+        assert_eq!(
+            primitive(99).as_str(),
+            "string",
+            "a primitive tag the IR does not define"
+        );
+    }
+
+    #[test]
+    fn the_largest_encoding_of_each_scalar() {
+        assert_eq!(Scalar::Bool.max_encoded_len(), Some(1));
+        assert_eq!(Scalar::Uint32.max_encoded_len(), Some(5));
+        assert_eq!(Scalar::Sint32.max_encoded_len(), Some(5));
+        assert_eq!(Scalar::Int64.max_encoded_len(), Some(10));
+        assert_eq!(Scalar::Uint64.max_encoded_len(), Some(10));
+        assert_eq!(Scalar::Sint64.max_encoded_len(), Some(10));
+        assert_eq!(Scalar::Float.max_encoded_len(), Some(4));
+        assert_eq!(Scalar::Double.max_encoded_len(), Some(8));
+        assert_eq!(Scalar::String.max_encoded_len(), None);
+        assert_eq!(Scalar::Bytes.max_encoded_len(), None);
+    }
+}

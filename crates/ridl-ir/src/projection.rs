@@ -12,6 +12,9 @@
 //! two, so the facts cannot live in a backend.
 //!
 //! One submodule per target. [`flatbuffers`] reads ADR-0019's projection rules
-//! once, for both of the emitters that have to agree on them.
+//! once, for both of the emitters that have to agree on them. [`proto3`] holds
+//! ADR-0017's scalar table once, for the `.proto` emitter and the descriptor's
+//! proto3 size bound.
 
 pub mod flatbuffers;
+pub mod proto3;

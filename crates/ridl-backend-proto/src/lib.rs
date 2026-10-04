@@ -26,6 +26,7 @@
 //! resolve is refused, rather than emitted as a name `protoc` would then
 //! fail to resolve.
 
+use ridl_ir::projection::proto3;
 use ridl_ir::v2;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -957,58 +958,18 @@ fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
     (scalar.to_string(), comment)
 }
 
-/// The proto3 scalar for a resolved typl width (typl Appendix D). proto3 has
-/// no `uint8`/`uint16` — varint keeps small values small — so both widen to
-/// `uint32`. A signed width means the declared range contains negatives, and
-/// such a range takes `sint32`/`sint64`, because plain `int32` varint costs
-/// 10 bytes for every negative value (ADR-0013 decision 4). A quantized
-/// float keeps its native form: the scaled-integer encoding of typl §4.3
-/// belongs to CAN/DBC and to SOME/IP per deployment, and a wire backend must
-/// not apply it unasked.
+/// The proto3 scalar for a resolved typl width (typl Appendix D). The table
+/// is `ridl_ir::projection::proto3::scalar`, which holds it once for this
+/// emitter and for the proto3 size bound the catalog descriptor derives, so
+/// the two cannot disagree; the rationale for each row is documented there.
 fn proto_scalar(td: &v2::TypeDef) -> &'static str {
-    match &td.width {
-        Some(v2::type_def::Width::IntWidth(width)) => match v2::IntWidth::try_from(*width) {
-            Ok(v2::IntWidth::U8 | v2::IntWidth::U16 | v2::IntWidth::U32) => "uint32",
-            Ok(v2::IntWidth::U64) => "uint64",
-            Ok(v2::IntWidth::I8 | v2::IntWidth::I16 | v2::IntWidth::I32) => "sint32",
-            Ok(v2::IntWidth::I64) => "sint64",
-            _ => "int64",
-        },
-        Some(v2::type_def::Width::FloatWidth(width)) => match v2::FloatWidth::try_from(*width) {
-            Ok(v2::FloatWidth::F32) => "float",
-            _ => "double",
-        },
-        // No width table: boolean, string and bytes backings. A unit backing
-        // implies the float primitive (typl §5.1), so its width is always
-        // derived and never reaches this arm.
-        None => match td
-            .backing
-            .as_ref()
-            .and_then(|backing| backing.kind.as_ref())
-        {
-            Some(v2::backing::Kind::Primitive(primitive)) => {
-                match v2::PrimitiveType::try_from(*primitive) {
-                    Ok(v2::PrimitiveType::Boolean) => "bool",
-                    Ok(v2::PrimitiveType::Bytes) => "bytes",
-                    _ => "string",
-                }
-            }
-            _ => "string",
-        },
-    }
+    proto3::scalar(td).as_str()
 }
 
-/// The proto3 scalar for a direct primitive use at a field position. A bare
-/// `integer` or `float` carries no derived width, so the full typl domain is
-/// emitted: int64 and float64 (typl §4).
+/// The proto3 scalar for a bare primitive at a field position
+/// (`ridl_ir::projection::proto3::primitive`).
 fn proto_primitive(primitive: i32) -> &'static str {
-    match v2::PrimitiveType::try_from(primitive) {
-        Ok(v2::PrimitiveType::Boolean) => "bool",
-        Ok(v2::PrimitiveType::Integer) => "int64",
-        Ok(v2::PrimitiveType::Float) => "double",
-        Ok(v2::PrimitiveType::Bytes) => "bytes",
-        _ => "string",
-    }
+    proto3::primitive(primitive).as_str()
 }
 
 /// The constraint information proto3 has no construct for, as a comment
