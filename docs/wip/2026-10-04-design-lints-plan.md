@@ -933,6 +933,20 @@ execution.
     detect that before commitment. The integration adds no version bump and runs
     no candidate check, metric dump, finding or calibration procedure.
 
+21. **Bound the existing upstream licence check to its notice section** (PR 2
+    integration fix). The full verification run found that the distribution test
+    hashed the complete suffix after the upstream licence header, including all
+    newly appended corpus notices. The upstream licence bytes and their recorded
+    SHA-256 remain unchanged. Extract the licence up to the next generic notice
+    separator, or end of file when it is the last notice, preserving its final
+    newline. Keep every notice byte and the original hash. A focused regression
+    checks that modified and truncated licence text still fails that hash
+    comparison; release archive checks continue to compare the complete notices
+    file byte for byte. If the separator convention changes, the extraction must
+    be revised and reviewed; the exact upstream hash must not be updated to
+    include unrelated notices. This change adds no corpus or task edits and runs
+    no candidate checks or calibration procedure.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
