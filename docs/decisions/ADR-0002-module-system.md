@@ -4,6 +4,9 @@
 
 Accepted.
 
+Amended 2026-10-04 by the lint foundation design (spec 0): §4 gains the
+`[lints]` table, which both manifest kinds accept, and its resolution order.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -160,6 +163,25 @@ members = ["veh-common", "veh-cluster", "veh-adas"]
 
 Each workspace member directory contains its own `ridl.toml` in
 standalone-package mode.
+
+**The `[lints]` table** (amended 2026-10-04, lint foundation design) sets the
+level of a lint, in both modes. Each key is a lint name, the name a Warning or
+Info row of the diagnostic catalogue carries; each value is one of `allow`,
+`info`, `warn` or `deny`:
+
+```toml
+[lints]
+missing-timing = "deny"
+shared-error-type = "allow"
+```
+
+The level of a lint for a package is resolved key by key, the later source
+winning: the catalogue default, then the `[lints]` table of the workspace root
+manifest when the package is a workspace member, then the package's own
+`[lints]` table. A member loaded on its own — the entry point is the member's
+directory or a file inside it — is a standalone package, so the root table does
+not apply to it. An entry that names no lint, or whose value is not a level,
+raises MANI-010 and is ignored.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based

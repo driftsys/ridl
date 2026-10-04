@@ -18,6 +18,7 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::{self, Config};
 
 use super::{Diagnostic, Severity, SourceMap, Span};
+use crate::lint;
 
 /// Renders `diags` against `sources` to a plain (uncoloured) terminal string.
 ///
@@ -81,7 +82,7 @@ fn to_codespan(diag: &Diagnostic, file_count: usize) -> cs::Diagnostic<usize> {
 
     // Fix-its render as notes: codespan-reporting has no first-class suggestion,
     // so the suggested replacement text is spelled out under the diagnostic.
-    let notes: Vec<String> = diag
+    let mut notes: Vec<String> = diag
         .fixits
         .iter()
         .map(|fixit| {
@@ -91,6 +92,14 @@ fn to_codespan(diag: &Diagnostic, file_count: usize) -> cs::Diagnostic<usize> {
             )
         })
         .collect();
+    // A lint diagnostic names its lint after the fix-it notes, so a reader
+    // knows the key that sets its level (lint foundation spec §7.2). The note
+    // depends only on the code, not on the level that applied.
+    if let Some(name) = lint::lint_of(diag.code).and_then(|entry| entry.lint) {
+        notes.push(format!(
+            "lint: `{name}` (set its level in `[lints]` in ridl.toml)"
+        ));
+    }
 
     let mut rendered = cs::Diagnostic::new(severity)
         .with_message(&diag.message)
@@ -184,6 +193,35 @@ mod tests {
             "the rendered output must spell the suggested replacement, got:\n{rendered}",
         );
         assert!(rendered.contains("rename to `Velocity`"));
+    }
+
+    /// A lint diagnostic ends with the note that names its lint, after the
+    /// fix-it notes (lint foundation spec §7.2). The file has fewer than ten
+    /// lines, so the note line is two spaces of gutter followed by the text.
+    #[test]
+    fn lint_diagnostic_renders_its_lint_note() {
+        let text = "package p\ninterface S {\n  signal speed: Speed\n}\n";
+        let mut map = SourceMap::new();
+        let at_signal = span(&mut map, "demo.ridl", text, 32, 37); // `speed`
+        let diags = vec![Diagnostic {
+            code: DiagCode::RIDL_100,
+            severity: Severity::Warning,
+            message: "signal without a timing annotation".to_string(),
+            primary: at_signal,
+            labels: Vec::new(),
+            fixits: vec![FixIt {
+                span: at_signal,
+                replacement: "speed: Speed @10ms".to_string(),
+                label: "write the timing".to_string(),
+            }],
+        }];
+        let rendered = super::render(&diags, &map);
+        assert!(
+            rendered.lines().any(|line| line
+                == "  = lint: `missing-timing` (set its level in `[lints]` in ridl.toml)"),
+            "the rendered output must hold the lint note line, got:\n{rendered}",
+        );
+        insta::assert_snapshot!("lint_diagnostic_note", rendered);
     }
 
     /// A span that runs across a blank line into the next declaration's keyword

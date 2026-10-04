@@ -358,11 +358,12 @@ check gate (§6.2), `lint_of` in `ridl_core::lint` returning `&CatalogEntry`
     `missing-timing = "deny"`. `ridlc::run_check` gives a RIDL-100 with
     `Severity::Error`, and `has_error()` is true.
   - `allow_removes_a_lint`: with `"allow"`, no RIDL-100 is present.
-  - `defaults_normalise_severity`: with no `[lints]`, RIDL-100 is a Warning.
+  - `a_lint_without_lints_table_is_a_warning`: with no `[lints]`, RIDL-100 is a
+    Warning.
   - `deny_blocks_build`: `ridlc::run_build` with `missing-timing = "deny"` into
     a temp out dir has `has_error()`, and the out dir holds no generated file.
-  - `check_source_uses_defaults`: `ridlc::check_source` on the same text gives a
-    RIDL-100 Warning.
+  - `check_source_reports_the_lint_as_a_warning`: `ridlc::check_source` on the
+    same text gives a RIDL-100 Warning.
   - `compile_workspace_keeps_emitted_severities`: with
     `missing-timing =
     "allow"`, `ridlc::compile_workspace` still reports

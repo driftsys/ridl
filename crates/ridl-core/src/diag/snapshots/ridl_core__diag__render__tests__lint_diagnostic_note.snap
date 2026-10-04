@@ -1,0 +1,14 @@
+---
+source: crates/ridl-core/src/diag/render.rs
+expression: rendered
+---
+warning[RIDL-100]: signal without a timing annotation
+  ┌─ demo.ridl:3:9
+  │
+3 │   signal speed: Speed
+  │         ^^^^^
+  │         │
+  │         write the timing
+  │
+  = suggestion: replace with `speed: Speed @10ms` — write the timing
+  = lint: `missing-timing` (set its level in `[lints]` in ridl.toml)

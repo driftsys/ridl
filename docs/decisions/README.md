@@ -4,7 +4,9 @@ An entry marked `_Proposed._` has that status in its own `## Status`; every
 other entry below is Accepted.
 
 - **ADR-0002 — Module system.** `package` / `import` / `as` / `internal`, the
-  manifest, lockfile, and resolver.
+  manifest, lockfile, and resolver. Amended 2026-10-04 by the lint foundation
+  design: §4 gains the `[lints]` table, which both manifest kinds accept, and
+  its resolution order.
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
   order and technology choices (companion to the roadmap). Amended 2026-08-03:
   uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl
@@ -39,7 +41,11 @@ other entry below is Accepted.
   `ridl`/`ridlc`, which clig.dev guidance applies and which does not (the
   `diff(1)`/`grep(1)` precedent for a verdict-carrying exit 1, not clig), and
   the fail-closed rule `ridl fmt` was brought into line with. Not epic-scoped:
-  it binds the CLI contract for every future subcommand.
+  it binds the CLI contract for every future subcommand. Amended 2026-10-04 by
+  the lint foundation design: decision 1 states that a lint raised to `deny`
+  exits 1 in `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, and
+  that of the other subcommands only the `ridl lsp` and `ridl mcp` servers apply
+  lint levels, with no effect on their exit code.
 
 - **ADR-0011 — The provisioned-constant keyword.** ridl's `final` renamed to
   `fixed`, so both ridl and uxdl spell one concept one way; `final` removed from

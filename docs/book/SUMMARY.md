@@ -5,6 +5,7 @@
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
 - [CLI reference](cli-reference.md)
+- [Lints](lints.md)
 
 # Language reference
 

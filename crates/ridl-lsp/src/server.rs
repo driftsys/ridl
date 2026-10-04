@@ -20,6 +20,12 @@
 //! it (issue #384). The nearest `ridl.toml` wins, so a file inside a member of
 //! a `[workspace]` loads that member's package only.
 //!
+//! The `[lints]` levels the load resolved apply to every published
+//! diagnostic (lint foundation spec §6.2): to the loader's findings once, at
+//! load time, and to the analysis results on every recompute, both before
+//! conversion. A lint at `allow` is not published; one at `deny` is published
+//! as an error.
+//!
 //! Two scope limits of this task, both by design:
 //!
 //! - The loader's own findings (manifest diagnostics and the
@@ -43,6 +49,7 @@ use ridl_core::db::{InputFile, RidlDatabase, parse_file};
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
+use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     LoadedWorkspace, find_manifest_root, load_workspace, profile_of_path, std_package,
@@ -225,6 +232,15 @@ struct ServerState {
     /// Whether [`ServerState::load`] has succeeded. Once it has, the
     /// workspace is not loaded again; a file outside it is an overlay.
     loaded: bool,
+    /// The `[lints]` levels by directory, as the loader built them (lint
+    /// foundation spec §6.1); replaced by each [`ServerState::load`], empty
+    /// before one succeeds. The levels resolve by directory, not by file id,
+    /// so a file opened after the load — an overlay with no load-time entry —
+    /// still takes the levels of the member whose directory contains it. The
+    /// scope keys are in the path form the loader read the workspace from,
+    /// which is the form of the client's root URI; a `didOpen` path is in the
+    /// form of its own URI. Neither side is canonicalised.
+    lints: LintScopes,
     /// The manifest directory and reason of the last load error a `didOpen`
     /// showed, so the same error is not shown again on every later
     /// `didOpen`.
@@ -268,6 +284,7 @@ impl ServerState {
             std,
             workspace,
             loaded: false,
+            lints: LintScopes::default(),
             shown_load_error: None,
             files: HashMap::new(),
             file_package: HashMap::new(),
@@ -293,8 +310,9 @@ impl ServerState {
     fn load(&mut self, dir: &Path) -> io::Result<()> {
         let LoadedWorkspace {
             workspace,
-            diagnostics,
+            mut diagnostics,
             sources,
+            lints,
         } = load_workspace(&mut self.db, dir)?;
         for package in workspace.packages(&self.db) {
             for file in package.files(&self.db) {
@@ -303,9 +321,15 @@ impl ServerState {
                     .insert(file.path(&self.db).clone(), *package);
             }
         }
+        // `analyze` never sees the loader's findings, so their levels are
+        // applied here, once, before the conversion (lint foundation spec
+        // §6.2). A manifest's MANI-010 is itself a lint, and its file is in
+        // the scope of the manifest's own directory.
+        apply_lint_levels(&mut diagnostics, &sources, &lints);
         self.loader_diagnostics =
             convert_loader_diagnostics(&self.db, &self.files, diagnostics, &sources);
         self.workspace = workspace;
+        self.lints = lints;
         self.loaded = true;
 
         let joined: Vec<String> = self
@@ -688,6 +712,11 @@ impl ServerState {
             &BTreeSet::new(),
             &mut sources,
         ));
+        // The `[lints]` levels, resolved through the paths this source map
+        // recorded for every file, including an overlay's (lint foundation
+        // spec §6.2). `allow` removes a diagnostic before conversion, so it is
+        // never published.
+        apply_lint_levels(&mut all, &sources, &self.lints);
         batch(all, &table)
     }
 

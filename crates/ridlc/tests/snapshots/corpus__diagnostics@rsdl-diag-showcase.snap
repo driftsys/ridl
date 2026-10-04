@@ -62,6 +62,8 @@ warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux
    │
 29 │     Lane [ linux.cpuset = (2, 3) ]
    │            ^^^^^^^^^^^^^^^^^^^^^
+   │
+   = lint: `unclaimed-backend-key` (set its level in `[lints]` in ridl.toml)
 
 error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
    ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:42:3
@@ -170,6 +172,8 @@ warning[RSDL-409]: `Driver` requires `rsdl.showcase.Horn`, which resolves to `Ho
    │
 17 │   requires Horn
    │            ^^^^
+   │
+   = lint: `redundant-provider-set` (set its level in `[lints]` in ridl.toml)
 
 error[RSDL-403]: no closure service lists `rsdl.showcase.Wiper`, which `Driver` requires; `Wipers` offers `rsdl.showcase.wipers`, which lists it, and the system does not list `Wipers` (rsdl reference §8)
    ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:18:12

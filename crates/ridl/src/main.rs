@@ -50,10 +50,11 @@ mod property;
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
 use ridl_core::interface_lock::LockKey;
+use ridl_core::lint::{apply_lint_levels, lint_of};
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::plugin::PluginSpec;
-use ridlc::{CliRun, Emit};
+use ridlc::{ApplyLints, CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
 #[derive(Parser)]
@@ -92,7 +93,8 @@ enum Command {
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
         /// default); json goes to stdout instead — see the CLI reference
-        /// (docs/book/cli-reference.md) for its schema.
+        /// (docs/book/cli-reference.md) for its schema; sarif writes one
+        /// SARIF 2.1.0 log to stdout, for code-scanning viewers.
         #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
         format: CheckFormat,
     },
@@ -245,6 +247,7 @@ enum DiffFormat {
 enum CheckFormat {
     Text,
     Json,
+    Sarif,
 }
 
 fn main() -> ExitCode {
@@ -271,6 +274,7 @@ fn main() -> ExitCode {
             &plugin,
             std::time::Duration::from_secs(plugin_timeout),
             frozen.into(),
+            ApplyLints::Yes,
         )),
         Command::Test {
             path,
@@ -574,7 +578,10 @@ const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [
 /// is skipped entirely when the compile produced any other error — a diff
 /// against IR that failed to check would report noise on top of the real
 /// problem — while RIDL-409 stops nothing in lowering (an entry with no
-/// declaration has nothing to lower), so the IR it runs over is whole.
+/// declaration has nothing to lower), so the IR it runs over is whole. A lint
+/// raised to `deny` by `[lints]` is an Error for the exit code but not a
+/// compile error, so it does not skip the desk check either (lint foundation
+/// spec §6.2): the run reports the denied lint and the RIDL-407 together.
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
@@ -584,7 +591,15 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         }
     };
 
-    if lock::only_lock_orphans(&run.diagnostics) {
+    // A lint at `deny` is an Error by level, not a compile error: the IR it
+    // runs over is whole, so it does not stop the desk check (lint foundation
+    // spec §6.2). The lint diagnostics are left out of the gate here, at the
+    // `ridl check` call site only; `ridl lock` keeps the unfiltered test.
+    let compile_diagnostics = run
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| lint_of(diagnostic.code).is_none());
+    if lock::only_lock_orphans(compile_diagnostics) {
         match baseline_location(path, baseline) {
             Ok(Some(location)) => {
                 if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
@@ -595,6 +610,11 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
             Err(code) => return code,
         }
     }
+
+    // RIDL-407 is raised here, after `ridlc` applied the levels, so they are
+    // applied once more over the whole run. The function is idempotent, so
+    // the diagnostics `ridlc` already levelled do not change.
+    apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
     finish_check(run, format)
 }
@@ -620,7 +640,19 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     let staging = staging_dir(&out_dir);
     let _ = std::fs::remove_dir_all(&staging);
 
-    let mut run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
+    // The snapshot is published with the severities the emit sites chose: a
+    // baseline is not a report to a person, so no `[lints]` level applies, and
+    // a lint at `deny` does not block the publication (lint foundation spec
+    // D-8).
+    let mut run = match ridlc::run_build_with(
+        path,
+        &staging,
+        &[Emit::IrJson],
+        &[],
+        std::time::Duration::from_secs(ridlc::plugin::DEFAULT_TIMEOUT_SECONDS),
+        false.into(),
+        ApplyLints::No,
+    ) {
         Ok(run) => run,
         Err(err) => {
             let _ = std::fs::remove_dir_all(&staging);
@@ -2215,8 +2247,9 @@ struct DeclIndex {
 }
 
 impl DeclIndex {
-    /// Indexes every `.typl`, `.ridl` and `.rsdl` file under `entry` (an
-    /// `.rsdl` file declares no shape and no service, so it adds nothing). A
+    /// Indexes every `.typl`, `.ridl` and `.rsdl` file under
+    /// [`index_root`]`(entry)` (an `.rsdl` file declares no shape and no
+    /// service, so it adds nothing). A
     /// file that cannot be read is skipped rather than reported: the compile
     /// already ran clean over this tree, so anything unreadable here is outside
     /// what any caller of this index reports — neither the desk check nor the
@@ -2228,7 +2261,7 @@ impl DeclIndex {
     /// reported here either.
     fn build(entry: &Path) -> Self {
         let mut index = Self::default();
-        for file in collect_source_files(entry).unwrap_or_default() {
+        for file in collect_source_files(&index_root(entry)).unwrap_or_default() {
             let Ok(text) = std::fs::read_to_string(&file) else {
                 continue;
             };
@@ -2463,6 +2496,22 @@ impl DeclIndex {
     }
 }
 
+/// The directory tree [`DeclIndex::build`] indexes for `entry`: the manifest
+/// root at or above it, the root [`ridl_core::load_workspace`] compiles from.
+/// The compile covers the whole root whatever entry names it, so an entry at
+/// a file or a subdirectory would otherwise leave a change in a file above or
+/// beside it with a detached span, which no `[lints]` scope reaches. A file
+/// with no manifest above it (single-file mode) is indexed alone.
+fn index_root(entry: &Path) -> PathBuf {
+    let dir = if entry.is_file() {
+        entry.parent()
+    } else {
+        Some(entry)
+    };
+    dir.and_then(ridl_core::find_manifest_root)
+        .unwrap_or_else(|| entry.to_path_buf())
+}
+
 /// A span pointing at no file at all.
 fn detached_span() -> Span {
     Span {
@@ -2529,8 +2578,16 @@ fn exit_code(run: &CliRun) -> ExitCode {
     }
 }
 
-/// Ends `ridl check`: text renders to stderr through [`finish`]; JSON prints
-/// the contract to stdout and keeps the same exit code.
+/// Ends `ridl check`: text renders to stderr through [`finish`]; JSON and
+/// SARIF print their contract to stdout and keep the same exit code. The
+/// SARIF artifact URIs are relative to the working directory, not to the
+/// checked path, so one log has one base (lint foundation spec §7.3). The
+/// comparison is lexical: `current_dir` returns the physical path, so an
+/// absolute entry that reaches the working directory through a symbolic link
+/// is outside it and gives absolute `file://` URIs, while a relative entry is
+/// joined onto the working directory and is under it. A working directory that
+/// cannot be read gives no base: an absolute source path is an absolute
+/// `file://` URI, a relative one stays relative.
 fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
     match format {
         CheckFormat::Text => finish(Ok(run)),
@@ -2539,6 +2596,20 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json).expect("diagnostics serialize")
+            );
+            exit_code(&run)
+        }
+        CheckFormat::Sarif => {
+            let cwd = std::env::current_dir().ok();
+            let log = ridl_core::diag::sarif::to_sarif(
+                &run.diagnostics,
+                &run.sources,
+                cwd.as_deref(),
+                env!("CARGO_PKG_VERSION"),
+            );
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&log).expect("the SARIF log serializes")
             );
             exit_code(&run)
         }

@@ -1,0 +1,8 @@
+package fx.sensor
+
+type Speed: integer [0..300]
+
+/// A sensor whose signal has no timing annotation, which draws RIDL-100.
+interface Sensor {
+  signal speed: Speed
+}

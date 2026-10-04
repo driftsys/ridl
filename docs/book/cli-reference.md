@@ -106,7 +106,7 @@ Arguments:
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
       --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm change `ridl diff` gates on that concerns an ordinal: a member inserted, one removed, one moved in an edit that added or removed no member, and one appended beside such a change or to a result union. An append that is breaking only for its field's type moves no ordinal and draws no warning. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
-      --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema [default: text] [possible values: text, json]
+      --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema; sarif writes one SARIF 2.1.0 log to stdout, for code-scanning viewers [default: text] [possible values: text, json, sarif]
   -h, --help                 Print help
 ```
 
@@ -194,6 +194,40 @@ ridl check --format json
 ]
 ```
 
+A diagnostic whose code is a [lint](lints.md) carries one more field, `lint`,
+which holds the lint name, for example `"lint": "unbounded-float"` next to
+`"code": "TYPL-102"`. The field is absent for a code that is not a lint and
+for a diagnostic with no code. `severity` is always the effective severity,
+after the levels in the `[lints]` table of `ridl.toml` are applied, so a lint
+set to `deny` reports `"severity": "error"` and a lint set to `allow` is not in
+the array. The text report names the lint in a note after the snippet
+(`= lint: ...`), as the examples below show.
+
+`--format sarif` writes one [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+log to stdout, for code-scanning viewers such as GitHub code scanning. The log
+holds one run. Its `tool.driver.rules` lists every catalogue code, errors
+included, with the lint name as the rule `name` when the code is a lint and the
+default level as `defaultConfiguration.level`. Each result has the code as its
+`ruleId`, the effective level (`error`, `warning`, or `note` for an info), the
+message, and one location; each label becomes a related location. Columns
+count Unicode code points (`columnKind` is `unicodeCodePoints`). The log
+carries no fix-its, which the JSON output carries, and no `helpUri`. A
+diagnostic with no source file, such as a lockfile or remote-fetch diagnostic
+(MANI-1xx), has no location. An uncoded diagnostic has no `ruleId` and no
+`ruleIndex`. An artifact URI is relative to the current working directory,
+with `/` separators and every segment percent-encoded; it carries `uriBaseId`
+`%SRCROOT%`, which the run's `originalUriBaseIds` resolves to the working
+directory as a `file://` URI. A file outside the working directory is an
+absolute `file://` URI with no `uriBaseId`. The comparison is lexical, not
+through the filesystem: a relative path is joined onto the working directory,
+and an absolute path is compared with the working directory as the operating
+system spells it, so an absolute path that reaches the working directory
+through a symbolic link (`/tmp` on macOS, for example) counts as outside it.
+Run `ridl check --format sarif` from the repository root, with the path to
+check given relative to it, so that every URI is relative to the root, which
+is what a code-scanning upload expects. The exit code is the same as for the
+other formats.
+
 2 when the workspace itself cannot be found:
 
 ```sh
@@ -252,7 +286,11 @@ silent skip the two paragraphs above do not touch.
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
 the workspace against it and warns (RIDL-407) on every interaction whose
 declaration order moved, and every struct field or union arm change `ridl
-diff` gates on that concerns an ordinal, without moving the exit code. The warning for a field or arm
+diff` gates on that concerns an ordinal. At its default level the warning does
+not change the exit code; RIDL-407 is the lint `ordinal-changed`, so
+`ordinal-changed = "deny"` in [`[lints]`](lints.md) reports it as an error,
+which makes the run exit 1, and `ordinal-changed = "allow"` removes it. The
+warning for a field or arm
 follows the verdict the gate reads, so the two agree: a member inserted, one
 removed, one moved in an edit that added or removed no member, and one
 appended beside such a change each draw one warning, and an append alone
@@ -275,25 +313,32 @@ warning[RIDL-407]: `doorOpened` has moved in `VehicleStatus` since the published
   │
 7 │   event doorOpened : DoorState @[100ms..1s]
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = lint: `ordinal-changed` (set its level in `[lints]` in ridl.toml)
 
 warning[RIDL-407]: `doorClosed` has moved in `VehicleStatus` since the published baseline (position 2 there, position 1 here). Declaration order is the wire identity of an interaction (ridl §11), so a consumer built against the baseline would now bind this slot to a different interaction — put the declarations back in the baseline's order and add new ones at the end
   ┌─ ./demo.ridl:6:3
   │
 6 │   event doorClosed : DoorState @[100ms..1s]
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = lint: `ordinal-changed` (set its level in `[lints]` in ridl.toml)
 
 ```
 
 That run exits 0: two RIDL-407 warnings and an otherwise clean compile stay
 clean. The desk check runs only after a compile with no error diagnostic other
 than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
-leaves nothing out of the IR the desk check compares. A workspace with any
-other error draws no RIDL-407 warning in addition to that error: it exits 1,
-exactly as it would with no baseline present. A workspace whose only errors
+leaves nothing out of the IR the desk check compares — and other than a lint
+raised to `deny`. A workspace with any other error draws no RIDL-407 warning in
+addition to that error: it exits 1, exactly as it would with no baseline
+present. A workspace whose only errors
 are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
 declaration without an entry has the published shape of the orphan entry's
 interface, the desk check adds a label to that RIDL-409 naming the
-[`ridl lock --rename`](#ridl-lock) command to run.
+[`ridl lock --rename`](#ridl-lock) command to run. A lint raised to `deny` in
+`[lints]` is an error for the exit code but does not stop the desk check: the
+run reports the denied lint and the RIDL-407 warnings together, and exits 1.
 
 ### `ridl baseline`
 
@@ -828,6 +873,8 @@ warning[TYPL-102]: `float` without both a range and a `step`
   │
 2 │ type Broken : km/h [250.0..0.0]
   │               ^^^^
+  │
+  = lint: `unbounded-float` (set its level in `[lints]` in ridl.toml)
 
 ```
 

@@ -11,7 +11,9 @@
 //!
 //! `MANI-001` invalid TOML, `MANI-002` both sections, `MANI-003` neither
 //! section, `MANI-005` unknown key (warning), `MANI-006` invalid package name,
-//! `MANI-007` invalid import URL. `MANI-004` (nested workspace) is defined in
+//! `MANI-007` invalid import URL, `MANI-010` a `[lints]` entry that names no
+//! lint or whose value is not a level (warning, lint foundation spec §5.3).
+//! `MANI-004` (nested workspace) is defined in
 //! the catalogue but emitted by the package loader (E1.3, task 8), not here: a
 //! manifest read in isolation cannot know it is a workspace member, so a valid
 //! `[workspace]` manifest parses clean.
@@ -28,11 +30,13 @@
 //!
 //! # Parsing strategy
 //!
-//! The text is deserialized twice: once into a typed shape with [`toml::Spanned`]
-//! leaves (for the values and their spans), and once into a key-to-spanned-value
-//! map (to enumerate the keys the typed shape silently drops, so unknown keys
-//! can warn). Both parses read the same valid TOML; the second cannot fail once
-//! the first has.
+//! The text is deserialized three times: once into a typed shape with
+//! [`toml::Spanned`] leaves (for the values and their spans), once into a
+//! key-to-spanned-value map (to enumerate the keys the typed shape silently
+//! drops, so unknown keys can warn), and once into the `[lints]` table with
+//! spanned keys (so each MANI-010 can point at its key). All three read the
+//! same valid TOML; the second cannot fail once the first has, and the third
+//! fails only when `lints` is not a table, which is MANI-010.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -42,20 +46,27 @@ use serde::Deserialize;
 use toml::Spanned;
 
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
+use crate::lint::{LintLevel, LintTable, lint_by_name};
 
 /// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`], its
-/// `[imports]` table (logical package name to URL), and the optional
-/// `[defaults].timing` string, all shared by both modes.
+/// `[imports]` table (logical package name to URL), the optional
+/// `[defaults].timing` string, and its `[lints]` table, all shared by both
+/// modes.
 ///
 /// `default_timing` is the raw `[defaults].timing` text (e.g.
 /// `"[100ms..1000ms]"`), stored **unparsed**: `ridl-core` cannot depend on
 /// `ridl-sem`, so the checker parses and validates it (MANI-009) — the
 /// manifest layer only records the string (ridl §9.1, E2 task 9).
+///
+/// `lints` holds only the valid `[lints]` entries: a registered lint name
+/// mapped to a level. Every other entry is MANI-010 and is dropped (lint
+/// foundation spec §5.1, §5.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub kind: ManifestKind,
     pub imports: BTreeMap<String, String>,
     pub default_timing: Option<String>,
+    pub lints: LintTable,
 }
 
 /// The two mutually exclusive manifest modes (ADR-0002 §4).
@@ -132,6 +143,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
     let default_timing = raw
         .defaults
         .and_then(|defaults| defaults.into_inner().timing);
+    let lints = collect_lints(file_id, text, &mut diags);
 
     let kind = if let Some(pkg) = raw.package {
         let section_span = pkg.span();
@@ -168,6 +180,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             kind,
             imports,
             default_timing,
+            lints,
         }),
         diags,
     )
@@ -202,6 +215,68 @@ struct RawPackage {
 struct RawWorkspace {
     #[serde(default)]
     members: Vec<String>,
+}
+
+/// The `[lints]` table alone, read in a parse of its own so that each key
+/// carries its span. `lints` is not a field of [`RawManifest`]: a typed field
+/// there would make `lints = 1` fail the whole typed parse, which is MANI-001
+/// with no manifest, where the spec wants one MANI-010 and the rest of the
+/// manifest (lint foundation spec §5.3).
+#[derive(Deserialize)]
+struct RawLints {
+    #[serde(default)]
+    lints: Option<BTreeMap<Spanned<String>, Spanned<toml::Value>>>,
+}
+
+/// Collects the `[lints]` table into a [`LintTable`] of registered lint names
+/// and levels (lint foundation spec §5.1). Every entry whose key is not a lint
+/// name, or whose value is not one of the four level strings, is MANI-010 on
+/// the key and is dropped (§5.3). A `lints` key that is not a table is one
+/// MANI-010 on the value, and the table is empty.
+fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> LintTable {
+    let mut lints = LintTable::new();
+    let raw: RawLints = match toml::from_str(text) {
+        Ok(raw) => raw,
+        Err(_) => {
+            // The typed manifest parse accepted this text, and every key and
+            // value of a table fits `RawLints`, so the only failure left is a
+            // `lints` value that is not a table. Its span comes from the
+            // untyped map (the one `check_unknown_keys` reads).
+            let doc: BTreeMap<String, Spanned<toml::Value>> =
+                toml::from_str(text).unwrap_or_default();
+            let range = doc.get("lints").map(Spanned::span).unwrap_or(0..text.len());
+            diags.push(warning(
+                DiagCode::MANI_010,
+                file_id,
+                range,
+                "`[lints]` must be a table".to_string(),
+            ));
+            return lints;
+        }
+    };
+    for (key, value) in raw.lints.unwrap_or_default() {
+        let name = key.get_ref();
+        let Some(registered) = lint_by_name(name).and_then(|entry| entry.lint) else {
+            diags.push(warning(
+                DiagCode::MANI_010,
+                file_id,
+                key.span(),
+                format!("unknown lint `{name}` in `[lints]`"),
+            ));
+            continue;
+        };
+        let Some(level) = value.get_ref().as_str().and_then(LintLevel::parse) else {
+            diags.push(warning(
+                DiagCode::MANI_010,
+                file_id,
+                key.span(),
+                format!("`[lints].{name}` must be one of \"allow\", \"info\", \"warn\", \"deny\""),
+            ));
+            continue;
+        };
+        lints.insert(registered, level);
+    }
+    lints
 }
 
 /// Collects the `[imports]` table into the public `name -> URL` map, flagging
@@ -241,12 +316,15 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
     // The allowed-key lists below must stay in sync with the fields of
     // `RawPackage`, `RawWorkspace`, and `RawDefaults`: a field added there
     // without a matching entry here would wrongly warn as an unknown key.
+    // Keys under `[lints]` are lint names; `collect_lints` checks them against
+    // the registry (MANI-010), so they are never "unknown" here.
     for (key, value) in &doc {
         match key.as_str() {
             "package" => check_section_keys(file_id, "package", value, &["name", "version"], diags),
             "workspace" => check_section_keys(file_id, "workspace", value, &["members"], diags),
             "defaults" => check_section_keys(file_id, "defaults", value, &["timing"], diags),
             "imports" => {}
+            "lints" => {}
             _ => diags.push(warning(
                 DiagCode::MANI_005,
                 file_id,
@@ -319,7 +397,7 @@ fn error(code: DiagCode, file: FileId, range: Range<usize>, message: String) -> 
     diagnostic(code, Severity::Error, file, range, message)
 }
 
-/// Builds a warning [`Diagnostic`] (used only for MANI-005).
+/// Builds a warning [`Diagnostic`] (used only for MANI-005 and MANI-010).
 fn warning(code: DiagCode, file: FileId, range: Range<usize>, message: String) -> Diagnostic {
     diagnostic(code, Severity::Warning, file, range, message)
 }
@@ -644,5 +722,129 @@ version = \"1.0.0\"
             http_diags.is_empty(),
             "http:// with a host is a valid URL, got {http_diags:?}",
         );
+    }
+
+    const PACKAGE_HEAD: &str = "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n";
+    const WORKSPACE_HEAD: &str = "[workspace]\nmembers = [\"a\"]\n\n";
+
+    /// The text of `text` under the primary span of `diag`.
+    fn spanned_text<'a>(text: &'a str, diag: &Diagnostic) -> &'a str {
+        let range = diag.primary.range;
+        &text[usize::from(range.start())..usize::from(range.end())]
+    }
+
+    #[test]
+    fn lints_table_is_read() {
+        for head in [PACKAGE_HEAD, WORKSPACE_HEAD] {
+            let text = format!("{head}[lints]\nmissing-timing = \"deny\"\n");
+            let (manifest, diags) = parse(&text);
+            assert!(diags.is_empty(), "a valid `[lints]` table, got {diags:?}");
+            let manifest = manifest.expect("the manifest parses");
+            assert_eq!(manifest.lints.get("missing-timing"), Some(&LintLevel::Deny));
+            assert_eq!(manifest.lints.len(), 1);
+        }
+    }
+
+    #[test]
+    fn lints_key_is_known() {
+        let text = format!("{PACKAGE_HEAD}[lints]\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "no MANI-005 for `lints`, got {diags:?}");
+        assert!(manifest.expect("the manifest parses").lints.is_empty());
+    }
+
+    #[test]
+    fn no_lints_table_leaves_lints_empty() {
+        let (manifest, diags) = parse(STANDALONE);
+        assert!(diags.is_empty());
+        assert!(manifest.expect("parses").lints.is_empty());
+    }
+
+    #[test]
+    fn unknown_lint_name() {
+        let text = format!("{PACKAGE_HEAD}[lints]\nnope = \"deny\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-010"]);
+        assert_eq!(diags[0].severity, Severity::Warning);
+        assert_eq!(diags[0].message, "unknown lint `nope` in `[lints]`");
+        assert!(
+            manifest.expect("the manifest parses").lints.is_empty(),
+            "an unknown lint is not recorded",
+        );
+    }
+
+    #[test]
+    fn code_as_key() {
+        let text = format!("{PACKAGE_HEAD}[lints]\n\"RIDL-100\" = \"deny\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-010"]);
+        assert_eq!(diags[0].message, "unknown lint `RIDL-100` in `[lints]`");
+        assert!(manifest.expect("the manifest parses").lints.is_empty());
+    }
+
+    #[test]
+    fn error_code_as_key() {
+        // An Error code has no lint name, so neither its code nor any name is
+        // accepted as a key.
+        let text = format!("{PACKAGE_HEAD}[lints]\n\"RIDL-101\" = \"allow\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-010"]);
+        assert!(manifest.expect("the manifest parses").lints.is_empty());
+    }
+
+    #[test]
+    fn bad_level() {
+        for value in ["\"Deny\"", "3"] {
+            let text = format!("{PACKAGE_HEAD}[lints]\nmissing-timing = {value}\n");
+            let (manifest, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-010"], "value {value}");
+            assert_eq!(diags[0].severity, Severity::Warning);
+            assert_eq!(
+                diags[0].message,
+                "`[lints].missing-timing` must be one of \"allow\", \"info\", \"warn\", \"deny\"",
+            );
+            assert_eq!(spanned_text(&text, &diags[0]), "missing-timing");
+            assert!(
+                manifest.expect("the manifest parses").lints.is_empty(),
+                "an entry with a bad level is not recorded",
+            );
+        }
+    }
+
+    #[test]
+    fn valid_entries_survive_a_bad_sibling() {
+        let text = format!("{PACKAGE_HEAD}[lints]\nmissing-timing = \"deny\"\nnope = \"warn\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-010"]);
+        let manifest = manifest.expect("the manifest parses");
+        assert_eq!(manifest.lints.get("missing-timing"), Some(&LintLevel::Deny));
+        assert_eq!(manifest.lints.len(), 1);
+    }
+
+    #[test]
+    fn lints_not_a_table() {
+        // A top-level key must come before the first section header.
+        let text = format!("lints = 1\n\n{PACKAGE_HEAD}");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-010"], "no MANI-001, no MANI-005");
+        assert_eq!(diags[0].message, "`[lints]` must be a table");
+        assert_eq!(spanned_text(&text, &diags[0]), "1");
+        let manifest = manifest.expect("the rest of the manifest is still read");
+        assert_eq!(
+            manifest.kind,
+            ManifestKind::Package {
+                name: "veh.common".to_string(),
+                version: "1.0.0".to_string(),
+            },
+        );
+        assert!(manifest.lints.is_empty());
+    }
+
+    #[test]
+    fn mani_010_span_is_the_key() {
+        let text = format!("{PACKAGE_HEAD}[lints]\nnope = \"deny\"\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-010"]);
+        assert_eq!(spanned_text(&text, &diags[0]), "nope");
     }
 }

@@ -15,3 +15,8 @@ book/
 # is written by `ridl baseline` and read back by `ridl check`, so it must stay
 # byte-for-byte as the toolchain wrote it.
 crates/ridl/tests/baseline-corpus/.ridl/baseline/*.ir.json
+
+# The SARIF 2.1.0 schema, downloaded from
+# https://json.schemastore.org/sarif-2.1.0.json and read by the `ridl check
+# --format sarif` test. Upstream content, kept byte-for-byte.
+crates/ridl/tests/fixtures/sarif-2.1.0.json

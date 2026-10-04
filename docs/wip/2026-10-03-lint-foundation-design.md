@@ -223,17 +223,21 @@ The result is a `LintLevels` value: the default levels with the overrides
 applied.
 
 The package that owns a diagnostic decides its level: the package whose
-directory contains the file of the diagnostic's primary span. A file that no
-workspace package owns (the standard library, a fetched remote import) uses the
-registry defaults. No default is `deny`, so a dependency can never fail a
-project's check, and a project's `[lints]` never applies to code it does not
-own. Today `ridl check` reports no diagnostic in a file that a workspace package
-does not own: no package is loaded as a remote package (`PackageOrigin::Remote`
-is never constructed outside tests), remote imports are only fetched and pinned
-by `materialize_and_lock` in `ridlc` after the check, which returns manifest and
-lockfile diagnostics only, and the diagnostics of `ridl.std` are not merged into
-the workspace output (`WorkspaceOutput::std_ir`). The rule holds for any such
-file a later change adds.
+directory contains the file of the diagnostic's primary span. In a workspace,
+the root `[lints]` table configures the whole directory tree of the root: a file
+under the workspace root that no member contains, and the root `ridl.toml`
+itself, get the root's levels (§6.1). A file outside the directory tree of the
+entry point (the standard library, a fetched remote import, an editor overlay
+outside the project) uses the registry defaults. No default is `deny`, so a
+dependency can never fail a project's check, and a project's `[lints]` never
+applies to code outside its directory. Today `ridl check` reports no diagnostic
+in a file outside the directory tree of the entry point: no package is loaded as
+a remote package (`PackageOrigin::Remote` is never constructed outside tests),
+remote imports are only fetched and pinned by `materialize_and_lock` in `ridlc`
+after the check, which returns manifest and lockfile diagnostics only, and the
+diagnostics of `ridl.std` are not merged into the workspace output
+(`WorkspaceOutput::std_ir`). The rule holds for any such file a later change
+adds.
 
 The levels follow the entry point (D-9). When the entry is a workspace member,
 or a file inside one, the loader stops at the member's own `ridl.toml` and loads
@@ -392,13 +396,26 @@ the MCP server can reuse it later; no SARIF crate is added.
   `warning`, `info` → `note`, Error → `error`).
 - Each result: `ruleId` and `ruleIndex` for a coded diagnostic (an uncoded
   diagnostic has neither), `level` the effective level mapped the same way,
-  `message.text`, and one `location` with a `physicalLocation` (the artifact URI
-  relative to the checked root, and a `region` with 1-based start and end line
-  and column). A diagnostic whose primary span has no path in the source map
+  `message.text`, and one `location` with a `physicalLocation` (the artifact
+  location, and a `region` with 1-based start and end line and column). A
+  diagnostic whose primary span has no path in the source map
   (`FileId::DETACHED`, which the MANI-1xx manifest, lockfile and fetch
   diagnostics and the uncoded lockfile write warning carry) has no `locations`
   property.
 - Each label becomes a `relatedLocation` with its message.
+- Every artifact URI has one base, the process's working directory, whatever
+  path was checked: a file under it is a URI relative to it, with `/` separators
+  and every segment percent-encoded (RFC 3986 unreserved characters pass, every
+  other byte of the UTF-8 form is `%XX`), and carries `uriBaseId` `%SRCROOT%`;
+  the run's `originalUriBaseIds` maps `%SRCROOT%` to the working directory as a
+  `file://` URI that ends with `/`. A relative source path is joined onto the
+  working directory first, and `.` and `..` are resolved lexically, not through
+  the filesystem, before the comparison. A file outside the working directory is
+  an absolute `file://` URI with no `uriBaseId`. When the working directory
+  cannot be read, the run has no `originalUriBaseIds` and every file is written
+  as its path is: an absolute path as an absolute `file://` URI, a relative path
+  relative with no `uriBaseId`. A code-scanning upload run from the checkout
+  root therefore resolves every URI.
 - `run.columnKind` is `"unicodeCodePoints"`, because RIDL columns count
   characters and SARIF's default unit is UTF-16 code units.
 - Fix-its are not emitted. GitHub code scanning ignores them, and the JSON
@@ -427,8 +444,8 @@ fields is a compatible change to the tool surface.
   §5.3, with its span; the root-then-member resolution, including a key set at
   the root and overridden by the member.
 - **`apply_lint_levels` unit tests**: each level on a lint code; an Error code
-  and an uncoded diagnostic left unchanged; a diagnostic in a file no package
-  owns uses the defaults even when the project sets `deny`.
+  and an uncoded diagnostic left unchanged; a diagnostic in a file outside every
+  scope uses the defaults even when the project sets `deny`.
 - **CLI tests** in `crates/ridl/tests/`, over a fixture workspace with a root
   and a member `[lints]`:
   - a lint at `deny` makes `ridl check` exit 1 and shows as an error, in text,

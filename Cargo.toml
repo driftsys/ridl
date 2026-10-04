@@ -36,6 +36,11 @@ clap = { version = "4.6.2", features = ["derive"] }
 codespan-reporting = "0.13.1"
 ec4rs = { version = "1.2", default-features = false }
 insta = { version = "1.48.0", features = ["json"] }
+# Validates the `ridl check --format sarif` log against the vendored SARIF
+# 2.1.0 schema in `crates/ridl`'s tests. Without the default features it
+# resolves no remote or file reference; the schema has none, and its draft-07
+# metaschema is bundled, so the test runs offline.
+jsonschema = { version = "0.58.5", default-features = false }
 logos = "0.16.1"
 lsp-server = "0.10.0"
 lsp-types = "0.97.0"

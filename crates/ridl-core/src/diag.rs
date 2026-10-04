@@ -45,6 +45,7 @@ use rowan::{TextRange, TextSize};
 use serde::{Serialize, Serializer};
 
 pub mod render;
+pub mod sarif;
 
 pub use render::render;
 
@@ -81,6 +82,11 @@ impl DiagCode {
 /// that names it, so a code with no catalogue entry cannot be written: there is
 /// no second list to forget.
 ///
+/// A Warning or Info row ends with `lint = "<name>"`, which becomes
+/// [`CatalogEntry::lint`]; a row without it gets `None`. The guard
+/// `lint_names_are_present_exactly_on_warnings_and_infos_and_unique` checks
+/// which rows carry a name.
+///
 /// The macro also generates [`ALL_CATALOGS`], which the guards read to find
 /// every catalogue. That makes it invocable only once **per module** — a second
 /// invocation beside this one redefines the constant and the crate stops
@@ -105,6 +111,8 @@ impl DiagCode {
 /// on. Declaring the constant and its entry from one line is the shape that
 /// works for a newtype.
 macro_rules! diag_codes {
+    (@lint) => { None };
+    (@lint $lint:literal) => { Some($lint) };
     (
         $(
             $(#[$catalog_doc:meta])*
@@ -112,7 +120,7 @@ macro_rules! diag_codes {
                 $(
                     $(#[$code_doc:meta])*
                     $konst:ident = $code:literal, $severity:ident,
-                        $summary:literal;
+                        $summary:literal $(, lint = $lint:literal)?;
                 )+
             }
         )+
@@ -131,6 +139,7 @@ macro_rules! diag_codes {
                     code: DiagCode::$konst,
                     severity: Severity::$severity,
                     summary: $summary,
+                    lint: diag_codes!(@lint $($lint)?),
                 },)+
             ];
         )+
@@ -276,12 +285,12 @@ diag_codes! {
 
         /// Unused import (typl §16.1). Emitted by the resolver (E1.4) as a warning.
         TYPL_007 = "TYPL-007", Warning,
-            "unused import";
+            "unused import", lint = "unused-import";
 
         /// Import alias without an actual collision (typl §16.1, ADR-0002 §2).
         /// Emitted by the resolver (E1.4) as a warning.
         TYPL_008 = "TYPL-008", Warning,
-            "import alias without an actual collision";
+            "import alias without an actual collision", lint = "unneeded-import-alias";
 
         /// Duplicate definition of the same name in a package (typl §16.1).
         TYPL_009 = "TYPL-009", Error,
@@ -316,16 +325,16 @@ diag_codes! {
 
         /// `integer` without a range constraint (typl §16.2). Warning.
         TYPL_101 = "TYPL-101", Warning,
-            "`integer` without a range constraint";
+            "`integer` without a range constraint", lint = "unbounded-integer";
 
         /// `float` without both a range and a `step` (typl §16.2). Warning.
         TYPL_102 = "TYPL-102", Warning,
-            "`float` without both a range and a `step`";
+            "`float` without both a range and a `step`", lint = "unbounded-float";
 
         /// `string`/`bytes` without explicit bounds — the default `[0..256]` is
         /// applied (typl §4.4–§4.5, §16.2). Warning.
         TYPL_103 = "TYPL-103", Warning,
-            "`string`/`bytes` without explicit bounds";
+            "`string`/`bytes` without explicit bounds", lint = "unbounded-length";
 
         /// Range `min > max` (typl §16.2).
         TYPL_104 = "TYPL-104", Error,
@@ -367,7 +376,7 @@ diag_codes! {
         /// (typl §5.8, §16.2). Info — escalated to an error only by consumers
         /// that require an init (e.g. a ridl signal payload).
         TYPL_115 = "TYPL-115", Info,
-            "type has no derivable init value and no declared `= value`";
+            "type has no derivable init value and no declared `= value`", lint = "no-init-value";
 
         /// Array without explicit bounds (typl §16.3).
         TYPL_201 = "TYPL-201", Error,
@@ -410,7 +419,7 @@ diag_codes! {
         /// half of the §16.3 rule (a name/value never previously used) needs the
         /// previous IR snapshot and belongs to `ridl-diff` (E2.8).
         TYPL_211 = "TYPL-211", Warning,
-            "duplicate `reserved` entry";
+            "duplicate `reserved` entry", lint = "duplicate-reserved";
 
         /// `error` modifier on a declaration other than `enum`, `struct`, `union`
         /// (typl §16.3).
@@ -512,12 +521,12 @@ diag_codes! {
         /// Blank line between a doc comment and its definition (typl §14, §16.5).
         /// Warning. Emitted by the checker (E1.7b).
         TYPL_404 = "TYPL-404", Warning,
-            "blank line between a doc comment and its definition";
+            "blank line between a doc comment and its definition", lint = "detached-doc-comment";
 
         /// `@deprecated` doc tag without a reason string (typl §14.2, §16.5).
         /// Warning. Emitted by the checker (E1.7b).
         TYPL_405 = "TYPL-405", Warning,
-            "`@deprecated` doc tag without a reason string";
+            "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -543,7 +552,7 @@ diag_codes! {
         /// `[100ms..1000ms]` (or the configured `[defaults].timing`) is applied
         /// (ridl §9.1, §16.1). Warning. Emitted by the checker (E2 task 9).
         RIDL_100 = "RIDL-100", Warning,
-            "`signal` or `event` without a timing annotation";
+            "`signal` or `event` without a timing annotation", lint = "missing-timing";
 
         /// A range annotation `@[X..Y]` whose lower bound exceeds its upper bound
         /// (ridl §9.2, §16.1). Emitted by the checker (E2 task 9).
@@ -609,7 +618,7 @@ diag_codes! {
         /// of the strict-periodic `@Xms`, which is a separate `TimingMode`.
         /// Warning. Emitted by the checker (E2 task 9).
         RIDL_108 = "RIDL-108", Warning,
-            "degenerate timing range `@[X..X]`";
+            "degenerate timing range `@[X..X]`", lint = "degenerate-timing-range";
 
         /// Signal payload type has no derivable init value and no `= value`
         /// override (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
@@ -632,7 +641,7 @@ diag_codes! {
         /// the interface-used-as-a-type error (ADR-0008 decision 21), so 112
         /// is the first free code in the band. Emitted by the checker (E9.4).
         RIDL_112 = "RIDL-112", Warning,
-            "`command` or `query` with no declared response bound";
+            "`command` or `query` with no declared response bound", lint = "missing-response-bound";
 
         /// Duplicate `service` name across the whole workspace — the service
         /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
@@ -743,13 +752,14 @@ diag_codes! {
         /// failure flowing toward a provider (ridl §10.1, §16.3). Warning. Emitted
         /// by the checker (E2 task 10).
         RIDL_304 = "RIDL-304", Warning,
-            "`error`-typed or result-union parameter on a `command` or `query`";
+            "`error`-typed or result-union parameter on a `command` or `query`",
+                lint = "error-typed-parameter";
 
         /// An `ensure` clause that never references `result` — well-typed but
         /// suspicious (ridl §13, §16.3; expr-core specification §8). Warning.
         /// Emitted by the checker (E2 task 11).
         RIDL_305 = "RIDL-305", Warning,
-            "`ensure` clause that never references `result`";
+            "`ensure` clause that never references `result`", lint = "ensure-without-result";
 
         /// A `require`/`ensure` expression outside the guaranteed subset (ridl §13,
         /// §16.3; expr-core specification §8 — one code for the whole boundary,
@@ -763,14 +773,15 @@ diag_codes! {
         /// `UNKNOWN_INTERACTION`) — reserved vocabulary (ridl §10.2, §16.3).
         /// Warning. Emitted by the checker (E2 task 10).
         RIDL_307 = "RIDL-307", Warning,
-            "contract-error category name declared in an `error` enum";
+            "contract-error category name declared in an `error` enum",
+                lint = "contract-error-name-in-enum";
 
         /// A named result union in query return position — the inline `T | E`
         /// spelling is canonical there (general form §6.1, ADR-0008 decision 13).
         /// Warning; the named spelling stays legal typl data, so this is a lint,
         /// not an error. Emitted by the lint pass (E2 task 19).
         RIDL_308 = "RIDL-308", Warning,
-            "named result union in query return position";
+            "named result union in query return position", lint = "named-result-union-in-query";
 
         /// Interaction re-declared under a `reserved` name (ridl §11, §16.4).
         /// Emitted by the checker (E2 task 5).
@@ -795,21 +806,21 @@ diag_codes! {
         /// mutating verb set (ridl §7.2, §16.4): a state-mutating request belongs
         /// to `command`. Warning. Emitted by the lint pass (E2 task 19).
         RIDL_404 = "RIDL-404", Warning,
-            "query named like a mutation";
+            "query named like a mutation", lint = "query-named-like-mutation";
 
         /// One `error` type used as the failure arm of queries in three or more
         /// distinct interfaces — the "shared across unrelated failure domains"
         /// heuristic (ridl §10.1, §16.4). Info. Emitted by the lint pass (E2 task
         /// 19); the threshold is three, so two interfaces stay silent.
         RIDL_405 = "RIDL-405", Info,
-            "one `error` type shared across unrelated failure domains";
+            "one `error` type shared across unrelated failure domains", lint = "shared-error-type";
 
         /// A `signal` or `event` payload whose struct re-declares envelope
         /// metadata — publication time or a frame counter (ridl §3.1, §16.4). Info;
         /// domain time distinct from transport time is legitimate, so the message
         /// says so. Emitted by the lint pass (E2 task 19).
         RIDL_406 = "RIDL-406", Info,
-            "payload struct re-declares envelope metadata";
+            "payload struct re-declares envelope metadata", lint = "redeclared-envelope-metadata";
 
         /// An interaction's, struct field's or union arm's ordinal (typl §7.4)
         /// changed against a published baseline snapshot
@@ -841,7 +852,7 @@ diag_codes! {
         /// diff`'s alone.
         RIDL_407 = "RIDL-407", Warning,
             "interaction, struct field, or union arm ordinal changed against the published \
-             baseline";
+             baseline", lint = "ordinal-changed";
 
         /// An interaction of an interface body the baseline being replaced
         /// declares is not carried forward as the tombstone rule requires
@@ -997,7 +1008,7 @@ diag_codes! {
         /// component with more than one instance (rsdl §7, §16.1). Warning, not
         /// yet realizable: the lowering proceeds. Raised by the rsdl resolution.
         RSDL_409 = "RSDL-409", Warning,
-            "a `requires` resolves to a redundant provider set";
+            "a `requires` resolves to a redundant provider set", lint = "redundant-provider-set";
 
         /// Two closure components offer one service (rsdl §8, §16.1). Error.
         /// Raised by the rsdl resolution.
@@ -1073,7 +1084,8 @@ diag_codes! {
         /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which
         /// knows the configured backends (plan decision P-B4).
         RSDL_804 = "RSDL-804", Warning,
-            "a backend key whose namespace no configured backend claims";
+            "a backend key whose namespace no configured backend claims",
+                lint = "unclaimed-backend-key";
 
         /// A `PLATFORM` distribution holds a component whose `requires` resolves
         /// into an `APPLICATION` distribution — tier inversion; a distribution
@@ -1143,7 +1155,7 @@ diag_codes! {
 
         /// An unrecognized key in the manifest or one of its sections (warning).
         MANI_005 = "MANI-005", Warning,
-            "unknown manifest key";
+            "unknown manifest key", lint = "unknown-manifest-key";
 
         /// The package name is not lowercase dot-separated segments (ADR-0002 §1).
         MANI_006 = "MANI-006", Error,
@@ -1165,6 +1177,13 @@ diag_codes! {
         /// parses it and emits this code (E2 task 9).
         MANI_009 = "MANI-009", Error,
             "invalid `[defaults].timing` value";
+
+        /// A `[lints]` entry whose key is not a registered lint name, or whose
+        /// value is not one of the level strings `allow`, `info`, `warn` and
+        /// `deny`; also a `lints` key that is not a table (lint foundation spec
+        /// §5.3). The entry is ignored and the check goes on.
+        MANI_010 = "MANI-010", Warning,
+            "`[lints]` entry names no lint, or its value is not a level", lint = "unknown-lint";
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
@@ -1379,10 +1398,15 @@ pub struct JsonLabel {
 /// field is always present, never omitted. `labels` passes the diagnostic's
 /// secondary annotations through verbatim, in the order the diagnostic holds
 /// them; the array is always present, empty when the diagnostic carries none.
+/// `lint` is the lint name of the code (lint foundation spec §7.1), present
+/// when the code has one and omitted otherwise; `severity` is the effective
+/// one after the `[lints]` levels are applied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct JsonDiagnostic {
     pub code: String,
     pub severity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lint: Option<String>,
     pub message: String,
     pub span: JsonSpan,
     pub labels: Vec<JsonLabel>,
@@ -1415,6 +1439,9 @@ pub fn to_json(diagnostics: &[Diagnostic], sources: &SourceMap) -> Vec<JsonDiagn
         .map(|diagnostic| JsonDiagnostic {
             code: diagnostic.code.0.to_string(),
             severity: severity_name(diagnostic.severity).to_string(),
+            lint: crate::lint::lint_of(diagnostic.code)
+                .and_then(|entry| entry.lint)
+                .map(str::to_string),
             message: diagnostic.message.clone(),
             span: json_span(diagnostic.primary, sources),
             labels: diagnostic
@@ -1476,6 +1503,10 @@ pub struct CatalogEntry {
     pub code: DiagCode,
     pub severity: Severity,
     pub summary: &'static str,
+    /// The lint name, present exactly when `severity` is Warning or Info (lint
+    /// foundation spec §4.1). The catalogue severity is the lint's default
+    /// level. A released name is never renamed or reused.
+    pub lint: Option<&'static str>,
 }
 
 /// Polishes a raw parser message into the house diagnostic style —
@@ -1806,6 +1837,82 @@ mod tests {
         );
     }
 
+    /// Every Warning and Info row carries a lint name and no Error row does; each
+    /// name is lowercase words joined by `-`; no two rows share a name; and the
+    /// `(code, name)` pairs are the table in the lint foundation spec §4.2.
+    #[test]
+    fn lint_names_are_present_exactly_on_warnings_and_infos_and_unique() {
+        fn is_lint_name(name: &str) -> bool {
+            // `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, checked without a regex crate.
+            name.starts_with(|c: char| c.is_ascii_lowercase())
+                && name.split('-').all(|word| {
+                    !word.is_empty()
+                        && word
+                            .chars()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                })
+        }
+
+        let mut names = std::collections::BTreeSet::new();
+        let mut pairs = std::collections::BTreeSet::new();
+        for (_, catalog) in ALL_CATALOGS {
+            for entry in *catalog {
+                let code = entry.code.as_str();
+                match entry.severity {
+                    Severity::Error => assert_eq!(
+                        entry.lint, None,
+                        "`{code}` is an Error and must not have a lint name",
+                    ),
+                    Severity::Warning | Severity::Info => {
+                        let name = entry.lint.unwrap_or_else(|| {
+                            panic!("`{code}` is a Warning or Info and has no lint name")
+                        });
+                        assert!(
+                            is_lint_name(name),
+                            "`{code}` has the lint name `{name}`, which does not \
+                             match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`",
+                        );
+                        assert!(
+                            names.insert(name),
+                            "the lint name `{name}` is used by more than one row",
+                        );
+                        pairs.insert((code, name));
+                    }
+                }
+            }
+        }
+
+        let expected: std::collections::BTreeSet<(&str, &str)> = [
+            ("TYPL-007", "unused-import"),
+            ("TYPL-008", "unneeded-import-alias"),
+            ("TYPL-101", "unbounded-integer"),
+            ("TYPL-102", "unbounded-float"),
+            ("TYPL-103", "unbounded-length"),
+            ("TYPL-115", "no-init-value"),
+            ("TYPL-211", "duplicate-reserved"),
+            ("TYPL-404", "detached-doc-comment"),
+            ("TYPL-405", "deprecated-without-reason"),
+            ("RIDL-100", "missing-timing"),
+            ("RIDL-108", "degenerate-timing-range"),
+            ("RIDL-112", "missing-response-bound"),
+            ("RIDL-304", "error-typed-parameter"),
+            ("RIDL-305", "ensure-without-result"),
+            ("RIDL-307", "contract-error-name-in-enum"),
+            ("RIDL-308", "named-result-union-in-query"),
+            ("RIDL-404", "query-named-like-mutation"),
+            ("RIDL-405", "shared-error-type"),
+            ("RIDL-406", "redeclared-envelope-metadata"),
+            ("RIDL-407", "ordinal-changed"),
+            ("RSDL-409", "redundant-provider-set"),
+            ("RSDL-804", "unclaimed-backend-key"),
+            ("MANI-005", "unknown-manifest-key"),
+            ("MANI-010", "unknown-lint"),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(pairs, expected, "the lint names differ from spec §4.2");
+    }
+
     /// Each constant's name is the code string it expands to, with `-` written
     /// `_`.
     ///
@@ -1827,10 +1934,10 @@ mod tests {
     }
 
     /// The two namespace-wide severity rules: every FORM code is an error, and
-    /// every MANI code is an error but the unknown-key warning.
+    /// every MANI code is an error but the unknown-key and unknown-lint warnings.
     ///
     /// Neither rule enumerates codes, so neither is a shadow list — one states a
-    /// property of a whole namespace, the other adds a single named exception.
+    /// property of a whole namespace, the other adds two named exceptions.
     /// TYPL and RIDL have no such rule: their severities are per-code, set by
     /// the reference §16 tables, and writing them out here would rebuild exactly
     /// the second list this change removed. A wrong severity on a TYPL or RIDL
@@ -1846,7 +1953,7 @@ mod tests {
             );
         }
         for entry in MANI_CATALOG {
-            let expected = if entry.code == DiagCode::MANI_005 {
+            let expected = if entry.code == DiagCode::MANI_005 || entry.code == DiagCode::MANI_010 {
                 Severity::Warning
             } else {
                 Severity::Error
@@ -2410,6 +2517,41 @@ mod json_tests {
         };
 
         insta::assert_json_snapshot!(to_json(&[diagnostic], &sources));
+    }
+
+    /// `lint` names the code's lint and is omitted, not `null`, for an Error
+    /// code (lint foundation spec §7.1). The struct assertions check the
+    /// value; the snapshot pins that the key is absent from the serialized
+    /// element, which no struct assertion can see.
+    #[test]
+    fn to_json_names_the_lint_and_omits_it_for_an_error_code() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.ridl", "package p\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(0), TextSize::from(7)),
+        };
+        let diagnostic = |code, severity| Diagnostic {
+            code,
+            severity,
+            message: "m".to_string(),
+            primary: span,
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let json = to_json(
+            &[
+                diagnostic(DiagCode::RIDL_100, Severity::Warning),
+                diagnostic(DiagCode::TYPL_009, Severity::Error),
+            ],
+            &sources,
+        );
+
+        assert_eq!(json[0].code, "RIDL-100");
+        assert_eq!(json[0].lint.as_deref(), Some("missing-timing"));
+        assert_eq!(json[1].code, "TYPL-009");
+        assert_eq!(json[1].lint, None);
+        insta::assert_json_snapshot!("to_json_lint_field", json);
     }
 
     #[test]

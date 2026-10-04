@@ -48,10 +48,13 @@ Input: either `path` and optional `overlays`, or `source` with `profile`
 profile with a path is a tool error.
 
 Result: `{diagnostics, workspace}` in path mode, `{diagnostics}` in source mode.
-Diagnostics use `ridl_core::diag::to_json` verbatim: `code`, `severity`,
-`message`, `span`, `labels` and `fixes`. A span carries `path`, `start` and
-`end`; labels carry `message` and `span`; fixes carry `label`, `replacement` and
-`span`. A workspace with diagnostics is a successful tool result.
+Diagnostics use `ridl_core::diag::to_json`: `code`, `severity`, `lint`,
+`message`, `span`, `labels` and `fixes`. `lint` is the lint name, present only
+when the code is a lint. Path mode applies the workspace's `[lints]` levels
+before the diagnostics are serialized; source mode gives every lint its default
+level. A span carries `path`, `start` and `end`; labels carry `message` and
+`span`; fixes carry `label`, `replacement` and `span`. A workspace with
+diagnostics is a successful tool result.
 
 **What this tool shares with `ridl check --format json <file>`, and where it
 differs.** The CLI prints a bare diagnostic array; the tool wraps that array.
@@ -77,10 +80,12 @@ yet available. Path loading and overlay failures are tool errors.
 Input: `code`, an exact case-sensitive diagnostic code such as `TYPL-002` or
 diff category word such as `payload_changed`. No workspace path is needed.
 
-Result: `{kind: "diagnostic", code, severity, summary}` from the binary's
-catalogue, or `{kind: "diff_category", category, text}` from
-`ridl_diff::explain`. Unknown inputs are tool errors naming FORM-, TYPL-, RIDL-,
-RSDL-, MANI- and saying that diff category words are also accepted.
+Result: `{kind: "diagnostic", code, severity, summary, lint, default_level}`
+from the binary's catalogue, where `lint` is the lint name and `default_level`
+its default level (`warn` or `info`), both present only when the code is a lint,
+or `{kind: "diff_category", category, text}` from `ridl_diff::explain`. Unknown
+inputs are tool errors naming FORM-, TYPL-, RIDL-, RSDL-, MANI- and saying that
+diff category words are also accepted.
 
 ### `ridl_resolve`
 

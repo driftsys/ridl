@@ -10,6 +10,7 @@ pub mod query;
 pub mod refs;
 pub mod snapshot;
 use ridl_core::diag::to_json;
+use ridl_core::lint::apply_lint_levels;
 pub mod types;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -271,7 +272,7 @@ impl RidlMcp {
     #[tool(
         name = "ridl_check",
         output_schema = rmcp::handler::server::common::schema_for_output::<CheckOutput>(),
-        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. It omits remote fetching, the `ridl.lock` round trip and baseline checks."
+        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its; a lint diagnostic also names its lint. In source mode every lint has its default level. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. Path mode applies the workspace's `[lints]` levels, so a lint's severity follows ridl.toml and a lint at `allow` is not reported. It omits remote fetching, the `ridl.lock` round trip and baseline checks."
     )]
     async fn ridl_check(
         &self,
@@ -293,7 +294,17 @@ impl RidlMcp {
             match (&params.source, &params.path, params.profile) {
                 (Some(_), None, Some(_)) => Ok(check(&params)),
                 (None, Some(path), None) => {
-                    let snap = snapshot(path, params.overlays.as_deref().unwrap_or_default())?;
+                    let mut snap = snapshot(path, params.overlays.as_deref().unwrap_or_default())?;
+                    // `ridl_check` reports to an agent, so it applies the
+                    // project's `[lints]` levels here, before the JSON and the
+                    // status counts are built (lint foundation spec D-8).
+                    // `snapshot` itself does not apply them: the lookup tools
+                    // share it and keep the emitted severities.
+                    apply_lint_levels(
+                        &mut snap.output.diagnostics,
+                        &snap.output.sources,
+                        &snap.output.lints,
+                    );
                     Ok(CheckOutput {
                         diagnostics: to_json(&snap.output.diagnostics, &snap.output.sources)
                             .iter()
@@ -483,6 +494,27 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["TYPL-103", "TYPL-011"]
         );
+    }
+
+    // Path mode applies the project's `[lints]` levels (lint foundation spec
+    // D-8, §6.2): the fixture's root manifest sets `missing-timing = "deny"`,
+    // so the member's RIDL-100 is reported as an error and counted as one.
+    #[tokio::test]
+    async fn path_mode_check_applies_lint_levels() {
+        let path = snapshot::tests::fixture("ws-lints");
+        let params = serde_json::from_value(json!({"path": path})).unwrap();
+        let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+        let value = result.structured_content.unwrap();
+        let diagnostics = value["diagnostics"].as_array().unwrap();
+        let ridl_100 = diagnostics
+            .iter()
+            .filter(|d| d["code"] == "RIDL-100")
+            .collect::<Vec<_>>();
+        assert_eq!(ridl_100.len(), 1, "{diagnostics:?}");
+        assert_eq!(ridl_100[0]["severity"], "error");
+        assert_eq!(ridl_100[0]["lint"], "missing-timing");
+        assert_eq!(value["workspace"]["errors"], 1);
+        assert_eq!(value["workspace"]["warnings"], 0);
     }
 
     #[tokio::test]

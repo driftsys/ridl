@@ -8,6 +8,8 @@ warning[MANI-005]: unknown key `edition` in `[package]`
   │
 1 │ [package]
   │ ^^^^^^^^^
+  │
+  = lint: `unknown-manifest-key` (set its level in `[lints]` in ridl.toml)
 
 error[MANI-007]: invalid import URL `ghost://not-a-url` for `ghost.pkg`; expected an `http://` or `https://` URL with a host
   ┌─ tests/corpus/diag-showcase/ridl.toml:9:15
@@ -98,6 +100,8 @@ warning[TYPL-211]: duplicate `reserved` entry `legacy`
    │
 65 │   reserved legacy
    │   ^^^^^^^^^^^^^^^
+   │
+   = lint: `duplicate-reserved` (set its level in `[lints]` in ridl.toml)
 
 error[TYPL-212]: `error` is not valid on a `type` declaration — only `struct`, `enum`, and `union`
    ┌─ tests/corpus/diag-showcase/composites.typl:70:12
@@ -182,18 +186,24 @@ warning[TYPL-101]: `integer` without a range constraint
   │
 8 │ type UnboundedCounter : integer
   │                         ^^^^^^^
+  │
+  = lint: `unbounded-integer` (set its level in `[lints]` in ridl.toml)
 
 warning[TYPL-102]: `float` without both a range and a `step`
    ┌─ tests/corpus/diag-showcase/scalars.typl:11:22
    │
 11 │ type UnboundedGain : float [0.0..1.0]
    │                      ^^^^^
+   │
+   = lint: `unbounded-float` (set its level in `[lints]` in ridl.toml)
 
 warning[TYPL-103]: `string` without explicit bounds; the default `[0..256]` applies
    ┌─ tests/corpus/diag-showcase/scalars.typl:15:18
    │
 15 │ type LooseText : string
    │                  ^^^^^^
+   │
+   = lint: `unbounded-length` (set its level in `[lints]` in ridl.toml)
 
 error[TYPL-104]: range minimum 10 is greater than maximum 0
    ┌─ tests/corpus/diag-showcase/scalars.typl:18:30
@@ -236,6 +246,8 @@ note[TYPL-115]: type `Handle` has no derivable init value and no declared `= val
    │
 39 │ type Handle : string [3..8 match HANDLE_PATTERN]
    │      ^^^^^^
+   │
+   = lint: `no-init-value` (set its level in `[lints]` in ridl.toml)
 
 error[TYPL-106]: invalid regular expression syntax
    ┌─ tests/corpus/diag-showcase/scalars.typl:42:19
@@ -254,9 +266,13 @@ warning[TYPL-405]: `@deprecated` on `OldSpeed` has no reason string
    │
 50 │ type OldSpeed : km/h [0.0..250.0 step 0.5]
    │      ^^^^^^^^
+   │
+   = lint: `deprecated-without-reason` (set its level in `[lints]` in ridl.toml)
 
 warning[TYPL-404]: blank line between the doc comment and `Ambient`
    ┌─ tests/corpus/diag-showcase/scalars.typl:55:6
    │
 55 │ type Ambient : Cel [-40.0..125.0 step 0.1]
    │      ^^^^^^^
+   │
+   = lint: `detached-doc-comment` (set its level in `[lints]` in ridl.toml)
