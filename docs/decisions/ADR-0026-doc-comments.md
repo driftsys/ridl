@@ -315,9 +315,14 @@ From the design's alternatives. The numbers are the decisions that reject them.
 ## Consequences
 
 - Member docs now reach the backends, because the checker fills the IR fields
-  they already read; the backends emit what they emitted before. A struct field
-  or interaction with a `@deprecated` tag now carries the deprecation in the IR,
-  so a backend that emits deprecation metadata for members emits it for them.
+  they already read. The backend code does not change, but its output does: the
+  Rust and TypeScript backends render the doc of a struct field, an enum value,
+  an enumset bit, a union arm and an interaction, which was empty before, and a
+  tag line no longer appears in a rendered doc, because the scanner removes
+  every tag line from `doc` — `@since` lines included, which it kept before. A
+  struct field or interaction with a `@deprecated` tag now carries the
+  deprecation in the IR, so a backend that emits deprecation metadata for
+  members emits it for them.
 - The catalog hash does not change when a doc, a link, a tag or a parameter doc
   changes, and `ridl diff` reports such a change as `DocOnly`.
 - A project that adopts this toolchain sees `missing-docs` warnings for every
