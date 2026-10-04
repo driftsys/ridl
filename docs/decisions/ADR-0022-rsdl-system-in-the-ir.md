@@ -173,8 +173,10 @@ nothing.
 
 ## Open
 
-1. **Story E6.17, the catalog hash per region** (decision 7), which waits on
-   driftsys/ridl#324's `ridl_descriptor::hash::catalog_hash`.
+1. **Story E6.17, the catalog hash per region** (decision 7). The function it
+   waited on, `ridl_descriptor::hash::catalog_hash`, exists since story E16.2
+   (see the note under decision 7); `Region` still has no hash field, and the
+   driver does not yet embed one.
 2. **Which system changes are breaking, and for whom** — the stability policy's
    question (roadmap E4.5a), which is why decision 9 reports them with no
    verdict.

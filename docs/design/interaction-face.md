@@ -738,9 +738,11 @@ every generated constructor. Stage K7 of lane K took this disposition, on
 Sebastien's decision, rather than emitting a check in the same change that
 rewrites the constructors for the payload encoding.
 
-Nothing in the tree depends on the check's absence: `ridl-loopback` is
-in-process and single-catalog, and the round trip's `CATALOG` constant names the
-same all-zero hash the face declares.
+Before E16.2, nothing in the tree depended on the check's absence:
+`ridl-loopback` is in-process and single-catalog, and the round trip's `CATALOG`
+constant named the same all-zero hash the face declared. Since E16.2 the two
+differ, so the round trips now depend on the check's absence (see the update
+below).
 
 **Update (2026-10-04).** E16.2 (driftsys/ridl#378) now computes the catalog hash
 ([ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15), and the face's

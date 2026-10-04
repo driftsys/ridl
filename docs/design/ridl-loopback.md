@@ -376,20 +376,21 @@ that `Drop` returns the claims but leaves the handler's state in the store.
 
 The call table is `ridl_rt::correlate::Table`, with `Loopback::SLOTS` — sixteen
 — slots and no byte budget, because the loopback has no catalog descriptor to
-size one from until E16.2 (note F-9). A call holds a slot from the caller's send
-until `forget`, or the drop of the caller handle that sent it, reclaims it; a
-send with every slot taken answers `SendError::Busy`, on every caller handle,
-because the table is the runtime's. A correlation is
-`(generation << 16) | slot`, and a reclaim advances the slot's generation, so
-the correlation a reused slot had before answers as unknown: `ack` and `reply`
-answer `None`, and an `Outcome` registration under it is woken at once. The
-table holds the outcome status and the `Outcome` waker; the loopback keeps each
-call's arguments, its envelope, its place in send order and its reply bytes
-beside it, by slot. A returned claim goes back among the waiting calls by send
-order, not by correlation, because a reused slot's correlation is larger than
-that of a call sent later into a fresh slot. A refused send draws no sequence
-number, because nothing was sent. Two identities address a call, and they are
-separate:
+size one from (note F-9): the descriptor file is written from story E16.5
+(`--emit catalog`, driftsys/ridl#381), and no story yet wires the loopback to
+read one. A call holds a slot from the caller's send until `forget`, or the drop
+of the caller handle that sent it, reclaims it; a send with every slot taken
+answers `SendError::Busy`, on every caller handle, because the table is the
+runtime's. A correlation is `(generation << 16) | slot`, and a reclaim advances
+the slot's generation, so the correlation a reused slot had before answers as
+unknown: `ack` and `reply` answer `None`, and an `Outcome` registration under it
+is woken at once. The table holds the outcome status and the `Outcome` waker;
+the loopback keeps each call's arguments, its envelope, its place in send order
+and its reply bytes beside it, by slot. A returned claim goes back among the
+waiting calls by send order, not by correlation, because a reused slot's
+correlation is larger than that of a call sent later into a fresh slot. A
+refused send draws no sequence number, because nothing was sent. Two identities
+address a call, and they are separate:
 
 - a **`Correlation`**, returned by `command` and `query`, is the caller's name
   for the outcome it will read back;
@@ -665,9 +666,9 @@ types below the port, which is the layering ADR-0020 decision 6 fixes.
 
 ## What it cannot report
 
-The loopback holds no catalog descriptor. The descriptor arrives with story
-E16.5 (driftsys/ridl#381), which writes the first one, so there is no member
-table, and therefore:
+The loopback holds no catalog descriptor. Story E16.5 (driftsys/ridl#381) writes
+the descriptor file; giving the loopback one is not yet assigned to a story. So
+there is no member table, and therefore:
 
 - **no unknown ordinal.** Nothing here can tell an ordinal that names no member
   from one that names a member with no value yet, so no port error's `Contract`
@@ -848,8 +849,9 @@ that.
   text; driftsys/ridl#544 aligned the ridl reference with the frame
   specification on both
 - Open against it: driftsys/ridl#350's `Watermark::seq` question, on which this
-  crate takes a reading; driftsys/ridl#381 (E16.5), which gives it a catalog
-  descriptor and with it every report in "What it cannot report"
+  crate takes a reading; driftsys/ridl#381 (E16.5), which writes the catalog
+  descriptor. Giving this crate one, and with it every report in "What it cannot
+  report", is not yet assigned to a story
 - `crates/ridl-loopback/src/lib.rs`, `src/handle.rs`, `src/store.rs` — the crate
   as built; `crates/ridl-loopback/tests/conformance.rs` — the port contract
   suite of `ridl-rt-conformance` run over it; `tests/ports.rs` — the tests only

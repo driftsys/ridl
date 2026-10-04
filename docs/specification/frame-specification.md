@@ -580,8 +580,9 @@ between peers, `Contract::UnknownInteraction`:
 An interface the catalog retires, and a `reserved` ordinal, are unknown for this
 purpose: the descriptors hold no row for either. Whether a runtime can tell an
 unknown ordinal from one it has no value for yet depends on its holding the
-member table; `ridl-loopback` holds none until story E16.5 gives it a catalog
-descriptor, and until then it cannot report `UnknownInteraction` at all.
+member table. `ridl-loopback` holds none: story E16.5 writes the catalog
+descriptor, and giving the loopback one is not yet assigned to a story. Until it
+holds one, it cannot report `UnknownInteraction` at all.
 
 ## 7. Sequence Numbers, Loss and Duplicates
 

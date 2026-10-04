@@ -704,7 +704,8 @@ trusted with no `unsafe` and no second verification pass.
     **Note (2026-10-04, story E16.2, driftsys/ridl#378).** E16.2 computes the
     catalog hash but writes no catalog descriptor file; `--emit catalog` is
     story E16.5 (driftsys/ridl#381). `ridl-loopback` therefore still has no
-    descriptor, and the descriptor in the sentence above now arrives with E16.5.
+    descriptor. E16.5 writes the descriptor; giving `ridl-loopback` one is not
+    yet assigned to a story.
 
 16. **Amendment (2026-09-26) — `ClientError` and `ProviderError`.** `error`
     gains `ClientError { Send(SendError), Call(CallError), Read(ReadError) }`,
