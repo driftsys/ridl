@@ -476,6 +476,11 @@ pub enum Emit {
     /// code emit reads, `ridl.std` included, and `ridl baseline` publishes
     /// only `.ir.json` artifacts.
     CodegenModel,
+    /// The catalog descriptor an engine reads, written to
+    /// `<base>.catalog.binfb` — only when the package carries at least one
+    /// interface shape: a declared `interface`, or a `service` with an inline
+    /// body (docs/wip/2026-09-13-runtime-descriptors-design.md, D-1, D-9).
+    Catalog,
 }
 
 impl Emit {
@@ -530,7 +535,8 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
-            | Emit::CodegenModel => None,
+            | Emit::CodegenModel
+            | Emit::Catalog => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -556,7 +562,8 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
-            | Emit::CodegenModel => None,
+            | Emit::CodegenModel
+            | Emit::Catalog => None,
             Emit::IrJson => Some(".system.json"),
             Emit::IrText => Some(".system.txtpb"),
             Emit::IrBinary => Some(".system.binpb"),
@@ -1584,6 +1591,22 @@ fn write_emits(
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
+            // A package with no interface shape has no catalog, so no file is
+            // written. `ridl-sem` numbers every shape of a checked package, so
+            // a lowering failure is an internal error: it is returned as an
+            // I/O error, which the command reports with exit code 2
+            // (ADR-0010 decision 1).
+            Emit::Catalog => {
+                if ir.shapes().next().is_some() {
+                    let bytes = ridl_descriptor::lower(ir, others)
+                        .map_err(|err| std::io::Error::other(err.to_string()))?;
+                    std::fs::write(
+                        out_dir.join(format!("{base}{}", ridl_descriptor::FILE_SUFFIX)),
+                        bytes,
+                    )?;
+                }
+                continue;
+            }
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;
@@ -1689,7 +1712,8 @@ fn write_system_emits(
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
-            | Emit::CodegenModel => continue,
+            | Emit::CodegenModel
+            | Emit::Catalog => continue,
             Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
             Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
             Emit::IrBinary => Ok(ridl_ir::v2::system_to_binary(system)),
