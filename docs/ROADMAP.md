@@ -541,8 +541,8 @@ run these same four over `ridl-loopback`, but each runs the backend's own output
 or a checked-in fixture. This one runs what the CLI wrote, linked as a separate
 crate into a separate process. The limit that stood beside the one below closed
 with it: the story resolves a cross-package reference, so no type is withheld a
-codec for that reason any more. Its as-built record is the E11.14 section of
-[`interaction-face.md`](design/interaction-face.md).
+codec for that reason any more. Its as-built record is the section "The face is
+emitted by `ridl build`" of [`interaction-face.md`](design/interaction-face.md).
 
 **One limit on what that emitted codec covers**, not E11.14's to close. An
 interaction whose payload is a named scalar or an enum used to carry no

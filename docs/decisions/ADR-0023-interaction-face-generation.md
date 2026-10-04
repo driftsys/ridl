@@ -176,8 +176,8 @@ never stated.
    today. The decision itself is not amended: `generate` still produces exactly
    what it produced before, unchanged and still bound by the two `crates/ridlc`
    tests named below; what changed is which entry point the pipeline calls, not
-   what this one emits. The as-built record is the E11.14 section of
-   [`interaction-face.md`](../design/interaction-face.md).
+   what this one emits. The as-built record is the section "The face is emitted
+   by `ridl build`" of [`interaction-face.md`](../design/interaction-face.md).
 
    The decision as taken, unamended, follows.
 
