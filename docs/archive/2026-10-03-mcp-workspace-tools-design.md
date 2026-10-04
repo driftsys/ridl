@@ -1,7 +1,7 @@
 # Workspace-aware MCP tools — design for spec 1a
 
 Status: design spec for piece 1a of
-[`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md),
+[`2026-10-03-devex-and-agent-tracks-brief.md`](../wip/2026-10-03-devex-and-agent-tracks-brief.md),
 written 2026-10-03 against `main` at 29b221a. Sebastien agreed the approach in
 the brainstorming session of 2026-10-03 (decisions D-1 to D-6, §2). Implemented
 by #668, except the §4.4 amendment. It is archived with its plan when the work
@@ -138,10 +138,10 @@ lists, and in no other way.
 owns: the code, its severity and its one-line summary. It carries no link to a
 document. A URL breaks when a chapter moves, and an agent often cannot fetch
 one. Where to read more about each namespace is stated in the skill (piece 1c,
-[`skill-ridl-authoring-outline.md`](skill-ridl-authoring-outline.md) §7), which
-is prose and changes together with the documents. When the long-form error index
-(E4.2) lands, it is added as an `explanation` field. A word that is not a code
-is looked up with `ridl_diff::category_from_word`, and `text` is
+[`skill-ridl-authoring-outline.md`](../wip/skill-ridl-authoring-outline.md) §7),
+which is prose and changes together with the documents. When the long-form error
+index (E4.2) lands, it is added as an `explanation` field. A word that is not a
+code is looked up with `ridl_diff::category_from_word`, and `text` is
 `ridl_diff::explain(category)`. An input that is neither is a tool error that
 lists the five namespaces and says that diff category words are also accepted.
 

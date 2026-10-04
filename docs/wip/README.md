@@ -16,7 +16,10 @@ on 2026-08-08, and the E9.9 pair
 baseline-gate design/plan pair (`2026-09-13-baseline-gate-{design,plan}.md`) on
 2026-09-13 — E9.10 and the Epic 11 stories that absorbed E9.11 (E11.2 and E11.4,
 ADR-0018 decision 16), both now parked by the 2026-09-12 re-scope, read the E9.8
-design note, from the archive.
+design note, from the archive. The piece 1a MCP tools design and its two plans
+(`2026-10-03-mcp-workspace-tools-{design,plan}.md` and
+`2026-10-03-mcp-tools-followup-plan.md`) were archived on 2026-10-04, once #668
+and #677 landed.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -218,15 +221,6 @@ design note, from the archive.
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
-- **2026-10-03-mcp-workspace-tools-design.md** — piece 1a of that brief: eight
-  read-only MCP tools over a workspace on disk (check by path with unsaved
-  overlays, explain, resolve, describe, list interactions, references,
-  dependencies, diff). Covers ROADMAP E8.6 and E8.7. Its nine-task plan,
-  **2026-10-03-mcp-workspace-tools-plan.md**, is written for a coding agent that
-  starts with only the repository and the two files.
-  **2026-10-03-mcp-tools-followup-plan.md** is the four-task follow-up after the
-  first implementation (#668): rsdl component uses in the review tools (design
-  §4.4) and the fixes a review of #668 found.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

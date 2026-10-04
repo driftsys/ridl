@@ -70,6 +70,9 @@ as-built map.
   - ADR-0024 and `docs/book/lints.md` — before adding or renaming a warning or
     info diagnostic code, changing the `[lints]` table, or changing which
     commands apply lint levels.
+  - ADR-0025 and `docs/design/mcp-workspace-tools.md` — before changing a tool
+    of `ridl-mcp`, its input or output schema, `tools.json`, or the overlay
+    loader.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

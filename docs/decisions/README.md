@@ -14,7 +14,10 @@ other entry below is Accepted.
   becomes V1/V2/V3. Amended 2026-09-12: §1's sequencing and the V1/V2 release
   definitions are superseded by the roadmap's two steps.
 - **ADR-0005 — Agent enablement.** _Proposed._ Enabling AI agents to author and
-  evolve RIDL.
+  evolve RIDL. Amended 2026-10-03 by the workspace-aware MCP tools (ADR-0025):
+  the minimum tool table names workspace paths and adds `ridl_references` and
+  `ridl_dependencies`, and §7 adds the MCP tool surface as a fourth contract
+  surface.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
 - **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar
@@ -325,6 +328,21 @@ other entry below is Accepted.
   tree takes the defaults. `ridl check --format sarif` writes a SARIF 2.1.0 log
   with artifact URIs relative to the working directory. Amends ADR-0002 §4 and
   ADR-0010 decision 1 in place.
+
+- **ADR-0025 — Workspace-aware MCP tools.** Nine decisions: six agreed in the
+  brainstorming session of piece 1a, one from the reviewed design, one approved
+  amendment, and one that records the contract (driftsys/ridl#668, #677). Each
+  tool call loads and checks the workspace from disk behind one `snapshot`
+  function and keeps no state, and a real snapshot that takes more than 500 ms
+  reopens that; root discovery is the command line's, so a member entered alone
+  loads alone (#529); the lookup tools read the checked IR and not the language
+  server; `ridl_explain` answers from the catalogues and carries no document
+  URL; `ridl_check` has a source mode and a path mode; the tools are read-only
+  and offline; unsaved text is applied inside the `ridl-core` loader; the review
+  tools count rsdl component uses from the lowered system; and the tool names
+  and schemas change only by addition, pinned by `tools.json`. Amends ADR-0005
+  §3 and §7 in place. The as-built description is
+  [the MCP workspace tools design record](../design/mcp-workspace-tools.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

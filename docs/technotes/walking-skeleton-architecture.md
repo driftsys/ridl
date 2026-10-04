@@ -280,7 +280,9 @@ that.
   canonical IR JSON and the compiler's JSON diagnostics, without writes or
   remote fetching. It uses `tokio` for the stdio transport and blocking compiler
   work; see [below](#the-lsp-overlay-design) for the LSP's separate overlay
-  design.
+  design. The tools as built are in
+  [the design record](../design/mcp-workspace-tools.md) and the decisions in
+  [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
 
 - **`editors/vscode`** — the VS Code extension: an LSP client plus TextMate
   grammars for `.typl`, `.ridl` and `.rsdl`, built with npm/tsc.
