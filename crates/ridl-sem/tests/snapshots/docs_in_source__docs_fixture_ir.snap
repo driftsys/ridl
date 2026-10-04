@@ -827,7 +827,8 @@ expression: json
           "provisional": true,
           "service": "veh.adas.cruise"
         }
-      ]
+      ],
+      "hash": ""
     }
   ],
   "distributions": [
