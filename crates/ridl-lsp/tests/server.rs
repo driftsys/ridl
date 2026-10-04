@@ -4865,6 +4865,92 @@ fn rename_leaves_an_aliased_doc_link_intact() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// Two packages each declare a `Level` and link to their own with `[Level]`.
+/// The references and the rename of one package's `Level` stop at that
+/// package: the other package's link resolves to a different declaration
+/// of the same name.
+#[test]
+fn doc_link_references_and_rename_stay_in_the_declaring_package() {
+    let dir = TempDir::new("doc-link-same-name");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"adas\"]\n",
+    );
+    for (member, package) in [("veh-common", "veh.common"), ("adas", "veh.adas")] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let vocab_text = "package veh.common\n\
+                      /// A level.\n\
+                      type Level: integer [0..3]\n\
+                      /// A pose, with its [Level].\n\
+                      struct Pose { level: Level }\n";
+    let adas_text = "package veh.adas\n\
+                     /// A level of the driver assistance.\n\
+                     type Level: integer [0..5]\n\
+                     /// A profile, with its [Level].\n\
+                     struct Profile { level: Level }\n";
+    let vocab = uri_of(&dir.write("veh-common/lib.typl", vocab_text));
+    let adas = uri_of(&dir.write("adas/adas.typl", adas_text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let found = references_at(
+        &client,
+        9,
+        vocab.clone(),
+        pos_in(vocab_text, "type Level", 0, 5),
+        false,
+    )
+    .expect("references are found");
+    let mut pairs: Vec<(String, lt::Range)> = found
+        .into_iter()
+        .map(|location| (location.uri.as_str().to_string(), location.range))
+        .collect();
+    pairs.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then((a.1.start.line, a.1.start.character).cmp(&(b.1.start.line, b.1.start.character)))
+    });
+    assert_eq!(
+        pairs,
+        vec![
+            (vocab.as_str().to_string(), range_of(vocab_text, "Level", 1)), // `[Level]`
+            (vocab.as_str().to_string(), range_of(vocab_text, "Level", 2)), // `level: Level`
+        ],
+        "the references stay in veh.common"
+    );
+
+    let edit = rename_at(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(vocab_text, "type Level", 0, 5),
+        "Grade",
+    );
+    assert_eq!(
+        edits_for(&edit, &vocab)
+            .iter()
+            .map(|edit| edit.range)
+            .collect::<Vec<_>>(),
+        vec![
+            range_of(vocab_text, "Level", 0), // the declaration
+            range_of(vocab_text, "Level", 1), // `[Level]`
+            range_of(vocab_text, "Level", 2), // `level: Level`
+        ],
+        "the vocabulary's edits"
+    );
+    assert_eq!(
+        edits_for(&edit, &adas),
+        Vec::<lt::TextEdit>::new(),
+        "no edit touches veh.adas"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Hover on a doc link shows the target's hover — a declaration's for a
 /// declaration link, a member's for an `@see` member target — anchored to
 /// the link's span.
