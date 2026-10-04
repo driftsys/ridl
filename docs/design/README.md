@@ -32,6 +32,17 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6 and 7.
+- **catalog-descriptor.md** — the FlatBuffers catalog descriptor per package as
+  built, epic E16 and story E6.17: the `RDLC` file `--emit catalog` writes, the
+  append-only schema and its generated planus accessors, what a catalog
+  contains, the catalog hash and the three artifacts that carry it, the size
+  state per payload and encoding, verification before access, `ridl describe`,
+  the port's catalog check, and the design's decisions D-1 to D-10 with what is
+  not built (the system descriptor among them). The decisions behind its choices
+  are [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 5 as amended 2026-10-03, and
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 8.
 - **codegen-plugins.md** — the backend contract
   `generate(CodegenRequest) → CodegenResponse`, its in-process host over every
   in-tree backend, the process host behind `--plugin` (`ridlc-gen-<language>` on
