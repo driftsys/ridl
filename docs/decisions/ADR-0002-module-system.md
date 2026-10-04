@@ -4,8 +4,9 @@
 
 Accepted.
 
-Amended 2026-10-04 by the lint foundation design (spec 0): §4 gains the
-`[lints]` table, which both manifest kinds accept, and its resolution order.
+Amended 2026-10-04 by the lint foundation design (spec 0,
+[ADR-0024](ADR-0024-lint-registry-and-levels.md)): §4 gains the `[lints]` table,
+which both manifest kinds accept, and its resolution order.
 
 ## Context
 
@@ -164,10 +165,10 @@ members = ["veh-common", "veh-cluster", "veh-adas"]
 Each workspace member directory contains its own `ridl.toml` in
 standalone-package mode.
 
-**The `[lints]` table** (amended 2026-10-04, lint foundation design) sets the
-level of a lint, in both modes. Each key is a lint name, the name a Warning or
-Info row of the diagnostic catalogue carries; each value is one of `allow`,
-`info`, `warn` or `deny`:
+**The `[lints]` table** (amended 2026-10-04, lint foundation design, ADR-0024)
+sets the level of a lint, in both modes. Each key is a lint name, the name a
+Warning or Info row of the diagnostic catalogue carries; each value is one of
+`allow`, `info`, `warn` or `deny`:
 
 ```toml
 [lints]

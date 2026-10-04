@@ -805,6 +805,17 @@ no shared serializer for "byte-identical to ... LSP" to hold through. The row
 above states the reachable criterion; see `crates/ridl-mcp/README.md`, "What
 this tool shares with `ridl check --format json <file>`, and where it differs."
 
+**Spec 0 of the devex and agent tracks, the lint foundation, landed on
+2026-10-04** (driftsys/ridl#678; design and plan in driftsys/ridl#671). Every
+Warning and Info catalogue code is a named lint, a `[lints]` table in
+`ridl.toml` sets its level, `ridl check --format sarif` projects the
+diagnostics, and the language server and the MCP tool `ridl_check` apply the
+same levels. The decisions are
+[ADR-0024](decisions/ADR-0024-lint-registry-and-levels.md); the user-facing
+description is [the lints page of the book](book/lints.md). Its debt is #682,
+and #529 (a workspace member entered alone ignores the root's `[lints]`) stays
+open.
+
 ---
 
 # Step 2 — TypeScript and the plugin system

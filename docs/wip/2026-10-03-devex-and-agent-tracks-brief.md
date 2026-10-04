@@ -73,6 +73,14 @@ Four specs. Each one is a separate brainstorming, spec and plan cycle.
 
 Both tracks depend on it, so it comes first and stays small.
 
+**Landed 2026-10-04.** The design and plan merged as #671 and the implementation
+as #678. The decisions are
+[ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md); the design and
+plan are archived as
+[`2026-10-03-lint-foundation-design.md`](../archive/2026-10-03-lint-foundation-design.md)
+and
+[`2026-10-03-lint-foundation-plan.md`](../archive/2026-10-03-lint-foundation-plan.md).
+
 - A lint registry: a stable name and a default level for each lint, separate
   from the existing error diagnostics.
 - A `[lints]` table in `ridl.toml` to change a level per project (for example

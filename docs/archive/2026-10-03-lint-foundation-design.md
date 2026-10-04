@@ -1,7 +1,7 @@
 # Lint foundation — design for spec 0
 
 Status: design spec for Spec 0 of
-[`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md),
+[`2026-10-03-devex-and-agent-tracks-brief.md`](../wip/2026-10-03-devex-and-agent-tracks-brief.md),
 written 2026-10-03 against `main` at 440dfb59. Sebastien agreed the approach in
 the brainstorming session of 2026-10-03 (decisions D-1 to D-7, §2). The
 maintainer's delegate took D-8 and D-9 in the pass-1 review of PR #671. Nothing

@@ -377,3 +377,22 @@ provenance. Nothing here is normative — the current references live in
   its line numbers record what was true when it was written. Read it for the
   reasoning and the experiments, not as a second description of the as-built
   names.
+- **2026-10-03-lint-foundation-design.md** — the design for spec 0 of the devex
+  and agent tracks brief (driftsys/ridl#671): the lint registry, the `[lints]`
+  table of `ridl.toml`, the levels, where they apply, and
+  `ridl check --format sarif`. Its §2 holds the nine decisions, its §4.2 the
+  lint name table, its §5 the resolution rules and its §10 the alternatives. The
+  gardened record is
+  [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md), where design
+  D-n is decision n. The user-facing description is
+  [the lints page of the book](../book/lints.md), the output formats are in
+  [the CLI reference](../book/cli-reference.md), and the amendments are in place
+  in [ADR-0002](../decisions/ADR-0002-module-system.md) §4 and
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md) decision 1. Its section
+  numbers are cited from source comments; read it for the reasoning, not as a
+  second description of the as-built behaviour.
+- **2026-10-03-lint-foundation-plan.md** — the task-by-task plan that
+  implemented the design above, merged as driftsys/ridl#678. Archived verbatim.
+  It has no gardened record of its own; the decisions it took at implementation
+  are decisions 10 to 16 of
+  [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md).
