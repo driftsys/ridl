@@ -12,23 +12,27 @@
 //!
 //! A member whose shape the backend refuses makes the payload absent. The
 //! refusals reproduced here, each citing the backend function that holds it,
-//! are exactly these: a nested array or map and a map value that is an array
-//! or a map (`resolve_field_type`), a map key outside the integral and string
-//! scalars (`map_key_text`), an optional array or map field (`emit_struct`,
-//! ADR-0013 decision 7), an enum live or retired value outside int32
-//! (`emit_enum`), and a field number protobuf reserves or exceeds
-//! (`check_field_number`). The backend's name-collision refusals are **not**
-//! reproduced: two struct field names that coincide after `snake_case`
-//! (`emit_struct`), two enum values that coincide after
-//! `SCREAMING_SNAKE_CASE` or one that spells the synthesized
-//! `<PREFIX>_UNSPECIFIED` (`emit_enum`), a union arm named `value`, the name
-//! of the `oneof` every union message carries (`emit_union`), and two induced
-//! tuple messages with one name (`emit_induced_tuples`). Each of those
-//! refuses the whole package rather than a member, so a payload in a package
+//! include: a field with no type and a stream type (`resolve_field_type`), a
+//! name that does not resolve (`resolve_named`), a nested array or map and a
+//! map value that is an array or a map (`resolve_field_type`), a map key
+//! outside the integral and string scalars (`map_key_text`), an optional
+//! array or map field (`emit_struct`, ADR-0013 decision 7), an enum live or
+//! retired value outside int32 (`emit_enum`), and a field number protobuf
+//! reserves or exceeds (`check_field_number`). The backend's name-collision
+//! refusals, at member and package scope, are **not** reproduced: two struct
+//! field names that coincide after `snake_case` (`emit_struct`); two enum
+//! values that coincide after `SCREAMING_SNAKE_CASE`, one that spells the
+//! synthesized `<PREFIX>_UNSPECIFIED`, or a reserved enum name equal to a
+//! live value (`emit_enum`); a union arm named `value`, the name of the
+//! `oneof` every union message carries, or two arms that project to one name
+//! (`emit_union`); an induced tuple message named as another tuple or as a
+//! declared type (`emit_induced_tuples`); and every other package-scope
+//! claim that clashes, such as a declared type named as a generated
+//! `<Interface>Ordinal` table (`SymbolScope::claim`). A payload in a package
 //! the backend refuses on a name collision still gets a proto3 bound here: the
-//! wire size does not depend on the names. Sharing those rules with the
-//! backend is deferred to a debt issue (move the proto3 projection's refusal
-//! rules into `ridl_ir::projection::proto3`).
+//! wire size does not depend on the names. Moving the refusal rules into
+//! `ridl_ir::projection::proto3`, where the backend and this sizer share
+//! them, is tracked by driftsys/ridl#690.
 //!
 //! proto3 has no unbounded state: typl bounds every collection, so a message
 //! is bounded or, when the projection refuses a member, absent. Every
@@ -231,9 +235,10 @@ fn struct_size<'a>(
 }
 
 /// The message of the union `name` declared in `home`: its largest arm, as
-/// a field of the `oneof` at the arm's ordinal. The backend's refusal of an
-/// arm named `value`, the `oneof`'s own name (`emit_union`), is a name
-/// collision and is not reproduced (module doc).
+/// a field of the `oneof` at the arm's ordinal. The backend's name-collision
+/// refusals in `emit_union` — an arm named `value`, the `oneof`'s own name,
+/// and two arms that project to one name — are not reproduced (module doc,
+/// driftsys/ridl#690).
 fn union_size<'a>(
     name: &'a str,
     def: &'a UnionDef,

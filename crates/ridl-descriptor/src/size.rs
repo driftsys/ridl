@@ -149,8 +149,11 @@ pub enum SizeState {
 /// resolve, or the projection has no root form for the type. For `ReprC`:
 /// always, the layout is undefined until E11.12. For `Proto3`, where no
 /// unbounded state exists (`proto3::state`): the type is not a struct or a
-/// union, a member of its message is one the proto backend refuses, an enum
-/// value it reaches is outside int32, or the bound is above `u32::MAX`.
+/// union; a member of its message is one the proto backend refuses, or one
+/// the backend accepts that no proto3 leaf bounds (a `string` or `bytes`
+/// with no length bound, a type def with no width); an enum value it reaches
+/// is outside int32; the `u64` arithmetic overflows; the nesting passes
+/// `MAX_DEPTH`; or the bound is above `u32::MAX`.
 pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
     match encoding {
         Encoding::Proto3 => proto3::state(type_name, ctx),
