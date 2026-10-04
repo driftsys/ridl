@@ -409,10 +409,13 @@ pub fn compile_workspace_with(
 
 /// Keeps the diagnostics a command reports for an entry inside a workspace
 /// member: those whose primary span is in a file under `scope`, the member
-/// directory ([`LoadedWorkspace::report_scope`]). A diagnostic with no file
-/// path is kept. With `scope` `None` every diagnostic is kept. The whole
-/// workspace is still loaded and checked; this only narrows what is reported
-/// (ADR-0024 decision 9, as ADR-0026 amends it).
+/// directory ([`LoadedWorkspace::report_scope`]), and those on the workspace
+/// root's `ridl.toml` — the `ridl.toml` of a directory above `scope` — because
+/// the root's `[imports]`, `[lints]` and `members` govern the member, so a
+/// problem there (MANI-007, for one) is the member's to see. A diagnostic
+/// with no file path is kept. With `scope` `None` every diagnostic is kept.
+/// The whole workspace is still loaded and checked; this only narrows what is
+/// reported (ADR-0024 decision 9, as ADR-0026 amends it).
 pub fn retain_in_report_scope(
     diagnostics: &mut Vec<Diagnostic>,
     sources: &SourceMap,
@@ -427,9 +430,20 @@ fn in_report_scope(diagnostic: &Diagnostic, sources: &SourceMap, scope: Option<&
         return true;
     };
     match sources.path(diagnostic.primary.file) {
-        Some(path) => Path::new(path).starts_with(scope),
+        Some(path) => {
+            let path = Path::new(path);
+            path.starts_with(scope) || is_manifest_above(path, scope)
+        }
         None => true,
     }
+}
+
+/// Whether `path` is the `ridl.toml` of a directory at or above `scope`: the
+/// workspace root's manifest, for a member scope. A sibling member's manifest
+/// is not, because its directory is beside `scope`, not above it.
+fn is_manifest_above(path: &Path, scope: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == "ridl.toml")
+        && path.parent().is_some_and(|dir| scope.starts_with(dir))
 }
 
 /// A build artifact `ridlc build --emit` can write for each package.

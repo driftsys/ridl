@@ -274,3 +274,36 @@ fn a_member_build_fails_on_a_sibling_lint_the_root_denies() {
     let files = written(out.path());
     assert!(files.is_empty(), "the build wrote: {files:?}");
 }
+
+/// A diagnostic on the workspace root's `ridl.toml` is in the report scope
+/// of every member: the root's tables govern the member, and nothing else
+/// would show it. `ridl check a` reports the MANI-007, and `ridl build a`
+/// reports it as its own error, not as another member's.
+#[test]
+fn a_member_entry_reports_the_root_manifest_diagnostics() {
+    let fixture = SiblingFixture::new("\n[imports]\nveh = \"not a url\"\n");
+    let mani_007 = |diagnostics: &[Diagnostic]| {
+        diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code.as_str() == "MANI-007")
+            .count()
+    };
+
+    let run = ridlc::run_check(&fixture.member_a(), Frozen::No).expect("the check runs");
+    assert_eq!(mani_007(&run.diagnostics), 1, "{:?}", run.diagnostics);
+
+    let out = tempfile::tempdir().expect("a temp dir");
+    let run = ridlc::run_build(&fixture.member_a(), out.path(), &[Emit::IrJson], Frozen::No)
+        .expect("the build runs");
+    assert_eq!(mani_007(&run.diagnostics), 1, "{:?}", run.diagnostics);
+    assert!(
+        !run
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("another member")),
+        "the root manifest's error is the member's own: {:?}",
+        run.diagnostics
+    );
+    let files = written(out.path());
+    assert!(files.is_empty(), "the build wrote: {files:?}");
+}
