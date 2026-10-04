@@ -117,3 +117,54 @@ fn a_foreign_flag_is_exempt_only_on_its_own_line() {
     assert!(check("cargo build --release").is_empty());
     assert_eq!(check("ridl build --release").len(), 1);
 }
+
+#[test]
+fn an_inline_span_exemption_holds_only_on_its_own_line() {
+    let exempt = &[("A `--wire` flag", "--wire")];
+    let page = synthetic_page("A `--wire` flag is named here.\n\nA bare `--wire` span.\n");
+    let failures = prose_flag_failures(&page, Path::new(RIDL), "ridl", "ridlc", exempt);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].starts_with("synthetic.md:3:"));
+}
+
+#[test]
+fn an_other_program_flag_is_checked_against_its_own_subcommand() {
+    let page = synthetic_page(
+        "```sh\nridlc alpha --help\n```\n\n```text\n--aaa --help\n```\n\n\
+         ```sh\nridlc beta --help\n```\n\n```text\n--bbb --help\n```\n\n\
+         ```sh\nridlc alpha --aaa\nridlc alpha --bbb\n```\n",
+    );
+    let failures = prose_flag_failures(&page, Path::new(RIDL), "ridl", "ridlc", &[]);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].contains("`--bbb`") && failures[0].contains("ridlc alpha"));
+}
+
+#[test]
+fn a_program_that_is_not_ridl_accepts_only_an_exempt_flag() {
+    assert_eq!(fence_failures("cargo build --format").len(), 1);
+}
+
+#[test]
+fn a_fence_exemption_covers_only_its_own_command() {
+    assert_eq!(
+        fence_failures("cargo build --release && ridl build --release").len(),
+        1
+    );
+}
+
+#[test]
+fn a_fence_line_is_split_at_a_pipe_and_a_semicolon() {
+    assert_eq!(
+        fence_failures("ridl check | ridl lsp --format json").len(),
+        1
+    );
+    assert_eq!(
+        fence_failures("ridl check; ridl lsp --format json").len(),
+        1
+    );
+}
+
+#[test]
+fn a_program_path_is_reduced_to_its_file_name() {
+    assert!(fence_failures("./target/debug/ridl check --format json").is_empty());
+}

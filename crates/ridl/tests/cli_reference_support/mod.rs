@@ -13,8 +13,11 @@
 //!   documented. The exit-code table's 0, 1 and 2 cells are not compared. The
 //!   `lsp` and `mcp` servers are exempt from the table, because their exit
 //!   codes are stated in their own sections.
-//! - **Prose.** Every long flag named in an inline code span or in a `sh`
-//!   fence must exist, and the prose count of emit targets must match.
+//! - **Prose.** Every long flag named in a `sh` fence must be accepted by the
+//!   subcommand of the command that names it, and every long flag named in an
+//!   inline code span must be accepted by some command. A flag no command
+//!   accepts is exempt only on a line that holds its context. The prose count
+//!   of emit targets must match.
 //! - **The version line.** `<program> --version` is compared with the binary's
 //!   version masked as `X.Y.Z`; the book holds the literal `X.Y.Z`.
 //!
