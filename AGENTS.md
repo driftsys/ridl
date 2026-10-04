@@ -217,10 +217,12 @@ them.
   hand.
 - **Every `ridl`/`typl`/`rsdl` fenced block in `docs/book/` is compiled** by
   `crates/ridl/tests/book_examples.rs`, and must draw no diagnostic its fence
-  does not name — nor name one it does not draw. A verified block declares its
-  own `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``;
-  a deliberate diagnostic is marked `` ```ridl,allow=<CODE> ``. Package names
-  are book-wide, and the book is one workspace, so it holds exactly one `system`
+  does not name — nor name one it does not draw. The harness leaves TYPL-406
+  (`missing-docs`) out of a block whose fence does not name it, so that an
+  example can leave items undocumented. A verified block declares its own
+  `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``; a
+  deliberate diagnostic is marked `` ```ridl,allow=<CODE> ``. Package names are
+  book-wide, and the book is one workspace, so it holds exactly one `system`
   fence (RSDL-601). Extraction uses `pulldown-cmark` with mdBook's exact option
   set (`MDBOOK_OPTIONS`), so a fence anywhere mdBook reads one _in that file_ is
   verified — do not replace it with pattern matching, and do not widen the

@@ -94,7 +94,10 @@ The harness is fail-closed. Each of these is an error rather than a silent skip:
   same fence;
 - **any** diagnostic the block did not name — error, warning, note, or one of
   the uncoded diagnostics, which can never be allowed because they have no code
-  to name;
+  to name. The one exception is TYPL-406 (`missing-docs`): the harness leaves it
+  out of a block whose fence does not name `allow=TYPL-406`, so that an example
+  can leave items undocumented; a block that names it is checked for it like any
+  other code;
 - an `allow=` naming a code the block does **not** draw, so a marker cannot
   outlive the example it was written for;
 - an `import` naming a package no block declares, a name no block in that
