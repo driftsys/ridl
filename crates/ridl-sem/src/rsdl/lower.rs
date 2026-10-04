@@ -405,7 +405,8 @@ impl<'a> Lowering<'a> {
 
     /// The region map (rsdl §11, §13): one region per catalog the closure
     /// reaches, holding the interfaces of that catalog that closure services
-    /// list, each with its number, provisional flag and owning service.
+    /// list, each with its number, provisional flag and owning service. The
+    /// hash is left empty for the driver to embed.
     fn regions(&self) -> Vec<v2::Region> {
         let mut regions: BTreeMap<String, Vec<v2::RegionInterface>> = BTreeMap::new();
         for (interface, owners) in &self.closure.interface_owners {
@@ -426,9 +427,12 @@ impl<'a> Lowering<'a> {
             .into_iter()
             .map(|(catalog, mut interfaces)| {
                 interfaces.sort_by_key(|interface| interface.number);
+                // The catalog hash is an input from ridl, never computed by
+                // rsdl (rsdl §13): the driver embeds it (`ridlc`).
                 v2::Region {
                     catalog,
                     interfaces,
+                    hash: Vec::new(),
                 }
             })
             .collect()

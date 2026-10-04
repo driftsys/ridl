@@ -378,6 +378,27 @@ mod tests {
         assert!(diff_systems(&base(), &base()).is_empty());
     }
 
+    /// A region's catalog hash changes only when the catalog's contract
+    /// changes, and the contract categories report that change. It is not a
+    /// placement or a composition change, so no system change is listed.
+    #[test]
+    fn a_region_hash_change_is_not_a_system_change() {
+        let region = |hash: u8| v2::Region {
+            catalog: "veh.adas".to_string(),
+            interfaces: Vec::new(),
+            hash: vec![hash; 32],
+        };
+        let old = System {
+            regions: vec![region(1)],
+            ..base()
+        };
+        let new = System {
+            regions: vec![region(2)],
+            ..base()
+        };
+        assert!(diff_systems(&old, &new).is_empty());
+    }
+
     /// A system change is rendered under its heading, after the contract
     /// changes and with no verdict, and leaves the report verdict alone; a
     /// system on one side only is not compared (rsdl §14).

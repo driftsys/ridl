@@ -247,7 +247,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "provisional": true,
           "service": "veh.adas.lane"
         }
-      ]
+      ],
+      "hash": "OIyPkzvltFVj6jqhxoEqSC1G6ggESmnRJKawgwBoeFU="
     },
     {
       "catalog": "veh.diag",
@@ -259,7 +260,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "provisional": true,
           "service": "veh.diag.access"
         }
-      ]
+      ],
+      "hash": "SFm0HawHfJ+vAUAccZTPTZzjqu+OzHwsezXib4litgg="
     }
   ],
   "distributions": [
