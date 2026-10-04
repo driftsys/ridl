@@ -1062,3 +1062,24 @@ Four PRs, each reviewed before merge:
 3. **Checks and tool**: Tasks 5 to 12. Can be developed in parallel with PR 2;
    nobody writing a rubric runs a check on the corpus.
 4. **Calibration**: Tasks 13 and 14, after PRs 2 and 3.
+
+5. **Task 10: report the shared graph's workspace-only fan-out** (2026-10-04).
+   Register RIDL-415 at provisional Info and set `PACKAGE_FAN_OUT_MAX` to the
+   search start of three. Iterate the shared ordered workspace graph once, count
+   its distinct dependency targets, and report only counts greater than three.
+   Use `SiteIndex::package_line` for the first file in path order, even when
+   only a later file contains imports. The tests present packages and imports in
+   nonlexical order, repeat a target reference, and reference a standard type:
+   the exact message still lists four distinct workspace targets in lexical
+   order. A separate boundary test retains three targets without a finding. The
+   shared graph's existing tests cover external-target filtering and
+   component-use edges; this task does not duplicate or change that computation.
+6. **Task 10: synchronize the candidate's exact diagnostic records** (approved
+   bounded extension, 2026-10-04). Add the catalogue pair, book row, ridl
+   reference row, SARIF rule and derived rule index, and diagnostic coverage
+   index entry for RIDL-415. The overview now names package coupling alongside
+   interface design lints at ridl §16.4. Preserve all fixture sources and
+   unrelated expectations. Task 14 must synchronize the final level across these
+   records and the exact provisional Info assertion, or remove the lint records
+   and emitter if calibration drops it. Threshold changes must revalidate the
+   exact fan-out fixtures and any later counts or allowances.

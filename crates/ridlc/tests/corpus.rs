@@ -567,6 +567,15 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      in `crates/ridlc/tests/design_lints.rs`",
         },
     ),
+    (
+        "RIDL-415",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/design_lints.rs",
+            reason: "a workspace design lint; provoked by \
+                     `fan_out_above_the_maximum_is_reported` \
+                     in `crates/ridlc/tests/design_lints.rs`",
+        },
+    ),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
     ("FORM-106", Showcase),

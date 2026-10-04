@@ -14,6 +14,14 @@ const TYPES: &str =
     "type Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\n";
 
 fn workspace(packages: &[(&str, &str)]) -> ridlc::WorkspaceOutput {
+    let files: Vec<_> = packages
+        .iter()
+        .map(|(name, source)| (*name, vec![("source.ridl", *source)]))
+        .collect();
+    workspace_files(&files)
+}
+
+fn workspace_files(packages: &[(&str, Vec<(&str, &str)>)]) -> ridlc::WorkspaceOutput {
     let dir = tempfile::tempdir().unwrap();
     let members = packages
         .iter()
@@ -25,7 +33,7 @@ fn workspace(packages: &[(&str, &str)]) -> ridlc::WorkspaceOutput {
         format!("[workspace]\nmembers = [{members}]\n"),
     )
     .unwrap();
-    for (name, source) in packages {
+    for (name, files) in packages {
         let member = dir.path().join(name);
         std::fs::create_dir(&member).unwrap();
         std::fs::write(
@@ -33,7 +41,9 @@ fn workspace(packages: &[(&str, &str)]) -> ridlc::WorkspaceOutput {
             format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
         )
         .unwrap();
-        std::fs::write(member.join("source.ridl"), source).unwrap();
+        for (path, source) in files {
+            std::fs::write(member.join(path), source).unwrap();
+        }
     }
     let output = ridlc::compile_workspace(&mut RidlDatabase::default(), dir.path()).unwrap();
     assert_no_errors(&output.diagnostics);
@@ -1217,5 +1227,86 @@ fn duplicate_shape_qualifies_inline_scalar_pattern_constants_in_checked_ir() {
             .map(|d| d.message.as_str())
             .collect::<Vec<_>>(),
         ["`b.Second` has the same 2 fields as `a.First`"]
+    );
+}
+
+fn fan_out(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|d| d.code.as_str() == "RIDL-415")
+        .collect()
+}
+
+const FAN_OUT_FOUR: &str = "package e\nimport d.D\nimport b.B\nimport a.A\nimport c.C\nstruct Bundle { first: A second: B third: C fourth: D again: A id: ridl.std.Uuid }\n";
+
+#[test]
+fn fan_out_above_the_maximum_is_reported() {
+    let out = workspace(&[
+        ("e", FAN_OUT_FOUR),
+        ("d", "package d\ntype D: boolean\n"),
+        ("b", "package b\ntype B: boolean\n"),
+        ("a", "package a\ntype A: boolean\n"),
+        ("c", "package c\ntype C: boolean\n"),
+    ]);
+    let found = fan_out(&out.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
+    assert_eq!(
+        found[0].message,
+        "package `e` depends on 4 workspace packages: a, b, c, d"
+    );
+    assert_eq!(found[0].severity, Severity::Info);
+    assert_eq!(
+        ridl_core::lint::lint_of(found[0].code).unwrap().lint,
+        Some("package-fan-out")
+    );
+    assert_eq!(
+        site(&out.sources, found[0].primary),
+        ("e/source.ridl".to_string(), 0..9)
+    );
+    assert!(found[0].labels.is_empty());
+    assert!(found[0].fixits.is_empty());
+}
+
+#[test]
+fn fan_out_is_reported_once_on_the_first_file() {
+    let out = workspace_files(&[
+        (
+            "e",
+            vec![
+                ("two.ridl", FAN_OUT_FOUR),
+                (
+                    "one.ridl",
+                    "// First file\npackage e\ntype Local: boolean\n",
+                ),
+            ],
+        ),
+        ("d", vec![("source.ridl", "package d\ntype D: boolean\n")]),
+        ("c", vec![("source.ridl", "package c\ntype C: boolean\n")]),
+        ("b", vec![("source.ridl", "package b\ntype B: boolean\n")]),
+        ("a", vec![("source.ridl", "package a\ntype A: boolean\n")]),
+    ]);
+    let found = fan_out(&out.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
+    assert_eq!(
+        site(&out.sources, found[0].primary),
+        ("e/one.ridl".to_string(), 14..23)
+    );
+}
+
+#[test]
+fn fan_out_at_the_maximum_is_not_reported() {
+    let out = workspace(&[
+        ("a", "package a\ntype A: boolean\n"),
+        ("b", "package b\ntype B: boolean\n"),
+        ("c", "package c\ntype C: boolean\n"),
+        (
+            "e",
+            "package e\nimport a.A\nimport b.B\nimport c.C\nstruct Bundle { first: A second: B third: C again: A id: ridl.std.Uuid }\n",
+        ),
+    ]);
+    assert!(
+        fan_out(&out.diagnostics).is_empty(),
+        "{:?}",
+        out.diagnostics
     );
 }

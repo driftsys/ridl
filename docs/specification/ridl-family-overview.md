@@ -271,8 +271,8 @@ the shipped toolchain; the other two are specified ahead of their layers.
 spelling can violate is a ridl rule (rxdl §10).
 
 The type vocabulary's workspace design lints are catalogued in typl §16.3;
-interface design lints are catalogued in ridl §16.4. Their names and default
-levels are indexed on [the lints page](../book/lints.md).
+interface and package coupling design lints are catalogued in ridl §16.4. Their
+names and default levels are indexed on [the lints page](../book/lints.md).
 
 The two namespaces below belong to no profile. `FORM-` is the **shared family
 grammar** — surface syntax, plus the attribute-block rules of general form §4.3

@@ -9,6 +9,7 @@ use ridl_ir::v2;
 use ridl_sem::{CheckedPackage, Resolution};
 
 mod cohesion;
+mod fan_out;
 mod shapes;
 mod sites;
 mod units;
@@ -64,6 +65,7 @@ pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
     diagnostics.extend(words::check(ctx));
     diagnostics.extend(shapes::check(ctx));
     diagnostics.extend(cohesion::check(ctx));
+    diagnostics.extend(fan_out::check(ctx));
     diagnostics
 }
 

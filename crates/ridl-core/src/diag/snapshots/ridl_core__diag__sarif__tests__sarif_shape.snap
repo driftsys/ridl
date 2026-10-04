@@ -982,6 +982,16 @@ expression: log
               }
             },
             {
+              "id": "RIDL-415",
+              "name": "package-fan-out",
+              "shortDescription": {
+                "text": "package depends on too many workspace packages"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "RSDL-305",
               "shortDescription": {
                 "text": "`instances` is not a parenthesised list of one or more camelCase names"
@@ -1484,7 +1494,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 148,
+          "ruleIndex": 149,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

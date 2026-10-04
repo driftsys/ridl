@@ -953,6 +953,11 @@ diag_codes! {
         /// direct named-type sharing. Provisional Info during calibration.
         RIDL_414 = "RIDL-414", Info,
             "interface members form disconnected type-sharing groups", lint = "low-cohesion-interface";
+
+        /// A package depends on more workspace packages than the threshold.
+        /// Provisional Info during calibration.
+        RIDL_415 = "RIDL-415", Info,
+            "package depends on too many workspace packages", lint = "package-fan-out";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -1928,6 +1933,7 @@ mod tests {
             ("RIDL-406", "redeclared-envelope-metadata"),
             ("RIDL-407", "ordinal-changed"),
             ("RIDL-414", "low-cohesion-interface"),
+            ("RIDL-415", "package-fan-out"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("MANI-005", "unknown-manifest-key"),
