@@ -315,12 +315,14 @@ Semantics:
 
 > **Not implemented; deferred to spec 2b** (ADR-0026 decision 4). The toolchain
 > keeps `@labels` and `@deprecated` as doc tags, beside `@see` and `@since`. An
-> attribute block exists only on `command`, `query` and `fixed` and on the rsdl
-> declarations, so removing the tags would leave `type`, `struct`, `enum`,
-> `union`, `interface`, `signal`, `event`, fields and enum values with no way to
-> be deprecated. Spec 2b, documentation in generated code, decides between this
-> promotion (adding the attribute block to the grammar) and generating
-> deprecation metadata from the doc tag.
+> attribute block exists on the interactions `signal`, `event`, `command` and
+> `query` (RIDL-106 rejects one on `fixed`) and on the rsdl declarations and
+> body lines. `type`, `const`, `struct`, `enum`, `enumset`, `union`,
+> `interface`, `service`, fields and enum values have none, so removing the tags
+> would leave them, and `fixed`, with no way to be deprecated. Spec 2b,
+> documentation in generated code, decides between this promotion (adding the
+> attribute block to the grammar) and generating deprecation metadata from the
+> doc tag.
 
 ```ridl
 /// Cruise control service contract.

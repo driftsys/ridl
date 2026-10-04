@@ -58,21 +58,23 @@ decision 9 recorded as a limitation.
 
 1. **A doc comment documents the next named declaration or member, and every
    named declaration and member is a carrier.** The checker reads the doc of
-   each carrier into the IR:
+   each carrier, and stores it in the IR where the IR has a field for it:
 
-   | Carrier                                                        | Before this record                      | Now                     |
-   | -------------------------------------------------------------- | --------------------------------------- | ----------------------- |
-   | `type`, `const`, `struct`, `enum`, `enumset`, `union`          | read                                    | unchanged               |
-   | `interface`, `service`, each interaction, `reserved` entry     | read                                    | unchanged               |
-   | struct field, enum value, enumset bit, union arm               | in the tree; the IR field is left empty | read                    |
-   | parameter of a `command` or `query`                            | no carrier                              | read into `Param.doc`   |
-   | `system`, `component`, `distribution`, `deployment`, `machine` | in the tree; no IR field                | read into the system IR |
-   | rsdl body line (`offers`, `requires`, a bare member reference) | in the tree; no IR field                | read, see below         |
+   | Carrier                                                        | Before this record                      | Now                                                          |
+   | -------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
+   | `type`, `const`, `struct`, `enum`, `enumset`, `union`          | read                                    | unchanged                                                    |
+   | `interface`, `service`, each interaction                       | read                                    | unchanged                                                    |
+   | `reserved` entry                                               | in the tree; no IR field                | a carrier with no IR field; its links are checked (TYPL-401) |
+   | struct field, enum value, enumset bit, union arm               | in the tree; the IR field is left empty | read                                                         |
+   | parameter of a `command` or `query`                            | no carrier                              | read into `Param.doc`                                        |
+   | `system`, `component`, `distribution`, `deployment`, `machine` | in the tree; no IR field                | read into the system IR                                      |
+   | rsdl body line (`offers`, `requires`, a bare member reference) | in the tree; no IR field                | read, see below                                              |
 
    The docs of the `system` and `distribution` member lines and of the `offers`
    and `requires` lines are stored in the system IR. A placement line in a
    `machine` body is a carrier and the editor shows its doc, but the system IR's
-   `Placement` has no doc field.
+   `Placement` has no doc field. A `reserved` entry is the same: its doc is read
+   and its links are checked, and the IR's `Reserved` has no doc field.
 
    These positions are not carriers: before `package`, before an `import`,
    before a return type or an attribute block, an arm of an inline `T | E`
@@ -122,14 +124,15 @@ decision 9 recorded as a limitation.
    take their labels from `@labels`.
 
    **The general form §4.7 promotion of `deprecated` and `labels` to attribute
-   keys is deferred to spec 2b.** An attribute block exists only on `command`,
-   `query` and `fixed` and on the rsdl declarations, and RIDL-106 rejects one on
-   `fixed`. Removing the doc tags would leave `type`, `struct`, `enum`, `union`,
-   `interface`, `signal`, `event`, fields and enum values with no way to be
-   deprecated. No output of this record changes when the tags change. The first
-   consumer that would need the promotion is generated deprecation metadata, and
-   spec 2b decides between adding the attribute block to the grammar and reading
-   the fact from the doc tag.
+   keys is deferred to spec 2b.** An attribute block exists on the interactions
+   `signal`, `event`, `command` and `query` (RIDL-106 rejects one on `fixed`)
+   and on the rsdl declarations and body lines. `type`, `const`, `struct`,
+   `enum`, `enumset`, `union`, `interface`, `service`, fields and enum values
+   have none, so removing the doc tags would leave them, and `fixed`, with no
+   way to be deprecated. No output of this record changes when the tags change.
+   The first consumer that would need the promotion is generated deprecation
+   metadata, and spec 2b decides between adding the attribute block to the
+   grammar and reading the fact from the doc tag.
 
 5. **A link resolves in the scope of the file that holds it, by the rules of a
    type reference, and the IR stores each resolved target** (design D-5).
@@ -191,8 +194,12 @@ decision 9 recorded as a limitation.
    covers a parameter, a `reserved` entry, an rsdl body line, a member of an
    `internal` declaration, or the package. A doc made only of tags is missing.
    There is one diagnostic per item, at its name, with a fix-it that inserts a
-   `///` line above the item when the item starts its line. Code outside the
-   entry point's directory tree is never reported (ADR-0024 decision 10).
+   `///` line above the item when the item starts its line. When the entry is
+   inside a workspace member, `ridl check`, `ridl build`, `ridl lock` and the
+   MCP path mode report only the diagnostics of files under the member (ADR-0024
+   decision 9, as decision 10 below replaces it), so a sibling member's
+   undocumented items are not reported there; the language server reports every
+   loaded file. A remote package of `[imports]` is never checked.
 
    `doc-comment-style` checks one direction: a project that sets it to `warn` or
    `deny` requires the house style `///`. Its fix-it rewrites the comment as
@@ -287,9 +294,9 @@ From the design's alternatives. The numbers are the decisions that reject them.
 - **Carrying out the general form §4.7 promotion now.** It needs an attribute
   block on every declaration and member — a grammar, parser, formatter and
   lowering change — and nothing here consumes the result. **Promoting only where
-  a block exists** (`command`, `query`, `fixed`, rsdl) gives two spellings of
-  one fact. **An `@example` tag** duplicates a Markdown heading and a fenced
-  block. Rejected for decision 4.
+  a block exists** (the interactions other than `fixed`, and rsdl) gives two
+  spellings of one fact. **An `@example` tag** duplicates a Markdown heading and
+  a fenced block. Rejected for decision 4.
 - **Qualified links only to imported packages.** A simpler resolver, but a doc
   link would force an import the code does not use. **Raw link text in the IR**,
   resolved by each backend, repeats the resolver in every backend, and an

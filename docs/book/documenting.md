@@ -288,9 +288,11 @@ internal struct Raw {
 }
 ```
 
-Code outside the directory tree of the entry point is never reported. A
-dependency in another directory therefore never adds `missing-docs` warnings to
-your check.
+When you check from inside a workspace member, `ridl check`, `ridl build`,
+`ridl lock` and the MCP tool `ridl_check` report only the diagnostics of files
+under that member, so an undocumented item in a sibling member does not appear
+in that report. The language server reports every file it loaded. A remote
+package of `[imports]` is never checked.
 
 A project that does not want to document every item yet sets the level in its
 `ridl.toml`:
