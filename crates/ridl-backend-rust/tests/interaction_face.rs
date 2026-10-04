@@ -2535,13 +2535,8 @@ struct MinimalSignalOnlyPort {
 }
 
 impl MinimalSignalOnlyPort {
-    fn new(package_name: &'static str) -> Self {
-        MinimalSignalOnlyPort {
-            catalog: ridl_rt::contract::CatalogRef {
-                name: package_name,
-                hash: CATALOG.hash,
-            },
-        }
+    fn new() -> Self {
+        MinimalSignalOnlyPort { catalog: CATALOG }
     }
 }
 
@@ -2585,7 +2580,7 @@ impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
 /// served real data, which is outside this test's purpose.
 #[test]
 fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
-    let mut port = MinimalSignalOnlyPort::new("face.demo");
+    let mut port = MinimalSignalOnlyPort::new();
     let client = generated::horn::Client::new(&mut port);
     let sample = client.active().expect("read");
     assert_eq!(
@@ -2607,13 +2602,8 @@ struct DistinctiveInitPort {
 }
 
 impl DistinctiveInitPort {
-    fn new(package_name: &'static str) -> Self {
-        DistinctiveInitPort {
-            catalog: ridl_rt::contract::CatalogRef {
-                name: package_name,
-                hash: CATALOG.hash,
-            },
-        }
+    fn new() -> Self {
+        DistinctiveInitPort { catalog: CATALOG }
     }
 }
 
@@ -2646,7 +2636,7 @@ impl ridl_rt::port::SignalReader for DistinctiveInitPort {
 
 #[test]
 fn the_init_branch_passes_the_ports_freshness_and_envelope_through_unchanged() {
-    let mut port = DistinctiveInitPort::new("face.demo");
+    let mut port = DistinctiveInitPort::new();
     let client = generated::horn::Client::new(&mut port);
     let sample = client.active().expect("read");
     assert_eq!(
@@ -2751,8 +2741,8 @@ const OTHER_NAME: CatalogRef = CatalogRef {
 };
 
 /// Runs `bind`, which must panic, and returns the panic message. The message
-/// must name the interface, the catalog the face was generated from and the
-/// catalog the port is attached to.
+/// must name the interface, then the catalog the face was generated from,
+/// then the catalog the port is attached to.
 fn mismatch_message(found: CatalogRef, bind: impl FnOnce()) -> String {
     assert_ne!(found, CATALOG, "the test catalog differs from the face's");
     let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(bind))
@@ -2762,17 +2752,12 @@ fn mismatch_message(found: CatalogRef, bind: impl FnOnce()) -> String {
         .cloned()
         .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_string()))
         .expect("the panic carries a message");
-    assert!(
-        message.contains("interface `Cabin`"),
-        "the message names the interface: {message}"
-    );
-    assert!(
-        message.contains(&format!("{CATALOG:?}")),
-        "the message names the face's catalog: {message}"
-    );
-    assert!(
-        message.contains(&format!("{found:?}")),
-        "the message names the port's catalog: {message}"
+    assert_eq!(
+        message,
+        format!(
+            "the face of interface `Cabin` was generated from catalog {CATALOG:?}, \
+             but the port is attached to catalog {found:?}"
+        )
     );
     message
 }
