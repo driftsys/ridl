@@ -31,7 +31,7 @@ package, not over the canonical JSON that decision 9's 2026-09-22 amendment
 names canonical. Decision 15 records what is hashed, the determinism rule for
 those bytes, the reason the derived encoding is the input, and the golden-hash
 test that pins it. Sebastien took the choice of input on 2026-10-03 (answer 4 of
-[the lane E16 driver](../wip/2026-10-03-lane-e16-catalog-descriptor-driver.md)
+[the lane E16 driver](../archive/2026-10-03-lane-e16-catalog-descriptor-driver.md)
 §4); the rest of decision 15 is written from stage D3 of that lane. Decisions 1
 to 14 are unchanged.
 

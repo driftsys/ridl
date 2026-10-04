@@ -919,6 +919,20 @@ execution.
     unchanged. If catalogue validation is later weakened, these focused
     regressions must fail even while the seed's lint arrays remain empty.
 
+20. **Integrate current main before the corpus PR review** (PR 2 integration).
+    Merge main at `112da94d863860091be0542594c5791b039e2594` into the corpus
+    branch at `9689d0a4a3ff9fd6966b66fbba6ad6e646c21339`, preserving every
+    automatic upstream change. Resolve only the CLI manifest conflict by
+    retaining the corpus guard's TOML dev-dependency and upstream's snapshot
+    dev-dependency, descriptor runtime dependency and updated description. This
+    makes the approved corpus reviewable against current main without rewriting
+    its commits or changing the thirty approved task files or corpus sources.
+    The lockfile merges automatically and is checked with locked metadata and
+    the thirteen corpus tests. If either side's dependencies are lost, the CLI
+    or corpus guard can fail to build; static checks and the focused tests must
+    detect that before commitment. The integration adds no version bump and runs
+    no candidate check, metric dump, finding or calibration procedure.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

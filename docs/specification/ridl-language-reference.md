@@ -1915,8 +1915,11 @@ sections it points at are.
    the answer moved out of the language: the enumeration surface is the
    **catalog descriptor** — a per-package artifact carrying each interface, its
    members and its numbers in a form an engine reads without decoding, specified
-   in the runtime-descriptors design and scheduled as Epic 16, where
-   `ridl describe` prints it at the desk. Nothing about it is a language
+   in
+   [the runtime-descriptors design](../archive/2026-09-13-runtime-descriptors-design.md)
+   and built in Epic 16 (described in
+   [the catalog descriptor design record](../design/catalog-descriptor.md)),
+   where `ridl describe` prints it at the desk. Nothing about it is a language
    construct, and a bridge that exposes that catalog at runtime is an ordinary
    component with an ordinary ridl service, written where the bridge lives; the
    bridge itself is a runtime concern the roadmap parks. No name is reserved for

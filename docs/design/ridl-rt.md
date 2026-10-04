@@ -184,7 +184,8 @@ decision 4.
 for that encoding**, which covers both an encoding that cannot carry the payload
 and one whose size is not derivable yet. The `repr(C)` column is `None` for
 every payload until E11.12 defines the C-representable layout
-(`docs/wip/2026-09-13-catalog-descriptor-plan.md` §3), and a backend that emits
+(`docs/archive/2026-09-13-catalog-descriptor-plan.md`, "Dispositions of the
+spec's open items, settled 2026-10-03", answer 5), and a backend that emits
 descriptors before its codec exists writes `None` for that codec's column as
 well. E11.13's MVP wrote `None` for all three; since E16.4 (driftsys/ridl#380)
 the Rust backend fills the `flatbuffers` column from the codegen model's bound

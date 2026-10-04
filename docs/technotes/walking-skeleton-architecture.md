@@ -25,9 +25,9 @@ One Cargo workspace for the toolchain (`Cargo.toml`,
 `members = ["crates/*", "xtask"]`, `exclude = ["examples"]` — `examples/cabin`
 is a second, separate workspace, because one of its members is written by
 `ridl build` and is not in git): every crate under `crates/` with its directory
-named after it, and the `xtask` automation member at the root (issue #180). The
-VS Code extension (`editors/vscode`) is TypeScript and is not a workspace
-member.
+named after it, and the `xtask` automation member at the root (issue #180),
+which runs two generators, `codegen` and `descriptor-codegen`. The VS Code
+extension (`editors/vscode`) is TypeScript and is not a workspace member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
@@ -142,11 +142,13 @@ that.
   `ridl_ir::catalog_hash` computes the catalog hash: SHA-256 over the protobuf
   binary of a reduced package that holds the interfaces, their numbers and the
   types they reach (ADR-0014 decision 15, story E16.2). It is in this crate
-  because two artifacts carry the hash — the codegen model's `Catalog.hash`,
-  which the Rust backend writes into every generated `Interface::CATALOG`, and
-  the catalog descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`,
+  because three artifacts carry the hash — the codegen model's `Catalog.hash`,
+  which the Rust backend writes into every generated `Interface::CATALOG`; the
+  catalog descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`,
   re-exports the hash as `ridl_descriptor::hash`, and copies the interface
-  numbers from the IR in `ridl_descriptor::number`.
+  numbers from the IR in `ridl_descriptor::number`; and each `Region` of the
+  lowered rsdl system, where `ridlc` embeds it (`embed_catalog_hashes`, story
+  E6.17).
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
@@ -198,9 +200,10 @@ that.
   its own artifact.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
-  `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lsp`, and
-  `ridl mcp`, driving the `ridlc` command drivers, the `ridl-fmt` engine, the
-  `ridl-diff` engine, and the `ridl-lsp`/`ridl-mcp` libraries (the
+  `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
+  `ridl mcp`, and `ridl describe`, driving the `ridlc` command drivers, the
+  `ridl-fmt` engine, the `ridl-diff` engine, the `ridl-lsp`/`ridl-mcp`
+  libraries, and the `ridl-descriptor` verifier and JSON view (the
   plumbing/porcelain split of concept note §8.1). Everything E2 added to the CLI
   landed here rather than in `ridlc`, because `ridlc` stays a pure source→IR
   function — the minimal ISO 26262 tool-qualification boundary (ADR-0008
@@ -289,7 +292,13 @@ that.
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
-  `ridl-descriptor`'s accessors from `schema/catalog.fbs` with planus.
+  `ridl-descriptor`'s accessors (`crates/ridl-descriptor/src/generated.rs`) from
+  `crates/ridl-descriptor/schema/catalog.fbs` with planus.
+
+  Run `cargo xtask descriptor-codegen` after every schema edit. The xtask test
+  `committed_generated_accessors_match_the_schema` fails while the committed
+  file is stale. The schema is append-only: add fields at the end of a table,
+  never remove or reorder one.
 
 ## The end-to-end pipeline contract
 

@@ -9,7 +9,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The `ridl` command-line toolchain: check, build, fmt, lock, diff, lsp, and mcp, over the shared compiler crates."
+description = "The `ridl` command-line toolchain: check, baseline, build, test, fmt, diff, lock, lsp, mcp, and describe, over the shared compiler crates."
 
 [[bin]]
 name = "ridl"
@@ -27,6 +27,8 @@ num-rational.workspace = true
 # which the E1.19 wasm check does not build, so nothing here reaches that gate.
 proptest = { workspace = true, features = ["std"] }
 ridl-core.workspace = true
+# `ridl describe` verifies a catalog descriptor and renders it as JSON.
+ridl-descriptor.workspace = true
 ridl-diff.workspace = true
 ridl-fmt.workspace = true
 ridl-ir.workspace = true
@@ -43,11 +45,10 @@ tokio.workspace = true
 
 [dev-dependencies]
 toml.workspace = true
+# `describe_cli` snapshots the JSON `ridl describe` prints.
+insta.workspace = true
 jsonschema.workspace = true
 pulldown-cmark.workspace = true
-# `describe_cli` reads the catalog hash out of a descriptor `ridl build`
-# wrote, through `ridl_descriptor::verify`.
-ridl-descriptor.workspace = true
 sha2.workspace = true
 # The end-to-end server tests speak MCP to a spawned `ridl mcp`: `client` is
 # the caller half of the SDK, `transport-child-process` the child-process

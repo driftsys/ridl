@@ -2024,6 +2024,7 @@ name = "ridl-cli"
 version = "0.5.1"
 dependencies = [
  "clap",
+ "insta",
  "jsonschema",
  "lsp-server",
  "num-bigint",
@@ -2074,6 +2075,7 @@ dependencies = [
  "ridl-backend-rust",
  "ridl-ir",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

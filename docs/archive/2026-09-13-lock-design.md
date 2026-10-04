@@ -36,7 +36,7 @@ defined at `crates/ridl-backend-proto/src/lib.rs:196` and applied to each value
 at `:1106`), the FlatBuffers backend's `enum <Interface>Ordinal : uint`
 (`crates/ridl-backend-flatbuffers/src/lib.rs:1223`), and the catalog descriptor
 plan's schema and hash input
-([`2026-09-13-catalog-descriptor-plan.md`](../wip/2026-09-13-catalog-descriptor-plan.md)
+([`2026-09-13-catalog-descriptor-plan.md`](2026-09-13-catalog-descriptor-plan.md)
 `:296`, `:306`, `:319`, and `entry.number.to_le_bytes()` at `:1327`). A narrower
 width would save at most 4 bytes in a frame header, and would add a range check
 at lowering, a diagnostic, and a second place where the bound can drift from the

@@ -37,11 +37,11 @@ the as-built record of the contract and the two hosts is
 **Amended 2026-10-03 — decision 5, planus is not the FlatBuffers runtime
 `ridl-rt` may take.** Sebastien's decision of 2026-10-03, recorded as answer 8
 in section 4 of the
-[lane E16 driver](../wip/2026-10-03-lane-e16-catalog-descriptor-driver.md), is:
-the toolchain may depend on planus — `ridl-descriptor`, and through it `ridlc`
-and `ridl` — and `ridl-rt` and every generated package must not. The amendment
-is written into decision 5 in place, with this record's reading of that answer;
-the other decisions are unchanged.
+[lane E16 driver](../archive/2026-10-03-lane-e16-catalog-descriptor-driver.md),
+is: the toolchain may depend on planus — `ridl-descriptor`, and through it
+`ridlc` and `ridl` — and `ridl-rt` and every generated package must not. The
+amendment is written into decision 5 in place, with this record's reading of
+that answer; the other decisions are unchanged.
 
 Its reasoning trail is
 [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md),
@@ -241,7 +241,7 @@ as its public contract.
    **Amendment (2026-10-03) — planus is excluded from the permission.** The
    FlatBuffers runtime this decision permits `ridl-rt` under the `flatbuffers`
    feature cannot be planus. Sebastien's decision of 2026-10-03 (the
-   [lane E16 driver](../wip/2026-10-03-lane-e16-catalog-descriptor-driver.md),
+   [lane E16 driver](../archive/2026-10-03-lane-e16-catalog-descriptor-driver.md),
    section 4, answer 8) is: the toolchain may depend on planus —
    `ridl-descriptor`, and through it `ridlc` and `ridl` — and `ridl-rt` and
    every generated package must not.

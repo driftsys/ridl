@@ -2535,6 +2535,7 @@ mod system_round_trip {
             }],
             regions: vec![v2::Region {
                 catalog: "veh.diag".to_string(),
+                hash: vec![0xab; 32],
                 interfaces: vec![v2::RegionInterface {
                     name: "veh.diag.access".to_string(),
                     inline: true,
@@ -2603,12 +2604,16 @@ mod system_round_trip {
 
     /// The canonical JSON of the system artifact re-reads through the same
     /// strict pbjson-generated impl the package uses (ADR-0014 decisions 11
-    /// and 14): unknown fields rejected, enums by name, the nested attribute
-    /// list intact.
+    /// and 14): unknown fields rejected, the catalog hash as base64, enums by
+    /// name, the nested attribute list intact.
     #[test]
     fn system_json_round_trip_preserves_system() {
         let system = fixture();
         let json = v2::system_to_json_pretty(&system).expect("the fixture serializes as JSON");
+        assert!(
+            json.contains("\"hash\": \"q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s=\""),
+            "bytes render as base64, got:\n{json}"
+        );
         assert!(
             json.contains("\"crossing\": \"CROSSING_OFF_BOARD\""),
             "enums render by name, got:\n{json}"
