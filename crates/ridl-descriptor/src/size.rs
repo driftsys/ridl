@@ -188,12 +188,16 @@ pub(crate) enum Leaf<'a> {
     /// sizes are `u32` (driver §4 answer 5), and the proto3 sizer narrows the
     /// value when it writes a row.
     Blob(u64),
-    /// An enum: its smallest and largest member values, both 0 when it has
-    /// no member. The proto backend refuses a value outside proto3's int32
-    /// range (`emit_enum`), which the sizer reproduces from these two.
+    /// An enum: its smallest and largest live member values, both 0 when it
+    /// has no member, which decide the varint length. `retired_in_int32` is
+    /// false when a retired (`reserved`) value is outside proto3's int32
+    /// range. A retired value is never encoded, but the proto backend
+    /// refuses it as it refuses a live value outside int32 (`emit_enum`), and
+    /// the sizer reproduces both refusals.
     Enum {
         min: i64,
         max: i64,
+        retired_in_int32: bool,
     },
     Struct {
         def: &'a StructDef,
@@ -253,6 +257,11 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
             Some(Leaf::Enum {
                 min: values().min().unwrap_or(0),
                 max: values().max().unwrap_or(0),
+                retired_in_int32: def
+                    .reserved
+                    .iter()
+                    .filter_map(|reserved| reserved.value)
+                    .all(|retired| i32::try_from(retired).is_ok()),
             })
         }
         // The scalar of the width alone, as the proto backend resolves an
@@ -833,11 +842,19 @@ mod tests {
         ));
         assert!(matches!(
             leaf_of_name("Gear", &home, &ctx),
-            Some(Leaf::Enum { min: -3, max: 7 })
+            Some(Leaf::Enum {
+                min: -3,
+                max: 7,
+                retired_in_int32: true
+            })
         ));
         assert!(matches!(
             leaf_of_name("Mode", &home, &ctx),
-            Some(Leaf::Enum { min: 0, max: 5 })
+            Some(Leaf::Enum {
+                min: 0,
+                max: 5,
+                retired_in_int32: true
+            })
         ));
         assert!(
             matches!(
@@ -849,7 +866,11 @@ mod tests {
         assert!(
             matches!(
                 leaf_of_name("Empty", &home, &ctx),
-                Some(Leaf::Enum { min: 0, max: 0 })
+                Some(Leaf::Enum {
+                    min: 0,
+                    max: 0,
+                    retired_in_int32: true
+                })
             ),
             "an enum with no member has magnitude 0"
         );
@@ -946,7 +967,11 @@ mod tests {
         assert!(
             matches!(
                 leaf_of_field_type(field, home, &ctx),
-                Some(Leaf::Enum { min: 0, max: 1 })
+                Some(Leaf::Enum {
+                    min: 0,
+                    max: 1,
+                    retired_in_int32: true
+                })
             ),
             "resolved against q, the field is q's enum `Inner`"
         );

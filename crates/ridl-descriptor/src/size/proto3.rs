@@ -13,13 +13,13 @@
 //! here, citing the backend function that holds it: a nested array or map and
 //! a map value that is an array or a map (`resolve_field_type`), a map key
 //! outside the integral and string scalars (`map_key_text`), an optional array
-//! or map field (`emit_struct`, ADR-0013 decision 7), an enum value outside
-//! int32 (`emit_enum`), and a field number protobuf reserves or exceeds
-//! (`check_field_number`). proto3 has no unbounded state: typl bounds every
-//! collection, so a message is bounded or, when the projection refuses a
-//! member, absent. Every addition and multiplication is checked, so a bound
-//! the `u64` arithmetic cannot hold is absent, and so is a bound above
-//! `u32::MAX`, as in the FlatBuffers projection's `MAX_ENCODABLE`.
+//! or map field (`emit_struct`, ADR-0013 decision 7), an enum live or
+//! retired value outside int32 (`emit_enum`), and a field number protobuf
+//! reserves or exceeds (`check_field_number`). proto3 has no unbounded state:
+//! typl bounds every collection, so a message is bounded or, when the
+//! projection refuses a member, absent. Every addition and multiplication is
+//! checked, so a bound the `u64` arithmetic cannot hold is absent, and so is a
+//! bound above `u32::MAX`, as in the FlatBuffers projection's `MAX_ENCODABLE`.
 
 use ridl_ir::projection::proto3::{self as proto3_projection, Scalar};
 use ridl_ir::v2::{
@@ -98,10 +98,13 @@ fn field_size<'a>(
 }
 
 /// The largest encoding of one enum value: a negative member encodes as a
-/// ten-byte varint, otherwise the largest value decides. `None` when a member
-/// is outside proto3's int32 range, which `emit_enum` in the proto backend
-/// refuses.
-fn enum_len(min: i64, max: i64) -> Option<u64> {
+/// ten-byte varint, otherwise the largest value decides. `None` when a live
+/// member or a retired value is outside proto3's int32 range, which
+/// `emit_enum` in the proto backend refuses.
+fn enum_len(min: i64, max: i64, retired_in_int32: bool) -> Option<u64> {
+    if !retired_in_int32 {
+        return None;
+    }
     i32::try_from(min).ok()?;
     i32::try_from(max).ok()?;
     Some(if min < 0 {
@@ -118,7 +121,11 @@ fn leaf_field(number: u32, leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<
     match leaf {
         Leaf::Scalar(s) => plain(number, s.max_encoded_len().expect(SCALAR_IS_BOUNDED)),
         Leaf::Blob(bytes) => delimited(number, bytes),
-        Leaf::Enum { min, max } => plain(number, enum_len(min, max)?),
+        Leaf::Enum {
+            min,
+            max,
+            retired_in_int32,
+        } => plain(number, enum_len(min, max, retired_in_int32)?),
         Leaf::Struct { def, home } => delimited(number, struct_size(def, home, ctx, depth + 1)?),
         Leaf::Union { def, home } => delimited(number, union_size(def, home, ctx, depth + 1)?),
         Leaf::Tuple { def, home } => delimited(number, tuple_size(def, home, ctx, depth + 1)?),
@@ -205,7 +212,14 @@ fn array_field<'a>(
             number,
             n.checked_mul(s.max_encoded_len().expect(SCALAR_IS_BOUNDED))?,
         ),
-        Leaf::Enum { min, max } => delimited(number, n.checked_mul(enum_len(min, max)?)?),
+        Leaf::Enum {
+            min,
+            max,
+            retired_in_int32,
+        } => delimited(
+            number,
+            n.checked_mul(enum_len(min, max, retired_in_int32)?)?,
+        ),
         Leaf::Array { .. } | Leaf::Map { .. } => None,
         other => n.checked_mul(leaf_field(number, other, ctx, depth)?),
     }
@@ -260,8 +274,8 @@ mod tests {
     use crate::size::tests_support::*;
     use ridl_ir::v2::{
         Backing, Constraint, Decl, EnumDef, EnumValue, Field, FloatWidth, IntWidth, Package,
-        PrimitiveType, StructMember, TupleField, TypeDef, UnionArm, UnionDef, backing, decl,
-        field_type, type_def,
+        PrimitiveType, Reserved, StructMember, TupleField, TypeDef, UnionArm, UnionDef, backing,
+        decl, field_type, type_def,
     };
 
     #[test]
@@ -634,6 +648,45 @@ mod tests {
             state("HoldsEdge", &ctx),
             Some(SizeState::Bounded(11)),
             "the int32 bounds themselves are admitted; a negative member is a 10-byte varint"
+        );
+    }
+
+    #[test]
+    fn a_retired_enum_value_outside_int32_is_refused() {
+        // `emit_enum` in the proto backend refuses a retired value outside
+        // int32 even when every live value is in range.
+        let with_retired = |name: &str, retired: i64| {
+            let mut decl = enum_decl(name, &[0, 1]);
+            if let Some(decl::Kind::EnumDef(def)) = decl.kind.as_mut() {
+                def.reserved.push(Reserved {
+                    value: Some(retired),
+                    ..Default::default()
+                });
+            }
+            decl
+        };
+        let mut package = fixture();
+        package
+            .decls
+            .push(with_retired("Retired", i64::from(i32::MAX) + 1));
+        package
+            .decls
+            .push(with_retired("RetiredEdge", i64::from(i32::MIN)));
+        package.decls.push(struct_decl(
+            "HoldsRetired",
+            vec![("e", 1, named("Retired"))],
+        ));
+        package.decls.push(struct_decl(
+            "HoldsRetiredEdge",
+            vec![("e", 1, named("RetiredEdge"))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("HoldsRetired", &ctx), None);
+        assert_eq!(
+            state("HoldsRetiredEdge", &ctx),
+            Some(SizeState::Bounded(2)),
+            "a retired value inside int32 is admitted and does not change the live values' size"
         );
     }
 
