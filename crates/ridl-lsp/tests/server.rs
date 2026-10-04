@@ -4801,6 +4801,70 @@ fn rename_updates_a_doc_link_in_a_sibling_member() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A doc link written with an import alias (`[Velocity]` for
+/// `import veh.common.Speed as Velocity`) resolves to the aliased
+/// declaration, and a rename of that declaration leaves the link as written,
+/// as it leaves a type reference through the alias: rewriting it would name
+/// a declaration the file does not import.
+#[test]
+fn rename_leaves_an_aliased_doc_link_intact() {
+    let dir = TempDir::new("doc-rename-alias");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let veh = dir.write(
+        "veh-common/lib.typl",
+        "package veh.common\n/// A speed.\ntype Speed: km/h\n",
+    );
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app_text = "package app\n\
+                    import veh.common.Speed as Velocity\n\
+                    /// The cabin, keyed by its [Velocity].\n\
+                    /// @see Velocity\n\
+                    struct Cabin { primary: Velocity }\n";
+    let app = dir.write("app/lib.typl", app_text);
+    let veh_uri = uri_of(&veh);
+    let app_uri = uri_of(&app);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // The aliased link resolves: it is a reference of `Speed`.
+    let found = references_at(&client, 9, veh_uri.clone(), pos(2, 6), false)
+        .expect("references are found");
+    assert!(
+        found
+            .iter()
+            .any(|location| location.uri == app_uri && location.range == range_of(app_text, "Velocity", 1)),
+        "the `[Velocity]` link is a reference of `Speed`: {found:?}"
+    );
+
+    let edit = rename_at(&client, 10, veh_uri.clone(), pos(2, 6), "Rapidity");
+
+    let veh_edits = edits_for(&edit, &veh_uri);
+    assert_eq!(veh_edits.len(), 1, "the declaration only: {veh_edits:?}");
+
+    // In app, only the import line's imported-name segment is rewritten; the
+    // doc link, the `@see` target and the type reference keep the alias.
+    let app_edits = edits_for(&edit, &app_uri);
+    assert_eq!(
+        app_edits.iter().map(|edit| edit.range).collect::<Vec<_>>(),
+        vec![range_of(app_text, "Speed", 0)],
+        "only the import segment: {app_edits:?}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Hover on a doc link shows the target's hover — a declaration's for a
 /// declaration link, a member's for an `@see` member target — anchored to
 /// the link's span.
