@@ -5,8 +5,8 @@ other entry below is Accepted.
 
 - **ADR-0002 — Module system.** `package` / `import` / `as` / `internal`, the
   manifest, lockfile, and resolver. Amended 2026-10-04 by the lint foundation
-  design: §4 gains the `[lints]` table, which both manifest kinds accept, and
-  its resolution order.
+  design (ADR-0024): §4 gains the `[lints]` table, which both manifest kinds
+  accept, and its resolution order.
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
   order and technology choices (companion to the roadmap). Amended 2026-08-03:
   uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl
@@ -42,10 +42,10 @@ other entry below is Accepted.
   `diff(1)`/`grep(1)` precedent for a verdict-carrying exit 1, not clig), and
   the fail-closed rule `ridl fmt` was brought into line with. Not epic-scoped:
   it binds the CLI contract for every future subcommand. Amended 2026-10-04 by
-  the lint foundation design: decision 1 states that a lint raised to `deny`
-  exits 1 in `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, and
-  that of the other subcommands only the `ridl lsp` and `ridl mcp` servers apply
-  lint levels, with no effect on their exit code.
+  the lint foundation design (ADR-0024): decision 1 states that a lint raised to
+  `deny` exits 1 in `ridl check`, `ridl build`, `ridlc check` and `ridlc build`,
+  and that of the other subcommands only the `ridl lsp` and `ridl mcp` servers
+  apply lint levels, with no effect on their exit code.
 
 - **ADR-0011 — The provisioned-constant keyword.** ridl's `final` renamed to
   `fixed`, so both ridl and uxdl spell one concept one way; `final` removed from
@@ -304,6 +304,27 @@ other entry below is Accepted.
   later language backend that follows this precedent. The as-built face this
   record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
+
+- **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed
+  in the brainstorming session of spec 0, two taken in the design review, and
+  seven that come partly from the reviewed design (decisions 10, 11 and 12) and
+  partly from the stage driver at implementation (the root-scope rule in 10, the
+  source of the default level in 12, and 13 to 16; driftsys/ridl#678). Every
+  Warning and Info catalogue code is a lint with a stable kebab-case name, and
+  its catalogue severity is its default level; a level (`allow`, `info`, `warn`
+  or `deny`) is set only in the `[lints]` table of a `ridl.toml`, never on the
+  command line and never in source; the registry and the one function that
+  applies levels live in `ridl-core`, and the entry points that report
+  diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,
+  `ridlc build`, the language server and the MCP tool `ridl_check` — while
+  `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock` and the other MCP tools
+  compile with the severities the emit sites chose, so a lint at `deny` never
+  changes whether a workspace compiles. Entering at a workspace member loads it
+  alone, so the root's table does not apply (#529). A diagnostic takes the
+  levels of the directory that owns its file; a file outside the entry point's
+  tree takes the defaults. `ridl check --format sarif` writes a SARIF 2.1.0 log
+  with artifact URIs relative to the working directory. Amends ADR-0002 §4 and
+  ADR-0010 decision 1 in place.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

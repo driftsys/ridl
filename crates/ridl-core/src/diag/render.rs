@@ -93,7 +93,8 @@ fn to_codespan(diag: &Diagnostic, file_count: usize) -> cs::Diagnostic<usize> {
         })
         .collect();
     // A lint diagnostic names its lint after the fix-it notes, so a reader
-    // knows the key that sets its level (lint foundation spec §7.2). The note
+    // knows the key that sets its level
+    // (docs/archive/2026-10-03-lint-foundation-design.md §7.2). The note
     // depends only on the code, not on the level that applied.
     if let Some(name) = lint::lint_of(diag.code).and_then(|entry| entry.lint) {
         notes.push(format!(
@@ -196,7 +197,7 @@ mod tests {
     }
 
     /// A lint diagnostic ends with the note that names its lint, after the
-    /// fix-it notes (lint foundation spec §7.2). The file has fewer than ten
+    /// fix-it notes (docs/book/lints.md). The file has fewer than ten
     /// lines, so the note line is two spaces of gutter followed by the text.
     #[test]
     fn lint_diagnostic_renders_its_lint_note() {

@@ -297,7 +297,7 @@ impl RidlMcp {
                     let mut snap = snapshot(path, params.overlays.as_deref().unwrap_or_default())?;
                     // `ridl_check` reports to an agent, so it applies the
                     // project's `[lints]` levels here, before the JSON and the
-                    // status counts are built (lint foundation spec D-8).
+                    // status counts are built (ADR-0024 decision 8).
                     // `snapshot` itself does not apply them: the lookup tools
                     // share it and keep the emitted severities.
                     apply_lint_levels(
@@ -496,9 +496,9 @@ mod tests {
         );
     }
 
-    // Path mode applies the project's `[lints]` levels (lint foundation spec
-    // D-8, §6.2): the fixture's root manifest sets `missing-timing = "deny"`,
-    // so the member's RIDL-100 is reported as an error and counted as one.
+    // Path mode applies the project's `[lints]` levels (ADR-0024 decisions 6
+    // and 8): the fixture's root manifest sets `missing-timing = "deny"`, so
+    // the member's RIDL-100 is reported as an error and counted as one.
     #[tokio::test]
     async fn path_mode_check_applies_lint_levels() {
         let path = snapshot::tests::fixture("ws-lints");

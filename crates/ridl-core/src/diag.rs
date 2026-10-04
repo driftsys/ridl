@@ -1180,8 +1180,8 @@ diag_codes! {
 
         /// A `[lints]` entry whose key is not a registered lint name, or whose
         /// value is not one of the level strings `allow`, `info`, `warn` and
-        /// `deny`; also a `lints` key that is not a table (lint foundation spec
-        /// §5.3). The entry is ignored and the check goes on.
+        /// `deny`; also a `lints` key that is not a table (ADR-0024
+        /// decision 11). The entry is ignored and the check goes on.
         MANI_010 = "MANI-010", Warning,
             "`[lints]` entry names no lint, or its value is not a level", lint = "unknown-lint";
 
@@ -1398,7 +1398,7 @@ pub struct JsonLabel {
 /// field is always present, never omitted. `labels` passes the diagnostic's
 /// secondary annotations through verbatim, in the order the diagnostic holds
 /// them; the array is always present, empty when the diagnostic carries none.
-/// `lint` is the lint name of the code (lint foundation spec §7.1), present
+/// `lint` is the lint name of the code (docs/book/cli-reference.md), present
 /// when the code has one and omitted otherwise; `severity` is the effective
 /// one after the `[lints]` levels are applied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1503,8 +1503,8 @@ pub struct CatalogEntry {
     pub code: DiagCode,
     pub severity: Severity,
     pub summary: &'static str,
-    /// The lint name, present exactly when `severity` is Warning or Info (lint
-    /// foundation spec §4.1). The catalogue severity is the lint's default
+    /// The lint name, present exactly when `severity` is Warning or Info
+    /// (ADR-0024 decision 1). The catalogue severity is the lint's default
     /// level. A released name is never renamed or reused.
     pub lint: Option<&'static str>,
 }
@@ -1837,9 +1837,10 @@ mod tests {
         );
     }
 
-    /// Every Warning and Info row carries a lint name and no Error row does; each
-    /// name is lowercase words joined by `-`; no two rows share a name; and the
-    /// `(code, name)` pairs are the table in the lint foundation spec §4.2.
+    /// Every Warning and Info row carries a lint name and no Error row does;
+    /// each name is lowercase words joined by `-`; no two rows share a name;
+    /// and the `(code, name)` pairs are the expected list below, which mirrors
+    /// the table in docs/book/lints.md (`book_lints.rs` checks that table).
     #[test]
     fn lint_names_are_present_exactly_on_warnings_and_infos_and_unique() {
         fn is_lint_name(name: &str) -> bool {
@@ -1910,7 +1911,10 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        assert_eq!(pairs, expected, "the lint names differ from spec §4.2");
+        assert_eq!(
+            pairs, expected,
+            "the lint names differ from the expected list in this test"
+        );
     }
 
     /// Each constant's name is the code string it expands to, with `-` written
@@ -2520,7 +2524,7 @@ mod json_tests {
     }
 
     /// `lint` names the code's lint and is omitted, not `null`, for an Error
-    /// code (lint foundation spec §7.1). The struct assertions check the
+    /// code (docs/book/cli-reference.md). The struct assertions check the
     /// value; the snapshot pins that the key is absent from the serialized
     /// element, which no struct assertion can see.
     #[test]

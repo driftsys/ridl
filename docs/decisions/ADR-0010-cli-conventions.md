@@ -11,11 +11,11 @@ agent-taken decision for after-the-fact maintainer review. This PR both records
 this ADR and fixes the three defects it rules on, and closes issue
 driftsys/ridl#194.
 
-Amended 2026-10-04 by the lint foundation design (spec 0): decision 1 states
-that a lint raised to `deny` exits 1 in `ridl check`, `ridl build`,
-`ridlc check` and `ridlc build`, and that of the other subcommands only the
-`ridl lsp` and `ridl mcp` servers apply lint levels, with no effect on their
-exit code.
+Amended 2026-10-04 by the lint foundation design (spec 0,
+[ADR-0024](ADR-0024-lint-registry-and-levels.md)): decision 1 states that a lint
+raised to `deny` exits 1 in `ridl check`, `ridl build`, `ridlc check` and
+`ridlc build`, and that of the other subcommands only the `ridl lsp` and
+`ridl mcp` servers apply lint levels, with no effect on their exit code.
 
 ## Context
 
@@ -83,10 +83,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    and `ridl mcp` servers, which apply them to the diagnostics they report and
    have no exit code that depends on them.
 
-   The paragraph above was added on 2026-10-04 (lint foundation design) and is
-   verified by tests, not by the direct construction below: `text_deny_exits_1`
-   and `build_fails_on_deny` in `crates/ridl/tests/lints.rs` run the `ridl`
-   binary, and `diff_ignores_deny`, `baseline_ignores_deny` and
+   The paragraph above was added on 2026-10-04 (lint foundation design,
+   ADR-0024) and is verified by tests, not by the direct construction below:
+   `text_deny_exits_1` and `build_fails_on_deny` in `crates/ridl/tests/lints.rs`
+   run the `ridl` binary, and `diff_ignores_deny`, `baseline_ignores_deny` and
    `test_ignores_deny` in the same file pin that the other subcommands apply no
    level; `deny_turns_a_lint_into_an_error` and `deny_blocks_build` in
    `crates/ridlc/tests/lint_levels.rs` call `ridlc::run_check` and

@@ -1,5 +1,5 @@
 //! The lint table of the book page `docs/book/lints.md` against the
-//! diagnostic catalogue (lint foundation spec §9). A lint added to the
+//! diagnostic catalogue (ADR-0024 decision 7). A lint added to the
 //! catalogue without a row in the book, or a row whose code, default level or
 //! summary differs from its catalogue row, fails this test.
 

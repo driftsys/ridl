@@ -1,5 +1,5 @@
-//! The SARIF 2.1.0 projection of a diagnostic list (lint foundation spec
-//! §7.3), which `ridl check --format sarif` writes to stdout.
+//! The SARIF 2.1.0 projection of a diagnostic list (ADR-0024
+//! decision 12), which `ridl check --format sarif` writes to stdout.
 //!
 //! The log holds one run. Its `tool.driver.rules` lists every row of
 //! [`ALL_CATALOGS`], Error rows included, so a viewer can describe every
@@ -145,7 +145,7 @@ pub struct Region {
 }
 
 /// The SARIF level of a severity: a rule's default from its catalogue
-/// severity, a result's from its effective severity (spec §7.3).
+/// severity, a result's from its effective severity (ADR-0024 decision 12).
 fn sarif_level(severity: Severity) -> &'static str {
     match severity {
         Severity::Error => "error",
@@ -427,7 +427,8 @@ mod tests {
 
     /// One RIDL-100 Warning with a label, one uncoded Error, and one MANI-101
     /// Error on a detached span, projected onto SARIF. The snapshot pins the
-    /// wire shape; the assertions below name the properties spec §7.3 fixes.
+    /// wire shape; the assertions below check the SARIF properties that
+    /// ADR-0024 decisions 5, 12 and 13 and docs/book/cli-reference.md describe.
     #[test]
     fn sarif_shape() {
         let text = "package p\ninterface S {\n  signal speed: Speed\n}\n";

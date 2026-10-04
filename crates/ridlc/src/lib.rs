@@ -125,14 +125,14 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             workspace,
             diagnostics: Vec::new(),
             sources,
-            // No manifest: the registry defaults apply (lint foundation spec
-            // §5.2).
+            // No manifest: the registry defaults apply (ADR-0024
+            // decision 10).
             lints: LintScopes::default(),
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
     // the levels apply here, with the empty scopes: every lint gets its
-    // registry default (lint foundation spec §6.2).
+    // registry default (ADR-0024 decision 6).
     apply_lint_levels(
         &mut compiled.diagnostics,
         &compiled.sources,
@@ -318,12 +318,12 @@ pub struct WorkspaceOutput {
     /// lowering. A deployment an RSDL-7xx error blocks is absent from it.
     pub system: Option<ridl_ir::v2::System>,
     /// The diagnostics with the severities the emit sites chose. The lint
-    /// levels of `lints` are not applied here (lint foundation spec D-8): a
+    /// levels of `lints` are not applied here (ADR-0024 decision 8): a
     /// consumer that reports to a person or an agent applies them itself.
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
     /// The lint scopes the loader resolved from every `[lints]` table, for a
-    /// consumer that reports `diagnostics` (lint foundation spec §6.2).
+    /// consumer that reports `diagnostics` (ADR-0024 decision 6).
     pub lints: LintScopes,
 }
 
@@ -583,13 +583,13 @@ pub struct CliRun {
     /// The lint scopes the loader resolved: empty for [`check_source`], and
     /// the loaded scopes for [`run_check`] and [`run_build_with`]. A caller
     /// that adds a lint diagnostic after the run returns applies them once
-    /// more over the whole list (lint foundation spec §6.2).
+    /// more over the whole list (ADR-0024 decision 6).
     pub lints: LintScopes,
 }
 
 /// Whether [`run_build_with`] applies the lint levels of the loaded `[lints]`
-/// tables to its diagnostics before the emit gate (lint foundation spec D-8,
-/// §6.2). `ridl build` and `ridlc build`, which report to a person, pass
+/// tables to its diagnostics before the emit gate (ADR-0024 decisions 6
+/// and 8). `ridl build` and `ridlc build`, which report to a person, pass
 /// [`Yes`](ApplyLints::Yes); `ridl baseline`, which publishes a snapshot,
 /// passes [`No`](ApplyLints::No), so a lint at `deny` does not block the
 /// publication.
@@ -612,7 +612,7 @@ impl CliRun {
 /// Runs `check`: loads, resolves, and checks the workspace at `entry`, then
 /// materializes remote imports against `ridl.lock` (regenerating it on a clean
 /// non-frozen run), and applies the lint levels of every `[lints]` table
-/// (lint foundation spec §6.2). Returns every diagnostic and the source map
+/// (ADR-0024 decision 6). Returns every diagnostic and the source map
 /// for rendering.
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
@@ -685,7 +685,7 @@ pub fn run_build(
 /// With [`ApplyLints::Yes`], the lint levels of every `[lints]` table are
 /// applied before the emit gate, so a lint at `deny` is an error that
 /// suppresses every artifact; with [`ApplyLints::No`], the diagnostics keep
-/// the severities the emit sites chose (lint foundation spec D-8).
+/// the severities the emit sites chose (ADR-0024 decision 8).
 pub fn run_build_with(
     entry: &Path,
     out_dir: &Path,
@@ -735,7 +735,8 @@ pub fn run_build_with(
     // The levels are applied before the emit gate below, so a lint at `deny`
     // is an error by the time the gate reads the list and no artifact is
     // written for it. `ridl.lock` is already written by `materialize_and_lock`
-    // above; the lockfile is not an artifact (lint foundation spec §6.2).
+    // above; the lockfile is not an artifact (Task 4 of
+    // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
         apply_lint_levels(&mut diagnostics, &sources, &lints);
     }
@@ -1218,11 +1219,11 @@ struct Compiled {
     /// The checked rsdl model; its diagnostics are already in `diagnostics`.
     system: CheckedSystem,
     /// The diagnostics with the severities the emit sites chose; `lints` is
-    /// not applied here (lint foundation spec D-8).
+    /// not applied here (ADR-0024 decision 8).
     diagnostics: Vec<Diagnostic>,
     sources: SourceMap,
     /// The lint scopes the loader resolved, carried out unapplied for the
-    /// entry points that report diagnostics (lint foundation spec §6.2).
+    /// entry points that report diagnostics (ADR-0024 decision 6).
     lints: LintScopes,
 }
 

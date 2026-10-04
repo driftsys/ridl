@@ -244,8 +244,8 @@ pub(crate) mod tests {
         assert_eq!(snapshot.status().errors, 1);
         assert_eq!(snapshot.status().warnings, 1);
     }
-    // `snapshot` does not apply the `[lints]` levels (lint foundation spec
-    // D-8): the lookup tools share it and keep the emitted severities. The
+    // `snapshot` does not apply the `[lints]` levels (ADR-0024
+    // decision 8): the lookup tools share it and keep the emitted severities. The
     // fixture's root manifest sets `missing-timing = "deny"`, which only
     // `ridl_check` applies, so here RIDL-100 is still the Warning it was
     // emitted as.
