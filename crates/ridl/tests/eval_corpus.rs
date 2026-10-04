@@ -335,6 +335,53 @@ fn rubric_validation_accepts_indented_wrapped_continuations() {
     assert!(validate_rubric("1. **must** preserve every existing\n   interaction identity.\n\n2. **must not** change existing\n   wire numbers.\n").is_ok());
 }
 
+fn validate_lint_fixture(lints: &str) -> Result<serde_json::Value, String> {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the current time follows the epoch")
+        .as_nanos();
+    let id = format!("ridl-task-lint-{}-{unique}", std::process::id());
+    let dir = std::env::temp_dir().join(&id);
+    std::fs::create_dir(&dir).expect("create the isolated lint task fixture");
+    std::fs::write(
+        dir.join("task.toml"),
+        format!("id = \"{id}\"\nkind = \"design\"\ntitle = \"Lint validation fixture\"\n\n[expect]\ncompiles = true\nlints = {lints}\n"),
+    )
+    .expect("write valid task metadata with the tested lint entries");
+    std::fs::write(dir.join("prompt.md"), "Provide valid declarations.\n")
+        .expect("write the fixture prompt");
+    std::fs::write(
+        dir.join("rubric.md"),
+        "1. **must** provide valid declarations.\n",
+    )
+    .expect("write the fixture rubric");
+    let result = validate_task(&dir);
+    std::fs::remove_dir_all(&dir).expect("remove the isolated lint task fixture");
+    result
+}
+
+#[test]
+fn task_lint_validation_accepts_a_released_catalogue_name() {
+    validate_lint_fixture("[\"unused-import\"]")
+        .expect("the released unused-import lint must be accepted");
+}
+
+#[test]
+fn task_lint_validation_rejects_an_unknown_name() {
+    assert_eq!(
+        validate_lint_fixture("[\"unknown-eval-fixture-lint\"]").unwrap_err(),
+        "lint name must be in the catalogue",
+    );
+}
+
+#[test]
+fn task_lint_validation_rejects_a_non_string_entry() {
+    assert_eq!(
+        validate_lint_fixture("[7]").unwrap_err(),
+        "lint name must be a string",
+    );
+}
+
 #[test]
 fn every_eval_task_is_well_formed() {
     let root = task_root();

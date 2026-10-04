@@ -906,6 +906,19 @@ execution.
     adjacent valid, invalid marker, duplicate ID and wrapped continuation
     regressions must detect it.
 
+19. **Exercise catalogue validation with isolated task metadata** (Task 4 review
+    fix, round 2). The approved task set intentionally has empty lint
+    expectations until Task 14, so its successful validation did not exercise
+    catalogue membership or string-entry rejection. Three otherwise valid
+    synthetic tasks now pin acceptance of one released catalogue lint and
+    rejection of an unknown name and a non-string entry. Controlled mutations
+    deleting the validation loop and inverting membership each make two new
+    regressions fail; the guard file is restored byte for byte after each
+    mutation. No candidate-name exemption or broad malformed-task suite is
+    introduced, and all approved task files and stable rubric IDs remain
+    unchanged. If catalogue validation is later weakened, these focused
+    regressions must fail even while the seed's lint arrays remain empty.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
