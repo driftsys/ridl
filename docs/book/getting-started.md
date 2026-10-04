@@ -418,7 +418,7 @@ above are the same declaration. There are no semicolons in the language.
 
 An `enumset` is a named bitfield, for several flags at once:
 
-```ridl
+```ridl,allow=TYPL-223
 package veh.common
 
 enumset AccessFlags {

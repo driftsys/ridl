@@ -574,3 +574,137 @@ fn abbreviation_reports_each_word_pair_once_per_identifier() {
         ]
     );
 }
+
+#[test]
+fn abbreviation_covers_enumset_bits_and_union_arms_at_their_tokens() {
+    let source = "package a\nstruct Temperature { value: boolean }\nenumset Flags { TEMP = 0 }\nunion Choice { temp: Temperature }\n";
+    let out = workspace(&[("a", source)]);
+    let found = abbreviations(&out.diagnostics);
+    assert_eq!(found.len(), 2, "{:?}", out.diagnostics);
+    let arm = source.find("temp:").unwrap();
+    let bit = source.find("TEMP =").unwrap();
+    assert_eq!(
+        found
+            .iter()
+            .map(|d| site(&out.sources, d.primary))
+            .collect::<Vec<_>>(),
+        [
+            ("a/source.ridl".to_string(), arm..arm + 4),
+            ("a/source.ridl".to_string(), bit..bit + 4),
+        ]
+    );
+    assert_eq!(
+        found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(),
+        [
+            "`temp` in `temp` abbreviates `temperature`, used in `Temperature`",
+            "`temp` in `TEMP` abbreviates `temperature`, used in `Temperature`",
+        ]
+    );
+
+    let no_pair = "package a\nstruct Value { value: boolean }\nenumset Flags { TEMP = 0 }\nunion Choice { temp: Value }\n";
+    let out = workspace(&[("a", no_pair)]);
+    assert!(
+        abbreviations(&out.diagnostics).is_empty(),
+        "{:?}",
+        out.diagnostics
+    );
+}
+
+fn abbreviation_source_set(packages: &[(&str, &str)]) -> (Vec<Diagnostic>, SourceMap) {
+    use ridl_core::db::InputFile;
+    use ridl_core::package::{Package, PackageOrigin, Workspace};
+    use std::collections::BTreeMap;
+
+    let mut db = RidlDatabase::default();
+    let std = ridl_core::std_package(&mut db);
+    let packages: Vec<_> = packages
+        .iter()
+        .map(|(name, source)| {
+            let input = InputFile::new(&db, format!("{name}/source.ridl"), source.to_string());
+            Package::new(
+                &db,
+                name.to_string(),
+                vec![input],
+                PackageOrigin::WorkspaceMember,
+                BTreeMap::new(),
+                None,
+                None,
+            )
+        })
+        .collect();
+    let workspace = Workspace::new(&db, packages.clone(), BTreeMap::new());
+    let resolutions: Vec<_> = packages
+        .iter()
+        .map(|package| ridl_sem::resolve_package(&db, workspace, *package, std))
+        .collect();
+    let checked: Vec<_> = packages
+        .iter()
+        .map(|package| ridl_sem::check_package(&db, workspace, *package, std))
+        .collect();
+    for package in &checked {
+        assert_no_errors(&package.diagnostics);
+    }
+    let std_ir = ridl_sem::check_package(&db, workspace, std, std).ir;
+    let mut sources = SourceMap::new();
+    let diagnostics = ridlc::check_design_lints(
+        &db,
+        &packages,
+        &checked,
+        &resolutions,
+        &std_ir,
+        None,
+        &mut sources,
+    );
+    (diagnostics, sources)
+}
+
+#[test]
+fn abbreviation_excludes_standard_short_and_long_words() {
+    for (standard, user) in [
+        (
+            "package ridl.std\nstruct Temperature { value: boolean }\n",
+            "package a\nstruct Reading { tempLimit: boolean }\n",
+        ),
+        (
+            "package ridl.std\nstruct Temp { value: boolean }\n",
+            "package a\nstruct Reading { temperature: boolean }\n",
+        ),
+    ] {
+        let (diagnostics, _) = abbreviation_source_set(&[("ridl.std", standard), ("a", user)]);
+        assert!(abbreviations(&diagnostics).is_empty(), "{diagnostics:?}");
+    }
+    let source = "package a\nstruct Reading { tempLimit: boolean, temperature: boolean }\n";
+    let (diagnostics, sources) = abbreviation_source_set(&[("a", source)]);
+    let found = abbreviations(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert_eq!(text_at(&sources, found[0].primary), "tempLimit");
+    assert_eq!(
+        found[0].message,
+        "`temp` in `tempLimit` abbreviates `temperature`, used in `temperature`"
+    );
+}
+
+#[test]
+fn abbreviation_chooses_the_first_qualified_expansion_independent_of_input_order() {
+    let a = "package a\nstruct Z { temperatureEarly: boolean }\n";
+    let b = "package b\nstruct A { temperatureLate: boolean }\n";
+    let c = "package c\nstruct Reading { tempLimit: boolean }\n";
+    for packages in [
+        vec![("a", a), ("b", b), ("c", c)],
+        vec![("c", c), ("b", b), ("a", a)],
+    ] {
+        let (diagnostics, sources) = abbreviation_source_set(&packages);
+        let found = abbreviations(&diagnostics);
+        assert_eq!(found.len(), 1, "{diagnostics:?}");
+        assert_eq!(
+            found[0].message,
+            "`temp` in `tempLimit` abbreviates `temperature`, used in `temperatureEarly`"
+        );
+        let start = c.find("tempLimit").unwrap();
+        assert_eq!(
+            site(&sources, found[0].primary),
+            ("c/source.ridl".to_string(), start..start + 9)
+        );
+        assert!(found[0].labels.is_empty(), "{:?}", found[0].labels);
+    }
+}

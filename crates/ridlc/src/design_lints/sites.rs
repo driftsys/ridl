@@ -15,6 +15,7 @@ pub(crate) struct SiteIndex {
     members: BTreeMap<(String, String, String), Span>,
     params: BTreeMap<(String, String, String, String), Span>,
     variants: BTreeMap<(String, String, String), Span>,
+    other_children: BTreeMap<(String, String, String), Span>,
     declarations: BTreeMap<(String, String), Span>,
     packages: BTreeMap<String, Span>,
 }
@@ -81,6 +82,30 @@ impl SiteIndex {
                         })
                     {
                         continue;
+                    }
+                    // Keep enum variants separate for the existing variant lookup.
+                    // The shared identifier inventory also includes bits and arms.
+                    let children: Vec<_> = match &def {
+                        ast::Definition::EnumSet(def) => {
+                            def.bits().filter_map(|bit| bit.name()).collect()
+                        }
+                        ast::Definition::Union(def) => {
+                            def.arms().filter_map(|arm| arm.name()).collect()
+                        }
+                        _ => Vec::new(),
+                    };
+                    for name in children {
+                        index
+                            .other_children
+                            .entry((
+                                pkg.clone(),
+                                name_text.clone(),
+                                name.syntax().text().to_string(),
+                            ))
+                            .or_insert(Span {
+                                file,
+                                range: name.syntax().text_range(),
+                            });
                     }
                     match def {
                         ast::Definition::Struct(def) => {
@@ -200,6 +225,7 @@ impl SiteIndex {
             .iter()
             .chain(&self.variants)
             .chain(&self.members)
+            .chain(&self.other_children)
         {
             add(pkg, owner, name, *span);
         }

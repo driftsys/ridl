@@ -858,6 +858,29 @@ reserved codes, corpus budgets, four PRs and approval stages.
     existing lookup and diff assertion. Ignoring the additional diagnostic would
     weaken the reporting contract; exact assertions preserve it.
 
+23. **Task 7 review fix: include all named composite children** (2026-10-04).
+    The normative §4.2 inventory includes every declared identifier, including
+    enumset bits and union arms. The shared source index now records those child
+    tokens in a separate map and includes them in identifier enumeration,
+    preserving the existing enum-only `variant` lookup and qualified ordering.
+    The positive fixture asserts both exact token ranges; its negative fixture
+    asserts no findings when no expansion exists. Omitting those categories
+    would silently miss legitimate findings; the new test failed before this fix
+    and passes afterward. The book harness then observed three newly covered
+    findings on the existing `AccessFlags` fence at `getting-started.md:421`.
+    Add only its exact TYPL-223 allowance, preserving source and harness
+    behavior. Task 14 must remove this allowance too if calibration drops the
+    lint.
+24. **Task 7 review fix: pin exclusion and representative choice** (2026-10-04).
+    Controlled standard-package fixtures test both standard expansion/user
+    abbreviation and standard abbreviation/user expansion, alongside a user-only
+    positive control. Deleting the standard-package guard makes the test fail.
+    Two expansion owners `a.Z.temperatureEarly` and `b.A.temperatureLate` test
+    the first qualified representative with reversed source-set input order, an
+    exact message and primary range, and the existing empty label list.
+    Replacing first-wins insertion with overwrite makes this test fail. This
+    adds coverage without changing the label contract.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
