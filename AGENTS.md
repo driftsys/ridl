@@ -67,6 +67,9 @@ as-built map.
   - ADR-0023 and `docs/design/interaction-face.md` — before extending the Rust
     backend's interaction face; its decision 6 before changing what the face
     emits for a call.
+  - ADR-0024 and `docs/book/lints.md` — before adding or renaming a warning or
+    info diagnostic code, changing the `[lints]` table, or changing which
+    commands apply lint levels.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the
