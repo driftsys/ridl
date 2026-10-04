@@ -11,6 +11,10 @@ agent-taken decision for after-the-fact maintainer review. This PR both records
 this ADR and fixes the three defects it rules on, and closes issue
 driftsys/ridl#194.
 
+Amended 2026-10-04 by the lint foundation design (spec 0): decision 1 states
+that a lint raised to `deny` exits 1 in `ridl check`, `ridl build`,
+`ridlc check` and `ridlc build`.
+
 ## Context
 
 Issue driftsys/ridl#194, found while writing the book's CLI reference (PR
@@ -70,6 +74,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      checked source (`check`, `build`, `baseline`).
    - **2** — the tool could not answer: a missing or unreadable path, a bad
      flag, or an I/O failure while reading or writing.
+
+   In `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, a lint raised
+   to `deny` in `[lints]` is a diagnostic error, so it exits 1; the other
+   subcommands of both binaries do not apply lint levels.
 
    Verified by direct construction against the built `ridl` and `ridlc` binaries
    on this branch (2026-07-27), one input per cell, across the eight subcommands
