@@ -91,6 +91,12 @@ fn allow_removes_a_lint() {
     assert!(!run.has_error());
 }
 
+/// Pins that `run_check` leaves a lint with no `[lints]` entry at its
+/// registry default: RIDL-100 is a Warning and does not fail the check. A
+/// removed apply in the front end is not detected here, because today no
+/// emit site draws a lint at a severity other than its catalogue row's;
+/// `ridl_core::lint`'s `apply_uses_defaults_outside_scopes` pins the
+/// normalisation itself.
 #[test]
 fn defaults_normalise_severity() {
     let fixture = Fixture::new("");
@@ -114,11 +120,50 @@ fn deny_blocks_build() {
     assert!(written.is_empty(), "the build wrote: {written:?}");
 }
 
+/// Pins that `check_source`, which has no manifest and so no `[lints]`
+/// table, reports a lint at its registry default: RIDL-100 is a Warning and
+/// does not fail the check. A removed apply in the front end is not detected
+/// here, because today no emit site draws a lint at a severity other than
+/// its catalogue row's; `ridl_core::lint`'s
+/// `apply_uses_defaults_outside_scopes` pins the normalisation itself.
 #[test]
 fn check_source_uses_defaults() {
     let run = ridlc::check_source("sensor.ridl", SOURCE);
     assert_eq!(the_ridl_100(&run.diagnostics).severity, Severity::Warning);
     assert!(!run.has_error());
+}
+
+/// The `ridlc build` binary applies the levels (`ApplyLints::Yes` at its
+/// call site): a lint at `deny` exits 1 and writes no artifact. `run_build`
+/// is pinned by `deny_blocks_build`; this test pins the binary's choice.
+#[test]
+fn binary_build_fails_on_deny() {
+    let fixture = Fixture::new(DENY);
+    let out = tempfile::tempdir().expect("a temp dir");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_ridlc"))
+        .arg("build")
+        .arg("--out-dir")
+        .arg(out.path())
+        .arg("--emit")
+        .arg("ir-json")
+        .arg(fixture.root())
+        .output()
+        .expect("the ridlc binary runs");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a lint at deny fails the build:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("error[RIDL-100]"),
+        "the lint is rendered as an error:\n{stderr}"
+    );
+    let written: Vec<PathBuf> = std::fs::read_dir(out.path())
+        .expect("the out dir is readable")
+        .map(|entry| entry.expect("a readable entry").path())
+        .collect();
+    assert!(written.is_empty(), "the build wrote: {written:?}");
 }
 
 #[test]
